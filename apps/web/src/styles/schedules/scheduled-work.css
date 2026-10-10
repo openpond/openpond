@@ -39,7 +39,7 @@
   align-items: center;
   gap: 3px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--state-hover);
   padding: 3px;
 }
 
@@ -49,19 +49,19 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 0 10px;
   font: inherit;
   font-size: 12px;
 }
 
 .scheduled-view-tabs button:hover {
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .scheduled-view-tabs button.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
+  background: var(--state-selected);
+  color: var(--text-primary);
 }
 
 .scheduled-work-header-actions {
@@ -80,14 +80,14 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 0;
 }
 
 .scheduled-icon-button:hover:not(:disabled),
 .scheduled-section-action:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .scheduled-icon-button:disabled,
@@ -103,12 +103,12 @@
   width: 34px;
   height: 34px;
   border-radius: 7px;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .scheduled-filter:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .scheduled-filter select {
@@ -121,7 +121,7 @@
 }
 
 .scheduled-filter option {
-  background: #202020;
+  background: var(--surface-raised);
 }
 
 .scheduled-list {
@@ -141,7 +141,7 @@
 }
 
 .scheduled-calendar-toolbar > strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 15px;
   font-weight: 600;
 }
@@ -157,28 +157,28 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   padding: 0 9px;
   font: inherit;
   font-size: 12px;
 }
 
 .scheduled-calendar-today:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .scheduled-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
 }
 
 .scheduled-calendar-weekday {
-  border-bottom: 1px solid var(--border);
-  color: var(--muted);
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-muted);
   padding: 8px 7px;
   text-align: right;
   font-size: 10px;
@@ -188,8 +188,8 @@
 .scheduled-calendar-day {
   min-width: 0;
   min-height: 92px;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
   padding: 6px;
 }
 
@@ -202,7 +202,7 @@
 }
 
 .scheduled-calendar-day.outside {
-  background: rgba(255, 255, 255, 0.012);
+  background: var(--surface-raised);
 }
 
 .scheduled-calendar-day-number {
@@ -212,17 +212,17 @@
   height: 22px;
   margin-left: auto;
   border-radius: 50%;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
 .scheduled-calendar-day.outside .scheduled-calendar-day-number {
-  color: #555;
+  color: var(--text-disabled);
 }
 
 .scheduled-calendar-day.today .scheduled-calendar-day-number {
-  background: var(--cyan);
-  color: #071216;
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
   font-weight: 700;
 }
 
@@ -242,8 +242,8 @@
   overflow: hidden;
   border: 0;
   border-radius: 5px;
-  background: rgba(6, 182, 212, 0.13);
-  color: #b9eaf2;
+  background: color-mix(in srgb, var(--accent-primary) 13%, transparent);
+  color: var(--accent-primary);
   padding: 0 5px;
   text-align: left;
   font: inherit;
@@ -252,12 +252,12 @@
 
 .scheduled-calendar-event:hover,
 .scheduled-calendar-event[aria-current="true"] {
-  background: rgba(6, 182, 212, 0.24);
+  background: color-mix(in srgb, var(--accent-primary) 24%, transparent);
 }
 
 .scheduled-calendar-event.paused {
-  background: rgba(255, 255, 255, 0.055);
-  color: var(--muted);
+  background: var(--state-hover);
+  color: var(--text-muted);
 }
 
 .scheduled-calendar-event strong {
@@ -273,7 +273,7 @@
   align-items: start;
   gap: 12px;
   margin-top: 14px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -286,15 +286,15 @@
 .scheduled-calendar-unscheduled button {
   border: 0;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.055);
-  color: var(--muted-strong);
+  background: var(--state-hover);
+  color: var(--text-secondary);
   padding: 5px 8px;
   font: inherit;
   font-size: 11px;
 }
 
 .scheduled-list-rows {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .scheduled-list-row {
@@ -304,16 +304,16 @@
   width: 100%;
   min-width: 0;
   border: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   padding: 17px 8px;
   text-align: left;
 }
 
 .scheduled-list-row:hover,
 .scheduled-list-row[aria-current="true"] {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--state-hover);
 }
 
 .scheduled-status-dot {
@@ -321,14 +321,14 @@
   height: 14px;
   flex: 0 0 auto;
   margin-top: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  border: 1px solid var(--border-strong);
   border-radius: 50%;
 }
 
 .scheduled-status-dot.active {
-  border-color: #91d7a6;
-  box-shadow: inset 0 0 0 3px var(--bg);
-  background: #91d7a6;
+  border-color: var(--status-success);
+  box-shadow: inset 0 0 0 3px var(--surface-page);
+  background: var(--status-success);
 }
 
 .scheduled-list-copy {
@@ -346,7 +346,7 @@
 
 .scheduled-environment-badge {
   flex: 0 0 auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
   padding: 1px 7px;
   font-size: 10px !important;
@@ -355,8 +355,8 @@
 }
 
 .scheduled-environment-badge.hosted {
-  border-color: rgba(126, 178, 224, 0.34);
-  color: #9cc8ed;
+  border-color: color-mix(in srgb, var(--accent-info) 34%, transparent);
+  color: var(--accent-info);
 }
 
 .scheduled-list-copy strong,
@@ -374,12 +374,12 @@
 }
 
 .scheduled-list-copy span {
-  color: #c3c3c3;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
 .scheduled-list-copy small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -388,7 +388,7 @@
 .scheduled-loading {
   margin: 0;
   padding: 30px 8px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -408,7 +408,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  box-shadow: -18px 0 42px rgba(0, 0, 0, 0.24);
+  box-shadow: -18px 0 42px var(--shadow-color);
 }
 
 .scheduled-work-view.detail-open .scheduled-detail {
@@ -437,22 +437,22 @@
 
 .scheduled-detail-title-row h2 {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 18px;
   font-weight: 650;
 }
 
 .scheduled-detail-title-row span {
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--muted);
+  background: var(--state-hover);
+  color: var(--text-muted);
   padding: 3px 8px;
   font-size: 11px;
 }
 
 .scheduled-detail-header p {
   margin: 6px 0 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -477,7 +477,7 @@
 
 .scheduled-detail-section h3 {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 650;
 }
@@ -511,12 +511,12 @@
 
 .scheduled-detail-fields dt,
 .scheduled-run-meta dt {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .scheduled-detail-fields dd,
 .scheduled-run-meta dd {
-  color: #d7d7d7;
+  color: var(--text-secondary);
 }
 
 .scheduled-prompt,
@@ -524,10 +524,10 @@
   max-height: 190px;
   margin: 0;
   overflow: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #d5d5d5;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
   padding: 11px;
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
@@ -540,7 +540,7 @@
 }
 
 .scheduled-profile-workflow-form label {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -551,10 +551,10 @@
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-primary);
   padding: 8px;
   font: inherit;
   font-size: 12px;
@@ -567,8 +567,8 @@
 
 .scheduled-detail-error {
   margin: 0;
-  border-left: 2px solid #d57568;
-  color: #f2a99e;
+  border-left: 2px solid var(--status-danger);
+  color: var(--status-danger);
   padding-left: 10px;
   font-size: 12px;
   line-height: 1.45;
@@ -584,7 +584,7 @@
   display: grid;
   gap: 6px;
   min-width: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -605,10 +605,10 @@
 .scheduled-field textarea {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--text);
+  background: var(--surface-raised);
+  color: var(--text-primary);
   padding: 8px 10px;
   outline: 0;
   font: inherit;
@@ -624,12 +624,12 @@
 .scheduled-field input:focus,
 .scheduled-field select:focus,
 .scheduled-field textarea:focus {
-  border-color: rgba(255, 255, 255, 0.24);
+  border-color: var(--border-strong);
 }
 
 .scheduled-next-run {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -645,17 +645,17 @@
   justify-content: center;
   gap: 7px;
   height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 0 12px;
   font: inherit;
   font-size: 12px;
 }
 
 .scheduled-detail-actions button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--state-hover);
 }
 
 .scheduled-detail-actions button:disabled {
@@ -673,8 +673,8 @@
   margin-top: 12px;
   border: 0;
   border-radius: 7px;
-  background: var(--text);
-  color: var(--bg);
+  background: var(--text-primary);
+  color: var(--surface-page);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -687,17 +687,17 @@
 
 .scheduled-no-runs {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .scheduled-run-list {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
 }
 
 .scheduled-run-row + .scheduled-run-row {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .scheduled-run-row summary {
@@ -721,19 +721,19 @@
 }
 
 .scheduled-run-row summary strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
 }
 
 .scheduled-run-row summary small,
 .scheduled-run-trigger {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .scheduled-run-row[open] summary {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--surface-raised);
 }
 
 .scheduled-run-row.hosted {
@@ -750,7 +750,7 @@
 }
 
 .scheduled-run-row.hosted:hover {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--state-hover);
 }
 
 .scheduled-run-row.hosted > span:first-child {
@@ -759,19 +759,19 @@
 }
 
 .scheduled-run-row.hosted strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
 }
 
 .scheduled-run-row.hosted small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .scheduled-run-row.hosted p {
   grid-column: 1 / -1;
   margin: 4px 0 0;
-  color: #f2a99e;
+  color: var(--status-danger);
   font-size: 11px;
 }
 

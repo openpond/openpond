@@ -141,7 +141,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
           <ResponsiveContainer height="100%" width="100%">
             <LineChart data={points} margin={{ top: 18, right: 18, bottom: 4, left: 0 }}>
               <CartesianGrid
-                stroke="var(--border)"
+                stroke="var(--border-default)"
                 strokeDasharray="3 4"
                 vertical={false}
               />
@@ -149,7 +149,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
                 axisLine={false}
                 dataKey="step"
                 fontSize={10}
-                stroke="var(--muted)"
+                stroke="var(--text-muted)"
                 tickLine={false}
               />
               <YAxis
@@ -157,7 +157,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
                 dataKey="value"
                 domain={metric.format === "percent" ? [0, 1] : ["auto", "auto"]}
                 fontSize={10}
-                stroke="var(--muted)"
+                stroke="var(--text-muted)"
                 tickFormatter={format}
                 tickLine={false}
                 width={66}
@@ -175,11 +175,11 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
                 isAnimationActive={false}
               />
               <Line
-                activeDot={{ fill: "var(--cyan, #06b6d4)", r: 5 }}
+                activeDot={{ fill: "var(--accent-primary)", r: 5 }}
                 dataKey="value"
-                dot={{ fill: "var(--cyan, #06b6d4)", r: 2.5 }}
+                dot={{ fill: "var(--accent-primary)", r: 2.5 }}
                 isAnimationActive={false}
-                stroke="var(--cyan, #06b6d4)"
+                stroke="var(--accent-primary)"
                 strokeWidth={2}
                 type="monotone"
               />

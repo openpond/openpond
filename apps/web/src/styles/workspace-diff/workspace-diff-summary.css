@@ -8,7 +8,7 @@
   overflow-y: auto;
   box-sizing: border-box;
   overscroll-behavior: contain;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
@@ -26,7 +26,7 @@
 }
 
 .workspace-diff-files-preview-layout > .workspace-diff-files-view {
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid var(--border-default);
 }
 
 .workspace-diff-files-preview-empty {
@@ -34,7 +34,7 @@
   place-items: center;
   min-width: 0;
   min-height: 0;
-  color: #858585;
+  color: var(--text-muted);
   padding: 24px;
   text-align: center;
   font-size: 12px;
@@ -53,14 +53,14 @@
   align-items: center;
   gap: 8px;
   min-height: 36px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  color: #e6e6e6;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-primary);
   padding: 0 11px;
   font-size: 13px;
 }
 
 .workspace-file-tree-header span {
-  color: #8f8f8f;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -84,20 +84,20 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #cfcfcf;
+  color: var(--text-secondary);
   padding-right: 6px;
   text-align: left;
   font-size: 13px;
 }
 
 .workspace-file-tree-row:hover {
-  background: rgba(255, 255, 255, 0.055);
-  color: #f1f1f1;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .workspace-file-tree-row.file.selected {
-  background: rgba(255, 255, 255, 0.09);
-  color: #f1f1f1;
+  background: var(--state-selected);
+  color: var(--text-primary);
 }
 
 .workspace-file-tree-row.file {
@@ -128,7 +128,7 @@
   right: 3px;
   gap: 1px;
   border-radius: 6px;
-  background: #1b1b1b;
+  background: var(--surface-panel);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);
@@ -139,7 +139,7 @@
   width: 22px;
   height: 22px;
   border-radius: 5px;
-  color: #8f8f8f;
+  color: var(--text-muted);
 }
 
 .workspace-file-tree-row.file:hover .workspace-file-tree-bookmark-actions,
@@ -152,12 +152,12 @@
 .workspace-file-tree-bookmark-actions button:focus-visible,
 .workspace-file-tree-bookmark-actions button.active {
   outline: 0;
-  background: rgba(255, 255, 255, 0.09);
-  color: #f1f1f1;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .workspace-file-tree-row.folder {
-  color: #a9a9a9;
+  color: var(--text-muted);
 }
 
 .workspace-file-tree-row span {
@@ -197,15 +197,15 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #f1f1f1;
+  color: var(--text-primary);
   padding: 0 5px;
   text-align: left;
 }
 
 .workspace-diff-file:hover,
 .workspace-diff-file.selected {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .workspace-diff-file span,

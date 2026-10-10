@@ -55,6 +55,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
   {
     label: "Customization",
     items: [
+      { section: "appearance", label: "Appearance", Icon: SlidersHorizontal },
       { section: "configuration", label: "Configuration", Icon: SlidersHorizontal },
       { section: "personalization", label: "Personalization", Icon: SquarePen },
       { section: "editor", label: "Editor", Icon: Code2 },

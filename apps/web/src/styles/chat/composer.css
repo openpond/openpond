@@ -29,13 +29,13 @@
   gap: 7px;
   min-width: 0;
   min-height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--border-default);
   border-bottom: 0;
   border-radius: 0;
-  background: #272727;
-  color: #e8e8e8;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 5px 9px 5px 12px;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 8px 18px var(--shadow-color);
 }
 
 .composer-steer-row:first-child {
@@ -54,13 +54,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #9b9b9b;
+  color: var(--text-muted);
 }
 
 .composer-steer-row-text {
   min-width: 0;
   overflow: hidden;
-  color: #cfcfcf;
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -76,7 +76,7 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #bdbdbd;
+  color: var(--text-secondary);
 }
 
 .composer-steer-row-action {
@@ -88,7 +88,7 @@
 }
 
 .composer-steer-row-action.primary {
-  color: #dedede;
+  color: var(--text-secondary);
 }
 
 .composer-steer-row-icon-button {
@@ -101,8 +101,8 @@
 .composer-steer-row-icon-button:hover:not(:disabled),
 .composer-steer-row-icon-button:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .composer-steer-row-action:disabled,
@@ -130,17 +130,17 @@
   gap: 4px;
   min-width: 0;
   margin: 0 65px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
-  background: #282828;
-  color: #ededed;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 5px 8px 5px 10px;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 8px 18px var(--shadow-color);
 }
 
 .composer-goal-strip.has-subagents {
-  border-color: rgba(168, 85, 247, 0.32);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(168, 85, 247, 0.08);
+  border-color: color-mix(in srgb, var(--chart-2) 32%, transparent);
+  box-shadow: 0 8px 18px var(--shadow-color), 0 0 0 1px color-mix(in srgb, var(--focus-ring) 8%, transparent);
 }
 
 .composer-goal-heading {
@@ -162,7 +162,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #efefef;
+  color: var(--text-primary);
   padding: 0;
   font-size: 12.5px;
   font-weight: 650;
@@ -172,12 +172,12 @@
 .composer-goal-toggle:hover,
 .composer-goal-toggle:focus-visible {
   outline: 0;
-  color: #f7f7f7;
+  color: var(--text-primary);
 }
 
 .composer-goal-toggle svg {
   flex: 0 0 auto;
-  color: #9a9a9a;
+  color: var(--text-muted);
   transition: transform 160ms ease;
 }
 
@@ -199,14 +199,14 @@
   gap: 8px;
   flex: 0 0 auto;
   min-width: 0;
-  color: #a8a8a8;
+  color: var(--text-muted);
   font-size: 11.5px;
   font-weight: 600;
 }
 
 .composer-goal-subagent-count {
   max-width: 170px;
-  color: #d8b4fe;
+  color: var(--chart-2);
 }
 
 .composer-goal-details-button {
@@ -215,10 +215,10 @@
   justify-content: center;
   gap: 5px;
   height: 26px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #dce3ea;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 0 8px;
   font-size: 11px;
   font-weight: 700;
@@ -227,13 +227,13 @@
 .composer-goal-details-button:hover,
 .composer-goal-details-button:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.11);
+  background: var(--state-hover);
 }
 
 .composer-goal-objective {
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #a0a0a0;
+  color: var(--text-muted);
   padding: 2px 0 1px;
   font-size: 12.5px;
   line-height: 1.35;
@@ -246,7 +246,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #d8b4fe;
+  color: var(--chart-2);
   font-size: 11.5px;
   font-weight: 650;
 }
@@ -268,27 +268,27 @@
   gap: 8px;
   min-width: 0;
   margin: 0 65px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-bottom: 0;
   border-radius: 13px 13px 0 0;
-  background: #1f1f1f;
-  color: #ededed;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   padding: 9px 14px 10px;
 }
 
 .composer-create-strip.warning {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: #1f1f1f;
+  border-color: var(--border-default);
+  background: var(--surface-raised);
 }
 
 .composer-create-strip.success {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: #1f1f1f;
+  border-color: var(--border-default);
+  background: var(--surface-raised);
 }
 
 .composer-create-strip.danger {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: #1f1f1f;
+  border-color: var(--border-default);
+  background: var(--surface-raised);
 }
 
 .composer-create-strip-heading {
@@ -300,7 +300,7 @@
 }
 
 .composer-create-strip-heading svg {
-  color: #b8c5d1;
+  color: var(--accent-info);
 }
 
 .composer-create-strip-heading span {
@@ -314,7 +314,7 @@
 .composer-create-strip-heading small,
 .composer-create-facts span,
 .composer-create-options small {
-  color: #a8adb4;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 550;
 }
@@ -332,7 +332,7 @@
 .composer-create-plan-summary p,
 .composer-create-status-body p {
   margin: 0;
-  color: #d9dde2;
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.35;
 }
@@ -376,10 +376,10 @@
   display: grid;
   gap: 3px;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #f3f4f6;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 7px 9px;
   text-align: left;
 }
@@ -393,10 +393,10 @@
   justify-content: center;
   justify-self: start;
   gap: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.065);
-  color: #f4f4f5;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 0 11px;
   font: inherit;
   font-size: 12px;
@@ -413,7 +413,7 @@
 .composer-create-revision button:hover:not(:disabled),
 .composer-create-revision button:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.11);
+  background: var(--state-hover);
 }
 
 .composer-create-options button span {
@@ -443,7 +443,7 @@
   overflow: hidden;
   max-width: 100%;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--state-hover);
   padding: 4px 6px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -466,7 +466,7 @@
   display: block;
   overflow: hidden;
   max-width: 100%;
-  color: #c8d1dc;
+  color: var(--text-secondary);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -492,10 +492,10 @@
   gap: 6px;
   min-width: 0;
   height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.065);
-  color: #f4f4f5;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 0 9px;
   font-size: 12px;
   font-weight: 650;
@@ -503,19 +503,19 @@
 
 .composer-create-actions button:first-child,
 .composer-create-revision button:first-child {
-  border-color: rgba(34, 197, 94, 0.3);
-  background: rgba(34, 197, 94, 0.14);
-  color: #bbf7d0;
+  border-color: color-mix(in srgb, var(--status-success) 30%, transparent);
+  background: color-mix(in srgb, var(--status-success) 14%, transparent);
+  color: var(--status-success);
 }
 
 .composer-create-revision textarea {
   width: 100%;
   min-width: 0;
   resize: vertical;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(0, 0, 0, 0.18);
-  color: #f4f4f5;
+  background: var(--state-selected);
+  color: var(--text-primary);
   padding: 8px;
   font: inherit;
   font-size: 12px;
@@ -537,20 +537,20 @@
   display: flex;
   align-items: center;
   min-height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
   margin: 0 0 8px;
   padding: 7px 10px;
-  color: #d7e7ff;
-  background: rgba(64, 126, 201, 0.12);
+  color: var(--accent-info);
+  background: color-mix(in srgb, var(--accent-info) 12%, transparent);
   font-size: 12px;
   font-weight: 550;
   line-height: 1.35;
 }
 
 .composer-notice.warning {
-  color: #ffe1ac;
-  background: rgba(201, 139, 42, 0.14);
+  color: var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 14%, transparent);
 }
 
 .composer-textarea-frame {
@@ -560,8 +560,8 @@
   min-height: 100px;
   border: 0;
   border-radius: 21px;
-  background: #2b2b2b;
-  color: #f7f7f7;
+  background: var(--surface-input);
+  color: var(--text-primary);
   padding: 15px 14px 49px;
   cursor: text;
 }
@@ -573,8 +573,8 @@
   max-width: min(320px, 100%);
   min-width: 0;
   border-radius: 5px;
-  background: #2b2b2b;
-  color: #e8e8e8;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 2px 6px 2px 5px;
   font-size: inherit;
   font-weight: 550;
@@ -602,7 +602,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #cfcfcf;
+  color: var(--text-secondary);
   padding: 0;
   line-height: 0;
 }
@@ -637,7 +637,7 @@
 .composer-invocation-remove:hover,
 .composer-invocation-remove:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--state-hover);
 }
 
 .composer-repo-link {
@@ -647,8 +647,8 @@
   max-width: min(340px, 100%);
   min-width: 0;
   border-radius: 5px;
-  background: #2b2b2b;
-  color: #e8e8e8;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 2px 6px;
   font-size: inherit;
   font-weight: 550;
@@ -660,7 +660,7 @@
 }
 
 .composer-repo-link.openpond {
-  color: #e8e8e8;
+  color: var(--text-primary);
 }
 
 .composer-connected-app-mention {
@@ -670,8 +670,8 @@
   max-width: min(260px, 100%);
   min-width: 0;
   border-radius: 5px;
-  background: #2b2b2b;
-  color: var(--blue);
+  background: var(--state-hover);
+  color: var(--accent-info);
   padding: 2px 6px;
   font-family: inherit;
   font-size: 1em;
@@ -724,13 +724,13 @@
   min-height: 22px;
   overflow-y: hidden;
   resize: none;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
   border: 0;
   outline: 0;
   border-radius: 0;
   background: transparent;
-  color: #f7f7f7;
+  color: var(--text-primary);
   padding: 1px 0 0;
   font-size: 14px;
   line-height: 1.45;
@@ -742,7 +742,7 @@
 
 .composer-inline-input[data-empty="true"]::before {
   content: attr(data-placeholder);
-  color: #858585;
+  color: var(--text-muted);
   pointer-events: none;
 }
 
@@ -775,7 +775,7 @@
   min-width: 0;
   overflow-x: auto;
   padding: 7px 9px 8px 1px;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
@@ -796,7 +796,7 @@
 .composer-attachments::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--scrollbar-thumb);
   background-clip: padding-box;
 }
 
@@ -809,9 +809,9 @@
   width: 172px;
   min-height: 70px;
   gap: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.055);
+  background: var(--state-hover);
   padding: 7px 31px 7px 7px;
 }
 
@@ -833,8 +833,8 @@
   height: 54px;
   overflow: hidden;
   border-radius: 7px;
-  background: #191919;
-  color: #c4dfff;
+  background: var(--surface-panel);
+  color: var(--accent-info);
 }
 
 .composer-attachment-card.image .composer-attachment-thumb {
@@ -852,7 +852,7 @@
 }
 
 .composer-attachment-preview:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -876,14 +876,14 @@
 }
 
 .composer-attachment-meta strong {
-  color: #f4f4f4;
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 650;
   line-height: 1.2;
 }
 
 .composer-attachment-meta span {
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -899,7 +899,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #d7d7d7;
+  color: var(--text-secondary);
   opacity: 0;
   line-height: 0;
   transition: opacity 120ms ease, color 120ms ease;
@@ -923,13 +923,13 @@
 .composer-attachment-remove:focus-visible {
   opacity: 1;
   outline: 0;
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .composer-attachment-error {
-  background: #2b2b2b;
-  color: #ffb4b4;
+  background: var(--state-hover);
+  color: var(--status-danger);
   padding: 0 14px 7px;
   font-size: 12px;
   line-height: 1.35;
@@ -986,12 +986,12 @@
 .composer-inline-input::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--scrollbar-thumb);
   background-clip: padding-box;
 }
 
 .composer-inline-input::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.34);
+  background: var(--scrollbar-hover);
   background-clip: padding-box;
 }
 
@@ -1001,7 +1001,7 @@
 
 .composer-workspace-notice {
   margin: 0 0 8px;
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -1021,11 +1021,11 @@
 
 .native-conversation-unavailable button {
   flex: 0 0 auto;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
   background: transparent;
   padding: 5px 9px;
-  color: #d7d7d7;
+  color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
 }

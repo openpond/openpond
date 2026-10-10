@@ -30,9 +30,9 @@
   width: max-content;
   max-width: min(320px, 76vw);
   border-radius: 9px;
-  background: #191919;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.46);
-  color: #f2f2f2;
+  background: var(--surface-input);
+  box-shadow: 0 14px 36px var(--shadow-color);
+  color: var(--text-primary);
   padding: 7px 9px;
   font-size: 12px;
   font-weight: 600;
@@ -47,7 +47,7 @@
 .voice-input-control > .voice-input-trigger.composer-icon:hover:not(:disabled),
 .voice-input-control > .voice-input-trigger.composer-icon:focus-visible {
   background: transparent;
-  color: #cfcfcf;
+  color: var(--text-secondary);
   outline: 0;
   box-shadow: none;
 }
@@ -58,7 +58,7 @@
 
 .voice-input-control.starting,
 .voice-input-control > .voice-input-trigger.starting {
-  color: #8bc7ff;
+  color: var(--accent-info);
 }
 
 .composer-voice-input.voice-input-control.recording,
@@ -69,8 +69,8 @@
   display: flex;
   min-width: 0;
   border-radius: 999px;
-  background: #2b2b2b;
-  color: #a4a4a4;
+  background: var(--surface-input);
+  color: var(--text-muted);
 }
 
 .composer-primary-controls.has-running-turn
@@ -86,7 +86,7 @@
   justify-content: center;
   flex: 1 1 auto;
   min-width: 0;
-  color: #b8b8b8;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -139,20 +139,20 @@
   height: 29px;
   border: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
-  color: #b8b8b8;
+  background: var(--state-hover);
+  color: var(--text-secondary);
   padding: 0;
 }
 
 .voice-recording-action:hover,
 .voice-recording-action:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.1);
-  color: #f1f1f1;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .voice-recording-action.stop {
-  color: #d2d2d2;
+  color: var(--text-secondary);
 }
 
 .voice-recording-action-spacer {
@@ -178,7 +178,7 @@
   height: max(3px, calc(var(--voice-level) * 21px));
   max-height: 21px;
   border-radius: 999px;
-  background: #858585;
+  background: var(--state-hover);
   transition: height 70ms linear;
 }
 

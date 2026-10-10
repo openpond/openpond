@@ -1,3 +1,5 @@
+import { UI_THEME_CSS } from "@openpond/contracts/ui-theme.generated";
+import { resolvedDesktopTheme } from "./desktop-appearance.js";
 import type { BrowserWindow } from "electron";
 import { appDisplayName } from "./desktop-environment.js";
 
@@ -15,21 +17,22 @@ export async function showLoadError(window: BrowserWindow, error: unknown, onPag
   });
   const pageUrl = `data:text/html;charset=utf-8,${encodeURIComponent(`
     <!doctype html>
-    <html>
+    <html data-theme="${resolvedDesktopTheme()}">
       <head>
         <meta charset="utf-8" />
         <title>${appDisplayName()}</title>
         <style>
-          body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #050608; color: white; font-family: system-ui, sans-serif; }
-          main { width: min(680px, calc(100vw - 48px)); padding: 24px; border: 1px solid rgba(255,255,255,.12); background: #0a0f16; border-radius: 6px; }
+          ${UI_THEME_CSS}
+          body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--surface-page); color: var(--text-primary); font-family: system-ui, sans-serif; }
+          main { width: min(680px, calc(100vw - 48px)); padding: 24px; border: 1px solid var(--border-default); background: var(--surface-panel); border-radius: 6px; }
           h1 { margin: 0 0 10px; font-size: 18px; }
-          p { margin: 0 0 16px; color: #cbd5e1; line-height: 1.5; }
-          pre { white-space: pre-wrap; color: #fca5a5; font-size: 13px; padding: 12px; background: rgba(255,255,255,.04); border-radius: 6px; overflow-wrap: anywhere; }
+          p { margin: 0 0 16px; color: var(--text-secondary); line-height: 1.5; }
+          pre { white-space: pre-wrap; color: var(--status-danger); font-size: 13px; padding: 12px; background: var(--surface-raised); border-radius: 6px; overflow-wrap: anywhere; }
           .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
-          button { appearance: none; border: 1px solid rgba(255,255,255,.16); border-radius: 6px; background: #172033; color: white; padding: 9px 12px; font: inherit; cursor: pointer; }
-          button.primary { background: #2563eb; border-color: #2563eb; }
+          button { appearance: none; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-input); color: var(--text-primary); padding: 9px 12px; font: inherit; cursor: pointer; }
+          button.primary { background: var(--action-primary); border-color: var(--action-primary); color: var(--text-on-primary); }
           button:hover { filter: brightness(1.1); }
-          #status { min-height: 18px; margin-top: 12px; color: #93c5fd; font-size: 13px; }
+          #status { min-height: 18px; margin-top: 12px; color: var(--status-info); font-size: 13px; }
         </style>
       </head>
       <body>

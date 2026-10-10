@@ -1,3 +1,4 @@
+import { chartColor as modelColorAt } from "../../../theme/chart-colors";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type {
   AccountState,
@@ -38,18 +39,7 @@ type HoveredActivityDay = {
   top: number;
 };
 
-const MODEL_COLORS = [
-  "#67b7ff",
-  "#9b82ff",
-  "#ea74ca",
-  "#ff8b78",
-  "#f6bd5c",
-  "#55d6ad",
-  "#49c6e5",
-  "#7f9cff",
-  "#c879ff",
-  "#8bd35f",
-];
+
 
 const integerFormatter = new Intl.NumberFormat("en-US");
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {
@@ -635,11 +625,7 @@ function buildModelColors(rows: UsageModelBreakdown[], daily: UsageDailyBucket[]
   }));
 }
 
-function modelColorAt(index: number): string {
-  if (index < MODEL_COLORS.length) return MODEL_COLORS[index]!;
-  const hue = Math.round((205 + (index - MODEL_COLORS.length) * 137.508) % 360);
-  return `hsl(${hue} 76% 68%)`;
-}
+
 
 function weekLabel(week: ActivityWeek): string {
   const first = localDateFromKey(week.firstDate);

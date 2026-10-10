@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown, Plus } from "./icons";
+import { ChevronDown, ChevronRight, Plus } from "./icons";
 import type { DropdownOption } from "../lib/app-models";
 
 export function DropdownSelect({
@@ -28,7 +28,7 @@ export function DropdownSelect({
   className?: string;
   icon?: ReactNode;
   triggerContent?: ReactNode;
-  placement?: "bottom" | "top";
+  placement?: "bottom" | "top" | "right";
   label: string;
   tooltip?: string;
   searchable?: boolean;
@@ -58,10 +58,20 @@ export function DropdownSelect({
   }, []);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>();
   useLayoutEffect(() => {
-    if (!open || !floating) return;
+    if (!open || (!floating && placement !== "right")) return;
     function position() {
       const rect = menuRef.current?.getBoundingClientRect();
       if (!rect) return;
+      if (placement === "right") {
+        const width = Math.min(floatingMenuWidth ?? 240, window.innerWidth - 24);
+        const maxHeight = Math.min(floatingMenuMaxHeight, window.innerHeight - 24);
+        const height = Math.min(menuRef.current?.querySelector('[role="menu"]')?.getBoundingClientRect().height ?? maxHeight, maxHeight);
+        const left = rect.right + 12 + width <= window.innerWidth - 12
+          ? rect.right + 12 : Math.max(12, rect.left - width - 12);
+        setMenuStyle({ position: "fixed", left, top: Math.max(12, Math.min(rect.top, window.innerHeight - height - 12)),
+          width, minWidth: 0, maxWidth: "calc(100vw - 24px)", right: "auto", bottom: "auto", maxHeight, overflowY: "auto", zIndex: 1000 });
+        return;
+      }
       const below = window.innerHeight - rect.bottom - 12;
       const above = rect.top - 12;
       const upward = below < 180 && above > below;
@@ -72,7 +82,14 @@ export function DropdownSelect({
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, true);
     return () => { window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
-  }, [open, floating, floatingMenuWidth, floatingMenuMaxHeight]);
+  }, [open, floating, floatingMenuWidth, floatingMenuMaxHeight, placement]);
+  useLayoutEffect(() => {
+    if (open && placement === "right") {
+      const menu = menuRef.current?.querySelector('[role="menu"]');
+      (menu?.querySelector<HTMLElement>('[aria-checked="true"]:not(:disabled)')
+        ?? menu?.querySelector<HTMLElement>('[role="menuitemradio"]:not(:disabled)'))?.focus();
+    }
+  }, [open, placement]);
   const selected = options.find((option) => option.value === value) ?? options[0];
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOptions = normalizedQuery
@@ -107,6 +124,21 @@ export function DropdownSelect({
   return (
     <div
       className={`dropdown-select ${className ?? ""} ${compact ? "compact" : ""} ${placement === "top" ? "open-up" : ""}`}
+      onKeyDown={(event) => {
+        if (placement !== "right") return;
+        if (open && (event.key === "Escape" || event.key === "ArrowLeft")) {
+          event.preventDefault(); event.stopPropagation(); closeMenu(); triggerRef.current?.focus();
+        } else if (!open && event.key === "ArrowRight") {
+          event.preventDefault(); setOpen(true);
+        } else if (open && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+          event.preventDefault();
+          const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]:not(:disabled)') ?? []);
+          const current = items.indexOf(document.activeElement as HTMLElement);
+          const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+            : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+          items[next]?.focus();
+        }
+      }}
       data-tooltip={tooltip}
       ref={menuRef}
       onPointerEnter={openOnHover ? (event) => {
@@ -144,12 +176,12 @@ export function DropdownSelect({
       >
         {triggerContent ?? <>
           {icon}
-          <span>{selected?.shortLabel ?? selected?.label ?? value}</span>
-          <ChevronDown size={14} />
+          <span title={selected?.label}>{selected?.shortLabel ?? selected?.label ?? value}</span>
+          {placement === "right" ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
         </>}
       </button>
       {open && (
-        <div className="dropdown-menu" role="menu" style={floating ? menuStyle : undefined}>
+        <div className="dropdown-menu" role="menu" style={floating || placement === "right" ? menuStyle : undefined}>
           {searchable ? (
             <label className="dropdown-search" onClick={(event) => event.stopPropagation()}>
               <span className="sr-only">Search {label}</span>
@@ -167,6 +199,7 @@ export function DropdownSelect({
               type="button"
               role="menuitemradio"
               aria-checked={option.value === value}
+              title={option.label}
               disabled={option.disabled}
               className={[
                 option.value === value ? "selected" : "",

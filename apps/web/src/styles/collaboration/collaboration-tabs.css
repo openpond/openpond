@@ -6,8 +6,8 @@
   gap: 4px;
   min-width: 0;
   min-height: 44px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--surface-page);
   padding: 0 16px;
 }
 
@@ -19,7 +19,7 @@
   min-height: 43px;
   border: 0;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 0 12px;
   font-size: 13px;
 }
@@ -39,9 +39,10 @@
 .collaboration-tabs button:focus-visible,
 .collaboration-tabs button.active {
   outline: 0;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .collaboration-tabs button.active::after {
-  background: var(--cyan);
+  background: var(--accent-primary-fill);
+  color: var(--text-on-accent);
 }

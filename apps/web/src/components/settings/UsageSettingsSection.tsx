@@ -1,3 +1,4 @@
+import { CHART_COLORS } from "../../theme/chart-colors";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import "../../styles/settings/usage-settings.css";
 import {
@@ -131,16 +132,7 @@ const STATUS_OPTIONS: Array<{ value: UsageStatusFilter; label: string }> = [
 ];
 
 const MAX_CHART_SERIES = 8;
-const CHART_COLORS = [
-  "#5b8def",
-  "#41b883",
-  "#f2a65a",
-  "#d66ba0",
-  "#8f7ee7",
-  "#4fb6c2",
-  "#d6c15c",
-  "#9b9b9b",
-];
+
 
 
 export function UsageSettingsSection({
@@ -557,16 +549,16 @@ function UsageTokenChart({
     <div className="usage-chart-frame">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chart.rows} margin={{ top: 18, right: 10, bottom: 2, left: -8 }}>
-          <CartesianGrid stroke="rgba(255, 255, 255, 0.06)" vertical={false} />
-          <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "#9b9b9b", fontSize: 11 }} />
+          <CartesianGrid stroke="var(--border-subtle)" vertical={false} />
+          <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 11 }} />
           <YAxis
             axisLine={false}
             tickLine={false}
-            tick={{ fill: "#9b9b9b", fontSize: 11 }}
+            tick={{ fill: "var(--text-muted)", fontSize: 11 }}
             tickFormatter={(value) => formatCompactNumber(Number(value))}
           />
-          <Tooltip content={<UsageChartTooltip />} cursor={{ fill: "rgba(255, 255, 255, 0.04)" }} />
-          <Legend iconType="square" wrapperStyle={{ color: "#c8c8c8", fontSize: 11, paddingTop: 8 }} />
+          <Tooltip content={<UsageChartTooltip />} cursor={{ fill: "var(--state-hover)" }} />
+          <Legend iconType="square" wrapperStyle={{ color: "var(--text-secondary)", fontSize: 11, paddingTop: 8 }} />
           {chart.series.map((series) => (
             <Bar
               key={series.dataKey}
@@ -596,7 +588,7 @@ function UsageChartTooltip({
   if (!active || !payload?.length) return null;
   const rows = payload
     .map((item) => ({
-      color: item.color ?? "#9b9b9b",
+      color: item.color ?? "var(--text-muted)",
       name: item.name ?? "Model",
       value: numericValue(item.value),
     }))

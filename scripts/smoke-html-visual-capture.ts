@@ -24,7 +24,7 @@ try {
       void app.whenReady().then(async () => {
         const owner = new BrowserWindow({show:false});
         try {
-          await owner.loadURL('data:text/html,<style>:root{--bg:rgb(80,80,80)}.app-shell{--bg:rgb(20,20,20)}</style><main class=app-shell></main>');
+          await owner.loadURL('data:text/html,<style>:root{--surface-page:rgb(80,80,80)}.app-shell{--surface-page:rgb(20,20,20)}</style><main class=app-shell></main>');
           const result = await captureHtmlVisual({id:'pixel-check',operation:'previewHtml',
             deadlineAt:new Date(Date.now()+15000).toISOString(),input:{width:680,
             html:'<style>body{background:transparent}</style><div style="height:50px"></div><div style="height:600px;background:rgb(10,100,200)"></div>'}},owner,new AbortController().signal);

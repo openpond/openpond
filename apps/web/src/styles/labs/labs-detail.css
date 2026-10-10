@@ -22,7 +22,7 @@
   display: grid;
   grid-template-columns: 130px 130px minmax(0, 1fr);
   margin: 0;
-  border-block: 1px solid var(--border);
+  border-block: 1px solid var(--border-default);
 }
 
 .labs-change-facts > div {
@@ -30,7 +30,7 @@
   min-width: 0;
   gap: 4px;
   padding: 12px 14px;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-default);
 }
 
 .labs-change-facts > div:first-child {
@@ -42,7 +42,7 @@
 }
 
 .labs-change-facts dt {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -59,17 +59,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   padding: 11px 12px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .labs-change-message.negative,
 .labs-change-empty.negative {
-  border-color: color-mix(in srgb, #c45e62 48%, var(--border));
-  color: #db7779;
+  border-color: color-mix(in srgb, var(--status-danger) 48%, var(--border-default));
+  color: var(--status-danger);
 }
 
 .labs-change-timeline {
@@ -85,7 +85,7 @@
   bottom: 0;
   left: 7.5%;
   width: 1px;
-  background: var(--border);
+  background: var(--border-default);
   content: "";
 }
 
@@ -98,9 +98,9 @@
   display: grid;
   overflow: hidden;
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
-  background: var(--panel);
+  background: var(--surface-panel);
 }
 
 .labs-change-card-header,
@@ -117,7 +117,7 @@
 }
 
 .labs-change-card-header > span:last-child {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -135,7 +135,7 @@
 
 .labs-change-card-body p {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.55;
 }
@@ -149,7 +149,7 @@
 }
 
 .labs-change-timeline-label {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -157,7 +157,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
@@ -172,7 +172,7 @@
   gap: 10px;
   min-height: 58px;
   padding: 0 13px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .labs-change-eval:last-child {
@@ -193,7 +193,7 @@
 }
 
 .labs-change-eval span {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -221,7 +221,7 @@
   width: 100%;
   border: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   padding: 0;
   font: inherit;
   text-align: left;
@@ -236,7 +236,7 @@
 }
 
 .labs-agent-change-history td:first-child span {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -253,7 +253,7 @@
 }
 
 .labs-inline-facts dt {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -269,9 +269,9 @@
   display: inline-flex;
   gap: 3px;
   margin: 0 0 18px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--panel-soft);
+  background: var(--surface-raised);
   padding: 3px;
 }
 
@@ -283,7 +283,7 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 8px 11px;
   font: inherit;
   font-size: 12px;
@@ -292,13 +292,13 @@
 }
 
 .labs-method-tabs button:hover {
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .labs-method-tabs button.active {
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--border);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
 .labs-method-tabs button strong {
@@ -318,7 +318,7 @@
   display: grid;
   gap: 9px;
   margin-top: 18px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   padding-top: 14px;
 }
 
@@ -327,7 +327,7 @@
   gap: 5px;
   margin: 0;
   padding-left: 18px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -343,7 +343,7 @@
 
 .labs-dataset-tabs button > span {
   margin-left: auto;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -354,9 +354,9 @@
 
 .labs-dataset-example {
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--panel-soft);
+  background: var(--surface-raised);
 }
 
 .labs-dataset-example > summary {
@@ -374,12 +374,12 @@
 }
 
 .labs-dataset-example[open] > summary {
-  background: var(--panel);
+  background: var(--surface-panel);
 }
 
 .labs-dataset-example-index {
-  color: var(--muted);
-  font: 10px/1 var(--mono);
+  color: var(--text-muted);
+  font: 10px/1 var(--font-mono);
 }
 
 .labs-dataset-example-title {
@@ -397,14 +397,14 @@
 }
 
 .labs-dataset-example-title small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
 .labs-dataset-example-body {
   display: grid;
   gap: 15px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   padding: 14px;
 }
 
@@ -421,7 +421,7 @@
 
 .labs-dataset-example-body p {
   margin: 0;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -430,18 +430,18 @@
   max-height: 180px;
   overflow: auto;
   margin: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  background: var(--bg);
+  background: var(--surface-page);
   padding: 9px 10px;
-  color: var(--text);
-  font: 10px/1.5 var(--mono);
+  color: var(--text-primary);
+  font: 10px/1.5 var(--font-mono);
   white-space: pre-wrap;
 }
 
 .labs-dataset-example-advanced > summary,
 .labs-run-technical > summary {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   cursor: pointer;
 }
@@ -453,12 +453,12 @@
 
 .labs-run-technical {
   margin-top: 14px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   padding-top: 10px;
 }
 
 .labs-eval-setup > summary {
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
 }
@@ -484,13 +484,13 @@
 
 .labs-version-name small {
   margin-top: 3px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
 .labs-version-storage code {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -500,13 +500,13 @@
   display: grid;
   gap: 12px;
   margin-top: 18px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   padding-top: 16px;
 }
 
 .labs-detail-copy {
   margin: 14px 0 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -524,7 +524,7 @@
 
 .labs-expert-bootstrap-summary p {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -546,9 +546,9 @@
 
 .labs-expert-trajectory {
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--panel-soft);
+  background: var(--surface-raised);
 }
 
 .labs-expert-trajectory > summary {
@@ -576,7 +576,7 @@
 
 .labs-expert-trajectory summary small,
 .labs-expert-approval-note {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -587,7 +587,7 @@
 .labs-expert-trajectory-body {
   display: grid;
   gap: 14px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   padding: 13px;
 }
 
@@ -603,18 +603,18 @@
 
 .labs-expert-trajectory-body p {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
 }
 
 .labs-expert-trajectory-body .training-pills span {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: var(--panel);
+  background: var(--surface-panel);
   padding: 3px 7px;
-  color: var(--muted);
-  font-family: var(--mono);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 
@@ -622,18 +622,18 @@
   max-height: 260px;
   overflow: auto;
   margin: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  background: var(--bg);
+  background: var(--surface-page);
   padding: 9px;
-  color: var(--text);
-  font: 10px/1.5 var(--mono);
+  color: var(--text-primary);
+  font: 10px/1.5 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .labs-expert-messages > summary {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   cursor: pointer;
 }
@@ -662,7 +662,7 @@
 .labs-validation-list {
   margin: 14px 0 0;
   padding-left: 18px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -677,7 +677,7 @@
 
 .labs-training-error {
   margin: 14px 0 0;
-  color: #db7779;
+  color: var(--status-danger);
   font-size: 11px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -705,12 +705,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   padding: 0 0 6px;
 }
 
 .labs-source-evals code {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 

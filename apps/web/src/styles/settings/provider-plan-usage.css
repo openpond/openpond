@@ -1,23 +1,27 @@
-.provider-plan-usage { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; }
+.provider-plan-usage { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border-default); font-size: 12px; }
 .plan-usage-heading, .plan-usage-window > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.plan-usage-heading { justify-content: flex-end; color: var(--muted); }
-.plan-usage-refresh { display: grid; place-items: center; background: transparent; color: var(--muted); border: 0; border-radius: 4px; padding: 5px; cursor: pointer; }
-.plan-usage-refresh:hover { color: var(--text); background: var(--hover); }
+.plan-usage-heading { justify-content: flex-end; color: var(--text-muted); }
+.plan-usage-refresh { display: grid; place-items: center; background: transparent; color: var(--text-muted); border: 0; border-radius: 4px; padding: 5px; cursor: pointer; }
+.plan-usage-refresh:hover { color: var(--text-primary); background: var(--state-hover); }
 .plan-usage-refresh:disabled { opacity: .5; cursor: default; }
 .plan-usage-window { display: grid; gap: 5px; }
 .plan-usage-window strong { font-weight: 500; font-variant-numeric: tabular-nums; }
-.plan-usage-window meter { width: 100%; height: 6px; border: 0; border-radius: 6px; overflow: hidden; background: #353535; }
-.plan-usage-window meter::-webkit-meter-bar { background: #353535; border: 0; border-radius: 6px; }
-.plan-usage-window meter::-webkit-meter-optimum-value { background: #8ccdaa; }
-.plan-usage-window meter::-webkit-meter-suboptimum-value { background: #e3ba79; }
-.plan-usage-window meter::-webkit-meter-even-less-good-value { background: #e28b84; }
-.plan-usage-window meter::-moz-meter-bar { background: #8ccdaa; }
-.provider-plan-usage small, .provider-plan-usage p { color: var(--muted); line-height: 1.5; font-size: 11px; margin: 0; }
+.plan-usage-window meter { width: 100%; height: 6px; border: 0; border-radius: 6px; overflow: hidden; background: var(--state-hover); }
+.plan-usage-window meter::-webkit-meter-bar { background: var(--state-hover); border: 0; border-radius: 6px; }
+.plan-usage-window meter::-webkit-meter-optimum-value { background: var(--status-success); }
+.plan-usage-window meter::-webkit-meter-suboptimum-value { background: var(--status-warning); }
+.plan-usage-window meter::-webkit-meter-even-less-good-value { background: var(--status-danger); }
+.plan-usage-window meter::-moz-meter-bar { background: var(--status-success); }
+.provider-plan-usage small, .provider-plan-usage p { color: var(--text-muted); line-height: 1.5; font-size: 11px; margin: 0; }
 .plan-usage-note { opacity: .8; }
-.user-auth-plan-usage { padding: 6px; border-top: 1px solid var(--border); }
-.plan-usage-compact { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 18px; border: 0; border-radius: 5px; padding: 7px 8px; background: transparent; color: inherit; font-size: 12px; text-align: left; cursor: pointer; }
-.plan-usage-compact:hover, .plan-usage-compact:focus-visible { background: rgba(255,255,255,.06); }
-.plan-usage-compact-values { display: flex; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; gap: 6px 12px; }
+.user-auth-plan-usage { padding: 6px; border-top: 1px solid var(--border-default); }
+.plan-usage-compact { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px; flex-wrap: wrap; border: 0; border-radius: 5px; padding: 7px 8px; background: transparent; color: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.plan-usage-compact:hover, .plan-usage-compact:focus-visible { background: var(--state-hover); }
+.plan-usage-compact-values { display: flex; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; gap: 4px 8px; }
 .plan-usage-compact-value { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
 .plan-usage-compact-values strong { font-weight: 500; font-variant-numeric: tabular-nums; }
-.plan-usage-compact-value small { font-size: 10px; color: var(--muted); }
+.plan-usage-compact-value small { font-size: 10px; color: var(--text-muted); }
+
+.plan-usage-compact-provider { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.plan-usage-compact-provider img { width: 15px; height: 15px; object-fit: contain; flex: 0 0 auto; }
+.plan-usage-compact-values { margin-left: auto; }
