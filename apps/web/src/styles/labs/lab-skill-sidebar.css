@@ -12,15 +12,15 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  border-right: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.015);
+  border-right: 1px solid var(--border-default);
+  background: var(--surface-raised);
   padding: 8px;
-  scrollbar-color: #404040 transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .lab-skill-file-list-heading {
   padding: 4px 7px 8px;
-  color: #777;
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.08em;
@@ -36,7 +36,7 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #9f9f9f;
+  color: var(--text-muted);
   padding: 7px;
   text-align: left;
   font: inherit;
@@ -46,8 +46,8 @@
 
 .lab-skill-file-list button:hover,
 .lab-skill-file-list button.active {
-  background: rgba(255, 255, 255, 0.07);
-  color: #ededed;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .lab-skill-file-list button svg {
@@ -82,9 +82,9 @@
 
 .lab-skill-source-title-row span {
   flex: 0 0 auto;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  color: #9a9a9a;
+  color: var(--text-muted);
   padding: 2px 6px;
   font-size: 9px;
   letter-spacing: 0.03em;
@@ -97,14 +97,14 @@
   justify-content: center;
   gap: 8px;
   min-height: 160px;
-  color: #888;
+  color: var(--text-muted);
   padding: 24px;
   font-size: 12px;
   text-align: center;
 }
 
 .lab-skill-source-state.error {
-  color: #d79a9a;
+  color: var(--status-danger);
 }
 
 @media (max-width: 860px) {

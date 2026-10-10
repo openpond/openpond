@@ -5,6 +5,8 @@ import type { OpenPondOrganization } from "../../lib/organization-types";
 import { AccountHelpSubmenu } from "./AccountHelpSubmenu";
 import { DesktopUpdateMenu } from "./DesktopUpdateMenu";
 import type { ClientConnection } from "../../api/api-client";
+import { DropdownSelect } from "../DropdownSelect";
+import { AppearanceMenuItem } from "./AppearanceMenuItem";
 import { ProviderPlanUsage } from "../settings/ProviderPlanUsage";
 
 type UserAuthFooterProps = {
@@ -142,42 +144,32 @@ export function UserAuthFooter({
             </span>
           </div>
           {organizations.length > 0 && onSelectTeam ? (
-            <div>
-              <label className="user-auth-team-picker">
-                <Shapes size={15} aria-hidden="true" />
-                <span className="user-auth-team-picker-label">Team</span>
-                <select
-                  aria-label="Active team"
-                  aria-describedby="account-task-ownership-hint"
-                  disabled={switchingTeamId !== null}
-                  value={selectedTeamId ?? ""}
-                  onChange={async (event) => {
-                    const teamId = event.currentTarget.value;
-                    setSwitchingTeamId(teamId);
-                    try {
-                      await onSelectTeam(teamId || null);
-                    } catch {
-                      // The app-level handler reports the failure without closing the menu.
-                    } finally {
-                      setSwitchingTeamId(null);
-                    }
-                  }}
-                >
-                  <option value="">Personal account</option>
-                  {selectedTeamId && !organizations.some(organization => organization.teamId === selectedTeamId) ? (
-                    <option value={selectedTeamId} disabled>Selected workspace unavailable</option>
-                  ) : null}
-                  {organizations.map((organization) => (
-                    <option key={organization.teamId} value={organization.teamId}>
-                      {organization.displayName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="user-auth-task-ownership-hint" id="account-task-ownership-hint">
-                New tasks use this selection. Existing tasks keep their owner.
-              </p>
-            </div>
+            <DropdownSelect
+              className="user-auth-team-picker"
+              label="Active team"
+              icon={<Shapes size={15} aria-hidden="true" />}
+              placement="right"
+              floating
+              floatingMenuWidth={260}
+              disabled={switchingTeamId !== null}
+              value={selectedTeamId ?? ""}
+              options={[
+                { value: "", label: "Personal account" },
+                ...(selectedTeamId && !organizations.some(team => team.teamId === selectedTeamId)
+                  ? [{ value: selectedTeamId, label: "Selected workspace unavailable", disabled: true }] : []),
+                ...organizations.map(team => ({ value: team.teamId, label: team.displayName })),
+              ]}
+              onChange={async (teamId) => {
+                setSwitchingTeamId(teamId);
+                try {
+                  await onSelectTeam(teamId || null);
+                } catch {
+                  // The app-level handler reports the failure without closing the account menu.
+                } finally {
+                  setSwitchingTeamId(null);
+                }
+              }}
+            />
           ) : null}
           <div className="user-auth-plan-usage">
             {(["claude-code", "codex"] as const).map(provider => <ProviderPlanUsage key={provider} connection={connection} provider={provider} compact onOpen={() => { onOpenChange(false); onOpenProviders(); }} />)}
@@ -197,6 +189,7 @@ export function UserAuthFooter({
               <span>Activity</span>
             </button>
           ) : null}
+          <AppearanceMenuItem />
           <button
             type="button"
             className="user-auth-menu-link"

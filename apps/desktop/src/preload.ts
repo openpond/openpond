@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("openpond", {
     return () => ipcRenderer.removeListener("openpond:ponder-notification", listener);
   },
   getConnection: () => ipcRenderer.invoke("openpond:connection"),
+  setAppearance: (preference: "light" | "dark" | "system") => ipcRenderer.invoke("openpond:appearance:set", preference),
   getDesktopRuntimeInfo: () => ipcRenderer.invoke("openpond:desktop:runtimeInfo"),
   restartDesktopApp: () => ipcRenderer.invoke("openpond:desktop:restart"),
   reloadDesktopApp: () => ipcRenderer.invoke("openpond:desktop:reload"),

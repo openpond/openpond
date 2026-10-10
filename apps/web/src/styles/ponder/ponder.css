@@ -1,17 +1,17 @@
 .sidebar-ponder-fixed { flex: 0 0 auto; }
-.sidebar .sidebar-row.sidebar-ponder-entry { border-color: #64c7d655; background: #64c7d611; color: var(--text); font-weight: 400; cursor: pointer; }
+.sidebar .sidebar-row.sidebar-ponder-entry { border-color: color-mix(in srgb, var(--accent-primary) 33.33%, transparent); background: color-mix(in srgb, var(--accent-primary) 6.67%, transparent); color: var(--text-primary); font-weight: 400; cursor: pointer; }
 .sidebar:has(.sidebar-thread-inbox) .sidebar-ponder-entry { min-height: 54px; padding-top: 8px; padding-bottom: 8px; }
-.sidebar-ponder-entry:focus-visible { outline: 2px solid #74d4df; outline-offset: 2px; }
-.ponder-desktop-attention { margin: 16px 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.sidebar-ponder-entry:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.ponder-desktop-attention { margin: 16px 0; padding: 16px; border: 1px solid var(--border-default); border-radius: 12px; }
 .ponder-desktop-attention button { margin: 8px 8px 0 0; }
-.ponder-stop-turn { align-self: flex-end; margin: 0 12px 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); cursor: pointer; }
+.ponder-stop-turn { align-self: flex-end; margin: 0 12px 8px; padding: 6px 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-panel); color: var(--text-primary); cursor: pointer; }
 .ponder-linked-work { display: grid; gap: 8px; margin: 0 0 16px; }
-.ponder-linked-work button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text); text-align: left; cursor: pointer; }
-.ponder-linked-work button:focus-visible { outline: 2px solid #64c7d6; outline-offset: 2px; }
+.ponder-linked-work button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-panel); color: var(--text-primary); text-align: left; cursor: pointer; }
+.ponder-linked-work button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .ponder-linked-work span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ponder-linked-work small { flex: none; color: var(--muted); }
+.ponder-linked-work small { flex: none; color: var(--text-muted); }
 .assistant-sources.ponder-agent-sources { flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 8px; }
-.ponder-agent-sources h3 { margin: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
+.ponder-agent-sources h3 { margin: 0; color: var(--text-muted); font-size: 12px; font-weight: 500; }
 .ponder-agent-sources .assistant-source-stack { gap: 6px; }
 .ponder-agent-sources .assistant-source-stack .assistant-source-pill { width: auto; max-width: 100%; margin-left: 0; padding: 0 10px; font-weight: 500; }
 .ponder-agent-sources .assistant-source-stack .assistant-source-pill + .assistant-source-pill { margin-left: 0; }
@@ -20,18 +20,18 @@
 .ponder-agent-sources .conversation-source-icon img { width: 14px; height: 14px; }
 .ponder-transcript-message > .assistant-message-footer { display: flex; justify-content: flex-end; align-self: flex-end; margin-top: 8px; }
 .ponder-recommendations { display: grid; gap: 12px; margin: 16px 0; }
-.ponder-recommendation { padding: 14px 16px; border: 1px solid #64c7d655; border-radius: 12px; background: #64c7d60a; overflow-wrap: anywhere; }
-.ponder-recommendation-target { max-width: 100%; color: var(--text); background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+.ponder-recommendation { padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--accent-primary) 33.33%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--accent-primary) 3.92%, transparent); overflow-wrap: anywhere; }
+.ponder-recommendation-target { max-width: 100%; color: var(--text-primary); background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
 .ponder-recommendation p { margin: 10px 0; }
-.ponder-recommendation blockquote { margin: 12px 0; padding-left: 12px; border-left: 2px solid #64c7d655; white-space: pre-wrap; }
-.ponder-recommendation details, .ponder-recommendation small { color: var(--muted); font-size: 12px; }
+.ponder-recommendation blockquote { margin: 12px 0; padding-left: 12px; border-left: 2px solid color-mix(in srgb, var(--accent-primary) 33.33%, transparent); white-space: pre-wrap; }
+.ponder-recommendation details, .ponder-recommendation small { color: var(--text-muted); font-size: 12px; }
 .ponder-recommendation-actions, .ponder-message-destination { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-.ponder-recommendation-actions button, .ponder-message-destination button { padding: 6px 10px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
-.ponder-message-destination { padding: 8px 14px; margin: 0; font-size: 12px; color: var(--muted); }
+.ponder-recommendation-actions button, .ponder-message-destination button { padding: 6px 10px; background: var(--surface-panel); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: 8px; cursor: pointer; }
+.ponder-message-destination { padding: 8px 14px; margin: 0; font-size: 12px; color: var(--text-muted); }
 .ponder-transcript-message.task-handoff { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .task-handoff > .message-row { width: 100%; min-width: 0; }
 .task-handoff .ponder-message-destination { max-width: min(620px, 72%); justify-content: flex-end; padding: 0; }
-.task-handoff .ponder-message-destination button { border: 0; padding: 0; background: transparent; color: #64c7d6; border-radius: 0; }
-.task-handoff .ponder-message-destination button:focus-visible { outline: 2px solid #64c7d6; outline-offset: 2px; }
+.task-handoff .ponder-message-destination button { border: 0; padding: 0; background: transparent; color: var(--accent-primary); border-radius: 0; }
+.task-handoff .ponder-message-destination button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 
-.sidebar .sidebar-row.sidebar-ponder-entry:hover { background: rgb(100 199 214 / 18%); }
+.sidebar .sidebar-row.sidebar-ponder-entry:hover { background: color-mix(in srgb, var(--accent-primary) 18%, transparent); }

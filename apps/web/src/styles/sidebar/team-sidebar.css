@@ -8,7 +8,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   padding: 2px 5px;
   text-align: left;
   font-size: 13px;
@@ -21,7 +21,7 @@
 }
 
 .team-sidebar-group-toggle {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 400;
 }
@@ -41,7 +41,7 @@
   width: 12px;
   height: 16px;
   place-items: center;
-  color: var(--muted);
+  color: var(--text-muted);
   opacity: 0;
   transition: opacity 120ms ease;
 }
@@ -67,7 +67,7 @@
   gap: 6px;
   overflow: hidden;
   padding: 0 6px 3px 33px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -80,22 +80,22 @@
 .team-sidebar-workspace-meta span + span::before {
   content: "·";
   padding-right: 6px;
-  color: #666;
+  color: var(--text-disabled);
 }
 
 .team-sidebar-row:hover,
 .team-sidebar-row.selected {
-  background: rgba(255, 255, 255, 0.065);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .team-sidebar-row:focus-visible {
-  outline: 2px solid #67d4c0;
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
 .team-sidebar-channel {
-  color: #888;
+  color: var(--text-muted);
   text-align: center;
   font-size: 16px;
 }
@@ -108,8 +108,8 @@
   height: 20px;
   overflow: hidden;
   border-radius: 6px;
-  background: #29433b;
-  color: #d1fae5;
+  background: color-mix(in srgb, var(--status-success) 12%, var(--surface-panel));
+  color: var(--status-success);
   object-fit: cover;
   font-size: 8px;
   font-weight: 700;
@@ -125,8 +125,8 @@
 .team-sidebar-unread {
   min-width: 18px;
   border-radius: 8px;
-  background: #e8e8e8;
-  color: #181818;
+  background: var(--action-primary);
+  color: var(--text-on-primary);
   padding: 1px 5px;
   text-align: center;
   font-size: 9px;
@@ -139,5 +139,5 @@
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  color: var(--muted);
+  color: var(--text-muted);
 }

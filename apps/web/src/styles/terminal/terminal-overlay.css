@@ -18,10 +18,10 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-page);
   box-shadow: none;
-  color: var(--text);
+  color: var(--text-primary);
   opacity: 0;
   pointer-events: none;
   transform: translateY(100%);
@@ -33,7 +33,7 @@
 }
 
 .guake-terminal-overlay.open .guake-terminal-panel {
-  box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 -18px 48px var(--shadow-color);
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
@@ -50,8 +50,8 @@
   align-items: center;
   min-width: 0;
   gap: 7px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--surface-page);
   padding: 5px 8px;
 }
 
@@ -79,14 +79,14 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #9d9d9d;
+  color: var(--text-muted);
   overflow: hidden;
 }
 
 .guake-terminal-tab.active,
 .guake-terminal-tab:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f1f1f1;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .guake-terminal-tab-main {
@@ -107,20 +107,20 @@
   height: 7px;
   flex: 0 0 7px;
   border-radius: 999px;
-  background: #7b8492;
+  background: var(--accent-info);
 }
 
 .terminal-status-dot.running {
-  background: #62d26f;
+  background: var(--status-success);
 }
 
 .terminal-status-dot.connecting {
-  background: #f5c451;
+  background: var(--status-warning);
 }
 
 .terminal-status-dot.exited,
 .terminal-status-dot.error {
-  background: #ff706a;
+  background: var(--status-danger);
 }
 
 .guake-terminal-tab-title {
@@ -139,7 +139,7 @@
   flex: 0 0 auto;
   border: 0;
   background: transparent;
-  color: #8d8d8d;
+  color: var(--text-muted);
   padding: 0;
 }
 
@@ -150,8 +150,8 @@
 
 .guake-terminal-tab-close:hover,
 .guake-terminal-icon-button:hover {
-  color: #f3f3f3;
-  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  background: var(--state-hover);
 }
 
 .guake-terminal-icon-button {
@@ -176,18 +176,18 @@
 }
 
 .guake-terminal-cwd {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .guake-terminal-error {
-  color: #ff8a86;
+  color: var(--status-danger);
 }
 
 .guake-terminal-body {
   position: relative;
   min-width: 0;
   min-height: 0;
-  background: #0f0f0f;
+  background: var(--surface-page);
 }
 
 .guake-terminal-pane {
@@ -212,7 +212,7 @@
 }
 
 .guake-terminal-pane .xterm-viewport {
-  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .guake-terminal-pane .xterm-viewport::-webkit-scrollbar {
@@ -224,9 +224,9 @@
 }
 
 .guake-terminal-pane .xterm-viewport::-webkit-scrollbar-thumb {
-  border: 3px solid #0f0f0f;
+  border: 3px solid var(--scrollbar-thumb);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.26);
+  background: var(--scrollbar-thumb);
 }
 
 .guake-terminal-empty {
@@ -236,17 +236,17 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--panel-soft);
-  color: var(--text);
+  background: var(--surface-raised);
+  color: var(--text-primary);
   padding: 8px 11px;
   transform: translate(-50%, -50%);
 }
 
 .guake-terminal-empty:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: var(--panel-hover);
+  border-color: var(--border-default);
+  background: var(--state-hover);
 }
 
 @media (max-width: 760px) {

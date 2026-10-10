@@ -18,7 +18,7 @@
   min-width: 0;
   border: 0;
   background: transparent;
-  color: #8f98a3;
+  color: var(--text-muted);
   padding: 0;
   font-size: 12px;
   text-align: left;
@@ -30,7 +30,7 @@
 
 .harness-refiner-receipt-summary:not(:disabled):hover,
 .harness-refiner-receipt-summary:not(:disabled):focus-visible {
-  color: #d7e2ee;
+  color: var(--accent-info);
   outline: 0;
 }
 
@@ -47,11 +47,11 @@
 }
 
 .harness-refiner-receipt.applied .harness-refiner-receipt-summary {
-  color: #88c99a;
+  color: var(--status-success);
 }
 
 .harness-refiner-receipt.failed .harness-refiner-receipt-summary {
-  color: #ff8d8d;
+  color: var(--status-danger);
 }
 
 .harness-refiner-receipt-toggle {
@@ -71,8 +71,8 @@
   padding: 11px 12px;
   border: 0;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.025);
-  color: #aeb6c0;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
 }
 
 .harness-refiner-receipt-details section,
@@ -88,7 +88,7 @@
 
 .harness-refiner-receipt-details strong,
 .harness-refiner-receipt-details summary {
-  color: #d7e2ee;
+  color: var(--accent-info);
   font-weight: 600;
 }
 
@@ -108,7 +108,7 @@
 
 .harness-refiner-receipt-facts dt,
 .harness-refiner-references dt {
-  color: #717985;
+  color: var(--text-muted);
   font-size: 10px;
   letter-spacing: 0.04em;
 }
@@ -137,18 +137,18 @@
 .harness-refiner-validation-list span {
   border-radius: 999px;
   padding: 1px 6px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--state-hover);
   font-size: 10px;
   text-transform: uppercase;
 }
 
 .harness-refiner-validation-list span.passed {
-  color: #88c99a;
+  color: var(--status-success);
 }
 
 .harness-refiner-validation-list span.failed,
 .harness-refiner-validation-list span.blocked {
-  color: #ff8d8d;
+  color: var(--status-danger);
 }
 
 .harness-refiner-exact-edits > section {
@@ -160,9 +160,9 @@
   margin: 2px 0 0;
   overflow: auto;
   border-radius: 7px;
-  background: #11151a;
+  background: var(--surface-panel);
   padding: 9px;
-  color: #c9d2dc;
+  color: var(--text-secondary);
   font: 11px/1.45 var(--font-mono);
   white-space: pre-wrap;
 }

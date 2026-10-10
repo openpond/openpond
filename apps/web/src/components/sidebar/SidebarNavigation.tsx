@@ -54,7 +54,7 @@ export function SidebarNewThreadButton({ beginNewChat }: {
   beginNewChat: (app?: OpenPondApp | null) => void;
 }) {
   return (
-    <button className="sidebar-icon" type="button" aria-label="New thread" data-tooltip="New thread" title="New thread"
+    <button className="sidebar-icon" type="button" aria-label="New thread" data-tooltip="New thread" data-tooltip-placement="bottom"
       onClick={async () => {
         if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
         beginNewChat(null);

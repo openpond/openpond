@@ -16,7 +16,7 @@
 .dataset-storage-intro {
   max-width: 680px;
   margin: 7px 0 0;
-  color: #999;
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -26,7 +26,7 @@
 }
 
 .dataset-storage-row small.dataset-storage-error {
-  color: #df8e8e;
+  color: var(--status-danger);
 }
 
 .compute-summary-main {
@@ -50,7 +50,7 @@
 }
 
 .model-storage-label {
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -66,21 +66,21 @@
   width: 100%;
   min-width: 0;
   height: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   outline: 0;
   appearance: none;
   background:
-    linear-gradient(45deg, transparent 50%, #9b9b9b 50%) calc(100% - 16px) 50% / 5px 5px no-repeat,
-    linear-gradient(135deg, #9b9b9b 50%, transparent 50%) calc(100% - 11px) 50% / 5px 5px no-repeat,
-    #101010;
-  color: var(--text);
+    linear-gradient(45deg, transparent 50%, var(--state-hover) 50%) calc(100% - 16px) 50% / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--state-hover) 50%, transparent 50%) calc(100% - 11px) 50% / 5px 5px no-repeat,
+    var(--surface-page);
+  color: var(--text-primary);
   padding: 0 32px 0 10px;
   font-size: 13px;
 }
 
 .model-storage-select:focus {
-  border-color: rgba(6, 182, 212, 0.5);
+  border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
 }
 
 .model-storage-add {
@@ -93,10 +93,10 @@
 }
 
 .model-storage-dialog-note {
-  border: 1px solid rgba(143, 200, 255, 0.16);
+  border: 1px solid color-mix(in srgb, var(--accent-info) 16%, transparent);
   border-radius: 9px;
-  background: rgba(143, 200, 255, 0.07);
-  color: #b4cae0;
+  background: color-mix(in srgb, var(--accent-info) 7%, transparent);
+  color: var(--accent-info);
   padding: 9px 10px;
   font-size: 12px;
   line-height: 1.45;
@@ -108,7 +108,7 @@
   justify-content: space-between;
   gap: 18px;
   padding: 13px 16px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .compute-row:first-of-type {
@@ -122,33 +122,33 @@
 }
 
 .compute-row strong {
-  color: #f1f1f1;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 570;
 }
 
 .compute-row small {
   overflow-wrap: anywhere;
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .compute-row > span {
   flex: 0 0 auto;
-  color: #b7b7b7;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
 .compute-diagnostics {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
-  color: #b7b7b7;
+  color: var(--text-secondary);
   padding: 12px 14px;
   font-size: 12px;
 }
 
 .compute-diagnostics summary {
-  color: #dedede;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
@@ -167,7 +167,7 @@
   display: grid;
   gap: 10px;
   padding: 13px 16px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .compute-download-row > div {
@@ -176,20 +176,20 @@
 }
 
 .compute-download-row strong {
-  color: #f1f1f1;
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .compute-download-row small {
   overflow-wrap: anywhere;
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .compute-download-row progress {
   width: 100%;
   height: 5px;
-  accent-color: var(--cyan);
+  accent-color: var(--accent-primary);
 }
 
 @media (max-width: 720px) {

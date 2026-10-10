@@ -64,7 +64,7 @@ function MetricChart({
                       width={slot * 0.7}
                       height={height}
                       rx="3"
-                      fill="#22d3ee"
+                      fill="var(--accent-primary)"
                     />
                   )}
                 </g>

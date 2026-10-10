@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { desktopBackground, initializeDesktopAppearance, setDesktopAppearance, trackWindowAppearance } from "./desktop-appearance.js";
 import { saveImageDownload } from "./desktop-image-download.js";
 import { prepareDesktopBrowserHome } from "./desktop-browser-home.js";
 import { initializeDesktopExecutablePath } from "./desktop-executable-path.js";
@@ -706,6 +707,7 @@ function registerIpcHandlers(): void {
     window.close();
     return true;
   });
+  handleTrackedIpc("openpond:appearance:set", (_event, value: unknown) => setDesktopAppearance(value));
 }
 
 function handleTrackedIpc(channel: string, listener: Parameters<typeof ipcMain.handle>[1]): void {
@@ -803,6 +805,7 @@ function installNavigationHandlers(window: BrowserWindow): void {
 }
 
 async function createWindow(): Promise<void> {
+  initializeDesktopAppearance();
   registerIpcHandlers();
   const preloadPath = path.join(desktopDirname, "preload.js");
   desktopLogger().info("creating main window", { preloadPath });
@@ -812,7 +815,7 @@ async function createWindow(): Promise<void> {
     height: 860,
     minWidth: 980,
     minHeight: 680,
-    backgroundColor: "#141414",
+    backgroundColor: desktopBackground(),
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hiddenInset",
@@ -828,6 +831,7 @@ async function createWindow(): Promise<void> {
       sandbox: true,
     },
   });
+  trackWindowAppearance(mainWindow);
   mainWindow.on("closed", () => {
     mainWindow = null;
     stopBrowserControlWorker();

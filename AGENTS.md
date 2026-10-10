@@ -4,6 +4,8 @@ The app should be run with `pnpm dev` for local testing. If an app is already ru
 
 For a list of selectable values, use the existing `DropdownSelect` (`apps/web/src/components/DropdownSelect.tsx`) or the relevant established picker. Show the selected value in the trigger and the choices in the dropdown; do not just render all the options as an inline list or invent a one-off native select. Collections of saved records still use tables: reuse the existing experiment table layout and shared page styles. Inspect a current rendered screen and match its spacing, typography, controls, and table geometry before calling UI work complete. Keep this guidance here; do not add a separate OpenPond design-system document.
 
+UI colors belong in `apps/web/src/styles/theme.css`. Use semantic CSS variables in components; keep light and dark values together there. After changing the palette, run `pnpm theme:generate`; `pnpm theme:check` checks color ownership and generated data. Monaco and authored brand/media artwork are explicit exceptions.
+
 ## Development and validation
 
 Use the official OpenPond CLI for supported operations, including experiment preparation, execution, status, results and comparison. Check the CLI help or command reference before creating helper scripts. Do not duplicate existing CLI authentication or API operations in custom scripts; use a custom helper only for a verified capability gap.

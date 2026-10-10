@@ -86,6 +86,8 @@ export function SidebarTaskListControls({
           type="button"
           className={`section-icon ${filterMenuOpen ? "active" : ""}`}
           aria-label={`Filter ${noun}: ${filterLabel}`}
+          data-tooltip={filterMenuOpen ? undefined : `Filter ${noun}: ${filterLabel}`}
+          data-tooltip-placement="bottom"
           aria-haspopup="menu"
           aria-expanded={filterMenuOpen}
           onClick={() =>

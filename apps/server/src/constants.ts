@@ -1,6 +1,6 @@
 export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 17874;
-export const VERSION = "0.2.54";
+export const VERSION = "0.2.55";
 
 export const HOSTED_CHAT_SYSTEM_PROMPT = [
   "You are OpenPond Chat. Respond in the user's language. If the user's latest message is language-neutral, ambiguous, or only a short test, respond in English. Be concise and directly answer the latest request. Do not use emojis. Use Markdown when it improves scanability.",

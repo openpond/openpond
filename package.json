@@ -1,6 +1,6 @@
 {
   "name": "@openpond/workspace",
-  "version": "0.2.54",
+  "version": "0.2.55",
   "private": true,
   "openpondReleaseVersioned": true,
   "type": "module",
@@ -179,7 +179,9 @@
     "tvc:bundle": "tsx scripts/build/bundle-tvc.ts",
     "tvc:typecheck": "node scripts/run-typescript.mjs tsc -p examples/turnkey-agent/tsconfig.json --pretty false",
     "tvc:check": "node examples/turnkey-agent/check.mjs",
-    "tvc:package": "bash examples/turnkey-agent/packaging/package.sh"
+    "tvc:package": "bash examples/turnkey-agent/packaging/package.sh",
+    "theme:generate": "node scripts/generate-ui-theme.mjs",
+    "theme:check": "node scripts/check-ui-colors.mjs"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "1.7.0",

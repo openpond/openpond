@@ -27,11 +27,11 @@
   width: 100%;
   height: 32px;
   appearance: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
   outline: 0;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-primary);
   padding: 0 34px 0 11px;
   font: inherit;
   font-size: 12px;
@@ -40,8 +40,8 @@
 }
 
 .profile-page .profile-selector-control select:focus-visible {
-  border-color: color-mix(in srgb, var(--text) 32%, var(--border));
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.07);
+  border-color: color-mix(in srgb, var(--text-primary) 32%, var(--border-default));
+  box-shadow: 0 0 0 2px var(--shadow-color);
 }
 
 .profile-page .profile-selector-control select:disabled {
@@ -52,7 +52,7 @@
 .profile-page .profile-selector-control > svg {
   position: absolute;
   right: 10px;
-  color: var(--muted);
+  color: var(--text-muted);
   pointer-events: none;
 }
 
@@ -82,8 +82,8 @@
   padding: 5px;
   border: 0;
   border-radius: 8px;
-  background: var(--panel);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
+  background: var(--surface-panel);
+  box-shadow: 0 14px 36px var(--shadow-color);
 }
 
 .profile-page .profile-settings-menu > button {
@@ -96,7 +96,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font: inherit;
   font-size: 11px;
   text-align: left;
@@ -106,8 +106,8 @@
 .profile-page .profile-settings-menu > button:hover:not(:disabled),
 .profile-page .profile-settings-menu > button:focus-visible {
   outline: 0;
-  background: var(--hover);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .profile-page .profile-settings-menu > button:disabled {
@@ -127,7 +127,7 @@
 
 .profile-page .profile-settings-menu > button small {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 9px;
   font-weight: 450;
   text-overflow: ellipsis;
@@ -137,12 +137,12 @@
 .profile-page .profile-settings-menu-separator {
   height: 1px;
   margin: 4px 6px;
-  background: var(--border);
+  background: var(--border-default);
 }
 
 .profile-page .account-list-heading {
   gap: 12px;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -233,7 +233,7 @@
 .profile-page .settings-help {
   max-width: 760px;
   margin: 0 0 8px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -290,14 +290,14 @@
   display: grid;
   gap: 12px;
   padding: 16px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: var(--panel);
+  background: var(--surface-panel);
 }
 
 .profile-workflows-header h3 {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 13px;
 }
 
@@ -305,7 +305,7 @@
 .profile-workflows-row p,
 .profile-workflows-row small {
   margin: 4px 0 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -315,21 +315,21 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
 }
 
 .profile-workflows-row strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
 }
 
 .profile-workflows button {
   padding: 6px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
@@ -350,10 +350,10 @@
   min-height: 90px;
   margin: 0;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: var(--background);
-  color: var(--text);
+  background: var(--surface-page);
+  color: var(--text-primary);
   font: 11px/1.5 monospace;
 }
 
@@ -367,9 +367,9 @@
   display: grid;
   gap: 12px;
   padding: 16px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: var(--panel);
+  background: var(--surface-panel);
 }
 
 .profile-table-scroll {
@@ -382,26 +382,26 @@
   border-collapse: collapse;
   text-align: left;
   font-size: 12px;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .profile-evaluation-table th,
 .profile-evaluation-table td {
   padding: 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   vertical-align: top;
   overflow-wrap: anywhere;
 }
 
 .profile-evaluation-table thead th {
-  color: var(--muted);
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .profile-evaluation-table small {
   display: block;
   margin-top: 4px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-weight: 400;
 }
 
@@ -410,14 +410,14 @@
   max-height: calc(100vh - 48px);
   padding: 16px;
   overflow: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-primary);
 }
 
 .profile-evaluation-dialog::backdrop {
-  background: rgb(0 0 0 / 55%);
+  background: var(--backdrop);
 }
 
 .profile-evaluation-dialog-header,
@@ -457,7 +457,7 @@
 .profile-evaluations-suite,
 .profile-evaluations-row,
 .profile-evaluations-detail {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   padding: 12px;
 }
@@ -472,12 +472,12 @@
 .profile-evaluations-suite strong,
 .profile-evaluations-row strong,
 .profile-evaluations-detail strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
 }
 
 .profile-evaluations-suite-run summary {
-  color: var(--text);
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 11px;
 }
@@ -492,7 +492,7 @@
 .profile-evaluations-suite-run li {
   display: grid;
   gap: 2px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -503,7 +503,7 @@
 .profile-evaluations-detail small,
 .profile-evaluations-cases span {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -518,10 +518,10 @@
 .profile-evaluation-dialog button {
   flex: none;
   padding: 6px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
@@ -534,7 +534,7 @@
 
 .profile-evaluations-detail h4 {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
 }
 
@@ -559,13 +559,13 @@
   display: grid;
   gap: 8px;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
 }
 
 .profile-evaluations-run-form label,
 .profile-evaluations-run-plan strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -573,10 +573,10 @@
 .profile-evaluations-run-form select {
   max-width: 100%;
   padding: 7px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: var(--panel);
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-primary);
 }
 
 .profile-evaluations-run-plan small {
@@ -588,7 +588,7 @@
   align-items: flex-start;
   gap: 8px;
   padding: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
   cursor: pointer;
 }

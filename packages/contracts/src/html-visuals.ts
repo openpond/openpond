@@ -1,14 +1,20 @@
+import { UI_THEME_COLORS } from "./ui-theme.generated.js";
 import { z } from "zod";
 import { FileOutputRefSchema } from "./work-outputs.js";
 export const HTML_VISUAL_MAX_BYTES = 64000;
 export const HTML_VISUAL_MAX_BUNDLE_BYTES = 6 * 1024 * 1024;
 export const HTML_VISUAL_MAX_HEIGHT = 2400;
 export const HTML_VISUAL_WIDTH = 680;
+// Published visuals use this small, stable variable vocabulary. Resolve it from the app palette.
+export const HTML_VISUAL_THEME_TOKENS = {
+  "--bg": "--surface-page", "--panel": "--surface-panel", "--panel-soft": "--surface-raised",
+  "--text": "--text-primary", "--muted": "--text-muted", "--border": "--border-default",
+  "--orange": "--accent-warm", "--cyan": "--accent-primary", "--blue": "--accent-info",
+} as const;
 export const HTML_VISUAL_THEME = {
-  "--bg": "#141414", "--panel": "#101010", "--panel-soft": "#1f1f1f",
-  "--text": "#f4f4f5", "--muted": "#9a9a9a", "--border": "rgba(255,255,255,.08)",
-  "--font-web": '"Figtree",Inter,system-ui,sans-serif', "--orange": "#ff7a2f",
-  "--cyan": "#06b6d4", "--blue": "#3aa3ff",
+  ...Object.fromEntries(Object.entries(HTML_VISUAL_THEME_TOKENS).map(([name, token]) => [name, UI_THEME_COLORS.dark[token]])) as Record<keyof typeof HTML_VISUAL_THEME_TOKENS, string>,
+  "--font-web": '\"Figtree\",Inter,system-ui,sans-serif',
+  "--color-scheme": "dark",
 } as const;
 export type HtmlVisualTheme = Record<keyof typeof HTML_VISUAL_THEME, string>;
 export const HtmlVisualThemeSchema = z.record(z.enum(Object.keys(HTML_VISUAL_THEME) as [

@@ -4,7 +4,7 @@
   grid-template-columns: 300px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  background: var(--bg);
+  background: var(--surface-page);
 }
 
 .settings-shell.harness-diff-open {
@@ -64,8 +64,8 @@
 
 .settings-sidebar {
   min-height: 0;
-  border-right: 1px solid var(--border);
-  background: #101010;
+  border-right: 1px solid var(--border-default);
+  background: var(--surface-page);
   padding: 12px 7px 0;
 }
 
@@ -83,7 +83,7 @@
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: #8e8e8e;
+  color: var(--text-muted);
   padding: 0 10px;
   text-align: left;
   font-size: 13px;
@@ -97,8 +97,8 @@
 }
 
 .settings-back:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  background: var(--state-hover);
 }
 
 .settings-nav {
@@ -115,12 +115,12 @@
 .settings-nav-group + .settings-nav-group {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .settings-nav-heading {
   padding: 3px 10px 5px;
-  color: #8a8a8a;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -134,14 +134,14 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #f5f5f5;
+  color: var(--text-primary);
   padding: 0 10px;
   text-align: left;
   font-size: 13px;
 }
 
 .settings-nav-item.active {
-  background: #2a2a2a;
+  background: var(--state-selected);
 }
 
 .settings-content {
@@ -162,7 +162,7 @@
 }
 
 .account-settings-embedded {
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--border-default);
   padding-top: 28px;
 }
 
@@ -187,7 +187,7 @@
 
 .account-settings h1 {
   margin: 0 0 24px;
-  color: #f7f7f7;
+  color: var(--text-primary);
   font-size: 22px;
   font-weight: 500;
   letter-spacing: 0;
@@ -232,7 +232,7 @@
     gap: 8px;
     overflow-x: auto;
     border-right: 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-default);
     padding: 44px 14px 10px;
     scrollbar-width: none;
   }
@@ -263,7 +263,7 @@
     margin: 0;
     padding: 0 0 0 8px;
     border-top: 0;
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    border-left: 1px solid var(--border-subtle);
   }
 
   .settings-nav-item {
@@ -287,15 +287,15 @@
 }
 
 .configuration-settings header h1 { margin-bottom: 12px; }
-.configuration-settings header p, .configuration-settings details p { color: var(--muted); font-size: 13px; line-height: 1.6; }
-.configuration-settings details { min-width: 0; border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.configuration-settings header p, .configuration-settings details p { color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+.configuration-settings details { min-width: 0; border: 1px solid var(--border-default); border-radius: 12px; padding: 16px; }
 .configuration-settings summary { cursor: pointer; font-size: 14px; font-weight: 500; }
-.configuration-settings textarea { box-sizing: border-box; resize: vertical; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 14px; line-height: 1.6; font-size: 13px; }
+.configuration-settings textarea { box-sizing: border-box; resize: vertical; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-page); color: var(--text-primary); padding: 14px; line-height: 1.6; font-size: 13px; }
 .configuration-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
-.configuration-settings button, .configuration-settings select { border: 1px solid var(--border); border-radius: 8px; background: #242424; color: var(--text); padding: 8px 12px; }
+.configuration-settings button, .configuration-settings select { border: 1px solid var(--border-default); border-radius: 8px; background: var(--state-hover); color: var(--text-primary); padding: 8px 12px; }
 .configuration-settings button:disabled { opacity: .5; cursor: default; }
 .configuration-settings table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.configuration-settings th, .configuration-settings td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.configuration-settings th, .configuration-settings td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border-default); overflow-wrap: anywhere; }
 .configuration-settings pre { overflow: auto; font-size: 12px; }
 .configuration-settings code { overflow-wrap: anywhere; }
 .configuration-banner { margin-bottom: 24px; }

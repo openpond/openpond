@@ -12,7 +12,7 @@
 }
 .provider-connections-intro p {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 14px;
 }
 .provider-connections-intro button {
@@ -29,9 +29,9 @@
   flex-direction: column;
   gap: 14px;
   padding: 18px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: #191919;
+  background: var(--surface-panel);
 }
 .provider-connection-identity {
   display: flex;
@@ -51,15 +51,15 @@
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--text-muted);
 }
-.provider-connection-status.ready { color: #8ccdaa; }
-.provider-connection-status.configured { color: #96c5eb; }
-.provider-connection-status.warning { color: #f0b782; }
+.provider-connection-status.ready { color: var(--status-success); }
+.provider-connection-status.configured { color: var(--accent-info); }
+.provider-connection-status.warning { color: var(--status-warning); }
 .provider-connection-card > p {
   min-height: 36px;
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -73,9 +73,9 @@
   max-height: calc(100dvh - 48px);
   padding: 0;
   gap: 0;
-  border: 1px solid #343434;
+  border: 1px solid var(--border-strong);
   border-radius: 14px;
-  background: #1c1c1c;
+  background: var(--surface-floating);
 }
 .provider-details-dialog .git-dialog-close {
   top: 16px;
@@ -87,7 +87,7 @@
   justify-content: space-between;
   padding: 24px 56px 20px 24px;
   gap: 16px;
-  border-bottom: 1px solid #303030;
+  border-bottom: 1px solid var(--border-strong);
 }
 .provider-details-dialog .provider-dialog-header > div:first-child {
   display: grid;
@@ -95,7 +95,7 @@
   min-width: 0;
 }
 .provider-details-dialog .provider-dialog-header h2 { font-size: 18px; font-weight: 500; }
-.provider-details-dialog .provider-dialog-header span { font-size: 12px; color: var(--muted); }
+.provider-details-dialog .provider-dialog-header span { font-size: 12px; color: var(--text-muted); }
 .provider-details-dialog .provider-state-pill {
   position: static;
   flex-shrink: 0;
@@ -117,7 +117,7 @@
   display: flex;
   gap: 22px;
   border: 0;
-  border-bottom: 1px solid #303030;
+  border-bottom: 1px solid var(--border-strong);
   border-radius: 0;
   background: transparent;
   margin: 0;
@@ -130,14 +130,14 @@
   border-bottom: 2px solid transparent;
   border-radius: 0;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
   font-weight: 400;
 }
 .provider-details-dialog .surface-tabs button[aria-selected="true"],
 .provider-details-dialog .surface-tabs button.active {
-  border-bottom-color: var(--cyan);
+  border-bottom-color: var(--accent-primary);
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
 }
 .provider-details-dialog .provider-dialog-body {
   padding: 20px 24px;
@@ -159,14 +159,14 @@
 .provider-details-dialog .native-connection-status {
   justify-content: space-between;
   padding: 12px;
-  border: 1px solid #303030;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
 }
 .native-connection-status > [role="status"] svg { flex-shrink: 0; }
 .native-model-section { display: grid; gap: 12px; }
 .native-model-heading { display: flex; align-items: center; justify-content: space-between; }
 .native-model-section small,
-.native-agent-version { color: var(--muted); font-size: 12px; }
+.native-agent-version { color: var(--text-muted); font-size: 12px; }
 .native-model-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -178,28 +178,28 @@
 .native-model-list > span {
   min-width: 0;
   border-radius: 6px;
-  background: #252525;
+  background: var(--state-hover);
   padding: 10px 12px;
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-.native-model-list:focus-visible { outline: 1px solid var(--cyan); outline-offset: 3px; }
+.native-model-list:focus-visible { outline: 1px solid var(--accent-primary); outline-offset: 3px; }
 .provider-details-dialog .settings-secondary,
 .provider-details-dialog .settings-primary,
 .provider-connection-card .settings-secondary {
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
-  background: #292929;
+  background: var(--surface-floating);
   height: 34px;
   margin: 0;
 }
-.provider-details-dialog .settings-secondary:hover:not(:disabled) { background: #353535; }
+.provider-details-dialog .settings-secondary:hover:not(:disabled) { background: var(--state-hover); }
 .provider-details-dialog .native-agent-setup > details {
   padding-top: 16px;
-  border-top: 1px solid #303030;
+  border-top: 1px solid var(--border-strong);
   font-size: 13px;
 }
-.native-agent-setup > details > summary { color: var(--muted); cursor: pointer; }
+.native-agent-setup > details > summary { color: var(--text-muted); cursor: pointer; }
 .native-agent-setup > details[open] > summary { margin-bottom: 16px; }
 .provider-details-dialog .agent-sync-form {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -225,7 +225,7 @@
   min-width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: var(--cyan);
+  accent-color: var(--accent-primary);
 }
 .provider-details-dialog .agent-sync-form select { min-height: 38px; }
 .provider-details-dialog .agent-sync-form > .agent-connect-button {
@@ -235,9 +235,9 @@
   padding: 8px 16px;
 }
 .provider-details-dialog .agent-conversation-setup > details {
-  border-top: 1px solid #303030;
+  border-top: 1px solid var(--border-strong);
   padding-top: 16px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 .provider-details-dialog .agent-conversation-setup summary { cursor: pointer; }
@@ -257,36 +257,36 @@
 .url-model-endpoint { overflow-wrap: anywhere; }
 .url-model-connection-form { display: grid; gap: 16px; padding: 20px; }
 .url-model-connection-form label, .url-model-field { display: grid; gap: 8px; }
-.url-model-connection-form input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+.url-model-connection-form input { width: 100%; padding: 10px; border: 1px solid var(--border-default); border-radius: 6px; background: var(--surface-page); color: var(--text-primary); }
 .url-model-connection-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
 .url-model-connections { display: grid; gap: 16px; }
 .url-model-connections h2 { font-size: 16px; margin: 0 0 6px; }
-.url-model-field .dropdown-trigger { width: 100%; justify-content: space-between; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
-.url-model-field .dropdown-menu { background: var(--panel); color: var(--text); }
+.url-model-field .dropdown-trigger { width: 100%; justify-content: space-between; padding: 10px; border: 1px solid var(--border-default); border-radius: 6px; background: var(--surface-page); color: var(--text-primary); }
+.url-model-field .dropdown-menu { background: var(--surface-panel); color: var(--text-primary); }
 
 .provider-connections-heading { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .acp-add-button { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 .provider-dialog-backdrop > .git-dialog.acp-agent-dialog { width: min(860px, calc(100vw - 32px)); }
 .acp-agent-dialog .provider-dialog-body { overflow-y: auto; min-height: 0; }
-.acp-agent-dialog .provider-dialog-body > p { margin: 0; color: var(--muted); font-size: 13px; }
+.acp-agent-dialog .provider-dialog-body > p { margin: 0; color: var(--text-muted); font-size: 13px; }
 .acp-agent-dialog .provider-card-form { display: grid; gap: 16px; }
 .acp-registry-content { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-.acp-registry-hint { color: var(--muted); font-size: 13px; padding: 16px; border: 1px dashed var(--border); border-radius: 8px; }
-.acp-registration-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+.acp-registry-hint { color: var(--text-muted); font-size: 13px; padding: 16px; border: 1px dashed var(--border-default); border-radius: 8px; }
+.acp-registration-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border-default); }
 .acp-registry-search { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
 .acp-registry-search label { flex: 1; }
 .acp-registry-list { display: grid; gap: 6px; max-height: 340px; overflow-y: auto; margin: 0; scrollbar-width: thin; }
-.acp-registry-entry { display: grid; gap: 5px; text-align: left; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: inherit; cursor: pointer; }
-.acp-registry-entry[aria-pressed="true"] { border-color: var(--cyan); background: #252d30; }
-.acp-registry-entry span, .acp-registry-entry small { font-size: 12px; color: var(--muted); }
+.acp-registry-entry { display: grid; gap: 5px; text-align: left; padding: 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-panel); color: inherit; cursor: pointer; }
+.acp-registry-entry[aria-pressed="true"] { border-color: var(--accent-primary); background: var(--state-hover); }
+.acp-registry-entry span, .acp-registry-entry small { font-size: 12px; color: var(--text-muted); }
 .acp-install-summary { display: grid; gap: 10px; padding: 12px 0; }
 .acp-install-summary code { overflow-wrap: anywhere; font-size: 12px; }
 .acp-agent-dialog textarea { min-height: 60px; font-family: monospace; }
 
 .acp-agent-dialog input, .acp-agent-dialog textarea, .acp-agent-dialog select { width: 100%; min-width: 0; }
-.acp-registry-entry:hover:not(:disabled) { background: #292929; }
+.acp-registry-entry:hover:not(:disabled) { background: var(--state-hover); }
 @media (max-width: 600px) { .acp-registry-content { grid-template-columns: minmax(0, 1fr); } .acp-registry-list { max-height: 220px; } }
 
-.acp-install-summary a { color: var(--cyan); font-size: 13px; }
-.acp-install-summary p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.acp-install-summary a { color: var(--accent-primary); font-size: 13px; }
+.acp-install-summary p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.5; }

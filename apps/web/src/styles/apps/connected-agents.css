@@ -15,12 +15,12 @@
   border: 0;
   border-radius: 6px;
   padding: 8px 12px;
-  color: #b6b6b6;
+  color: var(--text-secondary);
   background: transparent;
 }
 .apps-page-tabs button[aria-selected="true"] {
-  background: #252525;
-  color: #f2f2f2;
+  background: var(--state-selected);
+  color: var(--text-primary);
 }
 .connected-agents-view {
   width: min(1120px, calc(100% - 48px));
@@ -41,7 +41,7 @@
   font-weight: 500;
 }
 .agent-connections-heading p {
-  color: #a0a0a0;
+  color: var(--text-muted);
   font-size: 14px;
 }
 .agent-more {
@@ -55,8 +55,8 @@
   min-width: 180px;
   padding: 6px;
   border-radius: 8px;
-  background: #262626;
-  box-shadow: 0 8px 24px #0008;
+  background: var(--surface-floating);
+  box-shadow: 0 8px 24px var(--shadow-color);
 }
 .agent-more-menu button {
   display: flex;
@@ -65,14 +65,14 @@
   width: 100%;
 }
 .agent-more-menu button:hover {
-  background: #333;
+  background: var(--state-hover);
 }
 .agent-project-scope {
   display: flex;
   align-items: center;
   gap: 12px;
   font-size: 13px;
-  color: #aaa;
+  color: var(--text-muted);
 }
 .agent-project-scope select {
   min-width: 200px;
@@ -80,10 +80,10 @@
 }
 .connected-agents-view select,
 .agent-sync-form select {
-  border: 1px solid #333;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: #191919;
-  color: #eee;
+  background: var(--surface-panel);
+  color: var(--text-primary);
   min-height: 34px;
   padding: 6px 10px;
 }
@@ -99,7 +99,7 @@
   flex-direction: column;
   gap: 14px;
   border-radius: 8px;
-  background: #191919;
+  background: var(--surface-panel);
   padding: 14px;
 }
 .agent-card-title {
@@ -118,7 +118,7 @@
 .agent-hide {
   border: 0;
   background: transparent;
-  color: #999;
+  color: var(--text-muted);
   padding: 3px;
   opacity: 0;
 }
@@ -127,20 +127,20 @@
   opacity: 1;
 }
 .agent-connection-card small {
-  color: #aaa;
+  color: var(--text-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 .agent-connection-card p {
   margin: 0;
-  color: #aaa;
+  color: var(--text-muted);
   font-size: 13px;
 }
 .agent-connect-button {
   border: 0;
   border-radius: 6px;
-  background: #007e9b;
-  color: #fff;
+  background: var(--accent-primary-fill);
+  color: var(--text-on-accent);
   padding: 8px 12px;
   align-self: center;
   cursor: pointer;
@@ -160,7 +160,7 @@
   gap: 4px;
 }
 .agent-learning-link {
-  color: #67d9ee;
+  color: var(--accent-primary);
   font-size: 12px;
   margin-top: auto;
   text-decoration: none;
@@ -173,7 +173,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  color: #aaa;
+  color: var(--text-muted);
   font-size: 12px;
 }
 .agent-importer-footer code {
@@ -192,24 +192,24 @@
   display: grid;
   gap: 8px;
   padding: 12px;
-  border: 1px solid #333;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   font-size: 13px;
 }
 .agent-retained-connection small,
 .agent-sync-form small {
-  color: #aaa;
+  color: var(--text-muted);
   overflow-wrap: anywhere;
 }
 .agent-retained-connection progress {
   width: 100%;
-  accent-color: #08a3bd;
+  accent-color: var(--accent-primary);
 }
 .agent-conversation-setup .settings-button-row {
   flex-wrap: wrap;
 }
 .agent-conversation-setup a {
-  color: #67d9ee;
+  color: var(--accent-primary);
 }
 .agent-source-path {
   overflow-wrap: anywhere;
@@ -269,7 +269,7 @@
   border: 0;
   padding: 0;
   background: transparent;
-  color: #67d9ee;
+  color: var(--accent-primary);
   text-align: left;
   font-size: 13px;
   cursor: pointer;

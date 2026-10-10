@@ -1,5 +1,5 @@
 import type { ChatMessage } from "../../lib/app-models";
-import { MessageFooter } from "./MessageFooter";
+import { MessageTimestamp } from "./MessageFooter";
 import { UserMessageContent } from "./UserMessageContent";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
@@ -62,6 +62,7 @@ export function TaskMessageRow({
         <UserMessageContent content={input.body} />
       </div>
       <div className="task-message-attribution">
+        <MessageTimestamp timestamp={message.timestamp} />
         <span>{direction === "sent" ? "Sent to" : "Received from"}</span>
         {peer.kind === "ponder" ? (
           onOpenPonder && connection ? (
@@ -83,7 +84,6 @@ export function TaskMessageRow({
         </span>
       </div>
       {error ? <p role="alert">{error}</p> : null}
-      <MessageFooter content={input.body} timestamp={message.timestamp} />
     </article>
   );
 }

@@ -3,7 +3,7 @@
   gap: 20px;
   min-width: 0;
   padding-top: 4px;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 13px;
 }
 .run-diagnostics h2,
@@ -23,7 +23,7 @@
 }
 .run-diagnostics .diagnostic-note,
 .run-diagnostics small {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 .run-diagnostics .diagnostic-note {
   margin-top: 2px;
@@ -64,15 +64,16 @@
   white-space: nowrap;
 }
 .run-diagnostics .training-button:not(.secondary) {
-  border-color: #0e7490;
-  background: #0e7490;
-  color: #fff;
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-fill);
+  color: var(--text-on-accent);
 }
 .run-diagnostics .training-button:not(.secondary):hover:not(:disabled) {
-  background: #155e75;
+  background: var(--accent-primary-fill);
+  color: var(--text-on-accent);
 }
 .run-diagnostics .training-button.secondary:hover:not(:disabled) {
-  background: var(--panel-soft);
+  background: var(--surface-raised);
 }
 .run-diagnostics .diagnostic-more {
   justify-self: start;
@@ -83,22 +84,22 @@
   display: grid;
   gap: 6px;
   padding: 12px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--panel-soft);
+  background: var(--surface-raised);
 }
 .run-diagnostics .diagnostic-callout-error {
-  border-color: #f43f5e40;
-  background: #f43f5e12;
-  color: #fda4af;
+  border-color: color-mix(in srgb, var(--status-danger) 25.1%, transparent);
+  background: color-mix(in srgb, var(--status-danger) 7.06%, transparent);
+  color: var(--status-danger);
 }
 .run-diagnostics .diagnostic-callout strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
 }
 .run-diagnostics .diagnostic-callout code {
-  color: #fda4af;
+  color: var(--status-danger);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -109,7 +110,7 @@
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   margin: 0;
   padding: 4px 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
 }
 .run-diagnostics .diagnostic-stats > div {
@@ -120,7 +121,7 @@
   padding: 12px 16px;
 }
 .run-diagnostics .diagnostic-stats dt {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 .run-diagnostics .diagnostic-stats dd {
@@ -154,7 +155,7 @@
 .run-diagnostics .diagnostic-table {
   overflow: auto;
   max-height: 440px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
 }
 .run-diagnostics table {
@@ -166,7 +167,7 @@
 .run-diagnostics table td {
   padding: 9px 12px !important;
   border-right: 0 !important;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   vertical-align: middle;
   font-weight: normal;
 }
@@ -177,8 +178,8 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--panel-soft);
-  color: var(--muted-strong);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
@@ -198,11 +199,11 @@
 .run-diagnostics table td.diagnostic-empty {
   height: auto !important;
   padding: 18px 12px !important;
-  color: var(--muted);
+  color: var(--text-muted);
   text-align: center;
 }
 .run-diagnostics tr:target td {
-  background: #06b6d414;
+  background: color-mix(in srgb, var(--accent-primary) 7.84%, transparent);
 }
 .run-diagnostics .diagnostic-chips {
   display: flex;
@@ -213,8 +214,8 @@
   display: inline-block;
   padding: 2px 6px;
   border-radius: 4px;
-  background: var(--panel-soft);
-  color: var(--muted-strong);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   line-height: 16px;
@@ -222,17 +223,17 @@
 }
 .run-diagnostics .diagnostic-chip:hover,
 .run-diagnostics .diagnostic-chip:focus-visible {
-  background: #06b6d418;
-  color: #67e8f9;
+  background: color-mix(in srgb, var(--accent-primary) 9.41%, transparent);
+  color: var(--accent-primary);
 }
 
 /* Optional evidence */
 .run-diagnostics .diagnostic-disclosures {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
 }
 .run-diagnostics .diagnostic-disclosure + .diagnostic-disclosure {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 .run-diagnostics .diagnostic-disclosure > summary {
   display: flex;
@@ -247,15 +248,15 @@
   display: none;
 }
 .run-diagnostics .diagnostic-disclosure > summary:hover {
-  background: var(--panel-soft);
+  background: var(--surface-raised);
 }
 .run-diagnostics .diagnostic-disclosure > summary:focus-visible {
-  outline: 2px solid #22d3ee;
+  outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
 }
 .run-diagnostics .diagnostic-disclosure > summary svg {
   flex-shrink: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   transition: transform 120ms ease;
 }
 .run-diagnostics .diagnostic-disclosure[open] > summary svg {
@@ -273,7 +274,7 @@
 .run-diagnostics .diagnostic-disclosure-body ul {
   margin: 0;
   padding-left: 18px;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   display: grid;
   gap: 4px;
 }
@@ -284,7 +285,7 @@
   margin: 0;
 }
 .run-diagnostics .diagnostic-facts dt {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 .run-diagnostics .diagnostic-facts dd {
   margin: 0;
@@ -296,7 +297,7 @@
   padding: 10px 12px;
   overflow: auto;
   border-radius: 6px;
-  background: var(--panel);
+  background: var(--surface-panel);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -306,16 +307,16 @@
   display: grid;
   gap: 12px;
   padding: 16px;
-  border: 1px solid #06b6d466;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
   border-radius: 8px;
-  background: var(--panel-soft);
+  background: var(--surface-raised);
 }
 .run-diagnostics .diagnostic-review > p {
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 .run-diagnostics .diagnostic-review .diagnostic-disclosure {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
 }
 

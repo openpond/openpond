@@ -9,7 +9,7 @@
   grid-template-columns: minmax(180px, 1.35fr) minmax(68px, 0.4fr) minmax(90px, 0.5fr) minmax(180px, 1fr) auto;
   width: 100%;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -20,7 +20,7 @@
 .profile-catalog-row:focus-visible,
 .profile-catalog-row.selected {
   outline: 0;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--state-hover);
 }
 
 .profile-catalog-row[aria-disabled="true"] {
@@ -30,7 +30,7 @@
 
 .profile-catalog-source,
 .profile-catalog-summary {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -57,14 +57,14 @@
   display: grid;
   gap: 6px;
   margin: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
   padding: 10px 12px 12px;
 }
 
 .profile-publication-fieldset legend {
   padding: 0 5px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -85,7 +85,7 @@
 
 .profile-publication-provider:hover,
 .profile-publication-selection:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--state-hover);
 }
 
 .profile-publication-provider span,
@@ -98,7 +98,7 @@
 .profile-publication-provider small,
 .profile-publication-selection small,
 .profile-publication-empty {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -118,7 +118,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -129,8 +129,8 @@
 
 .profile-publication-warning {
   border-radius: 7px;
-  background: rgba(255, 198, 88, 0.09);
-  color: #ffd38a;
+  background: color-mix(in srgb, var(--status-warning) 9%, transparent);
+  color: var(--status-warning);
   padding: 8px 10px;
   font-size: 12px;
 }
@@ -139,7 +139,7 @@
   display: grid;
   max-height: 360px;
   overflow: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
 }
 
@@ -148,7 +148,7 @@
   justify-content: space-between;
   gap: 14px;
   padding: 7px 9px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  border-bottom: 1px solid var(--border-subtle);
   font-family: var(--font-mono);
   font-size: 11px;
 }
@@ -166,13 +166,13 @@
 
 .profile-publication-file-list small {
   flex: 0 0 auto;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .profile-publication-preview details code {
   display: block;
   padding: 3px 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 

@@ -7,9 +7,9 @@
   padding: 4px;
   border: 0;
   border-radius: 8px;
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: 0 8px 24px #0006;
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px var(--shadow-color);
 }
 .sidebar-task-menu button {
   display: flex;
@@ -29,11 +29,11 @@
 }
 .sidebar-task-menu button:hover,
 .sidebar-task-menu button:focus-visible {
-  background: #000;
+  background: var(--state-hover);
   outline: none;
 }
 .sidebar-task-menu .task-menu-done {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   margin-top: 4px;
 }
 .sidebar-task-menu-trigger.is-open {
@@ -56,8 +56,13 @@
   padding: 0;
 }
 
-.sidebar-task-row:hover .sidebar-task-menu-trigger .sidebar-row-action,
-.sidebar-task-row:focus-within .sidebar-task-menu-trigger .sidebar-row-action,
+.sidebar-task-menu-trigger .sidebar-row-action {
+  color: var(--text-muted);
+}
+
+.sidebar-task-menu-trigger .sidebar-row-action:hover,
+.sidebar-task-menu-trigger .sidebar-row-action:focus-visible,
 .sidebar-task-menu-trigger.is-open .sidebar-row-action {
-  background: var(--panel);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }

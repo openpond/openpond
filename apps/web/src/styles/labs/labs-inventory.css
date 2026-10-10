@@ -16,7 +16,7 @@
 }
 
 .labs-models-table td:nth-child(4) {
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
@@ -27,7 +27,7 @@
 }
 
 .labs-model-table-summary > span {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
   white-space: nowrap;
 }
@@ -52,7 +52,7 @@
 
 .labs-hosted-project-identity span {
   overflow: hidden;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -60,23 +60,23 @@
 }
 
 .labs-hosted-project-identity small {
-  color: var(--muted);
-  font: 10px/1.35 var(--mono);
+  color: var(--text-muted);
+  font: 10px/1.35 var(--font-mono);
 }
 
 .labs-hosted-only-row td {
-  background: color-mix(in srgb, var(--panel) 90%, var(--accent));
+  background: color-mix(in srgb, var(--surface-panel) 90%, var(--accent-primary));
 }
 
 .labs-dataset-advanced-details {
   margin-top: 14px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   padding-top: 12px;
 }
 
 .labs-dataset-advanced-details summary {
   width: max-content;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 650;
   cursor: pointer;
@@ -101,7 +101,7 @@
 .labs-dataset-advanced-action code {
   min-width: 0;
   overflow: hidden;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -111,9 +111,9 @@
   display: grid;
   gap: 10px;
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
-  background: var(--panel);
+  background: var(--surface-panel);
   padding: 13px;
 }
 
@@ -124,8 +124,8 @@
 
 .labs-taskset-grader-table small {
   margin-top: 3px;
-  color: var(--muted);
-  font: 10px/1.35 var(--mono);
+  color: var(--text-muted);
+  font: 10px/1.35 var(--font-mono);
 }
 
 .labs-taskset-grader-runtime h3,
@@ -143,7 +143,7 @@
 
 .labs-taskset-grader-source > header p {
   margin: 3px 0 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -151,38 +151,38 @@
   overflow: auto;
   max-height: 560px;
   margin: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: var(--bg);
+  background: var(--surface-page);
   padding: 12px;
-  color: var(--muted-strong);
-  font: 11px/1.55 var(--mono);
+  color: var(--text-secondary);
+  font: 11px/1.55 var(--font-mono);
   tab-size: 2;
   white-space: pre;
 }
 
 .labs-taskset-grader-source > small {
   overflow-wrap: anywhere;
-  color: var(--muted);
-  font: 9px/1.4 var(--mono);
+  color: var(--text-muted);
+  font: 9px/1.4 var(--font-mono);
 }
 
 .labs-taskset-grader-integrity {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: var(--panel-soft);
-  color: var(--muted);
+  background: var(--surface-raised);
+  color: var(--text-muted);
   padding: 3px 7px;
   font-size: 9px;
   text-transform: capitalize;
 }
 
 .labs-taskset-grader-integrity.verified {
-  color: var(--success);
+  color: var(--status-success);
 }
 
 .labs-taskset-grader-integrity.mismatch {
-  color: var(--danger);
+  color: var(--status-danger);
 }
 
 .labs-dataset-advanced-action .training-button {
@@ -194,11 +194,11 @@
 .labs-model-create-dialog select {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
   outline: none;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--surface-page);
+  color: var(--text-primary);
   padding: 9px 10px;
   font: inherit;
   font-size: 12px;
@@ -234,7 +234,7 @@
 .labs-scorer-settings-row > label {
   display: grid;
   gap: 7px;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 650;
 }
@@ -249,9 +249,9 @@
   min-height: 34px;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: var(--bg);
+  background: var(--surface-page);
   padding: 0 10px;
   cursor: pointer;
 }
@@ -278,7 +278,7 @@
 .labs-model-create-purpose legend {
   grid-column: 1 / -1;
   margin-bottom: 1px;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 650;
 }
@@ -287,10 +287,10 @@
   display: grid;
   gap: 5px;
   min-height: 82px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   padding: 11px;
   text-align: left;
   cursor: pointer;
@@ -298,15 +298,15 @@
 
 .labs-model-create-purpose button:hover,
 .labs-model-create-purpose button.selected {
-  background: var(--panel-soft);
+  background: var(--surface-raised);
 }
 
 .labs-model-create-purpose button.selected {
-  border-color: var(--muted-strong);
+  border-color: var(--text-secondary);
 }
 
 .labs-model-create-purpose small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
   line-height: 1.4;
 }
@@ -314,13 +314,13 @@
 .labs-model-create-field {
   display: grid;
   gap: 7px;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 650;
 }
 
 .labs-model-create-field > small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 500;
   line-height: 1.45;
@@ -337,7 +337,7 @@
 }
 
 .labs-model-create-select-row .dropdown-trigger {
-  background: var(--bg);
+  background: var(--surface-page);
 }
 
 .labs-model-create-select-row .dropdown-menu {
@@ -353,10 +353,10 @@
   min-height: 34px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
   background: transparent;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font: inherit;
   font-size: 17px;
   font-weight: 400;
@@ -364,8 +364,8 @@
 }
 
 .labs-model-create-add:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .labs-model-create-dialog textarea {
@@ -383,25 +383,26 @@
 
 .labs-model-create-dialog label small,
 .labs-model-create-field small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 9px;
   font-weight: 500;
 }
 
 .labs-model-create-dialog textarea:focus {
-  border-color: var(--border);
+  border-color: var(--border-default);
   box-shadow: none;
 }
 
 .labs-model-create-dialog footer button[type="submit"] {
-  border-color: #fff;
-  background: #fff;
-  color: #111;
+  border-color: var(--border-strong);
+  background: var(--action-primary);
+  color: var(--text-on-primary);
 }
 
 .labs-model-create-dialog footer button[type="submit"]:hover:not(:disabled) {
-  border-color: #f1f1f1;
-  background: #f1f1f1;
+  border-color: var(--border-strong);
+  background: var(--action-primary);
+  color: var(--text-on-primary);
 }
 
 .labs-serving-page,
@@ -427,7 +428,7 @@
 .labs-operational-section h2,
 .labs-operational-header h2 {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 560;
 }
@@ -436,7 +437,7 @@
 .labs-operational-header p {
   max-width: 720px;
   margin: 4px 0 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.55;
 }
@@ -458,13 +459,13 @@
 }
 
 .labs-serving-model strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 580;
 }
 
 .labs-serving-model span {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -484,11 +485,11 @@
 
 .labs-model-create-dialog { width: min(820px, calc(100vw - 40px)); max-height: calc(100vh - 48px); overflow: auto; }
 .model-create-steps { display: flex; gap: 8px; padding-block: 14px; }
-.model-create-steps button { flex: 1; padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; }
-.model-create-steps button[aria-current="step"] { color: var(--text); background: var(--panel); border-color: var(--muted); }
+.model-create-steps button { flex: 1; padding: 10px 14px; border: 1px solid var(--border-default); border-radius: 6px; background: transparent; color: var(--text-muted); font: inherit; font-size: 13px; }
+.model-create-steps button[aria-current="step"] { color: var(--text-primary); background: var(--surface-panel); border-color: var(--text-muted); }
 .model-create-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
-.model-create-fields > p { color: var(--muted); font-size: 13px; line-height: 1.5; }
-.model-create-fields pre { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; padding: 12px; background: var(--panel); border-radius: 6px; }
+.model-create-fields > p { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.model-create-fields pre { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; padding: 12px; background: var(--surface-panel); border-radius: 6px; }
 .labs-model-create-dialog .model-create-checkbox { display: flex; align-items: center; gap: 10px; }
 .labs-model-create-dialog .model-create-checkbox input { width: auto; }
 
@@ -500,13 +501,13 @@
 .model-create-fields > label { display: grid; gap: 8px; }
 .labs-model-create-dialog .labs-model-create-select-row select { flex: 1; }
 .labs-draft-exit-dialog { display: grid; gap: 18px; padding: 24px; }
-.labs-draft-exit-dialog > p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.labs-draft-exit-dialog > p { color: var(--text-muted); font-size: 13px; line-height: 1.6; }
 .labs-draft-exit-dialog .model-build-actions { margin-top: 4px; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .labs-model-taskset-dialog { width: min(1000px, calc(100vw - 48px)); max-height: calc(100vh - 48px); overflow: auto; padding: 24px; }
 
-.model-create-fields > label { color: var(--muted-strong); font-size: 11px; font-weight: 650; }
+.model-create-fields > label { color: var(--text-secondary); font-size: 11px; font-weight: 650; }
 .model-training-settings > summary { cursor: pointer; }
-.model-training-settings > p { color: var(--muted); font-size: 12px; margin: 12px 0; }
+.model-training-settings > p { color: var(--text-muted); font-size: 12px; margin: 12px 0; }
 .model-training-settings label { display: grid; gap: 8px; }
 .labs-model-taskset-dialog > .taskset-draft-focused-editor { padding: 0; }
 .taskset-draft-focused-editor > footer { margin-top: 24px; justify-content: flex-end; }

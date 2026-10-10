@@ -2,6 +2,8 @@ import { memo, useEffect, useRef } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { terminalTheme } from "../../theme/terminal-theme";
+import { subscribeToTheme } from "../../theme/appearance";
 import { MOVE_CURSOR_TO_LAST_ROW, type TerminalHandle, type TerminalTab } from "./terminal-overlay-types";
 
 export const TerminalPane = memo(function TerminalPane({
@@ -29,6 +31,7 @@ export const TerminalPane = memo(function TerminalPane({
     if (!container) return undefined;
 
     const terminal = new Terminal({
+      theme: terminalTheme(),
       allowProposedApi: false,
       cursorBlink: true,
       cursorStyle: "bar",
@@ -42,6 +45,7 @@ export const TerminalPane = memo(function TerminalPane({
     terminal.loadAddon(fit);
     terminal.open(container);
     terminalRef.current = terminal;
+    const unsubscribeTheme = subscribeToTheme(() => { terminal.options.theme = terminalTheme(); });
     fitRef.current = fit;
 
     const inputDisposable = terminal.onData((data) => onInput(tab.id, data));
@@ -86,6 +90,7 @@ export const TerminalPane = memo(function TerminalPane({
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       observer.disconnect();
+      unsubscribeTheme();
       unregister();
       inputDisposable.dispose();
       resizeDisposable.dispose();
