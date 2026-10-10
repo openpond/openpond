@@ -11,17 +11,16 @@ import type { createSessionStore } from "../store/session-store.js";
 import type { TurnRunner } from "../runtime/turns/ports.js";
 import type { PonderInstallation } from "./ponder-installation.js";
 import { createCapturedOpenPondPublicApiClient } from "./sandboxes.js";
-import { ponderLocalOwner, type PonderLocalOwner } from "./ponder-local-scope.js";
+import { ponderLocalOwner, ponderOwnsLocalSession, type PonderLocalOwner } from "./ponder-local-scope.js";
 import {
   capturePonderDesktopCatalog,
-  ponderDesktopSessionRevision,
 } from "./ponder-desktop-catalog.js";
-import { localSessionMayResolveOwnership } from "../remote-relay/session-ownership.js";
 import { capturePonderDesktopStarters } from "./ponder-desktop-starters.js";
 import { createPonderDesktopClient } from "./ponder-desktop-client.js";
 import { createPonderDesktopExecutor } from "./ponder-desktop-executor.js";
 import { createPonderDesktopRuntime } from "./ponder-desktop-runtime.js";
 import { createPonderDesktopResultCapture } from "./ponder-desktop-result-capture.js";
+import { createPonderDesktopSourceStore } from "./ponder-desktop-source.js";
 import { readPonderDesktopOutput } from "./ponder-desktop-output.js";
 import type { createWorkOutputService } from "../work/work-output-service.js";
 
@@ -59,6 +58,7 @@ export function createPonderDesktopManager(deps: {
   relayRequest: NonNullable<Parameters<typeof createPonderDesktopClient>[0]["relayRequest"]>;
   relayWake(): void;
 }) {
+  const sourceStore = createPonderDesktopSourceStore(deps.storeDir);
   let active: {
     key: string;
     credentialRevision: string;
@@ -185,7 +185,8 @@ export function createPonderDesktopManager(deps: {
       // Authoritative session records contain ownership; sidebar projections do not grant authority.
       const shells = await deps.store.sessionShells();
       const sessions = (
-        await Promise.all(shells.map((session) => deps.store.getSession(session.id)))
+        await Promise.all(shells.filter(session => ponderOwnsLocalSession(session, selected.owner))
+          .map((session) => deps.store.getSession(session.id)))
       ).filter((session): session is Session => session !== null);
       const status = connection.runtime.status();
       if (!status.authorizationRevision)
@@ -253,6 +254,7 @@ export function createPonderDesktopManager(deps: {
       result: createPonderDesktopResultCapture({
         store: deps.store,
         outputs: deps.outputs,
+        source: sourceStore.capture,
       }),
       inspection: async (operation) => {
         const record = await deps.store.getPonderDesktopInspection(operation.id);
@@ -350,20 +352,6 @@ export function createPonderDesktopManager(deps: {
           await persistDisabled();
           await reconcile();
         }
-        const candidates = [];
-        if (selected) {
-          for (const shell of await deps.store.sessionShells()) {
-            const session = await deps.store.getSession(shell.id);
-            if (!session || !localSessionMayResolveOwnership(session)) continue;
-            const managed = await deps.inspect(session.id);
-            if (!managed.canSendFollowup) continue;
-            candidates.push({
-              id: session.id,
-              title: session.title,
-              revision: ponderDesktopSessionRevision(session, managed.latestTurnId),
-            });
-          }
-        }
         return {
           ...(active?.runtime.status() ?? {
             state: selected && disabled.has(selected.key) ? "unlinked" : "offline",
@@ -371,7 +359,6 @@ export function createPonderDesktopManager(deps: {
             leaseExpiresAt: null,
           }),
           ownerScope: selected?.owner ?? null,
-          attachableSessions: candidates,
         };
       });
     },

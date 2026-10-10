@@ -5,6 +5,7 @@ import {
   SidebarNavigation,
   SidebarNewTask,
 } from "./SidebarNavigation";
+import { usePonderWork } from "../ponder/usePonderWork";
 import { SidebarSectionList } from "./SidebarSectionList";
 import { NativeConversationControls, useNativeConversationHistory } from "./NativeConversationSources";
 import { OPENPOND_ICON_URL, OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
@@ -43,6 +44,20 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
     setSelectedProjectId(projectId); setSelectedAppId(projectId ? null : session.appId);
     setView("chat"); return true;
   }, [setSelectedSessionId, setSelectedProjectId, setSelectedAppId, setView, props.sidebarProjectIdBySessionId]);
+  const accountScopeKey = JSON.stringify({ account: props.account?.activeProfile ?? null, baseUrl: props.account?.baseUrl ?? null,
+    owner: props.account?.profile?.id ?? null, state: props.account?.state ?? null, teamId: props.selectedTeamId ?? null });
+  const ponderEnabled = productArea === "chat" && props.account?.state === "signed_in";
+  const ponderWork = usePonderWork(props.connection, ponderEnabled, accountScopeKey);
+  const localWorkflowGroups = ponderEnabled && ponderWork.data?.ownerScope ? ponderWork.data.localHandoffs.filter(item => item.workflow &&
+    (["installationId", "profileId", "ownerUserId", "teamId"] as const).every(key => item.scope[key] === ponderWork.data!.ownerScope![key])) : [];
+  const localWorkflowIds = new Set(localWorkflowGroups.flatMap(group => [group.prerequisite.sessionId,
+    group.successor.sessionId, group.workflow?.preparationSessionId].filter((id): id is string => Boolean(id))));
+  const localWorkflowSessions = (props.allSessions ?? [...props.activeSessions, ...props.archivedSessions]).filter(session => {
+    const owner = session.metadata?.ponderLocalOwner;
+    return localWorkflowIds.has(session.id) && owner !== null && typeof owner === "object" && !Array.isArray(owner) &&
+      (["installationId", "profileId", "ownerUserId", "teamId"] as const).every(key =>
+        (owner as Record<string, unknown>)[key] === ponderWork.data?.ownerScope?.[key]);
+  });
   const nativeHistory = useNativeConversationHistory({ connection: productArea === "chat" ? props.connection : null, active: view === "chat", selectedSessionId: props.selectedSessionId, selectedSession: [...props.activeSessions, ...props.archivedSessions, ...Object.values(props.childSessionRowsByParentId ?? {}).flat()].find((session) => session.id === props.selectedSessionId) ?? null, onOpen: selectSession });
 
   return (
@@ -90,6 +105,8 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
         {productArea !== "chat" || view !== "chat" ? null : (
           <SidebarSectionList
             {...props}
+            workflowGroups={localWorkflowGroups}
+            workflowSessions={localWorkflowSessions}
             onSelectSession={nativeHistory.select}
             setSectionMenuOpen={setSidebarSectionMenuOpen}
           />

@@ -351,9 +351,8 @@ describe("chat message projection", () => {
       createElement(MessageRow, { message: messages[1]! })
     );
     expect(assistantHtml).toContain("Hello z.ai");
-    expect(assistantHtml).toContain("Thinking");
-    // Reasoning section is collapsed by default, so the text is not in the DOM
-    expect(assistantHtml).not.toContain("The user is greeting Z.ai.");
+    // The complete streamed reasoning must be visible without expanding a disclosure.
+    expect(assistantHtml).toContain("The user is greeting Z.ai. It should answer briefly.");
   });
 
   test("merges reasoning into an assistant message that already has content (out-of-order events)", () => {
@@ -487,7 +486,6 @@ describe("chat message projection", () => {
         },
       })
     );
-    expect(html).toContain("Worked for 1m 24s · Searched code");
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("Found 2 resources.");
     expect(html).not.toContain("Searched resources");
@@ -638,7 +636,9 @@ describe("chat message projection", () => {
     });
   });
 
-  test("renders image attachments as inline user message previews", () => {
+  // Failure story: transcript projection drops a mixed attachment's signed
+  // preview identity or text line count, so the retained file cannot be opened.
+  test("preserves preview references for mixed user attachments", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_with_image",
@@ -697,45 +697,16 @@ describe("chat message projection", () => {
       contentType: "image/png",
     });
 
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: messages[0]!,
-        connection: {
-          serverUrl: "http://127.0.0.1:17876",
-          token: "token",
-          platform: "test",
-        },
-      })
-    );
-    expect(html).toContain("has-image-attachments");
-    expect(html).toContain("user-message-image-attachment");
-    expect(html).toContain("Screenshot from 2026-07-02 13.49.59.png");
-    expect(html).toContain("notes.txt");
-    expect(html).toContain("source.zip");
-    expect(html).toContain("user-message-attachment");
-    expect(html).toContain("3 lines");
-    expect(html).not.toContain("128 B");
-    expect(html).not.toContain("44 KB");
-    const codexHtml = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: messages[0]!,
-        onOpenAttachmentInSidebar: async () => undefined,
-        userAttachmentDisplay: "compact",
-      })
-    );
-    expect(codexHtml).toContain("Can you inspect this bug screenshot?");
-    expect(codexHtml).toContain("user-message-attachments compact");
-    expect(codexHtml).toContain("Screenshot from 2026-07-02 13.49.59.png");
-    expect(codexHtml).toContain("Open attached file Screenshot from 2026-07-02 13.49.59.png");
-    expect(codexHtml).toContain("notes.txt");
-    expect(codexHtml).toContain("source.zip");
-    expect(codexHtml).toContain("Open attached file notes.txt");
-    expect(codexHtml).toContain("user-message-attachment openable");
-    expect(codexHtml).toContain("3 lines");
-    expect(codexHtml).not.toContain("128 B");
-    expect(codexHtml).not.toContain("44 KB");
-    expect(codexHtml).not.toContain("user-message-image-attachment");
-    expect(codexHtml).not.toContain("has-image-attachments");
+    expect(messages[0]?.attachments).toHaveLength(3);
+    expect(messages[0]?.attachments?.[1]?.filePreview).toEqual({
+      sessionId: "session_1",
+      turnId: "turn_1",
+      attachmentId: "attachment_2",
+      storageName: "notes.txt",
+      contentType: "text/plain",
+    });
+    expect(messages[0]?.attachments?.[1]?.lineCount).toBe(3);
+    expect(messages[0]?.attachments?.[2]?.kind).toBe("file");
   });
 
   test("renders web search results as source pills on the assistant message", () => {

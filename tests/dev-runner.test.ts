@@ -83,6 +83,7 @@ describe("dev runner", () => {
       OPENPOND_WEB_PORT: "17876",
       OPENPOND_WEB_URL: "http://127.0.0.1:17876",
       OPENPOND_DESKTOP_DEV_MODE: "1",
+      OPENPOND_DESKTOP_DEV_SUPERVISED: "1",
     });
   });
 

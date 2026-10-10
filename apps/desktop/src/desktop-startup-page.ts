@@ -34,11 +34,12 @@ export async function showLoadError(window: BrowserWindow, error: unknown, onPag
       </head>
       <body>
         <main>
-          <h1>${appDisplayName()} could not start</h1>
-          <p>The app hit a startup error. The details are also written to local logs.</p>
+          <h1>${appDisplayName()} needs recovery</h1>
+          <p>The app could not load after retrying. The details are also written to local logs.</p>
           <pre>${escaped}</pre>
           <div class="actions">
             <button class="primary" id="retry">Retry</button>
+            <button id="restart">Restart App</button>
             <button id="logs">Open Logs</button>
             <button id="diagnostics">Export Diagnostics</button>
           </div>
@@ -60,6 +61,7 @@ export async function showLoadError(window: BrowserWindow, error: unknown, onPag
             }
           }
           document.getElementById("retry").addEventListener("click", (event) => run("Retrying...", () => window.openpond.retryStartup(), event.currentTarget));
+          document.getElementById("restart").addEventListener("click", (event) => run("Restarting...", () => window.openpond.restartDesktopApp(), event.currentTarget));
           document.getElementById("logs").addEventListener("click", () => run("Opening logs...", () => window.openpond.openLogsFolder()));
           document.getElementById("diagnostics").addEventListener("click", () => run("Exporting diagnostics...", () => window.openpond.exportDiagnostics()));
         </script>

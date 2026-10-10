@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ponderDesktopRequestContent, type PonderDesktopOperation } from "@openpond/contracts";
+import { ponderDesktopRequestContent, ponderDesktopOperationContent, type PonderDesktopOperation } from "@openpond/contracts";
 
 function payloadHash(path: string, value: unknown) {
   return createHash("sha256")
@@ -21,11 +21,7 @@ export function assertPonderDesktopOperationIdentity(operation: PonderDesktopOpe
   if (
     operation.id !== expected ||
     operation.payloadHash !==
-      payloadHash("/ponder/desktop/operation", {
-        origin: operation.origin,
-        intent: operation.intent,
-        target: operation.target,
-      })
+      payloadHash("/ponder/desktop/operation", ponderDesktopOperationContent(operation))
   )
     throw new Error("ponder_desktop_operation_identity_invalid");
 }

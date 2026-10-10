@@ -1,6 +1,7 @@
 import type { ChatAttachment } from "@openpond/contracts";
 import { CHAT_ATTACHMENT_LIMITS, countTextLines } from "@openpond/contracts";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ImageLightbox } from "../common/ImageLightbox";
 import { X } from "../icons";
 import {
   AttachmentTypeIcon,
@@ -67,6 +68,12 @@ export function ComposerAttachmentPreview({
   attachment: ComposerAttachmentDraft;
   onRemove: () => void;
 }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewButtonRef = useRef<HTMLButtonElement>(null);
+  const closePreview = useCallback(() => {
+    setPreviewOpen(false);
+    previewButtonRef.current?.focus();
+  }, []);
   const [lineCount, setLineCount] = useState<number | null>(null);
   useEffect(() => {
     if (attachment.kind !== "text") return;
@@ -84,13 +91,28 @@ export function ComposerAttachmentPreview({
   const showMeta = attachment.kind !== "image";
   return (
     <div className={`composer-attachment-card ${attachment.kind}`}>
-      <div className="composer-attachment-thumb" aria-hidden="true">
-        {attachment.previewUrl ? (
+      {attachment.kind === "image" && attachment.previewUrl ? (
+        <button
+          ref={previewButtonRef}
+          type="button"
+          className="composer-attachment-thumb composer-attachment-preview"
+          aria-label={`Preview ${attachment.name}`}
+          title={`Preview ${attachment.name}`}
+          onClick={() => setPreviewOpen(true)}
+        >
           <img alt="" decoding="async" src={attachment.previewUrl} />
-        ) : (
+        </button>
+      ) : (
+        <div className="composer-attachment-thumb" aria-hidden="true">
           <AttachmentTypeIcon attachment={attachment} size={22} />
-        )}
-      </div>
+        </div>
+      )}
+      <ImageLightbox
+        open={previewOpen}
+        src={attachment.previewUrl ?? null}
+        title={attachment.name}
+        onClose={closePreview}
+      />
       {showMeta ? (
         <div className="composer-attachment-meta">
           <strong>{attachment.name}</strong>

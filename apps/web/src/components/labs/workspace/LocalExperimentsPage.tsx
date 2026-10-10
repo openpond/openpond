@@ -23,6 +23,7 @@ import { LocalExperimentCompare } from "./LocalExperimentCompare";
 import { LocalExperimentGrading } from "./LocalExperimentGrading";
 import { LocalExperimentUsage } from "./LocalExperimentUsage";
 import type { WorkspaceApi } from "./workspace-api";
+import { DropdownSelect } from "../../DropdownSelect";
 import {ExperimentImproveSidebar} from "./ExperimentImproveSidebar";
 export function LocalExperimentsPage({
   api,
@@ -107,7 +108,7 @@ export function LocalExperimentsPage({
           {execution ? "Duplicate and edit" : "Run experiment"}
         </button>
       </header>
-      <p>Local / Executed and retained on this Desktop server using its signed-in account.</p>
+      <p className="evaluation-meta-line">Executed and retained on this Desktop server using its signed-in account.</p>
       {failure ? <p role="alert">{failure}</p> : null}
       {!route.resourceId ? (
         <LocalExperimentCollection key={api.key} api={api} route={route} navigate={navigate} />
@@ -124,17 +125,18 @@ export function LocalExperimentsPage({
               </button>
             ))}
           </nav>
-          <div className="evaluation-workspace-scope">
+          <div className="evaluation-run-summary">
             <EvaluationModel
               name={execution.model.modelId}
               onOpen={() => navigate({ ...route, detailTab: "configuration" })}
             />
             <EvaluationStatus status={execution.status} />
-            <span>
-              {execution.counts.completed} completed · {execution.counts.failed} failed ·{" "}
-              {execution.counts.running} running · {execution.counts.pending} pending / {total}{" "}
-              attempts
+            <span className="evaluation-run-counts">
+              <b>{execution.counts.completed}</b> completed · <b>{execution.counts.failed}</b> failed ·{" "}
+              <b>{execution.counts.running}</b> running · <b>{execution.counts.pending}</b> pending ·{" "}
+              <b>{total}</b> attempts
             </span>
+            <span aria-hidden="true">·</span>
             <EvaluationTime value={execution.createdAt} />
             {!execution.completedAt ? (
               <button
@@ -151,25 +153,32 @@ export function LocalExperimentsPage({
             ) : null}
           </div>
           {detail.passes.data?.pages.some((page) => page.items.length) ? (
-            <label>
-              Grading
-              <select
+            <div className="evaluation-pass-select">
+              <span>Grading</span>
+              <DropdownSelect
+                label="Grading"
                 value={route.passId ?? ""}
-                onChange={(event) => navigate({ ...route, passId: event.target.value || null })}
-              >
-                <option value="">Original Experiment grading</option>
-                {detail.passes.data.pages
-                  .flatMap((page) => page.items)
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.status} · {item.id}
-                    </option>
-                  ))}
-              </select>
-            </label>
+                options={[
+                  { value: "", label: "Original Experiment grading" },
+                  ...detail.passes.data.pages
+                    .flatMap((page) => page.items)
+                    .map((item) => ({
+                      value: item.id,
+                      label: `Scoring pass ${item.id.slice(-8)}`,
+                      description: item.status.replaceAll("_", " "),
+                    })),
+                ]}
+                onChange={(value) => navigate({ ...route, passId: value || null })}
+              />
+            </div>
           ) : null}
           {detail.passes.hasNextPage ? (
-            <button onClick={() => void detail.passes.fetchNextPage()}>More scoring passes</button>
+            <button
+              className="training-button secondary evaluation-more"
+              onClick={() => void detail.passes.fetchNextPage()}
+            >
+              More scoring passes
+            </button>
           ) : null}
           {pass ? (
             <EvaluationCard title="Selected scoring pass">

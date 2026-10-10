@@ -54,6 +54,9 @@ import {
 } from "./hosted-turn/native-tools-runtime.js";
 import { createHostedToolLoopRuntime } from "./hosted-turn/tool-loop-runtime.js";
 import { createTaskInboxRuntime } from "./task-inbox/runtime.js";
+import { createPonderDesktopSourceStore } from "../openpond/ponder-desktop-source.js";
+import { PonderDesktopInputSchema } from "../store/ponder-desktop-input.js";
+import { assertDesktopWorkflowSource, desktopWorkflow, desktopWorkflowPrompt } from "../openpond/ponder-desktop-workflow-context.js";
 import { taskCoordinationTools } from "../openpond/task-coordination-tools.js";
 import { createProfileSkillCatalogRuntime } from "./hosted-turn/profile-skill-catalog-runtime.js";
 import { createCapabilityCatalogRuntime } from "./hosted-turn/capability-catalog.js";
@@ -291,6 +294,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     maxRepeatedInvalidToolRequests,
   } = deps;
   const inboxStore = deps.inboxStore ?? store;
+  const desktopSourceStore = createPonderDesktopSourceStore(deps.storageHome ?? attachmentRootDir);
   const hostedToolFlags = resolveHostedToolRolloutFlags(deps.hostedToolFlags);
   const activeTurns = new ActiveTurnRegistry();
   const taskInbox = createTaskInboxRuntime({
@@ -314,9 +318,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const permissions = previous?.metadata.taskExecutionPermissions ?? {
           approvalPolicy: "on-request", sandbox: "read-only", codexPermissionMode: "default",
         };
-        return sendTurn(id, { ...request, ...(permissions as Record<string, unknown>) }, turnId,
+        return sendTurn(id, { ...request, ...(permissions as Record<string, unknown>), ...(desktopWorkflow(sourceInput) || sourceInput.payload.taskReportingOnly === true ? { sandbox: "read-only", approvalPolicy: "never", codexPermissionMode: "default" } : {}) }, turnId,
           sourceInput.senderKind === "ponder" ? { beforeExecute: async admitted => {
             assertPonderDesktopExecution(sourceInput, admitted);
+            await assertDesktopWorkflowSource(PonderDesktopInputSchema.parse(sourceInput.payload.ponderDesktop).operation, admitted, store, desktopSourceStore);
             assertRemoteExecution(sourceInput, admitted);
           } } : undefined);
       }
@@ -339,6 +344,14 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (receipt.status === "failed") throw new Error(receipt.error ?? "Task follow-up failed.");
     },
     yieldWhileWaiting: (work) => turnFollowUpQueue.yieldWhileWaiting(() => subagentQueue ? subagentQueue.yieldWhileWaiting(work) : work()),
+  });
+  const coordinationTools = taskCoordinationTools(taskInbox, {
+    input: (id) => inboxStore.getTaskInput(id),
+    readSource: async (operation, session, file, offset) => {
+      await assertDesktopWorkflowSource(operation, session, store, desktopSourceStore);
+      if (!operation.workflow?.source) throw new Error("The verified workflow source is not available yet.");
+      return desktopSourceStore.inspect(operation.workflow.source, file, offset);
+    },
   });
   const connectedAppsForTurn = createConnectedAppTurnResolver({
     listIntegrationConnections,
@@ -852,7 +865,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       connectedApps,
       options
       ),
-      ...taskCoordinationTools(taskInbox),
+      ...coordinationTools,
       ...(deps.harnessModelTools ?? []),
     ];
   }
@@ -1236,6 +1249,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         attachmentContext
       );
       const peerInput = typeof input.metadata?.taskInputId === "string" ? await inboxStore.getTaskInput(input.metadata.taskInputId) : null;
+      providerPrompt += desktopWorkflowPrompt(peerInput);
+      if (peerInput?.payload.taskReportingOnly === true) providerPrompt += "\n\nRuntime restriction: this is a reporting-only acknowledgment. You may read evidence and acknowledge the peer report; do not edit, fix, commit, deploy, or start another coding task.";
       const peerInputId = peerInput?.sessionId === sessionId && peerInput.turnId === turn.id && peerInput.senderSessionId && peerInput.senderKind !== "user" ? peerInput.id : null;
       await appendRuntimeEvent(
         event({
@@ -1730,13 +1745,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const cwd = input.cwd ?? (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: session.workspaceKind !== "local_project" })) ?? session.cwd;
         if (!cwd) throw new Error("Choose a local working directory for this native agent.");
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
-        const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox);
-        const visualToolsEnabled = !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
+        const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : coordinationTools;
+        const visualToolsEnabled = peerInput?.payload.taskReportingOnly !== true && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
         const definitions = [...coordinationDefinitions, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : [])];
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
         const providerTurnId = await runSteeredNativeTurn({ runtime: nativeAgents, inbox: taskInbox, store: inboxStore, getSession,
           taskToolInstructions: [coordinationDefinitions.length ? TASK_COORDINATION_INSTRUCTIONS : "", visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : ""].filter(Boolean).join("\n\n"),
-          input: { content, session, turn, cwd, prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
+          input: { content, session, turn, cwd, reportingOnly: peerInput?.payload.taskReportingOnly === true, prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
           coordination: definitions.length ? {
             tools: definitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
             execute: async (name, args, callId, signal) => {
@@ -1771,7 +1786,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (turnCwd && turnCwd !== session.cwd)
         session = await updateSession(session.id, { cwd: turnCwd });
       activeTurn.session = session;
-      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : taskCoordinationTools(taskInbox)), ...(!session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : [])];
+      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...(!session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : [])];
       const runtime = await ensureCodexRuntime(session, {
         ...input,
         coordination: coordinationDefinitions.length ? {

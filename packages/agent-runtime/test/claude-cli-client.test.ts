@@ -5,6 +5,36 @@ import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { ClaudeCliClient } from "../src/acp/claude-cli-client.js";
 
+// Resuming the implementer to acknowledge a review must not inherit its coding
+// tools or bypass mode. Exercise the actual subprocess/control boundary.
+it.skipIf(process.platform === "win32")("resumes a reporting-only acknowledgment without coding tools or bypass permissions", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "openpond-claude-report-only-"));
+  const executable = join(directory, "claude");
+  await writeFile(executable, `#!${process.execPath}\n` + String.raw`
+const args = process.argv.slice(2);
+if (!args.includes('--restricted') || !args.includes('--strict-mcp-config') || args[args.indexOf('--tools')+1] !== '' || args.includes('--allow-dangerously-skip-permissions') || !JSON.parse(args[args.indexOf('--settings')+1]).disableAllHooks || !args.includes('--resume')) process.exit(1);
+const readline = require('node:readline');
+const send = value => process.stdout.write(JSON.stringify(value)+'\n');
+readline.createInterface({input:process.stdin}).on('line', line => {
+ const value = JSON.parse(line);
+ if (value.type === 'control_request') send({type:'control_response',response:{subtype:'success',request_id:value.request_id,response:{}}});
+ if (value.type === 'user') {
+   send({type:'stream_event',event:{type:'content_block_delta',delta:{type:'text_delta',text:'Acknowledged without edits'}}});
+   send({type:'result',is_error:false}); send({type:'system',subtype:'session_state_changed',state:'idle'});
+ }
+});`, { mode: 0o700 });
+  const client = new ClaudeCliClient({ command: executable, args: [], cwd: directory, reportingOnly: true, requestTimeoutMs: 2_000,
+    onUpdate: async () => {}, onPermission: async () => ({ outcome: { outcome: "cancelled" } }) });
+  const originalSessionId = randomUUID();
+  try {
+    const resumed = await client.loadSession(originalSessionId, directory);
+    expect(resumed.sessionId).toBe(originalSessionId);
+    await expect(client.setMode(originalSessionId, "bypassPermissions")).rejects.toThrow("Reporting-only");
+    await expect(client.setMode(originalSessionId, "plan")).rejects.toThrow("Reporting-only");
+    await expect(client.prompt(originalSessionId, [{ type: "text", text: "Acknowledge findings" }])).resolves.toEqual({ stopReason: "end_turn" });
+  } finally { await client.stop(); await rm(directory, { recursive: true, force: true }); }
+});
+
 // A missing launch opt-in makes YOLO fail only after selection; enabling bypass
 // at launch would silently skip approvals. Cover both fresh and resumed sessions.
 it.skipIf(process.platform === "win32").each([false, true])("switches Claude permissions explicitly for resumed=%s", async (resume) => {
@@ -16,7 +46,7 @@ const send = value => process.stdout.write(JSON.stringify(value)+'\n');
 const args = process.argv.slice(2);
 if (args[args.indexOf('--add-dir') + 1] !== require('node:path').join(process.cwd(), 'attached project')) process.exit(1);
 let mode = args.includes('--dangerously-skip-permissions') ? 'bypassPermissions' : 'manual';
-const finish = () => send({type:'result',is_error:false});
+const finish = () => { send({type:'result',is_error:false}); send({type:'system',subtype:'session_state_changed',state:'idle'}); };
 readline.createInterface({input:process.stdin}).on('line', line => {
  const value = JSON.parse(line);
  if(value.type==='control_request') {
@@ -76,7 +106,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
  const value = JSON.parse(line);
  if(value.type==='control_request') {
   send({type:'control_response',response:{subtype:'success',request_id:value.request_id,response:{models:[{value:'haiku',displayName:'Haiku'},{value:'default',displayName:'Default',description:'Haiku · Native configured default'}]}}});
-  if(value.request.subtype==='interrupt') send({type:'result',session_id:session,is_error:true,errors:['interrupted']});
+  if(value.request.subtype==='interrupt') { send({type:'result',session_id:session,is_error:true,errors:['interrupted']}); send({type:'system',subtype:'session_state_changed',state:'idle'}); }
  }
  if(value.type==='user') {
   session=value.session_id;

@@ -75,7 +75,16 @@ export async function createTaskCoordinationMcp(bridge: TaskCoordinationBridge) 
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Coordination endpoint did not start.");
   return {
-    config: { url: `http://127.0.0.1:${address.port}/mcp`, http_headers: { Authorization: `Bearer ${token}` }, tool_timeout_sec: 3605 },
+    config: {
+      url: `http://127.0.0.1:${address.port}/mcp`,
+      http_headers: { Authorization: `Bearer ${token}` },
+      tool_timeout_sec: 3605,
+      // These tools are scoped and authorized by the task runtime. Codex's
+      // separate MCP approval prompt otherwise cancels already-authorized
+      // coordination in read-only review turns. Other MCP servers keep their
+      // own approval policy, and unlisted tools remain unavailable.
+      tools: Object.fromEntries(bridge.tools.map(({ name }) => [name, { approval_mode: "approve" }])),
+    },
     close: async () => {
       for (const controller of pending.values()) controller.abort();
       server.closeAllConnections();

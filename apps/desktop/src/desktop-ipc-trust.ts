@@ -27,6 +27,7 @@ function isLoopbackHttpUrl(url: URL): boolean {
 
 const STARTUP_PAGE_CHANNELS = new Set([
   "openpond:startup:retry",
+  "openpond:desktop:restart",
   "openpond:logs:open",
   "openpond:diagnostics:export",
 ]);

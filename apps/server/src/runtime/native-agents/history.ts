@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { handleNativeImporter } from "./importer.js";
 import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
 import { z } from "zod";
 import { SessionSchema, TurnSchema, type RuntimeEvent, type Session } from "@openpond/contracts";
 import { discoverSources, listSessions, readSession, inspectSessionBranches, collectorDirectory, collectorMachineId, collectorStatus, type NativeSource, type NativeSession, type NativeBranchChoice } from "@openpond/evals/native-conversations";
@@ -15,9 +16,13 @@ const providerFor = { claude_code: "claude-code", opencode: "opencode", grok_bui
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 /** Read-only native acquisition, with local projections for the existing chat UI. No cloud admission. */
-export function createNativeHistory(deps: { store: SqliteStore; storeDir: string; appendRuntimeEvent(value: RuntimeEvent): Promise<void>; canResume?(provider: NativeAgentId, cwd: string): Promise<boolean | { available: boolean; reason: string | null }> }) {
+export function createNativeHistory(deps: { store: SqliteStore; storeDir: string; appendRuntimeEvent(value: RuntimeEvent): Promise<void>;
+  workspaceAvailable?(cwd: string): Promise<boolean>;
+  qualifyWorkspace?(input: { provider: NativeAgentId; sessionId: string; instanceId: string; cwd: string }): Promise<void>;
+  canResume?(provider: NativeAgentId, cwd: string): Promise<boolean | { available: boolean; reason: string | null }> }) {
   const selected = new Map<string, { source: NativeSource; session: NativeSession; provider: NativeAgentId }>();
   const opening = new Map<string, Promise<Session>>();
+  const workspaceFailures = new Map<string, string>();
   async function list(cursors: Record<string, string> = {}, retain = false) {
     const directory = collectorDirectory(); const machineId = await collectorMachineId(directory);
     const file = await readProvidersFile(join(deps.storeDir, "providers.json"));
@@ -80,7 +85,7 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
     const item = selected.get(id); if (!item) throw new Error("Native history selection expired; refresh the source list.");
     return item;
   }
-  async function open(id: string, branch?: NativeBranchChoice): Promise<Session> {
+  async function open(id: string, branch?: NativeBranchChoice, retryWorkspace = false): Promise<Session> {
     const projectionId = branch ? hash([id, branch.leafId, branch.revision]) : id;
     const openingKey = branch ? hash([projectionId, branch.revision]) : projectionId;
     const existing = opening.get(openingKey); if (existing) return existing;
@@ -96,32 +101,84 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       if (!native) throw new Error("Source history does not match the selected native session.");
       const instance = launch.instanceId;
       const shells = await deps.store.sessionShells();
-      const owned = !branch ? matchingNativeHistorySession(shells, { id, source: item.source, session: item.session, provider: item.provider, instanceId: instance }) : undefined;
+      let owned = !branch ? matchingNativeHistorySession(shells, { id, source: item.source, session: item.session, provider: item.provider, instanceId: instance }) : undefined;
+      let cwd = owned?.metadata?.nativeWorkspaceRecovered === true ? owned.nativeAgent?.cwd ?? owned.cwd : item.session.cwd;
+      let workspaceAvailable = Boolean(cwd && (!deps.workspaceAvailable || await deps.workspaceAvailable(cwd)));
+      let workspaceRecoveryError: string | null = null;
+      let recoveredMetadata: Record<string, unknown> = {};
+      let recovered = false;
+      if (!branch && !workspaceAvailable && deps.workspaceAvailable && deps.qualifyWorkspace) {
+        const failureKey = hash([id, instance, cwd]);
+        if (retryWorkspace) workspaceFailures.delete(failureKey);
+        let activeWork = false;
+        try {
+          const priorFailure = workspaceFailures.get(failureKey);
+          if (priorFailure) throw new Error(priorFailure);
+          const assertIdle = async () => {
+            if (owned && ((await deps.store.getSession(owned.id))?.status === "active" || (await deps.store.turnsForSession(owned.id, 10_000)).some(turn => turn.status === "in_progress"))) {
+              activeWork = true;
+              throw new Error("Active work must finish before its working folder can change.");
+            }
+          };
+          await assertIdle();
+          if (owned?.nativeAgent && (owned.nativeAgent.provider !== item.provider || owned.nativeAgent.instanceId !== instance || owned.nativeAgent.sessionId !== native.sessionId))
+            throw new Error("Restore the original agent configuration to continue this conversation.");
+          const appCwd = join(deps.storeDir, "workspaces", "native", id);
+          await mkdir(appCwd, { recursive: true });
+          await deps.qualifyWorkspace({ provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: appCwd });
+          if (!await deps.workspaceAvailable(appCwd)) throw new Error("The app workspace became inaccessible.");
+          await assertIdle();
+          recoveredMetadata = { nativeWorkspaceRecovered: true,
+            nativeOriginalCwd: owned?.metadata?.nativeWorkspaceRecovered === true ? owned.metadata.nativeOriginalCwd : item.session.cwd,
+            nativeResumeAvailable: true, nativeReadOnlyReason: null, nativeReadOnlyKind: null };
+          if (owned) {
+            const updated = await deps.store.updateSession(owned.id, current => {
+              if (current.status === "active") { activeWork = true; throw new Error("Active work must finish before its working folder can change."); }
+              return { ...current, cwd: appCwd, appId: null, appName: null, workspaceKind: undefined, workspaceId: null, workspaceName: null, localProjectId: null,
+                nativeAgent: { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: appCwd }, metadata: { ...current.metadata, ...recoveredMetadata } };
+            });
+            if (!updated) throw new Error("The saved conversation is no longer available.");
+            owned = updated;
+            await deps.appendRuntimeEvent(event({ sessionId: updated.id, name: "session.updated", source: "server", data: { session: updated } }));
+          }
+          cwd = appCwd;
+          workspaceAvailable = true;
+          recovered = true;
+        } catch (error) {
+          workspaceRecoveryError = error instanceof Error ? error.message : "The agent could not resume this conversation in an app workspace.";
+          if (!activeWork) workspaceFailures.set(failureKey, workspaceRecoveryError);
+        }
+      }
       const qualified = owned?.nativeAgent;
-      const alreadyQualified = qualified?.provider === item.provider && qualified.instanceId === instance && qualified.sessionId === native.sessionId && qualified.cwd === item.session.cwd;
-      const resume = !branch && item.session.cwd
-        ? alreadyQualified || item.source.capabilities.nativeResume || await deps.canResume?.(item.provider, item.session.cwd)
+      const alreadyQualified = qualified?.provider === item.provider && qualified.instanceId === instance && qualified.sessionId === native.sessionId && qualified.cwd === cwd;
+      const resume = !branch && workspaceAvailable
+        ? recovered || alreadyQualified || item.source.capabilities.nativeResume || await deps.canResume?.(item.provider, cwd!)
         : false;
       const canResume = typeof resume === "object" ? resume.available : Boolean(resume);
+      const readOnlyKind = branch ? "branch" : !cwd ? "workspace_unknown" : !workspaceAvailable ? "workspace_missing" : canResume ? null : "agent";
       const readOnlyReason = branch
         ? "Read-only Claude branch snapshot. Open the original conversation to continue; this selected branch remains unchanged."
-        : !item.session.cwd
-          ? "This saved conversation does not record its original working folder. It can be inspected here, but cannot be safely resumed."
-          : canResume ? null
-            : typeof resume === "object" && resume.reason ? resume.reason
-              : "This agent has not confirmed support for resuming the original session. Check its installation and login in Connections, then reopen this conversation.";
+        : workspaceRecoveryError
+          ? `Could not resume this conversation in an app workspace: ${workspaceRecoveryError}`
+          : !cwd
+          ? "This saved conversation has no working folder recorded. Check again to continue in an app workspace."
+          : !workspaceAvailable
+            ? "The working folder is unavailable. Your conversation is still here; check again to continue in an app workspace."
+            : canResume ? null
+              : typeof resume === "object" && resume.reason ? resume.reason
+                : "This agent has not confirmed support for resuming the saved session. Check its installation and login in Connections, then check again.";
       const sessionId = owned?.id ?? `native-${projectionId}`;
       let session = owned ?? await deps.store.getSession(sessionId);
       const timestamp = item.session.updatedAt;
       if (!session) {
-        session = SessionSchema.parse({ id: sessionId, experience: "work", provider: item.provider, title: `${item.session.title}${branch ? ` · Branch ${branch.leafId.slice(0, 8)}` : ""}`, appId: null, appName: null, cwd: item.session.cwd, codexThreadId: null, createdAt: timestamp, updatedAt: timestamp, status: "idle", pinned: false, archived: false, order: 0,
-          nativeAgent: canResume ? { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: item.session.cwd! } : null,
-          metadata: { nativeHistoryId: id, nativeHistoryProjection: true, nativeHistoryLoaded: true, sourceInstanceId: item.source.instanceId, sourceMachineId: item.source.machineId, nativeSource: item.source.source, nativeResumeAvailable: canResume, nativeSourceHash: native.contentHash, nativeReadOnlyReason: readOnlyReason, ...(branch ? { nativeBranch: branch } : {}) } });
+        session = SessionSchema.parse({ id: sessionId, experience: "work", provider: item.provider, title: `${item.session.title}${branch ? ` · Branch ${branch.leafId.slice(0, 8)}` : ""}`, appId: null, appName: null, cwd, codexThreadId: null, createdAt: timestamp, updatedAt: timestamp, status: "idle", pinned: false, archived: false, order: 0,
+          nativeAgent: canResume ? { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: cwd! } : null,
+          metadata: { nativeHistoryId: id, nativeHistoryProjection: true, nativeHistoryLoaded: true, sourceInstanceId: item.source.instanceId, sourceMachineId: item.source.machineId, nativeSource: item.source.source, nativeResumeAvailable: canResume, nativeSourceHash: native.contentHash, nativeReadOnlyReason: readOnlyReason, nativeReadOnlyKind: readOnlyKind, ...recoveredMetadata, ...(branch ? { nativeBranch: branch } : {}) } });
         await deps.store.insertSessionAtFront(session);
         await deps.appendRuntimeEvent(event({ sessionId, name: "session.started", source: "server", data: { session, retainedHistory: true } }));
       }
       if (session.metadata?.nativeHistoryProjection && !session.nativeAgent && canResume && !session.metadata.nativeBranch) {
-        const updated = await deps.store.updateSession(sessionId, (current) => ({ ...current, cwd: item.session.cwd, nativeAgent: { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: item.session.cwd! }, metadata: { ...current.metadata, nativeResumeAvailable: true, nativeReadOnlyReason: null } }));
+        const updated = await deps.store.updateSession(sessionId, (current) => ({ ...current, cwd, nativeAgent: { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: cwd! }, metadata: { ...current.metadata, nativeResumeAvailable: true, nativeReadOnlyReason: null, nativeReadOnlyKind: null } }));
         if (updated) { session = updated; await deps.appendRuntimeEvent(event({ sessionId, name: "session.updated", source: "server", data: { session, retainedHistory: true } })); }
       }
       const events = await deps.store.runtimeEventsForSession(sessionId);
@@ -159,10 +216,10 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
         const terminalId = `native-terminal-${hash([projectionId, boundary.id, boundary.revisionHash, boundary.terminal])}`;
         if (!existingIds.has(terminalId)) await deps.appendRuntimeEvent({ id: terminalId, sessionId, turnId: retainedTurnId, name: status === "completed" ? "turn.completed" : status === "failed" ? "turn.failed" : "turn.interrupted", timestamp: turn.completedAt!, source: "provider", data: { retainedHistory: true, sourceTerminal: boundary.terminal } });
       }
-      if (session.metadata?.nativeHistoryProjection && (session.metadata.nativeHistoryLoaded === false || session.metadata.nativeReadOnlyReason !== readOnlyReason)) {
+      if (session.metadata?.nativeHistoryProjection && (session.metadata.nativeHistoryLoaded === false || session.metadata.nativeReadOnlyReason !== readOnlyReason || session.metadata.nativeReadOnlyKind !== readOnlyKind)) {
         const updated = await deps.store.updateSession(sessionId, (current) => ({ ...current, metadata: { ...current.metadata,
           nativeHistoryLoaded: true, nativeSourceHash: native.contentHash,
-          nativeResumeAvailable: canResume, nativeReadOnlyReason: readOnlyReason } }));
+          nativeResumeAvailable: canResume, nativeReadOnlyReason: readOnlyReason, nativeReadOnlyKind: readOnlyKind } }));
         if (updated) { session = updated; await deps.appendRuntimeEvent(event({ sessionId, name: "session.updated", source: "server", data: { session, retainedHistory: true } })); }
       }
       return session;
@@ -177,8 +234,8 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       return inspectSessionBranches(item.source, item.session);
     }
     if (action === "open") {
-      const { id, branch } = z.object({ id: z.string().regex(/^[a-f0-9]{64}$/), branch: z.object({ leafId: z.string().min(1).max(200), revision: z.string().regex(/^[a-f0-9]{64}$/) }).optional() }).parse(payload);
-      return open(id, branch);
+      const { id, branch, retryWorkspace } = z.object({ retryWorkspace: z.boolean().optional(), id: z.string().regex(/^[a-f0-9]{64}$/), branch: z.object({ leafId: z.string().min(1).max(200), revision: z.string().regex(/^[a-f0-9]{64}$/) }).optional() }).parse(payload);
+      return open(id, branch, retryWorkspace);
     }
     if (action === "collector") return handleNativeImporter(payload, deps.storeDir);
     throw new Error("Unknown native history action.");

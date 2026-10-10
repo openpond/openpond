@@ -13,7 +13,6 @@ import {
 } from "react";
 import {
   CHAT_ATTACHMENT_LIMITS,
-  SessionSchema,
   type RuntimeEvent,
   type ChatAttachment,
   type OpenPondApp,
@@ -105,6 +104,7 @@ import {
   readComposerAttachmentPayload,
 } from "./ComposerAttachments";
 import { useComposerAttachments } from "./useComposerAttachments";
+import { NativeConversationUnavailable, useNativeConversationAvailability } from "./NativeConversationAvailability";
 import {
   activeSlashCommandContext,
   completedTypedSlashCommand,
@@ -212,16 +212,10 @@ export function Composer({
   onStop,
   onPauseGoal,
 }: ComposerProps) {
-  const nativeReadOnlyReason = useMemo(() => {
-    for (let index = taskEvents.length - 1; index >= 0; index--) {
-      const event = taskEvents[index]!;
-      if (event.sessionId !== taskSessionId || !["session.started", "session.updated", "session.title.updated"].includes(event.name)) continue;
-      const data = event.data;
-      const session = SessionSchema.safeParse(data && typeof data === "object" && "session" in data ? data.session : null);
-      if (session.success) return typeof session.data.metadata?.nativeReadOnlyReason === "string" ? session.data.metadata.nativeReadOnlyReason : null;
-    }
-    return readOnlyReason;
-  }, [readOnlyReason, taskEvents, taskSessionId]);
+  const nativeAvailability = useNativeConversationAvailability({
+    connection, sessionId: taskSessionId ?? null, events: taskEvents, fallbackReason: readOnlyReason ?? null,
+  });
+  const nativeReadOnlyReason = nativeAvailability.reason;
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
@@ -1515,7 +1509,9 @@ export function Composer({
     });
   }
 
-  if (nativeReadOnlyReason) return <p className="composer dock" role="status">{nativeReadOnlyReason}</p>;
+  if (nativeReadOnlyReason) return <NativeConversationUnavailable
+    connection={connection} session={nativeAvailability.session} reason={nativeReadOnlyReason} onRechecked={nativeAvailability.acceptSession}
+  />;
 
   return (
     <form
@@ -1532,6 +1528,11 @@ export function Composer({
         void submitComposer();
       }}
     >
+      {nativeAvailability.session?.metadata?.nativeWorkspaceRecovered === true ? (
+        <p className="composer-workspace-notice" role="status" title={nativeAvailability.session.cwd ?? undefined}>
+          Using an app workspace because the original folder is unavailable.
+        </p>
+      ) : null}
       <input
         {...({ webkitdirectory: "" } as Record<string, string>)}
         ref={folderInputRef}

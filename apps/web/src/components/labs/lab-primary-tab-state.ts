@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { SettingsSection } from "../../lib/app-models";
 import { modelsPath, modelsRouteFromLocation, type ModelsRoute } from "./models-route";
+import { diagnosticLocationHash } from "./diagnostic-location";
 export * from "./models-route";
 
 export type DesktopRoute =
@@ -71,7 +72,7 @@ function safeModelsReturn(value: string | null): string | null {
   return route ? modelsPath(route) : null;
 }
 
-function locationPath(): string { return `${window.location.pathname}${window.location.search}`; }
+function locationPath(): string { return `${window.location.pathname}${window.location.search}${diagnosticLocationHash(window.location)}`; }
 function readLocation() {
   if (typeof window === "undefined") return;
   // Browser Back changes window.location before a draft-exit decision resolves.
@@ -137,7 +138,7 @@ async function onPopState() {
 function startListening() {
   if (listening || typeof window === "undefined") return;
   const initialRoute = desktopRouteFromLocation(window.location);
-  acceptedPath = initialRoute ? desktopPath(initialRoute) : locationPath();
+  acceptedPath = initialRoute ? `${desktopPath(initialRoute)}${diagnosticLocationHash(window.location)}` : locationPath();
   acceptedIndex = typeof window.history.state?.openpondNavigationIndex === "number" ? window.history.state.openpondNavigationIndex : 0;
   window.history.replaceState(historyState(acceptedIndex), "", acceptedPath);
   window.addEventListener("popstate", onPopState);

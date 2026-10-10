@@ -22,6 +22,7 @@ import { ScoringPassStatus } from "./ScoringPassStatus";
 import { useHostedExperimentDetail } from "./useHostedExperimentDetail";
 import type { Inventory, WorkspaceApi } from "./workspace-api";
 import {ExperimentImproveSidebar} from "./ExperimentImproveSidebar";
+import { DropdownSelect } from "../../DropdownSelect";
 export function HostedExperimentsPage({
   api,
   inventory,
@@ -143,7 +144,10 @@ export function HostedExperimentsPage({
             navigate={navigate}
           />
           {inventory?.experiments.nextCursor ? (
-            <button onClick={() => navigate({ ...route, after: inventory.experiments.nextCursor })}>
+            <button
+              className="training-button secondary evaluation-more"
+              onClick={() => navigate({ ...route, after: inventory.experiments.nextCursor })}
+            >
               More Experiments
             </button>
           ) : null}
@@ -168,7 +172,7 @@ export function HostedExperimentsPage({
               </button>
             ))}
           </nav>
-          <div className="evaluation-workspace-scope">
+          <div className="evaluation-run-summary">
             <EvaluationModel
               name={
                 "modelId" in run.request.policy ? run.request.policy.modelId : "Authored fixtures"
@@ -176,11 +180,12 @@ export function HostedExperimentsPage({
               onOpen={() => navigate({ ...route, detailTab: "configuration" })}
             />
             <EvaluationStatus status={run.summary.status} />
-            <span>
-              {run.summary.counts.completed} completed / {run.summary.counts.failed} failed /{" "}
-              {run.summary.counts.running} running / {run.summary.counts.pending} pending /{" "}
-              {run.summary.totalCount} attempts
+            <span className="evaluation-run-counts">
+              <b>{run.summary.counts.completed}</b> completed · <b>{run.summary.counts.failed}</b>{" "}
+              failed · <b>{run.summary.counts.running}</b> running ·{" "}
+              <b>{run.summary.counts.pending}</b> pending · <b>{run.summary.totalCount}</b> attempts
             </span>
+            <span aria-hidden="true">·</span>
             <EvaluationTime value={run.summary.startedAt ?? run.summary.createdAt} />
             {["queued", "running", "cancelling"].includes(run.summary.status) ? (
               <button
@@ -198,20 +203,22 @@ export function HostedExperimentsPage({
           </div>
           {detail.evidence.data ? <ExperimentTrainingPanel api={api} executionId={run.summary.id} passId={route.passId} navigate={navigate}/> : null}
           {detail.passItems.length ? (
-            <label>
-              Grading
-              <select
+            <div className="evaluation-pass-select">
+              <span>Grading</span>
+              <DropdownSelect
+                label="Grading"
                 value={route.passId ?? ""}
-                onChange={(event) => navigate({ ...route, passId: event.target.value || null })}
-              >
-                <option value="">Original Experiment grading</option>
-                {detail.passItems.map((pass) => (
-                  <option key={pass.id} value={pass.id}>
-                    {pass.status} / {pass.id}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={[
+                  { value: "", label: "Original Experiment grading" },
+                  ...detail.passItems.map((pass) => ({
+                    value: pass.id,
+                    label: `Scoring pass ${pass.id.slice(-8)}`,
+                    description: pass.status.replaceAll("_", " "),
+                  })),
+                ]}
+                onChange={(value) => navigate({ ...route, passId: value || null })}
+              />
+            </div>
           ) : null}
           {detail.selectedPass.data ? (
             <ScoringPassStatus
@@ -226,6 +233,7 @@ export function HostedExperimentsPage({
           ) : null}
           {detail.passes.hasNextPage ? (
             <button
+              className="training-button secondary evaluation-more"
               disabled={detail.passes.isFetchingNextPage}
               onClick={() => void detail.passes.fetchNextPage()}
             >

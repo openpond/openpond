@@ -213,7 +213,7 @@ export function buildDevRunnerPlan(
       electronBinary(root),
       ["."],
       path.join(root, "apps", "desktop"),
-      { ...desktopEnv, OPENPOND_DESKTOP_DEV_MODE: "1" },
+      { ...desktopEnv, OPENPOND_DESKTOP_DEV_MODE: "1", OPENPOND_DESKTOP_DEV_SUPERVISED: "1" },
     ));
   }
 
@@ -258,6 +258,7 @@ export function buildDevRunnerPlan(
         path.join(root, "apps", "desktop"),
         {
           ...desktopEnv,
+          OPENPOND_DESKTOP_DEV_SUPERVISED: "1",
           OPENPOND_DESKTOP_USER_DATA_DIR: path.join(
             root,
             ".openpond",
@@ -364,7 +365,14 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
     }
 
     if (running.length === 0 && !reusedServer) throw new Error(`No dev processes were configured for mode ${plan.mode}`);
-    const exit = await waitForExitOrSignal(running);
+    let exit: ProcessExit;
+    while (true) {
+      exit = await waitForExitOrSignal(running);
+      if (exit.id !== "desktop" || exit.code !== 75 || !desktopProcess) break;
+      const index = running.findIndex((item) => item.id === "desktop");
+      console.log("Restarting Electron; keeping server and renderer running.");
+      running[index] = { id: "desktop", child: startProcess(desktopProcess).child };
+    }
     if (exit.id === "supervisor") {
       process.exitCode = exit.code ?? 0;
       return;
@@ -570,14 +578,16 @@ async function waitForUrl(url: string, timeoutMs = 20000): Promise<void> {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
-function waitForExitOrSignal(processes: RunningProcess[]): Promise<ProcessExit> {
+export function waitForExitOrSignal(processes: RunningProcess[]): Promise<ProcessExit> {
   return new Promise((resolve) => {
     let settled = false;
+    const listeners = new Map<ChildProcessWithoutNullStreams, (code: number | null, signal: NodeJS.Signals | null) => void>();
     const finish = (exit: ProcessExit) => {
       if (settled) return;
       settled = true;
       process.off("SIGINT", onInterrupt);
       process.off("SIGTERM", onTerminate);
+      for (const item of processes) item.child.off("exit", listeners.get(item.child)!);
       resolve(exit);
     };
     const onInterrupt = () => finish({ id: "supervisor", code: 130, signal: "SIGINT" });
@@ -585,9 +595,15 @@ function waitForExitOrSignal(processes: RunningProcess[]): Promise<ProcessExit> 
     process.once("SIGINT", onInterrupt);
     process.once("SIGTERM", onTerminate);
     for (const item of processes) {
-      item.child.once("exit", (code, signal) => {
-        finish({ id: item.id, code, signal });
-      });
+      const listener = (code: number | null, signal: NodeJS.Signals | null) => finish({ id: item.id, code, signal });
+      listeners.set(item.child, listener);
+      item.child.once("exit", listener);
+    }
+    for (const item of processes) {
+      if (item.child.exitCode !== null || item.child.signalCode !== null) {
+        finish({ id: item.id, code: item.child.exitCode, signal: item.child.signalCode });
+        break;
+      }
     }
   });
 }

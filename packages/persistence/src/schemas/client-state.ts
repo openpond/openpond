@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const ClientChoicesSchema = z.strictObject({
   chatMode: z.enum(["chat", "work"]).optional(),
+  sidebarWorkflowCollapsedIds: z.array(z.string().min(1).max(200)).max(200).optional(),
   sidebarPresentation: z.enum(["grouped", "inbox"]).optional(),
   notificationMode: z.enum(["all", "direct_mentions", "none"]).optional(),
   learningNoticeDismissed: z.boolean().optional(),
@@ -14,6 +15,7 @@ export const ClientChoicesSchema = z.strictObject({
 export type ClientChoices = z.infer<typeof ClientChoicesSchema>;
 export const CLIENT_CHOICE_KEYS = {
   "openpond:last-chat-task-mode": "chatMode",
+  "openpond.sidebar.workflow-collapse.v1": "sidebarWorkflowCollapsedIds",
   "openpond.sidebar.presentation.v1": "sidebarPresentation",
   "openpond.team-chat.notification-mode": "notificationMode",
   "openpond.sidebar.continuous-learning.dismissed.v1": "learningNoticeDismissed",

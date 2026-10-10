@@ -632,11 +632,6 @@ function workTraceSummaryText(
       summary ? ` · ${summary}` : ""
     }`;
   }
-  if (traceState === "completed") {
-    return `${duration ? `Worked for ${duration}` : "Worked"}${
-      summary ? ` · ${summary}` : ""
-    }`;
-  }
   return summary;
 }
 
