@@ -28,6 +28,7 @@ for (const relativePath of [
   "apps/web/src/test-pages/streaming-markdown-browser-proof.tsx",
   "apps/web/src/test-pages/models-browser-proof.tsx",
   "apps/web/src/test-pages/usage-browser-proof.tsx",
+  "apps/web/src/test-pages/thread-toast-browser-proof-entry.tsx",
   "apps/cli/src/index.ts",
   "apps/cli/src/cli/main.ts",
   "apps/cli/src/sandbox-template/manifest.ts",
