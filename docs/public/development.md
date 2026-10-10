@@ -18,6 +18,8 @@ pnpm dev
 
 Server source edits automatically restart the backend; renderer edits use Vite hot reload. SDK builds are reused across launches when their source, build configuration, dependencies, and generated output are unchanged. The first launch builds them, and subsequent launches use incremental app compilation. Package source changes require restarting the dev command to refresh package builds. Electron main/preload changes also require restarting the dev command.
 
+If the window goes blank, press Ctrl+Shift+R (Cmd+Shift+R on macOS) to retry after checking server readiness. On Linux and Windows, press Alt to open the recovery menu with Retry App, Restart App, Open Logs, and developer tools; macOS exposes these in the View menu. Renderer crashes and failed loads receive one automatic retry, then a recovery page. Restart App replaces Electron while keeping the dev server and Vite running. Unsaved renderer state and Electron-owned browser panels are lost on restart.
+
 Use `pnpm dev --no-watch` to disable backend restarts, or `pnpm stable` for the separate frozen desktop build without renderer hot reload. Typechecking and release builds remain available through `pnpm typecheck` and `pnpm build`.
 
 ## Test Commands

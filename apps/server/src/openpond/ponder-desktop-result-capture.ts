@@ -19,6 +19,7 @@ export function createPonderDesktopResultCapture(deps: {
     | "getPonderDesktopObservation"
   >;
   outputs(sessionId: string, turnId: string): Promise<FileOutputRef[]>;
+  source?(session: import("@openpond/contracts").Session, turnId: string): Promise<import("@openpond/contracts").PonderDesktopSource>;
 }) {
   return async (operation: PonderDesktopOperation) => {
     assertPonderDesktopOperationIdentity(operation);
@@ -81,6 +82,12 @@ export function createPonderDesktopResultCapture(deps: {
       else ordinary += event.output;
     }
     const body = [ordinary, ...messages.values()].filter(Boolean).join("\n\n");
+    let source: import("@openpond/contracts").PonderDesktopSource | undefined;
+    let sourceError: string | undefined;
+    if (turn.status === "completed" && session.experience === "work" && !operation.workflow && deps.source) {
+      try { source = await deps.source(session, turn.id); }
+      catch (error) { sourceError = (error instanceof Error ? error.message : "Workflow source capture failed.").slice(0, 1_000); }
+    }
     const outputs = (await deps.outputs(session.id, turn.id))
       .filter((output) => output.sourceTaskId === session.id && output.sourceTurnId === turn.id)
       .map(({ id, title, contentType, sizeBytes, sha256 }) => ({
@@ -91,6 +98,7 @@ export function createPonderDesktopResultCapture(deps: {
         sha256,
       }));
     const result = PonderDesktopResultSchema.parse({
+      ...(source ? { source } : {}), ...(sourceError ? { sourceError } : {}),
       operationId: operation.id,
       payloadHash: operation.payloadHash,
       sessionId: session.id,

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { createAcpRegistrationService } from "../runtime/native-agents/acp-registrations.js";
 import { withUrlModels } from "../enclave/provider.js";
 import { randomUUID } from "node:crypto";
-import { stat } from "node:fs/promises";
 import path from "node:path";
 import {createLocalExternalDatasetPreparation} from "../harness/local-external-dataset-preparation.js";
 import {resolveHostedApiAccess} from "../openpond/hosted-api-access.js";
@@ -11,8 +10,10 @@ import {resolveHostedApiAccess} from "../openpond/hosted-api-access.js";
 import { nativeTerminalCommand } from "../runtime/native-agents/terminal-command.js";
 import { NATIVE_AGENTS, nativeAgentLaunch } from "../runtime/native-agents/config.js";
 import { applyNativeAgentStatus, probeNativeAgent } from "../runtime/native-agents/setup.js";
+import { withCodexModelCatalog } from "../providers/codex-model-catalog.js";
 import { isNativeAgentId } from "../runtime/native-agents/config.js";
 import { createNativeHistory } from "../runtime/native-agents/history.js";
+import { createNativeHistoryWorkspace } from "../runtime/native-agents/history-workspace.js";
 import {
   AccountStateSchema,
   BootstrapPayloadSchema,
@@ -209,15 +210,7 @@ export function createServerPayloads(deps: {
     return readPlanUsage(provider, file.providers[provider]);
   }
   const nativeHistoryPayload = createNativeHistory({ store, storeDir, appendRuntimeEvent,
-    canResume: async (provider, cwd) => {
-      const file = await readProvidersFile(path.join(storeDir, "providers.json"));
-      if (!file.providers[provider]?.enabled) return { available: false, reason: "Enable the original agent in Connections before continuing this conversation." };
-      const available = await stat(cwd).then((value) => value.isDirectory()).catch(() => false);
-      if (!available) return { available: false, reason: "The original working folder is missing or inaccessible. Restore it, then reopen this conversation." };
-      const status = await probeNativeAgent(provider, file.providers[provider]);
-      const qualified = status.status === "ready" && status.capabilities?.loadSession === true;
-      return { available: qualified, reason: qualified ? null : status.error ?? "This agent does not advertise original-session continuation. Check its installation and login in Connections, then reopen the conversation." };
-    },
+    ...createNativeHistoryWorkspace(providersFilePath),
   });
   const {
     appendAppPage,
@@ -310,7 +303,7 @@ export function createServerPayloads(deps: {
       readProviderSecrets(providerSecretPaths),
       listManagedAdapterProviderModels(store),
     ]);
-    return withUrlModels(store.home, await applyNativeAgentStatus(withManagedAdapterProviderModels(
+    return withUrlModels(store.home, await withCodexModelCatalog(await applyNativeAgentStatus(withManagedAdapterProviderModels(
       buildProviderSettings({
         file: providerState.file,
         secrets,
@@ -319,7 +312,7 @@ export function createServerPayloads(deps: {
         catalog: providerState.catalog,
       }),
       managedAdapterModels
-    )));
+    )), input.codex ?? getCodexStatus()));
   }
 
   async function updateAppPreferencesPayload(
@@ -360,7 +353,7 @@ export function createServerPayloads(deps: {
     return providerSettingsPayload();
   }
 
-  async function providerSettingsPayload(options: { refreshCatalog?: boolean } = {}): Promise<ProviderSettings> {
+  async function providerSettingsPayload(options: { refreshCatalog?: boolean; refreshCodexModels?: boolean } = {}): Promise<ProviderSettings> {
     return providerDiagnostics.track("provider_settings", null, async () => {
       const [openPond, providerState, secrets, managedAdapterModels] =
         await Promise.all([
@@ -369,7 +362,7 @@ export function createServerPayloads(deps: {
           readProviderSecrets(providerSecretPaths),
           listManagedAdapterProviderModels(store),
         ]);
-      return withUrlModels(store.home, await applyNativeAgentStatus(withManagedAdapterProviderModels(
+      return withUrlModels(store.home, await withCodexModelCatalog(await applyNativeAgentStatus(withManagedAdapterProviderModels(
         buildProviderSettings({
           file: providerState.file,
           secrets,
@@ -378,7 +371,7 @@ export function createServerPayloads(deps: {
           catalog: providerState.catalog,
         }),
         managedAdapterModels
-      )));
+      )), getCodexStatus(), options.refreshCodexModels));
     });
   }
 
@@ -440,6 +433,10 @@ export function createServerPayloads(deps: {
       async () => {
         const request = parseProviderModelsRefreshRequest(payload);
         const state = await localProviderRuntimeState();
+        if (providerId === "codex") {
+          const providers = await providerSettingsPayload({ refreshCodexModels: true });
+          return { ...listProviderModels(providers, providerId, { query: request.query, refresh: false, limit: 100 }), providers };
+        }
         if (isNativeAgentId(providerId)) {
           await probeNativeAgent(providerId, state.file.providers[providerId], { force: true });
           const providers = await providerSettingsPayload();

@@ -19,6 +19,7 @@ export function useComposerAttachments() {
   }, [attachments]);
 
   useEffect(() => {
+    unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
       for (const attachment of attachmentsRef.current) {
@@ -32,11 +33,12 @@ export function useComposerAttachments() {
 
   const addFiles = useCallback(
     (files: File[]) => {
-      if (files.length === 0) return;
+      if (files.length === 0 || unmountedRef.current) return;
+      const current = attachmentsRef.current;
 
       const slotsAvailable = Math.max(
         0,
-        CHAT_ATTACHMENT_LIMITS.maxAttachments - attachments.length
+        CHAT_ATTACHMENT_LIMITS.maxAttachments - current.length
       );
       const accepted: ComposerAttachmentDraft[] = [];
       let rejectedForSize = 0;
@@ -72,7 +74,9 @@ export function useComposerAttachments() {
       }
 
       if (accepted.length > 0) {
-        setAttachments([...attachments, ...accepted]);
+        const next = [...current, ...accepted];
+        attachmentsRef.current = next;
+        setAttachments(next);
         setAttachmentError(null);
       }
 
@@ -95,17 +99,17 @@ export function useComposerAttachments() {
         setAttachmentError(messages.join("; "));
       }
     },
-    [attachments]
+    []
   );
 
   const removeAttachment = useCallback((id: string) => {
-    setAttachments((current) => {
-      const removed = current.find((attachment) => attachment.id === id);
-      if (removed) revokeAttachmentPreview(removed);
-      const next = current.filter((attachment) => attachment.id !== id);
-      if (next.length === 0) setAttachmentError(null);
-      return next;
-    });
+    const current = attachmentsRef.current;
+    const removed = current.find((attachment) => attachment.id === id);
+    if (removed) revokeAttachmentPreview(removed);
+    const next = current.filter((attachment) => attachment.id !== id);
+    attachmentsRef.current = next;
+    setAttachments(next);
+    if (next.length === 0) setAttachmentError(null);
   }, []);
 
   const clearAttachments = useCallback(() => {

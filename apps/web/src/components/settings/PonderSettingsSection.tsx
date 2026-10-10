@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
+import { PonderDesktopAccessSettings } from "./PonderDesktopAccessSettings";
 
 type Selection = { providerId: string; modelId: string; reasoningEffort: string };
 type Settings = {
@@ -103,6 +104,7 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
         <h2>Ponder Pal</h2>
         <p>Use your deployed model and keep track of your conversations and workflows.</p>
       </header>
+      <PonderDesktopAccessSettings connection={connection} />
       {error && <p role="alert">{error}</p>}
       {error && !payload && (
         <button type="button" onClick={() => setReload((value) => value + 1)}>

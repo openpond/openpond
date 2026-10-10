@@ -11,6 +11,15 @@
 .ponder-linked-work button:focus-visible { outline: 2px solid #64c7d6; outline-offset: 2px; }
 .ponder-linked-work span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ponder-linked-work small { flex: none; color: var(--muted); }
+.assistant-sources.ponder-agent-sources { flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 8px; }
+.ponder-agent-sources h3 { margin: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
+.ponder-agent-sources .assistant-source-stack { gap: 6px; }
+.ponder-agent-sources .assistant-source-stack .assistant-source-pill { width: auto; max-width: 100%; margin-left: 0; padding: 0 10px; font-weight: 500; }
+.ponder-agent-sources .assistant-source-stack .assistant-source-pill + .assistant-source-pill { margin-left: 0; }
+.ponder-agent-sources .assistant-source-stack .assistant-source-pill > span:not(.conversation-source-icon) { max-width: none; opacity: 1; }
+.ponder-agent-sources .conversation-source-icon { flex: 0 0 auto; width: 14px; max-width: 14px; height: 14px; overflow: visible; opacity: 1; }
+.ponder-agent-sources .conversation-source-icon img { width: 14px; height: 14px; }
+.ponder-transcript-message > .assistant-message-footer { display: flex; justify-content: flex-end; align-self: flex-end; margin-top: 8px; }
 .ponder-recommendations { display: grid; gap: 12px; margin: 16px 0; }
 .ponder-recommendation { padding: 14px 16px; border: 1px solid #64c7d655; border-radius: 12px; background: #64c7d60a; overflow-wrap: anywhere; }
 .ponder-recommendation-target { max-width: 100%; color: var(--text); background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
@@ -27,5 +36,3 @@
 .task-handoff .ponder-message-destination button:focus-visible { outline: 2px solid #64c7d6; outline-offset: 2px; }
 
 .sidebar .sidebar-row.sidebar-ponder-entry:hover { background: rgb(100 199 214 / 18%); }
-
-.ponder-request-status { padding: 12px 0; color: var(--muted); overflow-wrap: anywhere; }

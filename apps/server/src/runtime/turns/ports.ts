@@ -97,6 +97,7 @@ export type SubagentSandboxCleanupRequest = {
 };
 
 export type TurnRepository = TaskInboxRepository & {
+  getPonderDesktopResult?(operationId: string, turnId: string): Promise<import("@openpond/contracts").PonderDesktopResult | null>;
   sessionShells(): Promise<Session[]>;
   getTaskset?(
     id: string
@@ -233,6 +234,7 @@ export type SessionWorkspaceResolver = {
       | "subagentRunId"
       | "workspaceId"
       | "workspaceKind"
+      | "nativeAgent"
     >,
     options?: { ensureOpenPond?: boolean }
   ): Promise<string | null>;

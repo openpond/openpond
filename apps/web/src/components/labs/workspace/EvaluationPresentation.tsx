@@ -18,7 +18,7 @@ export function EvaluationStatus({ status, iconOnly=false }: { status: string; i
 }
 
 export function EvaluationModel({ name, onOpen }: { name: string; onOpen?: () => void }) {
-  return onOpen ? <button type="button" className="evaluation-model" onClick={event => { event.stopPropagation(); onOpen(); }}>{chatModelLabel(name)}</button> : <span className="evaluation-model">{chatModelLabel(name)}</span>;
+  return onOpen ? <button type="button" title={chatModelLabel(name)} className="evaluation-model" onClick={event => { event.stopPropagation(); onOpen(); }}>{chatModelLabel(name)}</button> : <span title={chatModelLabel(name)} className="evaluation-model">{chatModelLabel(name)}</span>;
 }
 
 export function EvaluationTime({ value }: { value?: string | null }) {

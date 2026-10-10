@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("openpond", {
   },
   getConnection: () => ipcRenderer.invoke("openpond:connection"),
   getDesktopRuntimeInfo: () => ipcRenderer.invoke("openpond:desktop:runtimeInfo"),
+  restartDesktopApp: () => ipcRenderer.invoke("openpond:desktop:restart"),
   reloadDesktopApp: () => ipcRenderer.invoke("openpond:desktop:reload"),
   browser: {
     open: (payload: unknown) => ipcRenderer.invoke("openpond:browser:open", payload),

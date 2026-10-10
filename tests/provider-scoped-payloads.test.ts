@@ -66,9 +66,11 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
     const server = await createOpenPondServer({ port: 0, storeDir, silent: true, version: "bootstrap-native-models-test" });
     try {
       const bootstrap = await api<BootstrapPayload>(server.url, server.token, "/v1/bootstrap?ensureProfile=0");
-      for (const providerId of ids.slice(0, 3)) {
+      for (const providerId of ids.slice(0, 2)) {
         expect(bootstrap.providers.modelCaches[providerId]?.models.map((model) => model.id)).toContain(`${providerId}/exact-model`);
       }
+      expect(bootstrap.providers.modelCaches.opencode?.models.map((model) => model.id)).toEqual(["openai/exact-native-model"]);
+      expect(bootstrap.providers.providers.opencode?.defaultModel).toBe("explicit-default");
       expect(bootstrap.providers.modelCaches.openrouter?.models).toEqual([]);
       await api(server.url, server.token, "/v1/providers/opencode/native-setup", { method: "POST", body: JSON.stringify({ action: "capabilities" }) });
       const saved = await readProvidersFile(providersConfigPath(storeDir));

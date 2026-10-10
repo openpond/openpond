@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PonderDesktopSourceSchema, PonderDesktopWorkflowStepSchema } from "./ponder-desktop-workflow.js";
 
 /** Signed original-desktop evidence of a reserved session with no accepted input or turn. */
 export const PonderDesktopReservationResumeSchema = z
@@ -215,6 +216,7 @@ export const PonderDesktopOperationSchema = z
     payloadHash: hash,
     intent: PonderDesktopIntentSchema,
     target: PonderDesktopTargetSchema,
+    workflow: PonderDesktopWorkflowStepSchema.optional(),
     state: z.enum([
       "ready",
       "dispatching",
@@ -277,9 +279,17 @@ export const PonderDesktopResultSchema = z
       )
       .max(100),
     error: z.string().max(2_000).nullable(),
+    source: PonderDesktopSourceSchema.optional(),
+    sourceError: z.string().max(1_000).optional(),
   })
   .strict();
 export type PonderDesktopResult = z.infer<typeof PonderDesktopResultSchema>;
+
+/** Bind derived workflow context into the signed operation without changing ordinary task identities. */
+export function ponderDesktopOperationContent(operation: Pick<PonderDesktopOperation, "origin" | "intent" | "target" | "workflow">) {
+  return { origin: operation.origin, intent: operation.intent, target: operation.target,
+    ...(operation.workflow ? { workflow: operation.workflow } : {}) };
+}
 
 export const PonderLocalMessagePresentationSchema = z
   .object({

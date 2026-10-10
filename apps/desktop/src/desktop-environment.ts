@@ -20,6 +20,11 @@ export function serverWorkingDirectory(): string {
 }
 
 export function appIconPath(): string {
+  if (process.platform === "darwin") {
+    return app.isPackaged
+      ? path.join(process.resourcesPath, "icon-mac.png")
+      : path.join(repoRoot(), "apps", "desktop", "build", "icon-mac.png");
+  }
   return app.isPackaged
     ? path.join(process.resourcesPath, "icons", "512x512.png")
     : path.join(repoRoot(), "apps", "desktop", "build", "icons", "512x512.png");

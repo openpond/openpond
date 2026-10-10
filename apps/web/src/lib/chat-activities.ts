@@ -28,6 +28,20 @@ export { appendHarnessRefinementStatus } from "./chat-refiner-activity";
 
 export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEvent): void {
   const activity = activityFromEvent(item);
+  // A native background command can finish after one or more assistant replies.
+  // Update its original row across those replies instead of duplicating it.
+  if (asRecord(item.data)?.nativeBackgroundTask === true && activity.callId) {
+    const owner = findLast(messages, candidate => candidate.turnId === item.turnId && candidate.role === "activity_group"
+      && Boolean(candidate.activities?.some(entry => entry.callId === activity.callId)));
+    if (owner) {
+      owner.activities = appendActivityToList(owner.activities ?? [], item, activity);
+      const background = owner.activities.filter(entry => entry.backgroundTaskId);
+      const running = background.some(entry => entry.state === "running" || entry.state === "pending");
+      owner.traceState = running ? "running" : background.some(entry => entry.state === "failed") ? "failed" : "settled";
+      owner.traceCompletedAt = running ? undefined : item.timestamp;
+      return;
+    }
+  }
   if (activity.subagentMessage) {
     messages.push({
       id: item.id,
@@ -67,6 +81,7 @@ export function settleRunningActivityGroups(messages: ChatMessage[], item: Runti
       continue;
     }
     if (candidate.traceState !== "running") continue;
+    if (candidate.activities?.some(activity => activity.backgroundTaskId && (activity.state === "running" || activity.state === "pending"))) continue;
     candidate.traceState = "settled";
     candidate.traceCompletedAt = item.timestamp;
   }
@@ -254,6 +269,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
       ? { callId: activityCallId(item) ?? undefined }
       : {}),
     ...(kind && item.name === "command.output" ? { detail: commandOutputFromEvent(item) } : {}),
+    ...(typeof asRecord(item.data)?.nativeTaskId === "string" ? { backgroundTaskId: String(asRecord(item.data)?.nativeTaskId) } : {}),
     ...(kind !== "command" && item.name === "tool.started" && asRecord(item.data)?.nativeTool === true && item.args && Object.keys(item.args).length > 0
       ? { detail: boundProjectedCommandOutput(JSON.stringify(item.args, null, 2)) } : {}),
     ...(kind !== "command" && item.name === "tool.completed" && asRecord(item.data)?.nativeTool === true && item.output ? { detail: boundProjectedCommandOutput(item.output) } : {}),
@@ -275,6 +291,7 @@ function mergeCommandActivity(activities: ActivityItem[], item: RuntimeEvent, ac
     const durationMs = elapsedMilliseconds(existing.timestamp, item.timestamp);
     existing.label = item.status === "failed" ? "Failed" : "Ran";
     existing.state = activity.state;
+    existing.backgroundTaskId = activity.backgroundTaskId ?? existing.backgroundTaskId;
     existing.timestamp = item.timestamp;
     existing.artifacts = activity.artifacts;
     existing.terminal = {

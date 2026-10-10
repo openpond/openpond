@@ -1,4 +1,5 @@
 import type { ClientConnection } from "../../api/api-client";
+import type { ReactNode } from "react";
 import { MessageFooter } from "../chat/MessageFooter";
 import { MessageRow } from "../chat/Messages";
 import type { PonderLinkedWork } from "./PonderResultAttention";
@@ -35,6 +36,7 @@ export function PonderTranscriptMessage({
   onOpenOutput,
   onOpenLocalWork,
   onOpenLocalOutput,
+  agentSources,
 }: {
   message: PonderConversationMessage;
   connection: ClientConnection;
@@ -46,6 +48,7 @@ export function PonderTranscriptMessage({
     source: PonderLocalMessagePresentation,
     outputId: string,
   ) => void;
+  agentSources?: ReactNode;
 }) {
   if (message.source === "ponder-recommendation") return null;
   const presentation = message.metadata.ponderMessage;
@@ -64,7 +67,8 @@ export function PonderTranscriptMessage({
   if (!presentation && !local && message.role === "assistant" && !content.trim())
     return null;
   return (
-    <div className={`ponder-transcript-message ${local || presentation ? "task-handoff" : ""}`}>
+    <div className={`ponder-transcript-message ${local || presentation ? "task-handoff" : ""}`}
+      data-chat-user-message={message.role === "user" && !local && !presentation ? "true" : undefined}>
       <MessageRow
         showFooter={false}
         connection={connection}
@@ -118,6 +122,7 @@ export function PonderTranscriptMessage({
           </span>
         </div>
       ) : null}
+      {agentSources}
       {message.role === "assistant" ? <MessageFooter content={content} timestamp={message.createdAt} kvCacheSummary={message.metadata.kvCacheSummary} /> : null}
       {presentation?.outputFileIds.map((fileId) => (
         <button key={fileId} type="button" onClick={() => onOpenOutput(fileId)}>

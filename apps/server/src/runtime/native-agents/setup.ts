@@ -80,7 +80,7 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
       result.error = error instanceof Error ? error.message : "Native agent connection failed.";
     } finally { signal.removeEventListener("abort", abort); await stop(); }
     if (signal.aborted) throw signal.reason;
-    cache.set(launch.instanceId, { result, expires: Date.now() + 30_000 });
+    cache.set(launch.instanceId, { result, expires: Date.now() + (result.status === "ready" ? 300_000 : 30_000) });
     return result;
   })();
   if (!options.signal) probing.set(launch.instanceId, operation);
@@ -92,7 +92,13 @@ export function invalidateNativeAgent(instanceId: string, error: Error): void {
   if (cached) cache.set(instanceId, { expires: 0, result: { ...cached.result, status: "unavailable", error: error.message } });
 }
 
-export function applyNativeAgentStatus(settings: ProviderSettings): ProviderSettings {
+export async function applyNativeAgentStatus(settings: ProviderSettings): Promise<ProviderSettings> {
+  // A configured native agent remains discoverable after a server restart;
+  // opening its setup dialog is not a prerequisite for desktop orchestration.
+  await Promise.all(Object.entries(settings.providers).map(async ([id, config]) => {
+    if (config.enabled && isNativeAgentId(id))
+      await probeNativeAgent(id, config).catch(() => undefined);
+  }));
   for (const [id, config] of Object.entries(settings.providers)) {
     if (!isNativeAgentId(id)) continue;
     const status = settings.statuses[id];

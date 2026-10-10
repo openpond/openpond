@@ -23,7 +23,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
  const input = JSON.parse(line);
  if(input.type === 'control_request') {
   send({type:'control_response',response:{subtype:'success',request_id:input.request_id,response:{}}});
-  if(input.request.subtype === 'interrupt') send({type:'result',session_id:session,is_error:false,result:'Cancelled result must not appear'});
+  if(input.request.subtype === 'interrupt') { send({type:'result',session_id:session,is_error:false,result:'Cancelled result must not appear'}); send({type:'system',subtype:'session_state_changed',state:'idle'}); }
   return;
  }
  if(input.type !== 'user') return;
@@ -59,6 +59,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
  previousResult = {type:'result',uuid:require('node:crypto').randomUUID(),session_id:session,is_error:false,result:'Final for ' + mode,usage:{input_tokens:300,cache_read_input_tokens:2400,cache_creation_input_tokens:50,output_tokens:100},modelUsage:{'claude-fixture':{inputTokens:9999999,contextWindow:200000}},total_cost_usd:999};
  send(previousResult);
  send(previousResult);
+ send({type:'system',subtype:'session_state_changed',state:'idle'});
 });`, { mode: 0o700 });
 
   const session = SessionSchema.parse({

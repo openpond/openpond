@@ -133,12 +133,12 @@ export function createTaskInboxRuntime(deps: {
 
   async function send(input: {
     senderSessionId: string; sessionId: string; body: string; kind?: "message" | "followup" | "result";
-    idempotencyKey: string; replyTo?: string | null; runtimeNotice?: boolean;
+    idempotencyKey: string; replyTo?: string | null; runtimeNotice?: boolean; reportingOnly?: boolean;
   }): Promise<TaskInput> {
     await authorize(input.senderSessionId, input.sessionId);
     return admit({ id: randomUUID(), sessionId: input.sessionId, senderSessionId: input.senderSessionId,
       senderKind: input.kind === "result" || input.runtimeNotice ? "runtime" : "task", kind: input.kind ?? "message", body: input.body,
-      payload: {}, idempotencyKey: input.idempotencyKey, replyTo: input.replyTo ?? null, expectedTurnId: null });
+      payload: input.reportingOnly ? { taskReportingOnly: true } : {}, idempotencyKey: input.idempotencyKey, replyTo: input.replyTo ?? null, expectedTurnId: null });
   }
 
   async function list(senderId: string): Promise<TaskPeer[]> {
