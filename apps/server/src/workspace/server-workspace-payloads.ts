@@ -250,9 +250,10 @@ export function createServerWorkspacePayloads(deps: {
   }
 
   async function resolveSessionWorkspaceCwd(
-    session: Pick<Session, "appId" | "cwd" | "metadata" | "subagentRunId" | "workspaceId" | "workspaceKind">,
+    session: Pick<Session, "appId" | "cwd" | "metadata" | "subagentRunId" | "workspaceId" | "workspaceKind" | "nativeAgent">,
     options: { ensureOpenPond?: boolean } = {}
   ): Promise<string | null> {
+    if (session.metadata?.nativeWorkspaceRecovered === true && session.nativeAgent?.cwd) return session.nativeAgent.cwd;
     const subagentRepoPath = subagentIsolatedWorkspaceRepoPath(session);
     if (subagentRepoPath) return subagentRepoPath;
     if (session.workspaceKind === "local_project" && session.workspaceId) {

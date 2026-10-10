@@ -233,6 +233,7 @@ export type SessionWorkspaceResolver = {
       | "subagentRunId"
       | "workspaceId"
       | "workspaceKind"
+      | "nativeAgent"
     >,
     options?: { ensureOpenPond?: boolean }
   ): Promise<string | null>;
