@@ -23,7 +23,6 @@ import {
 import { DropdownSelect } from "../DropdownSelect";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView } from "../../lib/app-models";
-import { newExperienceTitle } from "../../lib/experience-options";
 import {
   changeModelsScope,
   modelsLocation,
@@ -51,27 +50,17 @@ type SidebarDestinationProps = {
   >;
 };
 
-export function SidebarNewTask({
-  experience = "work",
-  beginNewChat,
-}: {
-  experience?: Experience;
+export function SidebarNewThreadButton({ beginNewChat }: {
   beginNewChat: (app?: OpenPondApp | null) => void;
 }) {
   return (
-    <div className="sidebar-new-task">
-      <button
-        className="sidebar-row sidebar-task-row sidebar-new-task-entry"
-        type="button"
-        onClick={async () => {
-          if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
-          beginNewChat(null);
-        }}
-      >
-        <span className="conversation-source-icon" aria-hidden="true"><SquarePen size={18} /></span>
-        <span>{newExperienceTitle(experience)}</span>
-      </button>
-    </div>
+    <button className="sidebar-icon" type="button" aria-label="New thread" data-tooltip="New thread" title="New thread"
+      onClick={async () => {
+        if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
+        beginNewChat(null);
+      }}>
+      <SquarePen size={16} />
+    </button>
   );
 }
 

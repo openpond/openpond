@@ -2,10 +2,17 @@ import { captureTasksetDraftWorkspace } from "@openpond/taskset-sdk";
 import { OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
 import { loadConfig } from "../config";
 import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl, parseBooleanOption } from "./common";
+import { DATASET_PREPARATION_USAGE, runDatasetPreparationCommand } from "./datasets-preparation";
 
 export async function runDatasetsCommand(options: Record<string, string | boolean>, rest: string[]) {
   const [action, id] = rest;
   const teamId = optionString(options, "team"); const baseUrl = resolveApiBaseUrlOption(options);
+  if (action === "preparation") {
+    if (!teamId || !baseUrl) throw new Error(`usage: ${DATASET_PREPARATION_USAGE}`);
+    const config = await loadConfig();
+    const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
+    return runDatasetPreparationCommand(client.preparations, options, rest.slice(1));
+  }
   if (!teamId || !baseUrl || !action || rest.length > 2 || !["upload", "read", "list", "validate", "publish"].includes(action))
     throw new Error("usage: datasets <upload|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>]");
   const config = await loadConfig();

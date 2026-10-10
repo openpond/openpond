@@ -51,6 +51,11 @@ let cachedUpload: {
 } | null = null;
 
 export const collectorTransport: CollectorTransport = {
+  async publishCoverage(connection, manifest, cancellation) {
+    const { sync } = await collectorClients(connection);
+    await sync.publishCoverage({ id: connection.id, expectedRevision: connection.revision, manifest },
+      AbortSignal.any([AbortSignal.timeout(60000), ...(cancellation ? [cancellation] : [])]));
+  },
   async heartbeat(connection, input, cancellation) {
     const { sync } = await collectorClients(connection);
     const remote = await sync.heartbeat({

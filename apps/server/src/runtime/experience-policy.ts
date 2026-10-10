@@ -129,9 +129,9 @@ export function workspaceToolExperienceBlocker(input: {
     return workWorkspaceRequestBlocker(input.action, input.args ?? {});
   }
   if (input.session.experience === "chat") {
-    return "Chat does not have workspace compute. Start Work to use Local or Hosted workspace tools.";
+    return "Workspace compute is unavailable in this internal conversation.";
   }
-  return `${input.action} requires repository-aware Work and is not available in this projectless Work run.`;
+  return `${input.action} requires a project workspace and is not available in this projectless thread.`;
 }
 
 function workWorkspaceRequestBlocker(

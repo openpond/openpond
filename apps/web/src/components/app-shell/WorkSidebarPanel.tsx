@@ -253,14 +253,14 @@ export function WorkSidebarPanel({
       className={`workspace-diff-panel work-sidebar-panel ${
         expanded ? "expanded" : ""
       }`}
-      aria-label="Work details"
+      aria-label="Thread details"
     >
       {!expanded ? (
         <div
           className="workspace-diff-resize-handle"
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize Work details"
+          aria-label="Resize Thread details"
           onPointerDown={onResizeStart}
         />
       ) : null}
@@ -268,7 +268,7 @@ export function WorkSidebarPanel({
         <div
           className="workspace-diff-tabs"
           role="tablist"
-          aria-label="Work details"
+          aria-label="Thread details"
         >
           {(
             [
@@ -525,18 +525,11 @@ export function WorkSidebarPanel({
                       <button
                         type="button"
                         disabled={busyOutputId === outputRevisionKey(output)}
-                        onClick={() => void handoffOutput("chat", output)}
-                      >
-                        Continue in Chat
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyOutputId === outputRevisionKey(output)}
                         onClick={() =>
                           void handoffOutput("work", output)
                         }
                       >
-                        Continue in repository Work
+                        Continue in new thread
                       </button>
                     </div>
                   </article>
@@ -597,7 +590,7 @@ export function WorkSidebarPanel({
             <WorkEmptyState
               icon={Activity}
               title="No activity yet"
-              detail="Commands, tool receipts, and checks appear while Work runs."
+              detail="Commands, tool receipts, and checks appear while the thread runs."
             />
           )
         ) : null}

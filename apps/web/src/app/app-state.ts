@@ -20,29 +20,8 @@ import {
   type SettingsSection,
 } from "../lib/app-models";
 
-export type AppToast = {
-  id: number;
-  message: string;
-  tone: "success" | "error" | "info";
-  actionLabel?: string;
-  onAction?: () => void;
-  persistent?: boolean;
-  durationMs?: number;
-  placement?: "bottom-right" | "top-right";
-};
-
-export type ShowAppToast = (
-  message: string,
-  tone?: AppToast["tone"],
-  options?: Pick<
-    AppToast,
-    | "actionLabel"
-    | "onAction"
-    | "persistent"
-    | "durationMs"
-    | "placement"
-  >
-) => number;
+import { enqueueAppToast, type AppToast } from "../lib/app-toasts";
+export type { AppToast, ShowAppToast } from "../lib/app-toasts";
 
 export type SidebarSectionMenuId =
   | "cloud"
@@ -109,7 +88,7 @@ export type AppState = {
   commitDraft: boolean;
   branchDialogOpen: boolean;
   branchDialogName: string;
-  toast: AppToast | null;
+  toasts: AppToast[];
   error: string | null;
 };
 
@@ -130,7 +109,7 @@ export const initialAppState: AppState = {
   promptDrafts: {},
   draftProvider: DEFAULT_CHAT_PROVIDER,
   draftModel: DEFAULT_CHAT_MODEL,
-  draftExperience: "chat",
+  draftExperience: "work",
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
   openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
@@ -154,7 +133,7 @@ export const initialAppState: AppState = {
   commitDraft: true,
   branchDialogOpen: false,
   branchDialogName: "",
-  toast: null,
+  toasts: [],
   error: null,
 };
 
@@ -181,7 +160,9 @@ export type AppAction =
   | { type: "openCommitDialog"; nextStep: CommitNextStep }
   | { type: "openBranchDialog"; branchName: string }
   | { type: "showToast"; toast: AppToast }
-  | { type: "clearToast"; toastId: number };
+  | { type: "clearToast"; toastId: number }
+  | { type: "clearToastGroup"; groupKey: string }
+  | { type: "clearToasts" };
 
 type PromptSelectionState = Pick<
   AppState,
@@ -197,7 +178,7 @@ function promptDraftKey(selection: PromptSelectionState): string {
   if (selection.selectedProjectId)
     return `project:${selection.selectedProjectId}`;
   if (selection.selectedAppId) return `app:${selection.selectedAppId}`;
-  return `new-${selection.draftExperience}`;
+  return "new-chat";
 }
 
 function setPromptDraft(
@@ -352,11 +333,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         view: "chat",
       };
     case "showToast":
-      return { ...state, toast: action.toast };
+      return { ...state, toasts: enqueueAppToast(state.toasts, action.toast) };
     case "clearToast":
-      return state.toast?.id === action.toastId
-        ? { ...state, toast: null }
-        : state;
+      return { ...state, toasts: state.toasts.filter(toast => toast.id !== action.toastId) };
+    case "clearToastGroup":
+      return { ...state, toasts: state.toasts.filter(toast => toast.groupKey !== action.groupKey) };
+    case "clearToasts":
+      return { ...state, toasts: [] };
     default:
       return state;
   }
@@ -417,7 +400,6 @@ export function createAppSetters(dispatch: Dispatch<AppAction>) {
     setCommitDraft: fieldSetter(dispatch, "commitDraft"),
     setBranchDialogOpen: fieldSetter(dispatch, "branchDialogOpen"),
     setBranchDialogName: fieldSetter(dispatch, "branchDialogName"),
-    setToast: fieldSetter(dispatch, "toast"),
     setError: fieldSetter(dispatch, "error"),
   };
 }

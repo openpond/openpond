@@ -68,12 +68,12 @@ export function AppShellController({
         >
           <MainPane {...mainPane} />
         </Suspense>
+        <div className="app-toast-anchor"><AppToastView {...toast} /></div>
       </div>
 
       <CloudSetupDialog {...cloudSetup} />
       <ProjectConfirmDialog {...projectConfirm} />
       <AppLazyPanels {...lazyPanels} />
-      <AppToastView {...toast} />
     </div>
     </PageChromeProvider>
   );
@@ -86,9 +86,9 @@ export type AppSettingsControllerProps = {
 
 export function AppSettingsController({ settings, toast }: AppSettingsControllerProps) {
   return (
-    <>
+    <div className="app-settings-shell">
       <AppSettingsRoute {...settings} />
-      <AppToastView {...toast} />
-    </>
+      <div className="app-toast-anchor"><AppToastView {...toast} /></div>
+    </div>
   );
 }

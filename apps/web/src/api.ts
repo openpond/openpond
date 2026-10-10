@@ -322,10 +322,11 @@ export const api = {
         skillName
       )}/source?path=${encodeURIComponent(filePath)}`
     ),
-  teamChatMembers: (connection: ClientConnection, teamId: string) =>
+  teamChatMembers: (connection: ClientConnection, teamId: string, signal?: AbortSignal) =>
     apiFetch<{ members: TeamChatMember[] }>(
       connection,
-      `/v1/team-chat/members?teamId=${encodeURIComponent(teamId)}`
+      `/v1/team-chat/members?teamId=${encodeURIComponent(teamId)}`,
+      { signal },
     ),
   teamChatAgents: (connection: ClientConnection, teamId: string) =>
     apiFetch<{ agents: TeamChatAgentCatalogEntry[] }>(

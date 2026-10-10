@@ -31,6 +31,7 @@ it("skips empty OpenCode history and admits the same identity once it has a comp
     store.put({ ...connection, revision }); store.set("desiredState", "running");
     try {
       await runCollector({ directory: stateDirectory, signal: controller.signal, transport: {
+        publishCoverage: async () => {},
         heartbeat: async current => ({ revision: current.revision, state: current.state }),
         admit: async (_, entry) => { admissions++; expect(JSON.parse(entry.files[0]!.text).info.id).toBe("original"); },
       } });
@@ -62,8 +63,8 @@ it("reprojects an unchanged Codex file after a source-policy upgrade", async () 
   await writeFile(file, [
     { type: "session_meta", payload: { id: "policy-upgrade", cli_version: "0.153.4" } },
     { type: "world_state", payload: { state: { permissions: { approved_command_prefixes: [["token=fixtureAuthorization123"]] } } } },
-    { type: "response_item", payload: { id: "request", type: "message", role: "user", content: "retained request" } },
-    { type: "response_item", payload: { id: "answer", type: "message", role: "assistant", content: "retained answer" } },
+    { type: "response_item", timestamp: "2026-10-02T00:00:01Z", payload: { id: "request", type: "message", role: "user", content: "retained request" } },
+    { type: "response_item", timestamp: "2026-10-02T00:00:02Z", payload: { id: "answer", type: "message", role: "assistant", content: "retained answer" } },
     { type: "event_msg", payload: { type: "task_complete" } },
   ].map(row => JSON.stringify(row)).join("\n"));
   const connection: CollectorConnection = {
@@ -89,6 +90,7 @@ it("reprojects an unchanged Codex file after a source-policy upgrade", async () 
     store.progress.select(connection.id, scanKey); store.progress.read(connection.id, scanKey, true); store.progress.discovered(connection.id);
     let revisions = 0;
     await runCollector({ directory: stateDirectory, signal: controller.signal, transport: {
+      publishCoverage: async () => {},
       heartbeat: async current => {
         // An explicit remote resume is observed at this job's first probe.
         return { revision: Math.max(3, current.revision), state: "active" };
@@ -186,6 +188,7 @@ it("preserves local source identity and receipts across remote controls", async 
       directory: join(directory, "state"),
       signal: controller.signal,
       transport: {
+        publishCoverage: async () => {},
         heartbeat: async () => ({
           revision: 2,
           state: "active",
@@ -234,8 +237,8 @@ it("acknowledges requested sync only after acquisition and admission, across con
   await mkdir(sourceRoot);
   const transcript = (id: string) => [
     { type: "session", version: 3, id, timestamp: "2026-10-02T00:00:00Z" },
-    { type: "message", id: "u", parentId: null, message: { role: "user", content: "retained request" } },
-    { type: "message", id: "a", parentId: "u", message: { role: "assistant", content: [{ type: "text", text: "retained answer" }], stopReason: "stop" } },
+    { type: "message", id: "u", parentId: null, timestamp: "2026-10-02T00:00:01Z", message: { role: "user", content: "retained request" } },
+    { type: "message", id: "a", parentId: "u", timestamp: "2026-10-02T00:00:02Z", message: { role: "assistant", content: [{ type: "text", text: "retained answer" }], stopReason: "stop" } },
   ].map(row => JSON.stringify(row)).join("\n") + "\n";
   await writeFile(join(sourceRoot, "first.jsonl"), transcript("first"));
   const state = join(directory, "state"), store = await CollectorStore.open(state);
@@ -251,12 +254,14 @@ it("acknowledges requested sync only after acquisition and admission, across con
     store.put(connection); store.set("desiredState", "running");
     const paused = new AbortController();
     await runCollector({ directory: state, signal: paused.signal, transport: {
+      publishCoverage: async () => {},
       heartbeat: async current => { paused.abort(); return { revision: current.revision, state: "paused", requestedSyncRevision: 2, completedSyncRevision: 0 }; },
       admit: async () => { throw new Error("Paused source admitted work"); },
     } });
     expect(store.status().connections[0]).toMatchObject({ state: "paused", admitted: 0, completedSyncRevision: 0 });
     store.put({ ...connection, state: "active" }); store.set("desiredState", "stopped");
     await runCollector({ directory: state, signal: new AbortController().signal, transport: {
+      publishCoverage: async () => {},
       heartbeat: async () => { throw new Error("Stopped collector contacted remote"); },
       admit: async () => { throw new Error("Stopped collector admitted work"); },
     } });
@@ -264,6 +269,7 @@ it("acknowledges requested sync only after acquisition and admission, across con
     const first = new AbortController(), deadline = setTimeout(() => first.abort(), 8000);
     try {
       await runCollector({ directory: state, signal: first.signal, transport: {
+        publishCoverage: async () => {},
         heartbeat: async (current, report) => {
           if (report.completedSyncRevision) {
             expect(report.completedSyncRevision).toBe(3);
@@ -293,6 +299,7 @@ it("acknowledges requested sync only after acquisition and admission, across con
     const restart = new AbortController(), restartDeadline = setTimeout(() => restart.abort(), 5000);
     try {
       await runCollector({ directory: state, trigger: "manual", signal: restart.signal, transport: {
+        publishCoverage: async () => {},
         heartbeat: async (current, report) => {
           expect(report.completedSyncRevision).toBe(3);
           expect(report.error).toBeNull();
@@ -347,6 +354,7 @@ it.each([401, 403])(
             trigger: "manual",
             signal: controller.signal,
             transport: {
+              publishCoverage: async () => {},
               heartbeat: async (current) => {
                 heartbeats.push(current.id);
                 if (current.id === "revoked") {
@@ -434,6 +442,7 @@ it("clears recovered heartbeat failures while retaining source failures", async 
           trigger: "manual",
           signal: controller.signal,
           transport: {
+            publishCoverage: async () => {},
             heartbeat: async (current, status) => {
               if (restart === 0)
                 throw Object.assign(new Error("Sync request failed (502)."), {

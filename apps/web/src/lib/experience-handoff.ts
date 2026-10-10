@@ -55,14 +55,14 @@ export function exactExchangeHandoffPrompt(
   }>
 ): string {
   const context = exactExchangeHandoffContext(messages);
-  return `Continue this exact exchange in Work:\n\n${context}`;
+  return `Continue this exact exchange in a new thread:\n\n${context}`;
 }
 
 export function outputHandoffPrompt(
   output: Pick<OutputRef, "revision" | "title">,
   target: Extract<Experience, "chat" | "work">
 ): string {
-  const base = `Continue from the attached Work output "${output.title}" (revision ${output.revision}).`;
+  const base = `Continue from the attached output "${output.title}" (revision ${output.revision}).`;
   return target === "work"
     ? `${base} Choose a Project or repository before making source changes; do not mutate a checkout until I choose it.`
     : base;

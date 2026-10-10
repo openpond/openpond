@@ -112,8 +112,9 @@ export function createSessionStore(deps: {
     )) {
       throw new Error("Profile component session requires its selected Profile reference and a single binding.");
     }
+    const experience = effectiveSessionExperience(input);
     const managedLocalWork =
-      input.experience === "work" &&
+      experience === "work" &&
       !workspaceKind &&
       !input.appId &&
       !input.localProjectId &&
@@ -128,7 +129,7 @@ export function createSessionStore(deps: {
         : input.cwd;
     const session: Session = {
       id: sessionId,
-      experience: input.experience ?? DEFAULT_SESSION_EXPERIENCE,
+      experience,
       provider: input.provider,
       modelRef: input.modelRef ?? null,
       openPondCommandAccessMode,
@@ -379,7 +380,7 @@ function normalizeSession(
   }
   return {
     ...session,
-    experience: session.experience ?? DEFAULT_SESSION_EXPERIENCE,
+    experience: effectiveSessionExperience(session),
     openPondCommandAccessMode: parsed.success
       ? parsed.data
       : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
@@ -388,4 +389,15 @@ function normalizeSession(
     savedForLater,
     archived,
   };
+}
+
+/** User conversations share Work capabilities; internal system chats keep their restricted policy.
+ * Resolve at the session boundary so every continuation path agrees without rewriting history.
+ */
+function effectiveSessionExperience(session: {
+  experience?: Session["experience"];
+  systemKind?: Session["systemKind"];
+}): Session["experience"] {
+  const experience = session.experience ?? DEFAULT_SESSION_EXPERIENCE;
+  return experience === "chat" && !session.systemKind ? "work" : experience;
 }

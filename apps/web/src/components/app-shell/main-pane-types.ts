@@ -72,7 +72,6 @@ export type MainPaneProps = {
   ponderMode?: "clean" | "activity" | null;
   onPonderModeChange?: (mode: "clean" | "activity" | null) => void;
   experience: Experience;
-  onNewExperienceChange: (experience: Experience) => void;
   view: AppView;
   teamChat: TeamChatViewProps;
   community: CommunityViewProps;

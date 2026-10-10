@@ -8,7 +8,7 @@ import {
   type AuthoringRepair,
   type TaskCreationRequest,
   type TaskDesignProposal,
-  type TrainingSourceRef,
+  type TasksetSourceRef,
 } from "@openpond/contracts";
 
 const ModelProposalEnvelopeSchema = z.object({
@@ -18,8 +18,23 @@ const ModelProposalEnvelopeSchema = z.object({
 
 const DEFAULT_TASK_AUTHORING_TIMEOUT_MS = 10 * 60_000;
 
+export function createTaskAuthoringMessages(input: Parameters<typeof taskAuthoringMessages>[0]) {
+  return taskAuthoringMessages(input);
+}
+
+/** The hosted preparation owner budgets every attempt itself, so it uses the
+ * same parser and compatibility gate without an implicit second model call. */
+export function parseTaskAuthoringDecision(content: string, evidence: TaskAuthoringEvidence[]) {
+  const parsed = parseEnvelope(content);
+  if (!parsed) throw new Error("Task authoring returned invalid structured output.");
+  const proposal = normalizePolicyBoundary(parsed.proposal);
+  const issue = proposalCompatibilityIssue(proposal, evidence);
+  if (issue) throw new Error(`Task authoring returned an incompatible proposal: ${issue}`);
+  return proposal;
+}
+
 export type TaskAuthoringEvidence = {
-  source: TrainingSourceRef;
+  source: TasksetSourceRef;
   excerpts: Array<{ role: "user" | "assistant"; text: string; turnId: string }>;
 };
 

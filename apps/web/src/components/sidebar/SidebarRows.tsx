@@ -364,6 +364,13 @@ export function SidebarSessionRow({
           onClick={(event) => { event.stopPropagation(); onArchive(); }}>
           {archived ? <RotateCcw size={19} /> : <Check size={21} />}
         </button> : null}
+        {session.pinned ? (
+          <button type="button" className="sidebar-thread-pin"
+            aria-label={`Unpin thread: ${session.title}`} title="Unpin thread"
+            onClick={(event) => { event.stopPropagation(); onTogglePin(); }}>
+            <Pin size={16} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     </SidebarInteractiveRow>
   );
@@ -627,7 +634,7 @@ export function SidebarProjectRow({
                 onToggleOpen={() => setMenuOpen((open) => !open)}
               />
             )}
-            <SidebarRowAction label="New task" onClick={onNewChat}>
+            <SidebarRowAction label="New thread" onClick={onNewChat}>
               <SquarePen size={13} />
             </SidebarRowAction>
           </div>

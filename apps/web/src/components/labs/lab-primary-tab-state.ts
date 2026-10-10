@@ -164,8 +164,8 @@ export function useModelsRoute(): ModelsRoute | null {
 export function useDesktopRoute(): DesktopRoute | null {
   return useSyncExternalStore(subscribe, () => { readLocation(); return cachedDesktop; }, () => null);
 }
-export async function navigateDesktopRoute(route: DesktopRoute, mode: NavigationMode = "push"): Promise<boolean> {
-  if (typeof window === "undefined") return false;
+export async function navigateDesktopRoute(route: DesktopRoute, mode: NavigationMode = "push", isCurrent: () => boolean = () => true): Promise<boolean> {
+  if (typeof window === "undefined" || !isCurrent()) return false;
   startListening();
   if (popDecisionPending) return false;
   if (route.kind === "settings" && !route.returnTo) {
@@ -175,7 +175,7 @@ export async function navigateDesktopRoute(route: DesktopRoute, mode: Navigation
   }
   const path = desktopPath(route);
   if (locationPath() === path) return true;
-  if (!await permit(path)) return false;
+  if (!await permit(path) || !isCurrent()) return false;
   if (mode === "push") acceptedIndex++;
   window.history[mode === "replace" ? "replaceState" : "pushState"](historyState(acceptedIndex), "", path);
   acceptedPath = path;
