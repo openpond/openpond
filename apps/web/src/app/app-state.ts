@@ -130,7 +130,7 @@ export const initialAppState: AppState = {
   promptDrafts: {},
   draftProvider: DEFAULT_CHAT_PROVIDER,
   draftModel: DEFAULT_CHAT_MODEL,
-  draftExperience: "chat",
+  draftExperience: "work",
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
   openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
@@ -197,7 +197,7 @@ function promptDraftKey(selection: PromptSelectionState): string {
   if (selection.selectedProjectId)
     return `project:${selection.selectedProjectId}`;
   if (selection.selectedAppId) return `app:${selection.selectedAppId}`;
-  return `new-${selection.draftExperience}`;
+  return "new-chat";
 }
 
 function setPromptDraft(

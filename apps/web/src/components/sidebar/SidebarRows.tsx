@@ -627,7 +627,7 @@ export function SidebarProjectRow({
                 onToggleOpen={() => setMenuOpen((open) => !open)}
               />
             )}
-            <SidebarRowAction label="New task" onClick={onNewChat}>
+            <SidebarRowAction label="New thread" onClick={onNewChat}>
               <SquarePen size={13} />
             </SidebarRowAction>
           </div>

@@ -1,3 +1,7 @@
+.sidebar-task-project-group {
+  min-width: 0;
+}
+
 .sidebar-task-project-group + .sidebar-task-project-group {
   margin-top: 8px;
 }

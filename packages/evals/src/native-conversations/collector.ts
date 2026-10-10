@@ -15,7 +15,10 @@ export async function runCollector(input: {
   connectionIds?: string[];
   trigger?: "manual" | "scheduled";
   maxDurationMs?: number;
+  until?: string;
 }) {
+  const until = input.until ?? new Date().toISOString();
+  if (!Number.isFinite(Date.parse(until)) || Date.parse(until) > Date.now()) throw new Error("--until must be a valid timestamp no later than now.");
   const store = await CollectorStore.open(input.directory), nonce = randomUUID();
   let selected: CollectorConnection[] = [];
   store.database.exec("BEGIN IMMEDIATE");
@@ -146,12 +149,13 @@ export async function runCollector(input: {
           await check();
           const revision = connection.revision, requested = connection.requestedSyncRevision ?? 0;
           phase = "source";
+          store.coverage.begin(connection, `${nonce}-${pass}`, run.startedAt, until);
           const checkAcquisition = async () => {
             await check(); phase = "source";
             if (connection.revision !== revision) throw new CollectorScopeChangedError("Source settings changed during acquisition.");
           };
           try {
-            await acquireCollectorSource({ store, connection, check: checkAcquisition,
+            await acquireCollectorSource({ store, connection, until, check: checkAcquisition,
               drain: async () => { await drain(); await checkAcquisition(); }, progress });
           } catch (error) {
             if (error instanceof CollectorScopeChangedError && pass < 2) continue;
@@ -159,6 +163,7 @@ export async function runCollector(input: {
           }
           errors.set(connection.id, "source", null);
           await drain();
+          await input.transport.publishCoverage(connection, store.coverage.finish(connection.id, true), signal);
           connection = retained(connection);
           if (connection.revision !== revision) {
             if (pass === 2) throw new Error("Source settings changed repeatedly during import. Run Sync now again.");
@@ -185,6 +190,13 @@ export async function runCollector(input: {
         const message = reason instanceof Error ? reason.message : "Import cancelled.";
         if (!cancelled) recordFailure(connection, reason, phase);
         progress({ state: cancelled ? "cancelled" : "failed", error: message, finishedAt: new Date().toISOString() });
+        if (store.coverage.manifest(connection.id)?.jobId.startsWith(`${nonce}-`)) {
+          const coverage = store.coverage.finish(connection.id, false);
+          if (!signal.aborted && connection.state === "active") {
+            try { await input.transport.publishCoverage(connection, coverage, signal); }
+            catch (coverageError) { recordFailure(connection, coverageError, "source"); }
+          }
+        }
       }
       if (signal.aborted || store.setting("desiredState") !== "running") break;
     }

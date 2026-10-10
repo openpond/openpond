@@ -4,7 +4,40 @@ import {
   AgentImportPreviewRequestSchema,
 } from "./connected-evidence-contracts.js";
 import { fetchConnectedJson } from "./connected-evidence-http.js";
+import {
+  CollectorCoverageManifestSchema,
+  CollectorCoverageSummarySchema,
+  summarizeCollectorCoverage,
+} from "@openpond/evals/connected-evidence";
 const Id = z.string().trim().min(1).max(240);
+export const ConnectedSyncCoveragePublishSchema = z
+  .object({
+    id: Id,
+    expectedRevision: z.number().int().positive(),
+    manifest: CollectorCoverageManifestSchema,
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.id === value.manifest.connectionId &&
+      value.expectedRevision === value.manifest.connectionRevision,
+    "Collector coverage scope differs from its connection.",
+  );
+export const ConnectedSyncCoverageReadSchema = z
+  .object({ id: Id, cutoff: z.iso.datetime().optional() })
+  .strict();
+export const ConnectedSyncCoverageReceiptSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.connectedSyncCoverageReceipt.v1"),
+    id: Id,
+    teamId: Id,
+    ownerUserId: Id,
+    connectionId: Id,
+    connectionRevision: z.number().int().positive(),
+    receivedAt: z.iso.datetime(),
+    summary: CollectorCoverageSummarySchema,
+  })
+  .strict();
 export const ConnectedSyncRegistrationSchema = z
   .object({
     id: Id,
@@ -26,11 +59,13 @@ export const ConnectedSyncControlSchema = z
     action: z.enum(["pause", "resume", "disconnect"]),
   })
   .strict();
-export const ConnectedSyncRequestSchema = z.object({
-  id: Id,
-  operationId: Id,
-  expectedRevision: z.number().int().positive(),
-}).strict();
+export const ConnectedSyncRequestSchema = z
+  .object({
+    id: Id,
+    operationId: Id,
+    expectedRevision: z.number().int().positive(),
+  })
+  .strict();
 export const ConnectedSyncHeartbeatSchema = z
   .object({
     id: Id,
@@ -69,7 +104,12 @@ export const ConnectedSyncConnectionSchema = z
     syncCompletedAt: z.string().datetime().nullable().default(null),
   })
   .strict()
-  .refine(value => value.completedSyncRevision <= value.requestedSyncRevision && value.requestedSyncRevision <= value.revision, "Invalid sync acknowledgement generation.");
+  .refine(
+    (value) =>
+      value.completedSyncRevision <= value.requestedSyncRevision &&
+      value.requestedSyncRevision <= value.revision,
+    "Invalid sync acknowledgement generation.",
+  );
 export const ConnectedSyncCommitSchema = z
   .object({
     connectionId: Id,
@@ -161,7 +201,12 @@ export class ConnectedSyncClient {
     signal?: AbortSignal,
   ) {
     return this.connection(
-      await this.request("/sync-now", "POST", ConnectedSyncRequestSchema.parse(raw), signal),
+      await this.request(
+        "/sync-now",
+        "POST",
+        ConnectedSyncRequestSchema.parse(raw),
+        signal,
+      ),
       raw.id,
     );
   }
@@ -175,6 +220,59 @@ export class ConnectedSyncClient {
       ConnectedSyncCommitSchema.parse(raw),
       signal,
     );
+  }
+  async publishCoverage(
+    raw: z.input<typeof ConnectedSyncCoveragePublishSchema>,
+    signal?: AbortSignal,
+  ) {
+    const request = ConnectedSyncCoveragePublishSchema.parse(raw);
+    const receipt = this.coverageReceipt(
+      await this.request(
+        "/coverage",
+        "POST",
+        { action: "publish", ...request },
+        signal,
+      ),
+      request.id,
+    );
+    if (
+      !receipt ||
+      receipt.connectionRevision !== request.expectedRevision ||
+      receipt.summary.manifestHash !==
+        summarizeCollectorCoverage(request.manifest).manifestHash
+    )
+      throw new Error(
+        "Collector coverage acknowledgement differs from the retained manifest.",
+      );
+    return receipt;
+  }
+  async readCoverage(
+    raw: z.input<typeof ConnectedSyncCoverageReadSchema>,
+    signal?: AbortSignal,
+  ) {
+    const request = ConnectedSyncCoverageReadSchema.parse(raw);
+    const query = new URLSearchParams(
+      request.cutoff ? { cutoff: request.cutoff } : {},
+    );
+    return this.coverageReceipt(
+      await this.request(
+        `/${encodeURIComponent(request.id)}/coverage?${query}`,
+        "GET",
+        undefined,
+        signal,
+      ),
+      request.id,
+    );
+  }
+  private coverageReceipt(value: unknown, connectionId: string) {
+    if (value === null) return null;
+    const receipt = ConnectedSyncCoverageReceiptSchema.parse(value);
+    if (
+      receipt.teamId !== this.options.teamId ||
+      receipt.connectionId !== connectionId
+    )
+      throw new Error("Collector coverage workspace mismatch.");
+    return receipt;
   }
   private connection(raw: unknown, id: string) {
     const result = ConnectedSyncConnectionSchema.parse(raw);

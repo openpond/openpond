@@ -181,7 +181,7 @@ export function sidebarTaskShortcutState(input: {
 
 export function sidebarTaskEmptyLabel(
   filter: SidebarTaskFilter,
-  noun: "chats" | "tasks"
+  noun: "chats" | "tasks" | "threads"
 ): string {
   switch (filter) {
     case "active":

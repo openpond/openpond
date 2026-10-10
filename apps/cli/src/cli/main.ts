@@ -51,6 +51,10 @@ export async function runOpenPondCli(argv = process.argv.slice(2)): Promise<void
 }
 
 async function runEmbeddedCompanion(argv: string[]): Promise<boolean> {
+  if (argv[0] === "__dataset-preparation-authoring") {
+    await (await import("@openpond/local-server/dataset-preparation-authoring")).runDatasetPreparationAuthoringCli(argv.slice(1));
+    return true;
+  }
   if (argv[0] === "__inspect-hosted-profile-evaluation") {
     await (await import("@openpond/local-server/hosted-profile-compiler"))
       .runHostedProfileInspectionCli(argv.slice(1));

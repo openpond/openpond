@@ -37,6 +37,7 @@ export async function runImportCommand(
   const json = parseBooleanOption(options.json),
     print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
   const schedule = importSchedule(options);
+  if (options.until && action !== "sync") throw new Error("Use --until with import sync to select a fixed event-time cutoff.");
   if (schedule && !["connect", "reconnect", "schedule"].includes(action))
     throw new Error("Use --continual with import connect, reconnect, or schedule.");
   if (parseBooleanOption(options.off) && action !== "schedule")

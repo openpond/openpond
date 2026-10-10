@@ -36,6 +36,9 @@ openpond import status
 # Run once now without changing the schedule.
 openpond import sync <connection-id>
 
+# Reconcile the registered lower bound through an exact event-time cutoff.
+openpond import sync <connection-id> --until 2026-10-10T03:18:22.485Z --json
+
 # Cancel the current job, keeping queued work and its schedule.
 openpond import cancel
 ```
@@ -43,6 +46,8 @@ openpond import cancel
 `--continual` alone defaults to daily at `00:00`. `--weekly` defaults to `--on mon`; supported weekdays are `sun|mon|tue|wed|thu|fri|sat`. Use `--at HH:MM` for the local start time. Choose only one cadence. `--at` applies to daily/weekly schedules, and `--on` applies to weekly schedules. For a custom hourly minute, use cron (for example, `15 * * * *`). Existing schedules stay unchanged when running a one-time import; use `schedule --off` to turn them off.
 
 `--range` selects the initial history cutoff, independently of recurrence. Future jobs reconcile changes against retained source revisions and admission receipts, including changes made during missed days. `Ctrl+C` cancels a foreground job; it does not leave a background importer running.
+
+Each job fixes its upper cutoff at launch unless `import sync --until <UTC timestamp>` supplies an earlier cutoff. Selection uses native request-event timestamps in the half-open window `[since, until)`, not filesystem modification times. The collector retains and publishes a bounded revision inventory with admitted, skipped, failed and unknown-time counts. `import status --json` exposes this as `coverage`; zero queued uploads alone does not mean complete coverage. Preparation independently compares the eligible-boundary hash with the exact hosted Dataset membership at its import cutoff. This attestation establishes source reconciliation, not reconstructed or qualified tasks. Recurrence and existing pending-upload identities remain unchanged.
 
 In the desktop app, **Settings → Conversation imports** shows each source and destination, its initial cutoff, last successful sync, next run, progress and errors. Enable **Continual imports**, then choose **Hourly**, **Daily**, **Weekly**, or **Custom cron**, with weekday/time or expression when applicable. Defaults are daily at midnight, or Monday at midnight for weekly. Midnight leaves time before a 02:00 model run; import scheduling does not itself establish a training dependency.
 

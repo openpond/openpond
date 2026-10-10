@@ -13,6 +13,7 @@ vi.mock("openpond-sdk/connected-evidence", () => ({ ConnectedSyncClient: class {
   async register(input: Record<string, unknown>) { fixture.registration = input; return { ...input, projectId: "project", revision: 1, state: "active", requestedSyncRevision: 0, completedSyncRevision: 0 }; }
 } }));
 vi.mock("../src/importer/transport", () => ({ collectorTransport: {
+  publishCoverage: async () => {},
   heartbeat: async (current: CollectorConnection) => ({ revision: current.revision, state: current.state }),
   admit: async () => { fixture.admissions++; },
 }, collectorClients: vi.fn() }));

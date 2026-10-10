@@ -6,8 +6,61 @@ import { AppPreferencesSchema } from "@openpond/contracts";
 import type { RuntimeEvent, Session, Turn } from "@openpond/contracts";
 import { createSessionStore } from "../apps/server/src/store/session-store";
 import { SqliteStore } from "../apps/server/src/store/store";
+import { experienceAllowsConnectedApps, workspaceToolExperienceBlocker } from "../apps/server/src/runtime/experience-policy";
 
 describe("session store patches", () => {
+  // Old conversations must continue with the unified capabilities without losing
+  // their history or weakening the private workspace and internal-chat boundaries.
+  test("continues existing chats with Work capabilities and preserves internal restrictions", async () => {
+    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-unified-session-"));
+    const store = new SqliteStore(storeDir);
+    try {
+      const sessions = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        appendRuntimeEvent: async () => undefined,
+      });
+      const created = await sessions.createSession({
+        experience: "chat", provider: "openpond", title: "Existing conversation", cwd: null,
+      });
+      expect(created.experience).toBe("work");
+      await store.updateSession(created.id, (session) => ({ ...session, experience: "chat" }));
+      const turn: Turn = {
+        id: "historical-turn", sessionId: created.id, providerTurnId: null,
+        prompt: "Keep this history", startedAt: "2026-07-29T10:00:00.000Z",
+        completedAt: "2026-07-29T10:01:00.000Z", status: "completed",
+        error: null, metadata: {}, createImproveRun: null,
+      };
+      await store.insertTurn(turn);
+      const continued = await sessions.getSession(created.id);
+      expect(continued).toMatchObject({
+        id: created.id, title: created.title, provider: created.provider, cwd: null, experience: "work",
+      });
+      expect(experienceAllowsConnectedApps(continued.experience)).toBe(true);
+      expect(workspaceToolExperienceBlocker({
+        session: continued, action: "sandbox_write_file", args: { path: "work/report.txt" },
+      })).toBeNull();
+      expect(workspaceToolExperienceBlocker({
+        session: continued, action: "sandbox_write_file", args: { path: "../outside.txt" },
+      })).not.toBeNull();
+      await sessions.patchSession(created.id, { pinned: true });
+      expect(await store.getSession(created.id)).toMatchObject({ experience: "work", pinned: true });
+      expect(await store.getTurn(turn.id)).toMatchObject(turn);
+
+      const internal = await sessions.createSession({
+        experience: "chat", systemKind: "openpond.lab", provider: "openpond",
+      });
+      expect((await sessions.getSession(internal.id)).experience).toBe("chat");
+      expect(experienceAllowsConnectedApps(internal.experience)).toBe(false);
+      expect(workspaceToolExperienceBlocker({
+        session: internal, action: "sandbox_write_file", args: { path: "work/report.txt" },
+      })).not.toBeNull();
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+
   test("exposes cumulative turn runtime in session shells and patch responses", async () => {
     const storeDir = await mkdtemp(
       path.join(os.tmpdir(), "openpond-session-runtime-")

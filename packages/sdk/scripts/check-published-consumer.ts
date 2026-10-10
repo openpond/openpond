@@ -70,7 +70,7 @@ async function main(): Promise<void> {
           'export { ExperimentImprovementCommandSchema, ExperimentImprovementOptionsSchema, verifyExperimentImprovementState } from "openpond-sdk/experiment-improvements";',
           'export { HumanReviewCommandSchema } from "openpond-sdk/human-review";',
           'export { RunExperimentSchema, ExperimentScoringRequestSchema } from "openpond-sdk/experiments";',
-          'export { DatasetWorkspaceReceiptSchema } from "openpond-sdk/dataset-workspaces";',
+          'export { DatasetWorkspaceReceiptSchema, DatasetPreparationCreateSchema, DatasetPreparationRunSchema, OpenPondDatasetPreparationClient } from "openpond-sdk/dataset-workspaces";',
           'export { PostTrainingAttachmentSchema, PostTrainingControlSchema, createPostTrainingClient } from "openpond-sdk/post-training";',
           'export { CandidateEvaluationRequestSchema, createCandidateEvaluationClient } from "openpond-sdk/candidate-evaluations";',
           'export { ExperimentEvaluationScheduleCommandSchema, ExperimentEvaluationScheduleInputSchema, OpenPondExperimentEvaluationScheduleClient } from "openpond-sdk/experiment-evaluation-schedules";',
@@ -143,6 +143,7 @@ async function main(): Promise<void> {
     );
     await writeFile(path.join(consumer, "verify-types.mts"), [
       'import { OpenPondExperimentsClient, type ExperimentRunDetails } from "openpond-sdk/experiments"; declare const experiments: OpenPondExperimentsClient; const experiment: Promise<ExperimentRunDetails> = experiments.get("mrun_test"); void experiment;',
+      'import { OpenPondDatasetWorkspaceClient, type DatasetPreparationRun } from "openpond-sdk/dataset-workspaces"; declare const datasets: OpenPondDatasetWorkspaceClient; const preparationReadback: Promise<DatasetPreparationRun> = datasets.preparations.get("dataset", "run"); void preparationReadback;',
       'import { createOpenPondClient } from "openpond-sdk"; const workClient = createOpenPondClient({ sandbox: { endpoint: "https://runtime.invalid", apiKey: "runtime" }, model: { endpoint: "https://model.invalid/v1", apiKey: "model", model: "test" } });',
       'type NotAny<T> = 0 extends (1 & T) ? false : true; const sandboxTypesSurvivePacking: NotAny<Awaited<ReturnType<typeof workClient.sandboxes.get>>> = true; void sandboxTypesSurvivePacking;',
       'const sandboxId: Promise<string> = workClient.sandboxes.get("id").then(record => record.id); void sandboxId;',
@@ -169,7 +170,7 @@ async function main(): Promise<void> {
       'const mutation: TasksetDraftFileMutation = TasksetDraftFileMutationSchema.parse({ draftId: preparation.draftId, expectedDraftRevision: 1, path: "environment/world.js", expectedFileHash: null, content: { encoding: "utf8", data: "export const value = 1;" } });',
       'void mutation;',
     ].join("\n"));
-    execFileSync(path.resolve(packageRoot, "../../node_modules/.bin/tsc"), ["--noEmit", "--strict", "--skipLibCheck", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", path.join(consumer, "verify-types.mts")], { cwd: consumer, stdio: "inherit" });
+    execFileSync(process.execPath, [path.resolve(packageRoot, "../../scripts/run-typescript.mjs"), "tsc", "--noEmit", "--strict", "--skipLibCheck", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", path.join(consumer, "verify-types.mts")], { cwd: path.resolve(packageRoot, "../.."), stdio: "inherit" });
   } finally {
     await Promise.all([
       rm(tarball, { force: true }),

@@ -469,21 +469,21 @@ function schemaContext(
 
 function buildChatExperienceContext(): string {
   return [
-    "Chat experience:",
+    "Internal conversation context:",
     "- Answer conversationally using the supplied prompt, attachments, and available web tools.",
     "- General workspace compute, plugins, local commands, repository tools, deployment tools, and sandbox tools are not available.",
-    "- If the user asks for multi-step workspace work or a durable generated file, explain that they should start a Work task.",
+    "- If a request needs capabilities that are unavailable in this internal conversation, explain the limitation without claiming to have performed the work.",
   ].join("\n");
 }
 
 function buildWorkExperienceContext(session: Session): string {
   return [
-    "Work experience:",
-    "- Carry multi-step everyday work to a reviewable result using the Work, web, plugin/connector, and approval tools actually available in this turn.",
-    "- Work compute is lazy. Do not start a sandbox when the request can be completed directly.",
+    "Thread workspace context:",
+    "- Answer questions directly. When the user requests a task, use the tools available in this turn to complete it and provide a reviewable result.",
+    "- Workspace compute is lazy. Do not start a sandbox when the request can be completed directly.",
     session.workspaceId
       ? `- Active managed workspace: ${session.workspaceId}.`
-      : "- No managed workspace is active yet. A Work tool will create one when compute is actually needed.",
+      : "- No managed workspace is active yet. An available workspace tool will create one when compute is actually needed.",
     "- The managed workspace layout is /workspace/inputs, /workspace/work, and /workspace/outputs; ordinary commands run from /workspace/work.",
     "- Use work_capabilities before promising an unfamiliar file type or destination; it does not start compute.",
     "- Treat supplied files and folders as authoritative references: inspect them before drafting, preserve requested structure and style, and create a new output revision instead of overwriting a saved result.",
@@ -492,7 +492,7 @@ function buildWorkExperienceContext(session: Session): string {
     "- If Agent preparation, validation, evals, or package saving fails, report that blocker plainly. Do not substitute a generic file output or claim that an Agent package was completed.",
     "- When an approved connected write or deployment already created the durable result elsewhere, call work_register_external_output with its stable provider id or URL instead of copying it through the sandbox.",
     "- Connected writes, sharing, and publication require explicit user intent and provider readback. Otherwise create a reviewable local draft.",
-    "- Repository, git, interactive terminal, source-promotion, and deployment capabilities require repository-aware Work and are not available in this projectless run.",
+    "- Repository, git, interactive terminal, source-promotion, and deployment capabilities require an appropriate project workspace and are not available in this projectless run.",
   ].join("\n");
 }
 
@@ -500,7 +500,7 @@ function buildManagedLocalWorkTurnContext(
   workspacePath: string | null | undefined,
 ): string {
   return [
-    "Local Work experience:",
+    "Local workspace context:",
     workspacePath ? `- Managed task workspace: ${workspacePath}.` : null,
     "- Work directly in this app-managed task directory. It is not a user-selected software repository.",
     "- Keep scratch files organized, and do not read or write outside this task directory unless the user explicitly asks.",
