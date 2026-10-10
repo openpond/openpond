@@ -1,6 +1,7 @@
 import { readFile,stat } from "node:fs/promises";
 import { createLocalAuthenticatedRequest, DEFAULT_LOCAL_TRAINING_API_URL } from "./training";
-import { optionString } from "./common";
+import { printLocalExperimentResult } from "./experiments-local-output";
+import { optionString,parseBooleanOption } from "./common";
 import { LocalExperimentComparisonSchema, LocalExperimentRecordSchema } from "@openpond/contracts";
 import { RunExperimentSchema } from "openpond-sdk/experiments";
 import { compareExperiments } from "@openpond/evals/experiments";
@@ -11,24 +12,34 @@ export async function runLocalExperimentsCommand(options:Record<string,string|bo
   const [action,id,candidateId]=rest,teamId=optionString(options,"team");
   if(options.revision!==undefined)throw new Error("A local Experiment is one immutable run; read it by id rather than a saved configuration revision.");
   if(action!=="read"&&options.contentHash!==undefined)throw new Error("An exact configuration hash requires the local read action.");
-  if(!teamId||!action||rest.length>(action==="compare"?3:2))throw new Error("Local Experiments require an action and --team; use --server-url for an existing local server.");
+  if(!action||rest.length>(action==="compare"?3:2))throw new Error("Local Experiments require an action; use --server-url for an existing local server.");
   const rawUrl=optionString(options,"serverUrl")||process.env.OPENPOND_LOCAL_API_URL||DEFAULT_LOCAL_TRAINING_API_URL;
   const base=new URL(rawUrl);
   if(base.protocol!=="http:"||!["localhost","127.0.0.1"].includes(base.hostname)||base.username||base.password||base.search||base.hash||base.pathname!=="/")
     throw new Error("Local Experiments require an HTTP loopback server origin.");
   const request=await createLocalAuthenticatedRequest(base.origin);
   async function command(action:string,payload:unknown):Promise<Record<string,unknown>> {
-    const response=await request(new URL("/v1/local-experiments",base),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({teamId,action,payload})});
+    const response=await request(new URL(teamId ? "/v1/local-experiments" : "/v1/chat-experiments",base),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...teamId ? {teamId} : {},action,payload})});
     const reply=await response.json() as Record<string,unknown>;
     if(!response.ok)throw new Error(typeof reply.error==="string"?reply.error:`Local Experiment request failed (${response.status}).`);
     return reply;
   }
   async function input() {
     const file=optionString(options,"inputFile");
-    if(!file||(await stat(file)).size>67_108_864)throw new Error("Provide a bounded --input-file with exact local configuration and retained package bytes.");
+    if(!file || !(await stat(file)).isFile() || (await stat(file)).size>67_108_864)throw new Error("Provide a bounded --input-file with exact local configuration and retained package bytes.");
     return JSON.parse(await readFile(file,"utf8")) as Record<string,unknown>;
   }
   let result:unknown;
+  if(!teamId) {
+    if(action === "models") result=await command("models",{});
+    else if(action === "run" || action === "run-cloud") result=await command(action.replaceAll("-","_"),await input());
+    else if(action === "list") result=await command("list",{});
+    else if(action === "compare" && id && candidateId) result=await command("compare",{baselineId:id,candidateId});
+    else if(action==="case" && id && optionString(options,"receiptId"))result=await command("case",{id,receiptId:optionString(options,"receiptId")});
+    else if(id && ["read","status","cancel","result"].includes(action)) result=await command(action,{id});
+    else throw new Error("Independent local Experiments support models/run/list/read/status/cancel/result/compare. Workspace operations require --team.");
+    if(parseBooleanOption(options.json))console.log(JSON.stringify(result,null,2));else printLocalExperimentResult(result);return;
+  }
   if(action==="prepare-harness") {
     if(id)throw new Error("Local Profile preparation accepts --input-file rather than an id.");
     result=await command("prepareHarness",await input());

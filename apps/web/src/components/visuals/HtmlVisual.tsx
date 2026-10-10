@@ -22,45 +22,45 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
-  const [visible, setVisible] = useState(expanded);
   const [visited, setVisited] = useState(expanded);
   const [source, setSource] = useState(false);
   const [ready, setReady] = useState(false);
   const [height, setHeight] = useState(visual.heights[0]?.height ?? 320);
   const identity = `${visual.publicationId}:${expanded ? "expanded" : "inline"}:${retry}`;
   const path = `/v1/sessions/${encodeURIComponent(visual.sessionId)}/visuals/${visual.publicationId}`;
+  const serverUrl = connection?.serverUrl;
+  const token = connection?.token;
+  const platform = connection?.platform;
   useEffect(() => {
     const element = container.current;
-    if (!element || expanded) return;
+    if (!element || visited || expanded) return;
     const observer = new IntersectionObserver(([entry]) => {
-      // Keep a focused document alive while interacting with its controls.
-      const active = Boolean(entry?.isIntersecting) || document.activeElement === frame.current;
-      setVisible(active);
-      if (!active) setReady(false);
-      if (active) setVisited(true);
+      // Lazy-load once, then retain the document and its interactive state even
+      // when scrolling or resizing temporarily moves it outside the viewport.
+      if (entry?.isIntersecting) setVisited(true);
     }, { rootMargin: "160px" });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [expanded]);
+  }, [expanded, visited]);
   useEffect(() => {
-    if (!connection || !visited) return;
+    if (!serverUrl || !token || !(visited || expanded)) return;
     const controller = new AbortController();
     let previewUrl: string | null = null;
     setHtml(null); setError(null); setPreview(null);
     void Promise.all([
-      apiFetch<{ html: string }>(connection, `${path}/document`, { signal: controller.signal }),
-      fetch(`${connection.serverUrl}${path}/preview`, { headers: { Authorization: `Bearer ${connection.token}` }, signal: controller.signal })
+      apiFetch<{ html: string }>({ serverUrl, token, platform: platform ?? "web" }, `${path}/document`, { signal: controller.signal }),
+      fetch(`${serverUrl}${path}/preview`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
         .then(response => { if (!response.ok) throw new Error("Preview unavailable"); return response.blob(); }),
     ]).then(([document, png]) => {
       if (controller.signal.aborted) return;
       setHtml(document.html); previewUrl = URL.createObjectURL(png); setPreview(previewUrl);
     }).catch(err => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Visual unavailable"); });
     return () => { controller.abort(); if (previewUrl) URL.revokeObjectURL(previewUrl); };
-  }, [connection, path, retry, visited]);
+  }, [serverUrl, token, platform, path, retry, visited, expanded]);
   const documentSource = useMemo(() => html === null ? undefined : htmlVisualDocument(html, identity, theme()), [html, identity]);
   useEffect(() => {
     setReady(false);
-    if (!documentSource || !(visible || expanded) || source) return;
+    if (!documentSource) return;
     const timeout = setTimeout(() => setError("The visual did not finish loading."), 8000);
     const receive = (event: MessageEvent) => {
       const data = event.data;
@@ -81,7 +81,7 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
     const appearance = matchMedia("(prefers-color-scheme: dark)");
     appearance.addEventListener("change", sendTheme);
     return () => { clearTimeout(timeout); observer.disconnect(); window.removeEventListener("message", receive); appearance.removeEventListener("change", sendTheme); };
-  }, [identity, documentSource, expanded, source, visible]);
+  }, [identity, documentSource]);
   const download = () => {
     if (html === null) return;
     const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
@@ -95,17 +95,17 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
       <button type="button" disabled={html === null} onClick={download}>Download</button>
       {!expanded && open ? <button type="button" onClick={() => open(visual)}>Expand</button> : null}
     </div>
-    {source ? <pre className="html-visual-source" tabIndex={0}>{html}</pre> :
-      <div className="html-visual-content" style={{ minHeight: height }}>
+    {source ? <pre className="html-visual-source" tabIndex={0}>{html}</pre> : null}
+      <div className="html-visual-content" style={{ minHeight: height }} hidden={source}>
         {!connection ? <p className="html-visual-status">Connect to view this visual.</p> : error ? <p className="html-visual-status" role="status">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : <>
-          {documentSource && (visible || expanded) ? <iframe ref={frame} title={visual.output.title} sandbox="allow-scripts" referrerPolicy="no-referrer"
+          {documentSource ? <iframe ref={frame} title={visual.output.title} sandbox="allow-scripts" referrerPolicy="no-referrer"
             allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"
             srcDoc={documentSource} style={{ height, opacity: ready ? 1 : 0 }} /> : null}
           {!ready ? <div className="html-visual-placeholder">
-            {preview ? <button className="html-visual-preview" type="button" onClick={() => setVisible(true)} aria-label={`Activate ${visual.output.title}`}><img src={preview} alt={`Saved preview of ${visual.output.title}`} style={{ maxHeight: height }} /></button> : <p className="html-visual-status" role="status">Loading visual…</p>}
+            {preview ? <img src={preview} alt={`Saved preview of ${visual.output.title}`} style={{ maxHeight: height }} /> : <p className="html-visual-status" role="status">Loading visual…</p>}
           </div> : null}
         </>}
-      </div>}
+      </div>
     {height === HTML_VISUAL_MAX_HEIGHT && !source ? <p className="html-visual-status">This visual reaches the height limit. Scroll inside it to see more.</p> : null}
   </div>;
 }

@@ -97,9 +97,9 @@ export function useSidebarMutations(params: {
     });
   }
 
-  function toggleSessionPinned(session: Session) {
+  function toggleSessionPinned(session: Session, pinned = !session.pinned) {
     void patchSessionLocal(session, {
-      pinned: !session.pinned,
+      pinned,
       savedForLater: false,
       archived: false,
     });

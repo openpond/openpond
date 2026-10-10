@@ -15,6 +15,7 @@ import {
   isCodexGoalContextEvent,
 } from "./codex-control-messages";
 import { isSteerInterruptionReason } from "./steer-interruption";
+import {chatResourceToolEvent,chatResourceToolDetail} from "./chat-resources";
 
 export const MAX_PROJECTED_COMMAND_OUTPUT_CHARS = 64 * 1024;
 const PROJECTED_COMMAND_OUTPUT_HEAD_CHARS = 8 * 1024;
@@ -242,6 +243,7 @@ function compactionReason(item: RuntimeEvent): "auto" | "manual" {
 }
 
 function activityFromEvent(item: RuntimeEvent): ActivityItem {
+  item=chatResourceToolEvent(item);
   const imagePreview = activityImagePreview(item);
   const kind = item.name === "assistant.reasoning.delta" ? "reasoning" : commandActivityKind(item);
   const controlKind = controlActivityKind(item);
@@ -250,6 +252,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
   const openSession = activityOpenSession(item);
   const subagentMessage = activitySubagentMessage(item);
   const artifacts = activityArtifacts(item);
+  const resourceDetail=chatResourceToolDetail(item);
   return {
     id: item.id,
     label: subagentMessage
@@ -274,6 +277,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
       ? { detail: boundProjectedCommandOutput(JSON.stringify(item.args, null, 2)) } : {}),
     ...(kind !== "command" && item.name === "tool.completed" && asRecord(item.data)?.nativeTool === true && item.output ? { detail: boundProjectedCommandOutput(item.output) } : {}),
     ...(kind === "command" ? { terminal: commandTerminalFromEvent(item) } : {}),
+    ...(resourceDetail ? {detail:boundProjectedCommandOutput(resourceDetail)} : {}),
     ...(meta ? { meta } : {}),
     ...(receipt ? { receipt } : {}),
     ...(openSession ? { openSession } : {}),
@@ -414,6 +418,12 @@ function activityState(item: RuntimeEvent): ActivityItem["state"] {
 function activityLabel(item: RuntimeEvent): string {
   if (item.name === "assistant.reasoning.delta") {
     return stringValue(asRecord(item.data), ["kind"]) === "commentary" ? "Update" : "Reasoning";
+  }
+  if(item.action==="openpond_dataset" || item.action==="openpond_experiment") {
+    const action=stringValue(asRecord(item.args),["action"]);
+    const labels:Record<string,string>={create:"Creating dataset",save:"Editing dataset",file:"Editing dataset file",import:"Importing dataset",inspect_source:"Inspecting dataset source",import_source:"Importing dataset sample",check_graders:"Checking graders",check_sources:"Checking dataset sources",test_grader:"Testing grader",save_grader:"Editing grader",validate:"Validating dataset",package:"Packaging dataset",upload:"Uploading dataset",publish:"Publishing dataset",sync:"Synchronizing dataset",run:"Running experiment",run_cloud:"Running cloud experiment",cancel:"Cancelling experiment",charts:"Publishing experiment charts",improve:"Improving experiment"};
+    const label=labels[action ?? ""] ?? (item.action==="openpond_dataset" ? "Reading dataset resources" : "Reading experiment evidence");
+    return item.status==="failed" ? label+" · Failed" : label;
   }
   if (isCodexGoalContextEvent(item)) return "Goal context";
   if (item.name === "turn.interrupted") return "Turn aborted";

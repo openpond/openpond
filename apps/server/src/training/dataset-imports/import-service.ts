@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { approvedLicenseStatus } from "./source-policy.js";
 import {
   mkdir,
   readFile,
@@ -44,11 +45,6 @@ import {
   verifyDatasetFile,
 } from "./materialize-worker.js";
 
-const LICENSES_REQUIRING_EXPLICIT_REVIEW = new Set([
-  "unknown",
-  "other",
-]);
-
 export function createDatasetImportService(deps: {
   store: SqliteStore;
   workerProjectDir: string;
@@ -76,6 +72,8 @@ export function createDatasetImportService(deps: {
   async function inspectHuggingFace(input: {
     profileId: string;
     url: string;
+    configuration?:string;
+    split?:string;
   }): Promise<DatasetImportJob> {
     const timestamp = new Date().toISOString();
     const locator = normalizeHuggingFaceDatasetLocator(input.url);
@@ -102,7 +100,7 @@ export function createDatasetImportService(deps: {
     });
     await deps.store.upsertDatasetImportJob(job);
     try {
-      const inspection = await inspectHuggingFaceDataset(locator, request);
+      const inspection = await inspectHuggingFaceDataset(locator, request,{configuration:input.configuration,split:input.split});
       const suggested = finalizeMapping(
         suggestedHuggingFaceMapping(inspection),
       );
@@ -719,17 +717,6 @@ function failedJob(job: DatasetImportJob, error: unknown): DatasetImportJob {
     updatedAt: new Date().toISOString(),
     completedAt: new Date().toISOString(),
   });
-}
-
-function approvedLicenseStatus(
-  license: string | null,
-  explicitlyApproved: boolean,
-): "approved" | "review" {
-  if (explicitlyApproved) return "approved";
-  if (!license || LICENSES_REQUIRING_EXPLICIT_REVIEW.has(license.toLowerCase())) {
-    return "review";
-  }
-  return "approved";
 }
 
 function safeTasksetId(name: string, jobId: string): string {

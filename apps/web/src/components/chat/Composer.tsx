@@ -1,4 +1,6 @@
 import { createComposerTaskSubmission } from "./composer-task-submission";
+import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
+import { ComposerResourceControls } from "./ComposerResourceControls";
 import {
   lazy,
   Suspense,
@@ -221,6 +223,7 @@ export function Composer({
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
   const useActiveSteering = steerActiveResponses;
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
+  const chatResources = useChatResourceFocus(surface === "chat" ? connection : null,taskSessionId ?? null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1279,9 +1282,7 @@ export function Composer({
       const sent = await onSubmit([], null, null, {
         preservePrompt: true,
         promptOverride: draft.prompt,
-        ...(steeringActiveTurn
-          ? { turnMetadata: { interactionKind: "steer" } }
-          : {}),
+        turnMetadata: {chatResourceFocus:chatResources.focus,...steeringActiveTurn ? {interactionKind:"steer"} : {}},
       });
       updateSteerDraftsForScope(submissionScope, (current) =>
         composerSteerDraftsAfterSubmit(current, draftId, sent)
@@ -1358,13 +1359,14 @@ export function Composer({
         payloads,
         selectedAction,
         selectedCommand,
-        selectedDisplayPrompt || promptOverride || options.preservePrompt
+        selectedDisplayPrompt || promptOverride || options.preservePrompt || chatResources.focus.dataset || chatResources.focus.experiment
           ? {
               ...(selectedDisplayPrompt
                 ? { displayPrompt: selectedDisplayPrompt }
                 : {}),
               ...(promptOverride !== undefined ? { promptOverride } : {}),
               ...(options.preservePrompt ? { preservePrompt: true } : {}),
+              turnMetadata: {chatResourceFocus:chatResources.focus},
             }
           : undefined,
       );
@@ -1580,8 +1582,9 @@ export function Composer({
         onClose={closeSubmitIssueDialog}
         onSubmit={submitIssueForm}
       />
-      {showProjectFooter && (
+      {(showProjectFooter || surface === "chat" && taskSessionId) && (
         <div className="composer-footer">
+          {surface === "chat" && taskSessionId ? <ComposerResourceControls resources={chatResources} busy={busy} /> : null}
           {showProjectFooter ? (
             <ComposerProjectTargetControl
               busy={busy || projectTarget.busy}

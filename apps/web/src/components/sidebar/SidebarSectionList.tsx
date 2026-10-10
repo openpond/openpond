@@ -4,7 +4,8 @@ import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
 import { Inbox, List } from "../icons";
 import { clientChoiceStorage } from "../../lib/client-choice-storage";
-import { orderSidebarInbox, sidebarInboxDateGroups, sidebarInboxTime } from "../../lib/sidebar-inbox";
+import { sidebarInboxEntryDateGroups, sidebarInboxTime } from "../../lib/sidebar-inbox";
+import { sidebarWorkflowInbox, sidebarWorkflowRows, type SidebarWorkflowRow } from "../../lib/sidebar-workflow-list";
 import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import type { Session } from "@openpond/contracts";
 import { useEffect, useMemo, useState } from "react";
@@ -58,6 +59,7 @@ import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import { isDesktopShell } from "../app-shell/WindowControls";
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
+const EMPTY_TRAINING_SESSION_IDS: ReadonlySet<string> = new Set();
 const EMPTY_GOAL_RUNTIME_BY_SESSION_ID = new Map<string, GoalRuntimeStatus>();
 const EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID = new Map<
   string,
@@ -136,6 +138,7 @@ export function SidebarSectionList({
   onOpenPonder,
   workflowGroups = [],
   workflowSessions = [],
+  trainingSessionIds = EMPTY_TRAINING_SESSION_IDS,
   activityTimes = {},
   onSelectSession,
   archiveSession,
@@ -318,22 +321,29 @@ export function SidebarSectionList({
       showCodexChats,
     ]
   );
+  const workflowTaskRows = sidebarTaskRows({ activeSessions: workflowSessions.filter(session => !session.archived && !session.hiddenFromDefaultSidebar),
+    doneSessions: workflowSessions.filter(session => session.archived && !session.hiddenFromDefaultSidebar),
+    filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: taskSort });
+  const workflowRows = sidebarWorkflowRows(workflowGroups, workflowSessions, workflowTaskRows);
+  const pinnedWorkflowRows = sidebarWorkflowRows(workflowGroups, workflowSessions, workflowSessions.filter(session =>
+    !session.hiddenFromDefaultSidebar && isSidebarTaskPinned(session) && isSidebarTaskVisible(session, {
+      inProgressSessionIds, onlyRunningTasks, showCodexChats,
+    }),
+  )).filter(row => row.pinned);
+  const pinnedWorkflowSessionIds = new Set(pinnedWorkflowRows.flatMap(row => row.members.map(session => session.id)));
   const visiblePinnedRows = useMemo(
     () =>
       pinnedRows.filter(
         (row) =>
           row.type !== "session" ||
-          isSidebarTaskVisible(row.session, {
+          (!pinnedWorkflowSessionIds.has(row.session.id) && isSidebarTaskVisible(row.session, {
             inProgressSessionIds,
             onlyRunningTasks,
             showCodexChats,
-          })
+          }))
       ),
-    [inProgressSessionIds, onlyRunningTasks, pinnedRows, showCodexChats],
+    [inProgressSessionIds, onlyRunningTasks, pinnedRows, pinnedWorkflowSessionIds, showCodexChats],
   );
-  const workflowTaskRows = sidebarTaskRows({ activeSessions: workflowSessions.filter(session => !session.archived && !session.hiddenFromDefaultSidebar),
-    doneSessions: workflowSessions.filter(session => session.archived && !session.hiddenFromDefaultSidebar),
-    filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: taskSort });
   const workflowSessionIds = useMemo(() => new Set(workflowGroups.flatMap(group => [group.prerequisite.sessionId, group.successor.sessionId,
     group.workflow?.preparationSessionId].filter((id): id is string => Boolean(id)))), [workflowGroups]);
   const ordinaryFilteredTaskRows = useMemo(
@@ -357,6 +367,9 @@ export function SidebarSectionList({
             kind: "draft" as const,
           };
         }
+        if (trainingSessionIds.has(session.id)) {
+          return { key: "training", label: "Training", projectId: null, project: null, kind: "projectless" as const };
+        }
         const projectId = sidebarProjectIdBySessionId[session.id];
         const label = projectLabelForSession(session) ?? "Work";
         return {
@@ -374,7 +387,7 @@ export function SidebarSectionList({
       }
       return groups;
     },
-    [projectsSectionRows, projectLabelById, projectRowById, sidebarProjectIdBySessionId, visibleTaskRows],
+    [projectsSectionRows, projectLabelById, projectRowById, sidebarProjectIdBySessionId, visibleTaskRows, trainingSessionIds],
   );
   const canShowMoreTasks = visibleTaskRows.length < ordinaryFilteredTaskRows.length;
   const canShowLessTasks =
@@ -446,6 +459,7 @@ export function SidebarSectionList({
 
   function projectLabelForSession(session: Session): string | null {
     if (isTaskDraftSession(session)) return "Draft";
+    if (trainingSessionIds.has(session.id)) return "Training";
     const projectId = sidebarProjectIdBySessionId[session.id];
     if (projectId) {
       return (
@@ -468,6 +482,7 @@ export function SidebarSectionList({
   function childSessionsFor(session: Session): Session[] {
     return (childSessionRowsByParentId[session.id] ?? []).filter((child) =>
       !child.archived &&
+      !workflowSessionIds.has(child.id) &&
       isSidebarTaskVisible(child, {
         inProgressSessionIds,
         onlyRunningTasks,
@@ -737,7 +752,7 @@ export function SidebarSectionList({
       );
     }
     return renderTaskSession(row.session, {
-      projectLabel: inboxView && !sidebarProjectIdBySessionId[row.session.id]
+      projectLabel: inboxView && !sidebarProjectIdBySessionId[row.session.id] && !trainingSessionIds.has(row.session.id)
         ? null
         : projectLabelForSession(row.session),
       pinnedRow: { key: row.key, dragProps, placeholder },
@@ -816,7 +831,13 @@ export function SidebarSectionList({
             tasksets={tasksetOptions}
           />;
   const inboxChildren = sidebarTaskRows({ activeSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => !session.archived), doneSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => session.archived), filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: "recent" });
-  const inboxRows = orderSidebarInbox([...ordinaryFilteredTaskRows, ...inboxChildren].filter((session) => !isSidebarTaskPinned(session)), activityTimes, inProgressSessionIds);
+  const inboxRows = sidebarWorkflowInbox([...ordinaryFilteredTaskRows, ...inboxChildren], workflowRows, workflowSessionIds, activityTimes, inProgressSessionIds);
+
+  function renderWorkflowGroups(groups: SidebarWorkflowRow[]) {
+    return <SidebarWorkflowGroups groups={groups} toggleSessionPinned={toggleSessionPinned}
+      archiveSession={archiveSession} restoreSession={restoreSession}
+      renderSession={session => renderTaskSession(session, { projectLabel: projectLabelForSession(session) })} />;
+  }
 
   return (
     <div className="sidebar-sections">
@@ -853,20 +874,23 @@ export function SidebarSectionList({
           <span>Ponder Pal</span>
         </button>
       ) : null}
-      {visiblePinnedRows.length > 0 ? (
+      {visiblePinnedRows.length > 0 || pinnedWorkflowRows.length > 0 ? (
         <div className="sidebar-pinned-rows">
           {visiblePinnedRows.map(renderPinnedRow)}
+          {renderWorkflowGroups(pinnedWorkflowRows)}
         </div>
       ) : null}
-      <SidebarWorkflowGroups groups={workflowGroups} sessions={workflowTaskRows}
-        renderSession={session => renderTaskSession(session, { projectLabel: projectLabelForSession(session) })} />
       {inboxView ? <section className="sidebar-thread-inbox" aria-label="Thread inbox">
-        {sidebarInboxDateGroups(inboxRows, activityTimes, inProgressSessionIds).map((group) => <div key={group.key}>
+        {sidebarInboxEntryDateGroups(inboxRows, entry => entry).map((group) => <div key={group.key}>
           {group.label ? <h3 className="sidebar-inbox-date">{group.label}</h3> : null}
-          {group.sessions.map((session) => renderTaskSession(session, { projectLabel: sidebarProjectIdBySessionId[session.id] ? projectLabelForSession(session) : null }))}
+          {group.entries.map(entry => entry.kind === "workflow"
+            ? <div key={entry.id}>{renderWorkflowGroups([entry.workflow])}</div>
+            : renderTaskSession(entry.session, { projectLabel: sidebarProjectIdBySessionId[entry.session.id] || trainingSessionIds.has(entry.session.id) ? projectLabelForSession(entry.session) : null }))}
         </div>)}
-        {inboxRows.length === 0 && visiblePinnedRows.length === 0 ? <div className="empty-row">{sidebarTaskEmptyLabel(taskFilter, taskNoun)}</div> : null}
+        {inboxRows.length === 0 && visiblePinnedRows.length === 0 && pinnedWorkflowRows.length === 0 ? <div className="empty-row">{sidebarTaskEmptyLabel(taskFilter, taskNoun)}</div> : null}
       </section> : <>
+      {renderWorkflowGroups(workflowRows.filter(row => !row.pinned))}
+      {groupedTaskRows.filter(group => group.key === "training").map(renderTaskGroup)}
       <SidebarSection
         label="Projects"
         className="sidebar-projects-section development"
@@ -904,7 +928,7 @@ export function SidebarSectionList({
         {(!groupByProject
           ? visibleTaskRows
           : visibleTaskRows.filter((session) => !sidebarProjectIdBySessionId[session.id])
-        ).map((session) => renderTaskSession(session))}
+        ).filter(session => !trainingSessionIds.has(session.id)).map((session) => renderTaskSession(session))}
         {ordinaryFilteredTaskRows.length === 0 && visiblePinnedRows.length === 0 ? (
           <div className="empty-row">
             {sidebarTaskEmptyLabel(taskFilter, taskNoun)}

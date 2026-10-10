@@ -24,6 +24,7 @@ import { handleUsageRoutes } from "./usage-routes.js";
 import { handleTeamChatRoutes } from "./team-chat-routes.js";
 import { handleTrainingRoutes } from "./training-routes.js";
 import { handleLocalExperimentRoutes } from "./local-experiment-routes.js";
+import { handleChatResourceRoutes } from "./chat-resource-routes.js";
 import {handleExperimentImprovementRoutes} from "./experiment-improvement-routes.js";
 import { handleHumanReviewRoutes } from "./human-review-routes.js";
 import { handleLearningRoutes } from "./learning-routes.js";
@@ -42,6 +43,7 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "refiner", handle: handleRefinerRoutes },
   { id: "training", handle: handleTrainingRoutes },
   { id: "local-experiments", handle: handleLocalExperimentRoutes },
+  { id: "chat-resources", handle: handleChatResourceRoutes },
   {id:"experiment-improvements",handle:handleExperimentImprovementRoutes},
   { id: "human-review", handle: handleHumanReviewRoutes },
   { id: "learning", handle: handleLearningRoutes },

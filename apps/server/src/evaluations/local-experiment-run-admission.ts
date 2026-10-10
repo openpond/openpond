@@ -49,6 +49,7 @@ export function createLocalExperimentRunAdmission(deps: {
   assertScope(configuration: Configuration): void;
   closing(): boolean;
   catalog?: typeof loadOpenPondHostedModels;
+  prepareModel?(configuration:LocalExperimentDefinition["configuration"]):Promise<LocalModelAdmission>;
   authorize(
     configuration: LocalExperimentDefinition["configuration"],
   ): Promise<void>;
@@ -114,7 +115,7 @@ export function createLocalExperimentRunAdmission(deps: {
     const internalConfiguration = { ...runConfiguration, expectedRevision: 0 };
     await deps.authorize(internalConfiguration);
     const qualified = await deps.preflight(internalConfiguration, value);
-    const model =
+    const model = deps.prepareModel ? await deps.prepareModel(internalConfiguration) :
       configuration.request.policy.kind === "hosted_chat" &&
       configuration.request.policy.localRuntime
         ? await (deps.localInference?.prepare(internalConfiguration) ??

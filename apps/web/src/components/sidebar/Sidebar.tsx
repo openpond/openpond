@@ -1,6 +1,8 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { PanelLeft } from "../icons";
 import { DesktopUpdateButton } from "./DesktopUpdateButton";
+import { DropdownSelect } from "../DropdownSelect";
+import { useChatResourceIndex } from "../../hooks/useChatResourceIndex";
 import {
   SidebarNavigation,
 } from "./SidebarNavigation";
@@ -13,6 +15,12 @@ import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 
 export function Sidebar(props: SidebarProps & { open?: boolean }) {
+  const resources=useChatResourceIndex(props.productArea==="chat" ? props.connection : null);
+  const filteredSessions=resources.sessionIds ? {
+    activeSessions:props.activeSessions.filter(session=>resources.sessionIds!.has(session.id)),
+    archivedSessions:props.archivedSessions.filter(session=>resources.sessionIds!.has(session.id)),
+    childSessionRowsByParentId:Object.fromEntries(Object.entries(props.childSessionRowsByParentId ?? {}).map(([id,rows])=>[id,rows.filter(session=>resources.sessionIds!.has(session.id))])),
+  } : {};
 
   const {
     productArea,
@@ -87,9 +95,14 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
           modelTrainingActivityByProjectId={modelTrainingActivityByProjectId}
         /> : null}
 
+        {productArea==="chat" && view==="chat" && resources.resources.length ? <div className="sidebar-resource-filter"><DropdownSelect compact label="Chats using resource" value={resources.selected}
+          options={[{value:"",label:"All resources"},...resources.resources.map(resource=>({value:resource.kind+":"+resource.id,label:resource.name,description:resource.kind+" · version "+resource.revision}))]}
+          onChange={resources.setSelected} /></div> : null}
         {productArea !== "chat" || view !== "chat" ? null : (
           <SidebarSectionList
             {...props}
+            {...filteredSessions}
+            trainingSessionIds={resources.trainingSessionIds}
             workflowGroups={localWorkflowGroups}
             workflowSessions={localWorkflowSessions}
             onSelectSession={nativeHistory.select}

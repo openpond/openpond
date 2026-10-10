@@ -108,6 +108,7 @@ export function useMainPaneChatScroll({
     latestChatMessage?.id ?? "",
     latestChatMessage?.content?.length ?? 0,
     latestChatMessage?.timestamp ?? "",
+    JSON.stringify(latestChatMessage?.resources ?? []),
     showThinkingIndicator ? "thinking" : "",
   ].join(":");
   const canLoadOlderChatMessages = chatHistoryHasMore;

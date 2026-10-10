@@ -196,6 +196,7 @@ import { runLocalHarnessEvaluationBaseline } from "./harness/local-harness-tasks
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
 import { createDatasetArtifactService } from "./training/dataset-artifact-service.js";
 import { createDatasetImportService } from "./training/dataset-imports/import-service.js";
+import { createChatResourceRuntime } from "./training/chat-resource-runtime.js";
 import { createHarnessRefinerBenchmarkService } from "./training/harness-refiner-benchmark-service.js";
 import { createTaskAttemptModelJudge } from "./training/task-attempt-grader-evidence.js";
 import { createPreferenceComparisonService } from "./training/preference-comparison-service.js";
@@ -808,6 +809,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   onStartupFailure(()=>improvements.close());
   onStartupFailure(()=>schedules.stop());
   await localExperiments.recover();
+  const chatResources = await createChatResourceRuntime({store,home:storeDir,ownerId:serverId,state:localByokRuntimeState,codexStatus:()=>refreshCodexStatus(true),imports:datasetImportService,visuals:htmlVisuals,improve:experimentImprovementPayload,append:appendRuntimeEvent,
+    access:async()=>({...await resolveHostedApiAccess(),actorId:await reviewIdentity.actorId(),teamId:await reviewIdentity.teamId()})});
+  onStartupFailure(()=>chatResources.close());
   trainingApi.learning.start();
   onStartupFailure(() => trainingApi.learning.close());
   const teamChatAiExecutions = createTeamChatAiExecutionService({
@@ -923,6 +927,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
     executeProjectAction: projectActionRunPayload,
+    executeChatResourceAction:chatResources.execute,
     executeDatasetBuilderAction: async ({
       session,
       provider,
@@ -1733,6 +1738,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       usageTurnCachePayload: usageTurnCacheRoutePayload,
       trainingPayload,
       localExperimentPayload:localExperiments.request,
+      chatResourcePayload:chatResources.request,
       experimentImprovementPayload,experimentEvaluationSchedulePayload,advancedRefinerEvaluationPayload,
       learningProducerPayload: (endpoint, apiKey, payload) => trainingApi.learning.producerRequest(endpoint, apiKey, payload),
       datasetStoragePayload,
@@ -1922,6 +1928,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     terminalWebSockets,
     runtimeClosers: [
       sessionTitleService.close,
+      chatResources.close,
       ()=>closeCoordinatedEvaluations({schedules,localExperiments,benchmarks:harnessRefinerBenchmarks,improvements,advancedBoundary,drainWork:turnRunner.close}),
       trainingApi.learning.close,
       waitForOpenPondRefresh,

@@ -39,7 +39,7 @@ export function localExperimentAdmissions(definition:LocalExperimentDefinition,r
   if(value.contentHash!==definition.packageHash || contentHash(request.taskset)!==contentHash({id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash}))
     throw new LocalExperimentError("local_dataset_pin_conflict","Local execution requires the exact retained Dataset package.",422);
   if(request.policy.kind!=="hosted_chat"&&!(request.policy.kind==="hosted_harness"&&profileAdmitted))throw new LocalExperimentError("local_target_not_qualified","This local execution path requires a qualified exact target owner.",422);
-  if(definition.model.providerId==="claude-code"&&(executionForClaude(value)||value.taskset.environment.kind!=="text"||value.taskset.tools.length))throw new LocalExperimentError("claude_environment_not_admitted","The Claude process adapter requires a text Dataset with no environment tools. Additional tool owners require explicit admission.",422);
+  if(["claude-code","codex"].includes(definition.model.providerId)&&(executionForClaude(value)||value.taskset.environment.kind!=="text"||value.taskset.tools.length))throw new LocalExperimentError("native_text_environment_not_admitted","This native model adapter requires a text Dataset with no environment tools. Additional tool owners require explicit admission.",422);
   const harness=request.policy.kind==="hosted_chat"?request.policy.harness:undefined;
   if(harness&&!nativeHarnessAdmitted)throw new LocalExperimentError("local_harness_not_qualified","A released Harness must execute through its native turn owner.",422);
   const execution=resolveTasksetPackageExecution(value);

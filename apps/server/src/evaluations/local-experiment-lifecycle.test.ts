@@ -13,7 +13,7 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { expect,test } from "vitest";
+import { expect,test,vi } from "vitest";
 import { contentHash,sha256 } from "@openpond/harness";
 import { createEnvironmentRelease,createVerifierSetRelease,bindTasksetExecutionReleases } from "@openpond/evals";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
@@ -59,6 +59,52 @@ function savedInput(maximumCostUsd=0.01) {
       policy:{kind:"hosted_chat",modelId:"local-qualified-model",maxOutputTokens:64,temperature:0,topP:1},
       population:[{receiptId:"receipt-a",taskId:"task-a",seed:"0",fixtureId:null}]}}};
 }
+
+// Failure story: independently scoped chat and workspace services share one
+// server lease. A second claim prevents startup, while sibling recovery or
+// release can interrupt another service's live run or admit a competing server.
+test("scoped services share the server lease without recovering or releasing each other's runs",async()=> {
+  const home=await mkdtemp(path.join(os.tmpdir(),"openpond-shared-lease-"));
+  const store=new SqliteStore(home);
+  let dispatched:()=>void=()=>{},finish:()=>void=()=>{};
+  const entered=new Promise<void>(resolve=>{dispatched=resolve;});
+  const release=new Promise<void>(resolve=>{finish=resolve;});
+  const stream:typeof streamOpenPondHostedChatTurn=async function*(){
+    dispatched();await release;
+    yield {type:"text_delta",text:"pond",raw:{}};
+    yield {type:"usage",usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2},raw:{}};
+    yield {type:"finish",finishReason:"stop",raw:{}};
+  };
+  const common={store,catalog,stream,actorId:async()=>"local-proof-actor",teamId:async()=>"owned-workspace"};
+  const primary=createLocalExperimentService({...common,ownerId:"shared-server"});
+  const sibling=createLocalExperimentService({...common,ownerId:"shared-server",managesRuntimeLease:false});
+  const competing=createLocalExperimentService({...common,ownerId:"another-server"});
+  let run:Awaited<ReturnType<typeof primary.run>>;
+  try {
+    await primary.recover();
+    // A blocked event loop must not permanently disable its owner or allow a
+    // second live process to take over just because the heartbeat deadline passed.
+    const delayedClock=vi.spyOn(Date,"now").mockReturnValue(Date.now()+60_000);
+    try {
+      await expect(competing.recover()).rejects.toMatchObject({code:"local_runtime_already_owned"});
+      run=await primary.run(savedInput());await entered;
+      await store.renewLocalExperimentOwner("shared-server");
+      await expect(store.renewLocalExperimentOwner("another-server")).rejects.toMatchObject({code:"local_runtime_lease_lost"});
+    } finally {delayedClock.mockRestore();}
+    await sibling.recover();
+    expect((await primary.status({teamId:"owned-workspace",id:run.id})).status).toBe("running");
+    await sibling.close();
+    await store.renewLocalExperimentOwner("shared-server");
+    await expect(competing.recover()).rejects.toMatchObject({code:"local_runtime_already_owned"});
+    finish();await primary.wait(run.id);
+    expect((await primary.status({teamId:"owned-workspace",id:run.id})).status).toBe("completed");
+    await primary.close();await competing.recover();
+    await expect(store.renewLocalExperimentOwner("shared-server")).rejects.toMatchObject({code:"local_runtime_lease_lost"});
+  } finally {
+    finish();await sibling.close();await primary.close();await competing.close();
+    await store.close();await rm(home,{recursive:true,force:true});
+  }
+});
 
 // Failure story: one reviewed configuration must atomically own one run across
 // lost replies/restart. Duplication creates a new run without editing evidence;

@@ -58,6 +58,7 @@ import { LEARNING_TABLES_SQL } from "./store-learning-schema.js";
 import { MODEL_PROJECT_AUTHORING_TABLES_SQL } from "./store-model-project-authoring-schema.js";
 import { pruneMigrationBackups } from "./store-backup-retention.js";
 import { TASK_INBOX_SCHEMA_SQL } from "./store-task-inbox-schema.js";
+import { CHAT_RESOURCE_TABLES_SQL } from "./store-chat-resource-schema.js";
 import type { SqliteDomainContext } from "./store-domain.js";
 
 type UserVersionRow = { user_version: number };
@@ -71,6 +72,7 @@ export type SqliteStoreCoreOptions = {
 };
 
 export class SqliteStoreCore {
+  async createChatResourceTables(): Promise<void> { await this.exec(CHAT_RESOURCE_TABLES_SQL); }
   async createTaskInboxTables(): Promise<void> {
     await this.exec(TASK_INBOX_SCHEMA_SQL);
   }

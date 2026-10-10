@@ -1,4 +1,5 @@
 import { HtmlVisualReferenceSchema } from "@openpond/contracts/html-visuals";
+import { attachChatResources } from "./chat-resources";
 import {
   ChatAttachmentSummarySchema,
   TaskInputSchema,
@@ -54,6 +55,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
   for (const original of items) {
     const item = projectNativeHistoryTool(original, nativeToolNames);
+    if(item.source === "server" && asRecord(item.data)?.chatResource)continue;
     if (item.name === "visual.published") {
       const parsed = HtmlVisualReferenceSchema.safeParse(asRecord(item.data)?.visual);
       if (parsed.success && parsed.data.sessionId === item.sessionId && !messages.some(message => message.id === parsed.data.publicationId)) {
@@ -351,7 +353,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
   }
 
   attachTurnDeliverables(messages);
-  return messages;
+  return attachChatResources(messages,items);
 }
 
 function removeSupersededSteerInterruption(
