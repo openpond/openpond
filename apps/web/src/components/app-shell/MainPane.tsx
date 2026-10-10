@@ -108,7 +108,6 @@ import {
   LabsRoute,
   LabSkillSidebar,
   NativeSkillSidebar,
-  NewExperienceSwitcher,
   OutputsPage,
   ProjectsPage,
   RightSidebarHomePanel,
@@ -143,7 +142,6 @@ export function MainPane({
   ponderMode = null,
   onPonderModeChange,
   experience,
-  onNewExperienceChange,
   view,
   teamChat,
   community,
@@ -466,7 +464,6 @@ export function MainPane({
     experience === "development" ||
     (experience === "work" && projectTarget.value !== "none");
   const composerActionCatalog = useMemo(() => {
-    if (experience === "chat") return selectedProfileActionCatalog;
     if (!repositoryWork) return [];
     const byId = new Map(
       actionCatalog
@@ -1815,9 +1812,9 @@ export function MainPane({
                 }
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
-                goalRuntime={experience !== "chat" ? goalRuntime : null}
+                goalRuntime={goalRuntime}
                 subagentRuntime={
-                  experience !== "chat" ? subagentRuntime : null
+                  subagentRuntime
                 }
                 createImproveRuntime={
                   repositoryWork ? createImproveRuntime : null
@@ -1874,16 +1871,6 @@ export function MainPane({
       ) : (
         <>
           <section className="start-panel">
-            <Suspense fallback={null}>
-              <NewExperienceSwitcher
-                value={experience === "chat" ? "chat" : "work"}
-                onChange={(mode) => {
-                  if (mode === "ponder") { onPonderModeChange?.("clean"); return; }
-                  onPonderModeChange?.(null);
-                  onNewExperienceChange(mode);
-                }}
-              />
-            </Suspense>
             <div className="start-welcome">
               <h1>{startMessage}</h1>
               {canSyncWorkspace && (
@@ -1915,9 +1902,9 @@ export function MainPane({
                 }
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
-                goalRuntime={experience !== "chat" ? goalRuntime : null}
+                goalRuntime={goalRuntime}
                 subagentRuntime={
-                  experience !== "chat" ? subagentRuntime : null
+                  subagentRuntime
                 }
                 createImproveRuntime={
                   repositoryWork ? createImproveRuntime : null
@@ -1936,7 +1923,7 @@ export function MainPane({
                 providerSettings={bootstrap?.providers ?? null}
                 provider={activeProvider}
                 model={activeModel}
-                showProjectFooter={experience !== "chat"}
+                showProjectFooter
                 projectTarget={projectTarget}
                 profileTarget={null}
                 actionCatalog={composerActionCatalog}

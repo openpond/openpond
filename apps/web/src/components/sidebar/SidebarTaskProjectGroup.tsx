@@ -91,8 +91,8 @@ export function SidebarTaskProjectGroup({
               <button
                 type="button"
                 className="sidebar-row-action"
-                data-tooltip="New task"
-                aria-label="New task"
+                data-tooltip="New thread"
+                aria-label="New thread"
                 onClick={onNewTask}
               >
                 <SquarePen size={13} />

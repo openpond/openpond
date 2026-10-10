@@ -49,7 +49,6 @@ import { composerSkillsForProfile } from "../lib/profile-selection";
 import { buildExperienceHandoffMetadata } from "../lib/experience-handoff";
 import {
   productAreaForAppView,
-  readLastChatTaskModeFromBrowser,
 } from "../lib/product-area";
 import { useTaskDraftActions } from "../hooks/useTaskDraftActions";
 import {
@@ -110,7 +109,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     diffPanelExpanded,
     rightPanelMode,
     activeExperience,
-    changeNewExperience,
+    beginNewThread,
     terminalOpen,
     settingsSection,
     newProjectDialogOpen,
@@ -811,10 +810,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       if (nextProductArea === "chat") {
         navigateDesktopRoute({ kind: "chat", sessionId: null });
       }
-      changeNewExperience(readLastChatTaskModeFromBrowser());
+      beginNewThread();
     },
     [
-      changeNewExperience,
+      beginNewThread,
       navigateDesktopRoute,
       setSectionMenuOpen,
       setSelectedAppId,
@@ -916,7 +915,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     "--diff-panel-width": `${diffPanelWidth}px`,
   } as CSSProperties;
   const rightSidebarAvailableForView =
-    (view === "chat" && activeExperience !== "chat") ||
+    view === "chat" ||
     view === "labs" ||
     (view === "scheduled" && scheduledDetailOpen) ||
     (view === "team" && Boolean(teamAiThreadId));
@@ -1210,7 +1209,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           ponderMode,
           onPonderModeChange: setPonderMode,
           experience: activeExperience,
-          onNewExperienceChange: changeNewExperience,
           view,
           teamChat: {
             currentUserId: teamChat.currentUserId,

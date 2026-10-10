@@ -11,15 +11,18 @@ import type {
 import { COLLECTOR_DEFAULTS } from "./collector-contracts.js";
 import { collectorDestinationLinks } from "./collector-destinations.js";
 import { CollectorProgress } from "./collector-progress.js";
+import { CollectorCoverage } from "./collector-coverage.js";
 import { CollectorSnapshots, CollectorQueueFullError } from "./collector-snapshots.js";
 import { nextScheduledSync, validateCollectorSchedule } from "./collector-schedule.js";
 
 export class CollectorStore {
   readonly progress: CollectorProgress;
   readonly snapshots: CollectorSnapshots;
+  readonly coverage: CollectorCoverage;
   private constructor(readonly database: DatabaseSync) {
     this.progress = new CollectorProgress(database);
     this.snapshots = new CollectorSnapshots(database);
+    this.coverage = new CollectorCoverage(this);
   }
   static async open(directory: string) {
     await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -78,6 +81,8 @@ export class CollectorStore {
           prior.account !== connection.account);
       if (identityChanged) connection = { ...connection, destinations: undefined };
       if (prior && (identityChanged || prior.since !== connection.since)) {
+        this.database.prepare("DELETE FROM settings WHERE key=?").run(`coverage:${connection.id}`);
+        this.database.prepare("DELETE FROM coverage_sessions WHERE connection_id=?").run(connection.id);
         // Scope changes fence queued evidence too: do not upload a wider old
         // selection under newly narrowed consent. Reacquire the approved scope.
         this.progress.reset(connection.id);
@@ -337,6 +342,7 @@ export class CollectorStore {
             nextRunAt: schedule && config.state === "active" ? nextScheduledSync(schedule) : null,
             lastSuccessfulSyncAt: this.setting(`lastSuccess:${row.id}`),
             run,
+            coverage: this.coverage.summary(String(row.id)),
             requestedSyncRevision: config.requestedSyncRevision ?? 0,
             completedSyncRevision: config.completedSyncRevision ?? 0,
             acknowledgedSyncRevision: Number(this.setting(`syncAcknowledged:${row.id}`)) || 0,

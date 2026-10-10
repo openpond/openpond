@@ -9,6 +9,8 @@ export * from "./taskset-draft-authoring.js";
 export * from "./taskset-draft-files.js";
 export * from "./taskset-draft-workspace.js";
 export * from "./taskset-authored-contracts.js";
+export * from "./task-design-contracts.js";
+export * from "./dataset-preparation-authoring-contracts.js";
 export * from "./taskset-authored-validation.js";
 export * from "./taskset-draft-publication.js";
 export * from "./taskset-draft-manifests.js";

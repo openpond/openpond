@@ -10,7 +10,6 @@ import {
   SIDEBAR_TASK_INITIAL_LIMIT,
   type SidebarProjectItem,
 } from "../../lib/app-models";
-import { projectlessSidebarSessionLabel } from "../../lib/experience-sessions";
 import { isTaskDraftSession } from "../../lib/task-drafts";
 import { sessionTaskset } from "../../lib/session-tasksets";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
@@ -137,7 +136,6 @@ export function SidebarSectionList({
   commitTaskDrop,
   commitTaskPreviewDrop,
   dockSessionRight,
-  experience = "work",
   goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
   localProjectRows,
   openSidebarFile,
@@ -184,13 +182,8 @@ export function SidebarSectionList({
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
   const [groupByProject, setGroupByProject] = useState(true);
-  useEffect(() => {
-    if (experience !== "chat") setGroupByProject(true);
-  }, [experience]);
-  const [projectsCollapsedByMode, setProjectsCollapsedByMode] = useState({ work: false, chat: true });
-  const [ordinaryCollapsedByMode, setOrdinaryCollapsedByMode] = useState({ work: false, chat: false });
-  const projectsMode = experience === "chat" ? "chat" : "work";
-  const projectsCollapsed = projectsCollapsedByMode[projectsMode];
+  const [projectsCollapsed, setProjectsCollapsed] = useState(false);
+  const [ordinaryCollapsed, setOrdinaryCollapsed] = useState(false);
   const [taskVisibility, setTaskVisibility] = useState(
     readSidebarTaskVisibilityPreferences,
   );
@@ -208,9 +201,9 @@ export function SidebarSectionList({
     useState<SidebarTaskDetail | null>(null);
   useEffect(() => {
     if (!selectedProjectId) return;
-    setProjectsCollapsedByMode((current) => current[projectsMode] ? { ...current, [projectsMode]: false } : current);
-  }, [projectsMode, selectedProjectId]);
-  const taskNoun = experience === "chat" ? "chats" : "tasks";
+    setProjectsCollapsed(false);
+  }, [selectedProjectId]);
+  const taskNoun = "threads";
   const projectsSectionRows = projectRows ?? [
     ...localProjectRows,
     ...cloudProjectRows,
@@ -449,7 +442,7 @@ export function SidebarSectionList({
         projectLabelById.get(projectId) ?? session.workspaceName ?? "Project"
       );
     }
-    return projectlessSidebarSessionLabel(session);
+    return null;
   }
 
   function selectSession(session: Session) {
@@ -850,11 +843,9 @@ export function SidebarSectionList({
       </section> : <>
       <SidebarSection
         label="Projects"
-        className={`sidebar-projects-section${
-          experience !== "chat" ? " development" : ""
-        }`}
+        className="sidebar-projects-section development"
         collapsed={projectsCollapsed}
-        onToggleCollapsed={() => setProjectsCollapsedByMode((current) => ({ ...current, [projectsMode]: !current[projectsMode] }))}
+        onToggleCollapsed={() => setProjectsCollapsed((current) => !current)}
         actions={
           <SidebarProjectsHeaderActions
             onAddProject={onAddProject}
@@ -873,18 +864,18 @@ export function SidebarSectionList({
         {groupedTaskRows
           .filter((group) => group.kind === "project")
           .map((group) => renderTaskGroup(
-            experience === "chat" || !groupByProject ? { ...group, sessions: [] } : group,
+            !groupByProject ? { ...group, sessions: [] } : group,
           ))}
       </SidebarSection>
       <SidebarSection
-        label={experience === "chat" ? "Chat" : "Work"}
+        label="Threads"
         className="sidebar-task-section sidebar-ordinary-section"
-        collapsed={ordinaryCollapsedByMode[projectsMode]}
-        onToggleCollapsed={() => setOrdinaryCollapsedByMode((current) => ({ ...current, [projectsMode]: !current[projectsMode] }))}
+        collapsed={ordinaryCollapsed}
+        onToggleCollapsed={() => setOrdinaryCollapsed((current) => !current)}
         actionsVisible={sectionMenuOpen === "chats" || sectionMenuOpen === "tasks-filter" || taskFilter !== "active" || onlyRunningTasks || !showCodexChats}
         actions={listControls}
       >
-        {(experience === "chat" || !groupByProject
+        {(!groupByProject
           ? visibleTaskRows
           : visibleTaskRows.filter((session) => !sidebarProjectIdBySessionId[session.id])
         ).map((session) => renderTaskSession(session))}

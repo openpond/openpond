@@ -1,20 +1,9 @@
 import type { Experience, ProductArea } from "@openpond/contracts";
 
-export type ChatTaskMode = Extract<Experience, "chat" | "work">;
-
-export const CHAT_TASK_MODE_OPTIONS: ReadonlyArray<{
-  value: ChatTaskMode;
-  label: string;
-}> = [
-  {
-    value: "chat",
-    label: "Chat",
-  },
-  {
-    value: "work",
-    label: "Work",
-  },
-];
+/** The desktop has one capability surface; repository sessions retain their context. */
+export function desktopExperience(experience: Experience): "work" | "development" {
+  return experience === "development" ? "development" : "work";
+}
 
 export const PRODUCT_AREA_OPTIONS: ReadonlyArray<{
   value: ProductArea;
@@ -38,6 +27,6 @@ export const PRODUCT_AREA_OPTIONS: ReadonlyArray<{
   },
 ];
 
-export function newExperienceTitle(experience: Experience): string {
-  return experience === "chat" ? "New chat" : "New task";
+export function newExperienceTitle(_experience: Experience): string {
+  return "New thread";
 }

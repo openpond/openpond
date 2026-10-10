@@ -8,7 +8,7 @@ Parsing, aliases, command help, and this reference use the same authoritative re
 
 ```text
 Usage:
-  openpond import <connect|reconnect|discover|status|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]
+  openpond import <connect|reconnect|discover|status|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--until <ISO-cutoff>] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]
 
 Options:
   --at <string>
@@ -30,6 +30,7 @@ Options:
   --source <string>
   --source-path <string>
   --team <string>
+  --until <string>
   --weekly
   --yes
 ```
@@ -37,12 +38,14 @@ Options:
 
 ```text
 Usage:
-  openpond datasets <upload|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>]
+  openpond datasets <upload|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]
+  openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]
 
 Options:
   --cursor <string>
   --dataset-id <string>
   --expected-revision <integer>
+  --input-file <string>
   --json
   --operation-id <string>
   --package-hash <string>

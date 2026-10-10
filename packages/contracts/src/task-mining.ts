@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { TrainingTacticSchema } from "openpond-sdk/taskset-drafts";
+export { TrainingTacticSchema };
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
@@ -16,18 +18,6 @@ export const TaskCandidateStatusSchema = z.enum([
   "dismissed",
   "retired",
   "blocked",
-]);
-
-export const TrainingTacticSchema = z.enum([
-  "no_training",
-  "prompting",
-  "retrieval",
-  "sft",
-  "preference",
-  "grpo_rft",
-  "sdft_opsd",
-  "sdpo",
-  "agentic_rl",
 ]);
 
 export const TaskCandidateEvidenceSchema = z.object({

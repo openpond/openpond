@@ -19,6 +19,7 @@ import type {
   UsageRequestAttribution,
   WorkspaceState,
 } from "@openpond/contracts";
+import { desktopExperience } from "../lib/experience-options";
 import { DEFAULT_OPENPOND_CHAT_MODEL } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import {
@@ -660,7 +661,7 @@ export function useChatActions({
       ? options.session ?? null
       : selectedSession;
     const experienceForTurn =
-      options.experience ?? selectedSessionForTurn?.experience ?? experience;
+      desktopExperience(options.experience ?? selectedSessionForTurn?.experience ?? experience);
     const repositoryWorkTurn =
       experienceForTurn === "development" ||
       (experienceForTurn === "work" && (
@@ -736,7 +737,7 @@ export function useChatActions({
     let pendingUserMessage: PendingChatUserMessage | null = null;
     try {
       if (!repositoryWorkTurn && providerForTurn === "codex") {
-        throw new Error("The Codex provider requires repository-aware Work.");
+        throw new Error("Select a local workspace to use the Codex provider.");
       }
       if (disallowedExperienceSlashCommand) {
         throw new Error(
@@ -1040,13 +1041,10 @@ export function useChatActions({
       const mentionedSandboxApp =
         selectedMentionedSandboxApp ??
         resolveMentionedSandboxChatApp(promptForTurn, sandboxMentionApps(apps));
-      const mentionedConnectedApps =
-        experienceForTurn === "chat"
-          ? []
-          : resolveMentionedConnectedApps(
-              promptForTurn,
-              connectedAppMentions
-            ).map((option) => option.ref);
+      const mentionedConnectedApps = resolveMentionedConnectedApps(
+        promptForTurn,
+        connectedAppMentions
+      ).map((option) => option.ref);
       if (!session) {
         const sessionAppId =
           selectedProjectLinkedOpenPondAppForTurn?.appId ??

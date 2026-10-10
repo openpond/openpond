@@ -44,7 +44,7 @@ export function SidebarTaskListControls({
   filter: SidebarTaskFilter;
   activityOrder?: boolean;
   groupByProject: boolean;
-  noun: "chats" | "tasks";
+  noun: "chats" | "tasks" | "threads";
   onFilterChange: (filter: SidebarTaskFilter) => void;
   onGroupByProjectChange: (groupByProject: boolean) => void;
   onOnlyRunningTasksChange: (onlyRunningTasks: boolean) => void;

@@ -71,13 +71,13 @@ const PROFILE_SDK_OPTION_SCHEMA = {
 } as const satisfies Record<string, CliCommandOptionKind>;
 
 export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
-  { name: "import", usage: "openpond import <connect|reconnect|discover|status|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]",
-    optionSchema: { source: "string", sourcePath: "string", range: "string", team: "string", project: "string", session: "string", leaf: "string", revision: "string", continual: "boolean", daily: "boolean", weekly: "boolean", hourly: "boolean", cron: "string", at: "string", on: "string", off: "boolean", scheduled: "boolean", yes: "boolean", connection: "string", collectorDir: "string", json: "boolean" },
+  { name: "import", usage: "openpond import <connect|reconnect|discover|status|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--until <ISO-cutoff>] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]",
+    optionSchema: { source: "string", sourcePath: "string", range: "string", until: "string", team: "string", project: "string", session: "string", leaf: "string", revision: "string", continual: "boolean", daily: "boolean", weekly: "boolean", hourly: "boolean", cron: "string", at: "string", on: "string", off: "boolean", scheduled: "boolean", yes: "boolean", connection: "string", collectorDir: "string", json: "boolean" },
     handler: async ({options,rest}) => (await import("./import")).runImportCommand(options,rest) },
   {
     name: "datasets",
-    usage: "openpond datasets <upload|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>]",
-    optionSchema: { team: "string", operationId: "string", expectedRevision: "integer", publish: "boolean", project: "string", datasetId: "string", cursor: "string", workspaceHash: "string", packageHash: "string", json: "boolean" },
+    usage: "openpond datasets <upload|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]\n  openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]",
+    optionSchema: { team: "string", operationId: "string", expectedRevision: "integer", publish: "boolean", project: "string", datasetId: "string", cursor: "string", workspaceHash: "string", packageHash: "string", inputFile: "string", json: "boolean" },
     handler: async ({ options, rest }) => (await import("./datasets")).runDatasetsCommand(options, rest),
   },
   {

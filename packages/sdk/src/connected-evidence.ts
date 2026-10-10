@@ -6,3 +6,6 @@ export * from "./connected-dataset-publication.js";
 export * from "./connected-collection-status.js";
 
 export * from "./connected-sync.js";
+export { CollectorCoverageManifestSchema, CollectorCoverageSessionSchema, CollectorCoverageSummarySchema,
+  summarizeCollectorCoverage, hashCollectorEligibleBoundaries } from "@openpond/evals/connected-evidence";
+export type { CollectorCoverageManifest, CollectorCoverageSession, CollectorCoverageSummary } from "@openpond/evals/connected-evidence";

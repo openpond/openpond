@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { TaskDesignFixtureTemplateSchema, CapabilityDiagnosisSchema, TaskExampleProposalSchema, TaskDesignProposalSchema } from "openpond-sdk/taskset-drafts";
+export { TaskDesignFixtureTemplateSchema, CapabilityDiagnosisSchema, TaskExampleProposalSchema, TaskDesignProposalSchema };
 import { TASKSET_WORK_TOOL_NAMES, TasksetStatusSchema, DatasetBuildIntentSchema, DatasetBuildSpecificationSchema, GeneratedTaskFileSchema, TrainingPathRecommendationSchema, TrainingMethodReadinessReasonCodeSchema, TrainingMethodReadinessSchema, TasksetReadinessFindingSchema, TasksetReadinessReportSchema, AuthoringRepairSchema, AuthoringProvenanceSchema, TasksetSchema, type DatasetBuildIntent, type DatasetBuildSpecification, type GeneratedTaskFile, type TrainingPathRecommendation, type TrainingMethodReadinessReasonCode, type TrainingMethodReadiness, type TasksetReadinessReport, type AuthoringProvenance, type AuthoringRepair, type Taskset } from "openpond-sdk/taskset-drafts";
 export { TASKSET_WORK_TOOL_NAMES, TasksetStatusSchema, DatasetBuildIntentSchema, DatasetBuildSpecificationSchema, GeneratedTaskFileSchema, TrainingPathRecommendationSchema, TrainingMethodReadinessReasonCodeSchema, TrainingMethodReadinessSchema, TasksetReadinessFindingSchema, TasksetReadinessReportSchema, AuthoringRepairSchema, AuthoringProvenanceSchema, TasksetSchema, type DatasetBuildIntent, type DatasetBuildSpecification, type GeneratedTaskFile, type TrainingPathRecommendation, type TrainingMethodReadinessReasonCode, type TrainingMethodReadiness, type TasksetReadinessReport, type AuthoringProvenance, type AuthoringRepair, type Taskset };
 export { isTrainingSourceRef } from "openpond-sdk/taskset-drafts";
@@ -107,7 +109,6 @@ import { TasksetMetricPolicySchema } from "@openpond/evals/metrics";
 export { TasksetMetricPolicySchema } from "@openpond/evals/metrics";
 import { ChatModelRefSchema } from "./providers.js";
 import { CodexReasoningEffortSchema } from "./settings.js";
-import { TrainingTacticSchema } from "./task-mining.js";
 import { VersionedReleaseRefSchema } from "./release-core.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
@@ -202,17 +203,6 @@ export const TasksetGraderDetailsResponseSchema = z.object({
   unavailableReason: z.string().max(2_000).nullable(),
 });
 
-export const TaskDesignFixtureTemplateSchema = z.object({
-  id: IdSchema,
-  taskIndex: z.number().int().nonnegative(),
-  label: GraderFixtureLabelSchema,
-  output: z.record(z.string(), z.unknown()),
-  infrastructureError: z.string().trim().min(1).max(10_000).nullable(),
-  expectedPassed: z.boolean(),
-  expectedRewardEligible: z.boolean(),
-  metadata: MetadataSchema,
-});
-
 export const TaskAttemptResultSchema = z.object({
   schemaVersion: z.literal("openpond.taskAttempt.v1"),
   id: IdSchema,
@@ -301,62 +291,6 @@ export const GraderAuditReportSchema = z.object({
   leakageChecksPassed: z.boolean(),
   infrastructureSafetyPassed: z.boolean(),
   failures: z.array(z.object({ fixtureId: IdSchema, label: GraderFixtureLabelSchema, gradeId: IdSchema, reason: z.string().trim().min(1).max(5_000) })).max(100_000),
-  createdAt: TimestampSchema,
-});
-
-export const CapabilityDiagnosisSchema = z.object({
-  schemaVersion: z.literal("openpond.capabilityDiagnosis.v1"),
-  summary: z.string().trim().min(1).max(10_000),
-  stableBehavior: z.array(z.string().trim().min(1).max(5_000)).max(100).default([]),
-  changingKnowledge: z.array(z.string().trim().min(1).max(5_000)).max(100).default([]),
-  requiredContext: z.array(z.string().trim().min(1).max(5_000)).max(100).default([]),
-  requiredTools: z.array(IdSchema).max(100).default([]),
-  intervention: TrainingTacticSchema,
-  trainingEligible: z.boolean(),
-  rationale: z.array(z.string().trim().min(1).max(5_000)).min(1).max(100),
-  confidence: z.number().min(0).max(1),
-});
-
-export const TaskExampleProposalSchema = z.object({
-  id: IdSchema,
-  sourceId: IdSchema,
-  sourceTurnId: NullableIdSchema,
-  split: TasksetSplitSchema,
-  origin: z.enum(["extracted", "corrected", "synthetic", "expert_authored"]),
-  inputPrompt: z.string().trim().min(1).max(100_000),
-  expectedOutputText: z.string().trim().min(1).max(200_000).nullable(),
-  rationale: z.string().trim().min(1).max(5_000),
-});
-
-export const TaskDesignProposalSchema = z.object({
-  schemaVersion: z.literal("openpond.taskDesignProposal.v1"),
-  id: IdSchema,
-  name: z.string().trim().min(1).max(500),
-  objective: z.string().trim().min(1).max(20_000),
-  diagnosis: CapabilityDiagnosisSchema.default({
-    schemaVersion: "openpond.capabilityDiagnosis.v1",
-    summary: "Reproduce the selected approved behavior.",
-    stableBehavior: [],
-    changingKnowledge: [],
-    requiredContext: [],
-    requiredTools: [],
-    intervention: "sft",
-    trainingEligible: true,
-    rationale: ["The selected examples were supplied as demonstrations."],
-    confidence: 0.5,
-  }),
-  taskKind: TasksetCapabilityManifestSchema.shape.taskKind,
-  sourceIds: z.array(IdSchema).min(1).max(100_000),
-  assumptions: z.array(z.string().trim().min(1).max(5_000)).max(1_000),
-  successCriteria: z.array(z.string().trim().min(1).max(5_000)).min(1).max(1_000),
-  proposedGraders: z.array(GraderSpecSchema).max(1_000).default([]),
-  graderFixtures: z.array(TaskDesignFixtureTemplateSchema).max(100_000).default([]),
-  generatedFiles: z.array(GeneratedTaskFileSchema).max(1_000).default([]),
-  proposedExamples: z.array(TaskExampleProposalSchema).max(100_000).default([]),
-  proposedMethod: TasksetReadinessReportSchema.shape.recommendedMethod,
-  trainingPath: TrainingPathRecommendationSchema.nullable().default(null),
-  policy: TaskPolicyBoundarySchema,
-  warnings: z.array(z.string().trim().min(1).max(5_000)).default([]),
   createdAt: TimestampSchema,
 });
 
