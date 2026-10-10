@@ -56,7 +56,6 @@ export function useCommunityController(input: {
           selectChannel(notification.channelId);
           setView("community");
         },
-        placement: "top-right",
       },
     );
     dismissIncomingNotification();

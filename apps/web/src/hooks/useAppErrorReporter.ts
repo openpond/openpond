@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import type { AppAction, AppToast, ShowAppToast } from "../app/app-state";
+import type { AppAction, ShowAppToast } from "../app/app-state";
 import { api, type ClientConnection } from "../api";
 import { errorMessageForToast } from "../lib/error-messages";
 
@@ -21,17 +21,10 @@ export function useAppErrorReporter({
     (
       message: string,
       tone: "success" | "error" | "info" = "info",
-      options: Pick<
-        AppToast,
-        | "actionLabel"
-        | "onAction"
-        | "persistent"
-        | "durationMs"
-        | "placement"
-      > = {},
+      options = {},
     ) => {
       const id = Date.now() + ++toastSequenceRef.current;
-      appDispatch({ type: "showToast", toast: { id, message, tone, ...options } });
+      appDispatch({ type: "showToast", toast: { id, createdAt: Date.now(), message, tone, ...options } });
       return id;
     },
     [appDispatch],

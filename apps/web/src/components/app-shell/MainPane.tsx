@@ -1516,7 +1516,7 @@ export function MainPane({
   );
   return (
     <OpenHtmlVisualContext.Provider value={openHtmlVisual}>
-    <main
+    <main tabIndex={-1} data-thread-session={view === "chat" && !ponderMode ? selectedSessionId ?? undefined : undefined}
       className={`main-pane ${viewClass} ${
         terminalOpen ? "terminal-open" : ""
       } ${showRightPanel ? "diff-open" : ""} ${

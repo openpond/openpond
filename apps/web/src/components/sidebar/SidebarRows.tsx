@@ -364,6 +364,13 @@ export function SidebarSessionRow({
           onClick={(event) => { event.stopPropagation(); onArchive(); }}>
           {archived ? <RotateCcw size={19} /> : <Check size={21} />}
         </button> : null}
+        {session.pinned ? (
+          <button type="button" className="sidebar-thread-pin"
+            aria-label={`Unpin thread: ${session.title}`} title="Unpin thread"
+            onClick={(event) => { event.stopPropagation(); onTogglePin(); }}>
+            <Pin size={16} aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     </SidebarInteractiveRow>
   );

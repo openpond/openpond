@@ -16,7 +16,7 @@ export function useGitSetupNotifications(params: {
   showToast: (
     message: string,
     tone?: "success" | "error" | "info",
-    options?: { actionLabel?: string; onAction?: () => void; persistent?: boolean }
+    options?: { actionLabel?: string; onAction?: () => void }
   ) => void;
 }) {
   const { connection, events, showToast } = params;
@@ -36,7 +36,6 @@ export function useGitSetupNotifications(params: {
     showToast(message, "error", {
       actionLabel: "Install Tools",
       onAction: () => void startMacOSCommandLineToolsInstall(),
-      persistent: true,
     });
   }, [showToast, startMacOSCommandLineToolsInstall]);
 

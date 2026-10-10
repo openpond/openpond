@@ -3,14 +3,12 @@ import { PanelLeft } from "../icons";
 import { DesktopUpdateButton } from "./DesktopUpdateButton";
 import {
   SidebarNavigation,
-  SidebarNewTask,
 } from "./SidebarNavigation";
 import { usePonderWork } from "../ponder/usePonderWork";
 import { SidebarSectionList } from "./SidebarSectionList";
 import { NativeConversationControls, useNativeConversationHistory } from "./NativeConversationSources";
-import { OPENPOND_ICON_URL, OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
+import { OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
 import type { SidebarProps } from "./Sidebar.types";
-import { HarnessLearningSidebarCard } from "./HarnessLearningSidebarCard";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 
@@ -76,19 +74,6 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
         <DesktopUpdateButton hasRunningWork={props.runningSessionIds.size > 0 || Object.values(props.terminalSummaries).some((summary) => summary.tabCount > 0)} />
       </div>
 
-      {productArea === "chat" ? <div className="sidebar-fixed-actions">
-      <SidebarNewTask experience={props.experience} beginNewChat={props.beginNewChat} />
-
-      {productArea === "chat" && view === "chat" && props.account?.activeProfile && props.onOpenPonder ? (
-        <div className="sidebar-ponder-fixed">
-          <button type="button" className="sidebar-row sidebar-task-row sidebar-ponder-entry" onClick={props.onOpenPonder}>
-            <span className="conversation-source-icon" aria-hidden="true"><img src={OPENPOND_ICON_URL} alt="" /></span>
-            <span>Ponder Pal</span>
-          </button>
-        </div>
-      ) : null}
-      </div> : null}
-
       <div className="sidebar-scroll">
         {productArea !== "chat" ? <SidebarNavigation
           productArea={productArea}
@@ -114,17 +99,6 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
         {productArea === "chat" && view === "chat" ? <NativeConversationControls history={nativeHistory} /> : null}
       </div>
 
-      <div className="sidebar-bottom-stack">
-        {productArea !== "chat" ? null : (
-          <HarnessLearningSidebarCard
-            connection={props.connection}
-            onOpenSettings={() => {
-              setSectionMenuOpen(null);
-              void navigateDesktopRoute({ kind: "settings", section: "harness" });
-            }}
-          />
-        )}
-      </div>
     </aside>
   );
 }

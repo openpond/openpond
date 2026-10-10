@@ -41,7 +41,7 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
   }
 
   return (
-    <div className="approval-request-shell" role="status" aria-live="polite">
+    <div data-notification-approval={approval.id} className="approval-request-shell" role="status" aria-live="polite">
       <section className="approval-request-card" aria-label={`${approvalKindLabel(approval.kind)} approval request`}>
         <div className="approval-request-copy">
           <div className="approval-request-header">

@@ -68,6 +68,7 @@ export function useRuntimeEvents({
   useEffect(() => {
     if (!connection?.token || afterSequence === null) return;
     const eventConnection = connection;
+    let disposed = false;
     let disconnectTimer: number | null = null;
     let pendingRuntimeEvents: RuntimeEvent[] = [];
     let flushTimer: number | null = null;
@@ -88,6 +89,7 @@ export function useRuntimeEvents({
     }
 
     function flushRuntimeEvents() {
+      if (disposed) return;
       flushTimer = null;
       const nextEvents = pendingRuntimeEvents;
       pendingRuntimeEvents = [];
@@ -134,6 +136,7 @@ export function useRuntimeEvents({
     }
 
     function queueRuntimeEvent(runtimeEvent: RuntimeEvent) {
+      if (disposed) return;
       trackRefinerEvent(runtimeEvent);
       pendingRuntimeEvents.push(runtimeEvent);
       scheduleFlush();
@@ -161,7 +164,7 @@ export function useRuntimeEvents({
     }
 
     function scheduleRefinerCompletionPoll() {
-      if (refinerPollTimer !== null || pendingRefinerSessions.size === 0) return;
+      if (disposed || refinerPollTimer !== null || pendingRefinerSessions.size === 0) return;
       refinerPollTimer = window.setTimeout(() => {
         refinerPollTimer = null;
         void pollRefinerCompletions();
@@ -179,6 +182,7 @@ export function useRuntimeEvents({
               afterSequence,
               limit: 100,
             });
+            if (disposed) return;
             for (const entry of page.events) {
               const runtimeEvent = entry.event;
               pendingRefinerSessions.set(
@@ -209,11 +213,13 @@ export function useRuntimeEvents({
     const source = openEventStream(
       connection,
       (runtimeEvent) => {
+        if (disposed) return;
         clearDisconnectTimer();
         clearEventStreamError();
         queueRuntimeEvent(runtimeEvent);
       },
       () => {
+        if (disposed) return;
         clearDisconnectTimer();
         disconnectTimer = window.setTimeout(() => {
           if (!source.isOpen()) {
@@ -223,6 +229,7 @@ export function useRuntimeEvents({
         }, 2000);
       },
       () => {
+        if (disposed) return;
         clearDisconnectTimer();
         clearEventStreamError();
         window.dispatchEvent(new Event("openpond-runtime-connected"));
@@ -230,6 +237,7 @@ export function useRuntimeEvents({
       { afterSequence },
     );
     return () => {
+      disposed = true;
       clearDisconnectTimer();
       if (flushTimer !== null) window.clearTimeout(flushTimer);
       if (refinerPollTimer !== null) window.clearTimeout(refinerPollTimer);

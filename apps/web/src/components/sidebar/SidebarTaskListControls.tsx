@@ -11,7 +11,6 @@ import {
   ChevronDown,
   ChevronRight,
   ListFilter,
-  MoreHorizontal,
 } from "../icons";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import {
@@ -70,94 +69,18 @@ export function SidebarTaskListControls({
       ?.label ??
     "Active";
   const filterMenuOpen = openMenu === "tasks-filter";
-  const sortMenuOpen = openMenu === "chats";
 
   useEffect(() => {
-    if (!filterMenuOpen && !sortMenuOpen) return;
+    if (!filterMenuOpen) return;
     function closeOnOutsidePointer(event: PointerEvent) {
       if (!controlsRef.current?.contains(event.target as Node)) setOpenMenu(null);
     }
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
-  }, [filterMenuOpen, setOpenMenu, sortMenuOpen]);
+  }, [filterMenuOpen, setOpenMenu]);
 
   return (
     <div className="sidebar-task-list-controls" ref={controlsRef}>
-      <div className="section-menu">
-        <button
-          type="button"
-          className={`section-icon ${sortMenuOpen ? "active" : ""}`}
-          aria-label={`${noun === "tasks" ? "Task" : "Chat"} list options`}
-          aria-haspopup="menu"
-          aria-expanded={sortMenuOpen}
-          onClick={() =>
-            setOpenMenu((current) => (current === "chats" ? null : "chats"))
-          }
-        >
-          <MoreHorizontal size={14} />
-        </button>
-        {sortMenuOpen ? (
-          <div
-            className="section-menu-popover"
-            role="menu"
-            aria-label={`${noun === "tasks" ? "Task" : "Chat"} list options`}
-          >
-            <button
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={showCodexChats}
-              onClick={() => onShowCodexChatsChange(!showCodexChats)}
-            >
-              <span className="section-menu-check" aria-hidden="true">
-                {showCodexChats ? <Check size={13} /> : null}
-              </span>
-              <span>Show Codex chats, including pinned</span>
-            </button>
-            <button
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={onlyRunningTasks}
-              onClick={() => onOnlyRunningTasksChange(!onlyRunningTasks)}
-            >
-              <span className="section-menu-check" aria-hidden="true">
-                {onlyRunningTasks ? <Check size={13} /> : null}
-              </span>
-              <span>Only running {noun}, including pinned</span>
-            </button>
-            {noun === "tasks" && !activityOrder ? (
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={groupByProject}
-                onClick={() => onGroupByProjectChange(!groupByProject)}
-              >
-                <span className="section-menu-check" aria-hidden="true">
-                  {groupByProject ? <Check size={13} /> : null}
-                </span>
-                <span>Group by project</span>
-              </button>
-            ) : null}
-            {!activityOrder ? SIDEBAR_TASK_SORT_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="menuitemradio"
-                aria-checked={sort === option.value}
-                onClick={() => {
-                  onSortChange(option.value);
-                  setOpenMenu(null);
-                }}
-              >
-                <span className="section-menu-check" aria-hidden="true">
-                  {sort === option.value ? <Check size={13} /> : null}
-                </span>
-                <span>{option.label}</span>
-              </button>
-            )) : <p className="empty-row">Latest activity first</p>}
-          </div>
-        ) : null}
-      </div>
-
       <div className="section-menu">
         <button
           type="button"
@@ -266,6 +189,59 @@ export function SidebarTaskListControls({
                 ) : null}
               </Fragment>
             ))}
+            <div className="section-menu-separator" role="separator" />
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={showCodexChats}
+              onClick={() => onShowCodexChatsChange(!showCodexChats)}
+            >
+              <span className="section-menu-check" aria-hidden="true">
+                {showCodexChats ? <Check size={13} /> : null}
+              </span>
+              <span>Show Codex chats, including pinned</span>
+            </button>
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={onlyRunningTasks}
+              onClick={() => onOnlyRunningTasksChange(!onlyRunningTasks)}
+            >
+              <span className="section-menu-check" aria-hidden="true">
+                {onlyRunningTasks ? <Check size={13} /> : null}
+              </span>
+              <span>Only running {noun}, including pinned</span>
+            </button>
+            {noun === "tasks" && !activityOrder ? (
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={groupByProject}
+                onClick={() => onGroupByProjectChange(!groupByProject)}
+              >
+                <span className="section-menu-check" aria-hidden="true">
+                  {groupByProject ? <Check size={13} /> : null}
+                </span>
+                <span>Group by project</span>
+              </button>
+            ) : null}
+            {!activityOrder ? SIDEBAR_TASK_SORT_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={sort === option.value}
+                onClick={() => {
+                  onSortChange(option.value);
+                  setOpenMenu(null);
+                }}
+              >
+                <span className="section-menu-check" aria-hidden="true">
+                  {sort === option.value ? <Check size={13} /> : null}
+                </span>
+                <span>{option.label}</span>
+              </button>
+            )) : null}
           </div>
         ) : null}
       </div>

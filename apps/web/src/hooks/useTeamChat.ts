@@ -1,4 +1,6 @@
 import { useHydratedClientChoice } from "../lib/client-choice-storage";
+import { useQuery } from "@tanstack/react-query";
+import { teamMemberQueryOptions } from "../lib/team-member-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ChatAttachment,
@@ -131,11 +133,14 @@ export function useTeamChat(input: {
   connection: ClientConnection | null;
   teamId: string | null;
   currentUserId: string | null;
+  accountScopeKey: string | null;
   refreshToken?: string | null;
 }) {
+  const memberQuery = useQuery(teamMemberQueryOptions(input));
+  const members = memberQuery.isError ? INITIAL_STATE.members : memberQuery.data ?? INITIAL_STATE.members;
   const [state, setState] = useState<TeamChatState>(INITIAL_STATE);
   const stateRef = useRef(state);
-  stateRef.current = state;
+  stateRef.current = { ...state, members };
   const [notificationMode, setNotificationModeState] =
     useState<TeamChatNotificationMode>(readTeamChatNotificationMode);
   useHydratedClientChoice(() => setNotificationModeState(readTeamChatNotificationMode()));
@@ -180,17 +185,16 @@ export function useTeamChat(input: {
     if (!input.connection || !input.teamId) {
       return { members: [], agents: [] };
     }
-    const [members, agents] = await Promise.all([
-      api.teamChatMembers(input.connection, input.teamId),
+    const [directory, agents] = await Promise.all([
+      memberQuery.refetch({ throwOnError: true }),
       api.teamChatAgents(input.connection, input.teamId),
     ]);
     setState((current) => ({
       ...current,
-      members: members.members,
       agents: agents.agents,
     }));
-    return { members: members.members, agents: agents.agents };
-  }, [input.connection, input.teamId]);
+    return { members: directory.data ?? [], agents: agents.agents };
+  }, [input.connection, input.teamId, memberQuery.refetch]);
 
   const refreshThread = useCallback(
     async (threadId?: string | null) => {
@@ -328,11 +332,9 @@ export function useTeamChat(input: {
         const baseline = await api.teamChatEvents(input.connection!, input.teamId!);
         if (cancelled) return;
         eventCursorRef.current = baseline.cursor;
-        const membersPromise = api.teamChatMembers(input.connection!, input.teamId!);
         const agentsPromise = api.teamChatAgents(input.connection!, input.teamId!);
         const general = await api.teamChatGeneral(input.connection!, input.teamId!);
-        const [members, agents, threads] = await Promise.all([
-          membersPromise,
+        const [agents, threads] = await Promise.all([
           agentsPromise,
           api.teamChatThreads(input.connection!, input.teamId!),
         ]);
@@ -350,7 +352,6 @@ export function useTeamChat(input: {
         const readDetail = clearTeamChatDetailUnreadCount(detail);
         setState((current) => ({
           ...current,
-          members: members.members,
           agents: agents.agents,
           threads: clearTeamChatThreadUnreadCount(threads.threads, selectedThreadId),
           selectedThreadId,
@@ -1212,6 +1213,8 @@ export function useTeamChat(input: {
 
   return {
     ...state,
+    members,
+    error: state.error ?? (memberQuery.error ? errorMessage(memberQuery.error) : null),
     currentUserId: input.currentUserId,
     notificationMode,
     incomingNotification,

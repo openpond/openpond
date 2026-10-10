@@ -10,11 +10,15 @@ export function DropdownSelect({
   compact,
   className,
   icon,
+  triggerContent,
   placement = "bottom",
   label,
   tooltip,
   searchable = false,
   floating = false,
+  floatingMenuWidth,
+  floatingMenuMaxHeight = 320,
+  openOnHover = false,
   onChange,
 }: {
   value: string;
@@ -23,16 +27,35 @@ export function DropdownSelect({
   compact?: boolean;
   className?: string;
   icon?: ReactNode;
+  triggerContent?: ReactNode;
   placement?: "bottom" | "top";
   label: string;
   tooltip?: string;
   searchable?: boolean;
   floating?: boolean;
+  floatingMenuWidth?: number;
+  floatingMenuMaxHeight?: number;
+  openOnHover?: boolean;
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const hoverPreview = useRef(false);
+  const hoverCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function cancelHoverClose() {
+    if (hoverCloseTimer.current !== null) clearTimeout(hoverCloseTimer.current);
+    hoverCloseTimer.current = null;
+  }
+  function closeMenu() {
+    cancelHoverClose();
+    hoverPreview.current = false;
+    setOpen(false);
+  }
+  useEffect(() => () => {
+    if (hoverCloseTimer.current !== null) clearTimeout(hoverCloseTimer.current);
+  }, []);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>();
   useLayoutEffect(() => {
     if (!open || !floating) return;
@@ -42,13 +65,14 @@ export function DropdownSelect({
       const below = window.innerHeight - rect.bottom - 12;
       const above = rect.top - 12;
       const upward = below < 180 && above > below;
-      setMenuStyle({ position: "fixed", left: Math.max(12, rect.left), width: Math.min(rect.width, window.innerWidth - 24), minWidth: 0, maxWidth: "calc(100vw - 24px)", right: "auto", top: upward ? "auto" : rect.bottom + 5, bottom: upward ? window.innerHeight - rect.top + 5 : "auto", maxHeight: Math.max(80, Math.min(320, upward ? above - 5 : below - 5)), overflowY: "auto", zIndex: 1000 });
+      const width = Math.min(floatingMenuWidth ?? rect.width, window.innerWidth - 24);
+      setMenuStyle({ position: "fixed", left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)), width, minWidth: 0, maxWidth: "calc(100vw - 24px)", right: "auto", top: upward ? "auto" : rect.bottom + 5, bottom: upward ? window.innerHeight - rect.top + 5 : "auto", maxHeight: Math.max(80, Math.min(floatingMenuMaxHeight, upward ? above - 5 : below - 5)), overflowY: "auto", zIndex: 1000 });
     }
     position();
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, true);
     return () => { window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
-  }, [open, floating]);
+  }, [open, floating, floatingMenuWidth, floatingMenuMaxHeight]);
   const selected = options.find((option) => option.value === value) ?? options[0];
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOptions = normalizedQuery
@@ -63,10 +87,14 @@ export function DropdownSelect({
       return;
     }
     function handlePointerDown(event: PointerEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!menuRef.current?.contains(event.target as Node)) closeMenu();
     }
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        const hadFocus = menuRef.current?.contains(document.activeElement);
+        closeMenu();
+        if (hadFocus) triggerRef.current?.focus();
+      }
     }
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -81,19 +109,44 @@ export function DropdownSelect({
       className={`dropdown-select ${className ?? ""} ${compact ? "compact" : ""} ${placement === "top" ? "open-up" : ""}`}
       data-tooltip={tooltip}
       ref={menuRef}
+      onPointerEnter={openOnHover ? (event) => {
+        if (disabled || event.pointerType === "touch") return;
+        cancelHoverClose();
+        if (!open) {
+          hoverPreview.current = true;
+          setOpen(true);
+        }
+      } : undefined}
+      onPointerLeave={openOnHover ? () => {
+        if (!hoverPreview.current) return;
+        cancelHoverClose();
+        hoverCloseTimer.current = setTimeout(() => {
+          if (!menuRef.current?.contains(document.activeElement)) closeMenu();
+        }, 180);
+      } : undefined}
     >
       <button
         type="button"
+        ref={triggerRef}
         className={`dropdown-trigger ${open ? "active" : ""}`}
         disabled={disabled}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          cancelHoverClose();
+          if (hoverPreview.current) {
+            hoverPreview.current = false;
+            setOpen(true);
+          } else if (open) closeMenu();
+          else setOpen(true);
+        }}
       >
-        {icon}
-        <span>{selected?.shortLabel ?? selected?.label ?? value}</span>
-        <ChevronDown size={14} />
+        {triggerContent ?? <>
+          {icon}
+          <span>{selected?.shortLabel ?? selected?.label ?? value}</span>
+          <ChevronDown size={14} />
+        </>}
       </button>
       {open && (
         <div className="dropdown-menu" role="menu" style={floating ? menuStyle : undefined}>
@@ -124,7 +177,7 @@ export function DropdownSelect({
                 if (option.disabled) return;
                 onChange(option.value);
                 setQuery("");
-                setOpen(false);
+                closeMenu();
               }}
             >
               <span>
