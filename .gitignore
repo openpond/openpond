@@ -48,6 +48,7 @@ apps/*/.next/
 apps/*/out/
 apps/*/release-assets/
 apps/*/release/
+apps/desktop/electron-builder.release.json
 packages/*/dist/
 packages/*/build/
 packages/*/coverage/
