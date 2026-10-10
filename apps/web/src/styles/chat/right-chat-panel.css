@@ -4,11 +4,11 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--surface-page);
 }
 
 .right-chat-topbar {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .right-chat-topbar .workspace-diff-tabs {
@@ -52,7 +52,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--surface-page);
 }
 
 .right-chat-thread {
@@ -132,7 +132,7 @@
 }
 
 .right-sidebar-home-topbar {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .right-sidebar-home-body {
@@ -156,10 +156,10 @@
   gap: 10px;
   min-width: 0;
   height: 42px;
-  border: 1px solid rgba(255, 255, 255, 0.055);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
-  color: #d9d9d9;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
   padding: 0 11px;
   font-size: 13px;
   text-align: left;
@@ -167,9 +167,9 @@
 
 .right-sidebar-home-row:hover:not(:disabled),
 .right-sidebar-home-row:focus-visible:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.11);
-  background: rgba(255, 255, 255, 0.055);
-  color: #f1f1f1;
+  border-color: var(--border-default);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .right-sidebar-home-row:disabled {
@@ -188,8 +188,8 @@
   justify-self: end;
   max-width: 104px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
-  color: #8f8f8f;
+  background: var(--state-hover);
+  color: var(--text-muted);
   padding: 2px 8px;
   font-size: 11px;
 }
@@ -199,12 +199,12 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--accent, #7aa2ff);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #7aa2ff) 38%, transparent);
+  background: var(--accent-info);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-info) 38%, transparent);
   animation: right-chat-status-pulse 2.65s ease-out infinite;
 }
 
 @keyframes right-chat-status-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #7aa2ff) 38%, transparent); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-info) 38%, transparent); }
   70%, 100% { box-shadow: 0 0 0 5px transparent; }
 }

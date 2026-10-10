@@ -15,7 +15,7 @@
 }
 
 .project-kind-icon.linked-cloud {
-  color: #b6c7d7;
+  color: var(--accent-info);
 }
 
 .project-kind-icon-cloud-badge {
@@ -23,11 +23,11 @@
 }
 
 .project-kind-icon-cloud-badge circle {
-  fill: #111820;
-  stroke: #67b7ff;
+  fill: var(--text-on-primary);
+  stroke: var(--accent-info);
 }
 
 .project-kind-icon-cloud-badge path {
   fill: none;
-  stroke: #67b7ff;
+  stroke: var(--accent-info);
 }

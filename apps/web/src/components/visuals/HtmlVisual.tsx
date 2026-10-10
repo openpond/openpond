@@ -1,13 +1,13 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { htmlVisualDocument } from "@openpond/contracts/html-visual-document";
-import { HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, type HtmlVisualReference, type HtmlVisualTheme } from "@openpond/contracts/html-visuals";
+import { HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, HTML_VISUAL_THEME_TOKENS, type HtmlVisualReference, type HtmlVisualTheme } from "@openpond/contracts/html-visuals";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import "./html-visual.css";
 
 import { OpenHtmlVisualContext } from "./html-visual-context";
 function theme(): HtmlVisualTheme {
   const styles = getComputedStyle(document.querySelector(".app-shell") ?? document.documentElement);
-  return Object.fromEntries(Object.entries(HTML_VISUAL_THEME).map(([key, fallback]) => [key, styles.getPropertyValue(key).trim() || fallback])) as HtmlVisualTheme;
+  return Object.fromEntries(Object.entries(HTML_VISUAL_THEME).map(([key, fallback]) => [key, key === "--color-scheme" ? document.documentElement.dataset.theme ?? "dark" : styles.getPropertyValue(HTML_VISUAL_THEME_TOKENS[key as keyof typeof HTML_VISUAL_THEME_TOKENS] ?? key).trim() || fallback])) as HtmlVisualTheme;
 }
 
 // Only published references reach this renderer. No tool argument or Markdown

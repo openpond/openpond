@@ -1,4 +1,5 @@
 import { PonderSettingsSection } from "./PonderSettingsSection";
+import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
 import { ConfigurationSettings } from "./ConfigurationSettings";
 import {
   lazy,
@@ -298,7 +299,7 @@ export function SettingsView({
       <SettingsNavigation section={section} onBack={goBack} onSectionChange={changeSection} />
       <main className={`settings-content ${section === "profile" || harnessSectionActive ? "settings-content-wide" : ""}`}>
         {section !== "configuration" ? <ConfigurationSettings connection={connection} bannerOnly onOpen={() => changeSection("configuration")} /> : null}
-        {section === "account" ? (
+        {section === "appearance" ? <AppearanceSettingsSection /> : section === "account" ? (
           <AccountSettingsSection
             payload={payload}
             connection={connection}

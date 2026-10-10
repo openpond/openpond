@@ -24,14 +24,14 @@
   border: 0;
   border-radius: 12px;
   background: transparent;
-  color: #8f8f8f;
+  color: var(--text-muted);
   padding: 0;
   text-align: left;
   cursor: pointer;
 }
 
 .activity-summary:hover {
-  color: #d9d9d9;
+  color: var(--text-secondary);
 }
 
 .activity-summary.static {
@@ -39,13 +39,13 @@
 }
 
 .activity-summary.static:hover {
-  color: #8f8f8f;
+  color: var(--text-muted);
 }
 
 .activity-summary.danger,
 .activity-summary.danger:hover,
 .activity-summary.danger .activity-summary-text {
-  color: #ff8d8d;
+  color: var(--status-danger);
 }
 
 .activity-summary-toggle {
@@ -96,12 +96,12 @@
 
 .activity-summary-text > small {
   flex: 0 0 auto;
-  color: #6f6f6f;
+  color: var(--text-disabled);
   font-size: 10px;
 }
 
 .activity-summary-text strong {
-  color: #d7e2ee;
+  color: var(--accent-info);
   font-weight: 650;
 }
 
@@ -110,27 +110,27 @@
 }
 
 .shell-token.command {
-  color: #a6e3ff;
+  color: var(--accent-info);
 }
 
 .shell-token.flag {
-  color: #ffd166;
+  color: var(--status-warning);
 }
 
 .shell-token.string {
-  color: #a7f3a7;
+  color: var(--status-success);
 }
 
 .shell-token.operator {
-  color: #ff8f8f;
+  color: var(--status-danger);
 }
 
 .shell-token.variable {
-  color: #c7a6ff;
+  color: var(--chart-2);
 }
 
 .shell-token.path {
-  color: #8fe9dd;
+  color: var(--accent-primary);
 }
 
 .activity-summary-code {
@@ -139,7 +139,7 @@
   min-width: 0;
   max-width: min(680px, 100%);
   overflow: hidden;
-  color: #d7e2ee;
+  color: var(--accent-info);
   text-overflow: ellipsis;
   vertical-align: bottom;
   white-space: nowrap;
@@ -148,7 +148,7 @@
 }
 
 .activity-summary.working .activity-summary-text > span {
-  background: linear-gradient(90deg, #818181 0%, #e7e7e7 42%, #818181 84%);
+  background: linear-gradient(90deg, var(--state-hover) 0%, var(--action-primary) 42%, var(--state-hover) 84%);
   background-size: 220% 100%;
   color: transparent;
   background-clip: text;
@@ -169,7 +169,7 @@
 @media (prefers-reduced-motion: reduce) {
   .activity-summary.working .activity-summary-text > span {
     animation: none;
-    color: #9b9b9b;
+    color: var(--text-muted);
   }
 }
 
@@ -178,10 +178,10 @@
   height: 20px;
   flex: 0 0 auto;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
   object-fit: cover;
-  background: #151515;
+  background: var(--surface-panel);
 }
 
 .activity-subagent-avatar-group {
@@ -200,7 +200,7 @@
 }
 
 .activity-subagent-avatar {
-  --subagent-avatar-fg: #e6e6e6;
+  --subagent-avatar-fg: var(--text-primary);
   position: relative;
   display: inline-grid;
   width: 28px;
@@ -233,39 +233,39 @@
   height: 5px;
   border: 0;
   border-radius: 50%;
-  background: #4ade80;
+  background: var(--status-success);
 }
 
 .activity-subagent-avatar[data-status="running"]::after {
-  background: #facc15;
+  background: var(--status-warning);
 }
 
 .activity-subagent-avatar[data-role="coding"] {
-  --subagent-avatar-fg: #8fb6c9;
+  --subagent-avatar-fg: var(--identity-coding);
 }
 
 .activity-subagent-avatar[data-role="research"] {
-  --subagent-avatar-fg: #8caf9c;
+  --subagent-avatar-fg: var(--identity-research);
 }
 
 .activity-subagent-avatar[data-role="review"] {
-  --subagent-avatar-fg: #b99aa0;
+  --subagent-avatar-fg: var(--identity-review);
 }
 
 .activity-subagent-avatar[data-role="test"] {
-  --subagent-avatar-fg: #87b7bd;
+  --subagent-avatar-fg: var(--identity-test);
 }
 
 .activity-subagent-avatar[data-role="docs"] {
-  --subagent-avatar-fg: #c2b27c;
+  --subagent-avatar-fg: var(--identity-docs);
 }
 
 .activity-subagent-avatar[data-role="planner"] {
-  --subagent-avatar-fg: #aaa0c7;
+  --subagent-avatar-fg: var(--identity-planner);
 }
 
 .activity-subagent-avatar[data-role="summarizer"] {
-  --subagent-avatar-fg: #b4b4b8;
+  --subagent-avatar-fg: var(--text-secondary);
 }
 
 .activity-subagent-avatar-svg {
@@ -277,11 +277,11 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2.35;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  filter: drop-shadow(0 1px 2px var(--shadow-color));
 }
 
 .activity-subagent-avatar-count {
-  color: #8e8e8e;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 800;
   line-height: 1;
@@ -307,7 +307,7 @@
 
 .activity-tool-summary {
   max-width: min(720px, 100%);
-  color: #7f8791;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.35;
 }
@@ -315,7 +315,7 @@
 .activity-tool-summary:hover,
 .activity-tool-summary:focus-visible {
   outline: 0;
-  color: #c8d0d9;
+  color: var(--text-secondary);
 }
 
 .activity-tool-summary .activity-summary-toggle {
@@ -324,7 +324,7 @@
 
 .activity-tool-row.danger .activity-tool-summary,
 .activity-tool-row.danger .activity-tool-details {
-  color: #ff8d8d;
+  color: var(--status-danger);
 }
 
 .activity-tool-details {
@@ -340,7 +340,7 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-family: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -357,8 +357,8 @@
   margin: 0;
   border: 0;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.025);
-  color: var(--muted-strong);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
   padding: 8px;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -375,8 +375,8 @@
   box-sizing: border-box;
   border: 0;
   border-radius: 10px;
-  background: #232323;
-  color: #d7e2ee;
+  background: var(--surface-raised);
+  color: var(--accent-info);
   box-shadow: none;
 }
 
@@ -384,7 +384,7 @@
   min-height: 31px;
   box-sizing: border-box;
   padding: 8px 9px 4px;
-  color: #aaaeb4;
+  color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -406,7 +406,7 @@
   min-height: 29px;
   box-sizing: border-box;
   padding: 4px 9px 8px;
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.5;
   text-align: right;
@@ -419,16 +419,16 @@
 }
 
 .activity-command-prompt {
-  color: #737a83;
+  color: var(--text-muted);
   user-select: none;
 }
 
 .activity-command-output {
-  color: #a8adb4;
+  color: var(--text-secondary);
 }
 
 .activity-detail-meta {
-  color: #777;
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.3;
 }
@@ -449,7 +449,7 @@
   box-sizing: border-box;
   border: 0;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--surface-raised);
   padding: 16px 5px 16px 9px;
   grid-column: 1 / -1;
   color: inherit;
@@ -458,8 +458,8 @@
 }
 
 .activity-artifact:hover {
-  border-color: rgba(255, 255, 255, 0.17);
-  background: rgba(255, 255, 255, 0.055);
+  border-color: var(--border-strong);
+  background: var(--state-hover);
 }
 
 .activity-artifact-name {
@@ -468,7 +468,7 @@
   gap: 7px;
   min-width: 0;
   max-width: min(420px, calc(100vw - 220px));
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 button.activity-artifact-name {
@@ -486,7 +486,7 @@ button.activity-artifact-name:focus-visible strong {
 }
 
 button.activity-artifact-name:focus-visible {
-  outline: 1px solid rgba(157, 213, 255, 0.7);
+  outline: 1px solid color-mix(in srgb, var(--accent-info) 70%, transparent);
   outline-offset: 3px;
 }
 
@@ -514,14 +514,14 @@ button.activity-artifact-name:focus-visible {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #8d9298;
+  color: var(--text-muted);
 }
 
 .activity-artifact-actions button:hover,
 .activity-artifact-actions button:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: #f0f0ee;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .activity-artifact-context-menu {
@@ -532,9 +532,9 @@ button.activity-artifact-name:focus-visible {
   overflow: hidden;
   border: 0;
   border-radius: 8px;
-  background: #191919;
+  background: var(--surface-floating);
   padding: 5px;
-  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.46);
+  box-shadow: 0 18px 54px var(--shadow-color);
 }
 
 .activity-artifact-context-menu button {
@@ -545,7 +545,7 @@ button.activity-artifact-name:focus-visible {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #e8e8e8;
+  color: var(--text-primary);
   padding: 0 9px;
   text-align: left;
   font-size: 12px;
@@ -554,7 +554,7 @@ button.activity-artifact-name:focus-visible {
 .activity-artifact-context-menu button:hover,
 .activity-artifact-context-menu button:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--state-hover);
 }
 
 .activity-artifact-image {
@@ -571,13 +571,13 @@ button.activity-artifact-name:focus-visible {
   overflow: hidden;
   border: 0;
   border-radius: 7px;
-  background: #171717;
-  color: var(--muted);
+  background: var(--surface-panel);
+  color: var(--text-muted);
   padding: 0;
 }
 
 .activity-artifact-image > button:not(:disabled):hover {
-  border-color: rgba(255, 255, 255, 0.26);
+  border-color: var(--border-strong);
 }
 
 .activity-artifact-image img {
@@ -589,7 +589,7 @@ button.activity-artifact-name:focus-visible {
 
 .activity-artifact-image > strong {
   overflow: hidden;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 10px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -600,9 +600,9 @@ button.activity-artifact-name:focus-visible {
   display: grid;
   grid-column: 1 / -1;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #171717;
+  background: var(--surface-panel);
 }
 
 .activity-artifact-video-stage {
@@ -610,7 +610,7 @@ button.activity-artifact-name:focus-visible {
   min-height: 180px;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: #090909;
+  background: var(--surface-page);
 }
 
 .activity-artifact-video-stage video,
@@ -626,7 +626,7 @@ button.activity-artifact-name:focus-visible {
 }
 
 .activity-artifact-video-loading {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -638,15 +638,15 @@ button.activity-artifact-name:focus-visible {
   height: 100%;
   place-items: center;
   border: 0;
-  background: rgba(0, 0, 0, 0.12);
-  color: #f4f4f4;
+  background: var(--state-selected);
+  color: var(--text-primary);
   padding: 0;
 }
 
 .activity-artifact-video-play svg {
   box-sizing: content-box;
   border-radius: 999px;
-  background: rgba(17, 17, 17, 0.78);
+  background: var(--state-selected);
   padding: 13px;
   backdrop-filter: blur(8px);
 }
@@ -668,7 +668,7 @@ button.activity-artifact-name:focus-visible {
   min-width: 0;
   border: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   padding: 0;
   text-align: left;
 }
@@ -697,7 +697,7 @@ button.activity-artifact-name:focus-visible {
 
 .activity-artifact-video-file code,
 .activity-artifact-video-file small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 9px;
 }
 
@@ -706,17 +706,17 @@ button.activity-artifact-name:focus-visible {
   flex: none;
   gap: 5px;
   align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--muted-strong);
+  background: var(--state-hover);
+  color: var(--text-secondary);
   padding: 5px 7px;
   font-size: 10px;
 }
 
 .activity-artifact-video-sidebar:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  color: var(--text);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .activity-child-message-group {
@@ -739,13 +739,13 @@ button.activity-artifact-name:focus-visible {
   min-width: 0;
   border: 0;
   border-radius: 8px;
-  background: rgba(143, 182, 201, 0.055);
+  background: color-mix(in srgb, var(--accent-info) 5.5%, transparent);
   padding: 11px 12px;
 }
 
 .activity-child-message.sent .activity-child-message-card {
-  border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.035);
+  border-color: var(--border-default);
+  background: var(--surface-raised);
 }
 
 .activity-child-message-header {
@@ -758,7 +758,7 @@ button.activity-artifact-name:focus-visible {
 
 .activity-child-message-header > small {
   flex: 0 0 auto;
-  color: #7d8f98;
+  color: var(--accent-info);
   font-size: 10px;
   text-transform: capitalize;
 }
@@ -768,7 +768,7 @@ button.activity-artifact-name:focus-visible {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: #a9cbd9;
+  color: var(--accent-info);
 }
 
 .activity-child-message-title svg {
@@ -778,7 +778,7 @@ button.activity-artifact-name:focus-visible {
 .activity-child-message-title strong {
   min-width: 0;
   overflow: hidden;
-  color: #d7e2ee;
+  color: var(--accent-info);
   font-size: 12px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -787,7 +787,7 @@ button.activity-artifact-name:focus-visible {
 
 .activity-child-message-card p {
   margin: 0;
-  color: #d7e2ee;
+  color: var(--accent-info);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -805,7 +805,7 @@ button.activity-artifact-name:focus-visible {
   width: fit-content;
   border: 0;
   background: transparent;
-  color: #9aa9b0;
+  color: var(--text-secondary);
   padding: 0;
   font-size: 11px;
   font-weight: 600;
@@ -814,7 +814,7 @@ button.activity-artifact-name:focus-visible {
 .activity-child-message-toggle:hover,
 .activity-child-message-toggle:focus-visible {
   outline: 0;
-  color: #d7e2ee;
+  color: var(--accent-info);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -825,7 +825,7 @@ button.activity-artifact-name:focus-visible {
 
 .activity-child-message-details summary {
   width: fit-content;
-  color: #8999a1;
+  color: var(--accent-info);
   cursor: pointer;
   font-size: 11px;
 }
@@ -845,13 +845,13 @@ button.activity-artifact-name:focus-visible {
 }
 
 .activity-child-message-facts small {
-  color: #7d8f98;
+  color: var(--accent-info);
   font-size: 10px;
   text-transform: uppercase;
 }
 
 .activity-child-message-facts code {
-  color: #c7d3dc;
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 11px;
   white-space: nowrap;
@@ -867,10 +867,10 @@ button.activity-artifact-name:focus-visible {
 .activity-child-message-refs span {
   max-width: 100%;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #aeb8bd;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
   padding: 3px 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -880,7 +880,7 @@ button.activity-artifact-name:focus-visible {
 .activity-subagent-detail-avatar {
   width: 25px;
   height: 25px;
-  box-shadow: 0 0 0 2px #202020;
+  box-shadow: 0 0 0 2px var(--shadow-color);
 }
 
 .activity-image-preview {
@@ -888,14 +888,14 @@ button.activity-artifact-name:focus-visible {
   width: 96px;
   aspect-ratio: 1;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  background: #131313;
+  background: var(--surface-panel);
   padding: 0;
 }
 
 .activity-image-preview:hover {
-  border-color: rgba(255, 255, 255, 0.26);
+  border-color: var(--border-strong);
 }
 
 .activity-image-preview img {
@@ -928,7 +928,7 @@ button.activity-artifact-name:focus-visible {
 
 .start-panel h1 {
   margin: 0;
-  color: #f8f8f8;
+  color: var(--text-primary);
   text-align: center;
   font-size: clamp(24px, 3vw, 29px);
   font-weight: 500;

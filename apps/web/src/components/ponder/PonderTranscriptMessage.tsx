@@ -1,6 +1,6 @@
 import type { ClientConnection } from "../../api/api-client";
 import type { ReactNode } from "react";
-import { MessageFooter } from "../chat/MessageFooter";
+import { MessageFooter, MessageTimestamp } from "../chat/MessageFooter";
 import { MessageRow } from "../chat/Messages";
 import type { PonderLinkedWork } from "./PonderResultAttention";
 import {
@@ -83,6 +83,7 @@ export function PonderTranscriptMessage({
       />
       {local ? (
         <div className="ponder-message-destination">
+          <MessageTimestamp timestamp={message.createdAt} />
           <span>
             {local.direction === "sent" ? "Sent to" : "Received from"}{" "}
           </span>
@@ -102,6 +103,7 @@ export function PonderTranscriptMessage({
       ) : null}
       {presentation ? (
         <div className="ponder-message-destination">
+          <MessageTimestamp timestamp={message.createdAt} />
           <span>
             {presentation.direction === "sent"
               ? "Sent to"
@@ -123,7 +125,7 @@ export function PonderTranscriptMessage({
         </div>
       ) : null}
       {agentSources}
-      {message.role === "assistant" ? <MessageFooter content={content} timestamp={message.createdAt} kvCacheSummary={message.metadata.kvCacheSummary} /> : null}
+      {!local && !presentation && message.role === "assistant" ? <MessageFooter content={content} timestamp={message.createdAt} kvCacheSummary={message.metadata.kvCacheSummary} /> : null}
       {presentation?.outputFileIds.map((fileId) => (
         <button key={fileId} type="button" onClick={() => onOpenOutput(fileId)}>
           {work

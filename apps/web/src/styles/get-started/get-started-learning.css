@@ -5,7 +5,7 @@
   min-width: 0;
   justify-self: center;
   padding: 34px 0 54px;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .get-started-view.course-player-open {
@@ -39,7 +39,7 @@
 .get-started-playlist-card {
   position: relative;
   min-width: 0;
-  color: #f5f5f5;
+  color: var(--text-primary);
 }
 
 .get-started-playlist-open {
@@ -55,7 +55,7 @@
 }
 
 .get-started-playlist-open:focus-visible {
-  outline: 2px solid rgba(103, 232, 249, 0.72);
+  outline: 2px solid color-mix(in srgb, var(--accent-primary) 72%, transparent);
   outline-offset: 4px;
 }
 
@@ -70,10 +70,10 @@
   width: calc(100% - 12px);
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: #0d0e11;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.26);
+  background: var(--surface-page);
+  box-shadow: 0 8px 20px var(--shadow-color);
   transition: transform 220ms ease;
 }
 
@@ -122,10 +122,10 @@
   right: 13px;
   bottom: 11px;
   z-index: 3;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: rgba(5, 5, 5, 0.88);
-  color: #c7c7c7;
+  background: var(--state-selected);
+  color: var(--text-secondary);
   padding: 4px 7px;
   font-size: 10px;
   font-weight: 600;
@@ -139,7 +139,7 @@
 
 .get-started-playlist-copy h1 {
   margin: 0;
-  color: #f5f5f5;
+  color: var(--text-primary);
   font-size: 18px;
   font-weight: 620;
   letter-spacing: -0.025em;
@@ -158,10 +158,10 @@
   align-items: center;
   flex: 0 0 auto;
   min-height: 17px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
-  color: #a5a5a5;
+  background: var(--state-hover);
+  color: var(--text-muted);
   padding: 1px 6px;
   font-size: 9px;
   font-weight: 600;
@@ -169,7 +169,7 @@
 }
 
 .get-started-playlist-status:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -178,7 +178,7 @@
   min-height: 38px;
   margin: 0;
   overflow: hidden;
-  color: #858585;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.55;
   -webkit-box-orient: vertical;
@@ -188,7 +188,7 @@
 .get-started-course-card {
   position: relative;
   min-width: 0;
-  color: #f5f5f5;
+  color: var(--text-primary);
 }
 
 .get-started-course-open {
@@ -204,7 +204,7 @@
 }
 
 .get-started-course-open:focus-visible {
-  outline: 2px solid rgba(103, 232, 249, 0.72);
+  outline: 2px solid color-mix(in srgb, var(--accent-primary) 72%, transparent);
   outline-offset: 4px;
 }
 
@@ -213,7 +213,7 @@
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: 12px 12px 0 0;
-  background: #0d0e11;
+  background: var(--surface-page);
 }
 
 .get-started-course-poster {
@@ -221,7 +221,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  background: #0d0e11;
+  background: var(--surface-page);
   transition: transform 280ms ease;
 }
 
@@ -238,11 +238,11 @@
   place-items: center;
   width: 42px;
   height: 42px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  background: rgba(8, 8, 8, 0.82);
-  color: #f5f5f5;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36);
+  background: var(--state-selected);
+  color: var(--text-primary);
+  box-shadow: 0 12px 32px var(--shadow-color);
   transform: translate(-50%, -50%);
   transition: transform 160ms ease, background 160ms ease;
 }
@@ -255,10 +255,10 @@
   place-items: center;
   min-width: 28px;
   height: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: rgba(5, 5, 5, 0.86);
-  color: #c7c7c7;
+  background: var(--state-selected);
+  color: var(--text-secondary);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   font-weight: 620;
@@ -266,7 +266,7 @@
 
 .get-started-course-card:hover .get-started-course-play-icon,
 .get-started-course-card:focus-within .get-started-course-play-icon {
-  background: rgba(20, 20, 20, 0.94);
+  background: var(--state-hover);
   transform: translate(-50%, -50%) scale(1.05);
 }
 
@@ -280,7 +280,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #888;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 500;
 }
@@ -290,7 +290,7 @@
 .get-started-course-copy h3,
 .get-started-section-heading h2 {
   margin: 0;
-  color: #f5f5f5;
+  color: var(--text-primary);
   font-weight: 620;
   letter-spacing: -0.025em;
 }
@@ -311,7 +311,7 @@
   min-height: 38px;
   margin: 0;
   overflow: hidden;
-  color: #858585;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.55;
   -webkit-box-orient: vertical;
@@ -325,7 +325,7 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  background: #050505;
+  background: var(--surface-page);
   padding: 16px;
 }
 
@@ -372,13 +372,13 @@
 }
 
 .get-started-course-player-header strong {
-  color: #f5f5f5;
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
 }
 
 .get-started-course-player-header span {
-  color: #858585;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -397,23 +397,23 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #aaa;
+  color: var(--text-muted);
   padding: 0;
   cursor: pointer;
 }
 
 .get-started-course-player-actions button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f5f5f5;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .get-started-course-player-actions button:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
 .get-started-course-player-actions button:disabled {
-  color: #3f3f3f;
+  color: var(--text-on-primary);
   cursor: default;
 }
 
@@ -424,7 +424,7 @@
   min-height: 0;
   overflow: hidden;
   border-radius: 8px;
-  background: #0d0e11;
+  background: var(--surface-page);
 }
 
 .get-started-course-player-video {
@@ -432,7 +432,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #0d0e11;
+  background: var(--surface-page);
 }
 
 .get-started-learning-panel {
@@ -440,7 +440,7 @@
 }
 
 .get-started-learning-panel-tabs {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .get-started-learning-panel-toolbar {
@@ -449,7 +449,7 @@
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   padding: 0 10px 0 12px;
 }
 
@@ -467,13 +467,13 @@
 }
 
 .get-started-learning-panel-toolbar strong {
-  color: #e4e4e4;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
 }
 
 .get-started-learning-panel-toolbar small {
-  color: #747474;
+  color: var(--text-muted);
   font-size: 9px;
 }
 
@@ -484,7 +484,7 @@
   flex: 0 0 auto;
   border: 0;
   background: transparent;
-  color: #777;
+  color: var(--text-muted);
   padding: 4px 0;
   font-size: 9px;
   cursor: pointer;
@@ -492,7 +492,7 @@
 
 .get-started-learning-autoplay:hover,
 .get-started-learning-autoplay.active {
-  color: #d4d4d4;
+  color: var(--text-secondary);
 }
 
 .get-started-learning-autoplay > i {
@@ -500,7 +500,7 @@
   width: 23px;
   height: 13px;
   border-radius: 999px;
-  background: #343434;
+  background: var(--state-hover);
   transition: background 140ms ease;
 }
 
@@ -512,21 +512,21 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #898989;
+  background: var(--state-hover);
   transition: background 140ms ease, transform 140ms ease;
 }
 
 .get-started-learning-autoplay.active > i {
-  background: #555;
+  background: var(--state-selected);
 }
 
 .get-started-learning-autoplay.active > i::after {
-  background: #eee;
+  background: var(--action-primary);
   transform: translateX(10px);
 }
 
 .get-started-learning-autoplay:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -584,14 +584,14 @@
   border: 0;
   border-radius: 6px 0 0 6px;
   background: transparent;
-  color: #a0a0a0;
+  color: var(--text-muted);
   padding: 6px;
   text-align: left;
   cursor: pointer;
 }
 
 .get-started-learning-lesson-button[aria-current="true"] {
-  color: #f1f1f1;
+  color: var(--text-primary);
 }
 
 .get-started-learning-script-button {
@@ -602,17 +602,17 @@
   border: 0;
   border-radius: 0 6px 6px 0;
   background: transparent;
-  color: #686868;
+  color: var(--text-disabled);
   padding: 0;
   cursor: pointer;
 }
 
 .get-started-learning-script-button:hover {
-  color: #dedede;
+  color: var(--text-secondary);
 }
 
 .get-started-learning-script-button:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -622,23 +622,23 @@
   margin: 0 6px 3px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.075);
+  background: var(--state-hover);
 }
 
 .get-started-learning-progress > i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #8c8c8c;
+  background: var(--state-hover);
   transition: width 220ms linear;
 }
 
 .get-started-learning-progress.complete > i {
-  background: #c2c2c2;
+  background: var(--action-primary);
 }
 
 .get-started-learning-full-video {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   padding: 6px 7px 7px;
 }
 
@@ -651,7 +651,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #999;
+  color: var(--text-muted);
   padding: 7px 6px;
   text-align: left;
   cursor: pointer;
@@ -659,11 +659,11 @@
 
 .get-started-learning-full-video > button:hover,
 .get-started-learning-full-video > button[aria-current="true"] {
-  color: #f1f1f1;
+  color: var(--text-primary);
 }
 
 .get-started-learning-full-video > button:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.7);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
@@ -673,7 +673,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--state-hover);
 }
 
 .get-started-learning-full-video > button > span:last-child {
@@ -688,7 +688,7 @@
 }
 
 .get-started-learning-full-video small {
-  color: #747474;
+  color: var(--text-muted);
   font-size: 9px;
 }
 
@@ -707,7 +707,7 @@
 }
 
 .get-started-learning-panel-body li small {
-  color: #777;
+  color: var(--text-muted);
   font-size: 9px;
 }
 
@@ -739,7 +739,7 @@
 
 .make-agent-steps h3 {
   margin: 0 0 5px;
-  color: #d8d8d8;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 620;
 }
@@ -759,7 +759,7 @@
 }
 
 .make-agent-steps li > span {
-  color: #6f6f6f;
+  color: var(--text-disabled);
   font-size: 9px;
   line-height: 1.4;
 }
@@ -776,7 +776,7 @@
 
 .make-agent-steps li p {
   margin: 0;
-  color: #858585;
+  color: var(--text-muted);
   font-size: 10px;
   line-height: 1.4;
 }
@@ -787,14 +787,14 @@
   justify-items: center;
   gap: 9px;
   min-height: 0;
-  color: #777;
+  color: var(--text-muted);
   padding: 20px;
   text-align: center;
   font-size: 11px;
 }
 
 .get-started-script-status.error {
-  color: #a3a3a3;
+  color: var(--text-muted);
 }
 
 .get-started-script-status button {
@@ -802,10 +802,10 @@
   align-items: center;
   gap: 6px;
   min-height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #d0d0d0;
+  background: var(--state-hover);
+  color: var(--text-secondary);
   padding: 0 10px;
   font-size: 10px;
   cursor: pointer;
@@ -822,7 +822,7 @@
 .get-started-section-heading {
   display: grid;
   width: 100%;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border-default);
   padding-bottom: 10px;
 }
 

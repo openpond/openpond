@@ -18,7 +18,7 @@
   overflow: auto;
   overflow-anchor: auto;
   padding: 22px var(--chat-thread-inline-padding) calc(var(--chat-composer-reserve) + 28px + var(--chat-sent-message-space, 0px));
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
@@ -37,12 +37,12 @@
 .chat-thread::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--scrollbar-thumb);
   background-clip: padding-box;
 }
 
 .chat-thread::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.34);
+  background: var(--scrollbar-hover);
   background-clip: padding-box;
 }
 
@@ -70,8 +70,8 @@
   max-width: min(620px, 72%);
   padding: 10px 15px;
   border-radius: 20px;
-  background: #242424;
-  color: #fff;
+  background: var(--state-hover);
+  color: var(--text-primary);
   word-break: break-word;
   font-size: 14px;
   line-height: 1.55;
@@ -100,7 +100,7 @@
   justify-self: end;
   border: 0;
   background: transparent;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -109,7 +109,7 @@
 }
 
 .user-message-show-more:hover {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .user-message-attachments {
@@ -122,7 +122,7 @@
 .user-message-attachments.compact {
   gap: 4px 10px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .user-message-attachment {
@@ -131,10 +131,10 @@
   gap: 5px;
   max-width: 220px;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #e9e9e9;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 4px 7px;
   font-size: 12px;
   line-height: 1.2;
@@ -151,8 +151,8 @@ button.user-message-attachment {
 
 .user-message-attachment.openable:hover:not(:disabled),
 .user-message-attachment.openable:focus-visible {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-strong);
+  background: var(--state-hover);
 }
 
 .user-message-attachment.openable:disabled {
@@ -162,7 +162,7 @@ button.user-message-attachment {
 
 .user-message-attachment svg {
   flex: 0 0 auto;
-  color: #b6d8ff;
+  color: var(--accent-info);
 }
 
 .user-message-attachment span {
@@ -174,7 +174,7 @@ button.user-message-attachment {
 
 .user-message-attachment small {
   flex: 0 0 auto;
-  color: #a4a4a4;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -183,25 +183,25 @@ button.user-message-attachment {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--text-secondary);
   padding: 0;
   font-size: 11px;
 }
 
 .user-message-attachments.compact .user-message-attachment svg {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-muted);
 }
 
 .user-message-attachments.compact .user-message-attachment small {
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--text-muted);
   font-size: 10px;
 }
 
 .user-message-attachments.compact .user-message-attachment.openable:hover:not(:disabled),
 .user-message-attachments.compact .user-message-attachment.openable:focus-visible {
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .user-message-image-attachment {
@@ -213,14 +213,14 @@ button.user-message-attachment {
   overflow: hidden;
   border: 0;
   border-radius: 8px;
-  background: #191919;
-  color: #b6d8ff;
+  background: var(--surface-panel);
+  color: var(--accent-info);
   padding: 0;
   cursor: zoom-in;
 }
 
 .user-message-image-attachment:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -240,7 +240,7 @@ button.user-message-attachment {
 }
 
 .assistant-message {
-  color: #f5f5f3;
+  color: var(--text-primary);
   word-break: break-word;
   font-size: 14px;
   line-height: 1.6;
@@ -253,8 +253,8 @@ button.user-message-attachment {
   padding: 16px;
   border: 0;
   border-radius: 16px;
-  background: linear-gradient(145deg, #202020, #1b1b1b);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  background: linear-gradient(145deg, var(--surface-raised), var(--surface-panel));
+  box-shadow: 0 12px 32px var(--shadow-color);
 }
 
 .user-question-header {
@@ -270,8 +270,8 @@ button.user-message-attachment {
   width: 30px;
   height: 30px;
   border-radius: 9px;
-  background: rgba(126, 200, 255, 0.11);
-  color: #9dd5ff;
+  background: color-mix(in srgb, var(--accent-info) 11%, transparent);
+  color: var(--accent-info);
 }
 
 .user-question-heading {
@@ -281,7 +281,7 @@ button.user-message-attachment {
 }
 
 .user-question-eyebrow {
-  color: #9dd5ff;
+  color: var(--accent-info);
   font-size: 11px;
   font-weight: 650;
   letter-spacing: normal;
@@ -290,7 +290,7 @@ button.user-message-attachment {
 }
 
 .user-question-heading strong {
-  color: #f7f7f5;
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 620;
   line-height: 1.4;
@@ -299,7 +299,7 @@ button.user-message-attachment {
 .user-question-card p,
 .user-question-card small {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .user-question-reason {
@@ -319,10 +319,10 @@ button.user-message-attachment {
   gap: 10px;
   width: 100%;
   padding: 10px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--border-default);
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.025);
-  color: #f0f0ee;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   text-align: left;
   transition:
     border-color 120ms ease,
@@ -333,8 +333,8 @@ button.user-message-attachment {
 .user-question-options button:hover:not(:disabled),
 .user-question-options button:focus-visible {
   outline: 0;
-  border-color: rgba(126, 200, 255, 0.45);
-  background: rgba(126, 200, 255, 0.075);
+  border-color: color-mix(in srgb, var(--accent-info) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-info) 7.5%, transparent);
 }
 
 .user-question-options button:active:not(:disabled) {
@@ -351,9 +351,9 @@ button.user-message-attachment {
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  color: #bfc3c7;
+  color: var(--text-secondary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -382,7 +382,7 @@ button.user-message-attachment {
 }
 
 .user-question-freeform label {
-  color: #a8a8a8;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -395,18 +395,18 @@ button.user-message-attachment {
   flex: 1;
   min-width: 0;
   height: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
   outline: 0;
-  background: rgba(0, 0, 0, 0.16);
-  color: #f7f7f5;
+  background: var(--state-selected);
+  color: var(--text-primary);
   padding: 0 11px;
   font-size: 12px;
 }
 
 .user-question-freeform input:focus-visible {
-  border-color: rgba(126, 200, 255, 0.52);
-  box-shadow: 0 0 0 3px rgba(126, 200, 255, 0.08);
+  border-color: color-mix(in srgb, var(--accent-info) 52%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 8%, transparent);
 }
 
 .user-question-freeform button {
@@ -414,15 +414,16 @@ button.user-message-attachment {
   height: 36px;
   border: 0;
   border-radius: 9px;
-  background: #f1f1ef;
-  color: #171717;
+  background: var(--action-primary);
+  color: var(--text-on-primary);
   padding: 0 13px;
   font-size: 12px;
   font-weight: 650;
 }
 
 .user-question-freeform button:hover:not(:disabled) {
-  background: #ffffff;
+  background: var(--action-primary);
+  color: var(--text-on-primary);
 }
 
 .user-question-freeform button:disabled {
@@ -435,14 +436,14 @@ button.user-message-attachment {
   padding: 2px 0;
   border: 0;
   background: transparent;
-  color: #8f8f8f;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .user-question-dismiss:hover:not(:disabled),
 .user-question-dismiss:focus-visible {
   outline: 0;
-  color: #d7d7d5;
+  color: var(--text-secondary);
 }
 
 .user-question-resolution {
@@ -450,7 +451,7 @@ button.user-message-attachment {
   align-items: center;
   gap: 7px;
   padding-left: 41px;
-  color: #90d7ae;
+  color: var(--status-success);
 }
 
 @media (max-width: 640px) {
@@ -480,10 +481,10 @@ button.user-message-attachment {
   gap: 6px;
   min-width: 0;
   min-height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: var(--panel-soft);
-  color: #d5d8dd;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
   padding: 0 10px;
   font-size: 12px;
   font-weight: 650;
@@ -531,9 +532,9 @@ button.user-message-attachment {
 
 .assistant-source-pill:hover,
 .assistant-source-pill:focus-visible {
-  border-color: rgba(126, 200, 255, 0.44);
-  background: color-mix(in srgb, #7ec8ff 9%, var(--panel-soft));
-  color: #f0f8ff;
+  border-color: color-mix(in srgb, var(--accent-info) 44%, transparent);
+  background: color-mix(in srgb, var(--status-info-fill) 9%, var(--surface-raised));
+  color: var(--text-primary);
   outline: 0;
 }
 
@@ -550,7 +551,7 @@ button.user-message-attachment {
 }
 
 .assistant-source-fallback-icon {
-  color: #a7d7ff;
+  color: var(--accent-info);
 }
 
 .assistant-source-pill span {
@@ -583,8 +584,8 @@ button.user-message-attachment {
   min-width: 0;
   border: 0;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.045);
-  color: #f4f4f5;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 10px 11px;
 }
 
@@ -597,12 +598,12 @@ button.user-message-attachment {
 }
 
 .chat-create-receipt-heading svg {
-  color: #8fe9dd;
+  color: var(--accent-primary);
 }
 
 .chat-create-receipt-heading span {
   overflow: hidden;
-  color: #ffffff;
+  color: var(--text-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
@@ -611,14 +612,14 @@ button.user-message-attachment {
 
 .chat-create-receipt-heading small,
 .chat-create-receipt-facts span {
-  color: #aab3bf;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 550;
 }
 
 .chat-create-receipt p {
   margin: 0;
-  color: #c6ccd4;
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -634,7 +635,7 @@ button.user-message-attachment {
   overflow: hidden;
   max-width: 100%;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--state-hover);
   padding: 4px 6px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -673,18 +674,18 @@ button.user-message-attachment {
   display: grid;
   gap: 8px;
   margin: 0;
-  border-left: 3px solid color-mix(in srgb, var(--muted) 55%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--text-muted) 55%, transparent);
   padding: 1px 0 1px 14px;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
 }
 
 .markdown-blockquote .markdown-heading {
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .markdown-heading {
   margin: 4px 0 0;
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 15px;
   font-weight: 650;
   line-height: 1.35;
@@ -712,7 +713,7 @@ button.user-message-attachment {
   width: 14px;
   height: 14px;
   margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border-strong);
   border-radius: 3px;
   background: transparent;
   transform: translateY(4px);
@@ -724,8 +725,9 @@ button.user-message-attachment {
 }
 
 .markdown-checkbox:checked {
-  border-color: #8fe9dd;
-  background: #8fe9dd;
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-fill);
+  color: var(--text-on-accent);
 }
 
 .markdown-checkbox:checked::after {
@@ -735,7 +737,7 @@ button.user-message-attachment {
   top: 1px;
   width: 4px;
   height: 8px;
-  border: solid #0f1416;
+  border: solid var(--border-strong);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -749,8 +751,8 @@ button.user-message-attachment {
 
 .markdown-message :not(pre) > code {
   border-radius: 4px;
-  background: #2b2b2b;
-  color: #f0f0ee;
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 2px 5px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.88em;
@@ -764,8 +766,8 @@ button.user-message-attachment {
   overflow: hidden;
   border: 0;
   border-radius: 18px;
-  background: #222222;
-  color: #eeeeec;
+  background: var(--surface-raised);
+  color: var(--text-primary);
 }
 
 .markdown-code-header {
@@ -774,8 +776,8 @@ button.user-message-attachment {
   justify-content: space-between;
   min-height: 40px;
   padding: 0 14px 0 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
-  color: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
   font-size: 12px;
 }
 
@@ -803,15 +805,15 @@ button.user-message-attachment {
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--text-secondary);
 }
 
 .markdown-code-action:hover,
 .markdown-code-action:focus-visible,
 .markdown-code-action[aria-pressed="true"] {
   outline: 0;
-  background: rgba(255, 255, 255, 0.075);
-  color: #ffffff;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .markdown-code-content {
@@ -821,7 +823,7 @@ button.user-message-attachment {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.65;
-  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
@@ -842,7 +844,7 @@ button.user-message-attachment {
 .markdown-table-wrap {
   max-width: min(860px, calc(100vw - 140px));
   overflow: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
 }
 
@@ -850,21 +852,21 @@ button.user-message-attachment {
   width: 100%;
   min-width: max-content;
   border-collapse: collapse;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-raised);
   font-size: 13px;
 }
 
 .markdown-table th,
 .markdown-table td {
   padding: 7px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border-default);
   text-align: left;
   vertical-align: top;
 }
 
 .markdown-table th {
-  background: rgba(255, 255, 255, 0.06);
-  color: #ffffff;
+  background: var(--state-hover);
+  color: var(--text-primary);
   font-weight: 650;
 }
 
@@ -873,7 +875,7 @@ button.user-message-attachment {
 }
 
 .markdown-message a {
-  color: #7ec8ff;
+  color: var(--accent-info);
   text-decoration: none;
 }
 
@@ -882,13 +884,13 @@ button.user-message-attachment {
 }
 
 .markdown-message a.markdown-file-link {
-  color: #7ec8ff;
+  color: var(--accent-info);
   text-decoration: none;
 }
 
 .markdown-message a.markdown-file-link:hover,
 .markdown-message a.markdown-file-link:focus-visible {
-  color: #9ad4ff;
+  color: var(--accent-info);
   text-decoration: none;
 }
 
@@ -904,7 +906,7 @@ button.user-message-attachment {
 }
 
 .markdown-message a.markdown-image-link {
-  color: #8fd6ba;
+  color: var(--status-success);
 }
 
 .markdown-message a.markdown-image-link::after {
@@ -926,9 +928,9 @@ button.user-message-attachment {
   max-height: 460px;
   overflow: hidden;
   margin: 8px 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #151515;
+  background: var(--surface-panel);
   padding: 0;
   color: inherit;
   cursor: zoom-in;
@@ -951,8 +953,8 @@ button.user-message-attachment {
   width: 100%;
   height: 100%;
   background:
-    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent),
-    rgba(255, 255, 255, 0.035);
+    linear-gradient(90deg, transparent, var(--state-hover), transparent),
+    var(--surface-raised);
 }
 
 .markdown-file-image-reference {
@@ -972,9 +974,9 @@ button.user-message-attachment {
   min-height: 72px;
   max-height: 260px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #151515;
+  background: var(--surface-panel);
   padding: 0;
   color: inherit;
   cursor: zoom-in;
@@ -1002,8 +1004,8 @@ button.user-message-attachment {
   width: 100%;
   height: 100%;
   background:
-    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent),
-    rgba(255, 255, 255, 0.035);
+    linear-gradient(90deg, transparent, var(--state-hover), transparent),
+    var(--surface-raised);
 }
 
 .markdown-image-hover-preview {
@@ -1014,11 +1016,11 @@ button.user-message-attachment {
   width: 236px;
   pointer-events: none;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #111;
+  background: var(--surface-page);
   padding: 7px;
-  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.48);
+  box-shadow: 0 18px 54px var(--shadow-color);
 }
 
 .markdown-image-hover-preview img {
@@ -1027,7 +1029,7 @@ button.user-message-attachment {
   aspect-ratio: 16 / 10;
   border-radius: 5px;
   object-fit: cover;
-  background: #080808;
+  background: var(--surface-page);
 }
 
 .markdown-image-hover-preview.unavailable {
@@ -1039,15 +1041,15 @@ button.user-message-attachment {
   place-items: center;
   min-height: 80px;
   border-radius: 5px;
-  background: #171717;
-  color: #9d9d9d;
+  background: var(--surface-panel);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .markdown-image-hover-preview span {
   min-width: 0;
   overflow: hidden;
-  color: #d6d6d6;
+  color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -1062,9 +1064,9 @@ button.user-message-attachment {
   overflow: hidden;
   border: 0;
   border-radius: 8px;
-  background: #141414;
+  background: var(--surface-floating);
   padding: 5px;
-  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.46);
+  box-shadow: 0 18px 54px var(--shadow-color);
 }
 
 .markdown-link-menu button {
@@ -1074,18 +1076,18 @@ button.user-message-attachment {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #e8e8e8;
+  color: var(--text-primary);
   padding: 0 9px;
   text-align: left;
   font-size: 12px;
 }
 
 .markdown-link-menu button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--state-hover);
 }
 
 .error-message {
-  color: #ff8d8d;
+  color: var(--status-danger);
 }
 
 .quota-error-card {
@@ -1095,8 +1097,8 @@ button.user-message-attachment {
   width: min(560px, 100%);
   border: 0;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #f4f4f5;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   padding: 12px;
   line-height: 1.45;
 }
@@ -1107,8 +1109,8 @@ button.user-message-attachment {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #e5e5e5;
+  background: var(--state-hover);
+  color: var(--text-secondary);
 }
 
 .quota-error-card-body {
@@ -1118,14 +1120,14 @@ button.user-message-attachment {
 }
 
 .quota-error-card-body strong {
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 700;
 }
 
 .quota-error-card-body p {
   margin: 0;
-  color: #c9c9c9;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -1136,10 +1138,10 @@ button.user-message-attachment {
   justify-self: start;
   gap: 6px;
   min-height: 30px;
-  border: 1px solid #ffffff;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: #ffffff;
-  color: #111111;
+  background: var(--action-primary);
+  color: var(--text-on-primary);
   padding: 0 10px;
   text-decoration: none;
   font-size: 12px;
@@ -1148,8 +1150,8 @@ button.user-message-attachment {
 
 .quota-error-card-action:hover,
 .quota-error-card-action:focus-visible {
-  border-color: #f0f0f0;
-  background: #f0f0f0;
+  border-color: var(--border-strong);
+  background: var(--action-primary);
 }
 
 .assistant-message-footer {
@@ -1160,7 +1162,7 @@ button.user-message-attachment {
   min-width: 0;
   margin-top: -5px;
   flex-wrap: wrap;
-  color: #767676;
+  color: var(--text-muted);
 }
 
 .message-row.user.task-message-row {
@@ -1174,7 +1176,7 @@ button.user-message-attachment {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 6px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
   max-width: min(620px, 72%);
@@ -1185,13 +1187,13 @@ button.user-message-attachment {
   background: none;
   border: 0;
   padding: 0;
-  color: #64c7d6;
+  color: var(--accent-primary);
   text-align: left;
   cursor: pointer;
 }
 
 .task-message-attribution button:focus-visible {
-  outline: 2px solid #64c7d6;
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -1204,14 +1206,14 @@ button.user-message-attachment {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #767676;
+  color: var(--text-muted);
   padding: 0;
 }
 
 .message-copy-button:hover:not(:disabled),
 .message-copy-button:focus-visible {
-  background: rgba(255, 255, 255, 0.07);
-  color: #d8d8d8;
+  background: var(--state-hover);
+  color: var(--text-secondary);
   outline: 0;
 }
 
@@ -1246,8 +1248,8 @@ button.user-message-attachment {
   overflow: hidden;
   border: 0;
   border-radius: 8px;
-  background: #232323;
-  color: #f1f1f1;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   font-size: 13px;
 }
 
@@ -1284,7 +1286,7 @@ button.user-message-attachment {
 
 .change-summary-file {
   display: grid;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--border-default);
 }
 
 .change-summary-file-trigger {
@@ -1296,7 +1298,7 @@ button.user-message-attachment {
 }
 
 .change-summary-file-trigger:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--state-hover);
 }
 
 .change-summary-file-toggle {
@@ -1331,7 +1333,7 @@ button.user-message-attachment {
 }
 
 .change-summary-expand-file svg {
-  color: #8f8f8f;
+  color: var(--text-muted);
   transform: rotate(-90deg);
   transition: transform 160ms ease;
 }
@@ -1347,12 +1349,12 @@ button.user-message-attachment {
   height: 24px;
   padding: 0;
   border-radius: 6px;
-  color: #a8a8a8;
+  color: var(--text-muted);
 }
 
 .change-summary-open-file:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #f1f1f1;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .change-summary-open-file svg {
@@ -1360,9 +1362,9 @@ button.user-message-attachment {
 }
 
 .change-summary-patch-unavailable {
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--border-default);
   padding: 10px 11px;
-  color: #b8b8b8;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -1370,9 +1372,9 @@ button.user-message-attachment {
   max-height: 320px;
   overflow: auto;
   margin: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  background: #1a1a1a;
-  color: #d7d7d7;
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
   padding: 10px 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
@@ -1386,15 +1388,15 @@ button.user-message-attachment {
   width: min(736px, 100%);
   border: 0;
   border-radius: 8px;
-  background: #202323;
-  color: #f1f1f1;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   padding: 11px;
   font-size: 13px;
 }
 
 .action-run-card.failed {
-  border-color: rgba(255, 112, 112, 0.22);
-  background: #251f20;
+  border-color: color-mix(in srgb, var(--status-danger) 22%, transparent);
+  background: var(--state-hover);
 }
 
 .action-run-header {
@@ -1411,18 +1413,18 @@ button.user-message-attachment {
   width: 24px;
   height: 24px;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #a6e3bd;
+  background: var(--state-hover);
+  color: var(--status-success);
 }
 
 .action-run-card.running .action-run-status,
 .action-run-card.pending .action-run-status,
 .action-run-card.unknown .action-run-status {
-  color: #a9d4ff;
+  color: var(--accent-info);
 }
 
 .action-run-card.failed .action-run-status {
-  color: #ff9898;
+  color: var(--status-danger);
 }
 
 .action-run-title {
@@ -1440,13 +1442,13 @@ button.user-message-attachment {
 }
 
 .action-run-title strong {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.25;
 }
 
 .action-run-title span {
-  color: #9eaaa6;
+  color: var(--text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
 }
@@ -1464,10 +1466,10 @@ button.user-message-attachment {
   gap: 5px;
   max-width: 100%;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #aeb7b4;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
   padding: 4px 7px;
   line-height: 1.2;
 }
@@ -1485,7 +1487,7 @@ button.user-message-attachment {
 .action-run-child code {
   min-width: 0;
   overflow: hidden;
-  color: #e1e6e3;
+  color: var(--text-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   text-overflow: ellipsis;
@@ -1494,7 +1496,7 @@ button.user-message-attachment {
 
 .action-run-response {
   margin: 0;
-  color: #d8dcda;
+  color: var(--text-secondary);
   line-height: 1.55;
   white-space: pre-wrap;
 }
@@ -1506,14 +1508,14 @@ button.user-message-attachment {
 }
 
 .action-run-agent-label {
-  color: #8c8c8c;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.35;
 }
 
 .action-run-agent-label span,
 .action-run-agent-link {
-  color: #b8b8b8;
+  color: var(--text-secondary);
   font: inherit;
 }
 
@@ -1524,13 +1526,13 @@ button.user-message-attachment {
   padding: 0;
   text-align: left;
   text-decoration: underline;
-  text-decoration-color: rgba(184, 184, 184, 0.32);
+  text-decoration-color: var(--text-disabled);
   text-underline-offset: 3px;
 }
 
 .action-run-agent-link:hover,
 .action-run-agent-link:focus-visible {
-  color: var(--text);
+  color: var(--text-primary);
   outline: 0;
   text-decoration-color: currentColor;
 }
@@ -1549,7 +1551,7 @@ button.user-message-attachment {
   align-items: center;
   gap: 7px;
   min-width: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border-subtle);
   padding-top: 6px;
 }
 
@@ -1561,13 +1563,13 @@ button.user-message-attachment {
 .action-run-child > span {
   min-width: 0;
   overflow: hidden;
-  color: #aeb7b4;
+  color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .action-run-child small {
-  color: #8d9693;
+  color: var(--text-muted);
   font-size: 11px;
   text-transform: capitalize;
 }
@@ -1580,13 +1582,13 @@ button.user-message-attachment {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #a8a8a8;
+  color: var(--text-muted);
   padding: 0;
 }
 
 .action-run-ref button:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #f1f1f1;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .status-divider {
@@ -1596,7 +1598,7 @@ button.user-message-attachment {
   align-self: center;
   gap: 10px;
   width: min(720px, 100%);
-  color: #9d9d9d;
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1;
 }
@@ -1606,11 +1608,11 @@ button.user-message-attachment {
   content: "";
   height: 1px;
   min-width: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16));
+  background: linear-gradient(90deg, transparent, var(--state-selected));
 }
 
 .status-divider::after {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.16), transparent);
+  background: linear-gradient(90deg, var(--state-selected), transparent);
 }
 
 .status-divider.running::before,
@@ -1620,11 +1622,11 @@ button.user-message-attachment {
 }
 
 .status-divider.running::before {
-  background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.12));
+  background-image: linear-gradient(90deg, transparent, var(--state-selected), var(--state-selected), var(--state-selected));
 }
 
 .status-divider.running::after {
-  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.12), transparent);
+  background-image: linear-gradient(90deg, var(--state-selected), var(--state-selected), var(--state-selected), transparent);
 }
 
 .status-divider span {
@@ -1641,7 +1643,7 @@ button.user-message-attachment {
 }
 
 .status-divider.danger span {
-  color: #ffb5b5;
+  color: var(--status-danger);
 }
 
 @keyframes status-divider-shimmer {

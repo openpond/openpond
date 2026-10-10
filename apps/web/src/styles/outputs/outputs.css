@@ -38,8 +38,8 @@
   height: 34px;
   flex: 0 0 auto;
   border-radius: 17px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
   padding: 0 11px;
 }
 
@@ -54,7 +54,7 @@
 }
 
 .outputs-filter option {
-  background: #202020;
+  background: var(--surface-raised);
 }
 
 .outputs-grid {
@@ -69,14 +69,14 @@
   min-width: 0;
   min-height: 152px;
   flex-direction: column;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--surface-raised);
   padding: 14px;
 }
 
 .output-card:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--state-hover);
 }
 
 .output-card-main {
@@ -89,13 +89,13 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   padding: 0;
   text-align: left;
 }
 
 .output-card-main:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.34);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 4px;
 }
 
@@ -111,8 +111,8 @@
   height: 36px;
   flex: 0 0 auto;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--muted);
+  background: var(--state-hover);
+  color: var(--text-muted);
 }
 
 .output-card-copy {
@@ -130,7 +130,7 @@
 }
 
 .output-card-copy strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
@@ -138,7 +138,7 @@
 }
 
 .output-card-copy small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -161,7 +161,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 6px 8px;
   font: inherit;
   font-size: 11px;
@@ -170,8 +170,8 @@
 .output-card-actions button:hover,
 .output-detail-actions button:hover,
 .output-detail-header button:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .output-card-actions .output-download-button,
@@ -186,7 +186,7 @@
 .outputs-empty,
 .outputs-loading {
   margin: 28px 0 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -202,8 +202,8 @@
 
 .outputs-error {
   margin: 24px 0 0;
-  border-left: 2px solid #d57568;
-  color: #f2a99e;
+  border-left: 2px solid var(--status-danger);
+  color: var(--status-danger);
   padding-left: 10px;
   font-size: 12px;
   line-height: 1.45;
@@ -218,10 +218,10 @@
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
-  border-left: 1px solid var(--border);
-  background: var(--bg);
+  border-left: 1px solid var(--border-default);
+  background: var(--surface-page);
   padding: 22px;
-  box-shadow: -18px 0 42px rgba(0, 0, 0, 0.24);
+  box-shadow: -18px 0 42px var(--shadow-color);
 }
 
 .output-detail-header {
@@ -234,7 +234,7 @@
 .output-detail-header h2 {
   margin: 0;
   overflow-wrap: anywhere;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 16px;
   font-weight: 650;
   line-height: 1.35;
@@ -242,7 +242,7 @@
 
 .output-detail-header p {
   margin: 6px 0 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -263,9 +263,9 @@
   place-items: center;
   margin-top: 20px;
   overflow: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--surface-raised);
 }
 
 .output-preview-surface iframe,
@@ -287,7 +287,7 @@
   width: 100%;
   margin: 0;
   overflow: auto;
-  color: #d7d7d7;
+  color: var(--text-secondary);
   padding: 14px;
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
@@ -298,7 +298,7 @@
   display: grid;
   justify-items: center;
   gap: 12px;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 24px;
   text-align: center;
 }
@@ -318,8 +318,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-default);
+  background: var(--surface-raised);
 }
 
 .outputs-spin {

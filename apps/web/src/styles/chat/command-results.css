@@ -4,8 +4,8 @@
   align-items: center;
   gap: 10px;
   min-height: 52px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  color: #9b9b9b;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-muted);
   padding: 0 14px;
 }
 
@@ -14,20 +14,20 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 15px;
 }
 
 .command-input-row input::placeholder {
-  color: #777;
+  color: var(--text-muted);
 }
 
 .command-input-row kbd {
   min-width: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: #171717;
-  color: #8c8c8c;
+  background: var(--surface-input);
+  color: var(--text-muted);
   padding: 3px 7px;
   text-align: center;
   font-family: inherit;
@@ -40,7 +40,7 @@
   min-height: 0;
   overflow: auto;
   padding: 10px;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
@@ -55,7 +55,7 @@
 .command-results::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--scrollbar-thumb);
   background-clip: padding-box;
 }
 
@@ -66,7 +66,7 @@
 
 .command-group-label {
   padding: 5px 6px 3px;
-  color: #787878;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -79,7 +79,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   padding: 0 8px;
   text-align: left;
 }
@@ -87,8 +87,8 @@
 .command-result:hover,
 .command-result:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .command-result span,
@@ -105,17 +105,17 @@
 }
 
 .command-result small {
-  color: #858585;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .command-create {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: #262626;
+  border: 1px solid var(--border-default);
+  background: var(--state-hover);
 }
 
 .command-empty {
   padding: 7px 8px 8px;
-  color: #6f6f6f;
+  color: var(--text-disabled);
   font-size: 13px;
 }

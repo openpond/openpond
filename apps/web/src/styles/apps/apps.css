@@ -19,7 +19,7 @@
 .connected-apps-header h1,
 .connected-apps-hero h2 {
   margin: 0;
-  color: #f4f4f5;
+  color: var(--text-primary);
   letter-spacing: 0;
 }
 
@@ -31,7 +31,7 @@
 
 .connected-apps-header p {
   margin: 6px 0 0;
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 14px;
   line-height: 1.45;
 }
@@ -46,7 +46,7 @@
   position: absolute;
   left: 13px;
   top: 50%;
-  color: #6f6f6f;
+  color: var(--text-disabled);
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -55,17 +55,17 @@
   width: 100%;
   height: 38px;
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: #050505;
-  color: #f3f3f3;
+  background: var(--surface-input);
+  color: var(--text-primary);
   padding: 0 14px 0 38px;
   font-size: 13px;
   outline: none;
 }
 
 .connected-apps-search input:focus {
-  border-color: rgba(255, 255, 255, 0.24);
+  border-color: var(--border-strong);
 }
 
 .connected-apps-hero {
@@ -75,7 +75,7 @@
   min-width: 0;
   overflow: hidden;
   border-radius: 24px;
-  background: linear-gradient(135deg, #a76b42, #8fb7d9 48%, #38a39d);
+  background: linear-gradient(135deg, var(--status-warning), var(--accent-info) 48%, var(--accent-primary));
   padding: 28px 32px;
 }
 
@@ -84,7 +84,7 @@
   align-content: start;
   gap: 0;
   max-width: 390px;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .connected-apps-hero-icon,
@@ -98,7 +98,7 @@
   width: 44px;
   height: 44px;
   border-radius: 999px;
-  background: #fff;
+  background: var(--action-primary);
 }
 
 .connected-apps-hero-icon .connected-app-icon {
@@ -114,7 +114,7 @@
 
 .connected-apps-hero p {
   margin: 12px 0 0;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.45;
 }
@@ -124,10 +124,10 @@
   justify-items: stretch;
   min-height: 190px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
-  color: #111;
+  background: var(--state-selected);
+  color: var(--text-on-primary);
   padding: 18px;
-  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 20px 42px var(--shadow-color);
 }
 
 .connected-apps-context-card strong {
@@ -147,23 +147,23 @@
   min-width: 0;
   border-radius: 7px;
   padding: 8px 11px;
-  color: #111;
+  color: var(--text-on-primary);
 }
 
 .connected-apps-context-card .files {
-  background: #dff0fb;
+  background: var(--accent-info);
 }
 
 .connected-apps-context-card .chat {
-  background: #cef8df;
+  background: var(--status-success);
 }
 
 .connected-apps-context-card .oauth {
-  background: #fff2bd;
+  background: var(--status-warning);
 }
 
 .connected-apps-context-card .mcp {
-  background: #ece6fb;
+  background: var(--action-primary);
 }
 
 .connected-apps-filters {
@@ -177,18 +177,18 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #d1d1d1;
+  color: var(--text-secondary);
   padding: 0 17px;
   font-size: 14px;
 }
 
 .connected-apps-filters button:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--state-hover);
 }
 
 .connected-apps-filters button.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--state-selected);
+  color: var(--text-primary);
 }
 
 .connected-apps-list {
@@ -217,12 +217,12 @@
 
 .connected-app-row:hover,
 .connected-app-row:focus-visible {
-  background: rgba(255, 255, 255, 0.055);
+  background: var(--state-hover);
   outline: none;
 }
 
 .connected-app-row > svg {
-  color: #686868;
+  color: var(--text-disabled);
 }
 
 .connected-app-row-main {
@@ -237,7 +237,7 @@
   width: 44px;
   height: 44px;
   border-radius: 999px;
-  background: #050505;
+  background: var(--surface-page);
 }
 
 .connected-app-icon img {
@@ -257,7 +257,7 @@
 }
 
 .connected-app-icon.app-mcp {
-  background: #0f172a;
+  background: color-mix(in srgb, var(--accent-info) 12%, var(--surface-panel));
 }
 
 .connected-app-icon.app-mcp img {
@@ -272,7 +272,7 @@
 }
 
 .connected-app-title {
-  color: #f4f4f5;
+  color: var(--text-primary);
   font-size: 14px;
   line-height: 1.25;
   font-weight: 520;
@@ -290,14 +290,14 @@
 
 .connected-app-title span {
   margin-top: 1px;
-  color: #777;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 450;
 }
 
 .connected-app-copy > span:nth-child(2) {
   margin-top: 3px;
-  color: #777;
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.25;
 }
@@ -314,10 +314,10 @@
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #a7a7a7;
+  background: var(--surface-raised);
+  color: var(--text-muted);
   padding: 3px 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -328,8 +328,8 @@
 .connected-app-status-pill {
   min-width: 86px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #a9a9a9;
+  background: var(--state-hover);
+  color: var(--text-muted);
   padding: 5px 9px;
   text-align: center;
   white-space: nowrap;
@@ -338,13 +338,13 @@
 }
 
 .connected-app-status-pill.connected {
-  background: rgba(64, 201, 120, 0.13);
-  color: #72df9b;
+  background: color-mix(in srgb, var(--status-success) 13%, transparent);
+  color: var(--status-success);
 }
 
 .connected-app-status-pill.disconnected {
-  background: rgba(255, 255, 255, 0.04);
-  color: #9d9d9d;
+  background: var(--surface-raised);
+  color: var(--text-muted);
 }
 
 .connected-apps-empty {
@@ -352,9 +352,9 @@
   min-height: 80px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  color: #888;
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -364,7 +364,7 @@
   z-index: 80;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.68);
+  background: var(--backdrop);
   padding: 20px;
 }
 
@@ -375,12 +375,12 @@
   width: min(480px, 100%);
   max-height: calc(100vh - 40px);
   overflow: auto;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 18px;
-  background: #292929;
-  color: #f5f5f5;
+  background: var(--surface-floating);
+  color: var(--text-primary);
   padding: 32px 24px 24px;
-  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 26px 70px var(--shadow-color);
 }
 
 .connected-app-dialog-close {
@@ -391,20 +391,20 @@
   place-items: center;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.03);
-  color: #b8b8b8;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
   padding: 0;
 }
 
 .connected-app-dialog-close:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .connected-app-dialog-close:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.24);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -428,7 +428,7 @@
   width: 56px;
   height: 56px;
   border-radius: 10px;
-  background: #050505;
+  background: var(--surface-page);
 }
 
 .openpond-mark img {
@@ -456,13 +456,13 @@
   width: 5px;
   height: 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--state-selected);
 }
 
 .connected-app-dialog h2 {
   margin: 0;
   text-align: center;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 20px;
   line-height: 1.2;
   letter-spacing: 0;
@@ -470,13 +470,13 @@
 
 .connected-app-approval {
   gap: 7px;
-  color: #35d680;
+  color: var(--status-success);
   font-size: 14px;
 }
 
 .connected-app-dialog-body {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--border-default);
   border-radius: 14px;
 }
 
@@ -485,19 +485,19 @@
 }
 
 .connected-app-dialog-body section + section {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border-default);
 }
 
 .connected-app-dialog-body h3 {
   margin: 0 0 6px;
-  color: #f0f0f0;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 650;
 }
 
 .connected-app-dialog-body p {
   margin: 0;
-  color: #b8b8b8;
+  color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -513,13 +513,13 @@
   height: 38px;
   border: 0;
   border-radius: 999px;
-  background: #f5f5f5;
-  color: #222;
+  background: var(--action-primary);
+  color: var(--text-on-primary);
   font-size: 14px;
 }
 
 .connected-app-dialog-primary:hover {
-  background: #dedede;
+  background: var(--action-primary);
 }
 
 @media (max-width: 840px) {

@@ -13,6 +13,7 @@ const checks = [
   "scripts/check-source-structure.ts",
   "scripts/check-production-entrypoints.ts",
   "scripts/check-workspace-dependencies.ts",
+  "scripts/check-ui-colors.mjs",
 ] as const;
 
 const results = await Promise.all(checks.map(runCheck));

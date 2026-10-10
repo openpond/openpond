@@ -50,6 +50,7 @@ export type AppView =
   | "scheduled"
   | "settings";
 export type SettingsSection =
+  | "appearance"
   | "ponder"
   | "account"
   | "notifications"

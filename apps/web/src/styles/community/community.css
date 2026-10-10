@@ -20,8 +20,8 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--surface-page);
+  color: var(--text-primary);
 }
 
 .community-chat-main {
@@ -54,8 +54,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--surface-page);
   padding: 12px 20px;
 }
 
@@ -84,13 +84,13 @@
 }
 
 .community-heading small {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .community-heading h1 {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 16px;
   line-height: 1.3;
 }
@@ -99,7 +99,7 @@
   max-width: 650px;
   overflow: hidden;
   margin: 2px 0 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -116,8 +116,8 @@
 .community-icon.fallback {
   display: grid;
   place-items: center;
-  background: #29433b;
-  color: #d1fae5;
+  background: color-mix(in srgb, var(--status-success) 12%, var(--surface-panel));
+  color: var(--status-success);
   font-size: 12px;
   font-weight: 700;
 }
@@ -129,7 +129,7 @@
 
 .community-member-count {
   gap: 5px;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 6px 8px;
   font-size: 12px;
 }
@@ -145,8 +145,8 @@
   gap: 6px;
   border: 0;
   border-radius: 7px;
-  background: #e8e8e8;
-  color: #181818;
+  background: var(--action-primary);
+  color: var(--text-on-primary);
   padding: 6px 10px;
   font: inherit;
   font-size: 12px;
@@ -159,21 +159,22 @@
 .community-empty-card button:hover:not(:disabled),
 .community-discovery-card button:hover:not(:disabled),
 .community-rules-dialog button:hover:not(:disabled) {
-  background: #fff;
+  background: var(--action-primary);
+  color: var(--text-on-primary);
 }
 
 .community-header button.secondary,
 .community-rules-dialog button.secondary,
 .community-discovery-actions .secondary {
-  border: 1px solid var(--border);
-  background: #242424;
-  color: var(--text);
+  border: 1px solid var(--border-default);
+  background: var(--surface-floating);
+  color: var(--text-primary);
 }
 
 .community-header button.secondary:hover:not(:disabled),
 .community-rules-dialog button.secondary:hover:not(:disabled),
 .community-discovery-actions .secondary:hover:not(:disabled) {
-  background: #2d2d2d;
+  background: var(--state-hover);
 }
 
 .community-header button:disabled,
@@ -188,14 +189,14 @@
 .community-preview-banner {
   justify-content: space-between;
   gap: 20px;
-  border-bottom: 1px solid rgba(45, 212, 191, 0.24);
-  background: rgba(45, 212, 191, 0.07);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 24%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 7%, transparent);
   padding: 10px 20px;
 }
 
 .community-preview-banner.warning {
-  border-color: rgba(245, 158, 11, 0.3);
-  background: rgba(245, 158, 11, 0.08);
+  border-color: color-mix(in srgb, var(--status-warning) 30%, transparent);
+  background: color-mix(in srgb, var(--status-warning) 8%, transparent);
 }
 
 .community-preview-banner > div {
@@ -210,14 +211,14 @@
 }
 
 .community-preview-banner span {
-  color: var(--muted-strong);
+  color: var(--text-secondary);
 }
 
 .community-realtime-state {
   gap: 7px;
-  border-bottom: 1px solid rgba(234, 179, 8, 0.18);
-  background: rgba(234, 179, 8, 0.07);
-  color: #eab308;
+  border-bottom: 1px solid color-mix(in srgb, var(--status-warning) 18%, transparent);
+  background: color-mix(in srgb, var(--status-warning) 7%, transparent);
+  color: var(--status-warning);
   padding: 7px 20px;
   font-size: 12px;
 }
@@ -226,13 +227,13 @@
   margin: 8px 20px 0;
   border-radius: 7px;
   padding: 8px 10px;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
 .community-chat-notices .community-state {
   margin: 0;
-  border-bottom: 1px solid rgba(248, 113, 113, 0.2);
+  border-bottom: 1px solid color-mix(in srgb, var(--status-danger) 20%, transparent);
   border-radius: 0;
   padding: 8px 20px;
 }
@@ -240,8 +241,8 @@
 .community-state.error,
 .community-message-state.error,
 .community-composer-action-error {
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
+  background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+  color: var(--status-danger);
 }
 
 .community-state button,
@@ -257,7 +258,7 @@
 .community-message-pane { outline: none; }
 
 .community-message-pane:focus-visible {
-  box-shadow: inset 0 0 0 2px rgba(45, 212, 191, 0.35);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--focus-ring) 35%, transparent);
 }
 
 .community-message-state {
@@ -265,7 +266,7 @@
   min-height: 180px;
   place-items: center;
   border-radius: 8px;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 28px;
   font-size: 13px;
   text-align: center;
@@ -278,13 +279,13 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #67d4c0;
+  color: var(--accent-primary);
   padding: 0 8px;
   font-size: 11px;
 }
 
 .community-load-older:hover:not(:disabled) {
-  background: rgba(45, 212, 191, 0.09);
+  background: color-mix(in srgb, var(--accent-primary) 9%, transparent);
 }
 
 .community-load-older:disabled {
@@ -300,7 +301,7 @@
 }
 
 .community-message:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--state-hover);
 }
 
 .community-avatar {
@@ -309,15 +310,15 @@
   height: 34px;
   place-items: center;
   border-radius: 6px;
-  background: #29433b;
-  color: #d1fae5;
+  background: color-mix(in srgb, var(--status-success) 12%, var(--surface-panel));
+  color: var(--status-success);
   font-size: 11px;
   font-weight: 700;
 }
 
 .community-message-content {
   min-width: 0;
-  color: #e8e8e8;
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -330,19 +331,19 @@
 }
 
 .community-message-content > header strong {
-  color: var(--text);
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .community-message-content > header time,
 .community-message-content > header > span {
-  color: #777;
+  color: var(--text-muted);
   font-size: 10px;
 }
 
 .community-message-content .markdown-message {
   overflow-wrap: anywhere;
-  color: #e8e8e8;
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -371,18 +372,18 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .community-message-actions button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .community-message-actions button:focus-visible,
 .community-reply-quote:focus-visible,
 .community-load-older:focus-visible {
-  outline: 2px solid #67d4c0;
+  outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
@@ -392,21 +393,21 @@
   min-width: 0;
   margin: 3px 0 5px;
   border: 0;
-  border-left: 3px solid #2dd4bf;
+  border-left: 3px solid var(--accent-primary);
   border-radius: 4px;
-  background: rgba(45, 212, 191, 0.075);
-  color: var(--muted-strong);
+  background: color-mix(in srgb, var(--accent-primary) 7.5%, transparent);
+  color: var(--text-secondary);
   padding: 6px 9px;
   text-align: left;
 }
 
 .community-reply-quote:hover {
-  background: rgba(45, 212, 191, 0.12);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
 }
 
 .community-reply-quote strong {
   overflow: hidden;
-  color: #67d4c0;
+  color: var(--accent-primary);
   font-size: 11px;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -422,7 +423,7 @@
 }
 
 .community-message-deleted {
-  color: #777;
+  color: var(--text-muted);
   font-size: 12px;
   font-style: italic;
 }
@@ -431,10 +432,10 @@
   width: 100%;
   min-height: 72px;
   resize: vertical;
-  border: 1px solid rgba(45, 212, 191, 0.45);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
   border-radius: 6px;
-  background: #191919;
-  color: var(--text);
+  background: var(--surface-input);
+  color: var(--text-primary);
   padding: 8px;
   font: inherit;
 }
@@ -448,10 +449,10 @@
 
 .community-message-edit button {
   min-height: 27px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 5px;
-  background: #202020;
-  color: var(--text);
+  background: var(--surface-raised);
+  color: var(--text-primary);
   padding: 0 9px;
   font-size: 11px;
 }
@@ -469,10 +470,10 @@
   max-width: 240px;
   flex-direction: column;
   align-items: flex-start;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 7px;
-  background: #1b1b1b;
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-primary);
   padding: 8px 10px;
 }
 
@@ -489,7 +490,7 @@
 }
 
 .community-message-attachments small {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .community-composer-wrap {
@@ -503,11 +504,11 @@
   align-items: center;
   gap: 9px;
   margin-bottom: 6px;
-  border: 1px solid var(--border);
-  border-left: 3px solid #2dd4bf;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--accent-primary);
   border-radius: 7px;
-  background: #1d2422;
-  color: #67d4c0;
+  background: var(--state-hover);
+  color: var(--accent-primary);
   padding: 5px 7px 5px 10px;
 }
 
@@ -515,14 +516,14 @@
   display: grid;
   min-width: 0;
   overflow: hidden;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .community-composer-reply strong {
-  color: #67d4c0;
+  color: var(--accent-primary);
 }
 
 .community-composer-reply button {
@@ -533,20 +534,20 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .community-composer-reply button:hover,
 .community-composer-reply button:focus-visible {
   outline: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .community-composer-action-error,
 .community-failed-send {
   margin-bottom: 6px;
-  border: 1px solid rgba(248, 113, 113, 0.25);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 25%, transparent);
   border-radius: 7px;
   padding: 7px 9px;
   font-size: 11px;
@@ -556,8 +557,8 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
+  background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+  color: var(--status-danger);
 }
 
 .community-failed-send span {
@@ -582,9 +583,9 @@
   overflow-y: auto;
   border: 0;
   border-radius: 9px;
-  background: #222;
+  background: var(--surface-floating);
   padding: 5px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 12px 30px var(--shadow-color);
 }
 
 .community-mention-menu button {
@@ -596,19 +597,19 @@
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   padding: 0 9px;
   font-size: 12px;
 }
 
 .community-mention-menu button:hover,
 .community-mention-menu button[aria-selected="true"] {
-  background: rgba(45, 212, 191, 0.12);
-  color: #a7f3d0;
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--status-success);
 }
 
 .community-mention-menu small {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .community-membership-menu {
@@ -626,13 +627,13 @@
   gap: 8px;
   border: 0;
   border-radius: 9px;
-  background: #222;
+  background: var(--surface-floating);
   padding: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 12px 32px var(--shadow-color);
 }
 
 .community-membership-popover > strong {
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
@@ -641,14 +642,14 @@
 }
 
 .community-membership-popover input {
-  accent-color: #2dd4bf;
+  accent-color: var(--accent-primary);
 }
 
 .community-membership-popover button.danger {
   justify-content: center;
   margin-top: 4px;
-  background: rgba(239, 68, 68, 0.14);
-  color: #fca5a5;
+  background: color-mix(in srgb, var(--status-danger) 14%, transparent);
+  color: var(--status-danger);
 }
 
 .community-dialog-backdrop {
@@ -657,7 +658,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.62);
+  background: var(--backdrop);
   padding: 30px;
 }
 
@@ -667,21 +668,21 @@
   width: min(720px, 100%);
   max-height: min(780px, calc(100vh - 60px));
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 14px;
-  background: #191919;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  background: var(--surface-floating);
+  box-shadow: 0 24px 70px var(--shadow-color);
 }
 
 .community-rules-dialog > header {
   justify-content: space-between;
   gap: 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   padding: 16px 18px;
 }
 
 .community-rules-dialog > header small {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .community-rules-dialog h2 {
@@ -693,7 +694,7 @@
   min-height: 29px;
   padding: 7px;
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .community-rules-body {
@@ -705,7 +706,7 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   padding: 14px 18px;
 }
 
@@ -718,12 +719,12 @@
   max-width: 400px;
   align-items: flex-start;
   gap: 8px;
-  color: var(--muted-strong);
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
 .community-rules-acceptance input {
-  accent-color: #2dd4bf;
+  accent-color: var(--accent-primary);
 }
 
 .community-empty-page {
@@ -734,7 +735,7 @@
   min-height: 0;
   place-items: center;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--surface-page);
   padding: 30px;
 }
 
@@ -744,14 +745,14 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  color: var(--muted);
+  color: var(--text-muted);
   text-align: center;
 }
 
 .community-empty-card h1,
 .community-discovery-card > h1 {
   margin: 0;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .community-empty-card p {
@@ -766,7 +767,7 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .community-discovery-card > p {
@@ -790,16 +791,16 @@
   width: 100%;
   align-items: center;
   gap: 12px;
-  border: 1px solid var(--border);
-  background: #202020;
-  color: var(--text);
+  border: 1px solid var(--border-default);
+  background: var(--surface-raised);
+  color: var(--text-primary);
   padding: 11px;
   text-align: left;
 }
 
 .community-discovery-list > button:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.15);
-  background: #282828;
+  border-color: var(--border-strong);
+  background: var(--state-hover);
 }
 
 .community-discovery-list > button > span {
@@ -811,13 +812,13 @@
 
 .community-discovery-list small {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .community-discovery-list em {
-  color: #67d4c0;
+  color: var(--accent-primary);
   font-size: 11px;
   font-style: normal;
 }
@@ -830,8 +831,8 @@
 .community-spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid #454545;
-  border-top-color: #2dd4bf;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: community-spin 0.8s linear infinite;
 }

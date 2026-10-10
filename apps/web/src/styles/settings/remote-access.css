@@ -8,7 +8,7 @@
 }
 
 .remote-access-settings p {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -65,18 +65,18 @@
   width: 34px;
   height: 34px;
   border-radius: 17px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #9d9d9d;
+  background: var(--state-hover);
+  color: var(--text-muted);
 }
 
 .remote-access-icon.configured {
-  background: rgba(58, 163, 255, 0.13);
-  color: #77bdff;
+  background: color-mix(in srgb, var(--accent-info) 13%, transparent);
+  color: var(--accent-info);
 }
 
 .remote-access-icon.online {
-  background: rgba(80, 200, 120, 0.13);
-  color: #8ddfa8;
+  background: color-mix(in srgb, var(--status-success) 13%, transparent);
+  color: var(--status-success);
 }
 
 .remote-access-link-heading {
@@ -115,7 +115,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #dcdcdc;
+  color: var(--text-secondary);
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
@@ -130,7 +130,7 @@
 .remote-access-environment-row {
   display: grid;
   min-height: 62px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .remote-access-environment-row:last-child {
@@ -151,7 +151,7 @@
   gap: 5px;
   min-width: 0;
   padding: 12px 16px;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid var(--border-subtle);
 }
 
 .remote-access-environment-cell:last-child {
@@ -167,13 +167,13 @@
 }
 
 .remote-access-environment-cell strong {
-  color: #f6f6f6;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 550;
 }
 
 .remote-access-environment-cell span {
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -182,27 +182,27 @@
   height: 11px;
   justify-self: center;
   border-radius: 999px;
-  background: #555;
+  background: var(--state-hover);
 }
 
 .remote-access-peer-dot.online {
-  background: #58d68d;
-  box-shadow: 0 0 0 4px rgba(88, 214, 141, 0.12);
+  background: var(--status-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-success) 12%, transparent);
 }
 
 .remote-access-config {
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 16px;
-  background: #181818;
+  background: var(--surface-panel);
 }
 
 .remote-access-config pre {
   max-height: 260px;
   margin: 0;
   overflow: auto;
-  background: #0f0f0f;
-  color: #dcdcdc;
+  background: var(--surface-page);
+  color: var(--text-secondary);
   padding: 14px 16px;
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre;
@@ -211,14 +211,14 @@
 @keyframes remote-access-title-flash {
   0%,
   100% {
-    color: #f6f6f6;
+    color: var(--text-primary);
     text-shadow: none;
   }
 
   18%,
   55% {
-    color: #ffbc8f;
-    text-shadow: 0 0 12px rgba(255, 156, 86, 0.35);
+    color: var(--status-warning);
+    text-shadow: 0 0 12px color-mix(in srgb, var(--focus-ring) 35%, transparent);
   }
 }
 
@@ -231,7 +231,7 @@
   .remote-access-environment-cell {
     min-height: 56px;
     border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .remote-access-environment-cell:last-child {

@@ -8,14 +8,12 @@ export function MessageFooter({ content, timestamp, kvCacheSummary }: {
   timestamp: string;
   kvCacheSummary?: Pick<UsageTurnCacheSummary, "cacheHitRate"> | null;
 }) {
-  const time = formatMessageTimestamp(timestamp);
   const rate = kvCacheSummary?.cacheHitRate;
   const cachePercent = typeof rate === "number" && Number.isFinite(rate) && rate >= 0 && rate <= 1
     ? Math.round(rate * 100) : 0;
   const cache = cachePercent > 0 ? `${cachePercent}%` : null;
   return <div className="assistant-message-footer">
-    {time ? <time className="message-timestamp" dateTime={timestamp}
-      title={formatMessageTimestampTitle(timestamp)}>{time}</time> : null}
+    <MessageTimestamp timestamp={timestamp} />
     {cache ? <span className="message-kv-cache-metric" aria-label={`KV cache reuse ${cache}`}>
       KV {cache}
     </span> : null}
@@ -25,4 +23,10 @@ export function MessageFooter({ content, timestamp, kvCacheSummary }: {
       <Copy size={14} />
     </button>
   </div>;
+}
+
+export function MessageTimestamp({ timestamp }: { timestamp: string }) {
+  const time = formatMessageTimestamp(timestamp);
+  return time ? <time className="message-timestamp" dateTime={timestamp}
+    title={formatMessageTimestampTitle(timestamp)}>{time}</time> : null;
 }

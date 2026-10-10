@@ -5,7 +5,7 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.74);
+  background: var(--media-background);
   backdrop-filter: blur(10px);
 }
 
@@ -16,10 +16,10 @@
   height: min(820px, calc(100vh - 32px));
   min-height: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #101010;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  background: var(--surface-floating);
+  box-shadow: 0 24px 80px var(--shadow-color);
 }
 
 .image-lightbox-header {
@@ -29,8 +29,8 @@
   gap: 12px;
   min-height: 42px;
   padding: 0 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  color: #ededed;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-primary);
   font-size: 13px;
 }
 
@@ -55,12 +55,12 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #9c9c9c;
+  color: var(--text-muted);
 }
 
 .image-lightbox-actions button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f4f4f4;
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .image-lightbox-frame {
@@ -69,7 +69,7 @@
   min-height: 0;
   overflow: auto;
   padding: 12px;
-  background: #080808;
+  background: var(--media-background);
 }
 
 .image-lightbox-frame img {
@@ -85,9 +85,9 @@
   place-items: center;
   min-width: min(420px, 70vw);
   min-height: 180px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #111;
-  color: #b8b8b8;
+  background: var(--surface-page);
+  color: var(--text-secondary);
   font-size: 13px;
 }

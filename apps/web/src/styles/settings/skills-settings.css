@@ -16,7 +16,7 @@
 .skills-settings-header p {
   max-width: 680px;
   margin: 0;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.55;
 }
@@ -38,7 +38,7 @@
   align-items: end;
   gap: 12px;
   padding: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .github-extension-add-copy,
@@ -56,7 +56,7 @@
 .github-extension-add-copy span,
 .github-extension-add label > span,
 .github-extension-preview span {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1.45;
 }
@@ -64,27 +64,27 @@
 .github-extension-add input {
   width: 100%;
   height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 9px;
-  background: rgba(0, 0, 0, 0.18);
-  color: var(--text);
+  background: var(--state-selected);
+  color: var(--text-primary);
   padding: 0 10px;
   outline: none;
 }
 
 .github-extension-add input:focus {
-  border-color: rgba(34, 211, 238, 0.45);
+  border-color: color-mix(in srgb, var(--accent-primary) 45%, transparent);
 }
 
 .github-extension-message {
   padding: 10px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 12px;
 }
 
 .github-extension-message.error {
-  color: #fca5a5;
-  background: rgba(248, 113, 113, 0.06);
+  color: var(--status-danger);
+  background: color-mix(in srgb, var(--status-danger) 6%, transparent);
 }
 
 .github-extension-preview {
@@ -93,8 +93,8 @@
   align-items: center;
   gap: 16px;
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(34, 211, 238, 0.035);
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--accent-primary) 3.5%, transparent);
 }
 
 .github-extension-preview-skills {
@@ -106,7 +106,7 @@
 
 .github-extension-preview-skills > span {
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--state-hover);
   padding: 4px 7px;
 }
 
@@ -116,7 +116,7 @@
   align-items: center;
   gap: 12px;
   min-height: 76px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .github-extension-row:last-child {
@@ -132,18 +132,18 @@
   min-height: 76px;
   border: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   padding: 12px 0 12px 16px;
   text-align: left;
 }
 
 .github-extension-open:hover,
 .github-extension-open:focus-visible {
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--state-hover);
 }
 
 .github-extension-open:focus-visible {
-  outline: 1px solid rgba(34, 211, 238, 0.46);
+  outline: 1px solid color-mix(in srgb, var(--accent-primary) 46%, transparent);
   outline-offset: -1px;
 }
 
@@ -157,14 +157,14 @@
 }
 
 .github-extension-row-actions .danger:hover:not(:disabled) {
-  color: #fca5a5;
-  background: rgba(248, 113, 113, 0.09);
+  color: var(--status-danger);
+  background: color-mix(in srgb, var(--status-danger) 9%, transparent);
 }
 
 .native-skills-list {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.018);
+  background: var(--surface-raised);
 }
 
 .personal-skill-row {
@@ -177,7 +177,7 @@
 
 .skills-settings-empty {
   padding: 18px 16px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -189,9 +189,9 @@
   width: 100%;
   min-height: 72px;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
   background: transparent;
-  color: var(--text);
+  color: var(--text-primary);
   padding: 12px 16px;
   text-align: left;
 }
@@ -202,11 +202,11 @@
 
 .native-skill-row:hover,
 .native-skill-row:focus-visible {
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--state-hover);
 }
 
 .native-skill-row:focus-visible {
-  outline: 1px solid rgba(34, 211, 238, 0.46);
+  outline: 1px solid color-mix(in srgb, var(--accent-primary) 46%, transparent);
   outline-offset: -1px;
 }
 
@@ -216,8 +216,8 @@
   width: 32px;
   height: 32px;
   border-radius: 9px;
-  background: rgba(34, 211, 238, 0.09);
-  color: #67e8f9;
+  background: color-mix(in srgb, var(--accent-primary) 9%, transparent);
+  color: var(--accent-primary);
 }
 
 .native-skill-identity,
@@ -244,12 +244,12 @@
 
 .native-skill-identity span,
 .native-skill-provider span {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .native-skill-provider strong {
-  color: #d8d8d8;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 560;
 }
@@ -260,8 +260,8 @@
 
 .native-skill-status {
   border-radius: 999px;
-  background: rgba(74, 222, 128, 0.09);
-  color: #86efac;
+  background: color-mix(in srgb, var(--status-success) 9%, transparent);
+  color: var(--status-success);
   padding: 5px 8px;
   font-size: 10px;
   font-weight: 650;
@@ -269,12 +269,12 @@
 }
 
 .native-skill-status.invalid {
-  background: rgba(248, 113, 113, 0.09);
-  color: #fca5a5;
+  background: color-mix(in srgb, var(--status-danger) 9%, transparent);
+  color: var(--status-danger);
 }
 
 .native-skill-row > svg {
-  color: #737373;
+  color: var(--text-muted);
 }
 
 @media (max-width: 760px) {

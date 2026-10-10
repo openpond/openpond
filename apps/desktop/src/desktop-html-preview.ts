@@ -2,7 +2,7 @@ import { BrowserWindow, session } from "electron";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { htmlVisualDocument } from "@openpond/contracts/html-visual-document";
-import { HTML_VISUAL_MAX_BUNDLE_BYTES, HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, HtmlVisualThemeSchema, type HtmlVisualCapture } from "@openpond/contracts/html-visuals";
+import { HTML_VISUAL_MAX_BUNDLE_BYTES, HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, HTML_VISUAL_THEME_TOKENS, HtmlVisualThemeSchema, type HtmlVisualCapture } from "@openpond/contracts/html-visuals";
 const RequestSchema = z.object({ id: z.string().min(1), deadlineAt: z.string(), operation: z.literal('previewHtml'), input: z.object({ html: z.string().min(1).max(HTML_VISUAL_MAX_BUNDLE_BYTES), width: z.number().int().min(280).max(1440) }) });
 export async function captureHtmlVisual(raw: unknown, appWindow: BrowserWindow, signal: AbortSignal): Promise<HtmlVisualCapture> {
   const request = RequestSchema.parse(raw);
@@ -26,7 +26,7 @@ export async function captureHtmlVisual(raw: unknown, appWindow: BrowserWindow, 
   signal.addEventListener('abort', stop, { once: true });
   try {
     signal.throwIfAborted();
-    const theme = HtmlVisualThemeSchema.parse(await appWindow.webContents.executeJavaScript(`Object.fromEntries(${JSON.stringify(Object.keys(HTML_VISUAL_THEME))}.map(k=>[k,getComputedStyle(document.querySelector('.app-shell')||document.documentElement).getPropertyValue(k).trim()||${JSON.stringify(HTML_VISUAL_THEME)}[k]]))`));
+    const theme = HtmlVisualThemeSchema.parse(await appWindow.webContents.executeJavaScript(`Object.fromEntries(${JSON.stringify(Object.keys(HTML_VISUAL_THEME))}.map(k=>[k,k==='--color-scheme'?(document.documentElement.dataset.theme||'dark'):getComputedStyle(document.documentElement).getPropertyValue(${JSON.stringify(HTML_VISUAL_THEME_TOKENS)}[k]||k).trim()||${JSON.stringify(HTML_VISUAL_THEME)}[k]]))`));
     window.setBackgroundColor(theme["--bg"]);
     const html = htmlVisualDocument(request.input.html, request.id, theme);
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);

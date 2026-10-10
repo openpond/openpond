@@ -4,8 +4,8 @@
   place-items: center;
   height: 100%;
   min-height: 100%;
-  background: #101010;
-  color: var(--text);
+  background: var(--surface-page);
+  color: var(--text-primary);
   overflow: hidden;
 }
 
@@ -41,7 +41,7 @@
   align-items: center;
   margin-left: 0;
   overflow: visible;
-  color: #f7f7f8;
+  color: var(--text-primary);
   font-size: 34px;
   font-weight: 680;
   letter-spacing: 0;

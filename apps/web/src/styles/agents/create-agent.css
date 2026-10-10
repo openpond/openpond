@@ -20,13 +20,13 @@
 }
 
 .agent-section-header span {
-  color: #f4f4f4;
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 650;
 }
 
 .agent-section-header strong {
-  color: #8f8f8f;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
 }
@@ -54,8 +54,8 @@
 .agent-create-loading span {
   width: 28px;
   height: 28px;
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  border-top-color: #f2f2f2;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--border-strong);
   border-radius: 999px;
   animation: topbar-spin 0.85s linear infinite;
 }
@@ -66,9 +66,9 @@
   gap: 10px;
   min-width: 0;
   aspect-ratio: 1 / 1;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #181818;
+  background: var(--surface-panel);
   padding: 14px;
 }
 
@@ -83,20 +83,20 @@
 .agent-card-topline span {
   min-width: 0;
   overflow: hidden;
-  color: #9b9b9b;
+  color: var(--text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
 }
 
 .agent-card-topline span:first-child {
-  color: #8ddfa8;
+  color: var(--status-success);
 }
 
 .agent-card strong {
   min-width: 0;
   overflow: hidden;
-  color: #f4f4f4;
+  color: var(--text-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 15px;
@@ -108,7 +108,7 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: #b4b4b4;
+  color: var(--text-secondary);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   font-size: 12px;
@@ -147,17 +147,17 @@
 }
 
 .schedule-card-meta dt {
-  color: #777;
+  color: var(--text-muted);
 }
 
 .schedule-card-meta dd {
-  color: #c7c7c7;
+  color: var(--text-secondary);
 }
 
 .schedule-card-error {
   min-width: 0;
   overflow: hidden;
-  color: #ffb4a8;
+  color: var(--status-danger);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
@@ -177,15 +177,15 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #111;
-  color: #eeeeee;
+  background: var(--surface-page);
+  color: var(--text-primary);
   padding: 0;
 }
 
 .agent-icon-button:hover:not(:disabled) {
-  background: #232323;
+  background: var(--state-hover);
 }
 
 .agent-icon-button:disabled {
@@ -196,14 +196,14 @@
 .agent-create-error,
 .agent-create-empty {
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #181818;
+  background: var(--surface-panel);
 }
 
 .agent-create-error {
   padding: 12px 14px;
-  color: #ffb4a8;
+  color: var(--status-danger);
   font-size: 13px;
 }
 
@@ -217,7 +217,7 @@
 
 .agent-create-empty p {
   margin: 0;
-  color: #9b9b9b;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -226,16 +226,16 @@
   align-items: center;
   justify-content: center;
   height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: #111;
-  color: #f1f1f1;
+  background: var(--surface-page);
+  color: var(--text-primary);
   padding: 0 12px;
   font-size: 13px;
 }
 
 .agent-create-empty button:hover {
-  background: #222;
+  background: var(--state-hover);
 }
 
 @media (max-width: 900px) {
