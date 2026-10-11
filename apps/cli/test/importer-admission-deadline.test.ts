@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { contentHash } from "@openpond/harness";
+import { previewAgentImport } from "@openpond/evals/connected-evidence";
 import type { CollectorAdmission, CollectorConnection } from "@openpond/evals/native-conversations";
 import { collectorTransport } from "../src/importer/transport";
 
@@ -20,8 +21,18 @@ test("multipart admission survives aggregate duration and still honors cancellat
     available: true, capabilities: { history: true, live: true, nativeResume: false } };
   const connection: CollectorConnection = { id: "connection", teamId: "team", apiBaseUrl: "https://import.example.test", account: "test",
     source, projectId: "project", revision: 1, since: null, keepSyncing: false, state: "active" };
-  const entry: CollectorAdmission = { operationId: "stable-operation", connectionId: connection.id, sessionKey: "session", contentHash: "a".repeat(64),
-    files: [{ path: "source.jsonl", text: "evidence".repeat(40_000) }], boundaryIds: ["boundary"] };
+  const files = [{ path: "source.jsonl", text: [
+    { type: "session_meta", payload: { id: "session" } },
+    { type: "response_item", timestamp: "2026-10-01T00:00:00Z", payload: { type: "message", role: "user", content: "Selected request" } },
+    { type: "response_item", timestamp: "2026-10-01T00:00:01Z", payload: { type: "message", role: "assistant", content: "evidence".repeat(40_000) } },
+    { type: "event_msg", timestamp: "2026-10-01T00:00:02Z", payload: { type: "task_complete" } },
+  ].map(row => JSON.stringify(row)).join("\n") }];
+  const session = previewAgentImport({ source: "codex", files,
+    acquisition: { machineId: source.machineId, sourceInstanceId: source.instanceId } }).sessions[0]!;
+  const boundary = session.boundaries.find(item => item.projection === "turn" && item.terminal === "completed")!;
+  const entry: CollectorAdmission = { operationId: "stable-operation", connectionId: connection.id,
+    sessionKey: JSON.stringify([source.instanceId, session.sessionId, session.branchId]), contentHash: session.contentHash,
+    files, boundaryIds: [boundary.id] };
   const committed: string[] = [];
   let interrupt: AbortController | undefined;
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
@@ -34,7 +45,7 @@ test("multipart admission survives aggregate duration and still honors cancellat
     }
     if (url.endsWith("/imports/preview")) return Response.json({ teamId: "team", source: "codex", sourceHash: "b".repeat(64), previewHash: "c".repeat(64),
       destination: body.destination, issues: [], sessions: [{ sessionHash: entry.contentHash, sessionId: "session", origin: "codex", exporterVersion: null,
-        eventCount: 2, boundaries: [{ id: "boundary", projection: "turn", answer: true, process: "retained", terminal: "completed" }], warnings: [], sample: [] }] });
+        eventCount: session.events.length, boundaries: [{ id: boundary.id, projection: "turn", answer: true, process: "retained", terminal: "completed" }], warnings: [], sample: [] }] });
     if (url.endsWith("/commit")) {
       committed.push(body.request.operationId);
       return Response.json({ teamId: "team", operationId: body.request.operationId, requestHash: contentHash(body.request),
@@ -47,7 +58,7 @@ test("multipart admission survives aggregate duration and still honors cancellat
   expect(Date.now() - started).toBeGreaterThan(60_000);
   expect(committed).toEqual([entry.operationId]);
   interrupt = new AbortController();
-  await expect(collectorTransport.admit(connection, { ...entry, operationId: "cancelled-operation", files: [{ ...entry.files[0]!, text: "changed" }] }, interrupt.signal))
+  await expect(collectorTransport.admit(connection, { ...entry, operationId: "cancelled-operation", files: [{ ...entry.files[0]!, text: entry.files[0]!.text + "\n" }] }, interrupt.signal))
     .rejects.toThrow(/upload part.*Stopped by user/);
   expect(committed).toEqual([entry.operationId]);
 });
