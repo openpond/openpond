@@ -1,4 +1,5 @@
 import { sha256, contentHash } from "@openpond/harness";
+import { previewAgentImport } from "@openpond/evals/connected-evidence";
 import {
   ConnectedEvidenceClient,
   ConnectedSyncClient,
@@ -14,6 +15,7 @@ import { resolveApiKey } from "../cli/common/auth";
 import { withOpenPondHome } from "@openpond/persistence";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { refreshRetainedAdmission } from "./retained-admission";
 export async function collectorClients(
   connection: Pick<
     CollectorConnection,
@@ -48,6 +50,7 @@ let cachedUpload: {
   upload: { hash: string; parts: number };
   nextPart: number;
   preview?: Awaited<ReturnType<ConnectedEvidenceClient["preview"]>>;
+  normalized: ReturnType<typeof previewAgentImport>;
 } | null = null;
 
 // Each acknowledged part gets a fresh network deadline. The job's cancellation
@@ -91,9 +94,13 @@ export const collectorTransport: CollectorTransport = {
       const bytes = Buffer.from(JSON.stringify(entry.files.map(file => ({
         path: file.path, encoding: "utf8", base64: Buffer.from(file.text).toString("base64"),
       }))));
-      cachedUpload = { key, bytes, upload: { hash: sha256(bytes), parts: Math.ceil(bytes.length / 200000) }, nextPart: 0 };
+      const normalized = previewAgentImport({ source: connection.source.source, files: entry.files,
+        acquisition: { machineId: connection.source.machineId, sourceInstanceId: connection.source.instanceId },
+        ...(entry.branchLeafId ? { branchLeafId: entry.branchLeafId } : {}) });
+      cachedUpload = { key, bytes, upload: { hash: sha256(bytes), parts: Math.ceil(bytes.length / 200000) }, nextPart: 0, normalized };
     }
     const retained = cachedUpload;
+    const admission = refreshRetainedAdmission(connection, entry, retained.normalized);
     const upload = retained.upload;
     while (retained.nextPart < upload.parts) {
       const index = retained.nextPart;
@@ -124,7 +131,7 @@ export const collectorTransport: CollectorTransport = {
         { status: 400 },
       );
     const session = preview.sessions.find(
-      (item) => item.sessionHash === entry.contentHash,
+      (item) => item.sessionHash === admission.contentHash,
     );
     if (
       !session ||
@@ -146,7 +153,7 @@ export const collectorTransport: CollectorTransport = {
       );
     const request = {
       ...input,
-      operationId: entry.operationId,
+      operationId: admission.operationId,
       previewHash: preview.previewHash,
       selection: [
         { sessionHash: session.sessionHash, boundaryIds: entry.boundaryIds },
@@ -164,7 +171,7 @@ export const collectorTransport: CollectorTransport = {
     );
     if (
       result.state !== "completed" ||
-      result.operationId !== entry.operationId ||
+      result.operationId !== admission.operationId ||
       result.requestHash !== contentHash(request) ||
       result.projectId !== connection.projectId
     )
