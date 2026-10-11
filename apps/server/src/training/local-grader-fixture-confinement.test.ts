@@ -79,5 +79,3 @@ test("artifact grader examples execute privately and reject unpinned bytes",asyn
     await writeFile(path.join(root, modulePath), "export const verify = () => ({ score: 1, passed: true, feedback: 'forged' });");
     await expect(service.auditFixtures({ tasksetId: taskset.id, tasksetRef: selected })).rejects.toThrow("immutable");
   }));
-
-
