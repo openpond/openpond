@@ -1,6 +1,6 @@
 import { contentHash } from "@openpond/harness";
 import { agentImportNormalizerRevision } from "../connected-evidence/imports.js";
-import { listSessions, readSession } from "./history.js";
+import { listSessions, readSession, inspectSessionWindow } from "./history.js";
 import { NativeSessionNotReadyError } from "./readiness.js";
 import { collectorBranchAnchor } from "./collector-branches.js";
 import { CollectorQueueFullError } from "./collector-snapshots.js";
@@ -60,6 +60,18 @@ export async function acquireCollectorSource(input: {
       const coverage: CollectorCoverageSession = { sourceKeyHash: CollectorCoverage.sourceKey(scanKey), nativeRevisionHash: scanRevision,
         state: "reading", reason: scanRevision ? null : "source_revision_unavailable", unknownTimeBoundaries: 0, normalized: [] };
       try {
+        const outside = await inspectSessionWindow(connection.source, native, { since: connection.since, until, check });
+        if (outside) {
+          coverage.nativeRevisionHash = contentHash(["codex-window-inventory-v1", outside.sha256]);
+          coverage.state = "skipped"; coverage.reason = "no_eligible_boundaries";
+          store.coverage.record(connection.id, coverage);
+          store.progress.read(connection.id, scanKey, false);
+          if (scanRevision) {
+            store.scanned(connection.id, scanKey, scanRevision);
+            cache.retain(connection, until, scanKey, scanRevision, coverage);
+          }
+          continue;
+        }
         const { files, preview, branchLeafId } = await readSession(connection.source, native, {
           branchAnchor: collectorBranchAnchor(store, connection.id, native.nativeSessionId),
         });

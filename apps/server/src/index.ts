@@ -92,7 +92,7 @@ import {
   checkWorkspaceGitAvailability,
   startMacOSCommandLineToolsInstall,
 } from "./workspace/workspaces.js";
-import { loadGitCommitDiffAtPath } from "./workspace/workspace-diff.js";
+import { createImproveCandidateDiffPayload } from "./api/create-improve-candidate-diff.js";
 import { createCodexBridge } from "./runtime/codex-bridge.js";
 import { createCodexRuntimeManager } from "./runtime/codex-runtime.js";
 import { createServerPayloads } from "./api/server-payloads.js";
@@ -1870,29 +1870,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
         generatedAt: new Date().toISOString(),
       }),
       getCreateImproveRunPayload: getCreateImproveRun,
-      getCreateImproveCandidateDiffPayload: async (runId, candidateId) => {
-        const run = await getCreateImproveRun(runId);
-        if (!run) throw new Error("Create/Improve run not found.");
-        const candidate = run.candidates.find(
-          (item) => item.id === candidateId
-        );
-        if (!candidate?.git?.headCommit)
-          throw new Error("Candidate change is not available.");
-        const repoPath =
-          candidate.git.worktreePath ??
-          (run.adapter.kind === "local" ||
-          run.adapter.kind === "promote_local_to_hosted"
-            ? run.adapter.repoPath
-            : null);
-        if (!repoPath)
-          throw new Error("Candidate source is no longer available.");
-        return loadGitCommitDiffAtPath(
-          repoPath,
-          `candidate:${run.id}:${candidate.id}`,
-          candidate.git.baseCommit,
-          candidate.git.headCommit
-        );
-      },
+      getCreateImproveCandidateDiffPayload: createImproveCandidateDiffPayload(getCreateImproveRun),
       applyCreateImproveAction,
       interruptSessionTurn,
       compactSession,
