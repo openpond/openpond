@@ -50,6 +50,24 @@ let cachedUpload: {
   preview?: Awaited<ReturnType<ConnectedEvidenceClient["preview"]>>;
 } | null = null;
 
+// Each acknowledged part gets a fresh network deadline. The job's cancellation
+// signal still bounds the whole import; sharing one minute across every part
+// made healthy multi-megabyte uploads expire before preview or commit.
+async function admissionStep<T>(
+  stage: string,
+  cancellation: AbortSignal | undefined,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const signal = AbortSignal.any([AbortSignal.timeout(60_000), ...(cancellation ? [cancellation] : [])]);
+  try {
+    return await run(signal);
+  } catch (error) {
+    const status = error && typeof error === "object" && "status" in error ? error.status : undefined;
+    throw Object.assign(new Error(`Conversation import ${stage} failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error }),
+      typeof status === "number" ? { status } : {});
+  }
+}
+
 export const collectorTransport: CollectorTransport = {
   async publishCoverage(connection, manifest, cancellation) {
     const { sync } = await collectorClients(connection);
@@ -66,8 +84,7 @@ export const collectorTransport: CollectorTransport = {
     return { revision: remote.revision, state: remote.state, destinations: collectorDestinations(connection, remote), requestedSyncRevision: remote.requestedSyncRevision, completedSyncRevision: remote.completedSyncRevision };
   },
   async admit(connection, entry, cancellation) {
-    const { evidence, sync } = await collectorClients(connection),
-      signal = AbortSignal.any([AbortSignal.timeout(60000), ...(cancellation ? [cancellation] : [])]);
+    const { evidence, sync } = await collectorClients(connection);
     const key = contentHash([connection.id, connection.revision, connection.apiBaseUrl, connection.teamId, connection.account,
       connection.credentialHome, connection.projectId, connection.source.instanceId, entry.branchLeafId, entry.files]);
     if (cachedUpload?.key !== key) {
@@ -80,9 +97,9 @@ export const collectorTransport: CollectorTransport = {
     const upload = retained.upload;
     while (retained.nextPart < upload.parts) {
       const index = retained.nextPart;
-      await evidence.uploadPart({ ...upload, index,
+      await admissionStep(`upload part ${index + 1}/${upload.parts}`, cancellation, signal => evidence.uploadPart({ ...upload, index,
         base64: retained.bytes.subarray(index * 200000, (index + 1) * 200000).toString("base64"),
-      }, signal);
+      }, signal));
       retained.nextPart++;
     }
     const input = {
@@ -98,7 +115,7 @@ export const collectorTransport: CollectorTransport = {
         sourceInstanceId: connection.source.instanceId,
       },
     };
-    const preview = retained.preview ??= await evidence.preview(input, signal);
+    const preview = retained.preview ??= await admissionStep("preview", cancellation, signal => evidence.preview(input, signal));
     if (preview.issues.length)
       throw Object.assign(
         new Error(
@@ -136,14 +153,14 @@ export const collectorTransport: CollectorTransport = {
       ],
     };
     const result = AgentImportReceiptSchema.parse(
-      await sync.commit(
+      await admissionStep("commit", cancellation, signal => sync.commit(
         {
           connectionId: connection.id,
           expectedRevision: connection.revision,
           request,
         },
         signal,
-      ),
+      )),
     );
     if (
       result.state !== "completed" ||

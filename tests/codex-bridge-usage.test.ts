@@ -125,6 +125,9 @@ describe("codex bridge usage ledger", () => {
     });
     const bridge = createCodexBridge({
       store: {
+        async turnByProviderTurnId(providerTurnId: string) {
+          return providerTurnId === "turn_child" ? { id: "turn_child", sessionId: "session_child" } : null;
+        },
         async getSession(sessionId: string) {
           return [parentSession, childSession].find((session) => session.id === sessionId) ?? null;
         },

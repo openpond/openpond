@@ -117,7 +117,8 @@ export function decodeTasksetDraftWorkspaceFile(input: TasksetDraftWorkspaceFile
   try { raw = atob(file.base64); }
   catch { throw new Error("Taskset draft file contains invalid base64."); }
   if (btoa(raw) !== file.base64) throw new Error("Taskset draft file contains noncanonical base64.");
-  const bytes = Uint8Array.from(raw, character => character.charCodeAt(0));
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index++) bytes[index] = raw.charCodeAt(index);
   if (bytes.byteLength !== file.sizeBytes || sha256(bytes) !== file.contentHash) throw new Error("Taskset draft file differs from its retained bytes.");
   return bytes;
 }

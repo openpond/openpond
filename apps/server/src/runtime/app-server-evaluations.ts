@@ -63,7 +63,8 @@ export function createAppServerEvaluations(input: {
     storeDir,
     selectedProfile: selectedEvaluationProfile,
     createSession: createSessionWithAutoTitle,
-    sendTurn: turnRunner.sendTurn,
+    sendTurn: (sessionId, payload, executionLimits) =>
+      turnRunner.sendTurn(sessionId, payload, undefined, undefined, executionLimits),
     interruptSessionTurn: turnRunner.interruptSessionTurn,
   });
   const executeProfileEvaluationCase = (request: unknown, signal?: AbortSignal) => executeCase(request, signal ? AbortSignal.any([signal, shutdown.signal]) : shutdown.signal);

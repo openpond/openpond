@@ -232,5 +232,7 @@ function decode(base64: string): Uint8Array {
   let binary: string;
   try { binary = atob(base64); } catch { throw new Error("Harness source file is not valid base64."); }
   if (btoa(binary) !== base64) throw new Error("Harness source file is not canonical base64.");
-  return Uint8Array.from(binary, character => character.charCodeAt(0));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return bytes;
 }

@@ -5,10 +5,12 @@ import { optionString,parseBooleanOption } from "./common";
 import { LocalExperimentComparisonSchema, LocalExperimentRecordSchema } from "@openpond/contracts";
 import { RunExperimentSchema } from "openpond-sdk/experiments";
 import { compareExperiments } from "@openpond/evals/experiments";
+import { runLocalProfileExperimentCommand } from "./experiments-profile-local";
 
 /** --local selects the running local server, never a hosted Experiment client.
  * The existing capability loader keeps its token out of arguments and output. */
 export async function runLocalExperimentsCommand(options:Record<string,string|boolean>,rest:string[]) {
+  if (await runLocalProfileExperimentCommand(options, rest)) return;
   const [action,id,candidateId]=rest,teamId=optionString(options,"team");
   if(options.revision!==undefined)throw new Error("A local Experiment is one immutable run; read it by id rather than a saved configuration revision.");
   if(action!=="read"&&options.contentHash!==undefined)throw new Error("An exact configuration hash requires the local read action.");

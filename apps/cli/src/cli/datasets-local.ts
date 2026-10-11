@@ -7,7 +7,8 @@ export async function runLocalDatasetsCommand(options:Record<string,string|boole
   if (!action || rest.length > 2) throw new Error("Usage: datasets <schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]");
   const base = new URL(optionString(options,"serverUrl") || process.env.OPENPOND_LOCAL_API_URL || DEFAULT_LOCAL_TRAINING_API_URL);
   if (base.protocol !== "http:" || !["localhost","127.0.0.1","[::1]"].includes(base.hostname) || base.username || base.password || base.search || base.hash || base.pathname !== "/") throw new Error("Local Datasets require an HTTP loopback server origin.");
-  const request = await createLocalAuthenticatedRequest(base.origin);
+  // Packaging returns both the bounded authored workspace and its sealed files.
+  const request = await createLocalAuthenticatedRequest(base.origin,{maximumResponseBytes:128*1024*1024});
   const file = optionString(options,"inputFile");
   let payload:unknown = {};
   if (file) {

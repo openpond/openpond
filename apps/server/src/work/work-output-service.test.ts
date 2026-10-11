@@ -209,6 +209,17 @@ describe("Work output service automatic preservation", () => {
         expect.objectContaining({ title: "README.md" }),
       ]),
     });
+
+    // Native evaluations finish with structured text rather than file links;
+    // declared outputs must still retain real bytes without capturing scratch.
+    events.splice(0);
+    session.metadata = {workspaceTarget:"local",profileEvaluationRun:{id:"evaluation",contentHash:"a".repeat(64)},
+      profileEvaluationOutputs:["sales list.csv","escaped.csv","missing.csv"].map(path=>({path,mediaType:"text/csv",maxBytes:null,schemaRef:null,metadata:{}}))};
+    const declared=await service.saveAllWorkOutputs({session,sourceTurnId:"native_evaluation_turn"});
+    expect(declared).toHaveLength(1);
+    expect(declared[0]!.outputRef).toMatchObject({title:"sales list.csv",sourceTaskId:session.id,sourceTurnId:"native_evaluation_turn",sha256:saved[0]!.outputRef.sha256});
+    session.metadata.profileEvaluationOutputs=[{path:"../outside.csv",mediaType:"text/csv",maxBytes:null,schemaRef:null,metadata:{}}];
+    await expect(service.saveAllWorkOutputs({session,sourceTurnId:"invalid_evaluation_turn"})).rejects.toThrow();
   });
 });
 

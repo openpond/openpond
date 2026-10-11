@@ -5,6 +5,7 @@ import { withUrlModels } from "../enclave/provider.js";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {createLocalExternalDatasetPreparation} from "../harness/local-external-dataset-preparation.js";
+import {createInstallationLocalProfileDatasets} from "../harness/installation-local-profile-datasets.js";
 import {resolveHostedApiAccess} from "../openpond/hosted-api-access.js";
 
 import { nativeTerminalCommand } from "../runtime/native-agents/terminal-command.js";
@@ -1799,8 +1800,10 @@ export function createServerPayloads(deps: {
     });
   }
 
+  const profileDatasets=createInstallationLocalProfileDatasets({store,storeDir,
+    remote:createLocalExternalDatasetPreparation({store,storeDir,resolveAccess:resolveHostedApiAccess,identity:async()=>{const [bootstrap,preferences]=await Promise.all([bootstrapPayload(),loadAppPreferences()]);if(bootstrap.account.state!=="signed_in"||!bootstrap.account.profile?.id||!preferences.defaultTeamId)throw new Error("Sign in and select a workspace before preparing an external Dataset.");return{actorId:bootstrap.account.profile.id,teamId:preferences.defaultTeamId};}})});
   const profilePayloads = createProfilePayloads({ appendRuntimeEvent, store, storeDir, providerSettings: providerSettingsPayload,
-    resolveExternalDataset:createLocalExternalDatasetPreparation({store,storeDir,resolveAccess:resolveHostedApiAccess,identity:async()=>{const [bootstrap,preferences]=await Promise.all([bootstrapPayload(),loadAppPreferences()]);if(bootstrap.account.state!=="signed_in"||!bootstrap.account.profile?.id||!preferences.defaultTeamId)throw new Error("Sign in and select a workspace before preparing an external Dataset.");return{actorId:bootstrap.account.profile.id,teamId:preferences.defaultTeamId};}}),
+    resolveExternalDataset:profileDatasets.resolveExternalDataset,prepareLocalDatasetBinding:profileDatasets.prepareBinding,
   });
 
   let enclaveService: ReturnType<typeof import("../enclave/connection.js").createEnclaveConnection> | undefined;
@@ -1810,6 +1813,7 @@ export function createServerPayloads(deps: {
     return enclaveService(action, payload, signal);
   }
   return {
+    resolveProfileExternalDataset:profileDatasets.resolveExternalDataset,
     enclavePayload,
     openPondCacheScope,
     upsertScaffoldApp,

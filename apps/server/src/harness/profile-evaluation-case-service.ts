@@ -40,7 +40,7 @@ export function createProfileEvaluationCaseService(input: {
   settleSession?:(id:string)=>void|Promise<void>;
   selectedProfile: () => Promise<{ ref: OpenPondProfileRef; sourceRevision: string } | null>;
   createSession: (request: unknown) => Promise<Session>;
-  sendTurn: (sessionId: string, request: unknown) => Promise<Turn>;
+  sendTurn: Parameters<typeof createProfileWorkflowEvaluationExecutor>[0]["sendTurn"];
   interruptSessionTurn?: (sessionId: string, reason?: string) => Promise<Turn>;
 }) {
   return async (request: unknown, signal?: AbortSignal) => {

@@ -26,9 +26,10 @@ export async function resolveTasksetRewardBinding(store: SqliteStore, taskset: T
 export async function resolveTasksetTrainingReward(store: SqliteStore, taskset: Taskset, storeDir?: string) {
   const rewardExecution = await resolveTasksetRewardBinding(store, taskset);
   if (!rewardExecution) return { rewardExecution: undefined, verifierAssets: [] };
-  const references = compileBoundGraders(rewardExecution.binding, rewardExecution.rewards)
-    .flatMap(grader => grader.kind === "custom_verifier" ? [grader.verifierRef]
-      : grader.kind === "model_judge" ? [grader.rubricRef] : []);
+  const references = [...rewardExecution.rewards.flatMap(reward => reward.assets),
+    ...compileBoundGraders(rewardExecution.binding, rewardExecution.rewards)
+      .flatMap(grader => grader.kind === "custom_verifier" ? [grader.verifierRef]
+        : grader.kind === "model_judge" ? [grader.rubricRef] : [])];
   const imported = taskset.metadata.learning === undefined ? undefined : await readImportedLearningTasksetPackage(storeDir, taskset);
   if (imported) {
     const verifierAssets = [...new Map(references.map(reference => {

@@ -38,6 +38,14 @@ export function profileEvaluationOutput(
     const terminal = [...events].reverse().find(event => event.name === "turn.completed");
     const marker = terminal?.data as { providerResponse?: { requestId?: unknown; contentHash?: unknown } } | undefined;
     const response = marker?.providerResponse;
+    const nativeTerminal = terminal?.data as { turn?: { status?: unknown } } | undefined;
+    if (!response && nativeTerminal?.turn?.status === "completed") {
+      const final = [...events].reverse().find(event => nativeFinalAnswerItemId(event) !== null);
+      if (!final) throw new Error("Native Profile evaluation has no retained final answer.");
+      const itemId = nativeFinalAnswerItemId(final);
+      return events.filter(event => nativeFinalAnswerItemId(event) === itemId)
+        .map(event => event.output ?? "").join("");
+    }
     if (typeof response?.requestId !== "string" || !response.requestId
       || typeof response.contentHash !== "string")
       throw new Error("Profile evaluation has no retained final provider response.");
@@ -57,6 +65,13 @@ export function profileEvaluationOutput(
     )
     .map((event) => event.output ?? "")
     .join("");
+}
+
+function nativeFinalAnswerItemId(event: RuntimeEvent): string | null {
+  const data = event.data as { provider?: unknown; phase?: unknown; itemId?: unknown } | undefined;
+  return event.name === "assistant.delta" && data?.provider === "codex"
+    && data.phase === "final_answer" && typeof data.itemId === "string"
+    ? data.itemId : null;
 }
 
 /** Resolve a receipt's exact policy turn through the already authorized store.

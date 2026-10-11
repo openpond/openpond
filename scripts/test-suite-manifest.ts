@@ -144,6 +144,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/workspace-lsp.test.ts",
   "tests/workspace-state.test.ts",
   "tests/workspace-tool-git.test.ts",
+  "tests/codex-provider-shutdown.test.ts",
 ] as const;
 
 // These real namespace/private-grading proofs require Linux user namespaces,
@@ -156,6 +157,7 @@ export const ROOT_QUALIFICATION_TESTS = [
   "tests/python-correctness-preset.integration.test.ts",
   "tests/profile-external-dataset-boundary.test.ts",
   "apps/server/src/training/advanced-refiner-work-confinement.test.ts",
+  "apps/server/src/training/local-grader-fixture-confinement.test.ts",
 ] as const;
 
 export const ROOT_UI_TESTS = [

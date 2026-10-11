@@ -33,7 +33,8 @@ export function decodeTasksetDraftFileContent(input: unknown): Uint8Array {
     else {
       const raw = atob(content.data);
       if (btoa(raw) !== content.data) throw new Error("Noncanonical base64");
-      bytes = Uint8Array.from(raw, character => character.charCodeAt(0));
+      bytes = new Uint8Array(raw.length);
+      for (let index = 0; index < raw.length; index++) bytes[index] = raw.charCodeAt(index);
     }
   } catch { throw new Error("Taskset draft file content is invalid or exceeds 6 MB."); }
   if (bytes.byteLength > MAX_TASKSET_DRAFT_EDIT_FILE_BYTES) throw new Error("Taskset draft file content is invalid or exceeds 6 MB.");

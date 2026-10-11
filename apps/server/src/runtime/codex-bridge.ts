@@ -77,10 +77,14 @@ export function createCodexBridge(deps: {
     if (!kind) return defaultServerRequestResult(request);
 
     const params = request.params && typeof request.params === "object" ? (request.params as Record<string, unknown>) : {};
+    const providerTurnId = stringValue(params, ["turnId", "turn_id"]);
+    const turn = providerTurnId
+      ? await store.turnByProviderTurnId(providerTurnId)
+      : await store.latestTurnForSession(sessionId, "in_progress");
     const approval: Approval = {
       id: randomUUID(),
       sessionId,
-      turnId: typeof params.turnId === "string" ? params.turnId : null,
+      turnId: turn?.sessionId === sessionId ? turn.id : null,
       providerRequestId: request.id,
       kind,
       title:

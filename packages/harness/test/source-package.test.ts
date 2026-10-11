@@ -27,7 +27,7 @@ describe("released Harness source transport", () => {
       ["instructions/system.md", new TextEncoder().encode("Answer using the released rule.")],
       ["skills/report/SKILL.md", new TextEncoder().encode("Read reference.txt before writing the report.")],
       ["skills/report/reference.txt", new TextEncoder().encode("Released report terminology.")],
-      ["private/check.bin", new Uint8Array([0, 255, 128, 1])],
+      ["private/check.bin", Uint8Array.from({ length: 65_539 }, (_, index) => index % 256)],
       ["workflows/catalog.json", new TextEncoder().encode(JSON.stringify({
         schemaVersion: "openpond.profileWorkflows.v1",
         workflows: [{

@@ -15,12 +15,14 @@ import { validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskse
 import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
 import {externalProfileEvaluationDefinition,type ProfileExternalDatasetResolver} from "./profile-external-dataset-admission.js";
 import { type ProfileWorkflow } from "@openpond/harness";
+import {InstallationLocalDatasetSelectionSchema,type InstallationLocalDatasetBindingPreparation} from "./installation-local-profile-datasets.js";
 
 const PrepareRequestSchema = z.object({
   id: ReleaseIdSchema,
   createdAt: ReleaseTimestampSchema,
   definitionId: ReleaseIdSchema,
   externalDatasetBinding: ProfileExternalDatasetBindingSchema.optional(),
+  localDataset:InstallationLocalDatasetSelectionSchema.optional(),
   profileRef: OpenPondProfileRefSchema.optional(),
   profileSource:z.object({sourceRevision:z.string().min(1).max(500),harnessRelease:z.object({id:ReleaseIdSchema,contentHash:ReleaseHashSchema}).strict()}).strict().optional(),
   modelRef: ChatModelRefSchema,
@@ -64,6 +66,7 @@ export function createProfileEvaluationRunPreparationService(input: {
   loadTasksetPackage: (definition: ProfileEvaluationDefinition, profileId: string, harnessRelease: { id: string; contentHash: string }) => Promise<TasksetPackage>;
   /** Trusted current Dataset/Profile ownership and actual published-package resolver; no client marker grants authority. */
   resolveExternalDataset?: ProfileExternalDatasetResolver;
+  prepareLocalDatasetBinding?:InstallationLocalDatasetBindingPreparation;
   modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
   placement: "local" | "remote" | "colocated";
   /** Trusted host's case VM owner reserves compute against the run ledger. */
@@ -78,13 +81,17 @@ export function createProfileEvaluationRunPreparationService(input: {
     const selected = options?.selectedWorkflows ?? await input.selectedWorkflows(parsed.profileRef,parsed.profileSource);
     if(parsed.profileRef&&contentHash(parsed.profileRef)!==contentHash(selected.profileRef))throw new Error("Profile preparation did not resolve the explicitly selected Profile.");
     if(parsed.profileSource&&(selected.sourceRevision!==parsed.profileSource.sourceRevision||contentHash(selected.harnessRelease)!==contentHash(parsed.profileSource.harnessRelease)))throw new Error("Profile preparation changed its explicitly pinned source.");
-    const external=parsed.externalDatasetBinding?verifyProfileExternalDatasetBinding(parsed.externalDatasetBinding):null;
+    if(parsed.localDataset&&parsed.externalDatasetBinding)throw new Error("Select a local Dataset or an external recipe, not both.");
+    const discovered = await input.loadCatalog({ref:selected.profileRef,sourceRevision:selected.sourceRevision,harnessRelease:selected.harnessRelease});
+    const localDefinition=parsed.localDataset?discovered.definitions.find(item=>item.id===parsed.definitionId):null;
+    if(parsed.localDataset&&!localDefinition)throw new Error("Choose an existing accepted Profile definition as the local Dataset target.");
+    const localBinding=parsed.localDataset&&localDefinition?await (input.prepareLocalDatasetBinding?input.prepareLocalDatasetBinding(parsed.localDataset,selected,localDefinition):Promise.reject(new Error("This host has not qualified installation-local Profile Datasets."))):null;
+    const external=localBinding??(parsed.externalDatasetBinding?verifyProfileExternalDatasetBinding(parsed.externalDatasetBinding):null);
     const authorizedExternal=external?await (input.resolveExternalDataset?input.resolveExternalDataset(external,selected):Promise.reject(new Error("This host has not qualified external Dataset Profile execution."))):null;
     if(authorizedExternal){await authorizedExternal.authorize();if(contentHash(verifyProfileExternalDatasetBinding(authorizedExternal.binding))!==contentHash(external))throw new Error("External Dataset admission differs from the actual authorized recipe.");}
-    const discovered = await input.loadCatalog({ref:selected.profileRef,sourceRevision:selected.sourceRevision,harnessRelease:selected.harnessRelease});
     if(external&&external.declaredProfileCatalogHash!==discovered.catalogHash)throw new Error("The original Profile verifier catalog changed.");
     const externalDefinition:ProfileEvaluationDefinition|null=external?externalProfileEvaluationDefinition(external):null;
-    if(externalDefinition&&parsed.definitionId!==externalDefinition.id)throw new Error("Use the external recipe's own definition identity.");
+    if(externalDefinition&&!parsed.localDataset&&parsed.definitionId!==externalDefinition.id)throw new Error("Use the external recipe's own definition identity.");
     const catalog={schemaVersion:"openpond.profileEvaluations.v1" as const,definitions:externalDefinition?[externalDefinition]:discovered.definitions,suites:externalDefinition?[]:discovered.suites};
     const definition=externalDefinition??discovered.definitions.find(item=>item.id===parsed.definitionId);
     if(!definition)throw new Error(`Evaluation ${parsed.definitionId} is absent from the selected Profile release.`);
