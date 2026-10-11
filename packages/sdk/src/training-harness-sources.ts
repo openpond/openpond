@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ImmutableReleaseRefSchema, validateHarnessSourcePackage, type HarnessSourcePackage, type ImmutableReleaseRef } from "@openpond/harness";
+import { ImmutableReleaseRefSchema, validateHarnessSourcePackage, validateHarnessPolicySourcePackage, type HarnessPolicySourcePackage, type HarnessSourcePackage, type ImmutableReleaseRef } from "@openpond/harness";
 import { assertCanonicalPayloadSize, TRAINING_INPUT_ARTIFACT_MAX_BYTES } from "./protocol.js";
 
 export const TrainingHarnessSourcePublicationSchema = z.object({
@@ -16,11 +16,11 @@ export function createTrainingHarnessSourceClient(request: (path: string, init?:
     return `/v1/training/harness-sources/${encodeURIComponent(ref.id)}/${ref.contentHash}`;
   };
   return {
-    async publishHarnessSource(value: HarnessSourcePackage) {
+    async publishHarnessSource(value: HarnessSourcePackage | HarnessPolicySourcePackage) {
       assertCanonicalPayloadSize(value, TRAINING_INPUT_ARTIFACT_MAX_BYTES, "Training Harness source");
-      const source = validateHarnessSourcePackage(value);
+      const source = validateSource(value);
       const portability = source.agentSnapshot.portability;
-      if (!portability.portable || portability.blockers.length || portability.localOnlyAssetRefs.length || portability.hostPrivateAssetRefs.length || source.harnessRelease.files.some(file => file.visibility !== "policy")) {
+      if (!portability.portable || portability.blockers.length || portability.localOnlyAssetRefs.length || portability.hostPrivateAssetRefs.length || (source.schemaVersion === "openpond.harnessSourcePackage.v1" && source.harnessRelease.files.some(file => file.visibility !== "policy"))) {
         throw new Error("Hosted training Harness publication requires portable, policy-visible source.");
       }
       const result = TrainingHarnessSourcePublicationSchema.parse(await request(route({ id: source.harnessRelease.id, contentHash: source.harnessRelease.contentHash }), { method: "PUT", body: JSON.stringify(source) }));
@@ -32,7 +32,14 @@ export function createTrainingHarnessSourceClient(request: (path: string, init?:
     async getHarnessSource(reference: ImmutableReleaseRef) {
       const value = await request(route(reference), undefined, TRAINING_INPUT_ARTIFACT_MAX_BYTES);
       assertCanonicalPayloadSize(value, TRAINING_INPUT_ARTIFACT_MAX_BYTES, "Training Harness source");
-      return validateHarnessSourcePackage(value, reference);
+      return validateSource(value, reference);
     },
   };
+}
+
+function validateSource(value: unknown, reference?: ImmutableReleaseRef) {
+  return typeof value === "object" && value !== null
+    && Reflect.get(value, "schemaVersion") === "openpond.harnessPolicySourcePackage.v1"
+    ? validateHarnessPolicySourcePackage(value, reference)
+    : validateHarnessSourcePackage(value, reference);
 }

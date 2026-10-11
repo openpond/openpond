@@ -2,14 +2,14 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { HarnessRunManifestSchema } from "@openpond/contracts";
-import { assertContentHash, resolveHarnessSourceSelection, sha256, type HarnessSourcePackage } from "@openpond/harness";
+import { assertContentHash, resolveHarnessSourceSelection, sha256, type HarnessSourcePackage, type HarnessPolicySourcePackage } from "@openpond/harness";
 import { verifyResolvedTrainingBundle } from "@openpond/training-sdk";
 
 /** Hosted artifact admission owns the exact executable tool/runtime contract.
  * Check client-known export boundaries before sending source to that endpoint. */
 export function assertHostedTrainingHarnessSource(input: {
   environmentKind: string;
-  sourcePackage: HarnessSourcePackage;
+  sourcePackage: HarnessSourcePackage | HarnessPolicySourcePackage;
 }): void {
   if (input.environmentKind !== "work") {
     throw new Error("Hosted selected Harness execution requires a Work Taskset.");
@@ -19,7 +19,8 @@ export function assertHostedTrainingHarnessSource(input: {
     || portability.localOnlyAssetRefs.length > 0 || portability.hostPrivateAssetRefs.length > 0) {
     throw new Error("The selected Harness contains source that cannot be exported to hosted training.");
   }
-  if (input.sourcePackage.harnessRelease.files.some(file => file.visibility !== "policy")) {
+  if (input.sourcePackage.schemaVersion === "openpond.harnessSourcePackage.v1"
+    && input.sourcePackage.harnessRelease.files.some(file => file.visibility !== "policy")) {
     throw new Error("Hosted selected Harness execution requires policy-visible source files.");
   }
 }

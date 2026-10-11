@@ -21,7 +21,7 @@ import {
   type VersionedReleaseRef,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
-import type { HarnessSourcePackage } from "@openpond/harness";
+import type { HarnessSourcePackage, HarnessPolicySourcePackage } from "@openpond/harness";
 import {
   TrainingAdapterRegistry,
   buildTasksetTrainingBundle,
@@ -84,7 +84,7 @@ export function createPortableModelRunService(deps: {
   }) => Promise<{
     harnessRelease: { id: string; contentHash: string };
     tasksetRelease: { id: string; contentHash: string };
-    harnessSource: HarnessSourcePackage | null;
+    harnessSource: HarnessSourcePackage | HarnessPolicySourcePackage | null;
   }>;
 }) {
   const reconciliationIntervalMs = 5_000;

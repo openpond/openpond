@@ -59,7 +59,7 @@ export function resolveHarnessSourceSelection(input: {
   selection: unknown;
   sourcePackage?: unknown;
   expectedRelease: ImmutableReleaseRef;
-}): { selection: HarnessSourceSelection; sourcePackage: HarnessSourcePackage | null } {
+}): { selection: HarnessSourceSelection; sourcePackage: HarnessSourcePackage | HarnessPolicySourcePackage | null } {
   const selection = HarnessSourceSelectionSchema.parse(input.selection);
   if (selection.harnessRelease.id !== input.expectedRelease.id
     || selection.harnessRelease.contentHash !== input.expectedRelease.contentHash) {
@@ -69,7 +69,11 @@ export function resolveHarnessSourceSelection(input: {
     if (input.sourcePackage !== undefined && input.sourcePackage !== null) throw new Error("Taskset-owned execution cannot include a selected Harness source package.");
     return { selection, sourcePackage: null };
   }
-  const sourcePackage = validateHarnessSourcePackage(input.sourcePackage, selection.harnessRelease);
+  const policy = typeof input.sourcePackage === "object" && input.sourcePackage !== null
+    && Reflect.get(input.sourcePackage, "schemaVersion") === "openpond.harnessPolicySourcePackage.v1";
+  const sourcePackage = policy
+    ? validateHarnessPolicySourcePackage(input.sourcePackage, selection.harnessRelease)
+    : validateHarnessSourcePackage(input.sourcePackage, selection.harnessRelease);
   if (sourcePackage.contentHash !== selection.sourcePackageHash) throw new Error("Harness source selection differs from its captured package.");
   return { selection, sourcePackage };
 }

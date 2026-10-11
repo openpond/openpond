@@ -5,7 +5,7 @@ import path from "node:path";
 import readline from "node:readline";
 
 import type { Taskset } from "@openpond/contracts";
-import { createHarnessSourceRuntime, executeHarnessRollout, type HarnessSourcePackage } from "@openpond/harness";
+import { createHarnessSourceRuntime, executeHarnessRollout, type HarnessPolicySourcePackage, type HarnessSourcePackage } from "@openpond/harness";
 
 import {
   createTrainingHarnessAttemptReceipt,
@@ -51,7 +51,7 @@ export const portableJsonlTrainingAdapter = {
 
 registerTrainingHarnessAdapter(portableJsonlTrainingAdapter);
 
-export async function validatePortableJsonlHarnessSource(input: { taskset: Taskset; storeDir: string; harnessSource: HarnessSourcePackage }): Promise<void> {
+export async function validatePortableJsonlHarnessSource(input: { taskset: Taskset; storeDir: string; harnessSource: HarnessSourcePackage | HarnessPolicySourcePackage }): Promise<void> {
   const task = input.taskset.tasks.find(task => task.split === "train");
   const grader = input.taskset.graders.find(grader => grader.rewardEligible);
   if (!task || !grader) throw new Error("Selected Harness admission requires a training task and reward grader.");
@@ -71,7 +71,7 @@ export async function validatePortableJsonlHarnessSource(input: { taskset: Tasks
   } finally { await bridge.close(); }
 }
 
-function sourceRuntime(source: HarnessSourcePackage, initialized: BridgeInit) {
+function sourceRuntime(source: HarnessSourcePackage | HarnessPolicySourcePackage, initialized: BridgeInit) {
   return createHarnessSourceRuntime({
     sourcePackage: source,
     expectedRelease: { id: source.harnessRelease.id, contentHash: source.harnessRelease.contentHash },

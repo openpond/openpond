@@ -72,6 +72,11 @@ describe("released Harness source transport", () => {
     const selection = { schemaVersion: "openpond.harnessSourceSelection.v1", mode: "selected_release",
       harnessRelease: expectedRelease, sourcePackageHash: captured.contentHash };
     expect(resolveHarnessSourceSelection({ selection, sourcePackage: captured, expectedRelease }).sourcePackage).toEqual(captured);
+    const policySelection = { ...selection, sourcePackageHash: policy.contentHash };
+    expect(resolveHarnessSourceSelection({ selection: policySelection, sourcePackage: policy, expectedRelease }).sourcePackage).toEqual(policy);
+    expect(() => resolveHarnessSourceSelection({ selection: policySelection, sourcePackage: { ...leakedContent, contentHash: contentHash(leakedContent) }, expectedRelease }))
+      .toThrow("not policy-visible");
+    expect(() => resolveHarnessSourceSelection({ selection, sourcePackage: policy, expectedRelease })).toThrow("captured package");
     const releasedCatalog = loadReleasedProfileWorkflowCatalog(captured);
     const workflowBinding = {
       schemaVersion: "openpond.profileWorkflowBinding.v1",

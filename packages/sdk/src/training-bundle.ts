@@ -289,11 +289,6 @@ function addTasksetAssets(input: {
   const expected = new Set<string>();
   for (const task of input.tasks) {
     for (const asset of task.assets ?? []) {
-      if (expected.has(asset.artifactRef)) {
-        throw new Error(
-          `Training asset path ${asset.artifactRef} is shared by multiple tasks.`,
-        );
-      }
       expected.add(asset.artifactRef);
       const value = input.tasksetAssetBytes.get(asset.artifactRef);
       if (!value) {
