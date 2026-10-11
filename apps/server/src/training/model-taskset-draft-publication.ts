@@ -9,6 +9,7 @@ import { cacheTasksetPackage, materializeImportedTasksetPackage, readCachedTasks
 import { desktopTasksetRuntimeAdapterId } from "./portable-evals-adapter.js";
 import { materializeImmutableTasksetPackage } from "./model-starter-package-files.js";
 import { verifyPublishedTasksetAssets } from "./taskset-package-assets.js";
+import { retainModelTasksetInputReview } from "./model-taskset-review-projection.js";
 
 /** Compile the captured edited bytes through the public authoring contract.
  * Only the final native projection is eligible for atomic Model selection. */
@@ -24,7 +25,7 @@ export async function materializeModelTasksetDraftPublication(input: {
   const compiled = publishModelTasksetDraftPackage({ preparation: input.preparation, edited, source });
   if (compiled.modelResources) {
     const imported = prepareImportedTasksetPackage({ package: compiled, profileId: input.taskset.profileId, name: input.taskset.name, createdAt: input.taskset.createdAt });
-    const projected = TasksetSchema.parse({ ...imported.taskset, authoringProvenance: input.taskset.authoringProvenance,
+    const projected = TasksetSchema.parse({ ...retainModelTasksetInputReview(imported.taskset, input.taskset), authoringProvenance: input.taskset.authoringProvenance,
       metadata: { ...imported.taskset.metadata, sourcePackageHash: input.taskset.metadata.sourcePackageHash } });
     const taskset = TasksetSchema.parse({ ...projected, contentHash: computeTasksetHash(projected) });
     await materializeImportedTasksetPackage({ home: input.home, ...imported, taskset });

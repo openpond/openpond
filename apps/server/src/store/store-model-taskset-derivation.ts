@@ -13,6 +13,7 @@ import { createModelTasksetExecutionResourcesAsset } from "openpond-sdk/model-st
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { importStarterReleaseInTransaction } from "./store-starter-release-import.js";
 import { readModelTasksetSource, readSelectedModelReward } from "./store-model-taskset-source.js";
+import { retainModelTasksetInputReview } from "../training/model-taskset-review-projection.js";
 
 export interface PreparedModelTaskset {
   taskset: Taskset;
@@ -61,6 +62,7 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
     const value = bindOrdinaryModelTasksetReward({ owner: { scopeId: project.profileId, modelId: project.id }, source: completeSource, ...selection });
     const preparation = recordModelTasksetPreparation(db, request, persistPreparation);
     const imported = prepareImportedTasksetPackage({ package: value, profileId: project.profileId, name: source.name, createdAt: preparation.created_at });
+    imported.taskset = retainModelTasksetInputReview(imported.taskset, source);
     const derived = { ...value.modelResources!, taskset: value.taskset, executionResources: { environment: value.environment, verifierSet: value.verifierSet } };
     return { taskset: imported.taskset, generatedFiles: imported.generatedFiles, directoryId: String(imported.taskset.environment.metadata.runtimeSourceTasksetId), source, sourcePackage: null, derived, imported };
   }
@@ -87,6 +89,7 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
     if (!resources) throw new Error("Derived imported package is missing execution resources.");
     const value = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset: derivedRelease, ...resources, modelResources, files: [...files.values()] });
     const imported = prepareImportedTasksetPackage({ package: value, profileId: project.profileId, name: source.name, createdAt: preparation.created_at });
+    imported.taskset = retainModelTasksetInputReview(imported.taskset, source);
     return { taskset: imported.taskset, generatedFiles: imported.generatedFiles, directoryId: String(imported.taskset.environment.metadata.runtimeSourceTasksetId), source, sourcePackage, derived, imported };
   }
   const directoryId = `${derived.taskset.id}-r${derived.taskset.revision}-${sealLearningContent({ packageHash: derived.taskset.contentHash, preparedAt: preparation.created_at }).contentHash}`;
