@@ -420,25 +420,28 @@ export function createTaskEvaluationService(deps: {
         expectedPassed: fixture.expectedPassed,
         expectedRewardEligible: fixture.expectedRewardEligible,
         expectedScore: fixture.expectedScore,
+        // A scoped single-grader fixture calibrates that verdict, including a
+        // zero-weight hard gate. Its aggregate task score remains unchanged.
+        observed: graderIds?.length === 1 ? result.components[0]! : result,
         result,
       });
     }
 
     const failures = results.filter(
-      ({ label, expectedPassed, expectedRewardEligible, expectedScore, result }) => {
-        if (!fixtureScoreMatches(expectedScore, result.score)) return true;
-        if (label === "infrastructure_failure" && result.score !== null) {
+      ({ label, expectedPassed, expectedRewardEligible, expectedScore, observed }) => {
+        if (!fixtureScoreMatches(expectedScore, observed.score)) return true;
+        if (label === "infrastructure_failure" && observed.score !== null) {
           return true;
         }
         if (
           typeof expectedPassed === "boolean"
-          && result.passed !== expectedPassed
+          && observed.passed !== expectedPassed
         ) {
           return true;
         }
         return (
           typeof expectedRewardEligible === "boolean"
-          && result.rewardEligible !== expectedRewardEligible
+          && observed.rewardEligible !== expectedRewardEligible
         );
       },
     );
@@ -446,7 +449,7 @@ export function createTaskEvaluationService(deps: {
       .filter((item) => item.label === "infrastructure_failure")
       .every(
         (item) =>
-          item.result.score === null && item.result.rewardEligible === false,
+          item.observed.score === null && item.observed.rewardEligible === false,
       );
     const hackingChecksPassed =
       !failures.some(
@@ -462,7 +465,7 @@ export function createTaskEvaluationService(deps: {
         )
         .every(
           (item) =>
-            !item.result.passed && (item.result.score ?? 0) < 0.8,
+            !item.observed.passed && (item.observed.score ?? 0) < 0.8,
         );
     const leakageChecksPassed = results.every(
       (item) =>
@@ -475,11 +478,11 @@ export function createTaskEvaluationService(deps: {
       label: failure.label,
       gradeId: failure.result.id,
       reason:
-        (failure.expectedScore === undefined ? "" : `Expected score=${String(failure.expectedScore)}; received score=${String(failure.result.score)}. `)
+        (failure.expectedScore === undefined ? "" : `Expected score=${String(failure.expectedScore)}; received score=${String(failure.observed.score)}. `)
         + `Expected passed=${String(failure.expectedPassed)} and `
         + `rewardEligible=${String(failure.expectedRewardEligible)}; received `
-        + `passed=${String(failure.result.passed)} and `
-        + `rewardEligible=${String(failure.result.rewardEligible)}.`,
+        + `passed=${String(failure.observed.passed)} and `
+        + `rewardEligible=${String(failure.observed.rewardEligible)}.`,
     }));
     const report = GraderAuditReportSchema.parse({
       schemaVersion: "openpond.graderAuditReport.v1",
