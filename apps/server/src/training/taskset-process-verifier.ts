@@ -8,6 +8,10 @@ import type { TasksetPackage } from "openpond-sdk/taskset-packages";
 import type { SqliteStore } from "../store/store.js";
 import { executeLocalProfileVerifier } from "../evaluations/profile-sandbox-verifier.js";
 import { captureAuthoredModelTasksetPackage } from "./model-taskset-package-capture.js";
+import { captureLocalTasksetPackage } from "./taskset-package-capture.js";
+import { readCachedTasksetPackage } from "./taskset-package-files.js";
+import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
+import { AuthoredTasksetFileInventorySchema } from "./authored-taskset-files.js";
 import { desktopTasksetRuntimeAdapterId } from "./portable-evals-adapter.js";
 import { localGraderFixtureArtifacts } from "./local-grader-fixture-artifacts.js";
 
@@ -15,6 +19,20 @@ type Artifacts = ReturnType<typeof localGraderFixtureArtifacts>;
 
 export async function captureTasksetEvaluationPackage(storeDir: string, taskset: Taskset) {
   const releases = materializePortableTasksetRelease({ taskset, adapterId: desktopTasksetRuntimeAdapterId(taskset) });
+  if (typeof taskset.metadata.importedPackageHash === "string") {
+    const cached = await readCachedTasksetPackage(storeDir, taskset.metadata.importedPackageHash);
+    if (cached.taskset.contentHash !== releases.tasksetRelease.contentHash) throw new Error("Evaluation Taskset differs from its pinned portable package.");
+    const inventory = AuthoredTasksetFileInventorySchema.parse(taskset.metadata.portableFileInventory ?? []);
+    const { files, contentHash: _hash, ...content } = cached;
+    const captured = await captureLocalTasksetPackage({
+      root: path.join(storeDir, "training", "tasksets", tasksetPackageDirectoryId(taskset)), content,
+      sources: files.map(file => ({ asset: file.asset,
+        sourcePath: inventory.find(entry => entry.asset.id === file.asset.id)?.sourcePath ?? file.asset.path })),
+      fileOrder: files.map(file => file.asset.id),
+    });
+    if (captured.contentHash !== cached.contentHash) throw new Error("Evaluation package changed during capture.");
+    return captured;
+  }
   return captureAuthoredModelTasksetPackage({ storeDir, taskset, content: {
     schemaVersion: "openpond.tasksetPackage.v1", taskset: releases.tasksetRelease,
     environment: releases.environmentRelease, verifierSet: releases.verifierSetRelease,

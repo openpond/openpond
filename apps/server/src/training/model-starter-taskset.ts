@@ -1,6 +1,6 @@
 import { TasksetDraftSchema, type GraderFixture, type GeneratedTaskFile, type TasksetSourceRef } from "@openpond/contracts";
 import { learningRef, sameLearningRef, verifyLearningTextAsset } from "@openpond/evals/learning";
-import { computeTasksetHash, createTasksetDraft, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft } from "@openpond/taskset-sdk";
+import { computeTasksetHash, createTasksetDraft, projectLearningBatchGraders, publishTasksetDraft } from "@openpond/taskset-sdk";
 import { deriveModelTaskset, ModelStarterToolFixtureScriptSchema, validateModelStarterCreation, type ModelStarterCreationRequest, type ModelTasksetPackage } from "openpond-sdk/model-starters";
 
 /** Trusted catalog publication supplies authored fixtures and approved training
@@ -45,7 +45,7 @@ export function prepareModelStarterTaskset(input: {
     if (grader.kind !== "custom_verifier") continue;
     const asset = assets.find(asset => asset.id === grader.verifierRef.id);
     if (!asset) throw new Error(`Starter verifier asset is missing: ${grader.id}.`);
-    const path = learningVerifierModule(grader.verifierRef.contentHash);
+    const path = grader.verifierRef.path;
     if (!files.some(file => file.path === path)) files.push({ path, role: "verifier", content: verifyLearningTextAsset(asset, grader.verifierRef) });
   }
   const authored = TasksetDraftSchema.parse({

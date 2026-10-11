@@ -8,6 +8,7 @@ import {
 } from "@openpond/contracts";
 import type { WorkRuntimeInput } from "../openpond/work-runtime-service.js";
 import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
+import { resolveTasksetPolicyAssetPath } from "./taskset-package-assets.js";
 
 const DEFAULT_MAX_WORK_INPUT_BYTES = 250_000_000;
 const MAX_WORK_INPUT_BYTES = 1_000_000_000;
@@ -40,7 +41,6 @@ export async function resolveTasksetWorkAssets(input: {
     "tasksets",
     tasksetPackageDirectoryId(input.taskset),
   );
-  const assetRoot = path.resolve(tasksetRoot, "assets");
   const resolved: ResolvedTasksetWorkAsset[] = [];
 
   for (const asset of input.task.assets ?? []) {
@@ -61,15 +61,7 @@ export async function resolveTasksetWorkAssets(input: {
       );
     }
     assertEligibleSource(source, asset);
-    const target = path.resolve(tasksetRoot, asset.artifactRef);
-    if (
-      target === assetRoot
-      || !target.startsWith(`${assetRoot}${path.sep}`)
-    ) {
-      throw new Error(
-        `Work asset ${asset.id} must resolve inside the Taskset assets directory.`,
-      );
-    }
+    const target = resolveTasksetPolicyAssetPath(tasksetRoot, input.taskset, asset);
     const status = await lstat(target);
     if (!status.isFile() || status.isSymbolicLink()) {
       throw new Error(`Work asset ${asset.id} must be a regular file.`);

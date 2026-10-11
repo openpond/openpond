@@ -98,6 +98,8 @@ export function compileModelTasksetReward(input: {
       rewardExecution: { binding: rewardBinding, rewards },
       ...(graderFixtures === undefined ? {} : { starterAuthoring: { graderFixtures } }),
       ...(edited.taskset.metadata.environmentResources === undefined ? {} : { environmentResources: edited.taskset.metadata.environmentResources }),
+      ...(edited.taskset.metadata.workAssetStagingPaths === undefined ? {} : { workAssetStagingPaths: edited.taskset.metadata.workAssetStagingPaths }),
+      ...(edited.taskset.metadata.tasksetOutputContract === undefined ? {} : { tasksetOutputContract: edited.taskset.metadata.tasksetOutputContract }),
       modelTasksetDerivation: { schemaVersion: "openpond.modelTasksetDerivation.v1", owner, root, parent: learningRef(source.taskset) },
     },
   }));

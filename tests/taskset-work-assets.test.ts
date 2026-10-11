@@ -45,6 +45,18 @@ describe("Taskset Work assets", () => {
     await rename(path.join(root, fixture.taskset.id), path.join(root, "pinned-revision"));
     fixture.taskset.environment.metadata.runtimeSourceTasksetId = "pinned-revision";
     expect((await resolveTasksetWorkAssets(fixture))[0]?.bytes).toEqual(fixture.bytes);
+    const asset = fixture.task.assets![0]!;
+    await rename(path.join(root, "pinned-revision", "assets"), path.join(root, "pinned-revision", "inputs"));
+    asset.artifactRef = "inputs/inventory.csv";
+    const inventory = [{ sourcePath: asset.artifactRef, asset: { id: asset.id, path: asset.artifactRef, contentHash: asset.sha256,
+      sizeBytes: asset.sizeBytes, mediaType: asset.mediaType, visibility: "policy" } }];
+    fixture.taskset.metadata.portableFileInventory = inventory;
+    expect((await resolveTasksetTrainingAssetBytes(fixture)).get(asset.artifactRef)).toEqual(fixture.bytes);
+    inventory[0]!.asset.visibility = "verifier";
+    await expect(resolveTasksetWorkAssets(fixture)).rejects.toThrow("declared policy inventory");
+    inventory[0]!.asset.visibility = "policy";
+    inventory[0]!.asset.contentHash = "0".repeat(64);
+    await expect(resolveTasksetWorkAssets(fixture)).rejects.toThrow("declared policy inventory");
     fixture.taskset.environment.metadata.runtimeSourceTasksetId = "../outside";
     await expect(resolveTasksetWorkAssets(fixture)).rejects.toThrow("invalid package directory identity");
   });

@@ -637,7 +637,7 @@ importers:
         specifier: ^0.12.0
         version: link:../evals
       '@openpond/harness':
-        specifier: ^0.4.7
+        specifier: ^0.4.8
         version: link:../harness
       esbuild:
         specifier: 0.28.1

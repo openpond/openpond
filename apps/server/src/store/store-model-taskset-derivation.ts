@@ -3,7 +3,7 @@ import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "@openpond/c
 import { assertLearningContentHash, learningRef, sameLearningRef, sealLearningContent, TaskBatchPackageMetadataSchema, verifyLearningTextAsset } from "@openpond/evals/learning";
 import { resolveBoundRewards } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
-import { computeTasksetHash, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
+import { computeTasksetHash, projectLearningBatchGraders, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
 import { ModelProjectSchema, ModelProjectVersionedRefSchema, OpenPondModelProjectApiError, parseModelProjectSaveRequest, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { createModelStarterExecutionAsset, deriveModelTaskset, ModelTasksetDerivationSchema, type ModelTasksetPackage } from "openpond-sdk/model-starters";
 import { bindOrdinaryModelTasksetReward, createTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
@@ -13,6 +13,7 @@ import { createModelTasksetExecutionResourcesAsset } from "openpond-sdk/model-st
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { importStarterReleaseInTransaction } from "./store-starter-release-import.js";
 import { readModelTasksetSource, readSelectedModelReward } from "./store-model-taskset-source.js";
+import { retainModelTasksetInputReview } from "../training/model-taskset-review-projection.js";
 
 export interface PreparedModelTaskset {
   taskset: Taskset;
@@ -61,6 +62,7 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
     const value = bindOrdinaryModelTasksetReward({ owner: { scopeId: project.profileId, modelId: project.id }, source: completeSource, ...selection });
     const preparation = recordModelTasksetPreparation(db, request, persistPreparation);
     const imported = prepareImportedTasksetPackage({ package: value, profileId: project.profileId, name: source.name, createdAt: preparation.created_at });
+    imported.taskset = retainModelTasksetInputReview(imported.taskset, source);
     const derived = { ...value.modelResources!, taskset: value.taskset, executionResources: { environment: value.environment, verifierSet: value.verifierSet } };
     return { taskset: imported.taskset, generatedFiles: imported.generatedFiles, directoryId: String(imported.taskset.environment.metadata.runtimeSourceTasksetId), source, sourcePackage: null, derived, imported };
   }
@@ -87,6 +89,7 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
     if (!resources) throw new Error("Derived imported package is missing execution resources.");
     const value = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset: derivedRelease, ...resources, modelResources, files: [...files.values()] });
     const imported = prepareImportedTasksetPackage({ package: value, profileId: project.profileId, name: source.name, createdAt: preparation.created_at });
+    imported.taskset = retainModelTasksetInputReview(imported.taskset, source);
     return { taskset: imported.taskset, generatedFiles: imported.generatedFiles, directoryId: String(imported.taskset.environment.metadata.runtimeSourceTasksetId), source, sourcePackage, derived, imported };
   }
   const directoryId = `${derived.taskset.id}-r${derived.taskset.revision}-${sealLearningContent({ packageHash: derived.taskset.contentHash, preparedAt: preparation.created_at }).contentHash}`;
@@ -94,7 +97,7 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
   const portableTasks = new Map(derived.taskset.tasks.map(task => [task.id, task]));
   const generatedFiles: GeneratedTaskFile[] = [];
   for (const grader of derived.taskset.graders) if (grader.kind === "custom_verifier") {
-    const path = learningVerifierModule(grader.verifierRef.contentHash);
+    const path = grader.verifierRef.path;
     if (!generatedFiles.some(file => file.path === path)) generatedFiles.push({ path, role: "verifier", content: verifyLearningTextAsset(assets.get(grader.verifierRef.id)!, grader.verifierRef) });
   }
   const published = publishTasksetDraft({ tasksetId: derived.taskset.id, now: preparation.created_at, sourcePackageHash: derived.taskset.contentHash, draft: {

@@ -1,10 +1,59 @@
 export { projectLearningBatchGraders, learningVerifierModule } from "openpond-sdk/taskset-packages";
 import { type GradeResult, type GraderSpec, type TaskAttemptResult, type TaskDataRecord } from "@openpond/contracts";
 import { TaskRecordSchema } from "@openpond/evals";
-import { executeRewardBinding, resolveBoundRewards, type RewardBinding, type RewardRelease } from "@openpond/evals/rewards";
+import { compileBoundGraders, executeRewardBinding, resolveBoundRewards, type RewardBinding, type RewardRelease } from "@openpond/evals/rewards";
+import { aggregateGraderScores, gradeEvidence } from "@openpond/evals/graders";
 import { learningRef } from "@openpond/evals/learning";
 import { contentHash } from "./hashing.js";
 import type { CustomVerifierRunner, ModelJudgeRunner } from "./graders.js";
+
+/** Owner-side fixture calibration checks a declared subset without turning
+ * unrelated binding gates into failures or changing the published binding. */
+export async function gradeLearningCalibrationAttempt(input: Parameters<typeof gradeLearningBatchAttempt>[0]): Promise<GradeResult> {
+  const { binding, rewards } = input.learning;
+  const resolved = resolveBoundRewards(binding, rewards);
+  const ids = new Set(input.graders.map(grader => grader.id));
+  if (!ids.size || ids.size !== input.graders.length || input.graders.some(grader => {
+    const declared = resolved.find(item => item.source.graderId === grader.id);
+    return !declared || grader.version !== String(declared.reward.revision)
+      || contentHash(grader.metadata.rewardBinding) !== contentHash(learningRef(binding));
+  })) throw new Error("Calibration graders differ from the immutable Reward binding.");
+  const graders = compileBoundGraders(binding, rewards).filter(grader => ids.has(grader.id));
+  const task = TaskRecordSchema.parse({ id: input.task.id, clusterKey: input.task.clusterKey, split: input.task.split,
+    input: input.task.input, expectedOutput: input.task.expectedOutput, policyVisibleContext: input.task.policyVisibleContext,
+    privilegedContextRef: input.task.privilegedContextRef, artifactRefs: [], tags: input.task.tags });
+  const evidence = await gradeEvidence({ task, graders, signal: input.signal,
+    evidence: { output: input.attempt.output, artifactRefs: input.attempt.artifactRefs,
+      runtimeEventRefs: input.attempt.runtimeEventRefs, infrastructureError: input.attempt.infrastructureError },
+    customVerifier: input.customVerifier ? async ({ grader }) => {
+      const projected = input.graders.find(item => item.id === grader.id);
+      if (projected?.kind !== "custom_verifier") throw new Error("Calibration verifier projection is missing.");
+      const result = await input.customVerifier!({ grader: projected, task: input.task, attempt: input.attempt, signal: input.signal });
+      return { score: result.score, passed: result.passed, rewardEligible: grader.rewardEligible, failureClass: null,
+        feedback: [result.feedback], visibleEvidenceRefs: [], privilegedEvidenceRefs: result.evidenceRefs ?? [] };
+    } : undefined,
+    modelJudge: input.modelJudge ? async ({ grader }) => {
+      const projected = input.graders.find(item => item.id === grader.id);
+      if (projected?.kind !== "model_judge") throw new Error("Calibration judge projection is missing.");
+      const result = await input.modelJudge!({ grader: projected, task: input.task, attempt: input.attempt });
+      return { score: result.score, passed: result.passed, rewardEligible: grader.rewardEligible, failureClass: null,
+        feedback: [result.feedback], visibleEvidenceRefs: [], privilegedEvidenceRefs: result.evidenceRefs ?? [] };
+    } : undefined,
+  });
+  const summary = aggregateGraderScores({ graders, components: evidence, infrastructureError: input.attempt.infrastructureError });
+  const components = evidence.map(item => {
+    const grader = input.graders.find(grader => grader.id === item.graderId)!;
+    return { graderId: item.graderId, graderVersion: item.graderVersion, score: item.score, passed: item.passed,
+      hardGate: grader.hardGate, rewardEligible: item.rewardEligible, feedback: item.feedback.join("\n") || null,
+      evidenceRefs: [...item.visibleEvidenceRefs, ...item.privilegedEvidenceRefs],
+      judge: grader.kind === "model_judge" ? grader.judge : null,
+      calibrationStatus: grader.kind === "model_judge" ? grader.calibrationStatus : "not_applicable" as const };
+  });
+  return { schemaVersion: "openpond.gradeResult.v1", id: `calibration_${contentHash([input.attempt.id, binding.contentHash, evidence]).slice(0, 24)}`,
+    attemptId: input.attempt.id, graderSetHash: contentHash(input.graders), score: summary.score, passed: summary.passed,
+    components, failureClass: summary.failureClass, feedback: evidence.flatMap(item => item.feedback),
+    rewardEligible: summary.rewardEligible, createdAt: input.now?.() ?? new Date().toISOString() };
+}
 
 export async function gradeLearningBatchAttempt(input: {
   task: TaskDataRecord; attempt: TaskAttemptResult; graders: GraderSpec[];

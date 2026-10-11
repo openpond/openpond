@@ -5,7 +5,7 @@ import { z } from "zod";
 import { learningRef, taskBatchPackageMetadata, verifyLearningTextAsset } from "@openpond/evals/learning";
 import { computeTasksetHash } from "./taskset-authored-validation.js";
 import { createTasksetDraft } from "./taskset-draft-authoring.js";
-import { learningVerifierModule, projectLearningBatchGraders, importedPackageGraders } from "./taskset-package-grader-projection.js";
+import { projectLearningBatchGraders, importedPackageGraders } from "./taskset-package-grader-projection.js";
 import { decodeTasksetPackageFile, resolveTasksetPackageInstructions, validateTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
 
 /** Local identity includes Profile and provenance; portable identity stays in
@@ -31,7 +31,7 @@ export function prepareImportedTasksetPackage(input: {
     const asset = resources?.assets.find(asset => asset.id === grader.verifierRef.id);
     const file = value.files.find(file => file.asset.id === grader.verifierRef.id);
     if (!file) throw new Error(`Imported verifier source is missing: ${grader.id}.`);
-    const name = learningVerifierModule(grader.verifierRef.contentHash);
+    const name = grader.verifierRef.path;
     if (!files.some(file => file.path === name)) files.push({ path: name, role: "verifier", content: asset ? verifyLearningTextAsset(asset, grader.verifierRef) : new TextDecoder("utf-8", { fatal: true }).decode(decodeTasksetPackageFile(file)) });
   }
   const authoring = (release.metadata.ordinaryAuthoring ?? release.metadata.starterAuthoring) as { graderFixtures?: unknown } | undefined;
