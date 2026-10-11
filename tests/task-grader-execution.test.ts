@@ -21,7 +21,7 @@ describe("grader execution", () => {
     const source = `import fs from 'node:fs'; export function verify({artifacts}) { let denied=false; try { fs.readFileSync(${JSON.stringify(path.join(directory, "state/state.sqlite"))}); } catch { denied=true; } const passed=denied && artifacts.length===1 && Buffer.from(artifacts[0].base64,'base64').toString()==='verified bytes'; return {score:Number(passed),passed,feedback:'Checked pinned bytes with filesystem isolation',evidenceRefs:[]}; }`;
     const custom = { id: "private", version: "1", label: "Private artifact", kind: "custom_verifier" as const, runtime: "sandbox_process" as const,
       module: modulePath, exportName: "verify", timeoutMs: 10000, networkPolicy: "none" as const, weight: 1, hardGate: true, rewardEligible: true, privileged: true, metadata: {} };
-    const text = { id: "text", version: "1", label: "Text", kind: "state" as const, weight: 1, hardGate: true, rewardEligible: true, privileged: true, config: { fields: ["text"] }, metadata: {} };
+    const text = { id: "text", version: "1", label: "Text", kind: "state" as const, weight: 0, hardGate: true, rewardEligible: false, privileged: true, config: { fields: ["text"] }, metadata: {} };
     const initial = tasksetFixture({ graders: [custom, text] });
     initial.tasks = initial.tasks.map(task => ({ ...task, privilegedContextRef: null }));
     initial.environment.metadata.runtimeSourceTasksetId = initial.id;
@@ -29,7 +29,7 @@ describe("grader execution", () => {
       output: { text: "irrelevant" }, infrastructureError: null, expectedPassed: good, expectedRewardEligible: true,
       metadata: { graderIds: [custom.id], artifactAssetIds: good ? [fixtureId] : [] } }));
     initial.graderFixtures.push({ id: "text-good", taskId: "task_eval", label: "positive", output: { text: "Goodbye friend" }, infrastructureError: null,
-      expectedPassed: true, expectedRewardEligible: true, metadata: { graderIds: [text.id] } });
+      expectedPassed: true, expectedRewardEligible: false, metadata: { graderIds: [text.id], expectedScore: 1 } });
     const files = new Map([[modulePath, Buffer.from(source)], [fixturePath, Buffer.from("verified bytes")]]);
     const { taskset } = prepareAuthoredTasksetSource(initial, files, "openpond.desktop.v1");
     const root = path.join(directory, "training/tasksets", tasksetPackageDirectoryId(taskset));
