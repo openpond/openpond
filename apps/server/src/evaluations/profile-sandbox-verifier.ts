@@ -45,6 +45,7 @@ export const executeLocalProfileVerifier: ProfileSandboxVerifier = async (input)
   const root = await mkdtemp(path.join(os.tmpdir(), "profile-private-grade-"));
   const identity = randomUUID();
   try {
+    const staged = new Map<string, { contentHash: string; sizeBytes: number }>();
     for (const file of value.files.filter((file) => file.asset.visibility !== "policy")) {
       const relative = file.asset.path;
       if (
@@ -52,6 +53,14 @@ export const executeLocalProfileVerifier: ProfileSandboxVerifier = async (input)
         relative.split(/[\\/]/).some((p) => !p || p === "." || p === "..")
       )
         throw new Error("Private grader asset path invalid.");
+      const previous = staged.get(relative);
+      if (previous) {
+        if (previous.contentHash !== file.asset.contentHash || previous.sizeBytes !== file.asset.sizeBytes) {
+          throw new Error("Private grader assets declare conflicting bytes at the same path.");
+        }
+        continue;
+      }
+      staged.set(relative, { contentHash: file.asset.contentHash, sizeBytes: file.asset.sizeBytes });
       const destination = path.join(root, "package", relative);
       await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
       await writeFile(destination, decodeTasksetPackageFile(file), { mode: 0o400 });
