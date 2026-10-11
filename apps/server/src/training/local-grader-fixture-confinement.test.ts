@@ -28,4 +28,3 @@ test("artifact grader examples execute privately and reject unpinned bytes",asyn
     expect(invalid.check).toMatchObject({status:"unavailable",checked:0});
   } finally {await store.close();await rm(home,{recursive:true,force:true});}
 });
-

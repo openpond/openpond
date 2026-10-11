@@ -144,6 +144,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/workspace-lsp.test.ts",
   "tests/workspace-state.test.ts",
   "tests/workspace-tool-git.test.ts",
+  "tests/codex-provider-shutdown.test.ts",
 ] as const;
 
 // These real namespace/private-grading proofs require Linux user namespaces,

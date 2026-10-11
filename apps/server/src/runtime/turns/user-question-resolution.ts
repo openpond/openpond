@@ -104,4 +104,3 @@ export function promptWithUserQuestionResolution(
     .filter(Boolean)
     .join("\n")}`;
 }
-
