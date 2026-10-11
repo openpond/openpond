@@ -12,7 +12,7 @@ export function importedPackageGraders(value: TasksetPackage) {
   return value.taskset.graders.map(grader => {
     const base = { ...grader, label: grader.id, metadata: { portableGrader: grader } };
     if (grader.kind === "custom_verifier") return GraderSpecSchema.parse({ ...base,
-      module: learningVerifierModule(grader.verifierRef.contentHash), exportName: grader.exportName ?? "verify",
+      module: grader.verifierRef.path, exportName: grader.exportName ?? "verify",
       metadata: { ...base.metadata, portableVerifierRef: grader.verifierRef } });
     if (grader.kind === "human" || grader.kind === "model_judge") {
       const file = value.files.find(file => file.asset.id === grader.rubricRef.id);
@@ -47,7 +47,7 @@ export function projectLearningBatchGraders(binding: RewardBinding, rewards: Rew
       });
     }
     if (grader.kind === "custom_verifier") return GraderSpecSchema.parse({ ...base,
-      module: learningVerifierModule(grader.verifierRef.contentHash), exportName: grader.exportName ?? "verify",
+      module: grader.verifierRef.path, exportName: grader.exportName ?? "verify",
       metadata: { ...base.metadata, portableVerifierRef: grader.verifierRef },
     });
     if (grader.kind === "human") {

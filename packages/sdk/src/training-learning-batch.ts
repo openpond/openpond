@@ -5,7 +5,7 @@ import { scanAndRedactEvidence } from "./training-privacy.js";
 import { compileTaskBatch, learningRef, taskBatchPackageMetadata, verifyLearningTextAsset, type LearningTextAsset, type RewardBinding, type RewardComposition, type RewardRelease, type TaskAdmissionDecision, type TaskBatch, type TaskDefinition, type TaskEvidence } from "@openpond/evals";
 import { computeTasksetHash } from "./taskset-authored-validation.js";
 import { contentHash } from "@openpond/harness";
-import { learningVerifierModule, projectLearningBatchGraders } from "./taskset-package-grader-projection.js";
+import { projectLearningBatchGraders } from "./taskset-package-grader-projection.js";
 import { materializeLearningBatchAssets } from "./learning-batch-assets.js";
 import { MAX_TASKSET_PACKAGE_BYTES } from "./taskset-package-files.js";
 
@@ -52,7 +52,7 @@ export function materializeLearningBatchTaskset(input: {
     if (grader.kind !== "custom_verifier") continue;
     const asset = input.assets?.find((asset) => asset.id === grader.verifierRef.id);
     if (!asset) throw new Error(`Reward ${grader.id} is missing its immutable verifier source.`);
-    const module = learningVerifierModule(grader.verifierRef.contentHash);
+    const module = grader.verifierRef.path;
     if (!generatedFiles.some((file) => file.path === module)) generatedFiles.push({ path: module, role: "verifier", content: verifyLearningTextAsset(asset, grader.verifierRef) });
   }
   const taskset = TasksetSchema.parse({

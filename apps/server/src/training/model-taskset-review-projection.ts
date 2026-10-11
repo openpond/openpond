@@ -1,5 +1,6 @@
 import { TasksetSchema, type Taskset } from "@openpond/contracts";
 import { computeTasksetHash } from "@openpond/taskset-sdk";
+import { ImmutableAssetRefSchema } from "@openpond/harness";
 
 /** A Model-owned Reward edit keeps the owner's review of the same task inputs.
  * Package import defaults still apply to newly fetched, unreviewed packages.
@@ -14,8 +15,13 @@ export function retainModelTasksetInputReview(compiled: Taskset, reviewed: Tasks
     if (!original) throw new Error("Model Taskset review is missing a compiled task.");
     const assets = (task.assets ?? []).map(asset => {
       const previous = original.assets?.find(candidate => candidate.id === asset.id);
+      const portable = ImmutableAssetRefSchema.safeParse(previous?.metadata.portableAsset);
+      const samePath = previous?.artifactRef === asset.artifactRef || (portable.success
+        && portable.data.path === asset.artifactRef && portable.data.id === asset.id
+        && portable.data.contentHash === asset.sha256 && portable.data.sizeBytes === asset.sizeBytes
+        && portable.data.mediaType === asset.mediaType && portable.data.visibility === "policy");
       if (!previous || previous.sha256 !== asset.sha256 || previous.sizeBytes !== asset.sizeBytes
-        || previous.artifactRef !== asset.artifactRef || previous.mediaType !== asset.mediaType
+        || !samePath || previous.mediaType !== asset.mediaType
         || previous.fileName !== asset.fileName || previous.split !== task.split
         || !original.sourceRefs.includes(previous.sourceRefId) || !sources.has(previous.sourceRefId)) {
         throw new Error("Model Taskset review differs from its compiled input asset.");
