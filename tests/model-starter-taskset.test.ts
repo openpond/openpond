@@ -29,6 +29,7 @@ import { TasksetReleaseSchema, type TasksetRelease } from "@openpond/evals/tasks
 import { compileDesktopHarnessContext } from "../apps/server/src/training/portable-evals-adapter.js";
 import { createModelProjectSaveRequest, ModelProjectSchema, HostedModelProjectSummarySchema, type HostedModelProjectSummary, type ModelProject } from "openpond-sdk/model-projects";
 import { readTasksetGraderDetails } from "../apps/server/src/training/taskset-grader-details.js";
+import { captureTasksetEvaluationPackage } from "../apps/server/src/training/taskset-process-verifier.js";
 import { verifyPublishedTasksetAssets } from "../apps/server/src/training/taskset-package-assets.js";
 import { retainModelTasksetInputReview } from "../apps/server/src/training/model-taskset-review-projection.js";
 import { materializeImmutableTasksetPackage } from "../apps/server/src/training/model-starter-package-files.js";
@@ -189,6 +190,17 @@ it("pulls complete private packages atomically and exports their exact bytes aft
     expect(pulled.trainingSetup.evaluationTasksetRef).toEqual(learningRef(localEvaluation));
     expect(localEvaluation.contentHash).not.toBe(evaluation.taskset.contentHash);
     expect(local.contentHash).not.toBe(value.taskset.contentHash);
+    expect(await captureTasksetEvaluationPackage(target.home, local)).toEqual(value);
+    const privateFile = value.files.find(file => file.asset.visibility !== "policy")!;
+    const privatePath = path.join(target.home, "training", "tasksets", tasksetPackageDirectoryId(local), privateFile.asset.path);
+    const retainedPrivateBytes = await readFile(privatePath);
+    try {
+      const altered = Buffer.from(retainedPrivateBytes);
+      altered[0] = altered[0]! ^ 1;
+      await writeFile(privatePath, altered);
+      await expect(captureTasksetEvaluationPackage(target.home, local)).rejects.toThrow();
+    } finally { await writeFile(privatePath, retainedPrivateBytes); }
+
     expect(local.sourceRefs[0]).toMatchObject({ licensingStatus: "pending", secretScanStatus: "pending", piiScanStatus: "pending" });
     expect(validateTaskset(local).valid).toBe(false);
     expect(await readFile(path.join(target.home, "training", "tasksets", tasksetPackageDirectoryId(local), asset.path))).toEqual(bytes);
