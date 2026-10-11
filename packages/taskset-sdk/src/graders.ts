@@ -8,7 +8,11 @@ import {
 import { aggregateGraderScores, evaluateDeterministicGrader, portableDeterministicCheck } from "@openpond/evals/graders";
 import type { RewardBinding, RewardRelease } from "@openpond/evals/rewards";
 import { contentHash } from "./hashing.js";
-import { gradeLearningBatchAttempt } from "./learning-graders.js";
+import { gradeLearningBatchAttempt, gradeLearningCalibrationAttempt } from "./learning-graders.js";
+
+export async function gradeCalibrationAttempt(input: Parameters<typeof gradeAttempt>[0]): Promise<GradeResult> {
+  return input.learning ? gradeLearningCalibrationAttempt({ ...input, learning: input.learning }) : gradeAttempt(input);
+}
 
 export type ModelJudgeRunner = (input: {
   grader: Extract<GraderSpec, { kind: "model_judge" }>;

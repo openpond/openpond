@@ -40,6 +40,10 @@ test("saves ordinary tasks with a selected Reward through immutable revisions", 
     const checked = await checkModelProjectConfiguration({ store, request, destinations: async () => [] });
     expect(checked.findings.filter(finding => finding.code === "model_taskset_derivation_unavailable")).toEqual([]);
     const saved = await store.saveModelProjectConfiguration(request);
+    const selectedTasks = (await store.getTasksetRevision(saved.trainingSetup.tasksetRef!.id, saved.trainingSetup.tasksetRef!.revision))!;
+    expect(selectedTasks.sourceRefs).toEqual(source.sourceRefs);
+    expect(selectedTasks.learningSignals).toEqual(source.learningSignals);
+    expect(selectedTasks.readiness).toBeNull();
     expect(saved.trainingSetup.tasksetRef?.id).not.toBe(source.id);
     expect(saved.trainingSetup.rewardBindingRef).toEqual(learningRef(fixture.binding));
     expect(saved.trainingSetup.evaluationTasksetRef).toEqual(saved.trainingSetup.tasksetRef);
@@ -76,6 +80,8 @@ test("saves ordinary tasks with a selected Reward through immutable revisions", 
     expect(afterTaskEdit.trainingSetup.rewardBindingRef).toEqual(learningRef(replacement));
     expect(afterTaskEdit.trainingSetup.evaluationTasksetRef).toEqual(afterTaskEdit.trainingSetup.tasksetRef);
     expect(published.taskset.revision).toBe(3);
+    expect(published.taskset.sourceRefs).toEqual(edited.sourceRefs);
+    expect(published.taskset.sourceRefs.every(ref => ref.licensingStatus === "approved" && ref.secretScanStatus === "passed" && ref.piiScanStatus === "passed")).toBe(true);
     const taskEditExport = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: project.profileId, modelId: project.id });
     expect(taskEditExport.modelResources?.rewardBinding).toEqual(replacement);
     expect(taskEditExport.taskset.tasks[0]?.input.prompt).toBe("Use the revised task request.");

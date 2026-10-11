@@ -3,6 +3,7 @@ import path from "node:path";
 import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "@openpond/contracts/tasksets";
 import { canonicalJson } from "./canonical-json.js";
 import { validateTaskset } from "./validation.js";
+import { ImmutableAssetRefSchema, sha256 } from "@openpond/harness";
 
 export type TasksetBuildResult = {
   directory: string;
@@ -12,6 +13,12 @@ export type TasksetBuildResult = {
 
 export async function buildTaskset(input: unknown, directory: string, options: { generatedFiles?: GeneratedTaskFile[] } = {}): Promise<TasksetBuildResult> {
   const taskset = TasksetSchema.parse(input);
+  const verifierAssets = new Map(taskset.graders.flatMap(grader => {
+    if (grader.kind !== "custom_verifier") return [];
+    const declared = ImmutableAssetRefSchema.safeParse(grader.metadata.portableVerifierRef);
+    return declared.success && declared.data.visibility !== "policy" && declared.data.path === grader.module
+      ? [[grader.module, declared.data] as const] : [];
+  }));
   const report = validateTaskset(taskset);
   if (!report.valid) throw new Error(report.issues.map((issue) => `${issue.code}: ${issue.message}`).join("\n"));
   await mkdir(path.join(directory, "data"), { recursive: true });
@@ -33,7 +40,11 @@ export async function buildTaskset(input: unknown, directory: string, options: {
   await writeFile(files[4]!, canonicalJson(taskset.graderFixtures), "utf8");
   await writeFile(files[5]!, generatedEnvironmentSource(taskset), "utf8");
   for (const generated of options.generatedFiles ?? []) {
-    const relative = safeGeneratedPath(generated.path, generated.role);
+    const relative = safeGeneratedPath(generated.path, generated.role, verifierAssets.has(generated.path));
+    const declared = generated.role === "verifier" ? verifierAssets.get(generated.path) : undefined;
+    if (declared && (Buffer.byteLength(generated.content) !== declared.sizeBytes || sha256(generated.content) !== declared.contentHash)) {
+      throw new Error("Generated verifier differs from its immutable source.");
+    }
     const destination = path.join(directory, relative);
     await mkdir(path.dirname(destination), { recursive: true });
     await writeFile(destination, generated.content, "utf8");
@@ -41,18 +52,25 @@ export async function buildTaskset(input: unknown, directory: string, options: {
   }
   for (const grader of taskset.graders) {
     if (grader.kind !== "custom_verifier") continue;
-    const relative = safeGeneratedPath(grader.module, "verifier");
+    const relative = safeGeneratedPath(grader.module, "verifier", verifierAssets.has(grader.module));
     try { await access(path.join(directory, relative)); }
     catch { throw new Error(`Custom verifier ${grader.id} is missing generated source ${relative}.`); }
+    const declared = verifierAssets.get(grader.module);
+    if (declared) {
+      const bytes = await readFile(path.join(directory, relative));
+      if (bytes.length !== declared.sizeBytes || sha256(bytes) !== declared.contentHash) throw new Error("Materialized verifier differs from its immutable source.");
+    }
   }
   return { directory, files, taskset };
 }
 
-function safeGeneratedPath(value: string, role: GeneratedTaskFile["role"]): string {
+function safeGeneratedPath(value: string, role: GeneratedTaskFile["role"], immutableVerifier = false): string {
   const normalized = value.replaceAll("\\", "/");
   if (path.posix.isAbsolute(normalized) || normalized.split("/").includes("..")) throw new Error(`Generated ${role} path must stay inside the Taskset: ${value}.`);
   const prefix = role === "verifier" ? "graders/" : role === "environment" ? "environment/" : "fixtures/";
-  if (!normalized.startsWith(prefix)) throw new Error(`Generated ${role} path must start with ${prefix}.`);
+  const reserved = new Set(["taskset.json", "capabilities.json", "data/tasks.jsonl", "graders/graders.json", "fixtures/grader-fixtures.json", "environment/taskset.ts"]);
+  if (role === "verifier" && reserved.has(normalized)) throw new Error("A verifier cannot replace a Taskset manifest.");
+  if (!normalized.startsWith(prefix) && !(role === "verifier" && immutableVerifier && !reserved.has(normalized))) throw new Error(`Generated ${role} path must start with ${prefix}.`);
   return normalized;
 }
 

@@ -113,7 +113,9 @@ it("binds ordinary packages while retaining exact task and execution data", () =
     const { contentHash: _packageHash, ...packageContent } = original;
     const { contentHash: _taskHash, ...taskContent } = original.taskset;
     const source = createTasksetPackage({ ...packageContent, taskset: sealLearningContent({ ...taskContent,
-      metadata: { ...taskContent.metadata, ordinaryAuthoring: { instructions: "Follow each task request." }, qualification: { passed: true } },
+      metadata: { ...taskContent.metadata, ordinaryAuthoring: { instructions: "Follow each task request." }, qualification: { passed: true },
+        workAssetStagingPaths: { [taskContent.tasks[0]!.id]: { "binary-input": "inputs/original.bin" } },
+        tasksetOutputContract: { mode: "json_schema", jsonSchema: { type: "object", required: ["answer"] } } },
     }) });
     const before = JSON.stringify(source);
     const intent = { owner, source, rewardBinding, rewards: [reward], assets: [asset] };
@@ -123,6 +125,8 @@ it("binds ordinary packages while retaining exact task and execution data", () =
     expect(bound.taskset.tools).toEqual(source.taskset.tools);
     expect(bound.taskset.metrics).toEqual(source.taskset.metrics);
     expect(bound.environment).toEqual(source.environment);
+    expect(bound.taskset.metadata.workAssetStagingPaths).toEqual(source.taskset.metadata.workAssetStagingPaths);
+    expect(bound.taskset.metadata.tasksetOutputContract).toEqual(source.taskset.metadata.tasksetOutputContract);
     for (const file of source.files) expect(bound.files).toContainEqual(file);
     expect(bound.modelResources?.instructionMode).toBe("per_task");
     expect(bound.taskset.metadata.modelTasksetDerivation).toMatchObject({ owner, root: learningRef(source.taskset), parent: learningRef(source.taskset) });
@@ -130,6 +134,8 @@ it("binds ordinary packages while retaining exact task and execution data", () =
     expect(bound.verifierSet.calibrationReceiptRefs).toEqual([]);
     expect(bound.taskset.graders[0]?.id).toBe("selected");
     const next = deriveModelTaskset({ ...intent, assets: bound.modelResources!.assets, source: { ...bound.modelResources!, taskset: bound.taskset, executionResources: { environment: bound.environment, verifierSet: bound.verifierSet } } });
+    expect(next.taskset.metadata.workAssetStagingPaths).toEqual(source.taskset.metadata.workAssetStagingPaths);
+    expect(next.taskset.metadata.tasksetOutputContract).toEqual(source.taskset.metadata.tasksetOutputContract);
     expect(next.taskset.id).toBe(bound.taskset.id);
     expect(next.taskset.revision).toBe(2);
     expect(next.taskset.tasks).toEqual(source.taskset.tasks);
