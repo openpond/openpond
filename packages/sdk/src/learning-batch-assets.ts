@@ -19,7 +19,7 @@ export function materializeLearningBatchAssets(input: {
       const artifactRef = `learning/assets/${contentHash({ task: task.id, asset: asset.id }).slice(0, 40)}/${asset.path}`;
       tasksetAssetBytes.set(artifactRef, new Uint8Array(bytes));
       return { id: asset.id, sourceRefId: input.sourceId, artifactRef,
-        fileName: asset.path.split("/").at(-1)!, mediaType: asset.mediaType,
+        fileName: asset.path.split("/").at(-1)!, stagingPath: asset.path, mediaType: asset.mediaType,
         sha256: asset.contentHash, sizeBytes: asset.sizeBytes, split: task.split, metadata: { portableAsset: asset } };
     }),
     ...(task.requiredOutputs ? { requiredOutputs: task.requiredOutputs.map(output => ({ ...output,

@@ -312,3 +312,16 @@ Receipts and list entries retain the origin so unpublished drafts remain visible
 in their originating Project. A release can still be used across Projects through
 explicit associations; changing or removing that association does not rewrite
 where the draft was created.
+
+## Prepared task assembly
+
+`openpond-sdk/dataset-workspaces` exports `createPreparedTaskAuthoringWorkspace`
+and `assemblePreparedTaskWorkspaces`. Authoring retains the original input,
+starting environment, and verified starting-file bytes. Proposed answers and
+author-written fixtures do not establish independent correctness.
+
+Assembly preserves every supplied candidate and its provenance, namespaces
+private checker files and source references, and scopes candidate graders to
+their task IDs. It requires a compatible execution environment. The composed
+package needs fresh independent qualification before publication; individual
+candidate qualifications do not certify newly assembled bytes.

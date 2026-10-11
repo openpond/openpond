@@ -57,7 +57,7 @@ export function advancedPublishedWorkAssets(
     return {
       ...asset,
       assetId: asset.id,
-      storageName: asset.fileName,
+      storageName: asset.stagingPath ?? asset.fileName,
       bytes,
       sizeBytes: bytes.length,
     };

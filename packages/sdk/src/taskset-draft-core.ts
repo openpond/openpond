@@ -121,11 +121,16 @@ export const TaskAssetRefSchema = z.object({
     .refine(safeRelativeFilePath, "Task asset references must be safe relative paths."),
   fileName: z.string().trim().min(1).max(500)
     .refine(safeFileName, "Task asset file names must not contain path separators."),
+  stagingPath: z.string().trim().min(1).max(1_000)
+    .refine(safeRelativeFilePath, "Task asset staging paths must stay inside Work inputs.").optional(),
   mediaType: z.string().trim().min(1).max(200),
   sha256: Sha256Schema,
   sizeBytes: z.number().int().nonnegative().max(250_000_000),
   split: TasksetSplitSchema,
   metadata: MetadataSchema,
+}).superRefine((value, ctx) => {
+  if (value.stagingPath && value.stagingPath.split("/").at(-1) !== value.fileName)
+    ctx.addIssue({ code: "custom", message: "Staged task assets must preserve their source file name.", path: ["stagingPath"] });
 });
 
 export const TaskRequiredOutputSchema = z.object({
@@ -279,6 +284,7 @@ export const TasksetCapabilityManifestSchema = z.object({
 
 const GraderBaseSchema = z.object({
   id: IdSchema,
+  taskIds: z.array(IdSchema).min(1).max(10_000).refine(ids => new Set(ids).size === ids.length, "Grader task IDs must be unique.").optional(),
   version: z.string().trim().min(1).max(100),
   label: z.string().trim().min(1).max(500),
   weight: z.number().min(0).max(1_000).default(1),

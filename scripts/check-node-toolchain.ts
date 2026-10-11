@@ -49,6 +49,13 @@ const compatibilityFiles = new Set([
   "tests/release-workflow.test.ts",
 ]);
 
+// These modules export source text for the separately owned Sandbox guest.
+// Importing them on Node does not execute a guest runtime API. Dependency,
+// installation, lockfile and local-command checks still apply to these files.
+const guestSourceFiles = new Set([
+  "packages/evals/src/prepared-process-isolation.ts",
+]);
+
 const forbiddenPatterns: Array<{ label: string; pattern: RegExp }> = [
   { label: "Bun runtime API", pattern: /\bBun\b|\bbun:(?:test|sqlite)\b/ },
   { label: "Bun executable command", pattern: /\b(?:bun|bunx)\s+(?:add|build|install|remove|run|test|x)\b/ },
@@ -73,7 +80,8 @@ for (const file of await listFiles(root)) {
   if (contents.includes(0)) continue;
   const source = contents.toString("utf8");
   for (const { label, pattern } of forbiddenPatterns) {
-    if (!pattern.test(source) || compatibilityFiles.has(relative)) continue;
+    if (!pattern.test(source) || compatibilityFiles.has(relative)
+      || label === "Bun runtime API" && guestSourceFiles.has(relative)) continue;
     const line = source.slice(0, source.search(pattern)).split("\n").length;
     findings.push(`${relative}:${line}: ${label}`);
   }
@@ -88,7 +96,7 @@ if (findings.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(
-    `Node-only toolchain check passed; ${compatibilityFiles.size} reviewed compatibility files may recognize user-owned Bun projects.`,
+    `Node-only toolchain check passed; ${compatibilityFiles.size} reviewed compatibility files and ${guestSourceFiles.size} remote guest source modules.`,
   );
 }
 

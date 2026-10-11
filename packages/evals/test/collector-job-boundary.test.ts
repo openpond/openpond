@@ -66,8 +66,8 @@ test("inventories large Codex files by request time without weakening admission 
   const root = await mkdtemp(join(tmpdir(), "collector-codex-window-"));
   const file = join(root, "large.jsonl"), directory = join(root, "state");
   const store = await CollectorStore.open(directory);
-  const rows = [
-    { type: "session_meta", timestamp: "2026-09-01T00:00:00Z", payload: { id: "large" } },
+  const rows: Array<{ type: string; timestamp: string; payload: Record<string, unknown> }> = [
+    { type: "session_meta", timestamp: "2026-09-01T00:00:00Z", payload: { id: "large", forked_from_id: "parent" } },
     { type: "response_item", timestamp: "2026-09-01T00:00:01Z", payload: { type: "message", role: "user", content: "Old request" } },
     { type: "response_item", timestamp: "2026-09-01T00:00:02Z", payload: { type: "function_call_output", output: "x".repeat(33 * 1024 * 1024) } },
   ];
@@ -82,6 +82,17 @@ test("inventories large Codex files by request time without weakening admission 
     await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
     await scan();
     expect(store.status().connections[0]?.coverage).toMatchObject({ complete: true, skippedSessions: 1, eligibleTurns: 0 });
+    // Native forks retain their ancestor header before inherited history.
+    // An unrelated header must not authorize that same inventory proof.
+    rows.splice(1, 0, { type: "session_meta", timestamp: "2026-09-01T00:00:00Z", payload: { id: "parent" } });
+    await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+    await scan();
+    expect(store.status().connections[0]?.coverage).toMatchObject({ complete: true, skippedSessions: 1 });
+    rows[1]!.payload.id = "unrelated";
+    await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+    await scan();
+    expect(store.status().connections[0]?.coverage).toMatchObject({ complete: false, failedSessions: 1 });
+    rows.splice(1, 1);
     // The same file now includes a selected request. It must be read by the
     // ordinary bounded importer, whose size refusal remains an explicit failure.
     rows[1]!.timestamp = "2026-10-02T00:00:00Z";

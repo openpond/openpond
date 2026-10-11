@@ -90,7 +90,7 @@ export async function resolveTasksetWorkAssets(input: {
       assetId: asset.id,
       sourceRefId: asset.sourceRefId,
       artifactRef: asset.artifactRef,
-      storageName: asset.fileName,
+      storageName: asset.stagingPath ?? asset.fileName,
       mediaType: asset.mediaType,
       bytes,
       sha256,
@@ -186,7 +186,7 @@ function assertEligibleSource(
   }
   if (
     !("sourceFileHashes" in source)
-    || !source.sourceFileHashes.includes(asset.sha256)
+    || !source.sourceFileHashes?.includes(asset.sha256)
   ) {
     throw new Error(
       `Work asset ${asset.id} hash is not registered by its source.`,

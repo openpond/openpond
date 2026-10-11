@@ -55,6 +55,12 @@ export type AttemptEvidence = {
 export type ModelJudgeRunner = (input: { grader: Extract<GraderSpec, { kind: "model_judge" }>; task: TaskRecord; evidence: AttemptEvidence; evaluatorContext?: Record<string, unknown> | null; signal?: AbortSignal }) => Promise<Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash">>;
 export type CustomVerifierRunner = (input: { grader: Extract<GraderSpec, { kind: "custom_verifier" }>; task: TaskRecord; evidence: AttemptEvidence }) => Promise<Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash">>;
 
+/** Scope is part of the immutable grader. An absent scope applies to every
+ * task; an explicit scope is never inferred from answer content or metadata. */
+export function gradersForTask<T extends Pick<GraderSpec, "taskIds">>(graders: readonly T[], task: Pick<TaskRecord, "id">): T[] {
+  return graders.filter(grader => !grader.taskIds || grader.taskIds.includes(task.id));
+}
+
 export async function gradeEvidence(input: {
   task: TaskRecord;
   evidence: AttemptEvidence;
@@ -66,8 +72,9 @@ export async function gradeEvidence(input: {
   purpose?: "grading" | "fixture_calibration";
   signal?: AbortSignal;
 }): Promise<GraderEvidence[]> {
+  const graders = gradersForTask(input.graders, input.task);
   if (input.evidence.infrastructureError) {
-    return input.graders.map((grader) => evidence(grader, {
+    return graders.map((grader) => evidence(grader, {
       score: null,
       passed: false,
       rewardEligible: false,
@@ -77,7 +84,7 @@ export async function gradeEvidence(input: {
       privilegedEvidenceRefs: [],
     }));
   }
-  return Promise.all(input.graders.map(async (grader) => {
+  return Promise.all(graders.map(async (grader) => {
     if (grader.kind === "model_judge") {
       if (!input.modelJudge || (grader.calibrationStatus !== "passed" && input.purpose !== "fixture_calibration")) return evidence(grader, unavailable("Model judge is unavailable or uncalibrated."));
       input.signal?.throwIfAborted();
@@ -174,7 +181,7 @@ export async function gradeTaskEvidence(input: Parameters<typeof gradeEvidence>[
   const components = await gradeEvidence(input);
   const content = { schemaVersion: "openpond.taskGrade.v1" as const,
     taskHash: contentHash(input.task), evidenceHash: contentHash(input.evidence), graderSetHash: contentHash(input.graders), components,
-    ...aggregateGraderScores({ graders: input.graders, components, infrastructureError: input.evidence.infrastructureError }) };
+    ...aggregateGraderScores({ graders: gradersForTask(input.graders, input.task), components, infrastructureError: input.evidence.infrastructureError }) };
   return TaskGradeSchema.parse({ ...content, contentHash: contentHash(content) });
 }
 
@@ -188,7 +195,7 @@ export function verifyTaskGrade(value: unknown, input: Pick<Parameters<typeof gr
     const { contentHash: componentHash, ...body } = component;
     if (componentHash !== contentHash(body)) throw new Error("Grader evidence integrity failed.");
   }
-  const summary = aggregateGraderScores({ graders: input.graders, components: result.components, infrastructureError: input.evidence.infrastructureError });
+  const summary = aggregateGraderScores({ graders: gradersForTask(input.graders, input.task), components: result.components, infrastructureError: input.evidence.infrastructureError });
   if (contentHash(GradeSummarySchema.parse({ score: result.score, passed: result.passed, rewardEligible: result.rewardEligible, failureClass: result.failureClass, gradingStatus: result.gradingStatus })) !== contentHash(summary)) throw new Error("Task grade summary differs from its grader evidence.");
   return result;
 }

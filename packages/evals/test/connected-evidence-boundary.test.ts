@@ -66,6 +66,26 @@ describe("connected evidence immutable admission boundary", () => {
     expect(JSON.stringify(first.input)).not.toContain("first answer");
     expect(JSON.stringify(first.observed)).not.toContain("future secret answer");
     expect(first.boundary.coverage.process).toBe("retained");
+    const forkRows = codex().text!.trim().split("\n").map(line => JSON.parse(line));
+    forkRows[0].payload.forked_from_id = "parent-session";
+    forkRows[0].payload.timestamp = "2026-10-01T00:00:00Z";
+    forkRows[0].payload.git = { commit_hash: "a".repeat(40), branch: "main", repository_url: "https://secret-token@example.test/repo" };
+    forkRows.splice(1, 0, { type: "session_meta", payload: { id: "parent-session" } });
+    const fork = previewAgentImport({ source: "codex", files: [file("fork.jsonl", forkRows)], acquisition: { machineId: "machine", sourceInstanceId: "instance" } });
+    expect(fork.issues).toEqual([]);
+    expect(fork.sessions[0]!.parentSessionId).toBe("parent-session");
+    expect(fork.sessions[0]!.boundaries).toHaveLength(session.boundaries.length);
+    expect(fork.sessions[0]!.repositoryContext).toMatchObject({ commitHash: "a".repeat(40), branch: "main",
+      recordedAt: "2026-10-01T00:00:00.000Z", sourceFileHash: fork.sessions[0]!.sourceFiles[0]!.contentHash });
+    expect(JSON.stringify(fork.sessions[0])).not.toContain("secret-token");
+    const wrongRepository = structuredClone(fork.sessions[0]!);
+    wrongRepository.repositoryContext!.commitHash = "b".repeat(40);
+    expect(() => resolveConnectedBoundaryMetadata(wrongRepository, wrongRepository.boundaries[0]!.id)).toThrow("connected_evidence_hash_mismatch");
+    forkRows[1].payload.id = "unrelated";
+    expect(previewAgentImport({ source: "codex", files: [file("fork.jsonl", forkRows)] }).sessions).toHaveLength(0);
+    forkRows[1].payload.id = "parent-session";
+    forkRows.push(forkRows.splice(1, 1)[0]);
+    expect(previewAgentImport({ source: "codex", files: [file("fork.jsonl", forkRows)] }).sessions).toHaveLength(0);
     const changed = previewAgentImport({ source: "codex", files: [codex("changed answer")] }).sessions[0]!;
     expect(changed.boundaries[0]!.inputHash).toBe(turns[0]!.inputHash);
     expect(changed.boundaries[0]!.revisionHash).not.toBe(turns[0]!.revisionHash);

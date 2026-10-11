@@ -85,7 +85,7 @@ function resolveIndependent(value: TasksetPackage, authored: GraderFixture) {
     aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }, [closure.reward]);
   const canonical = compileBoundGraders(binding, [closure.reward])[0]!;
   const implementation = (spec: GraderSpec) => {
-    const { rewardEligible: _eligible, ...rest } = spec;
+    const { rewardEligible: _eligible, taskIds: _taskIds, ...rest } = spec;
     return rest.kind === "model_judge" ? { ...rest, temperature: rest.temperature ?? 0 } : rest;
   };
   if (contentHash(implementation(grader)) !== contentHash(implementation(canonical))) fail("calibration_grader_changed");

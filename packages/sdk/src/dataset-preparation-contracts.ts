@@ -114,6 +114,7 @@ export const DatasetPreparationPolicySchema = z
         maximumOutputTokens: z.number().int().min(1).max(32_768),
       })
       .strict(),
+    adjudicator: z.object({ modelId: Id, maximumOutputTokens: z.number().int().min(1).max(32_768) }).strict(),
     grading: z.discriminatedUnion("mode", [
       z.object({ mode: z.literal("auto") }).strict(),
       z.object({ mode: z.literal("existing_only") }).strict(),
@@ -420,6 +421,7 @@ export const PreparedTaskProvenanceSchema = z
     firstAvailableAt: Timestamp,
     initialInputHash: Hash,
     initialEnvironmentHash: Hash,
+    initialAssetsHash: Hash.nullable(),
     sourceScopeHash: Hash,
   })
   .strict()

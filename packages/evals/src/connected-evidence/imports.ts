@@ -24,7 +24,7 @@ export type ExternalAgentSource = Exclude<
 >;
 /** Cache identity includes source projection policy, independent of file mtimes. */
 export function agentImportNormalizerRevision(source: ExternalAgentSource) {
-  return source === "codex" ? `${CONNECTED_NORMALIZER_VERSION}/${CODEX_AUTHORIZATION_PROJECTION_POLICY}` : CONNECTED_NORMALIZER_VERSION;
+  return source === "codex" ? `${CONNECTED_NORMALIZER_VERSION}/${CODEX_AUTHORIZATION_PROJECTION_POLICY}/fork-repository-starting-state-v1` : CONNECTED_NORMALIZER_VERSION;
 }
 export type AgentImportPreview = {
   schemaVersion: "openpond.agentImportPreview.v1";
@@ -87,6 +87,7 @@ export function previewAgentImport(input: {
                   (boundary) => boundary.coverage.context === "unknown",
                 ),
                 acquisition: input.acquisition,
+                ...(session.repositoryContext ? { repositoryContext: session.repositoryContext } : {}),
               })
             : session,
         ),
