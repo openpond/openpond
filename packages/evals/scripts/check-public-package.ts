@@ -11,9 +11,9 @@ const manifest = JSON.parse(
   peerDependencies?: Record<string, string>;
 };
 const dependencies = Object.keys(manifest.dependencies ?? {});
-if (dependencies.sort().join(",") !== "@jitl/quickjs-singlefile-cjs-release-sync,@sqlite.org/sqlite-wasm,ajv,quickjs-emscripten-core,zod") {
+if (dependencies.sort().join(",") !== "@jitl/quickjs-singlefile-cjs-release-sync,@sqlite.org/sqlite-wasm,ajv,cron-parser,quickjs-emscripten-core,zod") {
   throw new Error(
-    `@openpond/evals runtime dependencies must contain only the portable schema, JavaScript and SQLite WASM runtimes; found ${dependencies.join(", ") || "none"}.`,
+    `@openpond/evals runtime dependencies must contain only the portable schema, JavaScript and SQLite WASM runtimes and the collector schedule parser; found ${dependencies.join(", ") || "none"}.`,
   );
 }
 const peers = Object.keys(manifest.peerDependencies ?? {});
