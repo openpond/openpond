@@ -6,7 +6,7 @@ import { gradeEvidence, GraderEvidenceSchema, type AttemptEvidence, type CustomV
 import { CustomVerifierGraderSpecSchema, DeterministicGraderSpecSchema, GraderSpecSchema, HumanGraderSpecSchema, ModelJudgeGraderSpecSchema, type GraderSpec, type TaskRecord } from "./tasksets.js";
 import { assertBoundedTaskJson, validateTaskSchema } from "./task-schema.js";
 
-const bindingFields = { id: true, version: true, weight: true, hardGate: true, rewardEligible: true, privileged: true } as const;
+const bindingFields = { taskIds: true, id: true, version: true, weight: true, hardGate: true, rewardEligible: true, privileged: true } as const;
 export const FeedbackKeySchema = z.string().regex(/^[a-z][a-z0-9_]{0,79}$/);
 export function feedbackKeyForReward(reward: Pick<RewardRelease, "id" | "feedbackKey">): string {
   return reward.feedbackKey ?? `reward_${contentHash(reward.id).slice(0, 24)}`;
@@ -49,6 +49,7 @@ export const RewardNormalizationSchema = z.discriminatedUnion("kind", [
 ]);
 export const RewardBindingSourceSchema = z.object({
   graderId: ReleaseIdSchema,
+  taskIds: z.array(ReleaseIdSchema).min(1).max(10_000).refine(ids => new Set(ids).size === ids.length, "Task scope must be unique.").optional(),
   reward: RewardReleaseRefSchema,
   role: z.enum(["training", "evaluation"]),
   normalization: RewardNormalizationSchema,
@@ -84,7 +85,7 @@ export const BoundRewardResultSchema = z.object({
   graderId: ReleaseIdSchema,
   reward: RewardReleaseRefSchema,
   role: z.enum(["training", "evaluation"]),
-  status: z.enum(["scored", "pending", "unavailable", "failed"]),
+  status: z.enum(["scored", "pending", "unavailable", "failed", "not_applicable"]),
   rawScore: z.number().finite().nullable(),
   normalizedScore: z.number().min(0).max(1).nullable(),
   passed: z.boolean().nullable(),
@@ -96,6 +97,7 @@ export const RewardCompositionContentSchema = z.object({
   schemaVersion: z.literal("openpond.rewardComposition.v1"),
   binding: RewardReleaseRefSchema,
   taskHash: ReleaseHashSchema,
+  taskId: ReleaseIdSchema.optional(),
   outputHash: ReleaseHashSchema,
   results: z.array(BoundRewardResultSchema).max(100),
   training: z.object({ status: z.enum(["scored", "pending", "unscorable", "not_configured"]), score: z.number().min(0).max(1).nullable(), passed: z.boolean().nullable() }).strict(),
@@ -164,6 +166,10 @@ export async function executeRewardBinding(input: {
   for (const { source, reward } of resolved) {
     input.signal?.throwIfAborted();
     const result: BoundRewardResult = { graderId: source.graderId, reward: source.reward, role: source.role, status: "unavailable", rawScore: null, normalizedScore: null, passed: null, evidenceHashes: [], message: null };
+    if (source.taskIds && !source.taskIds.includes(input.task.id)) {
+      results.push({ ...result, status: "not_applicable" });
+      continue;
+    }
     try {
       if (reward.implementation.kind === "human") {
         result.status = "pending";
@@ -191,17 +197,20 @@ export async function executeRewardBinding(input: {
     }
     results.push(BoundRewardResultSchema.parse(result));
   }
-  return composeBoundRewards({ binding: input.binding, taskHash: contentHash(input.task), outputHash: contentHash(input.evidence), results });
+  return composeBoundRewards({ binding: input.binding, ...(input.binding.sources.some(source => source.taskIds) ? { taskId: input.task.id } : {}), taskHash: contentHash(input.task), outputHash: contentHash(input.evidence), results });
 }
 
-export function composeBoundRewards(input: { binding: RewardBinding; taskHash: string; outputHash: string; results: BoundRewardResult[] }): RewardComposition {
+export function composeBoundRewards(input: { binding: RewardBinding; taskId?: string; taskHash: string; outputHash: string; results: BoundRewardResult[] }): RewardComposition {
   const binding = RewardBindingSchema.parse(input.binding);
   assertRewardHash(binding);
+  if (binding.sources.some(source => source.taskIds) && !input.taskId) throw new LearningDomainError("reward_task_scope_missing");
   const results = input.results.map((result) => BoundRewardResultSchema.parse(result));
   if (results.length !== binding.sources.length || new Set(results.map((result) => result.graderId)).size !== results.length) throw new LearningDomainError("reward_result_set_incomplete");
   for (const source of binding.sources) {
     const result = results.find((candidate) => candidate.graderId === source.graderId);
     if (!result || contentHash(result.reward) !== contentHash(source.reward) || result.role !== source.role) throw new LearningDomainError("reward_result_binding_mismatch");
+    const applicable = !source.taskIds || source.taskIds.includes(input.taskId!);
+    if (applicable === (result.status === "not_applicable") || !applicable && (result.graderEvidence || result.evidenceHashes.length || result.message !== null)) throw new LearningDomainError("reward_result_task_scope_mismatch");
     if (result.graderEvidence) {
       const { contentHash: evidenceHash, ...body } = result.graderEvidence;
       if (contentHash(body) !== evidenceHash || !result.evidenceHashes.includes(evidenceHash)
@@ -221,6 +230,7 @@ export function composeBoundRewards(input: { binding: RewardBinding; taskHash: s
     schemaVersion: "openpond.rewardComposition.v1",
     binding: { id: binding.id, revision: binding.revision, contentHash: binding.contentHash },
     taskHash: input.taskHash,
+    ...(input.taskId ? { taskId: input.taskId } : {}),
     outputHash: input.outputHash,
     results,
     training: aggregate("training"),
@@ -229,7 +239,7 @@ export function composeBoundRewards(input: { binding: RewardBinding; taskHash: s
   return RewardCompositionSchema.parse({ ...content, contentHash: contentHash(content) });
 
   function aggregate(role: "training" | "evaluation"): RewardComposition["training"] {
-    const selected = binding.sources.filter((source) => source.role === role).map((source) => ({ source, result: results.find((candidate) => candidate.graderId === source.graderId)! }));
+    const selected = binding.sources.filter((source) => source.role === role && (!source.taskIds || source.taskIds.includes(input.taskId!))).map((source) => ({ source, result: results.find((candidate) => candidate.graderId === source.graderId)! }));
     if (!selected.length) return { status: "not_configured", score: null, passed: null };
     if (selected.some(({ source, result }) => source.required && result.status !== "scored" && result.status !== "pending")) return { status: "unscorable", score: null, passed: null };
     if (selected.some(({ source, result }) => source.required && result.status === "pending")) return { status: "pending", score: null, passed: null };
@@ -248,5 +258,5 @@ export function assertRewardHash(value: { contentHash: string }): void {
 function withoutRewardHash<T extends { contentHash: string }>(value: T): Omit<T, "contentHash"> { const { contentHash: _hash, ...content } = value; return content; }
 function compileSource(source: RewardBindingSource, reward: RewardRelease): GraderSpec {
   if (reward.implementation.kind === "learned_model") throw new LearningDomainError("learned_reward_requires_model_execution_adapter");
-  return GraderSpecSchema.parse({ ...reward.implementation, id: source.graderId, version: String(reward.revision), weight: source.weight, hardGate: source.hardGate, rewardEligible: source.role === "training", privileged: source.privileged });
+  return GraderSpecSchema.parse({ ...reward.implementation, ...(source.taskIds ? { taskIds: source.taskIds } : {}), id: source.graderId, version: String(reward.revision), weight: source.weight, hardGate: source.hardGate, rewardEligible: source.role === "training", privileged: source.privileged });
 }

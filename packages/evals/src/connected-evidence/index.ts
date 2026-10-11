@@ -4,3 +4,4 @@ export * from "./imports.js";
 export * from "./usage-summary.js";
 export * from "./python-correctness.js";
 export * from "./collector-coverage-contracts.js";
+export * from "./git-file-contracts.js";

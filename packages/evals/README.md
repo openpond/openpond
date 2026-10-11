@@ -163,6 +163,18 @@ overrides that state.
 
 ## Runtime adapters
 
+Graders may declare `taskIds` to apply to a nonempty, unique population within
+the Taskset. Grading binds the full grader-set hash while executing and
+aggregating only the applicable checks. Reward binding sources carry the same
+scope; scoped compositions retain `taskId` and an explicit `not_applicable`
+result for each excluded source. Excluded checks cannot satisfy a required check
+or change the score, and a composition without its scope is rejected.
+
+`@openpond/evals/connected-evidence/git` verifies retained Git starting-file
+receipts against exact object identities and bytes. The receipt is evidence,
+not authorization to read a repository. Hosts remain responsible for owner
+authorization, dependency closure, and runtime qualification.
+
 Implement `HarnessRuntime` for environment state and `HarnessExecutor` around
 the host's existing model/Agent loop. Do not reimplement prompting, tool dispatch,
 session persistence, cost accounting, cancellation, or cleanup in this package.

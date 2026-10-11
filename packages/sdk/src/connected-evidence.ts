@@ -4,6 +4,7 @@ export * from "./connected-recorded-execution.js";
 export * from "./connected-evidence-client.js";
 export * from "./connected-dataset-publication.js";
 export * from "./connected-collection-status.js";
+export * from "./connected-starting-assets.js";
 
 export * from "./connected-sync.js";
 export { CollectorCoverageManifestSchema, CollectorCoverageSessionSchema, CollectorCoverageSummarySchema,

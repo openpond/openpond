@@ -82,7 +82,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "connected-evidence",
-    usage: "openpond connected-evidence <list|collection|recorded-list|recorded|import-receipt|summary|case|unmapped|capture|selection|publish|prepare-recorded|upload-part|preview|commit|set-collection> [id] --team <id> [--input-file <path>] [--project <id>] [--cursor <id>] [--limit <n>]",
+    usage: "openpond connected-evidence <list|collection|recorded-list|recorded|import-receipt|capture-assets|retain-assets|starting-assets|summary|case|unmapped|capture|selection|publish|prepare-recorded|upload-part|preview|commit|set-collection> [id] --team <id> [--input-file <path>] [--project <id>] [--cursor <id>] [--limit <n>]",
     optionSchema: {team:"string",inputFile:"string",project:"string",cursor:"string",limit:"integer"},
     handler:async({options,rest})=>(await import("./connected-evidence")).runConnectedEvidenceCommand(options,rest),
   },

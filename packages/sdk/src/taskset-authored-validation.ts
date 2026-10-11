@@ -263,16 +263,17 @@ function validateWorkExecution(
           path: `${path}.id`,
         });
       }
-      if (fileNames.has(asset.fileName)) {
+      const stagedPath = asset.stagingPath ?? asset.fileName;
+      if (fileNames.has(stagedPath)) {
         issues.push({
           code: "work_asset_duplicate_name",
           severity: "error",
-          message: `Task ${task.id} repeats staged file name ${asset.fileName}.`,
+          message: `Task ${task.id} repeats staged path ${stagedPath}.`,
           path: `${path}.fileName`,
         });
       }
       assetIds.add(asset.id);
-      fileNames.add(asset.fileName);
+      fileNames.add(stagedPath);
       if (!task.sourceRefs.includes(asset.sourceRefId)) {
         issues.push({
           code: "work_asset_task_source_missing",
@@ -291,7 +292,7 @@ function validateWorkExecution(
         });
       } else if (
         "sourceFileHashes" in source
-        && !source.sourceFileHashes.includes(asset.sha256)
+        && !source.sourceFileHashes?.includes(asset.sha256)
       ) {
         issues.push({
           code: "work_asset_hash_unregistered",
@@ -374,8 +375,10 @@ function validatePolicyBoundary(taskset: Taskset, issues: TasksetValidationIssue
 }
 
 function validateGraders(taskset: Taskset, issues: TasksetValidationIssue[]): void {
+  const taskIds = new Set(taskset.tasks.map(task => task.id));
   const ids = new Set<string>();
   for (const grader of taskset.graders) {
+    if (grader.taskIds?.some(id => !taskIds.has(id))) issues.push({ code: "grader_task_missing", severity: "error", message: `Grader ${grader.id} refers to a task outside this Dataset.`, path: "graders" });
     if (ids.has(grader.id)) issues.push({ code: "grader_duplicate", severity: "error", message: `Duplicate grader id ${grader.id}.`, path: "graders" });
     ids.add(grader.id);
     if (grader.kind === "model_judge" && grader.rewardEligible && grader.calibrationStatus !== "passed") {

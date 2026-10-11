@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { open } from "node:fs/promises";
 import { CONNECTED_EVIDENCE_LIMITS } from "../connected-evidence/contracts.js";
+import { CodexMetadataChain } from "../connected-evidence/sources/codex-metadata.js";
 
 /** Streaming inventory may prove an irrelevant source without retaining it.
  * It never truncates a selected conversation into an admissible snapshot. */
@@ -20,7 +21,8 @@ export async function inspectCodexWindow(input: {
     const decoder = new TextDecoder("utf-8", { fatal: true });
     const from = input.since === null ? -Infinity : Date.parse(input.since);
     const to = Date.parse(input.until);
-    let metadata = false, records = 0, bytes = 0;
+    const metadata = new CodexMetadataChain();
+    let records = 0, bytes = 0;
     let pending: Buffer[] = [], pendingBytes = 0;
     const inspect = (line: Buffer): boolean => {
       if (++records > 1_000_000 || line.byteLength > CONNECTED_EVIDENCE_LIMITS.lineBytes) return false;
@@ -33,10 +35,7 @@ export async function inspectCodexWindow(input: {
       const value = row as Record<string, unknown>;
       const payload = value.payload && typeof value.payload === "object" && !Array.isArray(value.payload)
         ? value.payload as Record<string, unknown> : {};
-      if (value.type === "session_meta") {
-        if (metadata || payload.id !== input.sessionId) return false;
-        metadata = true;
-      }
+      if (!metadata.accept(value) || (metadata.metadata && metadata.metadata.id !== input.sessionId)) return false;
       // The Codex normalizer maps other native records to unknown events;
       // they cannot create request boundaries. Missing metadata is still refused.
       const request = value.type === "response_item" && payload.type === "message" && payload.role === "user"
@@ -71,6 +70,6 @@ export async function inspectCodexWindow(input: {
     if (initial.dev !== final.dev || initial.ino !== final.ino || initial.size !== final.size
       || initial.mtimeMs !== final.mtimeMs || initial.ctimeMs !== final.ctimeMs || bytes !== final.size)
       throw new Error("Native source changed during window inventory.");
-    return metadata ? { sha256: digest.digest("hex") } : null;
+    return metadata.metadata ? { sha256: digest.digest("hex") } : null;
   } finally { await handle.close(); }
 }

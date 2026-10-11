@@ -8,6 +8,7 @@ import { ConnectedDatasetPublicationSchema, type ConnectedDatasetPublication } f
 import { DatasetWorkspaceReceiptSchema } from "./dataset-workspace-contracts.js";
 import { fetchConnectedJson } from "./connected-evidence-http.js";
 import { ConnectedCollectionStatusSchema } from "./connected-collection-status.js";
+import { ConnectedStartingAssetsRequestSchema, verifyConnectedStartingAssetsReceipt } from "./connected-starting-assets.js";
 
 const Id = z.string().min(1).max(500), Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const ConnectedCollectionSchema = z.object({ teamId: Id, projectId: Id.nullable(), status: z.enum(["active", "paused", "archived"]), revision: z.number().int().nonnegative() }).strict();
@@ -47,6 +48,23 @@ export class ConnectedEvidenceClient {
     this.scope(result.teamId);
     if (result.operationId !== request.operationId || result.outcomes.length > request.limit || request.conversationId && result.outcomes.some(item => item.conversationId !== request.conversationId))
       throw new Error("Capture receipt differs from its requested source or operation.");
+    return result;
+  }
+  async retainStartingAssets(raw: z.input<typeof ConnectedStartingAssetsRequestSchema>, signal?: AbortSignal) {
+    const request = ConnectedStartingAssetsRequestSchema.parse(raw);
+    const result = verifyConnectedStartingAssetsReceipt(await this.request("/starting-assets", "POST", request, signal));
+    this.scope(result.teamId);
+    if (result.operationId !== request.operationId || result.requestHash !== contentHash(request)
+      || contentHash(result.source) !== contentHash(request.source)
+      || result.assets.length !== request.proofs.length
+      || result.assets.some((asset, index) => asset.path !== request.proofs[index]!.path))
+      throw new Error("Starting assets differ from the exact source, operation or selected paths.");
+    return result;
+  }
+  async startingAssets(id: string, signal?: AbortSignal) {
+    const result = verifyConnectedStartingAssetsReceipt(await this.request(`/starting-assets/${encodeURIComponent(Id.parse(id))}`, "GET", undefined, signal));
+    this.scope(result.teamId);
+    if (result.id !== id) throw new Error("Starting assets identity mismatch.");
     return result;
   }
   async list(input: { projectId?: string; cursor?: string; limit?: number } = {}, signal?: AbortSignal) {

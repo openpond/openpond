@@ -11,7 +11,7 @@ export const DatasetPreparationAuthoringEvidenceSchema = z.array(z.object({
 }).strict()).min(1).max(20);
 export const DatasetPreparationAuthoringRequestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("messages"), id: Id, evidence: DatasetPreparationAuthoringEvidenceSchema,
-    instruction: z.string().max(100_000), buildSpecification: DatasetBuildSpecificationSchema,
+    instruction: z.string().max(2 * 1024 * 1024), buildSpecification: DatasetBuildSpecificationSchema,
     currentProposal: TaskDesignProposalSchema.nullable().default(null) }).strict(),
   z.object({ action: z.literal("validate"), evidence: DatasetPreparationAuthoringEvidenceSchema,
     content: z.string().max(2 * 1024 * 1024) }).strict(),

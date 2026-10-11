@@ -18,6 +18,7 @@ export function normalizeConnectedSession(input: {
   origin: ConnectedSourceKind; sessionId: string; branchId?: string | null; parentSessionId?: string | null;
   exporterVersion?: string | null; files: ConnectedFile[]; events: ConnectedEvent[]; warnings?: string[]; contextComplete?: boolean; includeConversation?: boolean;
   unmappedEvents?: ConnectedEvent[]; acquisition?: { machineId: string; sourceInstanceId: string };
+  repositoryContext?: ConnectedSession["repositoryContext"];
 }): ConnectedSession {
   if (input.events.length + (input.unmappedEvents?.length ?? 0) > CONNECTED_EVIDENCE_LIMITS.events) throw new Error("connected_event_limit");
   const events = input.events.map((event, sequence) => ({ ...event, sequence }));
@@ -69,6 +70,7 @@ export function normalizeConnectedSession(input: {
     origin: input.origin, sessionId: input.sessionId, branchId: input.branchId ?? null, parentSessionId: input.parentSessionId ?? null,
     exporterVersion: input.exporterVersion ?? null, sourceFiles: input.files.map(connectedFileIdentity).sort((a, b) => a.path.localeCompare(b.path)),
     ...(input.acquisition ? { acquisition: input.acquisition } : {}),
+    ...(input.repositoryContext ? { repositoryContext: input.repositoryContext } : {}),
     events, unmappedEvents: (input.unmappedEvents ?? []).map((event, sequence) => ({ ...event, sequence })), boundaries, warnings: input.warnings ?? [] };
   const session = ConnectedSessionSchema.parse({ ...body, contentHash: contentHash(body) });
   if (new TextEncoder().encode(JSON.stringify(session)).length > CONNECTED_EVIDENCE_LIMITS.decodedBytes) throw new Error("connected_normalized_size_limit");
