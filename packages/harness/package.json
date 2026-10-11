@@ -1,6 +1,6 @@
 {
   "name": "@openpond/harness",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Portable immutable Harness releases, workspaces, improvements, traces, tools, and model identities for OpenPond",
   "license": "MIT",
   "type": "module",
