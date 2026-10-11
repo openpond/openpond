@@ -13,6 +13,8 @@ import {
 import { resolveApiBaseUrlOption } from "./common/urls";
 
 export const DEFAULT_LOCAL_TRAINING_API_URL = "http://127.0.0.1:17874";
+// Training state and authored packages include private task and grader assets.
+export const LOCAL_TRAINING_RESPONSE_LIMIT = 128 * 1024 * 1024;
 const TERMINAL_STATUSES = new Set([
   "cancelled",
   "completed",
@@ -66,7 +68,9 @@ export async function runTrainingCommand(
     baseUrl,
     request:
       dependencies.request ??
-      await createLocalAuthenticatedRequest(baseUrl),
+      await createLocalAuthenticatedRequest(baseUrl, {
+        maximumResponseBytes: LOCAL_TRAINING_RESPONSE_LIMIT,
+      }),
   });
   const json = parseBooleanOption(options.json);
 
@@ -290,8 +294,9 @@ export class TrainingApiClient {
     );
   }
 
-  trainingState(): Promise<unknown> {
-    return this.json("/v1/training", "GET");
+  trainingState(profileId?: string): Promise<unknown> {
+    const scope = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
+    return this.json(`/v1/training${scope}`, "GET");
   }
 
   startHarnessRefinerBenchmark(modelId: string, body: unknown): Promise<unknown> {
@@ -377,7 +382,7 @@ async function startHarnessRefinerBenchmark(input: {
   json: boolean;
   sleep?: (milliseconds: number) => Promise<void>;
 }) {
-  const state = await input.client.trainingState();
+  const state = await input.client.trainingState(optionString(input.options, "profile"));
   const project = modelProject(state, input.modelId);
   const providerId = optionString(input.options, "provider") || "openpond";
   const modelId = optionString(input.options, "model") || "openpond-chat";
@@ -440,9 +445,10 @@ async function createManagedModelProject(input: {
     throw new Error("training create-project requires --recipe <versioned-recipe.json>");
   }
   const recipe = await readJsonObject(recipePath, "Training recipe");
-  const state = await input.client.trainingState();
+  const selectedProfileId = optionString(input.options, "profile");
+  const state = await input.client.trainingState(selectedProfileId);
   const taskset = trainingStateRecord(state, "tasksets", input.tasksetId, "Taskset");
-  const profileId = optionString(input.options, "profile")
+  const profileId = selectedProfileId
     || objectString(taskset, "profileId");
   if (!profileId) {
     throw new Error(
@@ -457,7 +463,8 @@ async function createManagedModelProject(input: {
   }
   const projectId = optionString(input.options, "projectId")
     || `model_${randomUUID()}`;
-  const projects = trainingStateRecords(state, "modelProjects");
+  const scopedState = selectedProfileId ? state : await input.client.trainingState(profileId);
+  const projects = trainingStateRecords(scopedState, "modelProjects");
   const existingProject = projects.find(
     (project) => objectString(project, "id") === projectId,
   );
