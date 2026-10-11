@@ -32,6 +32,10 @@ describe("grader execution", () => {
       expectedPassed: true, expectedRewardEligible: false, metadata: { graderIds: [text.id], expectedScore: 1 } });
     const files = new Map([[modulePath, Buffer.from(source)], [fixturePath, Buffer.from("verified bytes")]]);
     const { taskset } = prepareAuthoredTasksetSource(initial, files, "openpond.desktop.v1");
+    const inventory = taskset.metadata.portableFileInventory as { asset: Record<string, unknown>; sourcePath: string }[];
+    const verifierFile = inventory.find(file => file.sourcePath === modulePath)!;
+    inventory.push({ asset: { ...verifierFile.asset, id: "same-byte-private-alias" }, sourcePath: modulePath });
+    taskset.contentHash = computeTasksetHash(taskset);
     const root = path.join(directory, "training/tasksets", tasksetPackageDirectoryId(taskset));
     for (const [relative, bytes] of files) { await mkdir(path.dirname(path.join(root, relative)), { recursive: true }); await writeFile(path.join(root, relative), bytes); }
     await buildTaskset(taskset, root);
