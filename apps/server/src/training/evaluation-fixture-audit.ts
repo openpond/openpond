@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { GraderAuditReportSchema, TaskAttemptResultSchema, type Taskset, type TaskDataRecord, type DatasetSplit } from "@openpond/contracts";
-import { contentHash, gradeAttempt, type ModelJudgeRunner } from "@openpond/taskset-sdk";
+import { contentHash, gradeAttempt, gradeCalibrationAttempt, type ModelJudgeRunner } from "@openpond/taskset-sdk";
 import { requireLocalTasksetRevision, type LocalTasksetRevisionRef } from "./local-taskset-release.js";
 import { artifactSplit, fixtureAttempt } from "./evaluation-helpers.js";
 import { createTasksetEvaluationVerifier } from "./evaluation-custom-verifier.js";
@@ -79,7 +79,7 @@ export async function auditTasksetFixtures(deps: FixtureAuditDeps, input: AuditT
       if (graderIds && (new Set(graderIds).size !== graderIds.length || graderIds.some(id => !taskset.graders.some(grader => grader.id === id)))) {
         throw new Error("Fixture grader scope must contain unique declared grader IDs.");
       }
-      const result = await gradeAttempt({
+      const result = await (graderIds ? gradeCalibrationAttempt : gradeAttempt)({
         task,
         attempt,
         graders: graderIds ? taskset.graders.filter(grader => graderIds.includes(grader.id)) : taskset.graders,
@@ -191,4 +191,3 @@ export async function auditTasksetFixtures(deps: FixtureAuditDeps, input: AuditT
       })),
     };
   }
-

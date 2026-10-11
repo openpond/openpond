@@ -18,8 +18,11 @@ export async function createTasksetEvaluationVerifier(deps: {
   loadProfileState?: typeof loadOpenPondProfileState;
 }, taskset: Taskset, fixtureContext?: { packageValue: TasksetPackage; fixtures: TasksetFixtureEvidence }): Promise<CustomVerifierRunner | undefined> {
   if (!taskset.graders.some((grader) => grader.kind === "custom_verifier")) return undefined;
-  if (taskset.metadata.learning !== undefined) return createLearningBatchVerifier(deps.store, taskset, deps.storeDir);
-  if (taskset.metadata.rewardBinding !== undefined) return createTasksetBindingVerifier(deps.store, taskset, deps.storeDir);
+  const needsProcessVerifier = taskset.graders.some(grader => grader.kind === "custom_verifier" && grader.runtime === "sandbox_process");
+  const bindingVerifier = taskset.metadata.learning !== undefined
+    ? await createLearningBatchVerifier(deps.store, taskset, deps.storeDir)
+    : taskset.metadata.rewardBinding !== undefined ? await createTasksetBindingVerifier(deps.store, taskset, deps.storeDir) : undefined;
+  if (bindingVerifier && !needsProcessVerifier) return bindingVerifier;
   const profile = deps.storeDir
     ? null
     : await (deps.loadProfileState ?? loadOpenPondProfileState)();
@@ -37,7 +40,6 @@ export async function createTasksetEvaluationVerifier(deps: {
   if (tasksetRoot && taskset.purpose !== "benchmark" && taskset.environment.metadata.runtimeSourceTasksetId === undefined) {
     await buildTaskset(taskset, tasksetRoot, { generatedFiles: proposal?.generatedFiles ?? [] });
   }
-  const needsProcessVerifier = taskset.graders.some(grader => grader.kind === "custom_verifier" && grader.runtime === "sandbox_process");
   if (needsProcessVerifier && !deps.storeDir) throw new Error("Process grading requires the execution owner's package directory.");
   const processVerifier = needsProcessVerifier
     ? createTasksetProcessVerifier({ store: deps.store, storeDir: deps.storeDir!, taskset,
@@ -49,6 +51,7 @@ export async function createTasksetEvaluationVerifier(deps: {
       const pinned = taskset.graders.find(candidate => candidate.id === grader.id);
       if (!pinned || pinned.kind !== "custom_verifier") throw new Error("Verifier is not declared by this Taskset revision.");
       if (pinned.runtime === "sandbox_process") return processVerifier!({ grader, task, attempt, signal });
+      if (bindingVerifier) return bindingVerifier({ grader: pinned, task, attempt, signal });
       let evaluatorContext: Record<string, unknown> | undefined;
       if (taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT && !attempt.infrastructureError) {
         if (!deps.storeDir) throw new Error("Tool grading requires the execution owner's artifact directory.");

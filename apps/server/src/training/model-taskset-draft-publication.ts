@@ -25,8 +25,9 @@ export async function materializeModelTasksetDraftPublication(input: {
   const compiled = publishModelTasksetDraftPackage({ preparation: input.preparation, edited, source });
   if (compiled.modelResources) {
     const imported = prepareImportedTasksetPackage({ package: compiled, profileId: input.taskset.profileId, name: input.taskset.name, createdAt: input.taskset.createdAt });
-    const projected = TasksetSchema.parse({ ...retainModelTasksetInputReview(imported.taskset, input.taskset), authoringProvenance: input.taskset.authoringProvenance,
-      metadata: { ...imported.taskset.metadata, sourcePackageHash: input.taskset.metadata.sourcePackageHash } });
+    const reviewed = retainModelTasksetInputReview(imported.taskset, input.taskset);
+    const projected = TasksetSchema.parse({ ...reviewed, authoringProvenance: input.taskset.authoringProvenance,
+      metadata: { ...reviewed.metadata, sourcePackageHash: input.taskset.metadata.sourcePackageHash } });
     const taskset = TasksetSchema.parse({ ...projected, contentHash: computeTasksetHash(projected) });
     await materializeImportedTasksetPackage({ home: input.home, ...imported, taskset });
     return { taskset, directory: path.join(input.home, "training", "tasksets", String(taskset.environment.metadata.runtimeSourceTasksetId)) };

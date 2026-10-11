@@ -5,6 +5,11 @@ import { expect, it, test } from "vitest";
 import { createCandidateCommandExecutor } from "../apps/server/src/harness/experiment-candidate-command.js";
 
 import { contentHash } from "@openpond/harness";
+import { createLearningTextAsset, learningRef } from "@openpond/evals/learning";
+import { createRewardRelease, createRewardBinding } from "@openpond/evals/rewards";
+import { bindOrdinaryModelTasksetReward, prepareImportedTasksetPackage } from "openpond-sdk/taskset-packages";
+import { captureTasksetEvaluationPackage } from "../apps/server/src/training/taskset-process-verifier.js";
+import { materializeImportedTasksetPackage } from "../apps/server/src/training/taskset-package-files.js";
 import { buildTaskset, computeTasksetHash } from "@openpond/taskset-sdk";
 import { prepareAuthoredTasksetSource } from "openpond-sdk/taskset-packages";
 import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures.js";
@@ -74,6 +79,26 @@ it("confines real shell processes to the candidate, with fresh revision authoriz
     expect(await grade()).toMatchObject({ passed: true, score: 1 });
     await writeFile(artifact.path, "tampered bytes");
     expect(await grade()).toMatchObject({ passed: false, score: null, rewardEligible: false, failureClass: "grader_failure" });
+    const verifier = createLearningTextAsset({ text: source, path: modulePath, mediaType: "application/javascript", visibility: "verifier" });
+    const reward = createRewardRelease({ schemaVersion: "openpond.rewardRelease.v1", id: "bound-private", revision: 1, name: "Private bytes", description: "",
+      implementation: { kind: "custom_verifier", runtime: "sandbox_process", verifierRef: verifier.asset, exportName: "verify", timeoutMs: 10000, networkPolicy: "none" },
+      rawScore: { minimum: 0, maximum: 1 }, assets: [verifier.asset] });
+    const binding = createRewardBinding({ schemaVersion: "openpond.rewardBinding.v1", id: "bound-private-roles", revision: 1, name: "Private roles", description: "",
+      sources: ["training", "evaluation"].map(role => ({ graderId: `private-${role}`, reward: learningRef(reward), role: role as "training" | "evaluation",
+        normalization: { kind: "identity" as const }, weight: 1, required: true, hardGate: true, privileged: true, fixtureRefs: [] })),
+      aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }, [reward]);
+    await store.learningRepository().transaction(taskset.profileId, async tx => { await tx.put("asset", verifier, 0); await tx.put("reward", reward, 0); await tx.put("binding", binding, 0); });
+    const packageValue = bindOrdinaryModelTasksetReward({ owner: { scopeId: taskset.profileId, modelId: "bound-fixtures" },
+      source: await captureTasksetEvaluationPackage(directory, taskset), rewardBinding: binding, rewards: [reward], assets: [verifier] });
+    const imported = prepareImportedTasksetPackage({ package: packageValue, profileId: taskset.profileId, name: "Bound process fixtures", createdAt: taskset.createdAt });
+    const bound = { ...imported.taskset, graderFixtures: taskset.graderFixtures.filter(fixture => fixture.id.startsWith("private-")).flatMap(fixture => binding.sources.map(item => ({ ...fixture,
+      id: `${fixture.id}-${item.role}`, expectedRewardEligible: item.role === "training", metadata: { ...fixture.metadata, graderIds: [item.graderId] } }))) };
+    bound.contentHash = computeTasksetHash(bound);
+    await materializeImportedTasksetPackage({ home: directory, ...imported, taskset: bound });
+    await store.upsertTaskset(bound);
+    const boundAudit = await service.auditFixtures({ tasksetId: bound.id });
+    expect(boundAudit.report.passed).toBe(true);
+    expect(boundAudit.results.map(item => item.result.components.length)).toEqual([1, 1, 1, 1]);
     await writeFile(path.join(root, modulePath), "export const verify = () => ({ score: 1, passed: true, feedback: 'forged' });");
     await expect(service.auditFixtures({ tasksetId: taskset.id, tasksetRef: selected })).rejects.toThrow("immutable");
   }));

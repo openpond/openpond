@@ -1,6 +1,6 @@
 import { TasksetSchema, type Taskset } from "@openpond/contracts";
 import { computeTasksetHash } from "@openpond/taskset-sdk";
-import { ImmutableAssetRefSchema } from "@openpond/harness";
+import { contentHash, ImmutableAssetRefSchema } from "@openpond/harness";
 
 /** A Model-owned Reward edit keeps the owner's review of the same task inputs.
  * Package import defaults still apply to newly fetched, unreviewed packages.
@@ -13,6 +13,10 @@ export function retainModelTasksetInputReview(compiled: Taskset, reviewed: Tasks
   const tasks = compiled.tasks.map(task => {
     const original = reviewed.tasks.find(candidate => candidate.id === task.id);
     if (!original) throw new Error("Model Taskset review is missing a compiled task.");
+    if (contentHash(task.input) !== contentHash(original.input) || contentHash(task.expectedOutput) !== contentHash(original.expectedOutput)
+      || contentHash(task.policyVisibleContext) !== contentHash(original.policyVisibleContext)) {
+      throw new Error("Model Taskset review differs from its compiled task content.");
+    }
     const assets = (task.assets ?? []).map(asset => {
       const previous = original.assets?.find(candidate => candidate.id === asset.id);
       const portable = ImmutableAssetRefSchema.safeParse(previous?.metadata.portableAsset);
@@ -34,6 +38,8 @@ export function retainModelTasksetInputReview(compiled: Taskset, reviewed: Tasks
   });
   const binding = compiled.metadata.rewardBinding as { id: string } | undefined;
   const projected = TasksetSchema.parse({ ...compiled, sourceRefs: reviewed.sourceRefs, tasks,
+    metadata: { ...compiled.metadata, ...Object.fromEntries(["trainingMethod", "diagnosis", "buildIntent"]
+      .filter(key => reviewed.metadata[key] !== undefined).map(key => [key, reviewed.metadata[key]])) },
     capabilities: { ...compiled.capabilities, supportedSignals: reviewed.capabilities.supportedSignals,
       compatibleMethods: reviewed.capabilities.compatibleMethods },
     graderFixtures: reviewed.graderFixtures,

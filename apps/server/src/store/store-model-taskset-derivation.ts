@@ -3,7 +3,7 @@ import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "@openpond/c
 import { assertLearningContentHash, learningRef, sameLearningRef, sealLearningContent, TaskBatchPackageMetadataSchema, verifyLearningTextAsset } from "@openpond/evals/learning";
 import { resolveBoundRewards } from "@openpond/evals/rewards";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
-import { computeTasksetHash, learningVerifierModule, projectLearningBatchGraders, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
+import { computeTasksetHash, projectLearningBatchGraders, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
 import { ModelProjectSchema, ModelProjectVersionedRefSchema, OpenPondModelProjectApiError, parseModelProjectSaveRequest, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 import { createModelStarterExecutionAsset, deriveModelTaskset, ModelTasksetDerivationSchema, type ModelTasksetPackage } from "openpond-sdk/model-starters";
 import { bindOrdinaryModelTasksetReward, createTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
@@ -97,7 +97,7 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
   const portableTasks = new Map(derived.taskset.tasks.map(task => [task.id, task]));
   const generatedFiles: GeneratedTaskFile[] = [];
   for (const grader of derived.taskset.graders) if (grader.kind === "custom_verifier") {
-    const path = learningVerifierModule(grader.verifierRef.contentHash);
+    const path = grader.verifierRef.path;
     if (!generatedFiles.some(file => file.path === path)) generatedFiles.push({ path, role: "verifier", content: verifyLearningTextAsset(assets.get(grader.verifierRef.id)!, grader.verifierRef) });
   }
   const published = publishTasksetDraft({ tasksetId: derived.taskset.id, now: preparation.created_at, sourcePackageHash: derived.taskset.contentHash, draft: {
