@@ -49,6 +49,9 @@ import { verifyPublishedTasksetAssets } from "./taskset-package-assets.js";
 import { assertLocalTasksetMetric, captureTasksetMetricSource } from "./taskset-metric-source.js";
 import { persistBenchmarkComparison } from "./benchmark-comparison-history.js";
 import { fixtureScoreMatches, parseExpectedFixtureScore } from "./fixture-score-expectation.js";
+import { captureTasksetEvaluationPackage } from "./taskset-process-verifier.js";
+import { localGraderFixtureArtifacts } from "./local-grader-fixture-artifacts.js";
+import { z } from "zod";
 
 type AuditFixtureInput = {
   label:
@@ -356,7 +359,12 @@ export function createTaskEvaluationService(deps: {
     fixtures?: AuditFixtureInput[];
   }) {
     const taskset = await requireLocalTasksetRevision(deps.store, input.tasksetId, input.tasksetRef);
-    const customVerifier = await createTasksetEvaluationVerifier(deps, taskset);
+    const needsPrivatePackage = taskset.graders.some(grader => grader.kind === "custom_verifier" && grader.runtime === "sandbox_process")
+      || (!input.fixtures?.length && taskset.graderFixtures.some(fixture => fixture.metadata.artifactAssetIds !== undefined));
+    if (needsPrivatePackage && !deps.storeDir) throw new Error("Private fixture grading requires the execution owner's package directory.");
+    const packageValue = needsPrivatePackage ? await captureTasksetEvaluationPackage(deps.storeDir!, taskset) : undefined;
+    const fixtureEvidence = new Map<string, { attemptHash: string; artifacts: ReturnType<typeof localGraderFixtureArtifacts> }>();
+    const customVerifier = await createTasksetEvaluationVerifier(deps, taskset, packageValue ? { packageValue, fixtures: fixtureEvidence } : undefined);
     const fixtures = input.fixtures?.length
       ? input.fixtures.map((fixture, index) => ({
           ...fixture,
@@ -382,13 +390,24 @@ export function createTaskEvaluationService(deps: {
       );
       const authored = input.fixtures?.length ? undefined : taskset.graderFixtures.find(candidate => candidate.id === fixture.id);
       if (taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT && authored && !authored.infrastructureError && !deps.storeDir) throw new Error("Tool fixture execution requires the owner's artifact directory.");
-      const attempt = taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT && authored && !authored.infrastructureError
+      let attempt = taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT && authored && !authored.infrastructureError
         ? await runStarterToolFixture({ store: deps.store, storeDir: deps.storeDir!, taskset, task, fixture: authored })
         : TaskAttemptResultSchema.parse(fixture.attempt);
+      if (authored) attempt = TaskAttemptResultSchema.parse({ ...attempt, split: task.split });
+      if (authored && packageValue) {
+        const artifacts = localGraderFixtureArtifacts(packageValue, authored);
+        attempt = TaskAttemptResultSchema.parse({ ...attempt, artifactRefs: artifacts.map(artifact => artifact.reference.id) });
+        fixtureEvidence.set(attempt.id, { attemptHash: contentHash(attempt), artifacts });
+      }
+      const graderIds = authored?.metadata.graderIds === undefined ? undefined
+        : z.array(z.string().min(1)).min(1).parse(authored.metadata.graderIds);
+      if (graderIds && (new Set(graderIds).size !== graderIds.length || graderIds.some(id => !taskset.graders.some(grader => grader.id === id)))) {
+        throw new Error("Fixture grader scope must contain unique declared grader IDs.");
+      }
       const result = await gradeAttempt({
         task,
         attempt,
-        graders: taskset.graders,
+        graders: graderIds ? taskset.graders.filter(grader => graderIds.includes(grader.id)) : taskset.graders,
         learning: await resolveTasksetRewardBinding(deps.store, taskset),
         modelJudge: deps.modelJudge ?? undefined,
         customVerifier,
