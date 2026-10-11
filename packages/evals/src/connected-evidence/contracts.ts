@@ -30,11 +30,24 @@ export const ConnectedBoundarySchema = z.object({
     process: z.enum(["retained", "partial", "absent"]), artifacts: z.enum(["retained", "references_only", "absent"]),
     replay: z.literal("unavailable"), gaps: z.array(z.string().max(500)).max(100) }).strict(),
 }).strict();
+/** Source-reported repository identity is reconstruction evidence, not an
+ * admitted checkout or proof that the working tree was clean. */
+export const ConnectedRepositoryContextSchema = z.object({
+  schemaVersion: z.literal("openpond.connectedRepositoryContext.v1"),
+  kind: z.literal("git"),
+  commitHash: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+  branch: z.string().min(1).max(500).nullable(),
+  recordedAt: Time,
+  sourceFileHash: Hash,
+  metadataHash: Hash,
+  workingDirectoryHash: Hash.optional(),
+}).strict();
 export const ConnectedSessionSchema = z.object({
   schemaVersion: z.literal(CONNECTED_EVIDENCE_VERSION), normalizerVersion: z.literal(CONNECTED_NORMALIZER_VERSION),
   origin: ConnectedSourceKindSchema, sessionId: Id, branchId: Id.nullable(), parentSessionId: Id.nullable(),
   exporterVersion: z.string().max(200).nullable(),
   acquisition: z.object({ machineId: Id, sourceInstanceId: Id }).strict().optional(),
+  repositoryContext: ConnectedRepositoryContextSchema.optional(),
   sourceFiles: z.array(z.object({ path: Id, contentHash: Hash, sizeBytes: z.number().int().nonnegative() }).strict()).max(CONNECTED_EVIDENCE_LIMITS.files),
   events: z.array(ConnectedEventSchema).max(CONNECTED_EVIDENCE_LIMITS.events),
   unmappedEvents: z.array(ConnectedEventSchema).max(CONNECTED_EVIDENCE_LIMITS.events),

@@ -1,6 +1,7 @@
 import { executeJavaScriptIsolate } from "./javascript-isolate.js";
 import { assertIsolatedVerifierRuntime, JavaScriptVerifierResultSchema, type JavaScriptVerifierResult } from "./javascript-verifier-contract.js";
 export { JavaScriptVerifierResultSchema, type JavaScriptVerifierResult } from "./javascript-verifier-contract.js";
+export { PREPARED_PROCESS_ISOLATION_SOURCE } from "./prepared-process-isolation.js";
 
 /** A fresh interpreter with no filesystem, network, timers or module loader.
  * Hosts should use the worker entrypoint for cancellation and responsiveness. */

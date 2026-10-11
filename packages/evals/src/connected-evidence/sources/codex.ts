@@ -1,12 +1,23 @@
 import { contentHash } from "@openpond/harness";
 import type { ConnectedEvent, ConnectedFile } from "../contracts.js";
-import { connectedTimestamp, event, json, normalizeConnectedSession, object } from "../normalize.js";
+import { connectedFileIdentity, connectedTimestamp, event, json, normalizeConnectedSession, object } from "../normalize.js";
 import { projectCodexAuthorization } from "./codex-authorization.js";
 import { sourceUsage } from "./usage.js";
+import { CodexMetadataChain } from "./codex-metadata.js";
 
 export function parseCodexSession(file: ConnectedFile, rows: Record<string, unknown>[]) {
-  const metadata = object(rows.find(row => row.type === "session_meta")?.payload);
+  const chain = new CodexMetadataChain();
+  if (rows.some(row => !chain.accept(row))) throw new Error("Codex rollout metadata does not match its declared fork ancestry.");
+  const metadata = chain.metadata ?? {};
   if (typeof metadata.id !== "string") throw new Error("This is not a supported Codex rollout: session_meta.id is missing.");
+  const git = object(metadata.git);
+  const repositoryContext = typeof git.commit_hash === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(git.commit_hash)
+    ? { schemaVersion: "openpond.connectedRepositoryContext.v1" as const, kind: "git" as const,
+      commitHash: git.commit_hash, branch: typeof git.branch === "string" && git.branch.length > 0 && git.branch.length <= 500 ? git.branch : null,
+      recordedAt: connectedTimestamp(metadata.timestamp), sourceFileHash: connectedFileIdentity(file).contentHash,
+      metadataHash: contentHash(git) }
+    : undefined;
+  if (repositoryContext && typeof metadata.cwd === "string") Object.assign(repositoryContext, { workingDirectoryHash: contentHash(metadata.cwd) });
   const events: ConnectedEvent[] = [];
   let turnId: string | null = null;
   let authorizationOmissions = 0;
@@ -38,5 +49,6 @@ export function parseCodexSession(file: ConnectedFile, rows: Record<string, unkn
   }
   return normalizeConnectedSession({ origin: "codex", sessionId: metadata.id, parentSessionId: typeof metadata.forked_from_id === "string" ? metadata.forked_from_id : null,
     exporterVersion: typeof metadata.cli_version === "string" ? metadata.cli_version : null, files: [file], events,
+    ...(repositoryContext ? { repositoryContext } : {}),
     warnings: ["Codex cumulative usage is retained as reported totals and is not summed as billed invocations.", "Referenced files are unavailable unless separately admitted.", ...(authorizationOmissions ? [`Codex native authorization state excluded by codex-native-authorization-v1 from ${authorizationOmissions} locations. Omission markers retain source-section hashes; sourceFiles retains original byte hashes. Other conversation evidence is unchanged and still requires privacy admission.`] : [])] });
 }

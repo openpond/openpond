@@ -1,6 +1,7 @@
 import { GraderFixtureSchema, TasksetEnvironmentResourceSchema, TasksetSourceRefSchema } from "./taskset-draft-core.js";
 import { TasksetSchema, type GeneratedTaskFile } from "./taskset-authored-contracts.js";
 import { contentHash } from "@openpond/harness";
+import { z } from "zod";
 import { learningRef, taskBatchPackageMetadata, verifyLearningTextAsset } from "@openpond/evals/learning";
 import { computeTasksetHash } from "./taskset-authored-validation.js";
 import { createTasksetDraft } from "./taskset-draft-authoring.js";
@@ -36,6 +37,7 @@ export function prepareImportedTasksetPackage(input: {
   const authoring = (release.metadata.ordinaryAuthoring ?? release.metadata.starterAuthoring) as { graderFixtures?: unknown } | undefined;
   const fixtures = GraderFixtureSchema.array().max(100_000).parse(authoring?.graderFixtures ?? []);
   const kind = release.environment.kind === "text" ? "chat" : release.environment.kind === "custom_program" ? "program" : release.environment.kind;
+  const stagingPaths = z.record(z.string(), z.record(z.string(), z.string())).parse(release.metadata.workAssetStagingPaths ?? {});
   const projected = TasksetSchema.parse({
     schemaVersion: "openpond.taskset.v1", id: release.id, revision: release.revision,
     profileId: input.profileId, profileRelease: null, createImproveRunId: null,
@@ -56,7 +58,8 @@ export function prepareImportedTasksetPackage(input: {
     },
     tasks: release.tasks.map(task => ({ ...task, schemaVersion: "openpond.taskData.v1", sourceRefs: [source.id],
       assets: task.artifactRefs.map(asset => ({ id: asset.id, sourceRefId: source.id, artifactRef: asset.path,
-        fileName: asset.path.split("/").at(-1)!, mediaType: asset.mediaType, sha256: asset.contentHash,
+        fileName: asset.path.split("/").at(-1)!, ...(stagingPaths[task.id]?.[asset.id] ? { stagingPath: stagingPaths[task.id]![asset.id] } : {}),
+        mediaType: asset.mediaType, sha256: asset.contentHash,
         sizeBytes: asset.sizeBytes, split: task.split, metadata: { portableAsset: asset } })),
       ...(task.requiredOutputs ? { requiredOutputs: task.requiredOutputs.map(output => ({ ...output,
         schemaRef: output.schemaRef?.id ?? null, maxBytes: output.maxBytes ?? undefined })) } : {}),

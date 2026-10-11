@@ -1482,6 +1482,14 @@
         "graderId": {
           "$ref": "#/$defs/__schema0"
         },
+        "taskIds": {
+          "minItems": 1,
+          "maxItems": 10000,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
         "reward": {
           "$ref": "#/$defs/__schema1"
         },

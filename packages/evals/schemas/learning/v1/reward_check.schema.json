@@ -264,7 +264,8 @@
                 "scored",
                 "pending",
                 "unavailable",
-                "failed"
+                "failed",
+                "not_applicable"
               ]
             },
             "rawScore": {

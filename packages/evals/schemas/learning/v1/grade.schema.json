@@ -62,6 +62,9 @@
             "taskHash": {
               "$ref": "#/$defs/__schema2"
             },
+            "taskId": {
+              "$ref": "#/$defs/__schema0"
+            },
             "outputHash": {
               "$ref": "#/$defs/__schema2"
             },
@@ -345,7 +348,8 @@
             "scored",
             "pending",
             "unavailable",
-            "failed"
+            "failed",
+            "not_applicable"
           ]
         },
         "rawScore": {

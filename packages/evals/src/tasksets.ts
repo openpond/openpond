@@ -41,6 +41,7 @@ export const EnvironmentContractSchema = z.object({
 
 const GraderBaseSchema = z.object({
   id: ReleaseIdSchema,
+  taskIds: z.array(ReleaseIdSchema).min(1).max(10_000).refine(ids => new Set(ids).size === ids.length, "Grader task IDs must be unique.").optional(),
   version: z.string().trim().min(1).max(100),
   weight: z.number().nonnegative().max(1_000).default(1),
   hardGate: z.boolean().default(false),
@@ -148,6 +149,10 @@ export function validateTasksetRelease(input: unknown): {
       message: "A Taskset Release must bind both Environment and Verifier Set releases or neither during v2 migration.",
       path: "environmentRelease",
     });
+  }
+  const taskIds = new Set(taskset.tasks.map(task => task.id));
+  for (const grader of taskset.graders) if (grader.taskIds?.some(id => !taskIds.has(id))) {
+    issues.push({ code: "grader_task_missing", severity: "error", message: `Grader ${grader.id} refers to a task outside this release.`, path: "graders" });
   }
   const clusterSplits = new Map<string, Set<string>>();
   for (const task of taskset.tasks) {

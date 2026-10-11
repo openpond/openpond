@@ -11,6 +11,7 @@ export const ConnectedDatasetSourceRefSchema = z.object({
   origin: ConnectedSourceKindSchema, sourceId: z.string().min(1).max(500), sessionId: z.string().min(1).max(500),
   normalizerVersion: z.string().min(1).max(200), projection: z.enum(["turn", "conversation"]),
   ownerUserId: z.string().min(1).max(500), purpose: z.literal("recorded_evaluation"),
+  sourceFileHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(100).optional(),
   metadata: z.record(z.string(), z.unknown()).default({}),
 }).strict();
 export type ConnectedDatasetSourceRef = z.infer<typeof ConnectedDatasetSourceRefSchema>;

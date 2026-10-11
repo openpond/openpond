@@ -138,8 +138,14 @@ export function materializePortableTasksetRelease(input: {
       sourceTasksetHash: input.taskset.contentHash,
       sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,
       environmentResources: input.taskset.environment.resources ?? [],
+      workAssetStagingPaths: Object.fromEntries(tasks.filter(task => task.assets?.some(asset => asset.stagingPath))
+        .map(task => [task.id, Object.fromEntries((task.assets ?? []).filter(asset => asset.stagingPath)
+          .map(asset => [asset.id, asset.stagingPath]))])),
       ordinaryAuthoring: {
         instructions: input.taskset.objective,
+        graderSourceRewards: Object.fromEntries(input.taskset.graders.filter(grader => grader.metadata.sourceReward !== undefined).map(grader => [grader.id, grader.metadata.sourceReward])),
+        graderOrigins: Object.fromEntries(input.taskset.graders.map(grader => [grader.id,
+          grader.metadata.preparationOrigin === "reused" ? "reused" : grader.metadata.preparationOrigin === "adapted" || grader.metadata.adaptedFromReward ? "adapted" : "authored"])),
         graderFixtures: input.taskset.graderFixtures,
         judgeCalibrationFixtures: Object.fromEntries(input.taskset.graders
           .filter(grader => grader.kind === "model_judge")
@@ -216,7 +222,7 @@ export function projectPortableTaskRecord(task: TaskDataRecord) {
         const previous = original.artifactRefs.find(item => item.id === asset.id);
         return {
           id: asset.id,
-          path: previous?.path ?? `tasks/${segment(task.id)}/${segment(asset.fileName)}`,
+          path: previous?.path ?? `tasks/${segment(task.id)}/${asset.stagingPath ?? segment(asset.fileName)}`,
           contentHash: hash(asset.sha256),
           sizeBytes: asset.sizeBytes,
           mediaType: asset.mediaType,
@@ -252,7 +258,7 @@ export function projectPortableTaskRecord(task: TaskDataRecord) {
     privilegedContextRef: task.privilegedContextRef,
     artifactRefs: (task.assets ?? []).map((item) => ({
       id: item.id,
-      path: `tasks/${segment(task.id)}/${segment(item.fileName)}`,
+      path: `tasks/${segment(task.id)}/${item.stagingPath ?? segment(item.fileName)}`,
       contentHash: hash(item.sha256),
       sizeBytes: item.sizeBytes,
       mediaType: item.mediaType,
@@ -328,6 +334,7 @@ function portableTools(taskset: Taskset): ToolDeclaration[] {
 function portableGrader(grader: GraderSpec): PortableGraderSpec {
   const base = {
     id: grader.id,
+    ...(grader.taskIds ? { taskIds: grader.taskIds } : {}),
     version: grader.version,
     weight: grader.weight,
     hardGate: grader.hardGate,

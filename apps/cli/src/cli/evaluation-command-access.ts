@@ -6,13 +6,13 @@ import {createLocalAuthenticatedRequest, DEFAULT_LOCAL_TRAINING_API_URL} from ".
 
 /** Mutations consume an exact reviewed JSON request. Stable operation IDs and
  * revisions belong to that request; a retry never invents replacement intent. */
-export async function readEvaluationCommandInput(options: Record<string,string|boolean>): Promise<unknown> {
+export async function readEvaluationCommandInput(options: Record<string,string|boolean>, maximumBytes = 1_048_576): Promise<unknown> {
   const file = optionString(options,"inputFile");
   if (!file) throw new Error("Provide --input-file with the exact reviewed request.");
   const info = await stat(file);
-  if (!info.isFile() || info.size > 1_048_576) throw new Error("The request must be a regular JSON file of at most 1 MiB.");
+  if (!info.isFile() || info.size > maximumBytes) throw new Error(`The request must be a regular JSON file of at most ${maximumBytes} bytes.`);
   const bytes = await readFile(file);
-  if (bytes.byteLength > 1_048_576) throw new Error("The request file grew beyond 1 MiB.");
+  if (bytes.byteLength > maximumBytes) throw new Error("The request file grew beyond its byte allowance.");
   return JSON.parse(bytes.toString("utf8"));
 }
 export async function evaluationCommandAccess(options: Record<string,string|boolean>) {
