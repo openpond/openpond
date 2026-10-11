@@ -5,6 +5,7 @@ import { resolveApiBaseUrlOption } from "./common/urls";
 import {
   createLocalAuthenticatedRequest,
   DEFAULT_LOCAL_TRAINING_API_URL,
+  LOCAL_TRAINING_RESPONSE_LIMIT,
   TrainingApiClient,
 } from "./training";
 
@@ -36,7 +37,9 @@ export async function runTasksetCommand(
   }
   const client = new TrainingApiClient({
     baseUrl,
-    request: dependencies.request ?? await createLocalAuthenticatedRequest(baseUrl),
+    request: dependencies.request ?? await createLocalAuthenticatedRequest(baseUrl, {
+      maximumResponseBytes: LOCAL_TRAINING_RESPONSE_LIMIT,
+    }),
   });
   const result = subcommand === "import"
     ? await client.importTasksetDraftPackage({
