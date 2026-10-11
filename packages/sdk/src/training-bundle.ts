@@ -132,11 +132,13 @@ export function buildTasksetTrainingBundle(input: {
   const rewardExecution = resolvePortableTasksetRewardExecution(taskset, input.rewardExecution);
   if (rewardExecution) {
     const verifierAssets = input.verifierAssets ?? [];
-    const references = compileBoundGraders(rewardExecution.binding, rewardExecution.rewards)
-      .flatMap(grader => grader.kind === "custom_verifier" ? [grader.verifierRef]
-        : grader.kind === "model_judge" ? [grader.rubricRef] : []);
+    const references = [...rewardExecution.rewards.flatMap(reward => reward.assets),
+      ...compileBoundGraders(rewardExecution.binding, rewardExecution.rewards)
+        .flatMap(grader => grader.kind === "custom_verifier" ? [grader.verifierRef]
+          : grader.kind === "model_judge" ? [grader.rubricRef] : [])];
     const expected = new Set(references.map(reference => reference.id));
     if (new Set(verifierAssets.map(asset => asset.id)).size !== verifierAssets.length
+      || new Set(verifierAssets.map(asset => asset.asset.path)).size !== verifierAssets.length
       || verifierAssets.some(asset => !expected.has(asset.id))) throw new Error("Unexpected or duplicate private verifier asset.");
     for (const reference of references) {
       const asset = verifierAssets.find(asset => asset.id === reference.id);

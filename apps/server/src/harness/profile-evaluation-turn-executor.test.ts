@@ -164,6 +164,33 @@ test("long streamed workflow turns keep complete output and bounded grader evide
   const retained=await bounded({task:{id:task.id,input:task.input,policyVisibleContext:{},artifactRefs:[],tags:[]},seed:"1",source});
   expect(retained.terminal).toBe(false);expect(retained.evidence.output).toEqual({text:""});
   expect(retained.traceHash).toBe(result.traceHash);expect(overflowHash).toBe(contentHash("done"));
+
+  // Native provider final-answer phases are the authoritative response, not
+  // earlier answers, commentary, or an invented hosted response receipt.
+  const codexRef={providerId:"codex" as const,modelId:"gpt-6.1-sol"};
+  const codexManifest=createTasksetRunManifest({...manifestContent,policy:{kind:"model",
+    model:{provider:codexRef.providerId,model:codexRef.modelId},configurationHash:modelConfigurationHash}});
+  const nativeEvents=[
+    {id:"old-answer",name:"assistant.delta",output:"old",data:{provider:"codex",phase:"final_answer",itemId:"old"}},
+    {id:"progress",name:"assistant.delta",output:"progress",data:{provider:"codex",phase:"commentary",itemId:"progress"}},
+    {id:"native-answer-1",name:"assistant.delta",output:"do",data:{provider:"codex",phase:"final_answer",itemId:"final"}},
+    {id:"native-answer-2",name:"assistant.delta",output:"ne",data:{provider:"codex",phase:"final_answer",itemId:"final"}},
+    {id:"native-terminal",name:"turn.completed",data:{turn:{status:"completed"}}},
+  ] as RuntimeEvent[];
+  const requiredOutputs=[{path:"report.csv",mediaType:"text/csv",maxBytes:null,schemaRef:null,metadata:{}}];
+  const createNativeSession=vi.fn(async()=>({id:"native-profile-session"}) as Session);
+  const nativeSend=vi.fn(async()=>({id:"native-profile-turn",status:"completed",startedAt:manifest.createdAt,completedAt:manifest.createdAt,
+    modelRef:codexRef,harnessSnapshot:{harnessRelease}}) as Turn);
+  const native=createProfileWorkflowEvaluationExecutor({manifest:codexManifest,profileRef,binding,modelRef:codexRef,modelConfigurationHash,requiredOutputs,
+    createSession:createNativeSession,sendTurn:nativeSend,runtimeEventsForTurn:async()=>nativeEvents});
+  const nativeResult=await native({task:{id:task.id,input:task.input,policyVisibleContext:{},artifactRefs:[],tags:[]},seed:"1",source});
+  expect(nativeResult.evidence.output).toEqual({text:"done"});
+  expect(nativeSend).toHaveBeenCalledWith("native-profile-session", expect.any(Object),
+    {nativeTimeoutMs:codexManifest.limits.timeoutMs});
+  expect(createNativeSession).toHaveBeenCalledWith(expect.objectContaining({experience:"work",metadata:expect.objectContaining({workspaceTarget:"local",profileEvaluationOutputs:requiredOutputs})}));
+  nativeEvents.splice(2,2);
+  nativeEvents[0]!.data={provider:"codex",phase:"commentary",itemId:"old"};
+  await expect(native({task:{id:task.id,input:task.input,policyVisibleContext:{},artifactRefs:[],tags:[]},seed:"1",source})).rejects.toThrow("no retained final answer");
 });
 
 test("workflow case rejects a turn on a different released Harness", async () => {

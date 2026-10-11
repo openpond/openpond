@@ -143,6 +143,7 @@ export async function runTrainingCommand(
 
 export async function createLocalAuthenticatedRequest(
   baseUrl: string,
+  options: { maximumResponseBytes?: number; timeoutMs?: number } = {},
 ): Promise<typeof fetch> {
   const url = new URL(baseUrl);
   if (
@@ -154,6 +155,11 @@ export async function createLocalAuthenticatedRequest(
   const token = (await readFile(storagePaths(resolveOpenPondHome()).token, "utf8")).trim();
   if (!token) {
     throw new Error("OpenPond local capability token is empty.");
+  }
+  const maximumResponseBytes = options.maximumResponseBytes ?? 8_388_608;
+  const timeoutMs = options.timeoutMs ?? 60_000;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 86_400_000) {
+    throw new Error("Local request timeout must be between one millisecond and one day.");
   }
   return (async (
     resource: string | URL | Request,
@@ -171,7 +177,7 @@ export async function createLocalAuthenticatedRequest(
     headers.forEach((value, name) => {
       nodeHeaders[name] = value;
     });
-    const requestSignal = init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000);
+    const requestSignal = init.signal ? AbortSignal.any([init.signal,AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
     return new Promise<Response>((resolve, reject) => {
       let settled = false;
       const request = requestHttp(
@@ -185,8 +191,8 @@ export async function createLocalAuthenticatedRequest(
           let responseBytes = 0;
           response.on("data", (chunk: Buffer) => {
             responseBytes += chunk.byteLength;
-            if (responseBytes > 8_388_608) {
-              response.destroy(new Error("Local evaluation response exceeds 8 MiB."));
+            if (responseBytes > maximumResponseBytes) {
+              response.destroy(new Error(`Local response exceeds ${maximumResponseBytes} bytes.`));
               return;
             }
             chunks.push(chunk);

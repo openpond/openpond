@@ -1,8 +1,10 @@
 import { contentHash } from "@openpond/harness";
-import { gradeTaskEvidence } from "@openpond/evals/graders";
+import { gradeEvidence } from "@openpond/evals/graders";
 import { executeJavaScriptVerifierInWorker } from "@openpond/evals/javascript-verifier/node";
 import { decodeTasksetPackageFile, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import type { LocalDatasetCheck, LocalDatasetRecord } from "@openpond/contracts";
+import { executeLocalProfileVerifier } from "../evaluations/profile-sandbox-verifier.js";
+import { localGraderFixtureArtifacts } from "./local-grader-fixture-artifacts.js";
 
 /** Fixture checks use the evaluator's grading semantics; they cannot dispatch
  * target inference or an unbudgeted model judge. Unavailable evidence is saved. */
@@ -33,21 +35,26 @@ export async function checkLocalDatasetGraders(record: LocalDatasetRecord, value
       const task = value.taskset.tasks.find(t => t.id === fixture.taskId);
       if (!task) { issues.push({code:"fixture_task_missing",message:`Example ${fixture.id} references a missing task.`,graderId:grader.id,taskId:fixture.taskId}); continue; }
       try {
-        const grade = await gradeTaskEvidence({task, graders:[grader], purpose:"fixture_calibration", signal,
-          evidence:{output:fixture.output,runtimeEventRefs:[],artifactRefs:[],infrastructureError:fixture.infrastructureError},
+        const artifacts=localGraderFixtureArtifacts(value,fixture);
+        const fixtureEvidence={output:fixture.output,runtimeEventRefs:[],artifactRefs:artifacts.map(artifact=>artifact.reference.id),artifacts,infrastructureError:fixture.infrastructureError};
+        // Calibration checks each grader's verdict, not a weighted task score.
+        // A zero-weight artifact hard gate still has a meaningful pass/fail.
+        const [grade] = await gradeEvidence({task, graders:[grader], purpose:"fixture_calibration", signal,
+          evidence:fixtureEvidence,
           customVerifier: async ({grader,task,evidence}) => {
-            if (grader.runtime === "sandbox_process") throw new Error("This fixture requires the qualified process verifier owner.");
             const file = value.files.find(f => f.asset.id === grader.verifierRef.id);
             if (!file || contentHash(file.asset) !== contentHash(grader.verifierRef)) throw new Error("The exact verifier source is missing.");
-            const result = await executeJavaScriptVerifierInWorker({source:new TextDecoder("utf-8",{fatal:true}).decode(decodeTasksetPackageFile(file)),exportName:grader.exportName,runtime:grader.runtime,timeoutMs:grader.timeoutMs,signal,
-              value:{task,attempt:evidence,input:task.input,expectedOutput:task.expectedOutput,output:evidence.output,artifacts:[],infrastructureError:fixture.infrastructureError}});
+            const result = grader.runtime === "sandbox_process"
+              ? await executeLocalProfileVerifier({packageValue:value,grader,task,evidence:{...evidence,artifacts},signal,authorize:async()=>{signal?.throwIfAborted();}})
+              : await executeJavaScriptVerifierInWorker({source:new TextDecoder("utf-8",{fatal:true}).decode(decodeTasksetPackageFile(file)),exportName:grader.exportName,runtime:grader.runtime,timeoutMs:grader.timeoutMs,signal,
+                value:{task,attempt:evidence,input:task.input,expectedOutput:task.expectedOutput,output:evidence.output,artifacts,infrastructureError:fixture.infrastructureError}});
             return {score:result.score,passed:result.passed,rewardEligible:grader.rewardEligible,failureClass:null,feedback:[result.feedback],visibleEvidenceRefs:[],privilegedEvidenceRefs:result.evidenceRefs};
           }});
-        if (grade.gradingStatus === "unscorable" && !fixture.infrastructureError || grade.gradingStatus === "pending") {
-          issues.push({code:"grader_unavailable",message:grade.components.flatMap(c => c.feedback).join(" "),graderId:grader.id,taskId:task.id});
+        if (!grade || (grade.score === null && !fixture.infrastructureError) || grade.status === "pending") {
+          issues.push({code:"grader_unavailable",message:grade?.feedback.join(" ") ?? "The grader returned no evidence.",graderId:grader.id,taskId:task.id});
         } else {
           checked++;
-          if (grade.passed !== fixture.expectedPassed || grade.rewardEligible !== fixture.expectedRewardEligible) issues.push({code:"example_mismatch",message:`Example ${fixture.id} did not match its expected pass/reward outcome.`,graderId:grader.id,taskId:task.id});
+          if (grade.passed !== fixture.expectedPassed || grade.rewardEligible !== fixture.expectedRewardEligible) issues.push({code:"example_mismatch",message:`Example ${fixture.id} did not match its expected pass/reward outcome. ${grade.feedback.join(" ").slice(0,2000)}`,graderId:grader.id,taskId:task.id});
         }
       } catch (error) { issues.push({code:"grader_unavailable",message:error instanceof Error ? error.message : "Example check failed.",graderId:grader.id,taskId:task.id}); }
     }

@@ -6,6 +6,7 @@ import { createProfileEvaluationRunService } from "./profile-evaluation-run-serv
 import { createProfileEvaluationSuiteService } from "./profile-evaluation-suite-service.js";
 import type { createProfileEvaluationRunPreparationService } from "./profile-evaluation-run-preparation.js";
 import {createProfilePrivateGradingOwner} from "./profile-private-grading.js";
+import {admitProfileExternalDataset,type ProfileExternalDatasetResolver} from "./profile-external-dataset-admission.js";
 
 type CaseDependencies = Parameters<typeof createProfileEvaluationCaseService>[0];
 type SuiteDependencies = Parameters<typeof createProfileEvaluationSuiteService>[0];
@@ -16,6 +17,7 @@ export function createProfileEvaluationRuntime(input: {
   storeDir: string;
   workflows: SuiteDependencies["selectedWorkflows"];
   prepare: ReturnType<typeof createProfileEvaluationRunPreparationService>;
+  resolveExternalDataset?:ProfileExternalDatasetResolver;
   createSession: CaseDependencies["createSession"];
   sendTurn: CaseDependencies["sendTurn"];
   interruptSessionTurn: CaseDependencies["interruptSessionTurn"];
@@ -31,15 +33,20 @@ export function createProfileEvaluationRuntime(input: {
   const executeProfileEvaluationCase = createProfileEvaluationCaseService({
     ...input, loadCatalog, selectedProfile: selectedEvaluationProfile,
     loadTasksetPackage,
+    resolveExternalDataset:input.resolveExternalDataset,
   });
   const executeProfileEvaluationRun = createProfileEvaluationRunService({
     store: input.store, loadCatalog, selectedProfile: selectedEvaluationProfile, executeCase: executeProfileEvaluationCase,
     loadTasksetPackage,
+    resolveExternalDataset:input.resolveExternalDataset,
     privateGrading: (manifest, packageValue, signal) => createProfilePrivateGradingOwner({manifest, packageValue, signal, authorize: async () => {
       const selected = await selectedEvaluationProfile(), source = manifest.profileEvaluation;
       if (!source || selected.ref.profileId !== source.profileId || selected.sourceRevision !== source.sourceRevision) throw new Error("The private grading Profile authority changed.");
       const catalog = await loadCatalog({...selected, harnessRelease: source.harnessRelease});
-      if (catalog.catalogHash !== source.catalogHash) throw new Error("The private grading catalog changed.");
+      if(source.externalDatasetBinding) {
+        const external=await admitProfileExternalDataset({manifest,taskset:packageValue.taskset,selected:{profileRef:selected.ref,sourceRevision:selected.sourceRevision,harnessRelease:source.harnessRelease},loadCatalog,resolveExternalDataset:input.resolveExternalDataset});
+        if(!external||external.packageValue.contentHash!==packageValue.contentHash)throw new Error("The private grading external Dataset owner changed.");
+      } else if (catalog.catalogHash !== source.catalogHash) throw new Error("The private grading catalog changed.");
     }}),
   });
   const profileEvaluationRunPayload = async (request: unknown) =>

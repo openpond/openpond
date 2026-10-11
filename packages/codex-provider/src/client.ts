@@ -240,10 +240,7 @@ export class CodexAppServerClient {
   }
 
   async stop(): Promise<void> {
-    const child = this.child;
-    if (!child) return;
-    this.child = null;
-    child.kill("SIGTERM");
+    await this.stopAndWait();
   }
 
   /** Evaluation cleanup must acknowledge process exit before sealing results. */
@@ -253,9 +250,11 @@ export class CodexAppServerClient {
     if(!child)return Promise.resolve();
     this.stopping=new Promise<void>((resolve,reject)=>{
       const finished=()=>{clearTimeout(force);clearTimeout(deadline);resolve();};
-      child.once("exit",finished);
+      // Process exit can precede its final stdout notification. Wait for closed
+      // stdio too, so the owner can safely flush and seal all native evidence.
+      child.once("close",finished);
       const force=setTimeout(()=>{child.kill("SIGKILL");},1500);
-      const deadline=setTimeout(()=>{child.off("exit",finished);reject(new Error("Codex evaluation process exit was not confirmed."));},3000);
+      const deadline=setTimeout(()=>{child.off("close",finished);reject(new Error("Codex evaluation process and stdio closure were not confirmed."));},3000);
       child.kill("SIGTERM");
     }).finally(()=>{this.stopping=null;});
     return this.stopping;

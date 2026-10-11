@@ -29,6 +29,7 @@ export const SANDBOX_OPTION_SCHEMA = {
   integrationScopes: string, intervalMs: integer, json: boolean, keep: boolean,
   label: string, leaseId: string, lifecycleHint: json, manifestPath: string,
   maxDurationSeconds: integer, maxEntries: number, maxResults: number,
+  offsetBytes: integer, maxBytes: integer,
   memoryGb: number, message: string, name: string, noPreview: boolean,
   overwrite: boolean, params: json, path: string, paths: string, payload: json,
   port: integer, preview: boolean, projectId: string, publish: boolean, q: string,

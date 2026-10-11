@@ -307,8 +307,11 @@ export type CreatePipelineRepository = Pick<
   upsertApproval(approval: Approval): Promise<void>;
 };
 
+/** Internal execution-owner limits, never parsed from a public turn payload. */
+export type TurnExecutionLimits = { nativeTimeoutMs: number };
+
 export type TurnDispatcherPort = {
-  sendTurn(sessionId: string, payload: unknown, reservedTurnId?:string, admission?:StoredTurnAdmission): Promise<Turn>;
+  sendTurn(sessionId: string, payload: unknown, reservedTurnId?:string, admission?:StoredTurnAdmission, executionLimits?: TurnExecutionLimits): Promise<Turn>;
 };
 
 export type TurnRunnerDependencies = {
@@ -353,6 +356,8 @@ export type TurnRunnerDependencies = {
   findOpenPondApp: SessionWorkspaceResolver["findOpenPondApp"];
   resolveSessionWorkspaceCwd: SessionWorkspaceResolver["resolveSessionWorkspaceCwd"];
   ensureCodexRuntime: ProviderRuntime["ensureCodexRuntime"];
+  flushCodexRuntimeEvents?:(sessionId:string)=>Promise<void>;
+  stopCodexRuntime?:(sessionId:string)=>Promise<void>;
   appendWorkspaceDiffEvent: SessionWorkspaceResolver["appendWorkspaceDiffEvent"];
   workspaceDiffBaseline: SessionWorkspaceResolver["workspaceDiffBaseline"];
   appendRuntimeEvent: TurnEventSink["appendRuntimeEvent"];

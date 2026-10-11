@@ -38,6 +38,7 @@ Options:
 
 ```text
 Usage:
+  openpond datasets <schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]
   openpond datasets <upload|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]
   openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]
 
@@ -47,10 +48,12 @@ Options:
   --expected-revision <integer>
   --input-file <string>
   --json
+  --local
   --operation-id <string>
   --package-hash <string>
   --project <string>
   --publish
+  --server-url <string>
   --team <string>
   --workspace-hash <string>
 ```
@@ -135,6 +138,8 @@ Options:
 
 ```text
 Usage:
+  openpond experiments <models|run|run-cloud|list|read|status|cancel|result|compare|case> [id] [candidate-id] --local [--server-url <loopback-origin>] [--input-file <path>] [--receipt-id <id>] [--json]
+  openpond experiments <profile-catalog|prepare-profile|run-profile|inspect-profile> --local [--server-url <loopback-origin>] [--input-file <path>] [--json]
   openpond experiments <prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]
 
 Options:
@@ -832,6 +837,7 @@ Options:
   --lease-id <string>
   --lifecycle-hint <json>
   --manifest-path <string>
+  --max-bytes <integer>
   --max-duration-seconds <integer>
   --max-entries <number>
   --max-results <number>
@@ -839,6 +845,7 @@ Options:
   --message <string>
   --name <string>
   --no-preview
+  --offset-bytes <integer>
   --overwrite
   --params <json>
   --path <string>

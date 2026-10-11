@@ -1,5 +1,6 @@
 import type { OpenPondSandboxClient } from "../sandbox/client";
-import { parseBooleanOption, parseNumberOption } from "./common";
+import { readFile, stat } from "node:fs/promises";
+import { parseBooleanOption, parseIntegerOption, parseNumberOption } from "./common";
 import { summarizeSandbox } from "./sandbox-helpers";
 
 export async function handleSandboxFilesCommand(
@@ -47,16 +48,25 @@ export async function handleSandboxFilesCommand(
         : typeof options.content === "string"
         ? options.content
         : "";
-    const contentsBase64 =
+    let contentsBase64 =
       typeof options.contentsBase64 === "string"
         ? options.contentsBase64.trim()
         : typeof options.contentBase64 === "string"
         ? options.contentBase64.trim()
         : "";
+    const fromPath = typeof options.fromPath === "string" ? options.fromPath.trim() : "";
     if (!sandboxId || !path) {
       throw new Error(
         'usage: sandbox upload-file <sandboxId> --path <path> --contents "text"'
       );
+    }
+    if (fromPath) {
+      if (contents || contentsBase64) throw new Error("Choose --from-path or inline contents for the upload.");
+      const info = await stat(fromPath);
+      if (!info.isFile() || info.size > 10 * 1024 * 1024) throw new Error("Sandbox upload requires a file within 10 MiB.");
+      const bytes = await readFile(fromPath);
+      if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("Sandbox upload file changed beyond 10 MiB.");
+      contentsBase64 = bytes.toString("base64");
     }
     if (!contents && !contentsBase64) {
       throw new Error(
@@ -82,15 +92,15 @@ export async function handleSandboxFilesCommand(
   if (subcommand === "download-file") {
     const sandboxId = rest[1];
     const path = typeof options.path === "string" ? options.path.trim() : "";
-    const offsetBytes = Number(options["offset-bytes"]);
-    const maxBytes = Number(options["max-bytes"]);
+    const offsetBytes = parseIntegerOption(options.offsetBytes, "offset-bytes");
+    const maxBytes = parseIntegerOption(options.maxBytes, "max-bytes");
     if (!sandboxId || !path) {
       throw new Error("usage: sandbox download-file <sandboxId> --path <path>");
     }
     const result = await client.downloadFileResponse(sandboxId, {
       path,
-      ...(Number.isFinite(offsetBytes) ? { offsetBytes } : {}),
-      ...(Number.isFinite(maxBytes) ? { maxBytes } : {}),
+      ...(offsetBytes !== undefined ? { offsetBytes } : {}),
+      ...(maxBytes !== undefined ? { maxBytes } : {}),
     });
     console.log(
       JSON.stringify(

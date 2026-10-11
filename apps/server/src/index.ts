@@ -424,6 +424,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     profileEvaluationsPayload,
     profileEvaluationPreparePayload,
     prepareProfileEvaluationRun,
+    resolveProfileExternalDataset,
     profileEvaluationComparePayload,
     profileEvaluationSaveReportPayload,
     profileSelectPayload,
@@ -831,7 +832,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     providerRuntimeIngestionQueue: workQueues.providerRuntimeIngestion,
   });
 
-  const { ensureCodexRuntime, closeCoordination } = createCodexRuntimeManager({
+  const { ensureCodexRuntime, flushCodexRuntimeEvents, stopCodexRuntime, closeCoordination } = createCodexRuntimeManager({
     appendRuntimeEvent,
     codexSessions,
     getCodexStatus: codexStatusService.get,
@@ -914,6 +915,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     findOpenPondApp,
     resolveSessionWorkspaceCwd,
     ensureCodexRuntime,
+    flushCodexRuntimeEvents,
+    stopCodexRuntime,
     appendWorkspaceDiffEvent,
     workspaceDiffBaseline,
     appendRuntimeEvent,
@@ -1598,7 +1601,10 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   const {selectedEvaluationProfile,executeProfileEvaluationCase,executeProfileEvaluationRun,
     profileEvaluationRunPayload,profileEvaluationRunSuitePayload}=createProfileEvaluationRuntime({
     store,storeDir,workflows:profileWorkflowsPayload,prepare:prepareProfileEvaluationRun,
-    createSession:createSessionWithAutoTitle,sendTurn,interruptSessionTurn:turnRunner.interruptSessionTurn,
+    resolveExternalDataset:resolveProfileExternalDataset,
+    createSession:createSessionWithAutoTitle,
+    sendTurn:(sessionId,payload,executionLimits)=>turnRunner.sendTurn(sessionId,payload,undefined,undefined,executionLimits),
+    interruptSessionTurn:turnRunner.interruptSessionTurn,
   });
 
   const agentRuntime = createAppServer({

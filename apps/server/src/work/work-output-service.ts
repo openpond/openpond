@@ -9,6 +9,8 @@ import { type RuntimeEvent } from "@openpond/contracts/runtime";
 import { type Session } from "@openpond/contracts/sessions";
 import { sandboxRequestPayload } from "../openpond/sandboxes.js";
 import { isManagedLocalWorkSession } from "./managed-local-work.js";
+import { RequiredOutputContractSchema } from "@openpond/evals";
+import { z } from "zod";
 
 export type SaveWorkOutputInput = {
   session: Session;
@@ -337,6 +339,9 @@ export function createWorkOutputService(input: {
     const candidates = await resolveReferencedLocalFiles({
       assistantText,
       workspaceRoot: request.session.cwd,
+      declaredPaths: request.session.metadata?.profileEvaluationRun !== undefined
+        ? z.array(RequiredOutputContractSchema).max(1_000).parse(request.session.metadata.profileEvaluationOutputs ?? []).map(output=>output.path)
+        : [],
     });
     const alreadySaved = new Set(
       fileOutputRefs(events)
@@ -511,10 +516,11 @@ export function createWorkOutputService(input: {
 async function resolveReferencedLocalFiles(input: {
   assistantText: string;
   workspaceRoot: string;
+  declaredPaths?: readonly string[];
 }): Promise<string[]> {
   const root = await fs.realpath(input.workspaceRoot);
   const resolved = new Set<string>();
-  for (const reference of markdownLinkTargets(input.assistantText)) {
+  for (const reference of [...input.declaredPaths ?? [], ...markdownLinkTargets(input.assistantText)]) {
     const normalized = normalizeLocalFileReference(reference);
     if (!normalized) continue;
     const candidate = path.isAbsolute(normalized)

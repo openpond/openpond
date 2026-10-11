@@ -39,7 +39,7 @@ export async function admitTurnConfiguration(home: string, session: Session, inp
     input.modelRef = { providerId: model.provider_id, modelId: model.model_id };
     input.model = model.model_id;
   }
-  const standaloneExperiment = (session.metadata?.standaloneExperiment !== undefined || session.metadata?.localProfileExperiment !== undefined);
+  const standaloneExperiment = (session.metadata?.standaloneExperiment !== undefined || session.metadata?.localProfileExperiment !== undefined || session.metadata?.profileEvaluationRun !== undefined);
   // Keep credential/configuration revocation fences, but do not admit personal
   // instructions, delegation or automatic extra model work into a released
   // standalone Harness case. The execution owner pins its model/settings.

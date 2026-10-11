@@ -68,6 +68,7 @@ export function createProfilePayloads(deps: {
   storeDir: string;
   providerSettings: () => Promise<ProviderSettings>;
   resolveExternalDataset?: Parameters<typeof createProfileEvaluationRunPreparationService>[0]["resolveExternalDataset"];
+  prepareLocalDatasetBinding?:Parameters<typeof createProfileEvaluationRunPreparationService>[0]["prepareLocalDatasetBinding"];
 }) {
   const { appendRuntimeEvent } = deps;
 
@@ -155,6 +156,7 @@ export function createProfilePayloads(deps: {
   const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
     privateGradingPreflight:assertNativeProfilePrivateGrading,
     resolveExternalDataset: deps.resolveExternalDataset,
+    prepareLocalDatasetBinding:deps.prepareLocalDatasetBinding,
     loadCatalog: request => profileEvaluationsForRelease({ ...request, store: deps.store }),
     selectedWorkflows: profileWorkflowsPayload,
     loadTasksetPackage: (definition, profileId, harnessRelease) => loadLocalProfileEvaluationTaskset({

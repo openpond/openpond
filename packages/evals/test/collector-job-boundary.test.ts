@@ -40,10 +40,20 @@ test("retains fixed-window coverage and refuses to certify unknown event times",
     expect(admitted).toBe(1);
     expect(summarizeCollectorCoverage(manifests.at(-1)!)).toMatchObject({ complete: true, eligibleTurns: 1, pendingOperations: 0,
       from: "2026-10-01T00:00:00Z", to: "2026-10-03T00:00:00Z" });
+    // A resumed window preserves its complete coverage without re-admission.
+    await scan();
+    expect(admitted).toBe(1);
+    expect(summarizeCollectorCoverage(manifests.at(-1)!)).toMatchObject({ complete: true, eligibleTurns: 1 });
+    // Cached source bytes are unchanged, but a later cutoff must discover the
+    // second request. Reusing the old selection would silently omit it.
+    await runCollector({ directory, signal: new AbortController().signal, trigger: "manual",
+      until: "2026-10-05T00:00:00Z", transport });
+    expect(admitted).toBe(2);
+    expect(summarizeCollectorCoverage(manifests.at(-1)!)).toMatchObject({ complete: true, eligibleTurns: 2 });
     delete rows[1].timestamp;
     await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
     await scan();
-    expect(admitted).toBe(1);
+    expect(admitted).toBe(2);
     expect(store.status().connections[0]?.coverage).toMatchObject({ complete: false, unknownTimeBoundaries: 1, eligibleTurns: 0 });
     expect(JSON.stringify(manifests.at(-1))).not.toContain(file);
     expect(JSON.stringify(manifests.at(-1))).not.toContain("A durable answer");

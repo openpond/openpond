@@ -8,6 +8,7 @@ import { COLLECTOR_DEFAULTS, type CollectorConnection, type CollectorRun } from 
 import type { CollectorStore } from "./collector-store.js";
 import type { CollectorCoverageSession } from "../connected-evidence/collector-coverage-contracts.js";
 import { CollectorCoverage } from "./collector-coverage.js";
+import { CollectorSourceCache } from "./collector-source-cache.js";
 
 /** One pass over a frozen listing per page. Unchanged revisions are cheap; a
  * failed source is tried again only in a later explicitly launched job. */
@@ -20,6 +21,7 @@ export async function acquireCollectorSource(input: {
   progress(update: Partial<CollectorRun>): void;
 }) {
   const { store, connection, check, drain, progress, until } = input;
+  const cache = new CollectorSourceCache(store);
   let cursor: string | undefined, processed = 0, discovered = 0;
   const failures: string[] = [];
   do {
@@ -48,6 +50,13 @@ export async function acquireCollectorSource(input: {
       const scanRevision = native.storageRevision
         ? contentHash([native.storageRevision, agentImportNormalizerRevision(connection.source.source)]) : null;
       store.progress.select(connection.id, scanKey);
+      const cached = scanRevision ? cache.read(connection, until, scanKey, scanRevision) : null;
+      if (cached) {
+        store.coverage.record(connection.id, cached);
+        store.progress.read(connection.id, scanKey, cached.state === "admitted");
+        progress({ processed: ++processed });
+        continue;
+      }
       const coverage: CollectorCoverageSession = { sourceKeyHash: CollectorCoverage.sourceKey(scanKey), nativeRevisionHash: scanRevision,
         state: "reading", reason: scanRevision ? null : "source_revision_unavailable", unknownTimeBoundaries: 0, normalized: [] };
       try {
@@ -89,6 +98,7 @@ export async function acquireCollectorSource(input: {
         coverage.reason = eligible ? null : "no_eligible_boundaries";
         coverage.normalized.sort((a, b) => a.sessionHash < b.sessionHash ? -1 : a.sessionHash > b.sessionHash ? 1 : 0);
         store.coverage.record(connection.id, coverage);
+        if (scanRevision) cache.retain(connection, until, scanKey, scanRevision, coverage);
       } catch (error) {
         if (error instanceof NativeSessionNotReadyError) {
           coverage.state = "skipped"; coverage.reason = "native_session_not_ready";
