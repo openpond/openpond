@@ -10,7 +10,7 @@ import {
 } from "@openpond/contracts";
 import { computeTasksetHash } from "@openpond/taskset-sdk";
 import { tasksetFixture } from "./helpers/training-fixtures";
-import { resolveTasksetWorkAssets } from "../apps/server/src/training/taskset-work-assets";
+import { resolveTasksetWorkAssets, resolveTasksetTrainingAssetBytes, resolveTasksetEvaluationAssetBytes } from "../apps/server/src/training/taskset-work-assets";
 
 const temporaryDirectories: string[] = [];
 
@@ -47,6 +47,26 @@ describe("Taskset Work assets", () => {
     expect((await resolveTasksetWorkAssets(fixture))[0]?.bytes).toEqual(fixture.bytes);
     fixture.taskset.environment.metadata.runtimeSourceTasksetId = "../outside";
     await expect(resolveTasksetWorkAssets(fixture)).rejects.toThrow("invalid package directory identity");
+  });
+
+  // Shared attachments are valid across variants; every task must still prove
+  // its own source ownership and immutable bytes before bundle deduplication.
+  test("shares verified attachments without skipping task evidence", async () => {
+    const fixture = await workFixture();
+    const tasks = ["train", "validation", "frozen_eval"].flatMap(split => [1, 2].map(index => ({
+      ...fixture.task, id: `${split}-${index}`, split: split as TaskDataRecord["split"],
+      assets: fixture.task.assets!.map(asset => ({ ...asset, split: split as TaskDataRecord["split"] })),
+    })));
+    fixture.taskset.tasks = tasks;
+    for (const resolve of [resolveTasksetTrainingAssetBytes, resolveTasksetEvaluationAssetBytes]) {
+      const assets = await resolve(fixture);
+      expect(assets.size).toBe(1);
+      expect(assets.get("assets/inventory.csv")).toEqual(fixture.bytes);
+    }
+    tasks[1]!.assets[0]!.sha256 = "0".repeat(64);
+    await expect(resolveTasksetTrainingAssetBytes(fixture)).rejects.toThrow("hash is not registered");
+    tasks[3]!.sourceRefs = [];
+    await expect(resolveTasksetEvaluationAssetBytes(fixture)).rejects.toThrow("source is outside task");
   });
 
   test("rejects changed bytes before they can be staged", async () => {

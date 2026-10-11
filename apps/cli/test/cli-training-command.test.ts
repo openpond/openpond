@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { runTrainingCommand } from "../src/cli/training";
+import { parseModelProjectSaveRequest } from "openpond-sdk/model-projects";
 
 const logs: string[] = [];
 const originalLog = console.log;
@@ -51,7 +52,12 @@ describe("training CLI", () => {
         });
       }
       if (String(url) === "http://local.test/v1/training/models") {
-        savedProject = body;
+        // The live endpoint accepts a configuration command with CAS and an
+        // operation identity, rather than a serialized server-owned record.
+        const configuration = parseModelProjectSaveRequest(body);
+        expect(configuration.expectedRevision).toBe(0);
+        expect(configuration.operationId).toMatch(/^model-save:[a-f0-9]{64}$/);
+        savedProject = { ...configuration.project, revision: 1 };
         return jsonResponse({ id: "agent-trajectory-model", revision: 1 });
       }
       if (String(url) === "http://local.test/v1/training?profileId=team-a") {
@@ -98,7 +104,7 @@ describe("training CLI", () => {
       "GET http://local.test/v1/training",
       "GET http://local.test/v1/training?profileId=team-a",
     ]);
-    expect(requests[2]?.body).toMatchObject({
+    expect((requests[2]?.body as { project: unknown }).project).toMatchObject({
       id: "agent-trajectory-model",
       profileId: "team-a",
       defaultDestinationId: "openpond_managed",

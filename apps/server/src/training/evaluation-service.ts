@@ -6,7 +6,6 @@ import {
 } from "@openpond/evals";
 import { aggregateTasksetEvaluationInWorker } from "@openpond/evals/metrics/node";
 import {
-  GraderAuditReportSchema,
   TasksetSchema,
   TaskAttemptResultSchema,
   type ChatModelRef,
@@ -16,7 +15,6 @@ import {
 import {
   computeTasksetHash,
   contentHash,
-  gradeAttempt,
   type ModelJudgeRunner,
 } from "@openpond/taskset-sdk";
 import type { loadOpenPondProfileState } from "@openpond/cloud";
@@ -42,7 +40,6 @@ import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import { reviewRefMatches, variance } from "./evaluation-service-statistics.js";
 import { resolveTasksetRewardBinding } from "./taskset-reward-binding.js";
 import { STARTER_TOOL_ENVIRONMENT, compileStarterToolHarness, loadStarterToolEnvironment } from "./starter-tool-environment.js";
-import { runStarterToolFixture } from "./starter-tool-fixture.js";
 import { materializeTasksetRevisionFromSource } from "./generated-taskset-package.js";
 import { tasksetPackageDirectoryId } from "./taskset-package-path.js";
 import { verifyPublishedTasksetAssets } from "./taskset-package-assets.js";
@@ -50,20 +47,8 @@ import { assertLocalTasksetMetric, captureTasksetMetricSource } from "./taskset-
 import { persistBenchmarkComparison } from "./benchmark-comparison-history.js";
 import { fixtureScoreMatches, parseExpectedFixtureScore } from "./fixture-score-expectation.js";
 
-type AuditFixtureInput = {
-  label:
-    | "positive"
-    | "negative"
-    | "boundary"
-    | "adversarial"
-    | "prompt_injection"
-    | "infrastructure_failure";
-  taskId: string;
-  attempt: unknown;
-  expectedPassed?: boolean;
-  expectedRewardEligible?: boolean;
-  expectedScore?: number | null;
-};
+
+import { auditTasksetFixtures, type AuditTasksetFixturesInput } from "./evaluation-fixture-audit.js";
 
 export function createTaskEvaluationService(deps: {
   store: SqliteStore;
@@ -350,149 +335,8 @@ export function createTaskEvaluationService(deps: {
     return total;
   }
 
-  async function auditFixtures(input: {
-    tasksetId: string;
-    tasksetRef?: LocalTasksetRevisionRef;
-    fixtures?: AuditFixtureInput[];
-  }) {
-    const taskset = await requireLocalTasksetRevision(deps.store, input.tasksetId, input.tasksetRef);
-    const customVerifier = await createTasksetEvaluationVerifier(deps, taskset);
-    const fixtures = input.fixtures?.length
-      ? input.fixtures.map((fixture, index) => ({
-          ...fixture,
-          expectedScore: parseExpectedFixtureScore(fixture.expectedScore),
-          id: `external_fixture_${index}`,
-        }))
-      : taskset.graderFixtures.map((fixture, index) => ({
-          id: fixture.id,
-          label: fixture.label,
-          taskId: fixture.taskId,
-          expectedPassed: fixture.expectedPassed,
-          expectedRewardEligible: fixture.expectedRewardEligible,
-          expectedScore: parseExpectedFixtureScore(fixture.metadata.expectedScore),
-          attempt: fixtureAttempt(taskset.id, fixture, index),
-        }));
-    const results = [];
-
-    for (const fixture of fixtures) {
-      const task = await findTask(
-        taskset,
-        fixture.taskId,
-        artifactSplit(fixture),
-      );
-      const authored = input.fixtures?.length ? undefined : taskset.graderFixtures.find(candidate => candidate.id === fixture.id);
-      if (taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT && authored && !authored.infrastructureError && !deps.storeDir) throw new Error("Tool fixture execution requires the owner's artifact directory.");
-      const attempt = taskset.environment.entrypoint === STARTER_TOOL_ENVIRONMENT && authored && !authored.infrastructureError
-        ? await runStarterToolFixture({ store: deps.store, storeDir: deps.storeDir!, taskset, task, fixture: authored })
-        : TaskAttemptResultSchema.parse(fixture.attempt);
-      const result = await gradeAttempt({
-        task,
-        attempt,
-        graders: taskset.graders,
-        learning: await resolveTasksetRewardBinding(deps.store, taskset),
-        modelJudge: deps.modelJudge ?? undefined,
-        customVerifier,
-      });
-      await deps.store.saveTaskAttempt(attempt);
-      await deps.store.saveGradeResult(result);
-      results.push({
-        id: fixture.id,
-        label: fixture.label,
-        expectedPassed: fixture.expectedPassed,
-        expectedRewardEligible: fixture.expectedRewardEligible,
-        expectedScore: fixture.expectedScore,
-        result,
-      });
-    }
-
-    const failures = results.filter(
-      ({ label, expectedPassed, expectedRewardEligible, expectedScore, result }) => {
-        if (!fixtureScoreMatches(expectedScore, result.score)) return true;
-        if (label === "infrastructure_failure" && result.score !== null) {
-          return true;
-        }
-        if (
-          typeof expectedPassed === "boolean"
-          && result.passed !== expectedPassed
-        ) {
-          return true;
-        }
-        return (
-          typeof expectedRewardEligible === "boolean"
-          && result.rewardEligible !== expectedRewardEligible
-        );
-      },
-    );
-    const infrastructureSafetyPassed = results
-      .filter((item) => item.label === "infrastructure_failure")
-      .every(
-        (item) =>
-          item.result.score === null && item.result.rewardEligible === false,
-      );
-    const hackingChecksPassed =
-      !failures.some(
-        (item) =>
-          item.label === "adversarial"
-          || item.label === "prompt_injection",
-      )
-      && results
-        .filter(
-          (item) =>
-            item.label === "adversarial"
-            || item.label === "prompt_injection",
-        )
-        .every(
-          (item) =>
-            !item.result.passed && (item.result.score ?? 0) < 0.8,
-        );
-    const leakageChecksPassed = results.every(
-      (item) =>
-        !item.result.feedback.some((feedback) =>
-          /privileged.*leak|hidden grader.*leak/i.test(feedback),
-        ),
-    );
-    const reportFailures = failures.map((failure) => ({
-      fixtureId: failure.id,
-      label: failure.label,
-      gradeId: failure.result.id,
-      reason:
-        (failure.expectedScore === undefined ? "" : `Expected score=${String(failure.expectedScore)}; received score=${String(failure.result.score)}. `)
-        + `Expected passed=${String(failure.expectedPassed)} and `
-        + `rewardEligible=${String(failure.expectedRewardEligible)}; received `
-        + `passed=${String(failure.result.passed)} and `
-        + `rewardEligible=${String(failure.result.rewardEligible)}.`,
-    }));
-    const report = GraderAuditReportSchema.parse({
-      schemaVersion: "openpond.graderAuditReport.v1",
-      id: `grader_audit_${contentHash([
-        taskset.contentHash,
-        results.map((item) => item.result.id),
-      ]).slice(0, 24)}`,
-      tasksetId: taskset.id,
-      tasksetHash: taskset.contentHash,
-      fixtureRefs: results.map((item) => item.id),
-      gradeRefs: results.map((item) => item.result.id),
-      passed:
-        reportFailures.length === 0
-        && infrastructureSafetyPassed
-        && hackingChecksPassed
-        && leakageChecksPassed,
-      hackingChecksPassed,
-      leakageChecksPassed,
-      infrastructureSafetyPassed,
-      failures: reportFailures,
-      createdAt: new Date().toISOString(),
-    });
-    await deps.store.saveGraderAuditReport(report);
-    return {
-      report,
-      passed: report.passed,
-      results,
-      failures: reportFailures.map((failure) => ({
-        label: failure.label,
-        gradeId: failure.gradeId,
-      })),
-    };
+  async function auditFixtures(input: AuditTasksetFixturesInput) {
+    return auditTasksetFixtures({ ...deps, findTask }, input);
   }
 
   async function calibrateModelJudges(tasksetId: string) {
