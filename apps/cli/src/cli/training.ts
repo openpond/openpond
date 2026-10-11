@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { request as requestHttp } from "node:http";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
+import { createModelProjectSaveRequest, ModelProjectEditableSchema, ModelProjectBaseModelSchema, type ModelProjectSaveRequest } from "openpond-sdk/model-projects";
 
 import {
   optionString,
@@ -333,8 +334,8 @@ export class TrainingApiClient {
     );
   }
 
-  saveModelProject(project: unknown): Promise<unknown> {
-    return this.json("/v1/training/models", "PUT", project);
+  saveModelProject(request: ModelProjectSaveRequest): Promise<unknown> {
+    return this.json("/v1/training/models", "PUT", request);
   }
 
   private async json(
@@ -497,7 +498,6 @@ async function createManagedModelProject(input: {
   if (retentionDays !== null && retentionDays < 0) {
     throw new Error("retention-days must be non-negative");
   }
-  const timestamp = new Date().toISOString();
   const contentHash = objectString(taskset, "contentHash");
   const revision = objectNumber(taskset, "revision");
   if (!contentHash || !revision || revision < 1) {
@@ -520,23 +520,19 @@ async function createManagedModelProject(input: {
     if (objectRecord(existingSetup, "baseModel")) {
       throw new Error(`Model Project ${projectId} already exists.`);
     }
-    return input.client.saveModelProject({
-      ...existingProject,
-      revision: objectNumber(existingProject, "revision") ?? 1,
+    return input.client.saveModelProject(await createModelProjectSaveRequest(ModelProjectEditableSchema.parse({
+      ...ModelProjectEditableSchema.strip().parse(existingProject),
       defaultBaseModel: baseModel,
       trainingSetup: {
         ...existingSetup,
         baseModel,
         recipe,
       },
-      updatedAt: timestamp,
-    });
+    }), objectNumber(existingProject, "revision") ?? 1));
   }
-  return input.client.saveModelProject({
-    schemaVersion: "openpond.modelProject.v2",
+  return input.client.saveModelProject(await createModelProjectSaveRequest(ModelProjectEditableSchema.parse({
     id: projectId,
     profileId,
-    revision: 1,
     name: optionString(input.options, "name")
       || objectString(taskset, "name")
       || "Managed Model",
@@ -561,16 +557,12 @@ async function createManagedModelProject(input: {
       preferredMaximumSpendUsd: maximumSpendUsd,
       preferredRetentionDays: retentionDays,
     },
-    hosted: null,
-    tasksetSyncs: [],
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  });
+  }), 0));
 }
 
 function managedBasePreferenceFromRecipe(
   recipe: Record<string, unknown>,
-): Record<string, unknown> {
+): ReturnType<typeof ModelProjectBaseModelSchema.parse> {
   const recipeBase = objectRecord(recipe, "baseModel");
   const modelId = objectString(recipeBase, "id");
   const revision = objectString(recipeBase, "revision");
@@ -581,7 +573,7 @@ function managedBasePreferenceFromRecipe(
       "Managed GRPO recipe must pin baseModel id, revision, tokenizerRevision, and chatTemplateHash.",
     );
   }
-  return {
+  return ModelProjectBaseModelSchema.parse({
     schemaVersion: "openpond.baseModelPreference.v1",
     modelId,
     revision,
@@ -589,7 +581,7 @@ function managedBasePreferenceFromRecipe(
     chatTemplateHash,
     modelAssetId: null,
     source: "managed",
-  };
+  });
 }
 
 function trainingStateRecord(
