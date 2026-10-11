@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { createAgentSnapshot, createHarnessRelease, createHarnessSourcePackage, sha256 } from "@openpond/harness";
+import { createAgentSnapshot, createHarnessRelease, createHarnessSourcePackage, createHarnessPolicySourcePackage, sha256 } from "@openpond/harness";
 import { createTrainingClient } from "../src/training.js";
 
 function sourceFixture() {
@@ -37,4 +37,25 @@ test("publishes and retrieves exact source through authenticated Training API wi
   const calls = request.mock.calls.length;
   await expect(client.publishHarnessSource(blocked)).rejects.toThrow("policy-visible");
   expect(request).toHaveBeenCalledTimes(calls);
+});
+
+// Released Profiles contain private checks; publishing their public projection
+// must retain release identity and refuse any rehashed leak before HTTP.
+test("publishes and retrieves a policy projection without private verifier bytes", async () => {
+  const original = sourceFixture();
+  const bytes = new TextEncoder().encode("private checker secret");
+  const { contentHash: _hash, ...release } = original.harnessRelease;
+  const full = createHarnessSourcePackage({ agentSnapshot: original.agentSnapshot,
+    harnessRelease: createHarnessRelease({ ...release, files: [...release.files,
+      { id: "private-check", path: "private/check.txt", contentHash: sha256(bytes), sizeBytes: bytes.length, mediaType: "text/plain", visibility: "verifier" }] }),
+    files: new Map([...original.files.map(file => [file.path, Uint8Array.from(atob(file.base64), character => character.charCodeAt(0))] as const), ["private/check.txt", bytes]]) });
+  const source = createHarnessPolicySourcePackage(full);
+  const request = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => Response.json(init?.method === "PUT"
+    ? { schemaVersion: "openpond.trainingHarnessSourcePublication.v1", harnessRelease: { id: source.harnessRelease.id, contentHash: source.harnessRelease.contentHash }, sourcePackageHash: source.contentHash, sizeBytes: JSON.stringify(source).length } : source));
+  const client = createTrainingClient({ baseUrl: "https://training.example", fetch: request });
+  await client.publishHarnessSource(source);
+  expect(request.mock.calls[0]?.[1]?.body).not.toContain(btoa("private checker secret"));
+  expect(await client.getHarnessSource({ id: source.harnessRelease.id, contentHash: source.harnessRelease.contentHash })).toEqual(source);
+  await expect(client.publishHarnessSource(full)).rejects.toThrow("policy-visible");
+  expect(request).toHaveBeenCalledTimes(2);
 });

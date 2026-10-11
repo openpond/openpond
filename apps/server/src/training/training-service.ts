@@ -14,7 +14,7 @@ import {
   type Taskset,
 } from "@openpond/contracts";
 import type { PreferenceDatasetRelease, TasksetRelease } from "@openpond/evals";
-import { contentHash, createHarnessSourcePackage } from "@openpond/harness";
+import { contentHash, createHarnessPolicySourcePackage, createHarnessSourcePackage } from "@openpond/harness";
 import { OpenPondTrainingApiError } from "openpond-sdk/training";
 import {
   TrainingAdapterRegistry,
@@ -245,11 +245,15 @@ export function createTrainingService(deps: {
         })
         : null;
       return {
-        harnessSource: releasedHarness && sourceFiles ? createHarnessSourcePackage({
-          agentSnapshot: context.agentSnapshot,
-          harnessRelease: context.harnessRelease,
-          files: sourceFiles,
-        }) : null,
+        harnessSource: releasedHarness && sourceFiles ? (() => {
+          const complete = createHarnessSourcePackage({
+            agentSnapshot: context.agentSnapshot,
+            harnessRelease: context.harnessRelease,
+            files: sourceFiles,
+          });
+          return modelProject.trainingSetup.managedRolloutPlacement === "remote"
+            ? createHarnessPolicySourcePackage(complete) : complete;
+        })() : null,
         harnessRelease: {
           id: context.harnessRelease.id,
           contentHash: context.harnessRelease.contentHash,

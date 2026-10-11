@@ -128,6 +128,20 @@ describe("resolved training bundle release isolation", () => {
         ]),
       });
 
+    // Variants may share immutable input bytes. Every task's manifest still
+    // verifies the source; a conflicting declaration cannot reuse the blob.
+    const shared = structuredClone(taskset);
+    shared.tasks.push({ ...structuredClone(shared.tasks[0]!), id: "shared-variant", clusterKey: "shared-family" });
+    shared.contentHash = computeTasksetHash(shared);
+    const sharedProjectRef = modelProject.trainingSetup.tasksetRef!;
+    modelProject.trainingSetup.tasksetRef = { ...sharedProjectRef, contentHash: shared.contentHash };
+    expect(build(shared).assets.get("assets/task-1/source.txt")).toEqual(workAssetBytes);
+    shared.tasks.at(-1)!.assets![0]!.sha256 = sha256("different source");
+    shared.contentHash = computeTasksetHash(shared);
+    modelProject.trainingSetup.tasksetRef = { ...sharedProjectRef, contentHash: shared.contentHash };
+    expect(() => build(shared)).toThrow("immutable verification");
+    modelProject.trainingSetup.tasksetRef = sharedProjectRef;
+
     // Private held-out bytes must alter the resolved manifest, and the source
     // must agree with the selection covered by the prepared configuration.
     const evaluationSource: TrainingEvaluationSource = {
