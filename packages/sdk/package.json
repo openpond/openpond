@@ -188,7 +188,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
-    "@openpond/evals": "^0.11.21",
+    "@openpond/evals": "^0.12.0",
     "@openpond/harness": "^0.4.7",
     "yaml": "^2.9.0",
     "esbuild": "0.28.1",
