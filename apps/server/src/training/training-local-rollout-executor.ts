@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import type { SqliteStore } from "../store/store.js";
 import type { TaskDataRecord, Taskset } from "@openpond/contracts";
-import type { HarnessSourcePackage, HarnessSourceSelection } from "@openpond/harness";
+import type { HarnessPolicySourcePackage, HarnessSourcePackage, HarnessSourceSelection } from "@openpond/harness";
 import "./marketing-portfolio-training-adapter.js";
 import "./portable-jsonl-training-adapter.js";
 import {
@@ -49,7 +49,7 @@ export class TrainingLocalRolloutExecutor {
       storeDir: string;
       harnessRoot: string;
       validationTaskset?: Taskset;
-      admittedHarness?: { selection: HarnessSourceSelection; sourcePackage: HarnessSourcePackage | null };
+      admittedHarness?: { selection: HarnessSourceSelection; sourcePackage: HarnessSourcePackage | HarnessPolicySourcePackage | null };
     },
   ) {
     this.executorId = input.executorId ?? `openpond-desktop:${randomUUID()}`;

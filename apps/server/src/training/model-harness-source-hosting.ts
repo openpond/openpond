@@ -1,4 +1,4 @@
-import { createHarnessSourcePackage, type AgentSnapshot, type HarnessRelease } from "@openpond/harness";
+import { createHarnessPolicySourcePackage, createHarnessSourcePackage, type AgentSnapshot, type HarnessRelease } from "@openpond/harness";
 import type { ModelProject } from "@openpond/contracts";
 import { createTrainingClient } from "openpond-sdk/training";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
@@ -31,5 +31,5 @@ export async function publishModelHarnessSource(input: {
     throw new Error("The selected Harness release has no matching immutable source.");
   }
   const files = await materializeHarnessSource({ sourcePath: released.sourcePath, storeDir: input.storeDir, harnessHash: reference.contentHash, files: released.harnessRelease.files });
-  await client.publishHarnessSource(createHarnessSourcePackage({ ...released, files }));
+  await client.publishHarnessSource(createHarnessPolicySourcePackage(createHarnessSourcePackage({ ...released, files })));
 }
