@@ -33,6 +33,7 @@ describe("training CLI", () => {
       },
     }));
     const requests: Array<{ url: string; method: string; body: unknown }> = [];
+    let savedProject: unknown = null;
     const request = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const body = init?.body ? JSON.parse(String(init.body)) : null;
       requests.push({ url: String(url), method: init?.method ?? "GET", body });
@@ -50,7 +51,11 @@ describe("training CLI", () => {
         });
       }
       if (String(url) === "http://local.test/v1/training/models") {
+        savedProject = body;
         return jsonResponse({ id: "agent-trajectory-model", revision: 1 });
+      }
+      if (String(url) === "http://local.test/v1/training?profileId=team-a") {
+        return jsonResponse({ modelProjects: savedProject ? [savedProject] : [] });
       }
       return jsonResponse({
         id: "agent-trajectory-model",
@@ -72,14 +77,28 @@ describe("training CLI", () => {
         ["create-project", "agent-trajectory"],
         { request: request as typeof fetch },
       );
+      // The default catalog hides other Profiles' Models. Repeating creation must
+      // inspect the inferred owner and reject instead of overwriting its project.
+      await expect(runTrainingCommand(
+        {
+          apiBaseUrl: "http://local.test",
+          projectId: "agent-trajectory-model",
+          recipe: recipePath,
+        },
+        ["create-project", "agent-trajectory"],
+        { request: request as typeof fetch },
+      )).rejects.toThrow("already exists");
     } finally {
       await rm(directory, { recursive: true });
     }
     expect(requests.map((item) => `${item.method} ${item.url}`)).toEqual([
       "GET http://local.test/v1/training",
+      "GET http://local.test/v1/training?profileId=team-a",
       "PUT http://local.test/v1/training/models",
+      "GET http://local.test/v1/training",
+      "GET http://local.test/v1/training?profileId=team-a",
     ]);
-    expect(requests[1]?.body).toMatchObject({
+    expect(requests[2]?.body).toMatchObject({
       id: "agent-trajectory-model",
       profileId: "team-a",
       defaultDestinationId: "openpond_managed",
