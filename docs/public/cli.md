@@ -39,6 +39,19 @@ openpond actions run analytics.get_summary --cwd ./customer-project --input '{"b
 
 Cloud and account commands include `login`, `profiles`, `account`, `health`, `project`, `agent`, `sandbox`, `apps`, `tool`, and `backtest`. Run `openpond <command> --help` for the schema-generated option list.
 
+Local Profile evaluations execute the selected Profile's tools and artifact workflow. Read the catalog, prepare an immutable run, execute that exact selection, then inspect the retained results:
+
+```bash
+openpond experiments profile-catalog --local --server-url http://127.0.0.1:17874
+openpond experiments prepare-profile --local --server-url http://127.0.0.1:17874 --input-file prepare.json
+openpond experiments run-profile --local --server-url http://127.0.0.1:17874 --input-file run.json
+openpond experiments inspect-profile --local --server-url http://127.0.0.1:17874 --input-file inspect.json
+```
+
+Preparation selects the catalog's `definitionId`, `profileRef`, exact `profileSource`, `modelRef` and dataset/task selection. For an installation-local Dataset, supply `localDataset` with its ID, revision, workspace hash, task IDs and seed. The prepare response contains the immutable manifest; execution uses the same selection plus `expectedManifestHash` from that manifest. The local server resolves ownership and enforces its admitted limits. These commands require the running installation's app home and an HTTP loopback origin.
+
+Inspection accepts `{ "runId": "<id>" }` for a completed run. To inspect one retained case, include `receiptId`; `eventLimit` and `eventAfterId` page its trace. After an interrupted observer, include the original prepared `manifest` and exact `receiptId` once case evidence has settled. An observer timeout does not establish that the producer stopped; inspect the original run before retrying execution.
+
 `--cwd` is an explicit local workspace override. A resumed session uses its stored workspace. Cloud project targets reject local cwd overrides instead of silently changing execution placement.
 
 Project Actions use `openpond/actions` by default. `actions check` validates and builds their registry, `actions build` produces the deterministic local bundle, `actions run` invokes one built action in a child process, and `actions dev` watches the source tree and rebuilds after changes. These commands do not use hosted sandboxes or require an OpenPond API key.

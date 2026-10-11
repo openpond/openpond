@@ -267,7 +267,7 @@ it.each(["code", "process", "judge"] as const)("exports verified private %s Rewa
     const judgeReward = createRewardRelease({ schemaVersion: "openpond.rewardRelease.v1", id: "invoice-judge", revision: 1, name: "Invoice judge", description: "Check invoice identity",
       implementation: { kind: "model_judge", rubricRef: rubric.asset, calibrationStatus: "passed", model: { providerId: "openpond", modelId: "deepseek-v4-flash", revision: null }, temperature: 0 }, rawScore: { minimum: 0, maximum: 1 }, assets: [rubric.asset, calibrationFixtures.asset],
       fixtureSetRef: calibrationFixtures.asset, calibrationCheckRef: { id: "invoice-check", revision: 1, contentHash: "c".repeat(64) } });
-    const selectedAssets = rewardKind === "judge" ? [rubric] : input.package.assets;
+    const selectedAssets = rewardKind === "judge" ? [rubric, calibrationFixtures] : input.package.assets;
     const { contentHash: _codeHash, ...codeContent } = input.package.rewards[0]!;
     if (codeContent.implementation.kind !== "custom_verifier") throw new Error("Expected a fixture code verifier.");
     const processReward = createRewardRelease({ ...codeContent, id: "invoice-process", implementation: { ...codeContent.implementation, runtime: "sandbox_process" } });

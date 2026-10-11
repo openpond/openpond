@@ -40,13 +40,60 @@ test("retains fixed-window coverage and refuses to certify unknown event times",
     expect(admitted).toBe(1);
     expect(summarizeCollectorCoverage(manifests.at(-1)!)).toMatchObject({ complete: true, eligibleTurns: 1, pendingOperations: 0,
       from: "2026-10-01T00:00:00Z", to: "2026-10-03T00:00:00Z" });
+    // A resumed window preserves its complete coverage without re-admission.
+    await scan();
+    expect(admitted).toBe(1);
+    expect(summarizeCollectorCoverage(manifests.at(-1)!)).toMatchObject({ complete: true, eligibleTurns: 1 });
+    // Cached source bytes are unchanged, but a later cutoff must discover the
+    // second request. Reusing the old selection would silently omit it.
+    await runCollector({ directory, signal: new AbortController().signal, trigger: "manual",
+      until: "2026-10-05T00:00:00Z", transport });
+    expect(admitted).toBe(2);
+    expect(summarizeCollectorCoverage(manifests.at(-1)!)).toMatchObject({ complete: true, eligibleTurns: 2 });
     delete rows[1].timestamp;
     await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
     await scan();
-    expect(admitted).toBe(1);
+    expect(admitted).toBe(2);
     expect(store.status().connections[0]?.coverage).toMatchObject({ complete: false, unknownTimeBoundaries: 1, eligibleTurns: 0 });
     expect(JSON.stringify(manifests.at(-1))).not.toContain(file);
     expect(JSON.stringify(manifests.at(-1))).not.toContain("A durable answer");
+  } finally { store.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+// Failure story: an old large rollout prevents window coverage forever, or a
+// cheap file-date check silently excludes selected/undated native requests.
+test("inventories large Codex files by request time without weakening admission bounds", async () => {
+  const root = await mkdtemp(join(tmpdir(), "collector-codex-window-"));
+  const file = join(root, "large.jsonl"), directory = join(root, "state");
+  const store = await CollectorStore.open(directory);
+  const rows = [
+    { type: "session_meta", timestamp: "2026-09-01T00:00:00Z", payload: { id: "large" } },
+    { type: "response_item", timestamp: "2026-09-01T00:00:01Z", payload: { type: "message", role: "user", content: "Old request" } },
+    { type: "response_item", timestamp: "2026-09-01T00:00:02Z", payload: { type: "function_call_output", output: "x".repeat(33 * 1024 * 1024) } },
+  ];
+  const current = connection(file);
+  current.source.source = "codex";
+  current.since = "2026-10-01T00:00:00Z";
+  let admissions = 0;
+  const scan = () => runCollector({ directory, signal: new AbortController().signal, trigger: "manual", until: "2026-10-03T00:00:00Z",
+    transport: { heartbeat: async c => ({ revision: c.revision, state: c.state }), admit: async () => { admissions++; }, publishCoverage: async () => {} } });
+  try {
+    store.put(current);
+    await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+    await scan();
+    expect(store.status().connections[0]?.coverage).toMatchObject({ complete: true, skippedSessions: 1, eligibleTurns: 0 });
+    // The same file now includes a selected request. It must be read by the
+    // ordinary bounded importer, whose size refusal remains an explicit failure.
+    rows[1]!.timestamp = "2026-10-02T00:00:00Z";
+    await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+    await scan();
+    expect(store.status().connections[0]?.coverage).toMatchObject({ complete: false, failedSessions: 1 });
+    rows[1]!.timestamp = "unknown";
+    await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+    await scan();
+    expect(store.status().connections[0]?.coverage).toMatchObject({ complete: false, failedSessions: 1 });
+    expect(admissions).toBe(0);
+    expect(store.snapshots.bytes()).toBe(0);
   } finally { store.close(); await rm(root, { recursive: true, force: true }); }
 });
 

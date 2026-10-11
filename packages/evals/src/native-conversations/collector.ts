@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { CollectorStore } from "./collector-store.js";
+import { CollectorSourceCache } from "./collector-source-cache.js";
 import { CollectorErrors, type CollectorErrorPhase } from "./collector-errors.js";
 import { CollectorSyncRequests } from "./collector-sync-requests.js";
 import { acquireCollectorSource, CollectorInterruptedError, CollectorScopeChangedError } from "./collector-acquisition.js";
@@ -149,6 +150,7 @@ export async function runCollector(input: {
           await check();
           const revision = connection.revision, requested = connection.requestedSyncRevision ?? 0;
           phase = "source";
+          new CollectorSourceCache(store).seed(connection, until, store.coverage.manifest(connection.id));
           store.coverage.begin(connection, `${nonce}-${pass}`, run.startedAt, until);
           const checkAcquisition = async () => {
             await check(); phase = "source";

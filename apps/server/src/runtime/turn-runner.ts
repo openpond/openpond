@@ -3,10 +3,14 @@ import { HTML_VISUAL_INSTRUCTIONS } from "@openpond/contracts/html-visuals";
 import { visualTools } from "../visuals/visual-tools.js";
 import { chatResourceToolDefinitions } from "../openpond/chat-resource-tool-definitions.js";
 import { nativeToolMcpResult } from "../openpond/native-tool-calls.js";
+import { createOpenPondProfileSkillModelToolDefinitions } from "../openpond/model-tool-registry.js";
+import { materializeNativeEvaluationSkills } from "../harness/native-evaluation-skill-runtime.js";
 import { nativeImageContent } from "./native-agents/attachments.js";
 import { assertPonderDesktopExecution } from "../store/ponder-desktop-input.js";
 import { assertRemoteExecution } from "../remote-relay/session-ownership.js";
 import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admission.js";
+import type { TurnExecutionLimits } from "./turns/ports.js";
+import { awaitCodexTurn, CodexTurnSettlementError } from "./await-codex-turn.js";
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "./turn-configuration.js";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -14,7 +18,7 @@ import { AppPreferencesSchema, DEFAULT_OPENPOND_CHAT_MODEL, type ChatProvider } 
 import { DEFAULT_SESSION_EXPERIENCE } from "@openpond/contracts/experiences";
 import { TASK_COORDINATION_INSTRUCTIONS, taskInputModelText } from "@openpond/contracts/task-inbox";
 import { SendTurnRequestSchema } from "@openpond/contracts/requests";
-import { SessionUserQuestionResolutionSchema, type SessionUserQuestionResolution } from "@openpond/contracts/user-questions";
+import { parseUserQuestionResolution, promptWithUserQuestionResolution } from "./turns/user-question-resolution.js";
 import { type ChatModelRef } from "@openpond/contracts/providers";
 import { type OpenPondActionCatalogEntry } from "@openpond/contracts/action-catalog";
 import { type RuntimeEvent } from "@openpond/contracts/runtime";
@@ -128,109 +132,6 @@ export function promptWithSteeringContext(
   ].join("\n\n");
 }
 
-function parseUserQuestionResolution(
-  value: unknown,
-  priorEvents: RuntimeEvent[]
-): SessionUserQuestionResolution | null {
-  if (value === undefined) return null;
-  const parsed = SessionUserQuestionResolutionSchema.parse(value);
-  const asked = priorEvents.find((runtimeEvent) => {
-    if (runtimeEvent.name !== "user_question.asked") return false;
-    const data =
-      runtimeEvent.data &&
-      typeof runtimeEvent.data === "object" &&
-      !Array.isArray(runtimeEvent.data)
-        ? (runtimeEvent.data as Record<string, unknown>)
-        : null;
-    const question =
-      data?.question &&
-      typeof data.question === "object" &&
-      !Array.isArray(data.question)
-        ? (data.question as Record<string, unknown>)
-        : null;
-    return question?.id === parsed.questionId;
-  });
-  if (!asked)
-    throw new Error(`Pending user question not found: ${parsed.questionId}`);
-  const alreadyResolved = priorEvents.some((runtimeEvent) => {
-    if (
-      runtimeEvent.name !== "user_question.answered" &&
-      runtimeEvent.name !== "user_question.dismissed"
-    ) {
-      return false;
-    }
-    const data =
-      runtimeEvent.data &&
-      typeof runtimeEvent.data === "object" &&
-      !Array.isArray(runtimeEvent.data)
-        ? (runtimeEvent.data as Record<string, unknown>)
-        : null;
-    const resolution =
-      data?.resolution &&
-      typeof data.resolution === "object" &&
-      !Array.isArray(data.resolution)
-        ? (data.resolution as Record<string, unknown>)
-        : null;
-    return resolution?.questionId === parsed.questionId;
-  });
-  if (alreadyResolved)
-    throw new Error(`User question is already resolved: ${parsed.questionId}`);
-
-  const askedData =
-    asked.data && typeof asked.data === "object" && !Array.isArray(asked.data)
-      ? (asked.data as Record<string, unknown>)
-      : {};
-  const askedQuestion =
-    askedData.question &&
-    typeof askedData.question === "object" &&
-    !Array.isArray(askedData.question)
-      ? (askedData.question as Record<string, unknown>)
-      : {};
-  const options = Array.isArray(askedQuestion.options)
-    ? askedQuestion.options
-    : [];
-  if (
-    parsed.action === "answer" &&
-    parsed.optionId &&
-    !options.some(
-      (option) =>
-        option &&
-        typeof option === "object" &&
-        !Array.isArray(option) &&
-        (option as Record<string, unknown>).id === parsed.optionId
-    )
-  ) {
-    throw new Error(`Question option not found: ${parsed.optionId}`);
-  }
-  if (parsed.action === "answer" && !parsed.text && !parsed.optionId) {
-    throw new Error("A user-question answer requires text or an option.");
-  }
-  return parsed;
-}
-
-function promptWithUserQuestionResolution(
-  prompt: string,
-  resolution: SessionUserQuestionResolution | null
-): string {
-  if (!resolution) return prompt;
-  const structured =
-    resolution.action === "answer"
-      ? [
-          `The user explicitly answered pending question ${resolution.questionId}.`,
-          resolution.optionId
-            ? `Selected option ID: ${resolution.optionId}.`
-            : null,
-          resolution.text ? `Answer: ${resolution.text}` : null,
-          "Continue the same task using this answer.",
-        ]
-      : [
-          `The user explicitly dismissed pending question ${resolution.questionId}.`,
-          "Continue only if the task can proceed safely without that answer; otherwise explain the blocker.",
-        ];
-  return `${prompt}\n\n[OpenPond question resolution]\n${structured
-    .filter(Boolean)
-    .join("\n")}`;
-}
 
 export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   const {
@@ -372,7 +273,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   }): Promise<void> {
     if (!processHarnessImprovementBoundary || !input.turn.harnessSnapshot
       || input.session.metadata?.standaloneExperiment !== undefined
-      || input.session.metadata?.localProfileExperiment !== undefined) return;
+      || input.session.metadata?.localProfileExperiment !== undefined
+      || input.session.metadata?.profileEvaluationRun !== undefined) return;
     try {
       await processHarnessImprovementBoundary(input);
     } catch (error) {
@@ -443,7 +345,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     interruptSessionTurn,
     throwIfInterrupted,
     turnWasInterrupted,
-    waitForInterrupt,
   } = createInterruptionRuntime({
     activeTurns,
     getSession,
@@ -872,7 +773,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ...(deps.harnessModelTools ?? []),
     ];
   }
-  async function sendTurn(sessionId: string, payload: unknown, reservedTurnId?: string, admission?: StoredTurnAdmission): Promise<Turn> {
+  async function sendTurn(sessionId: string, payload: unknown, reservedTurnId?: string, admission?: StoredTurnAdmission, executionLimits?: TurnExecutionLimits): Promise<Turn> {
+    if (executionLimits && (!Number.isSafeInteger(executionLimits.nativeTimeoutMs)
+      || executionLimits.nativeTimeoutMs < 1 || executionLimits.nativeTimeoutMs > 2_147_483_647)) {
+      throw new Error("Native execution timeout is invalid.");
+    }
     const finish = turnRunnerLifecycle.beginSendTurn();
     const turnId = reservedTurnId ?? randomUUID();
     let owned = false;
@@ -887,7 +792,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         });
       }, 20_000);
       heartbeat.unref();
-      const result = await executeTurn(sessionId, payload, turnId, admission);
+      const result = await executeTurn(sessionId, payload, turnId, admission, executionLimits);
       outcome = result.status === "in_progress" ? "failed" : result.status;
       return result;
     } finally {
@@ -902,6 +807,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     payload: unknown,
     turnId: string,
     admission?: StoredTurnAdmission,
+    executionLimits?: TurnExecutionLimits,
   ): Promise<Turn> {
     const input = SendTurnRequestSchema.parse(payload);
     let turnPermissions = turnPermissionsFromSendTurnInput(input);
@@ -1416,10 +1322,27 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             signal: controller.signal,
           })
         : [];
+      const nativeEvaluation = session.metadata?.profileEvaluationRun !== undefined;
+      let nativeEvaluationSkillRuntime: ProfileSkillRuntime | null = null;
+      if (nativeEvaluation && selectedHarness?.skillRuntime.readSkill
+        && (session.provider === "codex" || isNativeAgentId(session.provider))) {
+        if (!session.cwd || !selectedHarness.release.bundlePath) {
+          throw new Error("Native evaluation skills require an owned task workspace and local release bundle.");
+        }
+        nativeEvaluationSkillRuntime = await materializeNativeEvaluationSkills({
+          cwd: session.cwd,
+          release: { bundlePath: selectedHarness.release.bundlePath, harnessRelease: selectedHarness.release.harnessRelease },
+          runtime: selectedHarness.skillRuntime,
+        });
+      }
+      const nativeEvaluationSkills = nativeEvaluationSkillRuntime?.readSkill
+        ? createOpenPondProfileSkillModelToolDefinitions({skills:nativeEvaluationSkillRuntime.skills,readProfileSkill:nativeEvaluationSkillRuntime.readSkill})
+        : [];
       const extraSystemContext = [
         !session.systemKind && turn.metadata.chatResourceFocus ? `Optional resource focus supplied by the app (does not restrict other work): ${JSON.stringify(turn.metadata.chatResourceFocus)}. Resolve exact resource IDs/revisions with openpond_dataset/openpond_experiment before acting; disambiguate conflicting references.` : "",
         !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.provider === "codex" && htmlVisuals?.available() ? HTML_VISUAL_INSTRUCTIONS : "",
         selectedHarness?.instructionContext ?? null,
+        nativeEvaluationSkills.length ? `Load released Profile skills using profile_skill_read, not paths relative to the task workspace. Available skills: ${JSON.stringify(selectedHarness!.skillRuntime.skills.map(skill=>({name:skill.name,description:skill.description})))}` : "",
         subagentSystemContextForSession(session, subagentDelegation),
       ].filter(Boolean).join("\n\n");
       if (session.provider === "openpond") {
@@ -1750,8 +1673,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         if (!cwd) throw new Error("Choose a local working directory for this native agent.");
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
         const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : coordinationTools;
-        const visualToolsEnabled = peerInput?.payload.taskReportingOnly !== true && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
-        const definitions = [...coordinationDefinitions, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : []), ...(!session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
+        const visualToolsEnabled = !nativeEvaluation && peerInput?.payload.taskReportingOnly !== true && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
+        const definitions = [...coordinationDefinitions, ...nativeEvaluationSkills, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : []), ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
         const providerTurnId = await runSteeredNativeTurn({ runtime: nativeAgents, inbox: taskInbox, store: inboxStore, getSession,
           taskToolInstructions: [coordinationDefinitions.length ? TASK_COORDINATION_INSTRUCTIONS : "", visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : ""].filter(Boolean).join("\n\n"),
@@ -1773,6 +1696,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         } });
         throwIfInterrupted(controller.signal);
         await appendWorkspaceDiffEvent(session, turn.id, { baseline: initialWorkspaceDiff });
+        await finalizeAttachedWorkSandbox(turn.id, "completed");
         const completed = await completeTurn(sessionId, turn.id, providerTurnId);
         await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "turn.completed", source: "provider", appId: session.appId, status: "completed", data: { provider: session.provider } }));
         await processHarnessImprovementBoundarySafely({ session, turn: completed, boundaryKind: "turn_completed" });
@@ -1790,7 +1714,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (turnCwd && turnCwd !== session.cwd)
         session = await updateSession(session.id, { cwd: turnCwd });
       activeTurn.session = session;
-      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...(!session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : []), ...(!session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.workspaceKind !== "sandbox" ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
+      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...nativeEvaluationSkills, ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : []), ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.workspaceKind !== "sandbox" ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
       const runtime = await ensureCodexRuntime(session, {
         ...input,
         coordination: coordinationDefinitions.length ? {
@@ -1828,28 +1752,25 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       });
       activeTurn.codexTurnId = providerTurn.turnId;
       await taskInbox.deliverCodex(activeTurn);
-      if (controller.signal.aborted) {
-        await runtime.client
-          .interruptTurn({
-            threadId: runtime.threadId,
-            turnId: providerTurn.turnId,
-          })
-          .catch(() => undefined);
-        throw interruptedError();
-      }
       await updateStoredTurn(turn.id, (current) => ({
         ...current,
         providerTurnId: providerTurn.turnId,
       }));
-      await Promise.race([
-        runtime.client.waitForTurn(providerTurn.turnId),
-        waitForInterrupt(controller.signal),
-      ]);
+      await awaitCodexTurn({
+        client: runtime.client,
+        turnId: providerTurn.turnId,
+        signal: controller.signal,
+        timeoutMs: executionLimits?.nativeTimeoutMs,
+        ...(deps.stopCodexRuntime ? { stop: () => deps.stopCodexRuntime!(sessionId) } : {}),
+        flush: () => deps.flushCodexRuntimeEvents?.(sessionId) ?? Promise.resolve(),
+      });
       await taskInbox.finishCodex(activeTurn);
+      await deps.flushCodexRuntimeEvents?.(sessionId);
       await inboxStore.settleTaskInputRequest(initialRequestId, "resolved");
       await appendWorkspaceDiffEvent(session, turn.id, {
         baseline: initialWorkspaceDiff,
       });
+      await finalizeAttachedWorkSandbox(turn.id, "completed");
       const completed = await completeTurn(sessionId, turn.id, providerTurn.turnId);
       await processHarnessImprovementBoundarySafely({
         session,
@@ -1858,10 +1779,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       });
       return completed;
     } catch (error) {
+      const nativeSettlementFailed = error instanceof CodexTurnSettlementError;
       const interrupted =
-        controller.signal.aborted || (await turnWasInterrupted(turn.id));
+        !nativeSettlementFailed && (controller.signal.aborted || (await turnWasInterrupted(turn.id)));
       try {
-        await finalizeAttachedWorkSandbox(
+        if (!nativeSettlementFailed) await finalizeAttachedWorkSandbox(
           turn.id,
           interrupted ? "interrupted" : "failed"
         );

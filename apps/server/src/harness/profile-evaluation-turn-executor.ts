@@ -6,6 +6,8 @@ import type { executeProfileEvaluationRun } from "@openpond/evals";
 import { assertProfileEvaluationSpendAuthority } from "./profile-evaluation-spend-authority.js";
 import { profileEvaluationOutput } from "./profile-evaluation-policy-evidence.js";
 import { awaitProfileEvaluationTurn } from "./profile-evaluation-owned-turn.js";
+import { isNativeAgentId } from "../runtime/native-agents/config.js";
+import type { TurnExecutionLimits } from "../runtime/turns/ports.js";
 
 type ExecuteCase = Parameters<typeof executeProfileEvaluationRun>[0]["execute"];
 
@@ -19,7 +21,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
   modelRef: ChatModelRef;
   modelConfigurationHash: string;
   createSession: (request: unknown) => Promise<Session>;
-  sendTurn: (sessionId: string, request: unknown) => Promise<Turn>;
+  sendTurn: (sessionId: string, request: unknown, executionLimits?: TurnExecutionLimits) => Promise<Turn>;
   interruptSessionTurn?: (sessionId: string, reason?: string) => Promise<Turn>;
   runtimeEventsForTurn: (turnId: string) => Promise<RuntimeEvent[]>;
   attachments?: ChatAttachment[];
@@ -63,6 +65,8 @@ export function createProfileWorkflowEvaluationExecutor(input: {
     member.signal?.throwIfAborted();
     await (input.assertSpendAuthority??assertProfileEvaluationSpendAuthority)(input.manifest, member.signal);
     const workCase = Boolean(input.attachments?.length || input.requiredOutputs?.length);
+    const managedNativeWork = workCase && input.profileRef.source === "local"
+      && (input.modelRef.providerId === "codex" || isNativeAgentId(input.modelRef.providerId));
     const session = await input.createSession({
       ...(workCase ? { experience: "work" } : {}),
       provider: input.modelRef.providerId,
@@ -77,11 +81,14 @@ export function createProfileWorkflowEvaluationExecutor(input: {
         taskId: member.task.id,
         seed: member.seed,
         ...(workCase && input.profileRef.source === "local" ? { workspaceTarget: "local" } : {}),
+        ...(managedNativeWork ? { profileEvaluationOutputs: input.requiredOutputs ?? [] } : {}),
         ...input.ownedSessionMetadata,
       },
     });
     const prompt = [
-      ...(workCase ? ["This is an evaluation run. Complete the requested task using its public inputs. Save each required output with work_save_output, then send your final response to finish the case. Saving a file alone does not finish the case. Private grading runs after your final response; do not wait for grader feedback."] : []),
+      ...(workCase ? [managedNativeWork
+        ? `This is a local evaluation run. Complete the requested task using its public inputs. Save these required files at their declared paths relative to the current task workspace: ${JSON.stringify(input.requiredOutputs ?? [])}. The app preserves those declared files automatically when the turn finishes; work_save_output is not a shell command and is not needed here. For headless tools that write user preferences, use writable configuration, cache and profile directories within this task workspace and a bounded command timeout. Send the requested final response to finish the case. Private grading runs afterward; do not wait for grader feedback.`
+        : "This is an evaluation run. Complete the requested task using its public inputs. Save each required output with work_save_output, then send your final response to finish the case. Saving a file alone does not finish the case. Private grading runs after your final response; do not wait for grader feedback."] : []),
       typeof member.task.input === "string" ? member.task.input : JSON.stringify(member.task.input),
       ...(Object.keys(member.task.policyVisibleContext).length
         ? [`Policy-visible task context:\n${JSON.stringify(member.task.policyVisibleContext)}`]
@@ -93,7 +100,8 @@ export function createProfileWorkflowEvaluationExecutor(input: {
     const turn = await awaitProfileEvaluationTurn({signal:member.signal,timeoutMs:input.manifest.limits.timeoutMs,
       onInterrupt:(kind)=>{ timedOut = kind === "timed_out"; input.onInterrupt?.(kind); },
       ...(input.interruptSessionTurn?{interrupt:(reason:string)=>input.interruptSessionTurn!(session.id,reason)}:{}),
-      send:()=>input.sendTurn(session.id, {
+      send:()=>{
+      const request = {
       prompt,
       ...(input.binding.schemaVersion === "openpond.profileWorkflowBinding.v1"
         ? { workflowInput: {} }
@@ -103,7 +111,11 @@ export function createProfileWorkflowEvaluationExecutor(input: {
       approvalPolicy: "on-request",
       ...(workCase ? { sandbox: "workspace-write", codexPermissionMode: "default" } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-    })});
+      };
+      return input.modelRef.providerId === "codex"
+        ? input.sendTurn(session.id, request, { nativeTimeoutMs: input.manifest.limits.timeoutMs })
+        : input.sendTurn(session.id, request);
+    }});
     if (turn.status === "in_progress" || !turn.completedAt) {
       throw new Error("Workflow evaluation turn did not settle.");
     }

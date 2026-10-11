@@ -70,6 +70,25 @@ export function createCodexRuntimeManager({
 }: CodexRuntimeInput) {
   const coordinationSignatures = new Map<string, string>();
   const coordinationServers = new Map<string, Awaited<ReturnType<typeof createTaskCoordinationMcp>>>();
+  const ingestionBySession = new Map<string, BackgroundWorkReceipt[]>();
+  async function flushCodexRuntimeEvents(sessionId: string) {
+    const receipts = ingestionBySession.get(sessionId)?.splice(0) ?? [];
+    const settled = await Promise.all(receipts.map(receipt => receipt.done));
+    const failed = settled.find(receipt => receipt.status === "failed");
+    if (failed) throw new Error(`Codex runtime evidence was not retained: ${failed.error ?? failed.label}`);
+  }
+  async function stopCodexRuntime(sessionId: string) {
+    const runtime = codexSessions.get(sessionId);
+    codexSessions.delete(sessionId);
+    coordinationSignatures.delete(sessionId);
+    const coordination = coordinationServers.get(sessionId);
+    coordinationServers.delete(sessionId);
+    try {
+      await runtime?.client.stopAndWait();
+    } finally {
+      await coordination?.close();
+    }
+  }
   async function ensureCodexRuntime(
     session: Session,
     turnInput: CodexTurnInput
@@ -90,13 +109,20 @@ export function createCodexRuntimeManager({
     }
 
     setCodexStatus({ ...getCodexStatus(), appServer: { status: "starting", lastError: null } });
+    const evaluation = session.metadata?.standaloneExperiment !== undefined
+      || session.metadata?.localProfileExperiment !== undefined || session.metadata?.profileEvaluationRun !== undefined;
     const client = new CodexAppServerClient({
       binaryPath: process.env.CODEX_BINARY || "codex",
       clientName: "openpond-app",
       clientTitle: "OpenPond App",
       clientVersion: optionsVersion ?? VERSION,
       onNotification: (notification) => {
-        mapCodexNotification(session.id, notification);
+        const receipt = mapCodexNotification(session.id, notification);
+        if (evaluation) {
+          const receipts = ingestionBySession.get(session.id) ?? [];
+          receipts.push(receipt);
+          ingestionBySession.set(session.id, receipts);
+        }
       },
       onServerRequest: (request) => handleCodexServerRequest(session.id, request),
       stderr: (chunk) => {
@@ -117,13 +143,13 @@ export function createCodexRuntimeManager({
       coordinationSignatures.set(session.id, JSON.stringify(turnInput.coordination?.tools.map(tool => tool.name) ?? []));
       const config = { ...codexSessionConfig(turnInput.codexPermissionMode, turnInput.codexReasoningEffort),
         ...(coordination ? { "mcp_servers.openpond_task": coordination.config } : {}) };
-      const personalization = await loadPersonalizationSettings(store, storeDir);
+      const personalization = evaluation ? null : await loadPersonalizationSettings(store, storeDir);
       const project = session.workspaceKind === "local_project" && session.workspaceId
         ? await findLocalProject(store, session.workspaceId)
         : null;
       const additionalFolders = project?.sourceFolders?.filter((folder) => folder !== session.cwd) ?? [];
       const instructions = [
-        personalization.soul,
+        personalization?.soul,
         "You are running inside OpenPond App v1 app plumbing.",
         session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template"
           ? "The selected workspace is a remote OpenPond sandbox. Use OpenPond App sandbox APIs for sandbox operations, snapshots, and replay artifacts; do not assume the local working directory is the sandbox filesystem."
@@ -186,9 +212,10 @@ export function createCodexRuntimeManager({
     }
   }
 
-  return { ensureCodexRuntime, closeCoordination: async () => {
+  return { ensureCodexRuntime, flushCodexRuntimeEvents, stopCodexRuntime, closeCoordination: async () => {
     await Promise.all([...coordinationServers.values()].map((server) => server.close()));
     coordinationServers.clear();
     coordinationSignatures.clear();
+    ingestionBySession.clear();
   } };
 }

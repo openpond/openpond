@@ -15,6 +15,7 @@ import { contentHash } from "@openpond/harness";
 import { listDatabaseSessions, readDatabaseSession } from "./database.js";
 import { claudeConversationTitle, retainedConversationTitle } from "./titles.js";
 import { NativeSessionNotReadyError } from "./readiness.js";
+import { inspectCodexWindow } from "./codex-window-inventory.js";
 import {
   NATIVE_READ_LIMIT,
   type NativeSession,
@@ -56,6 +57,15 @@ async function readSelectedFile(source: NativeSource, path: string) {
     }
   }
   return text;
+}
+
+export async function inspectSessionWindow(source: NativeSource, session: NativeSession, input: {
+  since: string | null; until: string; check(): Promise<void>;
+}) {
+  if (source.source !== "codex" || source.acquisition !== "files" || session.issue
+    || !(session.path || source.root).endsWith(".jsonl")) return null;
+  if (session.sourceInstanceId !== source.instanceId) throw new Error("Native session belongs to another selected source.");
+  return inspectCodexWindow({ ...input, path: await selectedPath(source, session.path, false), sessionId: session.nativeSessionId });
 }
 async function pathsBelow(source: NativeSource) {
   if ((await lstat(source.root)).isFile()) return [""];
