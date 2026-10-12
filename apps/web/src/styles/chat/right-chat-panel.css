@@ -152,28 +152,44 @@
 .right-sidebar-overview {
   container-type: inline-size;
   display: grid;
+  grid-template-rows: auto minmax(280px, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  padding: 24px;
+  gap: 48px;
 }
 
-.right-sidebar-overview-content {
-  align-self: center;
-  justify-self: center;
-  width: min(100%, 800px);
-  padding: 24px;
+.right-sidebar-overview:not(:has(.right-sidebar-overview-files)) {
+  grid-template-rows: minmax(280px, 1fr);
 }
 
 .right-sidebar-overview-files,
 .right-sidebar-overview-tools {
   display: grid;
-  gap: 8px;
+  gap: 16px;
+  justify-self: center;
+  width: min(100%, 800px);
+}
+
+.right-sidebar-overview h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
 }
 
 .right-sidebar-overview-files {
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 140px));
+  justify-content: center;
+  align-self: start;
   gap: 12px;
-  margin-bottom: 28px;
+}
+
+.right-sidebar-overview-tools {
+  align-self: center;
 }
 
 .right-sidebar-overview .activity-artifact {
@@ -194,11 +210,21 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  justify-content: center;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px;
   width: 100%;
-  padding: 14px 10px 34px;
+  padding: 8px 8px 28px;
   text-align: center;
+}
+
+.right-sidebar-overview .activity-artifact-preview {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface-panel);
 }
 
 .right-sidebar-overview .activity-artifact-name > svg {

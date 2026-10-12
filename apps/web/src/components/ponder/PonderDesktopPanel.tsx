@@ -256,7 +256,7 @@ export function PonderDesktopPanel({ connection, accountScopeKey, localSessions,
   const scroll = useMainPaneChatScroll({
     browserConversationId: conversation?.id ?? null, chatSubmissionVersion: submissionVersion,
     chatMessages: scrollMessages, chatHistoryHasMore: false, chatHistoryLoading: false,
-    pendingApproval: null, showChatThread: true, showThinkingIndicator: running, view: "chat",
+    pendingApproval: null, showChatThread: true, showThinkingIndicator: running, turnRunning: discussionActive, view: "chat",
   });
   return <div className="chat-column" aria-label="Ponder Pal" style={scroll.chatColumnStyle}>
     <section className="chat-thread" aria-label="Conversation" tabIndex={0}

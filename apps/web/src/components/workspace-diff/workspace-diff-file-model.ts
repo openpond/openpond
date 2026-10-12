@@ -1,4 +1,5 @@
 import type { RuntimeEvent, WorkspaceDiffFile, WorkspaceDiffSummary } from "@openpond/contracts";
+import { isWorkspaceImagePath } from "../../lib/workspace-images";
 import { api, type ClientConnection } from "../../api";
 import type { SandboxFileEntry, SandboxGitDiff, SandboxGitStatus, SandboxRecord } from "../../lib/sandbox-types";
 
@@ -13,7 +14,7 @@ export async function readSandboxFile(
 ): Promise<WorkspaceDiffFile> {
   let result: Awaited<ReturnType<typeof api.sandboxDownloadFile>>;
   try {
-    result = await api.sandboxDownloadFile(connection, sandboxId, path, { maxBytes: /\.(?:pdf|docx?|pptx)$/i.test(path) ? 20 * 1024 * 1024 : 256 * 1024 });
+    result = await api.sandboxDownloadFile(connection, sandboxId, path, { maxBytes: /\.(?:pdf|docx?|pptx)$/i.test(path) ? 20 * 1024 * 1024 : isWorkspaceImagePath(path) ? 10 * 1024 * 1024 : 256 * 1024 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!isStaleSandboxReadError(message)) throw error;

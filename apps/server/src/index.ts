@@ -126,6 +126,7 @@ import {
   readCodexHistoryThreadPayload,
 } from "./codex-history.js";
 import { createCodexStatusService } from "./codex-status-service.js";
+import { createNativeHistoryWorkspace } from "./runtime/native-agents/history-workspace.js";
 import { createSessionStore } from "./store/session-store.js";
 import { createSessionTitleService } from "./session-title-service.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
@@ -485,6 +486,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     interruptTurn,
   } = createSessionStore({
     store,
+    qualifyNativeWorkspace: (native, cwd) => createNativeHistoryWorkspace(providersFilePath).qualifyWorkspace({ ...native, cwd }),
     defaultSessionCwd,
     createManagedLocalWorkCwd: async (sessionId) => {
       const workspacePath = path.join(storeDir, "work", "tasks", sessionId);

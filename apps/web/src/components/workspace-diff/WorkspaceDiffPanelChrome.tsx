@@ -188,8 +188,8 @@ export function WorkspaceDiffTabs({
           <div className={`workspace-diff-tab file ${visibleTab === "outputs" && activeOverviewId === id ? "active" : ""}`} key={`overview-${id}`}>
             <button type="button" className="workspace-diff-tab-main" role="tab" aria-selected={visibleTab === "outputs" && activeOverviewId === id}
               tabIndex={visibleTab === "outputs" && activeOverviewId === id ? 0 : -1}
-              onClick={() => onSelectOverview?.(id)}><FileText className="workspace-diff-tab-icon" size={14} /><span>{id === 0 ? "Overview" : "New tab"}</span></button>
-            <button type="button" className="workspace-diff-tab-close" aria-label={id === 0 ? "Close overview" : "Close new tab"}
+              onClick={() => onSelectOverview?.(id)}><FileText className="workspace-diff-tab-icon" size={14} /><span>New tab</span></button>
+            <button type="button" className="workspace-diff-tab-close" aria-label="Close new tab"
               onClick={() => onCloseOverview?.(id)}><X size={12} /></button>
           </div>
         ))}

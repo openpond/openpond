@@ -1071,6 +1071,7 @@ export function MainPane({
     pendingApproval,
     showChatThread,
     showThinkingIndicator,
+    turnRunning,
     view,
   });
   const handleOpenBrowserLink = useCallback(
@@ -1170,7 +1171,7 @@ export function MainPane({
     ? `candidate:${labCandidateReview.selection.runId}:${labCandidateReview.selection.candidateId}`
     : null;
   const workPanel = view === "chat" ? (openFile: () => void) => (
-    <RightSidebarOverview messages={chatMessages} events={runtimeEvents} onOpenFile={handleOpenFileInSidebar}
+    <RightSidebarOverview sessionId={selectedSessionId} connection={connection} workspaceId={activeWorkspaceAppId} sandboxId={rightSidebarUsesSandbox ? rightSidebarSandboxId : null} messages={chatMessages} events={runtimeEvents} onOpenFile={handleOpenFileInSidebar}
       actions={<RightSidebarHomeActions terminalOpen={terminalOpen} sideChatAvailable
         onOpenFile={openFile} onOpenBrowser={onShowBrowserPanel} onOpenFiles={onShowFilesPanel}
         onOpenReview={onShowDiffPanel} onOpenSideChat={onAddRightChat}
@@ -1795,7 +1796,7 @@ export function MainPane({
                   getCurrentComposerSubmissionScopeKey
                 }
                 voiceInputChannelKey={`main-composer:${composerSubmissionScopeKey}`}
-                showProjectFooter={false}
+                showProjectFooter
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
                 provider={activeProvider}
