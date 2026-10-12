@@ -15,6 +15,7 @@ import { resolveApiKey } from "../cli/common/auth";
 import { withOpenPondHome } from "@openpond/persistence";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { zstdCompressSync } from "node:zlib";
 import { refreshRetainedAdmission } from "./retained-admission";
 export async function collectorClients(
   connection: Pick<
@@ -92,7 +93,7 @@ export const collectorTransport: CollectorTransport = {
       connection.credentialHome, connection.projectId, connection.source.instanceId, entry.branchLeafId, entry.files]);
     if (cachedUpload?.key !== key) {
       const bytes = Buffer.from(JSON.stringify(entry.files.map(file => ({
-        path: file.path, encoding: "utf8", base64: Buffer.from(file.text).toString("base64"),
+        path: file.path, encoding: "zstd", base64: zstdCompressSync(Buffer.from(file.text)).toString("base64"),
       }))));
       const normalized = previewAgentImport({ source: connection.source.source, files: entry.files,
         acquisition: { machineId: connection.source.machineId, sourceInstanceId: connection.source.instanceId },
