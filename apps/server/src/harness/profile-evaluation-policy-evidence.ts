@@ -1,3 +1,4 @@
+import { completedProfileWorkResponse } from "./profile-work-completion.js";
 import { contentHash } from "@openpond/harness";
 import {
   ProfileEvaluationEvidenceRefSchema,
@@ -54,7 +55,7 @@ export function profileEvaluationOutput(
       .map(event => event.output ?? "").join("");
     if (contentHash(text) !== response.contentHash)
       throw new Error("Profile evaluation final provider response differs from its retained trace.");
-    return text;
+    return completedProfileWorkResponse(events) ?? text;
   }
   // Failed/interrupted turns retain partial text for inspection, never as a
   // completed response. Progress and truncated rounds remain in the full trace.
