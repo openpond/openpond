@@ -33,6 +33,9 @@ openpond import schedule <connection-id> --off
 # Inspect progress, connection IDs, errors and schedules.
 openpond import status
 
+# Inspect the exact retained source inventory and revision hashes.
+openpond import coverage <connection-id> --json
+
 # Run once now without changing the schedule.
 openpond import sync <connection-id>
 
@@ -48,6 +51,8 @@ openpond import cancel
 `--range` selects the initial history cutoff, independently of recurrence. Future jobs reconcile changes against retained source revisions and admission receipts, including changes made during missed days. `Ctrl+C` cancels a foreground job; it does not leave a background importer running.
 
 Each job fixes its upper cutoff at launch unless `import sync --until <UTC timestamp>` supplies an earlier cutoff. Selection uses native request-event timestamps in the half-open window `[since, until)`, not filesystem modification times. The collector retains and publishes a bounded revision inventory with admitted, skipped, failed and unknown-time counts. `import status --json` exposes this as `coverage`; zero queued uploads alone does not mean complete coverage. Preparation independently compares the eligible-boundary hash with the exact hosted Dataset membership at its import cutoff. This attestation establishes source reconciliation, not reconstructed or qualified tasks. Large Codex JSONL files can be inventoried as streams to prove that every native request is outside the window; this retains a full byte hash without uploading the transcript. Selected or undated requests, malformed records and unsupported metadata still require ordinary bounded acquisition and remain explicit failures when unavailable. Recurrence and existing pending-upload identities remain unchanged.
+
+`import coverage <connection-id> --json` returns the retained `manifest` and `summary`. A preparation policy can explicitly account for an unreadable source with `source.excludedSessions`: each entry contains `connectionId`, `sourceKeyHash`, `nativeRevisionHash`, `reason` (`source_read_failed` or `native_session_not_ready`) and an explanation. Copy the exact identities from the retained report. The hosted owner verifies them against its pinned attestation. An exclusion cannot cover known eligible boundaries, unknown event times, pending uploads or an unfinished listing. Changed revisions require a new policy. Preparation reports `coverage.complete` for reconciled eligible membership, `coverage.sourceComplete` for complete original-source coverage, and `coverage.excludedSessions` separately. Excluded transcripts remain unavailable for task reconstruction and learning.
 
 In the desktop app, **Settings → Conversation imports** shows each source and destination, its initial cutoff, last successful sync, next run, progress and errors. Enable **Continual imports**, then choose **Hourly**, **Daily**, **Weekly**, or **Custom cron**, with weekday/time or expression when applicable. Defaults are daily at midnight, or Monday at midnight for weekly. Midnight leaves time before a 02:00 model run; import scheduling does not itself establish a training dependency.
 

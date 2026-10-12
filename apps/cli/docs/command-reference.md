@@ -8,7 +8,7 @@ Parsing, aliases, command help, and this reference use the same authoritative re
 
 ```text
 Usage:
-  openpond import <connect|reconnect|discover|status|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--until <ISO-cutoff>] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]
+  openpond import <connect|reconnect|discover|status|coverage|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--until <ISO-cutoff>] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]
 
 Options:
   --at <string>
@@ -61,7 +61,7 @@ Options:
 
 ```text
 Usage:
-  openpond connected-evidence <list|collection|recorded-list|recorded|import-receipt|summary|case|unmapped|capture|selection|publish|prepare-recorded|upload-part|preview|commit|set-collection> [id] --team <id> [--input-file <path>] [--project <id>] [--cursor <id>] [--limit <n>]
+  openpond connected-evidence <list|collection|recorded-list|recorded|import-receipt|capture-assets|retain-assets|starting-assets|summary|case|unmapped|capture|selection|publish|prepare-recorded|upload-part|preview|commit|set-collection> [id] --team <id> [--input-file <path>] [--project <id>] [--cursor <id>] [--limit <n>]
 
 Options:
   --cursor <string>
