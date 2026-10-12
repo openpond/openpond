@@ -73,6 +73,7 @@ export type HttpRouteDeps = {
   extensionUpdateAllPayload: () => Promise<unknown>;
   extensionRemovePayload: (source: string) => Promise<unknown>;
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
+  sessionFilesPayload: (sessionId: string) => Promise<unknown>;
   listWorkOutputsPayload: () => Promise<unknown>;
   captureWorkEvidencePayload: (payload: unknown) => Promise<unknown>;
   getWorkEvidencePayload: (receiptId: string) => Promise<unknown>;

@@ -2,6 +2,7 @@ import type { TrainingEvaluationTaskPage, TrainingCandidateDecision, TrainingCan
 import type { ChatModelRef, ImmutableReleaseRef, ProfileWorkflow, ProfileWorkflowBinding } from "@openpond/harness";
 import type { ProfileEvaluationComparison, ProfileEvaluationReport, TasksetMetricResult, TasksetRunManifest } from "@openpond/evals";
 import type {
+  SessionFilesResponse,
   Approval,
   AppPreferences,
   BootstrapPayload,
@@ -639,6 +640,8 @@ export const api = {
       `/v1/events/page${query}`
     );
   },
+  sessionFiles: (connection: ClientConnection, sessionId: string) =>
+    apiFetch<SessionFilesResponse>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/files`),
   workOutputs: (connection: ClientConnection) =>
     apiFetch<WorkOutputsResponse>(connection, "/v1/work/outputs"),
   harnessHistory: (connection: ClientConnection) =>

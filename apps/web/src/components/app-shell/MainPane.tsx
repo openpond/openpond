@@ -1171,9 +1171,9 @@ export function MainPane({
     ? `candidate:${labCandidateReview.selection.runId}:${labCandidateReview.selection.candidateId}`
     : null;
   const workPanel = view === "chat" ? (openFile: () => void) => (
-    <RightSidebarOverview sessionId={selectedSessionId} connection={connection} workspaceId={activeWorkspaceAppId} sandboxId={rightSidebarUsesSandbox ? rightSidebarSandboxId : null} messages={chatMessages} events={runtimeEvents} onOpenFile={handleOpenFileInSidebar}
+    <RightSidebarOverview conversationId={browserConversationId} onOpenBrowser={onShowBrowserPanel} sessionId={selectedSessionId} connection={connection} workspaceId={activeWorkspaceAppId} sandboxId={rightSidebarUsesSandbox ? rightSidebarSandboxId : null} messages={chatMessages} events={runtimeEvents} onOpenFile={handleOpenFileInSidebar}
       actions={<RightSidebarHomeActions terminalOpen={terminalOpen} sideChatAvailable
-        onOpenFile={openFile} onOpenBrowser={onShowBrowserPanel} onOpenFiles={onShowFilesPanel}
+        onOpenFile={openFile} onOpenFiles={onShowFilesPanel}
         onOpenReview={onShowDiffPanel} onOpenSideChat={onAddRightChat}
         onOpenTrainingDraft={onShowTrainingDraftPanel} trainingDraftAvailable={Boolean(selectedSessionId)}
         onToggleTerminal={onToggleTerminal} />}
@@ -1399,7 +1399,6 @@ export function MainPane({
       expanded={diffPanelExpanded}
       terminalOpen={terminalOpen}
       sideChatAvailable={view === "chat" || view === "labs"}
-      onOpenBrowser={onShowBrowserPanel}
       onOpenFiles={onShowFilesPanel}
       onOpenReview={onShowDiffPanel}
       onOpenSideChat={onAddRightChat}

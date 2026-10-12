@@ -19,19 +19,23 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as { port: number };
   const url = `http://127.0.0.1:${address.port}`;
-  const chrome = spawn(chromePath, ["--headless=new", "--disable-extensions", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--remote-debugging-port=0", `--user-data-dir=${dir}`, "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
+  const chromeEnv = { ...process.env };
+  // Headless CI has no desktop session bus or reliable shared-memory/GPU
+  // compositor. Keep browser startup separate from the isolation assertions.
+  delete chromeEnv.DBUS_SESSION_BUS_ADDRESS;
+  const chrome = spawn(chromePath, ["--headless=new", "--disable-gpu", "--disable-dev-shm-usage", "--disable-extensions", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--remote-debugging-port=0", `--user-data-dir=${dir}`, "about:blank"], { env: chromeEnv, stdio: ["ignore", "ignore", "pipe"] });
   let chromeError = "";
   chrome.stderr.on("data", chunk => { chromeError = (chromeError + String(chunk)).slice(-2000); });
   let cdp: CdpClient | undefined;
   try {
     let port = "";
-    for (let attempt = 0; attempt < 100; attempt++) {
+    for (let attempt = 0; attempt < 225; attempt++) {
       port = await readFile(`${dir}/DevToolsActivePort`, "utf8").then(value => value.split("\n")[0]!, () => "");
       if (port) break;
       if (chrome.exitCode !== null) break;
       await delay(200);
     }
-    if (!port) throw new Error(`Chromium failed to start: ${chromeError}`);
+    if (!port) throw new Error(`Chromium failed to start (exit ${chrome.exitCode ?? "pending"}): ${chromeError}`);
     const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json();
     cdp = await CdpClient.connect(target.webSocketDebuggerUrl);
     const evaluate = async (expression: string) => (await cdp!.send<{ result: { value: any } }>("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result.value;

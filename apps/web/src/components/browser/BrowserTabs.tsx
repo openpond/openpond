@@ -15,6 +15,7 @@ export function BrowserTabs({
 }) {
   return (
     <div className="browser-tabs" role="tablist" aria-label="Browser tabs">
+      {!tabs.length ? <div className="browser-tab active"><Globe2 size={13} aria-hidden /><button type="button" className="browser-tab-main" role="tab" aria-selected>New tab</button></div> : null}
       {tabs.map((tab) => (
         <div className={`browser-tab ${tab.id === activeTabId ? "active" : ""}`} key={tab.id}>
           <span className="browser-tab-favicon" aria-hidden="true">
@@ -53,6 +54,7 @@ export function BrowserTabs({
 }
 
 function browserTabLabel(tab: BrowserTabState): string {
+  if (!tab.url || tab.url === "about:blank") return "New tab";
   if (tab.title?.trim()) return tab.title.trim();
   try {
     return new URL(tab.url).host || tab.url;

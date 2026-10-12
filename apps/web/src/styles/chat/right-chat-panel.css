@@ -149,19 +149,27 @@
   width: min(100%, 420px);
 }
 
+.right-sidebar-new-tab {
+  display: grid;
+  grid-template-rows: 42px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .right-sidebar-overview {
   container-type: inline-size;
   display: grid;
-  grid-template-rows: auto minmax(280px, 1fr);
+  grid-template-rows: auto minmax(min-content, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: auto;
   padding: 24px;
-  gap: 48px;
+  gap: 32px;
 }
 
 .right-sidebar-overview:not(:has(.right-sidebar-overview-files)) {
-  grid-template-rows: minmax(280px, 1fr);
+  grid-template-rows: minmax(min-content, 1fr);
 }
 
 .right-sidebar-overview-files,
@@ -253,7 +261,7 @@
 
 .right-sidebar-overview .right-sidebar-home-actions {
   width: 100%;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
