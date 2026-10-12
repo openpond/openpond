@@ -4,7 +4,7 @@ import path from "node:path";
 import { TrainingPreparationPlanSchema } from "@openpond/contracts";
 import { TrainingAdapterRegistry, TrainingDestinationRegistry } from "@openpond/training-sdk";
 import { computeTasksetHash, sha256, publishTasksetDraft, tasksetDraftFromTaskset } from "@openpond/taskset-sdk";
-import { createModelProjectSaveRequest, ModelProjectTrainingSetupSchema } from "openpond-sdk/model-projects";
+import { createModelProjectSaveRequest, ModelProjectTrainingSetupSchema, ModelProjectEditableSchema } from "openpond-sdk/model-projects";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { withTempDirectory } from "./helpers/temp-directory";
 import { sftRecipeFixture, tasksetFixture } from "./helpers/training-fixtures";
@@ -24,6 +24,8 @@ import { createTrainingApi } from "../apps/server/src/training/training-api.js";
 
 // Reward selection on an ordinary collection must publish one isolated revision
 // even before base selection, retain held-out defaults and survive later edits.
+// Publishing task edits must not silently shrink an owner's context budget or
+// drop continuation settings and make the next real rollout impossible.
 test("saves ordinary tasks with a selected Reward through immutable revisions", async () => withTempDirectory("model-ordinary-binding-", async home => {
   const store = new SqliteStore(home);
   try {
@@ -57,12 +59,32 @@ test("saves ordinary tasks with a selected Reward through immutable revisions", 
       content: { ...bindingContent, revision: 2, sources: bindingContent.sources.map(source => ({ ...source, weight: 2 })) },
     })).resources[0]);
     const nextRequest = await createModelProjectSaveRequest({ ...project, trainingSetup: { ...saved.trainingSetup, rewardBindingRef: learningRef(replacement) } }, saved.revision);
-    const next = await store.saveModelProjectConfiguration(nextRequest);
+    let next = await store.saveModelProjectConfiguration(nextRequest);
     expect(next.trainingSetup.tasksetRef?.id).toBe(saved.trainingSetup.tasksetRef?.id);
     expect(next.trainingSetup.tasksetRef?.revision).toBe(2);
     expect(next.trainingSetup.evaluationTasksetRef).toEqual(next.trainingSetup.tasksetRef);
     expect(await store.saveModelProjectConfiguration(request)).toEqual(saved);
     expect(await store.getTasksetRevision(source.id, source.revision)).toEqual(source);
+    next = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({
+      ...ModelProjectEditableSchema.strip().parse(next),
+      trainingSetup: { ...next.trainingSetup, method: "grpo", baseModel: {
+        schemaVersion: "openpond.baseModelPreference.v1", modelId: "base", revision: "weights",
+        tokenizerRevision: "tokenizer", chatTemplateHash: "a".repeat(64), source: "managed", modelAssetId: null,
+      } },
+    }, next.revision));
+    expect(next.trainingSetup.recipe).not.toBeNull();
+    const configuredRecipe = { ...next.trainingSetup.recipe!,
+      dataset: { ...(next.trainingSetup.recipe!.dataset as object), maxPromptTokens: 6_144 },
+      rollout: { ...(next.trainingSetup.recipe!.rollout as object), maxOutputTokens: 2_048, maxTurns: 60 },
+      continuation: { schemaVersion: "openpond.crossJobContinuationRequest.v1",
+        parentArtifact: { id: "retained-parent", contentHash: "b".repeat(64) },
+        sourceArtifact: { jobId: "parent-job", artifactId: "retained-parent", checkpointId: "parent-checkpoint", contentHash: "b".repeat(64) },
+        optimizerMode: "reset" },
+    };
+    next = await store.saveModelProjectConfiguration(await createModelProjectSaveRequest({
+      ...ModelProjectEditableSchema.strip().parse(next),
+      trainingSetup: { ...next.trainingSetup, recipe: configuredRecipe },
+    }, next.revision));
     const nextExport = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: project.profileId, modelId: project.id });
     expect(nextExport.taskset.tasks).toEqual(exported.taskset.tasks);
     expect(nextExport.modelResources?.rewardBinding).toEqual(replacement);
@@ -79,6 +101,7 @@ test("saves ordinary tasks with a selected Reward through immutable revisions", 
     expect(afterTaskEdit.trainingSetup.tasksetRef).toEqual(learningRef(published.taskset));
     expect(afterTaskEdit.trainingSetup.rewardBindingRef).toEqual(learningRef(replacement));
     expect(afterTaskEdit.trainingSetup.evaluationTasksetRef).toEqual(afterTaskEdit.trainingSetup.tasksetRef);
+    expect(afterTaskEdit.trainingSetup.recipe).toEqual(configuredRecipe);
     expect(published.taskset.revision).toBe(3);
     expect(published.taskset.sourceRefs).toEqual(edited.sourceRefs);
     expect(published.taskset.sourceRefs.every(ref => ref.licensingStatus === "approved" && ref.secretScanStatus === "passed" && ref.piiScanStatus === "passed")).toBe(true);
