@@ -6,6 +6,7 @@ import { MarkdownText } from "../chat/MarkdownText";
 import {
   isAbsoluteWorkspaceDiffPath,
   isDocumentPath,
+  isPresentationFile,
   isMarkdownPath,
   normalizeWorkspaceDiffPath,
 } from "./workspace-diff-panel-model";
@@ -15,6 +16,7 @@ import { WorkspaceDocumentPreview } from "./WorkspaceDocumentPreview";
 
 const FILE_TRUNCATED_MARKER = "\n\n[file truncated]";
 const MonacoFileEditor = lazy(() => import("./WorkspaceMonacoEditor"));
+const PresentationPreview = lazy(() => import("./WorkspacePresentationPreview"));
 const PATCH_CONTEXT_EDGE_LINES = 6;
 const PATCH_CONTEXT_FOLD_MIN_LINES = 18;
 const DIFF_ROW_HEIGHT = 22;
@@ -136,7 +138,8 @@ export function FilePreview({
   const hasContent = draftContent != null || file.content != null;
   const contentIsTruncated = displayContent.endsWith(FILE_TRUNCATED_MARKER);
   const shouldRenderMarkdown = renderMarkdown && hasContent && isMarkdownPath(file.path);
-  const shouldRenderDocument = hasContent && isDocumentPath(file.path) && isLikelyBase64Document(displayContent);
+  const presentation = isPresentationFile(file);
+  const shouldRenderDocument = hasContent && (file.contentEncoding === "base64" || isDocumentPath(file.path)) && isLikelyBase64Document(displayContent);
 
   if (imageSrc) {
     return (
@@ -217,6 +220,10 @@ export function FilePreview({
         <div className="workspace-markdown-preview">
           <MarkdownText content={displayContent} />
         </div>
+      ) : presentation && shouldRenderDocument ? (
+        <Suspense fallback={<div className="workspace-diff-code-empty" role="status">Loading presentation…</div>}>
+          <PresentationPreview path={file.path} contentBase64={displayContent} />
+        </Suspense>
       ) : shouldRenderDocument ? (
         <WorkspaceDocumentPreview path={file.path} contentBase64={displayContent} />
       ) : editable && !contentIsTruncated ? (

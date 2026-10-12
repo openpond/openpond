@@ -149,6 +149,52 @@
   width: min(100%, 420px);
 }
 
+.right-sidebar-overview {
+  container-type: inline-size;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.right-sidebar-overview-content {
+  align-self: center;
+  justify-self: center;
+  width: min(100%, 800px);
+  padding: 32px;
+}
+
+.right-sidebar-overview-files,
+.right-sidebar-overview-tools {
+  display: grid;
+  gap: 8px;
+}
+
+.right-sidebar-overview-files {
+  margin-bottom: 28px;
+}
+
+.right-sidebar-overview h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.right-sidebar-overview .activity-artifact {
+  width: 100%;
+}
+
+.right-sidebar-overview .right-sidebar-home-actions {
+  width: 100%;
+}
+
+@container (min-width: 600px) {
+  .right-sidebar-overview .right-sidebar-home-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .right-sidebar-home-row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;

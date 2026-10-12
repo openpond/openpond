@@ -250,6 +250,7 @@ export type MainPaneProps = {
   refreshWorkspaceDiff: (options?: { silent?: boolean }) => Promise<void>;
   onToggleDiffPanelExpanded: () => void;
   onShowDiffPanel: () => void;
+  onShowFilePreview: () => void;
   onShowBrowserPanel: () => void;
   onShowGoalSidebarTab: () => void;
   onShowTrainingDraftPanel: () => void;

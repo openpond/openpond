@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import {
   BookOpenText,
   CircleAlert,
@@ -46,6 +46,12 @@ export function WorkspaceDiffTabs({
   sourceStatus,
   sourceSwitcher,
   visibleTab,
+  toolbarActions,
+  overviewTabs = [],
+  activeOverviewId,
+  onNewOverview,
+  onSelectOverview,
+  onCloseOverview,
   getFileBookmarkStatus,
   onCloseFileTab,
   onCloseSideChat,
@@ -58,6 +64,7 @@ export function WorkspaceDiffTabs({
   onSetFileBookmarkStatus,
   onSelectFile,
   onSelectFiles,
+  onSelectOutputs,
   onSelectGoal,
   onSelectSummary,
   onSelectSideChat,
@@ -78,6 +85,12 @@ export function WorkspaceDiffTabs({
   sourceStatus?: { label: string; tone: "clean" | "dirty" | "loading" | "error" } | null;
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   visibleTab: DiffTab;
+  toolbarActions?: ReactNode;
+  overviewTabs?: number[];
+  activeOverviewId?: number;
+  onNewOverview?: () => void;
+  onSelectOverview?: (id: number) => void;
+  onCloseOverview?: (id: number) => void;
   getFileBookmarkStatus?: (path: string) => SidebarFileStatus | null;
   onCloseFileTab: (path: string, event: MouseEvent<HTMLButtonElement>) => void;
   onCloseSideChat?: (panelId: string) => void;
@@ -93,6 +106,7 @@ export function WorkspaceDiffTabs({
   ) => void;
   onSelectFile: (path: string) => void;
   onSelectFiles: () => void;
+  onSelectOutputs?: () => void;
   onSelectGoal: () => void;
   onSelectSummary?: () => void;
   onSelectSideChat?: (panelId: string) => void;
@@ -127,7 +141,7 @@ export function WorkspaceDiffTabs({
       onCloseSearch();
       return;
     }
-    if (event.key === "Enter" && filteredFiles[0]) onOpenFile(filteredFiles[0]);
+    if (event.key === "Enter" && (filteredFiles[0] || searchQuery.trim())) onOpenFile(filteredFiles[0] || searchQuery.trim());
   }
 
   function handleTabListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -163,6 +177,15 @@ export function WorkspaceDiffTabs({
         aria-label="Right sidebar views"
         onKeyDown={handleTabListKeyDown}
       >
+        {overviewTabs.map(id => (
+          <div className={`workspace-diff-tab file ${visibleTab === "outputs" && activeOverviewId === id ? "active" : ""}`} key={`overview-${id}`}>
+            <button type="button" className="workspace-diff-tab-main" role="tab" aria-selected={visibleTab === "outputs" && activeOverviewId === id}
+              tabIndex={visibleTab === "outputs" && activeOverviewId === id ? 0 : -1}
+              onClick={() => onSelectOverview?.(id)}><FileText className="workspace-diff-tab-icon" size={14} /><span>{id === 0 ? "Overview" : "New tab"}</span></button>
+            <button type="button" className="workspace-diff-tab-close" aria-label={id === 0 ? "Close overview" : "Close new tab"}
+              onClick={() => onCloseOverview?.(id)}><X size={12} /></button>
+          </div>
+        ))}
         {goalDetailsAvailable ? (
           <button
             type="button"
@@ -271,15 +294,16 @@ export function WorkspaceDiffTabs({
         <div className="workspace-diff-add-anchor" ref={addAnchorRef}>
           <button
             type="button"
-            className={`workspace-diff-add-tab ${addMenuOpen || searchOpen ? "active" : ""}`}
+            className={`workspace-diff-add-tab ${!onNewOverview && (addMenuOpen || searchOpen) ? "active" : ""}`}
             title="Add"
-            aria-label="Add to right sidebar"
-            onClick={onToggleAddMenu}
+            aria-label={onNewOverview ? "New tab" : "Add to right sidebar"}
+            onClick={onNewOverview ?? onToggleAddMenu}
           >
             <Plus size={15} />
           </button>
           {addMenuOpen && (
             <div className="workspace-diff-add-menu" role="menu">
+              {onSelectOutputs ? <button type="button" role="menuitem" onClick={onSelectOutputs}><FileText size={14} /><span>Outputs</span><kbd /></button> : null}
               {onOpenSideChat ? (
                 <button type="button" role="menuitem" onClick={onOpenSideChat}>
                   <MessageSquare size={14} />
@@ -362,6 +386,7 @@ export function WorkspaceDiffTabs({
           ) : null}
         </div>
       ) : null}
+      {toolbarActions}
       <button
         type="button"
         className="diff-icon-button"
@@ -376,6 +401,7 @@ export function WorkspaceDiffTabs({
 }
 
 export function WorkspaceDiffToolbar({
+  inline = false,
   canCheckActiveFile,
   canSaveActiveFile,
   collapsed,
@@ -407,6 +433,7 @@ export function WorkspaceDiffToolbar({
   onToggleWordDiffs,
   onToggleWordWrap,
 }: {
+  inline?: boolean;
   canCheckActiveFile: boolean;
   canSaveActiveFile: boolean;
   collapsed: boolean;
@@ -439,7 +466,7 @@ export function WorkspaceDiffToolbar({
   onToggleWordWrap: () => void;
 }) {
   return (
-    <div className="workspace-diff-toolbar">
+    <div className={`workspace-diff-toolbar ${inline ? "inline" : ""}`}>
       <div className="workspace-diff-toolbar-actions">
         <div className="workspace-diff-menu-anchor">
           <button

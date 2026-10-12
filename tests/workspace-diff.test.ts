@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, test } from "vitest";
-import { AppPreferencesSchema, localPathWorkspaceId, type BootstrapPayload, type WorkspaceDiffSummary } from "@openpond/contracts";
+import { AppPreferencesSchema, localPathWorkspaceId, WorkspaceDiffFileSchema, type BootstrapPayload, type WorkspaceDiffSummary } from "@openpond/contracts";
 import {
   clearWorkspaceDiffCacheForTests,
   loadGitCommitDiffAtPath,
@@ -14,6 +14,7 @@ import {
   mapWorkspaceDiffEntriesWithConcurrency,
 } from "../apps/server/src/workspace/workspace-diff";
 import { readLocalImageFile } from "../apps/server/src/workspace/workspace-common";
+import { loadLocalOutputFile } from "../apps/server/src/workspace/local-output-files";
 import { workspaceDiffSinceBaseline } from "../apps/server/src/workspace/server-workspace-session-workflows";
 import { createServerWorkspacePayloads } from "../apps/server/src/workspace/server-workspace-payloads";
 import { SqliteStore } from "../apps/server/src/store/store";
@@ -319,6 +320,28 @@ describe("workspace diff", () => {
 
     expect(file.path).toBe("report.pdf");
     expect(Buffer.from(file.content ?? "", "base64")).toEqual(pdfBytes);
+  });
+
+  // Failure story: generated PPTX outputs were decoded as UTF-8 and opened in
+  // the editor; metadata must survive the API boundary even without an extension.
+  test("preserves PowerPoint bytes and preview metadata for named and extensionless outputs", async () => {
+    const repoPath = await createTempDir("openpond-workspace-presentation-");
+    const outputDir = await createTempDir("openpond-output-presentation-");
+    const bytes = await readFile(new URL("./fixtures/workspace-presentation.pptx", import.meta.url));
+    for (const name of ["slides.pptx", "001-artifact"]) {
+      const outputPath = path.join(outputDir, name);
+      await writeFile(outputPath, bytes);
+      const file = WorkspaceDiffFileSchema.parse(await loadLocalOutputFile(repoPath, outputPath));
+      expect(file.contentType).toBe("application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      expect(file.contentEncoding).toBe("base64");
+      expect(Buffer.from(file.content ?? "", "base64")).toEqual(bytes);
+    }
+    await writeFile(path.join(repoPath, "slides.pptx"), bytes);
+    const file = WorkspaceDiffFileSchema.parse(await loadWorkspaceFileAtPath(repoPath, "slides.pptx"));
+    expect(file.contentEncoding).toBe("base64");
+    expect(Buffer.from(file.content ?? "", "base64")).toEqual(bytes);
+    await truncate(path.join(repoPath, "slides.pptx"), 21 * 1024 * 1024);
+    await expect(loadWorkspaceFileAtPath(repoPath, "slides.pptx")).rejects.toThrow();
   });
 
   test("loads workspace payloads from a Codex cwd without a registered project", async () => {

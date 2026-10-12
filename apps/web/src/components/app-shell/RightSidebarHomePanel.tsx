@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { ComponentProps, PointerEvent as ReactPointerEvent } from "react";
 import {
   Clipboard,
   ChartColumnStacked,
@@ -48,35 +48,6 @@ export function RightSidebarHomePanel({
   onToggleExpanded: () => void;
   onToggleTerminal: () => void;
 }) {
-  const actions: RightSidebarHomeAction[] = [
-    { id: "review", label: "Review", meta: "Diffs", icon: Clipboard, onSelect: onOpenReview },
-    { id: "files", label: "Files", meta: "Workspace", icon: FolderOpen, onSelect: onOpenFiles },
-    { id: "browser", label: "Browser", meta: "Preview", icon: Globe2, onSelect: onOpenBrowser },
-    {
-      id: "side-chat",
-      label: "Side chat",
-      meta: "Context",
-      icon: MessageSquare,
-      onSelect: onOpenSideChat,
-      disabled: !sideChatAvailable,
-    },
-    {
-      id: "training-draft",
-      label: "Task draft",
-      meta: "Training",
-      icon: ChartColumnStacked,
-      onSelect: onOpenTrainingDraft,
-      disabled: !trainingDraftAvailable,
-    },
-    {
-      id: "terminal",
-      label: terminalOpen ? "Hide terminal" : "Terminal",
-      meta: "Shell",
-      icon: SquareTerminal,
-      onSelect: onToggleTerminal,
-    },
-  ];
-
   return (
     <aside className={`workspace-diff-panel right-sidebar-home-panel ${expanded ? "expanded" : ""}`} aria-label="Right sidebar">
       {!expanded ? (
@@ -108,23 +79,69 @@ export function RightSidebarHomePanel({
         </div>
       </div>
       <div className="right-sidebar-home-body">
-        <div className="right-sidebar-home-actions" role="menu" aria-label="Workspace actions">
-          {actions.map((action) => (
-            <button
-              type="button"
-              className="right-sidebar-home-row"
-              key={action.id}
-              role="menuitem"
-              disabled={action.disabled}
-              onClick={action.onSelect}
-            >
-              <action.icon size={15} />
-              <span>{action.label}</span>
-              {action.meta ? <span className="right-sidebar-home-chip">{action.meta}</span> : null}
-            </button>
-          ))}
-        </div>
+        <RightSidebarHomeActions terminalOpen={terminalOpen} sideChatAvailable={sideChatAvailable}
+          onOpenBrowser={onOpenBrowser} onOpenFiles={onOpenFiles} onOpenReview={onOpenReview}
+          onOpenSideChat={onOpenSideChat} onOpenTrainingDraft={onOpenTrainingDraft}
+          trainingDraftAvailable={trainingDraftAvailable} onToggleTerminal={onToggleTerminal} />
       </div>
     </aside>
+  );
+}
+
+export function RightSidebarHomeActions({
+  terminalOpen, sideChatAvailable, onOpenBrowser, onOpenFiles, onOpenFile, onOpenReview,
+  onOpenSideChat, onOpenTrainingDraft, trainingDraftAvailable, onToggleTerminal,
+}: Pick<ComponentProps<typeof RightSidebarHomePanel>,
+  | "terminalOpen" | "sideChatAvailable" | "onOpenBrowser" | "onOpenFiles"
+  | "onOpenReview" | "onOpenSideChat" | "onOpenTrainingDraft"
+  | "trainingDraftAvailable" | "onToggleTerminal"
+> & { onOpenFile?: () => void }) {
+  const actions: RightSidebarHomeAction[] = [
+    { id: "review", label: "Review", meta: "Diffs", icon: Clipboard, onSelect: onOpenReview },
+    { id: "files", label: "Files", meta: "Workspace", icon: FolderOpen, onSelect: onOpenFiles },
+    { id: "browser", label: "Browser", meta: "Preview", icon: Globe2, onSelect: onOpenBrowser },
+    {
+      id: "side-chat",
+      label: "Side chat",
+      meta: "Context",
+      icon: MessageSquare,
+      onSelect: onOpenSideChat,
+      disabled: !sideChatAvailable,
+    },
+    {
+      id: "training-draft",
+      label: "Task draft",
+      meta: "Training",
+      icon: ChartColumnStacked,
+      onSelect: onOpenTrainingDraft,
+      disabled: !trainingDraftAvailable,
+    },
+    {
+      id: "terminal",
+      label: terminalOpen ? "Hide terminal" : "Terminal",
+      meta: "Shell",
+      icon: SquareTerminal,
+      onSelect: onToggleTerminal,
+    },
+  ];
+
+  if (onOpenFile) actions.splice(2, 0, { id: "open-file", label: "Open file", icon: FolderOpen, onSelect: onOpenFile });
+  return (
+    <div className="right-sidebar-home-actions" role="menu" aria-label="Workspace actions">
+      {actions.map((action) => (
+        <button
+          type="button"
+          className="right-sidebar-home-row"
+          key={action.id}
+          role="menuitem"
+          disabled={action.disabled}
+          onClick={action.onSelect}
+        >
+          <action.icon size={15} />
+          <span>{action.label}</span>
+          {action.meta ? <span className="right-sidebar-home-chip">{action.meta}</span> : null}
+        </button>
+      ))}
+    </div>
   );
 }

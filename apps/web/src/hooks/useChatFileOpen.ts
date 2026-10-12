@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { localFileWorkspaceId } from "../lib/local-file-workspace";
 import { api, type ClientConnection } from "../api";
 import { normalizeChatFilePath } from "../lib/chat-file-links";
 import { absoluteLocalVideoPath } from "../lib/local-video";
 import { revealLocalFile } from "../lib/desktop-files";
 import { htmlPreviewUrl, isHtmlFilePath } from "../lib/html-preview";
+import { isWorkspaceImagePath } from "../lib/workspace-images";
+import { placeholderFile } from "../components/workspace-diff/workspace-diff-panel-model";
 import type { ShowAppToast } from "../app/app-state";
 import type { WorkspaceDiffOpenFileRequest } from "../components/workspace-diff/workspace-diff-panel-model";
 
@@ -40,7 +43,7 @@ export function useChatFileOpen({
     return () => { requestVersion.current++; };
   }, [connection, activeWorkspaceAppId, conversationKey, rightSidebarSandboxId]);
   const openResolvedFile = useCallback(
-    (path: string, options?: { source?: boolean }) => {
+    async (path: string, options?: { source?: boolean }) => {
       if (/[\\/]$/.test(path)) {
         const target = /^(?:[~/\\]|[A-Za-z]:)/.test(path) ? path : workspaceRootPath ? `${workspaceRootPath}/${path}` : path;
         void revealLocalFile(target).then((opened) => {
@@ -71,6 +74,21 @@ export function useChatFileOpen({
         return;
       }
       const normalizedFile = normalizeChatFilePath(path, { workspaceRootPath });
+      const filePath = normalizedFile?.path ?? path;
+      const standaloneWorkspaceId = localFileWorkspaceId(filePath);
+      if (!activeWorkspaceAppId && !rightSidebarUsesSandbox && connection && standaloneWorkspaceId) {
+        const version = requestVersion.current;
+        try {
+          const image = isWorkspaceImagePath(filePath) ? await api.signLocalImageUrl(connection, { path: filePath }) : null;
+          const file = image ? placeholderFile(filePath) : await api.workspaceFile(connection, standaloneWorkspaceId, filePath);
+          if (version !== requestVersion.current) return;
+          onShowDiffPanel();
+          setOpenDiffFileRequest({ id: Date.now(), path: file.path, file, imageUrl: image?.url });
+        } catch (error) {
+          if (version === requestVersion.current) showToast(error instanceof Error ? error.message : "Could not open this file.", "error");
+        }
+        return;
+      }
       onShowDiffPanel();
       setOpenDiffFileRequest({
         id: Date.now(),

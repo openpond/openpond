@@ -44,6 +44,12 @@
     display: none;
   }
 
+  .main-pane.diff-open > .workspace-diff-panel {
+    display: grid;
+    grid-area: 1 / 1 / -1;
+    z-index: 60;
+  }
+
   .main-pane.team-active.diff-open > .team-ai-thread-panel {
     display: grid;
   }
