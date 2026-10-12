@@ -1301,6 +1301,17 @@ function WorkspaceDiffPanelInner({
         : activeTab === "file" && selectedPath
           ? "file"
           : renderOutputs && !filesTabOpen ? "outputs" : "files";
+  useEffect(() => {
+    if (visibleTab !== "outputs" || overviewTabs.length) return;
+    // A workspace change can close its file tabs; keep the landing page backed
+    // by a real New tab rather than leaving an empty tab strip.
+    const id = nextOverviewId.current++;
+    setOverviewTabs([id]);
+    setActiveOverviewId(id);
+    setTabOrder(current => [...current, `overview-${id}`]);
+    setActiveTab("outputs");
+  }, [overviewTabs.length, visibleTab]);
+
   const initializedLocalEmptyMessage = visibleTab === "files" ? "No files to show" : "No local changes";
   const waitingForLocalWorkspace = workspaceKind === "local_project" && !workspaceInitialized && !workspaceError;
   const panelLoading = sandboxMode ? sandboxLoading : loading;
