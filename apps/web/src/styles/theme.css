@@ -14,6 +14,7 @@
   --text-muted: #9a9a9a;
   --text-disabled: #737373;
   --action-primary: #f4f4f5;
+  --action-primary-hover: #ffffff;
   --text-on-primary: #171717;
   --accent-primary: #06b6d4;
   --accent-primary-fill: #087d91;
@@ -85,6 +86,7 @@
   --text-muted: #666a73;
   --text-disabled: #858992;
   --action-primary: #202124;
+  --action-primary-hover: #171717;
   --text-on-primary: #ffffff;
   --accent-primary: #087d91;
   --accent-primary-fill: #087d91;
