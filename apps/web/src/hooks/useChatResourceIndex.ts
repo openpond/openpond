@@ -5,9 +5,8 @@ import { chatResourceRequest } from "../api/chat-resource-api";
 type Index={resources:ChatResourceSummary[];links:{sessionId:string;key:string}[]};
 export function useChatResourceIndex(connection:ClientConnection|null) {
   const [index,setIndex]=useState<Index>({resources:[],links:[]});
-  const [selected,setSelected]=useState("");
   useEffect(()=>{
-    setIndex({resources:[],links:[]});setSelected("");
+    setIndex({resources:[],links:[]});
     if(!connection)return;
     const abort=new AbortController();let timer:ReturnType<typeof setTimeout>;
     const load=async()=>{
@@ -17,7 +16,6 @@ export function useChatResourceIndex(connection:ClientConnection|null) {
     };
     void load();return()=>{abort.abort();clearTimeout(timer);};
   },[connection]);
-  const sessionIds=useMemo(()=>selected ? new Set(index.links.filter(link=>link.key===selected).map(link=>link.sessionId)) : null,[index.links,selected]);
   const trainingSessionIds=useMemo(()=>new Set(index.links.map(link=>link.sessionId)),[index.links]);
-  return {...index,selected,setSelected,sessionIds,trainingSessionIds};
+  return {trainingSessionIds};
 }

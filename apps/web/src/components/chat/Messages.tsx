@@ -22,7 +22,7 @@ import { MessageFooter } from "./MessageFooter";
 import { TaskMessageRow } from "./TaskMessageRow";
 import { UserMessageContent } from "./UserMessageContent";
 import { MarkdownText } from "./MarkdownText";
-import { StreamingMarkdownText } from "./StreamingMarkdownText";
+import { MessageTextBody } from "./MessageTextBody";
 import { ChatActivitySummary } from "./ChatActivitySummary";
 import {
   ActionRunCard,
@@ -162,36 +162,19 @@ export const MessageRow = memo(function MessageRow({
 
   return (
     <article className="message-row assistant" data-notification-turn={message.turnId} data-notification-final={message.finalAnswer ? "true" : undefined}>
-      {message.reasoningContent ? (
-        <div className="assistant-message">
-          <StreamingMarkdownText
-            activeWorkspaceAppId={activeWorkspaceAppId}
-            animateInitialContent={animateInitialContent}
-            connection={connection}
-            content={message.reasoningContent}
-            conversationLinks={conversationLinks}
-            onOpenConversation={onOpenSession}
-            onOpenBrowserLink={onOpenBrowserLink}
-            onOpenFileInSidebar={onOpenFileInSidebar}
-            workspaceRootPath={workspaceRootPath}
-          />
-        </div>
-      ) : null}
-      {message.content ? (
-        <div className="assistant-message">
-          <StreamingMarkdownText
-            activeWorkspaceAppId={activeWorkspaceAppId}
-            animateInitialContent={animateInitialContent}
-            connection={connection}
-            content={message.content}
-            conversationLinks={conversationLinks}
-            onOpenConversation={onOpenSession}
-            onOpenBrowserLink={onOpenBrowserLink}
-            onOpenFileInSidebar={onOpenFileInSidebar}
-            workspaceRootPath={workspaceRootPath}
-          />
-        </div>
-      ) : null}
+      <MessageTextBody
+        activeWorkspaceAppId={activeWorkspaceAppId}
+        animateInitialContent={animateInitialContent}
+        connection={connection}
+        content={message.content}
+        reasoningContent={message.reasoningContent}
+        conversationLinks={conversationLinks}
+        onOpenConversation={onOpenSession}
+        onOpenBrowserLink={onOpenBrowserLink}
+        onOpenFileInSidebar={onOpenFileInSidebar}
+        workspaceRootPath={workspaceRootPath}
+        footer={showFooter && message.finalAnswer ? <MessageFooter content={message.content} timestamp={message.timestamp} kvCacheSummary={kvCacheSummary} /> : null}
+      >
       {message.sources?.length ? (
         <MessageSources
           sources={message.sources}
@@ -252,8 +235,7 @@ export const MessageRow = memo(function MessageRow({
           onResolve={onResolveUserQuestion}
         />
       ) : null}
-      {/* Keep the footer implementation; interim messages intentionally hide the entire row. */}
-      {showFooter && message.finalAnswer ? <MessageFooter content={message.content} timestamp={message.timestamp} kvCacheSummary={kvCacheSummary} /> : null}
+      </MessageTextBody>
     </article>
   );
 },

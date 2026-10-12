@@ -5,22 +5,13 @@
   height: 30px;
   border: 0;
   border-radius: 15px;
-  background: var(--state-hover);
-  color: var(--text-on-primary);
-}
-
-.send-button:hover:not(:disabled) {
   background: var(--action-primary);
   color: var(--text-on-primary);
 }
 
-.send-button.stop-button {
-  background: var(--state-hover);
-  color: var(--text-primary);
-}
-
-.send-button.stop-button:hover:not(:disabled) {
-  background: var(--state-hover);
+.send-button:hover:not(:disabled) {
+  background: var(--action-primary-hover);
+  color: var(--text-on-primary);
 }
 
 .send-button.stop-button svg {
@@ -29,7 +20,8 @@
 }
 
 .send-button:disabled {
-  opacity: 0.42;
+  color: var(--text-disabled);
+  cursor: default;
 }
 
 .composer-queue-control {
