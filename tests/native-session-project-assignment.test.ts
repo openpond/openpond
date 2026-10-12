@@ -68,6 +68,7 @@ test("conversation file references keep their original folder and sandbox across
     ["/workspace/deck.pptx", "old-sandbox"], ["/workspace/deck.pptx", "new-sandbox"], ["/old-project/notes/report.docx", null],
   ]));
   expect(files).toHaveLength(5);
+  expect(files.map(file => file.path)).toEqual(["/workspace/deck.pptx", "/workspace/deck.pptx", "/new-project/report.docx", "/old-project/notes/report.docx", "/old-project/outputs/deck.pptx"]);
   expect(sessionFileArtifacts(session, [...events, event("tool.completed", { artifacts: [{ ...artifact, path: "/workspace/deck.pptx" }] }, { action: "work_output_delete", status: "completed" })]))
     .toHaveLength(4);
 });

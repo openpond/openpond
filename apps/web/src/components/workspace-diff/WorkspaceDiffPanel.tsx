@@ -338,9 +338,11 @@ function WorkspaceDiffPanelInner({
   ) => void;
 }) {
   const initialViewState = viewState ?? defaultWorkspaceDiffPanelViewState();
+  const [filesTabOpen, setFilesTabOpen] = useState(!renderOutputs || tabRequest?.tab === "files");
   const [overviewTabs, setOverviewTabs] = useState<number[]>([0]);
   const [activeOverviewId, setActiveOverviewId] = useState(0);
   const nextOverviewId = useRef(1);
+  const [tabOrder, setTabOrder] = useState<string[]>(["overview-0", ...initialViewState.openFilePaths]);
   const [activeTab, setActiveTab] = useState<DiffTab>(tabRequest?.tab ?? initialViewState.activeTab);
   const [menuOpen, setMenuOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -760,9 +762,11 @@ function WorkspaceDiffPanelInner({
 
   useEffect(() => {
     if (!tabRequest) return;
+    if (tabRequest.tab === "files") openFilesTab();
     if (tabRequest.tab === "outputs") {
       setOverviewTabs(current => current.includes(0) ? current : [0, ...current]);
       setActiveOverviewId(0);
+      setTabOrder(current => current.includes("overview-0") ? current : [...current, "overview-0"]);
     }
     setActiveTab(tabRequest.tab);
   }, [tabRequest]);
@@ -858,6 +862,29 @@ function WorkspaceDiffPanelInner({
     selectedDetailPath,
   ]);
 
+  function replaceNewTab(key: string) {
+    const placeholder = activeTab === "outputs" || (renderOutputs && activeTab === "files" && !filesTabOpen)
+      ? `overview-${activeOverviewId}` : null;
+    if (placeholder) setOverviewTabs(current => current.filter(id => id !== activeOverviewId));
+    setTabOrder(current => {
+      if (current.includes(key)) return placeholder ? current.filter(tab => tab !== placeholder) : current;
+      if (placeholder && current.includes(placeholder)) return current.map(tab => tab === placeholder ? key : tab);
+      return [...current, key];
+    });
+  }
+
+  function ensureNewTab() {
+    if (overviewTabs.length) {
+      setActiveOverviewId(overviewTabs[overviewTabs.length - 1]!);
+    } else {
+      const id = nextOverviewId.current++;
+      setOverviewTabs([id]);
+      setActiveOverviewId(id);
+      setTabOrder(current => [...current, `overview-${id}`]);
+    }
+    setActiveTab("outputs");
+  }
+
   function openFile(path: string, options?: { source?: boolean }) {
     setHtmlPreviewError(null);
     const htmlWorkspaceId = sandboxMode ? sandboxId : appId;
@@ -868,6 +895,8 @@ function WorkspaceDiffPanelInner({
     }
     const normalizedPath = normalizeWorkspaceDiffPath(path, workspaceRootPath);
     if (!normalizedPath) return;
+    replaceNewTab(filesWithPreview ? "files" : normalizedPath);
+    if (filesWithPreview) setFilesTabOpen(true);
     setProvidedFilePaths((current) => {
       if (!current.has(normalizedPath)) return current;
       const next = new Set(current);
@@ -906,6 +935,8 @@ function WorkspaceDiffPanelInner({
     }
     const normalizedPath = normalizeWorkspaceDiffPath(file.path, workspaceRootPath);
     if (!normalizedPath) return;
+    replaceNewTab(filesWithPreview ? "files" : normalizedPath);
+    if (filesWithPreview) setFilesTabOpen(true);
     const normalizedFile = { ...file, path: normalizedPath };
     setLoadedFiles((current) => ({ ...current, [normalizedPath]: normalizedFile }));
     setProvidedFilePaths((current) => {
@@ -1188,6 +1219,7 @@ function WorkspaceDiffPanelInner({
       });
     }
     setOpenFilePaths((current) => current.filter((candidate) => candidate !== path));
+    setTabOrder(current => current.filter(key => key !== path));
     if (providedFilePaths.has(path)) {
       setLoadedFiles((current) => {
         if (!(path in current)) return current;
@@ -1211,11 +1243,16 @@ function WorkspaceDiffPanelInner({
     if (selectedPath === path) {
       const nextFile = openFiles.find((file) => file.path !== path) ?? null;
       setSelectedPath(nextFile?.path ?? files[0]?.path ?? null);
-      if (!nextFile) setActiveTab("files");
+      if (!nextFile) {
+        if (renderOutputs) ensureNewTab();
+        else setActiveTab("files");
+      }
     }
   }
 
   function openFilesTab() {
+    replaceNewTab("files");
+    setFilesTabOpen(true);
     setActiveTab("files");
     setAddMenuOpen(false);
     setSearchOpen(false);
@@ -1231,6 +1268,8 @@ function WorkspaceDiffPanelInner({
   }
 
   function selectBreadcrumbPath(path: string | null) {
+    replaceNewTab("files");
+    setFilesTabOpen(true);
     if (path) {
       setExpandedFileTreeFolders((current) => {
         const next = new Set(current);
@@ -1261,7 +1300,7 @@ function WorkspaceDiffPanelInner({
         ? "summary"
         : activeTab === "file" && selectedPath
           ? "file"
-          : "files";
+          : renderOutputs && !filesTabOpen ? "outputs" : "files";
   const initializedLocalEmptyMessage = visibleTab === "files" ? "No files to show" : "No local changes";
   const waitingForLocalWorkspace = workspaceKind === "local_project" && !workspaceInitialized && !workspaceError;
   const panelLoading = sandboxMode ? sandboxLoading : loading;
@@ -1530,11 +1569,19 @@ function WorkspaceDiffPanelInner({
         sourceSwitcher={sourceSwitcher}
         visibleTab={visibleTab}
         toolbarActions={fileToolbar}
+        tabOrder={tabOrder}
+        filesTabOpen={filesTabOpen}
+        onCloseFilesTab={renderOutputs ? () => {
+          setFilesTabOpen(false);
+          setTabOrder(current => current.filter(key => key !== "files"));
+          if (activeTab === "files") ensureNewTab();
+        } : undefined}
         overviewTabs={renderOutputs ? overviewTabs : []}
         activeOverviewId={activeOverviewId}
         onNewOverview={renderOutputs ? () => {
           const id = nextOverviewId.current++;
           setOverviewTabs(current => [...current, id]);
+          setTabOrder(current => [...current, `overview-${id}`]);
           setActiveOverviewId(id);
           setActiveTab("outputs");
           setAddMenuOpen(false);
@@ -1544,9 +1591,17 @@ function WorkspaceDiffPanelInner({
         onCloseOverview={id => {
           const remaining = overviewTabs.filter(tabId => tabId !== id);
           setOverviewTabs(remaining);
+          setTabOrder(current => current.filter(key => key !== `overview-${id}`));
           if (id === activeOverviewId && activeTab === "outputs") {
             if (remaining.length) setActiveOverviewId(remaining[remaining.length - 1]!);
-            else setActiveTab(selectedPath ? "file" : "files");
+            else if (openFiles.length && selectedPath) setActiveTab("file");
+            else if (filesTabOpen) setActiveTab("files");
+            else {
+              const nextId = nextOverviewId.current++;
+              setOverviewTabs([nextId]);
+              setTabOrder(current => [...current, `overview-${nextId}`]);
+              setActiveOverviewId(nextId);
+            }
           }
         }}
         getFileBookmarkStatus={canManageSidebarFiles ? getSidebarFileStatus : undefined}

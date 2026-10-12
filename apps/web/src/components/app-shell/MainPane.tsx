@@ -1233,7 +1233,7 @@ export function MainPane({
       openFileRequest={
         showLabCandidateDiffPanel
           ? labCandidateReview.openFileRequest
-          : openDiffFileRequest
+          : rightPanelMode === "home" ? null : openDiffFileRequest
       }
       sidebarFileBookmarks={sidebarFileBookmarks}
       sidebarFileSourceSessionId={selectedSessionId}

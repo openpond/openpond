@@ -9,9 +9,11 @@ type FileContext = { cwd: string | null; sandboxId: string | null };
 export function sessionFileArtifacts(session: Session, events: RuntimeEvent[]): SessionFileArtifact[] {
   const files = new Map<string, SessionFileArtifact>();
   const deleted = new Set<string>();
-  const messages = new Map<string, FileContext & { text: string }>();
+  const positions = new Map<string, number>();
+  let position = 0;
+  const messages = new Map<string, FileContext & { text: string; revision: string; position: number }>();
   let context: FileContext = { cwd: session.cwd, sandboxId: cloudSandbox(session) };
-  function add(rawPath: string, title: unknown, contentType: string, sizeBytes: unknown, source: FileContext, deleting = false) {
+  function add(rawPath: string, title: unknown, contentType: string, sizeBytes: unknown, source: FileContext, deleting = false, revision?: string, filePosition = position) {
     if (/^(?!file:)[a-z][a-z\d+.-]+:/i.test(rawPath.replace(/^[A-Za-z]:[\\/]/, ""))) return;
     let target = rawPath;
     try { if (target.startsWith("file://")) target = fileURLToPath(target); } catch { return; }
@@ -24,22 +26,23 @@ export function sessionFileArtifacts(session: Session, events: RuntimeEvent[]): 
     }
     const key = `${source.sandboxId ?? "local"}:${target}`;
     if (deleting) { files.delete(key); deleted.add(key); return; }
-    if (deleted.has(key)) return;
+    if (deleted.has(key) || filePosition < (positions.get(key) ?? -1)) return;
     const parsed = SessionFileArtifactSchema.safeParse({ path: target,
       title: typeof title === "string" && title.trim() ? title : target.split(/[\\/]/).pop(),
-      contentType, sizeBytes: typeof sizeBytes === "number" ? sizeBytes : null, sandboxId: source.sandboxId });
-    if (parsed.success) { files.delete(key); files.set(key, parsed.data); }
+      contentType, revision, sizeBytes: typeof sizeBytes === "number" ? sizeBytes : null, sandboxId: source.sandboxId });
+    if (parsed.success) { files.set(key, parsed.data); positions.set(key, filePosition); }
   }
   for (const event of events) {
+    position += 1;
     const data = record(event.data);
     const snapshot = record(data?.session);
     if ((event.name === "session.started" || event.name === "session.updated") && snapshot)
       context = { cwd: typeof snapshot.cwd === "string" ? snapshot.cwd : null, sandboxId: cloudSandbox(snapshot) };
     if (event.name === "assistant.delta") {
       const id = String(data?.nativeMessageId ?? data?.messageId ?? data?.itemId ?? event.turnId ?? event.id);
-      const prior = messages.get(id) ?? { ...context, text: "" };
+      const prior = messages.get(id) ?? { ...context, text: "", revision: event.id, position };
       const text = event.output ?? (typeof data?.delta === "string" ? data.delta : "");
-      messages.set(id, { ...prior, text: data?.nativeMessageSnapshot ? text : prior.text + text });
+      messages.set(id, { ...prior, revision: event.id, position, text: data?.nativeMessageSnapshot ? text : prior.text + text });
       continue;
     }
     if (event.name !== "workspace_action_result" && event.name !== "tool.completed") continue;
@@ -54,7 +57,7 @@ export function sessionFileArtifacts(session: Session, events: RuntimeEvent[]): 
         : typeof row.path === "string" ? row.path : typeof row.artifactRef === "string" ? row.artifactRef : null;
       const mime = typeof row.contentType === "string" ? row.contentType : typeof row.mimeType === "string" ? row.mimeType : null;
       if (rawPath && mime) add(rawPath, row.title ?? row.name, mime, row.sizeBytes, source,
-        event.action === "work_output_delete" && event.status === "completed");
+        event.action === "work_output_delete" && event.status === "completed", event.id);
       Object.values(row).forEach(child => collect(child, depth + 1));
     };
     collect(event.data);
@@ -71,10 +74,10 @@ export function sessionFileArtifacts(session: Session, events: RuntimeEvent[]): 
         docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", pdf: "application/pdf",
         png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif",
         md: "text/markdown", txt: "text/plain" } as Record<string, string>)[extension ?? ""] ?? "application/octet-stream";
-      add(target, match[1], mime, null, message);
+      add(target, match[1], mime, null, message, false, message.revision, message.position);
     }
   }
-  return [...files.values()].reverse();
+  return [...files.entries()].sort(([a], [b]) => positions.get(b)! - positions.get(a)!).map(([, file]) => file);
 }
 function record(value: unknown): Record<string, unknown> | null { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null; }
 function cloudSandbox(session: Pick<Session, "workspaceKind" | "workspaceId"> | Record<string, unknown>): string | null {

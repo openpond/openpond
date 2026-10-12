@@ -20,10 +20,16 @@ export default function FilePagePreview({ file, thumbnail = true }: { file: Work
     setFailed(false);
     const fit = () => {
       const width = stage.offsetWidth;
-      if (width) stage.style.zoom = String(host.clientWidth / width);
+      if (!width) return;
+      const pageHeight = stage.scrollHeight;
+      const availableHeight = thumbnail ? host.parentElement?.clientHeight ?? 0 : 0;
+      const scale = thumbnail && availableHeight && pageHeight
+        ? Math.min(host.clientWidth / width, availableHeight / pageHeight) : host.clientWidth / width;
+      stage.style.zoom = String(scale);
     };
     const observer = new ResizeObserver(fit);
     observer.observe(host);
+    if (thumbnail && host.parentElement) observer.observe(host.parentElement);
     void (async () => {
       const bytes = Uint8Array.from(atob(file.content!), value => value.charCodeAt(0));
       if (isPresentationFile(file)) {
