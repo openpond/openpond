@@ -1,4 +1,4 @@
-import { collectorStatus, controlCollector, setCollectorSchedule, uninstallCollectorService, installCollectorService, type CollectorServiceSetup } from "@openpond/evals/native-conversations";
+import { CollectorStore, collectorStatus, controlCollector, setCollectorSchedule, uninstallCollectorService, installCollectorService, type CollectorServiceSetup } from "@openpond/evals/native-conversations";
 import { parseBooleanOption, optionString } from "../cli/common";
 import { runImportJob } from "./run";
 import { importSchedule } from "./schedule";
@@ -13,6 +13,17 @@ export async function runImporterControl(directory: string, action: string, id: 
   const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
   const json = parseBooleanOption(options.json);
   if (action === "status") { print(await collectorStatus(directory)); return true; }
+  if (action === "coverage") {
+    if (!id) throw new Error("Use openpond import coverage <connection-id>.");
+    const store = await CollectorStore.open(directory);
+    try {
+      if (!store.connections().some(connection => connection.id === id)) throw new Error("Select a retained connection from import status.");
+      const manifest = store.coverage.manifest(id);
+      if (!manifest) throw new Error("This connection has no retained source coverage. Run import sync first.");
+      print({ manifest, summary: store.coverage.summary(id) });
+    } finally { store.close(); }
+    return true;
+  }
   if (action === "cancel") { print(await controlCollector(directory, "stop")); return true; }
   if (action === "schedule") {
     if (!id) throw new Error("Use openpond import schedule <connection-id> --continual [--daily|--weekly|--hourly|--cron <expression>] or --off.");

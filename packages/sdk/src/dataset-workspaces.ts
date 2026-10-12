@@ -6,6 +6,7 @@ export * from "./dataset-preparation-contracts.js";
 export * from "./dataset-preparation-research-contracts.js";
 export * from "./dataset-preparation-workspace.js";
 export * from "./dataset-preparation-starting-state.js";
+export * from "./dataset-preparation-source-coverage.js";
 export * from "./dataset-preparation-qualification-contracts.js";
 export { OpenPondDatasetPreparationClient, DatasetPreparationRequestError } from "./dataset-preparation-client.js";
 

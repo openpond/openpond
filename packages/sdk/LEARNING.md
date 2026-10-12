@@ -138,3 +138,19 @@ tasks; existing policy limits remain unchanged. Candidates still require explici
 acceptance and serving selection. `learning.inspectTaskQueue(modelProjectId?)`
 returns the shared eligible, unconsumed task count, or explicit issues when the
 count cannot be determined.
+
+### Source coverage for task preparation
+
+`openpond-sdk/dataset-workspaces` exports `DatasetPreparationSourceSchema` and
+`reconcilePreparationSourceCoverage`. A policy's `source.excludedSessions`
+records exact unreadable source revisions with a connection ID, source-key hash,
+native revision hash, retained failure reason and explanation. Hosted preparation
+checks the original owner-scoped attestation and eligible Dataset membership.
+Exclusions cannot bypass unfinished listing, pending uploads, unknown event times
+or known eligible boundaries. Changed originals require a new policy.
+
+`coverage.complete` reports reconciled eligible membership;
+`coverage.sourceComplete` reports complete original-source coverage and remains
+false when unreadable originals are excluded. `coverage.excludedSessions` retains
+their count. These fields establish inventory reconciliation only; reconstructed
+tasks still need their own starting-state and grader qualification.
