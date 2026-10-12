@@ -14,15 +14,6 @@
   color: var(--text-on-primary);
 }
 
-.send-button.stop-button {
-  background: var(--state-hover);
-  color: var(--text-primary);
-}
-
-.send-button.stop-button:hover:not(:disabled) {
-  background: var(--state-hover);
-}
-
 .send-button.stop-button svg {
   display: block;
   transform: translateY(-0.25px);
