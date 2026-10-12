@@ -15,6 +15,13 @@ export function selectTasksetDraftModel(db: OpenPondSqliteConnection, draft: Tas
   if (!row) throw new Error("Taskset draft Model was not found in this Profile.");
   const model = ModelProjectSchema.parse(JSON.parse(row.payload));
   const tasksetRef = { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash };
+  const rewardBindingRef = taskset.metadata.rewardBinding === undefined ? null : ModelProjectVersionedRefSchema.parse(taskset.metadata.rewardBinding);
+  // Editing the tasks under the same bound Reward must preserve the owner's
+  // context, optimizer and continuation settings. A different Reward still
+  // requires a newly derived recipe through the normal defaults path.
+  const preserveRecipe = scope.source?.authoringGraph === "bound"
+    && rewardBindingRef && model.trainingSetup.rewardBindingRef
+    && sameLearningRef(rewardBindingRef, model.trainingSetup.rewardBindingRef);
   return saveModelProjectInTransaction(db, {
     schemaVersion: "openpond.modelProjectSave.v1",
     operationId: `draft-publication:${contentHash({ draftId: draft.id, revision: draft.revision, scope, tasksetRef })}`,
@@ -24,9 +31,9 @@ export function selectTasksetDraftModel(db: OpenPondSqliteConnection, draft: Tas
       trainingSetup: {
         ...model.trainingSetup,
         tasksetRef,
-        rewardBindingRef: taskset.metadata.rewardBinding === undefined ? null : ModelProjectVersionedRefSchema.parse(taskset.metadata.rewardBinding),
+        rewardBindingRef,
         tasksetRelease: null,
-        recipe: null,
+        recipe: preserveRecipe ? model.trainingSetup.recipe : null,
         ...(model.trainingSetup.evaluationTasksetRef && model.trainingSetup.tasksetRef && sameLearningRef(model.trainingSetup.evaluationTasksetRef, model.trainingSetup.tasksetRef) ? { evaluationTasksetRef: tasksetRef } : {}),
       },
     }),
