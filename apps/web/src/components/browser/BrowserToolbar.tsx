@@ -57,7 +57,7 @@ export function BrowserToolbar({
         <input
           aria-label="Browser address"
           disabled={!available}
-          placeholder={available ? "Search or enter address" : "Desktop browser unavailable"}
+          placeholder="Search or enter address"
           spellCheck={false}
           value={draftUrl}
           onChange={(event) => setDraftUrl(event.target.value)}

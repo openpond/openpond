@@ -780,6 +780,10 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   const { changeProjectTarget, submitNewProjectDialog } =
     useProjectTargetActions({
       appDispatch,
+      connection,
+      selectedSession,
+      setSessions,
+      setWorkspaceBusy,
       busy,
       cloudProjectById,
       createCloudProjectFromScratch,

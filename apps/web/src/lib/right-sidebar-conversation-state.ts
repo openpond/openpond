@@ -11,7 +11,7 @@ export function defaultRightSidebarConversationState(): RightSidebarConversation
   return {
     diffPanelOpen: false,
     diffPanelExpanded: false,
-    rightPanelMode: "changes",
+    rightPanelMode: "home",
     rightChatPanels: [],
   };
 }

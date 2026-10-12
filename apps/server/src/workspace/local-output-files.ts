@@ -16,16 +16,20 @@ export async function loadLocalOutputFile(repoPath: string, filePath: string) {
     catch (error) {
       // Generated outputs may be gitignored, but an explicit local link still
       // names a readable file. Keep the normal containment and size limits.
-      const content = await readWorkspaceFile(repoPath, target) ?? await readWorkspaceDocumentPreview(repoPath, target);
-      if (content === null) throw error;
-      return { path: filePath.trim(), status: "unchanged" as const, additions: 0, deletions: 0, patch: "", content };
+      const preview = await readOutputPreview(repoPath, target);
+      if (preview === null) throw error;
+      return { path: filePath.trim(), status: "unchanged" as const, additions: 0, deletions: 0, patch: "", ...preview };
     }
   }
   const absolute = path.resolve(target);
-  const content = await readWorkspaceFile(path.dirname(absolute), path.basename(absolute))
-    ?? await readWorkspaceDocumentPreview(path.dirname(absolute), path.basename(absolute));
-  if (content === null) throw new Error("File not found or unsupported preview format");
-  return { path: filePath.trim(), status: "unchanged" as const, additions: 0, deletions: 0, patch: "", content };
+  const preview = await readOutputPreview(path.dirname(absolute), path.basename(absolute));
+  if (preview === null) throw new Error("File not found or unsupported preview format");
+  return { path: filePath.trim(), status: "unchanged" as const, additions: 0, deletions: 0, patch: "", ...preview };
+}
+
+async function readOutputPreview(repoPath: string, filePath: string) {
+  const content = await readWorkspaceFile(repoPath, filePath);
+  return content === null ? readWorkspaceDocumentPreview(repoPath, filePath) : { content };
 }
 
 export async function loadLocalOutputImage(repoPath: string, filePath: string) {

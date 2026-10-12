@@ -1,4 +1,5 @@
 import type { RuntimeEvent, WorkspaceDiffFile, WorkspaceDiffSummary } from "@openpond/contracts";
+import { isWorkspaceImagePath } from "../../lib/workspace-images";
 import { api, type ClientConnection } from "../../api";
 import type { SandboxFileEntry, SandboxGitDiff, SandboxGitStatus, SandboxRecord } from "../../lib/sandbox-types";
 
@@ -13,7 +14,7 @@ export async function readSandboxFile(
 ): Promise<WorkspaceDiffFile> {
   let result: Awaited<ReturnType<typeof api.sandboxDownloadFile>>;
   try {
-    result = await api.sandboxDownloadFile(connection, sandboxId, path, { maxBytes: 256 * 1024 });
+    result = await api.sandboxDownloadFile(connection, sandboxId, path, { maxBytes: /\.(?:pdf|docx?|pptx)$/i.test(path) ? 20 * 1024 * 1024 : isWorkspaceImagePath(path) ? 10 * 1024 * 1024 : 256 * 1024 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!isStaleSandboxReadError(message)) throw error;
@@ -26,13 +27,16 @@ export async function readSandboxFile(
   const content = result.file.isBinary
     ? result.file.contentsBase64 || null
     : `${result.contents}${result.file.truncated ? FILE_TRUNCATED_MARKER : ""}`;
+  if (result.file.isBinary && result.file.truncated) throw new Error("This file is too large to preview completely.");
   return {
     path: result.file.path,
+    readVersion: `${result.file.sizeBytes}:${result.file.updatedAt}`,
     status: "",
     additions: 0,
     deletions: 0,
     patch: "",
     content,
+    ...(result.file.isBinary ? { contentEncoding: "base64" as const } : {}),
   };
 }
 

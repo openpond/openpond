@@ -12,6 +12,66 @@
   overflow: hidden;
 }
 
+.workspace-file-preview.document-only {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.workspace-file-preview,
+.workspace-document-preview,
+.workspace-diff-preview {
+  container-type: inline-size;
+}
+
+.workspace-diff-file-heading > div:first-child {
+  flex: 1;
+}
+
+.workspace-file-location {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.workspace-file-location > summary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.workspace-file-location > summary::-webkit-details-marker {
+  display: none;
+}
+
+.workspace-file-path-popover {
+  position: absolute;
+  z-index: 75;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(600px, calc(100cqi - 24px));
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px var(--shadow-color);
+}
+
+.workspace-file-path-popover > code {
+  display: block;
+  margin-top: 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .workspace-diff-file-heading {
   display: flex;
   align-items: center;
@@ -572,4 +632,49 @@
 
 .diff-deletion {
   color: var(--status-danger);
+}
+
+
+.workspace-active-file-preview {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-file-refresh {
+  position: absolute;
+  top: 56px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px var(--shadow-color);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.workspace-file-refresh:hover,
+.workspace-file-refresh:focus-visible {
+  background: var(--state-hover);
+}
+
+.workspace-file-refresh:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.workspace-file-refresh-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-primary);
 }

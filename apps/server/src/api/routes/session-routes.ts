@@ -22,6 +22,11 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     sendJson(response, 201, result.thread);
     return true;
   }
+  const sessionFilesMatch = /^\/v1\/sessions\/([^/]+)\/files$/.exec(requestUrl.pathname);
+  if (request.method === "GET" && sessionFilesMatch) {
+    sendJson(response, 200, await deps.sessionFilesPayload(decodeURIComponent(sessionFilesMatch[1]!)));
+    return true;
+  }
   const sessionPatchMatch = /^\/v1\/sessions\/([^/]+)$/.exec(requestUrl.pathname);
   if (request.method === "PATCH" && sessionPatchMatch) {
     markTransitionalAgentAdapter();

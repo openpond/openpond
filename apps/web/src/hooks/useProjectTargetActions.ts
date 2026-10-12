@@ -1,11 +1,18 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { ChatProvider, CloudProject, LocalProject } from "@openpond/contracts";
+import type { ChatProvider, CloudProject, LocalProject, Session } from "@openpond/contracts";
 import type { AppAction, NewProjectMode, ShowAppToast } from "../app/app-state";
+import { api, type ClientConnection } from "../api";
+import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
+import { sessionProjectAssignment } from "../lib/session-project-assignment";
 import { normalizeChatModel, projectSelectionKey } from "../lib/app-models";
 
 export function useProjectTargetActions({
   appDispatch,
+  connection,
+  selectedSession,
+  setSessions,
+  setWorkspaceBusy,
   busy,
   cloudProjectById,
   createCloudProjectFromScratch,
@@ -33,6 +40,10 @@ export function useProjectTargetActions({
   workspaceBusy,
 }: {
   appDispatch: Dispatch<AppAction>;
+  connection: ClientConnection | null;
+  selectedSession: Session | null;
+  setSessions: Dispatch<SetStateAction<Session[]>>;
+  setWorkspaceBusy: Dispatch<SetStateAction<boolean>>;
   busy: boolean;
   cloudProjectById: Map<string, CloudProject>;
   createCloudProjectFromScratch: (name: string) => Promise<unknown>;
@@ -59,9 +70,12 @@ export function useProjectTargetActions({
   showToast: ShowAppToast;
   workspaceBusy: boolean;
 }) {
+  const assignmentScope = useRef({ connection, sessionId: selectedSession?.id });
+  assignmentScope.current = { connection, sessionId: selectedSession?.id };
   const changeProjectTarget = useCallback(
-    (target: string) => {
-      if (target === projectTargetValue || busy || workspaceBusy) return;
+    async (target: string) => {
+      const needsNativeFolderRepair = selectedSession?.nativeAgent && selectedSession.nativeAgent.cwd !== selectedSession.cwd;
+      if ((target === projectTargetValue && !needsNativeFolderRepair) || busy || workspaceBusy) return;
       setError(null);
 
       if (target === "action:new-local-project") {
@@ -94,6 +108,30 @@ export function useProjectTargetActions({
       const separatorIndex = target.indexOf(":");
       const kind = separatorIndex >= 0 ? target.slice(0, separatorIndex) : "";
       const projectId = separatorIndex >= 0 ? target.slice(separatorIndex + 1) : "";
+      if (selectedSession && (kind === "local" || kind === "cloud")) {
+        const project = kind === "local" ? localProjectById.get(projectId) : cloudProjectById.get(projectId);
+        if (!project || !connection) return;
+        if (isCodexHistorySessionId(selectedSession.id)) {
+          showToast("Imported native history cannot change its project. Start a new task in that project.", "error");
+          return;
+        }
+        setWorkspaceBusy(true);
+        try {
+          const updated = await api.patchSession(connection, selectedSession.id,
+            sessionProjectAssignment(selectedSession, project, kind, [...cloudProjectById.values()]));
+          setSessions(current => current.map(session => session.id === updated.id ? updated : session));
+          if (assignmentScope.current.connection !== connection || assignmentScope.current.sessionId !== selectedSession.id) return;
+          const projectKey = projectSelectionKey(kind, project.id);
+          appDispatch({ type: "selectSession", sessionId: updated.id, appId: updated.appId, projectId: projectKey });
+          expandProject(projectKey);
+          showToast(`Attached this chat to ${project.name}.`, "success");
+        } catch (error) {
+          if (assignmentScope.current.sessionId === selectedSession.id) showToast(error instanceof Error ? error.message : "Could not attach this chat.", "error");
+        } finally {
+          setWorkspaceBusy(false);
+        }
+        return;
+      }
       if (kind === "local") {
         const project = localProjectById.get(projectId);
         if (!project) {
@@ -122,6 +160,10 @@ export function useProjectTargetActions({
     },
     [
       appDispatch,
+      connection,
+      selectedSession,
+      setSessions,
+      setWorkspaceBusy,
       busy,
       cloudProjectById,
       expandProject,

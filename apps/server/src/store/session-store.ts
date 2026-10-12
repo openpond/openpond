@@ -23,8 +23,9 @@ export type ReservedSessionCreation = {
 
 export function createSessionStore(deps: {
   store: Pick<SqliteStore,
-    "sessionCount" | "insertSessionAtFront" | "getSession" | "updateSession" | "getTurn" | "insertTurn" | "updateTurn">;
+    "turnsForSession" | "sessionCount" | "insertSessionAtFront" | "getSession" | "updateSession" | "getTurn" | "insertTurn" | "updateTurn">;
   defaultSessionCwd: (appId?: string | null) => string;
+  qualifyNativeWorkspace?: (native: NonNullable<Session["nativeAgent"]>, cwd: string) => Promise<void>;
   createManagedLocalWorkCwd?: (sessionId: string) => Promise<string>;
   loadAppPreferences?: () => Promise<AppPreferences>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -211,18 +212,37 @@ export function createSessionStore(deps: {
     payload: unknown
   ): Promise<Session> {
     const input = PatchSessionRequestSchema.parse(payload);
-    const updated = await store.updateSession(sessionId, (session) =>
-      normalizeSession(
+    const original = await store.getSession(sessionId);
+    if (!original) throw new Error("Session not found");
+    let qualifiedNative: Session["nativeAgent"];
+    if (original.nativeAgent && input.cwd !== undefined && input.cwd !== original.nativeAgent.cwd) {
+      if (!input.cwd) throw new Error("A native conversation needs a local project folder. Start a new cloud chat to use a cloud project.");
+      if (original.status === "active" || (await store.turnsForSession(sessionId, 10_000)).some(turn => turn.status === "in_progress"))
+        throw new Error("Finish or stop the current response before changing its project.");
+      if (original.nativeAgent.provider !== original.provider || (input.provider !== undefined && input.provider !== original.provider))
+        throw new Error("Restore the original agent configuration before changing this conversation's project.");
+      if (!deps.qualifyNativeWorkspace) throw new Error("This runtime cannot move a native conversation to another folder.");
+      await deps.qualifyNativeWorkspace(original.nativeAgent, input.cwd);
+      if ((await store.turnsForSession(sessionId, 10_000)).some(turn => turn.status === "in_progress"))
+        throw new Error("A response started while changing projects. Stop it and try again.");
+      qualifiedNative = { ...original.nativeAgent, cwd: input.cwd };
+    }
+    const updated = await store.updateSession(sessionId, (session) => {
+      if (qualifiedNative && (session.status === "active" || session.provider !== original.provider
+        || session.cwd !== original.cwd || JSON.stringify(session.nativeAgent) !== JSON.stringify(original.nativeAgent)))
+        throw new Error("The conversation changed while attaching its project. Try again after the current work finishes.");
+      return normalizeSession(
         {
           ...session,
           ...input,
+          ...(qualifiedNative ? { nativeAgent: qualifiedNative } : {}),
           ...(input.metadata !== undefined ? { metadata: preserveDeviceSessionIdentity(session.metadata, input.metadata) } : {}),
           ...(input.title !== undefined ? { metadata: { ...session.metadata, ...preserveDeviceSessionIdentity(session.metadata, input.metadata), titleSource: "manual", autoTitle: null } } : {}),
           updatedAt: session.updatedAt,
         },
         input
-      )
-    );
+      );
+    });
     if (!updated) throw new Error("Session not found");
     await appendRuntimeEvent(event({
       sessionId,
