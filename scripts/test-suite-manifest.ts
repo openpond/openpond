@@ -156,6 +156,7 @@ export const ROOT_QUALIFICATION_TESTS = [
   "tests/candidate-command-isolation.test.ts",
   "tests/python-correctness-preset.integration.test.ts",
   "tests/profile-external-dataset-boundary.test.ts",
+  "apps/server/src/harness/profile-work-completion.test.ts",
   "apps/server/src/training/advanced-refiner-work-confinement.test.ts",
   "apps/server/src/training/local-grader-fixture-confinement.test.ts",
 ] as const;
