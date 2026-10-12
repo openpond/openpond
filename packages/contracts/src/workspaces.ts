@@ -54,6 +54,8 @@ export const WorkspaceDiffFileSchema = z.object({
   deletions: z.number(),
   patch: z.string(),
   content: z.string().nullable().optional().default(null),
+  contentType: z.string().optional(),
+  contentEncoding: z.enum(["base64"]).optional(),
 });
 
 export type WorkspaceDiffFile = z.infer<typeof WorkspaceDiffFileSchema>;

@@ -314,6 +314,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@aiden0z/pptx-renderer':
+        specifier: 1.3.0
+        version: 1.3.0
       '@openpond/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
@@ -721,6 +724,14 @@ packages:
     resolution: {integrity: sha512-ZORuxsuEnLjRly7t6Ad7zAsWitjWsyprswyPUHz/yycPb+tTm3DGa8XheaHhRXqX8LS9snuxaYavXSRA50TlHw==}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
+
+  '@aiden0z/pptx-renderer@1.3.0':
+    resolution: {integrity: sha512-VEXSn2vmdgTwWaw96bhsEyZiSxlrhF5O5dONI+dSBXmg1WH2XM9O1eyY2LFQ68J1SY+iZnE5BVgFGGX6iox9Og==}
+    peerDependencies:
+      pdfjs-dist: '>=5 <7'
+    peerDependenciesMeta:
+      pdfjs-dist:
+        optional: true
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -2029,6 +2040,9 @@ packages:
   duplexer2@0.1.4:
     resolution: {integrity: sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==}
 
+  echarts@6.1.0:
+    resolution: {integrity: sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==}
+
   edge-runtime@2.5.9:
     resolution: {integrity: sha512-pk+k0oK0PVXdlT4oRp4lwh+unuKB7Ng4iZ2HB+EZ7QCEQizX360Rp/F4aRpgpRgdP2ufB35N+1KppHmYjqIGSg==}
     engines: {node: '>=16'}
@@ -2536,6 +2550,9 @@ packages:
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
 
+  immediate@3.0.6:
+    resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
+
   immer@11.1.11:
     resolution: {integrity: sha512-qzXuyXAkPySAGYkfsAwodDPWT8Zm7/Uo5BNt4BjhMhG5WlWyZZ4wQqnWwdS8kjlQ1Cwu6gjw3A6+0gTQwlyYtw==}
 
@@ -2668,6 +2685,9 @@ packages:
   jsonfile@6.2.1:
     resolution: {integrity: sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==}
 
+  jszip@3.10.2:
+    resolution: {integrity: sha512-3l+rb15IOWtUhU0H5MFqES/T6Kh7abYwjosBey/vD6hDt8zoEffkSC5Ws5SGtgVw3gBx2NEbhTeSW1+kWkpyTQ==}
+
   katex@0.18.5:
     resolution: {integrity: sha512-1FU5H3RjGJVj6GT9fMjf2uMIXmPQp232aXS3UEeQzf0dxefHg/CKMvNB3DuOC46LFG/E5PNxrE8dOwB782FDGg==}
     hasBin: true
@@ -2680,6 +2700,9 @@ packages:
 
   lazy-val@1.0.5:
     resolution: {integrity: sha512-0/BnGCCfyUMkBpeDgWihanIAF9JmZhHBgUhEqzvf+adhNGLoP6TaiI5oF8oyb3I45P+PcnrqihSf01M0l0G5+Q==}
+
+  lie@3.3.0:
+    resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
 
   lodash.escaperegexp@4.1.2:
     resolution: {integrity: sha512-TM9YBvyC84ZxE3rgfefxUWiQKLilstD6k7PTGt6wfbtXF8ixIJLOL3VYyV/z+ZiPLsVxAsKAFVwWlWeb2Y8Yyw==}
@@ -2847,6 +2870,9 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
+  mtx-decompressor@1.8.0:
+    resolution: {integrity: sha512-suXE376dUmLX4PPxSmVmdWvu09oeesqmlE5NfKjb6XIUpDRjF2Mn47kM8nXWRkHb3l7ac0P+Crp0J0O984imRQ==}
+
   nanoid@3.3.16:
     resolution: {integrity: sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -2971,6 +2997,9 @@ packages:
   p-limit@3.1.0:
     resolution: {integrity: sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==}
     engines: {node: '>=10'}
+
+  pako@1.0.11:
+    resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
 
   parse-ms@2.1.0:
     resolution: {integrity: sha512-kHt7kzLoS9VBZfUsiKjv43mr91ea+U05EyKkEtqp7vNbHxmaVuEqN7XxeEVnGrMtYOAxGrDElSi96K7EgO1zCA==}
@@ -3275,6 +3304,9 @@ packages:
   set-blocking@2.0.0:
     resolution: {integrity: sha512-KiKBS8AnWGEyLzofFfmvKwpdPzqiy16LvQfK3yv/fVH7Bj13/wl3JSR1J+rfgRE9q7xUJK4qvgS8raSOeLUehw==}
 
+  setimmediate@1.0.5:
+    resolution: {integrity: sha512-MATJdZp8sLqDl/68LfQmbP8zKPLQNV6BIZoIgrscFDQ+RsvK/BxeDQOgyxKKoh0y/8h3BqVFnCqQ/gd+reiIXA==}
+
   setprototypeof@1.2.0:
     resolution: {integrity: sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==}
 
@@ -3468,6 +3500,9 @@ packages:
 
   ts-toolbelt@6.15.5:
     resolution: {integrity: sha512-FZIXf1ksVyLcfr7M317jbB67XFJhOO1YqdTcuGaq9q5jLUoTikukZ+98TPjKiP2jC5CgmYdWWYs0s2nLSU0/1A==}
+
+  tslib@2.3.0:
+    resolution: {integrity: sha512-N82ooyxVNm6h1riLCoyS9e3fuJ3AMG2zIZs2Gd1ATcSFjSA23Q0fzjjZeh0jbJvWVDZ0cJT8yaNNaaXHzueNjg==}
 
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
@@ -3777,11 +3812,20 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
+  zrender@6.1.0:
+    resolution: {integrity: sha512-oEGMDB6pOP2S6OwRR4PdVv610zrjnA3Bh+JnSG12fYJlBKjtNAoEb5fSUoCOOINlH96I2fU38/A2UpRKs67xYQ==}
+
 snapshots:
 
   '@agentclientprotocol/sdk@1.7.0(zod@4.4.3)':
     dependencies:
       zod: 4.4.3
+
+  '@aiden0z/pptx-renderer@1.3.0':
+    dependencies:
+      echarts: 6.1.0
+      jszip: 3.10.2
+      mtx-decompressor: 1.8.0
 
   '@babel/code-frame@7.29.7':
     dependencies:
@@ -5124,6 +5168,11 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
+  echarts@6.1.0:
+    dependencies:
+      tslib: 2.3.0
+      zrender: 6.1.0
+
   edge-runtime@2.5.9:
     dependencies:
       '@edge-runtime/format': 2.2.1
@@ -5723,6 +5772,8 @@ snapshots:
 
   ieee754@1.2.1: {}
 
+  immediate@3.0.6: {}
+
   immer@11.1.11: {}
 
   inflight@1.0.6:
@@ -5823,6 +5874,13 @@ snapshots:
     optionalDependencies:
       graceful-fs: 4.2.11
 
+  jszip@3.10.2:
+    dependencies:
+      lie: 3.3.0
+      pako: 1.0.11
+      readable-stream: 2.3.8
+      setimmediate: 1.0.5
+
   katex@0.18.5:
     dependencies:
       commander: 15.0.0
@@ -5834,6 +5892,10 @@ snapshots:
   kuler@2.0.0: {}
 
   lazy-val@1.0.5: {}
+
+  lie@3.3.0:
+    dependencies:
+      immediate: 3.0.6
 
   lodash.escaperegexp@4.1.2: {}
 
@@ -5974,6 +6036,8 @@ snapshots:
 
   ms@2.1.3: {}
 
+  mtx-decompressor@1.8.0: {}
+
   nanoid@3.3.16: {}
 
   negotiator@1.1.0:
@@ -6081,6 +6145,8 @@ snapshots:
   p-limit@3.1.0:
     dependencies:
       yocto-queue: 0.1.0
+
+  pako@1.0.11: {}
 
   parse-ms@2.1.0: {}
 
@@ -6409,6 +6475,8 @@ snapshots:
 
   set-blocking@2.0.0: {}
 
+  setimmediate@1.0.5: {}
+
   setprototypeof@1.2.0: {}
 
   shebang-command@2.0.0:
@@ -6605,6 +6673,8 @@ snapshots:
       yn: 3.1.1
 
   ts-toolbelt@6.15.5: {}
+
+  tslib@2.3.0: {}
 
   tslib@2.8.1: {}
 
@@ -6863,3 +6933,7 @@ snapshots:
   zod@3.25.76: {}
 
   zod@4.4.3: {}
+
+  zrender@6.1.0:
+    dependencies:
+      tslib: 2.3.0

@@ -1,6 +1,6 @@
 import type { WorkspaceDiffFile } from "@openpond/contracts";
 
-export type DiffTab = "goal" | "summary" | "files" | "file";
+export type DiffTab = "goal" | "summary" | "files" | "file" | "outputs";
 
 export type WorkspaceDiffPanelViewState = {
   activeTab: DiffTab;
@@ -10,7 +10,7 @@ export type WorkspaceDiffPanelViewState = {
 
 export type WorkspaceDiffTabRequest = {
   id: number;
-  tab: Extract<DiffTab, "files" | "summary">;
+  tab: Extract<DiffTab, "files" | "summary" | "file" | "outputs">;
 };
 
 export type WorkspaceDiffOpenFileRequest = {
@@ -165,7 +165,11 @@ export function isMarkdownPath(filePath: string): boolean {
 }
 
 export function isDocumentPath(filePath: string): boolean {
-  return /\.(?:doc|docx|pdf)$/i.test(filePath);
+  return /\.(?:doc|docx|pdf|pptx)$/i.test(filePath);
+}
+
+export function isPresentationFile(file: Pick<WorkspaceDiffFile, "path" | "contentType">): boolean {
+  return /\.pptx$/i.test(file.path) || file.contentType === "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 }
 
 function normalizeWorkspaceDiffPathValue(value: string): string {

@@ -95,10 +95,11 @@ import {
   type ComposerAttachmentRequest,
 } from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
-import { outputHandoffPrompt } from "../../lib/experience-handoff";
 import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
 import { MainPanePonder } from "./MainPanePonder";
 import { mainPaneAccountScopeKey } from "./main-pane-account-scope";
+import { RightSidebarHomeActions } from "./RightSidebarHomePanel";
+import { RightSidebarOverview } from "./RightSidebarOverview";
 
 import {
   AppsView,
@@ -118,7 +119,6 @@ import {
   TeamChatProView,
   TeamChatView,
   CollaborationTabs,
-  WorkSidebarPanel,
   CommunityView,
   WorkspaceDiffPanel,
 } from "./MainPaneLazyViews";
@@ -212,7 +212,6 @@ export function MainPane({
   onTrainingChatTaskSelect,
   onTrainingChatHandoffDismiss,
   onOpenSession,
-  onExperienceHandoff,
   cloudProjects,
   projects,
   projectsAccountBaseUrl,
@@ -264,6 +263,7 @@ export function MainPane({
   refreshWorkspaceDiff,
   onToggleDiffPanelExpanded,
   onShowDiffPanel,
+  onShowFilePreview,
   onShowBrowserPanel,
   onShowTrainingDraftPanel,
   onShowFilesPanel,
@@ -693,7 +693,7 @@ export function MainPane({
     rightPanelMode === "changes" &&
     Boolean(labSkillSource);
   const showLocalDiffPanel =
-    (view === "chat" || view === "labs") && Boolean(activeWorkspaceAppId);
+    (view === "chat" || view === "labs") && Boolean(activeWorkspaceAppId || openDiffFileRequest?.file);
   const showEmptyRightChatFallbackPanel =
     view === "chat" &&
     diffPanelOpen &&
@@ -750,10 +750,12 @@ export function MainPane({
   const showDiffPanel =
     !showLabSkillPanel &&
     (showLabCandidateDiffPanel ||
+      (view === "chat") ||
       showLocalDiffPanel ||
       showChatSandboxDiffPanel) &&
     diffPanelOpen &&
     (rightPanelMode === "changes" ||
+      (rightPanelMode === "home" && view === "chat") ||
       (rightPanelMode === "goal" && hasGoalDetails) ||
       showEmptyRightChatFallbackPanel);
   const showBrowserPanel =
@@ -779,11 +781,6 @@ export function MainPane({
     diffPanelOpen &&
     rightPanelMode === "chat" &&
     Boolean(teamChat.agentConversation);
-  const showWorkPanel =
-    experience === "work" &&
-    view === "chat" &&
-    diffPanelOpen &&
-    rightPanelMode === "home";
   const showRightHomePanel = shouldShowRightSidebarHomePanel({
     supportedView:
       (view === "chat" && repositoryWork) || view === "labs",
@@ -796,8 +793,7 @@ export function MainPane({
       showTrainingDraftPanel ||
       showNativeSkillPanel ||
       showTeamAiThreadPanel ||
-      showTeamAgentConversationPanel ||
-      showWorkPanel,
+      showTeamAgentConversationPanel,
   });
   const showRightPanel = !evaluationSidebarActive && (
     showDiffPanel ||
@@ -808,7 +804,6 @@ export function MainPane({
     showNativeSkillPanel ||
     showTeamAiThreadPanel ||
     showTeamAgentConversationPanel ||
-    showWorkPanel ||
     showRightHomePanel);
   const rightPanelExpanded =
     showRightPanel && rightPanelMode !== "chat" && diffPanelExpanded;
@@ -1104,7 +1099,7 @@ export function MainPane({
     activeWorkspaceAppId,
     rightSidebarUsesSandbox,
     rightSidebarSandboxId,
-    onShowDiffPanel,
+    onShowDiffPanel: onShowFilePreview,
     showToast,
     workspaceRootPath,
     setOpenDiffFileRequest,
@@ -1150,7 +1145,7 @@ export function MainPane({
           imageUrl = payload.url;
         }
         if (htmlUrl) handleOpenBrowserLink(htmlUrl);
-        else onShowDiffPanel();
+        else onShowFilePreview();
         setOpenDiffFileRequest({
           id: Date.now(),
           path,
@@ -1167,13 +1162,25 @@ export function MainPane({
         );
       }
     },
-    [connection, handleOpenBrowserLink, onShowDiffPanel, showToast],
+    [connection, handleOpenBrowserLink, onShowFilePreview, showToast],
   );
   const workspaceStatusLoading =
     workspaceBusy && Boolean(activeWorkspaceAppId) && !workspaceState;
   const candidateSidebarId = labCandidateReview.selection
     ? `candidate:${labCandidateReview.selection.runId}:${labCandidateReview.selection.candidateId}`
     : null;
+  const workPanel = view === "chat" ? (openFile: () => void) => (
+    <RightSidebarOverview messages={chatMessages} events={runtimeEvents} onOpenFile={handleOpenFileInSidebar}
+      actions={<RightSidebarHomeActions terminalOpen={terminalOpen} sideChatAvailable
+        onOpenFile={openFile} onOpenBrowser={onShowBrowserPanel} onOpenFiles={onShowFilesPanel}
+        onOpenReview={onShowDiffPanel} onOpenSideChat={onAddRightChat}
+        onOpenTrainingDraft={onShowTrainingDraftPanel} trainingDraftAvailable={Boolean(selectedSessionId)}
+        onToggleTerminal={onToggleTerminal} />}
+    />
+  ) : null;
+  const workOutputsTabRequest = useMemo(() =>
+    rightPanelMode === "home" && view === "chat" ? { id: -1, tab: "outputs" as const } : rightPanelTabRequest,
+    [view, rightPanelMode, rightPanelTabRequest]);
   const diffPanel = showDiffPanel ? (
     <WorkspaceDiffPanel
       appId={
@@ -1239,7 +1246,8 @@ export function MainPane({
       sourceSwitcher={
         showLabCandidateDiffPanel ? null : rightSidebarSourceSwitcher
       }
-      tabRequest={rightPanelTabRequest}
+      tabRequest={workOutputsTabRequest}
+      renderOutputs={workPanel ?? undefined}
       viewState={workspaceDiffPanelViewState}
       workspaceName={
         showLabCandidateDiffPanel
@@ -1401,47 +1409,6 @@ export function MainPane({
       onToggleTerminal={onToggleTerminal}
     />
   ) : null;
-  const workPanel = showWorkPanel ? (
-    <WorkSidebarPanel
-      chatMessages={chatMessages}
-      connection={connection}
-      contextWindowStatus={contextWindowStatus}
-      expanded={diffPanelExpanded}
-      runtimeEvents={runtimeEvents}
-      sessionId={selectedSessionId}
-      showToast={showToast}
-      onResizeStart={onDiffPanelResizeStart}
-      onToggleExpanded={onToggleDiffPanelExpanded}
-      onUseOutput={(file) =>
-        setComposerAttachmentRequest({ id: Date.now(), file })
-      }
-      onHandoffOutput={async (target, output, file) => {
-        await onExperienceHandoff({
-          target,
-          sourceSessionId: selectedSessionId!,
-          output,
-          prompt: outputHandoffPrompt(output, target),
-        });
-        if (file) {
-          setComposerAttachmentRequest({ id: Date.now(), file });
-        }
-      }}
-      onReviseOutput={(output, file, annotation) => {
-        setComposerAttachmentRequest({ id: Date.now(), file });
-        composerDraftStore.set(
-          `Create revision ${output.revision + 1} of "${
-            output.title
-          }" from the attached revision ${
-            output.revision
-          }. Apply only this requested change:\n\n${annotation}`
-        );
-      }}
-      onAgentPackageInstalled={async () => {
-        if (!connection) return;
-        onPayload(await api.bootstrap(connection));
-      }}
-    />
-  ) : null;
   const trainingDraftPanel = showTrainingDraftPanel ? (
     <Suspense fallback={null}>
       <TrainingDraftPanel
@@ -1496,7 +1463,6 @@ export function MainPane({
     diffPanel ??
     browserPanel ??
     trainingDraftPanel ??
-    workPanel ??
     homePanel;
   const terminalPanel = (
     <Suspense fallback={null}>

@@ -324,7 +324,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     openExistingProjectPathDialog,
     openUrlInBrowserPanel,
     showBrowserPanel,
-    showChangesPanel,
     showGoalSidebarTab,
     rightChatTrainingLaunchRequest,
     setRightChatTrainingLaunchRequest,
@@ -1378,7 +1377,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           onDiffPanelResizeStart: startDiffPanelResize,
           onToggleDiffPanelExpanded: () =>
             setDiffPanelExpanded((expanded) => !expanded),
-          onShowDiffPanel: showChangesPanel,
+          onShowDiffPanel: () => showRightPanelDiffTab("files"),
+          onShowFilePreview: () => showRightPanelDiffTab("file"),
           onShowBrowserPanel: showBrowserPanel,
           onShowFilesPanel: () => showRightPanelDiffTab("files"),
           onShowGoalSidebarTab: showGoalSidebarTab,

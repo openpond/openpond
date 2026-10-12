@@ -76,6 +76,8 @@ const BINARY_WORKSPACE_EXTENSIONS = new Set([
   ".mp4",
   ".pdf",
   ".png",
+  ".ppt",
+  ".pptx",
   ".sqlite",
   ".tar",
   ".webp",
@@ -98,7 +100,12 @@ const LOCAL_VIDEO_CONTENT_TYPES = new Map<string, string>([
   [".mp4", "video/mp4"],
   [".webm", "video/webm"],
 ]);
-const WORKSPACE_DOCUMENT_EXTENSIONS = new Set([".doc", ".docx", ".pdf"]);
+const WORKSPACE_DOCUMENT_CONTENT_TYPES = new Map([
+  [".doc", "application/msword"],
+  [".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  [".pdf", "application/pdf"],
+  [".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+]);
 
 function safeAppSegment(appId: string): string {
   return appId.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 120) || "app";
@@ -155,7 +162,10 @@ export async function readWorkspaceFile(repoPath: string, filePath: string): Pro
     const stat = await fs.lstat(target);
     if (!stat.isFile()) return null;
     if (!isReadableTextWorkspaceFile(filePath, stat.size)) return null;
-    return truncateFileContent(await fs.readFile(target, "utf8"));
+    const bytes = await fs.readFile(target);
+    // Extensionless generated artifacts must never enter the text editor.
+    if (bytes.includes(0)) return null;
+    return truncateFileContent(bytes.toString("utf8"));
   } catch {
     return null;
   }
@@ -164,21 +174,20 @@ export async function readWorkspaceFile(repoPath: string, filePath: string): Pro
 export async function readWorkspaceDocumentPreview(
   repoPath: string,
   filePath: string,
-): Promise<string | null> {
+): Promise<{ content: string; contentType: string; contentEncoding: "base64" } | null> {
   const normalizedPath = normalizeWorkspaceFilePath(filePath);
-  if (
-    !normalizedPath ||
-    !WORKSPACE_DOCUMENT_EXTENSIONS.has(path.extname(normalizedPath).toLowerCase())
-  ) {
-    return null;
-  }
+  if (!normalizedPath) return null;
   const target = path.resolve(repoPath, normalizedPath);
   const root = path.resolve(repoPath);
   if (target !== root && !target.startsWith(`${root}${path.sep}`)) return null;
   try {
     const stat = await fs.lstat(target);
     if (!stat.isFile() || stat.size > MAX_WORKSPACE_DOCUMENT_BYTES) return null;
-    return (await fs.readFile(target)).toString("base64");
+    const bytes = await fs.readFile(target);
+    const contentType = WORKSPACE_DOCUMENT_CONTENT_TYPES.get(path.extname(normalizedPath).toLowerCase())
+      ?? (bytes.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])) && bytes.includes(Buffer.from("ppt/presentation.xml"))
+        ? WORKSPACE_DOCUMENT_CONTENT_TYPES.get(".pptx") : undefined);
+    return contentType ? { content: bytes.toString("base64"), contentType, contentEncoding: "base64" } : null;
   } catch {
     return null;
   }
