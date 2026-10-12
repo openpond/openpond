@@ -115,6 +115,11 @@ export function WorkspaceDiffTabs({
   onToggleExpanded: () => void;
 }) {
   const addAnchorRef = useRef<HTMLDivElement | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    tabsRef.current?.querySelector<HTMLButtonElement>('button[role="tab"][aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeOverviewId, openFiles.length, selectedPath, visibleTab]);
 
   useEffect(() => {
     if (!addMenuOpen && !searchOpen) return undefined;
@@ -176,6 +181,7 @@ export function WorkspaceDiffTabs({
         className="workspace-diff-tabs"
         role="tablist"
         aria-label="Right sidebar views"
+        ref={tabsRef}
         onKeyDown={handleTabListKeyDown}
       >
         {overviewTabs.map(id => (
@@ -292,6 +298,7 @@ export function WorkspaceDiffTabs({
             ) : null}
           </div>
         ))}
+      </div>
         <div className="workspace-diff-add-anchor" ref={addAnchorRef}>
           <button
             type="button"
@@ -362,7 +369,6 @@ export function WorkspaceDiffTabs({
             </div>
           )}
         </div>
-      </div>
       {sourceSwitcher || sourceStatus ? (
         <div className="workspace-diff-source-bar" aria-label="Workspace source">
           {sourceSwitcher ? (

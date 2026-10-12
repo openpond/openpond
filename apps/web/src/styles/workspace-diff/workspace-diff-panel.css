@@ -65,6 +65,13 @@
   align-items: center;
   gap: 5px;
   min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.workspace-diff-tabs > .workspace-diff-tab {
+  flex-shrink: 0;
 }
 
 .workspace-diff-source-bar {

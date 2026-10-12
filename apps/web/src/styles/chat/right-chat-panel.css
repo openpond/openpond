@@ -161,7 +161,7 @@
   align-self: center;
   justify-self: center;
   width: min(100%, 800px);
-  padding: 32px;
+  padding: 24px;
 }
 
 .right-sidebar-overview-files,
@@ -171,28 +171,84 @@
 }
 
 .right-sidebar-overview-files {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
   margin-bottom: 28px;
 }
 
-.right-sidebar-overview h3 {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
+.right-sidebar-overview .activity-artifact {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  grid-column: auto;
+  max-width: none;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
 }
 
-.right-sidebar-overview .activity-artifact {
+.right-sidebar-overview .activity-artifact-name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
   width: 100%;
+  padding: 14px 10px 34px;
+  text-align: center;
+}
+
+.right-sidebar-overview .activity-artifact-name > svg {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.right-sidebar-overview .activity-artifact-name > strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.right-sidebar-overview .activity-artifact-actions {
+  position: absolute;
+  right: 7px;
+  bottom: 6px;
 }
 
 .right-sidebar-overview .right-sidebar-home-actions {
   width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
-@container (min-width: 600px) {
-  .right-sidebar-overview .right-sidebar-home-actions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.right-sidebar-overview .right-sidebar-home-row {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  align-content: center;
+  gap: 8px;
+  height: 72px;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.right-sidebar-overview .right-sidebar-home-row > span {
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.right-sidebar-overview .right-sidebar-home-chip {
+  display: none;
 }
 
 .right-sidebar-home-row {

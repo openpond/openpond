@@ -27,12 +27,10 @@ export function RightSidebarOverview({ messages, events, actions, onOpenFile }: 
       <div className="right-sidebar-overview-content">
         {files.length ? (
           <section className="right-sidebar-overview-files" aria-label="Thread files">
-            <h3>Files</h3>
             {files.map(file => <ActivityFileArtifact key={file.path} artifact={file} onOpenFileInSidebar={onOpenFile} />)}
           </section>
         ) : null}
         <section className="right-sidebar-overview-tools" aria-label="Tools">
-          <h3>Tools</h3>
           {actions}
         </section>
       </div>
