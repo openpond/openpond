@@ -341,7 +341,7 @@ function WorkspaceDiffPanelInner({
   const [overviewTabs, setOverviewTabs] = useState<number[]>([0]);
   const [activeOverviewId, setActiveOverviewId] = useState(0);
   const nextOverviewId = useRef(1);
-  const [activeTab, setActiveTab] = useState<DiffTab>(initialViewState.activeTab);
+  const [activeTab, setActiveTab] = useState<DiffTab>(tabRequest?.tab ?? initialViewState.activeTab);
   const [menuOpen, setMenuOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -594,10 +594,11 @@ function WorkspaceDiffPanelInner({
     if (workspaceDiffPanelViewStatesEqual(appliedViewStateRef.current, next)) return;
     appliedViewStateRef.current = next;
     reportedViewStateRef.current = next;
-    setActiveTab(next.activeTab);
+    // Workspace hydration must not displace the explicit New tab request.
+    setActiveTab(current => tabRequest?.tab === "outputs" && current === "outputs" ? current : next.activeTab);
     setOpenFilePaths(next.openFilePaths);
     setSelectedPath(next.selectedPath);
-  }, [viewState, workspaceRootPath]);
+  }, [viewState, workspaceRootPath, tabRequest?.tab]);
 
   useEffect(() => {
     if (providedFilePaths.size > 0) return;

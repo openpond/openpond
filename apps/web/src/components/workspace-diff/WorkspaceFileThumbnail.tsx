@@ -20,7 +20,7 @@ export function WorkspaceFileThumbnail({ path, connection, workspaceId, sandboxI
   const [visible, setVisible] = useState(false);
   const [loaded, setLoaded] = useState<{ key: string; file: WorkspaceDiffFile } | null>(null);
   const image = isWorkspaceImagePath(path);
-  const sourceId = workspaceId || localFileWorkspaceId(path);
+  const sourceId = localFileWorkspaceId(path) || workspaceId;
   const key = `${connectionQueryScope(connection)}:${sourceId}:${sandboxId ?? ""}:${path}`;
   const imageUrl = useWorkspaceImageUrl(connection, visible && image && !sandboxId ? sourceId : null, path);
   useEffect(() => {

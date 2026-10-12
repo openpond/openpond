@@ -3,7 +3,6 @@ import {
   Clipboard,
   ChartColumnStacked,
   FolderOpen,
-  Globe2,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -25,7 +24,6 @@ export function RightSidebarHomePanel({
   expanded,
   terminalOpen,
   sideChatAvailable,
-  onOpenBrowser,
   onOpenFiles,
   onOpenReview,
   onOpenSideChat,
@@ -38,7 +36,6 @@ export function RightSidebarHomePanel({
   expanded: boolean;
   terminalOpen: boolean;
   sideChatAvailable: boolean;
-  onOpenBrowser: () => void;
   onOpenFiles: () => void;
   onOpenReview: () => void;
   onOpenSideChat: () => void;
@@ -80,7 +77,7 @@ export function RightSidebarHomePanel({
       </div>
       <div className="right-sidebar-home-body">
         <RightSidebarHomeActions terminalOpen={terminalOpen} sideChatAvailable={sideChatAvailable}
-          onOpenBrowser={onOpenBrowser} onOpenFiles={onOpenFiles} onOpenReview={onOpenReview}
+          onOpenFiles={onOpenFiles} onOpenReview={onOpenReview}
           onOpenSideChat={onOpenSideChat} onOpenTrainingDraft={onOpenTrainingDraft}
           trainingDraftAvailable={trainingDraftAvailable} onToggleTerminal={onToggleTerminal} />
       </div>
@@ -89,17 +86,16 @@ export function RightSidebarHomePanel({
 }
 
 export function RightSidebarHomeActions({
-  terminalOpen, sideChatAvailable, onOpenBrowser, onOpenFiles, onOpenFile, onOpenReview,
+  terminalOpen, sideChatAvailable, onOpenFiles, onOpenFile, onOpenReview,
   onOpenSideChat, onOpenTrainingDraft, trainingDraftAvailable, onToggleTerminal,
 }: Pick<ComponentProps<typeof RightSidebarHomePanel>,
-  | "terminalOpen" | "sideChatAvailable" | "onOpenBrowser" | "onOpenFiles"
+  | "terminalOpen" | "sideChatAvailable" | "onOpenFiles"
   | "onOpenReview" | "onOpenSideChat" | "onOpenTrainingDraft"
   | "trainingDraftAvailable" | "onToggleTerminal"
 > & { onOpenFile?: () => void }) {
   const actions: RightSidebarHomeAction[] = [
     { id: "review", label: "Review", meta: "Diffs", icon: Clipboard, onSelect: onOpenReview },
     { id: "files", label: "Files", meta: "Workspace", icon: FolderOpen, onSelect: onOpenFiles },
-    { id: "browser", label: "Browser", meta: "Preview", icon: Globe2, onSelect: onOpenBrowser },
     {
       id: "side-chat",
       label: "Side chat",

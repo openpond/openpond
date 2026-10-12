@@ -169,3 +169,15 @@ export type SidebarAppPreference = z.infer<typeof SidebarAppPreferenceSchema>;
 export const SidebarAppPreferencesSchema = z.record(z.string(), SidebarAppPreferenceSchema);
 
 export type SidebarAppPreferences = z.infer<typeof SidebarAppPreferencesSchema>;
+
+
+export const SessionFileArtifactSchema = z.object({
+  path: z.string().min(1),
+  title: z.string().min(1),
+  contentType: z.string().min(1),
+  sizeBytes: z.number().nonnegative().nullable(),
+  sandboxId: z.string().nullable(),
+});
+export type SessionFileArtifact = z.infer<typeof SessionFileArtifactSchema>;
+export const SessionFilesResponseSchema = z.object({ files: z.array(SessionFileArtifactSchema) });
+export type SessionFilesResponse = z.infer<typeof SessionFilesResponseSchema>;

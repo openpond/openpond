@@ -6,6 +6,7 @@ import { absoluteLocalVideoPath } from "../lib/local-video";
 import { revealLocalFile } from "../lib/desktop-files";
 import { htmlPreviewUrl, isHtmlFilePath } from "../lib/html-preview";
 import { isWorkspaceImagePath } from "../lib/workspace-images";
+import { readSandboxFile } from "../components/workspace-diff/workspace-diff-file-model";
 import { placeholderFile } from "../components/workspace-diff/workspace-diff-panel-model";
 import type { ShowAppToast } from "../app/app-state";
 import type { WorkspaceDiffOpenFileRequest } from "../components/workspace-diff/workspace-diff-panel-model";
@@ -43,7 +44,7 @@ export function useChatFileOpen({
     return () => { requestVersion.current++; };
   }, [connection, activeWorkspaceAppId, conversationKey, rightSidebarSandboxId]);
   const openResolvedFile = useCallback(
-    async (path: string, options?: { source?: boolean }) => {
+    async (path: string, options?: { source?: boolean; sandboxId?: string | null; local?: boolean }) => {
       if (/[\\/]$/.test(path)) {
         const target = /^(?:[~/\\]|[A-Za-z]:)/.test(path) ? path : workspaceRootPath ? `${workspaceRootPath}/${path}` : path;
         void revealLocalFile(target).then((opened) => {
@@ -51,9 +52,10 @@ export function useChatFileOpen({
         });
         return;
       }
-      const htmlWorkspaceId = rightSidebarUsesSandbox ? rightSidebarSandboxId : activeWorkspaceAppId;
+      const targetSandboxId = options?.local ? null : options?.sandboxId ?? (rightSidebarUsesSandbox ? rightSidebarSandboxId : null);
+      const htmlWorkspaceId = targetSandboxId ?? (options?.local ? localFileWorkspaceId(path) : activeWorkspaceAppId);
       if (isHtmlFilePath(path) && !options?.source && connection && htmlWorkspaceId) {
-        void htmlPreviewUrl(connection, htmlWorkspaceId, path, rightSidebarUsesSandbox ? "sandbox" : "local")
+        void htmlPreviewUrl(connection, htmlWorkspaceId, path, targetSandboxId ? "sandbox" : "local")
           .then((url) => handleOpenBrowserLink(url))
           .catch((error) => showToast(error instanceof Error ? error.message : "Could not open HTML preview.", "error"));
         return;
@@ -73,10 +75,24 @@ export function useChatFileOpen({
           });
         return;
       }
+      if (options?.sandboxId && connection) {
+        const version = requestVersion.current;
+        try {
+          const file = await readSandboxFile(connection, options.sandboxId, path);
+          if (version !== requestVersion.current) return;
+          onShowDiffPanel();
+          const imageUrl = isWorkspaceImagePath(file.path) && file.content
+            ? `data:image/${/\.jpe?g$/i.test(path) ? "jpeg" : path.split(".").pop()};base64,${file.content}` : undefined;
+          setOpenDiffFileRequest({ id: Date.now(), path: file.path, file, imageUrl });
+        } catch (error) {
+          if (version === requestVersion.current) showToast(error instanceof Error ? error.message : "Could not open this file.", "error");
+        }
+        return;
+      }
       const normalizedFile = normalizeChatFilePath(path, { workspaceRootPath });
       const filePath = normalizedFile?.path ?? path;
       const standaloneWorkspaceId = localFileWorkspaceId(filePath);
-      if (!activeWorkspaceAppId && !rightSidebarUsesSandbox && connection && standaloneWorkspaceId) {
+      if ((options?.local || (!activeWorkspaceAppId && !rightSidebarUsesSandbox)) && connection && standaloneWorkspaceId) {
         const version = requestVersion.current;
         try {
           const image = isWorkspaceImagePath(filePath) ? await api.signLocalImageUrl(connection, { path: filePath }) : null;
@@ -108,12 +124,14 @@ export function useChatFileOpen({
       setOpenDiffFileRequest,
     ]
   );
-  const handleOpenFileInSidebar = useCallback((requestedPath: string, options?: { source?: boolean }) => {
+  const handleOpenFileInSidebar = useCallback((requestedPath: string, options?: { source?: boolean; sandboxId?: string | null; local?: boolean }) => {
     const version = ++requestVersion.current;
     setFileResolution(null);
     if (/^https?:\/\//i.test(requestedPath)) { handleOpenBrowserLink(requestedPath); return; }
-    if (!connection || !activeWorkspaceAppId || rightSidebarUsesSandbox) {
-      openResolvedFile(requestedPath, options);
+    const explicitLocalPath = Boolean(localFileWorkspaceId(requestedPath))
+      && (!rightSidebarUsesSandbox || !/^\/workspace(?:\/|$)/.test(requestedPath));
+    if (options?.local || options?.sandboxId || explicitLocalPath || !connection || !activeWorkspaceAppId || rightSidebarUsesSandbox) {
+      openResolvedFile(requestedPath, explicitLocalPath ? { ...options, local: true } : options);
       return;
     }
     const normalized = normalizeChatFilePath(requestedPath)?.path ?? requestedPath;
