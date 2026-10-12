@@ -81,14 +81,14 @@ export function createProfileWorkflowEvaluationExecutor(input: {
         taskId: member.task.id,
         seed: member.seed,
         ...(workCase && input.profileRef.source === "local" ? { workspaceTarget: "local" } : {}),
-        ...(managedNativeWork ? { profileEvaluationOutputs: input.requiredOutputs ?? [] } : {}),
+        ...(workCase ? { profileEvaluationOutputs: input.requiredOutputs ?? [] } : {}),
         ...input.ownedSessionMetadata,
       },
     });
     const prompt = [
       ...(workCase ? [managedNativeWork
         ? `This is a local evaluation run. Complete the requested task using its public inputs. Save these required files at their declared paths relative to the current task workspace: ${JSON.stringify(input.requiredOutputs ?? [])}. The app preserves those declared files automatically when the turn finishes; work_save_output is not a shell command and is not needed here. For headless tools that write user preferences, use writable configuration, cache and profile directories within this task workspace and a bounded command timeout. Send the requested final response to finish the case. Private grading runs afterward; do not wait for grader feedback.`
-        : "This is an evaluation run. Complete the requested task using its public inputs. Save each required output with work_save_output, then send your final response to finish the case. Saving a file alone does not finish the case. Private grading runs after your final response; do not wait for grader feedback."] : []),
+        : "This is an evaluation run. Complete the requested task using its public inputs. work_exec starts in writable Work storage; inputs are ../inputs and released policy source is ../harness. When work_finish is available, create every declared output in Work and call work_finish with the path of your complete working response file, then send a short final answer. Otherwise save each required output with work_save_output and send your final response. Private grading runs after your final response; do not wait for grader feedback."] : []),
       typeof member.task.input === "string" ? member.task.input : JSON.stringify(member.task.input),
       ...(Object.keys(member.task.policyVisibleContext).length
         ? [`Policy-visible task context:\n${JSON.stringify(member.task.policyVisibleContext)}`]
