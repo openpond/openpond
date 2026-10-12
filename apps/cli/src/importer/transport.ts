@@ -104,11 +104,21 @@ export const collectorTransport: CollectorTransport = {
     const admission = refreshRetainedAdmission(connection, entry, retained.normalized);
     const upload = retained.upload;
     while (retained.nextPart < upload.parts) {
-      const index = retained.nextPart;
-      await admissionStep(`upload part ${index + 1}/${upload.parts}`, cancellation, signal => evidence.uploadPart({ ...upload, index,
-        base64: retained.bytes.subarray(index * 200000, (index + 1) * 200000).toString("base64"),
-      }, signal));
-      retained.nextPart++;
+      const start = retained.nextPart;
+      const count = Math.min(4, upload.parts - start);
+      const results = await Promise.allSettled(Array.from({ length: count }, (_, offset) => {
+        const index = start + offset;
+        return admissionStep(`upload part ${index + 1}/${upload.parts}`, cancellation, signal => evidence.uploadPart({ ...upload, index,
+          base64: retained.bytes.subarray(index * 200000, (index + 1) * 200000).toString("base64"),
+        }, signal));
+      }));
+      // Drain the entire bounded wave before retrying or acknowledging anything.
+      // Only its contiguous successful prefix advances the retained checkpoint;
+      // later successes can safely repeat at their immutable hash/index keys.
+      const failed = results.findIndex(result => result.status === "rejected");
+      retained.nextPart += failed < 0 ? count : failed;
+      const failure = results[failed];
+      if (failure?.status === "rejected") throw failure.reason;
     }
     const input = {
       upload,
