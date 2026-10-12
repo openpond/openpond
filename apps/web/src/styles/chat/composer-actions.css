@@ -5,12 +5,12 @@
   height: 30px;
   border: 0;
   border-radius: 15px;
-  background: var(--state-hover);
+  background: var(--action-primary);
   color: var(--text-on-primary);
 }
 
 .send-button:hover:not(:disabled) {
-  background: var(--action-primary);
+  background: var(--action-primary-hover);
   color: var(--text-on-primary);
 }
 
@@ -29,7 +29,8 @@
 }
 
 .send-button:disabled {
-  opacity: 0.42;
+  color: var(--text-disabled);
+  cursor: default;
 }
 
 .composer-queue-control {
