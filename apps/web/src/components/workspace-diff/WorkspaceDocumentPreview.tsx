@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download } from "../icons";
+import { FileBreadcrumbs, workspaceFileDisplayName } from "./WorkspaceFileLocation";
 
 export function WorkspaceDocumentPreview({ path, contentBase64 }: { path: string; contentBase64: string }) {
-  const filename = path.replace(/\\/g, "/").split("/").pop() || "document";
+  const filename = workspaceFileDisplayName(path);
   const blob = useMemo(() => {
     try {
       const binary = atob(contentBase64.replace(/\s/g, ""));
@@ -29,11 +30,13 @@ export function WorkspaceDocumentPreview({ path, contentBase64 }: { path: string
 
   return <div className="workspace-document-preview">
     <div className="workspace-document-preview-card">
-      <strong>{filename}</strong>
-      <span>{/\.pdf$/i.test(path) ? "PDF document" : "Word document"}</span>
-      <a href={objectUrl} download={filename} aria-label="Download document" title="Download document">
-        <Download size={16} aria-hidden="true" />
-      </a>
+      <FileBreadcrumbs path={path} />
+      <div className="workspace-document-preview-actions">
+        <span>{/\.pdf$/i.test(path) ? "PDF" : "Word"}</span>
+        <a href={objectUrl} download={filename} aria-label="Download document" title="Download document">
+          <Download size={16} aria-hidden="true" />
+        </a>
+      </div>
     </div>
     <iframe src={objectUrl} title={`${path} preview`} />
   </div>;

@@ -92,6 +92,12 @@
   letter-spacing: 0.01em;
 }
 
+.composer-primary-controls:has(> .composer-voice-input:is(.recording, .transcribing))
+  > :is(.codex-model-reasoning, .context-status-shell) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .voice-transcribing-dots {
   display: inline-grid;
   grid-template-columns: repeat(3, 0.38em);
