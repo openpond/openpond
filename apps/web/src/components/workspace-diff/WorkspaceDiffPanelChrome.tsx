@@ -48,6 +48,9 @@ export function WorkspaceDiffTabs({
   sourceSwitcher,
   visibleTab,
   toolbarActions,
+  tabOrder = [],
+  filesTabOpen = true,
+  onCloseFilesTab,
   overviewTabs = [],
   activeOverviewId,
   onNewOverview,
@@ -87,6 +90,9 @@ export function WorkspaceDiffTabs({
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   visibleTab: DiffTab;
   toolbarActions?: ReactNode;
+  tabOrder?: string[];
+  filesTabOpen?: boolean;
+  onCloseFilesTab?: () => void;
   overviewTabs?: number[];
   activeOverviewId?: number;
   onNewOverview?: () => void;
@@ -175,16 +181,8 @@ export function WorkspaceDiffTabs({
     }
   }
 
-  return (
-    <div className="workspace-diff-topbar">
-      <div
-        className="workspace-diff-tabs"
-        role="tablist"
-        aria-label="Right sidebar views"
-        ref={tabsRef}
-        onKeyDown={handleTabListKeyDown}
-      >
-        {overviewTabs.map(id => (
+  const tabNodes = [
+    ...overviewTabs.map(id => (
           <div className={`workspace-diff-tab file ${visibleTab === "outputs" && activeOverviewId === id ? "active" : ""}`} key={`overview-${id}`}>
             <button type="button" className="workspace-diff-tab-main" role="tab" aria-selected={visibleTab === "outputs" && activeOverviewId === id}
               tabIndex={visibleTab === "outputs" && activeOverviewId === id ? 0 : -1}
@@ -192,10 +190,11 @@ export function WorkspaceDiffTabs({
             <button type="button" className="workspace-diff-tab-close" aria-label="Close new tab"
               onClick={() => onCloseOverview?.(id)}><X size={12} /></button>
           </div>
-        ))}
-        {goalDetailsAvailable ? (
+    )),
+    goalDetailsAvailable ? (
           <button
             type="button"
+            key="goal"
             className={`workspace-diff-tab ${visibleTab === "goal" ? "active" : ""}`}
             role="tab"
             aria-selected={visibleTab === "goal"}
@@ -204,10 +203,11 @@ export function WorkspaceDiffTabs({
             <FileText size={14} />
             <span>Goal</span>
           </button>
-        ) : null}
-        {summaryAvailable && onSelectSummary ? (
+    ) : null,
+    summaryAvailable && onSelectSummary ? (
           <button
             type="button"
+            key="summary"
             className={`workspace-diff-tab ${visibleTab === "summary" ? "active" : ""}`}
             role="tab"
             aria-selected={visibleTab === "summary"}
@@ -216,21 +216,16 @@ export function WorkspaceDiffTabs({
             <Info size={14} />
             <span>Summary</span>
           </button>
-        ) : null}
-        <button
-          type="button"
-          className={`workspace-diff-tab ${visibleTab === "files" ? "active" : ""}`}
-          role="tab"
-          id="right-sidebar-files-tab"
-          aria-controls="right-sidebar-files-panel"
-          aria-selected={visibleTab === "files"}
-          tabIndex={visibleTab === "files" ? 0 : -1}
-          onClick={onSelectFiles}
-        >
-          <FolderOpen size={14} />
-          <span>Files</span>
-        </button>
-        {openFiles.map((file) => (
+    ) : null,
+    filesTabOpen ? <div key="files" className={`workspace-diff-tab file ${visibleTab === "files" ? "active" : ""}`}>
+          <button type="button" className="workspace-diff-tab-main" role="tab" id="right-sidebar-files-tab"
+            aria-controls="right-sidebar-files-panel" aria-selected={visibleTab === "files"}
+            tabIndex={visibleTab === "files" ? 0 : -1} onClick={onSelectFiles}>
+            <FolderOpen className="workspace-diff-tab-icon" size={14} /><span>Files</span>
+          </button>
+          {onCloseFilesTab ? <button type="button" className="workspace-diff-tab-close" aria-label="Close files tab" onClick={onCloseFilesTab}><X size={12} /></button> : null}
+        </div> : null,
+    ...openFiles.map((file) => (
           <div
             className={`workspace-diff-tab file ${visibleTab === "file" && selectedPath === file.path ? "active" : ""}`}
             key={file.path}
@@ -263,8 +258,8 @@ export function WorkspaceDiffTabs({
               <X size={12} />
             </button>
           </div>
-        ))}
-        {sideChatTabs.map((chat) => (
+    )),
+    ...sideChatTabs.map((chat) => (
           <div className="workspace-diff-tab right-chat-tab" key={chat.id}>
             <button
               type="button"
@@ -297,7 +292,21 @@ export function WorkspaceDiffTabs({
               </button>
             ) : null}
           </div>
-        ))}
+    )),
+  ].filter(node => node !== null);
+  const positions = new Map(tabOrder.map((key, index) => [key, index]));
+  tabNodes.sort((a, b) => (positions.get(String(a.key)) ?? tabOrder.length) - (positions.get(String(b.key)) ?? tabOrder.length));
+
+  return (
+    <div className="workspace-diff-topbar">
+      <div
+        className="workspace-diff-tabs"
+        role="tablist"
+        aria-label="Right sidebar views"
+        ref={tabsRef}
+        onKeyDown={handleTabListKeyDown}
+      >
+        {tabNodes}
       </div>
         <div className="workspace-diff-add-anchor" ref={addAnchorRef}>
           <button

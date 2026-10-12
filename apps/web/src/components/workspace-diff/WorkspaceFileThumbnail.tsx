@@ -10,7 +10,8 @@ import { isPresentationFile } from "./workspace-diff-panel-model";
 import { readSandboxFile } from "./workspace-diff-file-model";
 
 const PagePreview = lazy(() => import("./FilePagePreview"));
-export function WorkspaceFileThumbnail({ path, connection, workspaceId, sandboxId }: {
+export function WorkspaceFileThumbnail({ path, connection, workspaceId, sandboxId, revision }: {
+  revision?: string;
   path: string;
   connection: ClientConnection | null;
   workspaceId: string | null;
@@ -38,7 +39,7 @@ export function WorkspaceFileThumbnail({ path, connection, workspaceId, sandboxI
     const request = sandboxId ? readSandboxFile(connection, sandboxId, path) : api.workspaceFile(connection, sourceId!, path);
     void request.then(file => { if (!cancelled) setLoaded({ key, file }); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [connection, image, key, path, sandboxId, sourceId, visible]);
+  }, [connection, image, key, path, revision, sandboxId, sourceId, visible]);
   const file = loaded?.key === key ? loaded.file : null;
   const sandboxImage = image && sandboxId && file?.contentEncoding === "base64" && file.content
     ? `data:image/${/\.jpe?g$/i.test(path) ? "jpeg" : path.split(".").pop()?.toLowerCase()};base64,${file.content}` : null;

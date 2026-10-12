@@ -177,6 +177,7 @@ export const SessionFileArtifactSchema = z.object({
   contentType: z.string().min(1),
   sizeBytes: z.number().nonnegative().nullable(),
   sandboxId: z.string().nullable(),
+  revision: z.string().optional(),
 });
 export type SessionFileArtifact = z.infer<typeof SessionFileArtifactSchema>;
 export const SessionFilesResponseSchema = z.object({ files: z.array(SessionFileArtifactSchema) });
