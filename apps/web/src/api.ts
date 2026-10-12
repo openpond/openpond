@@ -1526,6 +1526,9 @@ export const api = {
       connection,
       `/v1/workspaces/${encodeURIComponent(appId)}/resolve-file?path=${encodeURIComponent(path)}`,
     ),
+  workspaceFileVersion: (connection: ClientConnection, appId: string, path: string) =>
+    apiFetch<{ exists: boolean; revision: string | null }>(connection,
+      `/v1/workspaces/${encodeURIComponent(appId)}/file-version?path=${encodeURIComponent(path)}`),
   workspaceFile: (connection: ClientConnection, appId: string, path: string) =>
     apiFetch<WorkspaceDiffFile>(
       connection,

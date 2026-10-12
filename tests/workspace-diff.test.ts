@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, truncate, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -425,4 +425,34 @@ describe("workspace diff", () => {
     expect(result?.deletions).toBe(1);
     expect(result?.files.map((file) => file.path)).toEqual(["src/app.ts"]);
   });
+});
+
+
+// A model can overwrite a document under the same name and byte length or
+// replace it atomically. Metadata must detect both without reading its body,
+// and polling must retain the same workspace boundary as file previews.
+test("open file versions detect same-name edits and replacements within the workspace boundary", async () => {
+  const { workspaceFileVersion } = await import("../apps/server/src/workspace/workspace-file-version");
+  const root = await mkdtemp(path.join(os.tmpdir(), "openpond-file-version-"));
+  tempDirs.push(root);
+  const folder = path.join(root, "project");
+  await mkdir(folder);
+  const target = path.join(folder, "deck.pptx");
+  await writeFile(target, "first");
+  const initial = await workspaceFileVersion(folder, "deck.pptx");
+  await writeFile(target, "other");
+  await utimes(target, new Date("2026-01-01"), new Date("2026-01-01"));
+  const edited = await workspaceFileVersion(folder, "deck.pptx");
+  expect(edited.exists).toBe(true);
+  expect(edited.revision).not.toBe(initial.revision);
+  await writeFile(path.join(folder, "next.pptx"), "third");
+  await rename(path.join(folder, "next.pptx"), target);
+  expect((await workspaceFileVersion(folder, target)).revision).not.toBe(edited.revision);
+  expect(await workspaceFileVersion(folder, "missing.pptx")).toEqual({ exists: false, revision: null });
+  await writeFile(path.join(root, "outside.pptx"), "other");
+  await expect(workspaceFileVersion(folder, "../outside.pptx", true)).rejects.toThrow("outside the workspace");
+  await expect(workspaceFileVersion(folder, path.join(root, "outside.pptx"))).rejects.toThrow("outside the workspace");
+  expect((await workspaceFileVersion(folder, path.join(root, "outside.pptx"), true)).exists).toBe(true);
+  await symlink(root, path.join(folder, "escape"), "dir");
+  await expect(workspaceFileVersion(folder, "escape/outside.pptx")).rejects.toThrow("outside the workspace");
 });
