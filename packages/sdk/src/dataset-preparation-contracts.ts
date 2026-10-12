@@ -76,6 +76,13 @@ export const DatasetPreparationSourceSchema = z
     to: Timestamp,
     importCutoff: Timestamp,
     connections: z.array(Id).min(1).max(50),
+    excludedSessions: z.array(z.object({
+      connectionId: Id,
+      sourceKeyHash: Hash,
+      nativeRevisionHash: Hash,
+      reason: z.enum(["source_read_failed", "native_session_not_ready"]),
+      explanation: z.string().trim().min(1).max(2_000),
+    }).strict()).max(10_000).default([]),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -89,6 +96,10 @@ export const DatasetPreparationSourceSchema = z
         code: "custom",
         message: "Source connections must be unique.",
       });
+    if (value.excludedSessions.some(item => !value.connections.includes(item.connectionId)))
+      ctx.addIssue({ code: "custom", message: "Excluded sessions must belong to selected source connections." });
+    if (new Set(value.excludedSessions.map(item => JSON.stringify([item.connectionId, item.sourceKeyHash]))).size !== value.excludedSessions.length)
+      ctx.addIssue({ code: "custom", message: "Source session exclusions must be unique." });
   });
 
 export const DatasetPreparationPolicySchema = z
@@ -195,6 +206,8 @@ export const DatasetPreparationCoverageSchema = z
     skippedSessions: Count.nullable(),
     lastAdmissionAt: Timestamp.nullable(),
     complete: z.boolean(),
+    sourceComplete: z.boolean().default(false),
+    excludedSessions: Count.default(0),
     reasons: z
       .array(
         z

@@ -102,7 +102,7 @@ export async function runImportCommand(
   }
   if (action !== "connect" && action !== "reconnect")
     throw new Error(
-      "usage: openpond import <connect|reconnect|discover|status|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service>",
+      "usage: openpond import <connect|reconnect|discover|status|coverage|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service>",
     );
   // An unavailable selected/default profile is still an authority choice.
   // Filtering it out could silently connect the sole remaining sibling.
