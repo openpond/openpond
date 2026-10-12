@@ -246,6 +246,7 @@ export type HttpRouteDeps = {
     appId: string,
     filePath: string | null
   ) => Promise<unknown>;
+  workspaceFileVersionPayload: (appId: string, filePath: string | null) => Promise<{ exists: boolean; revision: string | null }>;
   saveWorkspaceFilePayload: (
     appId: string,
     payload: unknown

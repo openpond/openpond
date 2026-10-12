@@ -16,6 +16,7 @@ import { SandboxWorkspaceSummary } from "./SandboxWorkspaceSummary";
 import { TrainingRunSidebarSummary, type TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
 import { WorkspaceDiffFiles } from "./WorkspaceDiffFiles";
 import { WorkspaceDiffTabs, WorkspaceDiffToolbar } from "./WorkspaceDiffPanelChrome";
+import { WorkspaceFileRefresh } from "./WorkspaceFileRefresh";
 import { FilePreview } from "./WorkspaceFilePreview";
 import { WorkspaceFileBookmarkActions } from "./WorkspaceFileBookmarkActions";
 import { FILE_TRUNCATED_MARKER, readSandboxFile, sandboxChangedFiles, sandboxRepoFiles, sandboxSourceReadbackDiffFromEvents, saveSandboxFile } from "./workspace-diff-file-model";
@@ -183,7 +184,7 @@ function detailedWorkspaceFile(
   path: string,
 ): WorkspaceDiffFile {
   if (current && loaded?.content != null) {
-    return { ...current, content: loaded.content, contentType: loaded.contentType, contentEncoding: loaded.contentEncoding };
+    return { ...current, content: loaded.content, contentType: loaded.contentType, contentEncoding: loaded.contentEncoding, readVersion: loaded.readVersion };
   }
   if (loaded && !current && hasWorkspaceFileDetail(loaded)) return loaded;
   if (current && hasWorkspaceFileDetail(current)) return current;
@@ -1476,6 +1477,16 @@ function WorkspaceDiffPanelInner({
     />
   ) : null;
   const selectedFilePreview = selectedPath ? (
+    <div className="workspace-active-file-preview">
+    <WorkspaceFileRefresh key={`${sourceKey}:${selectedPath}`} file={fileForPath(selectedPath)} connection={connection}
+      workspaceId={appId} sandboxId={sandboxMode ? sandboxId : null} dirty={dirtyFilePaths.has(selectedPath)}
+      onReload={(file, imageUrl) => {
+        setLoadedFiles(current => ({ ...current, [selectedPath]: { ...file, path: selectedPath } }));
+        setFileDrafts(current => { const next = { ...current }; delete next[selectedPath]; return next; });
+        if (imageUrl) setProvidedImageUrlsByPath(current => ({ ...current, [selectedPath]: imageUrl }));
+        setFileError(null);
+        if (!isDocumentPath(selectedPath) && !isWorkspaceImagePath(selectedPath)) setLoadFullFiles(true);
+      }} />
     <FilePreview
       diagnostics={editorLspEnabled ? lspDiagnosticsByPath[selectedPath] ?? [] : []}
       draftContent={fileDrafts[selectedPath]?.content}
@@ -1505,6 +1516,7 @@ function WorkspaceDiffPanelInner({
       workspaceName={workspaceName}
       workspaceRootPath={workspaceRootPath}
     />
+    </div>
   ) : null;
   const fileControlsVisible = Boolean(
     (visibleTab === "file" || (filesWithPreview && visibleTab === "files")) && selectedPath &&

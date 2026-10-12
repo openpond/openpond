@@ -30,6 +30,7 @@ export async function readSandboxFile(
   if (result.file.isBinary && result.file.truncated) throw new Error("This file is too large to preview completely.");
   return {
     path: result.file.path,
+    readVersion: `${result.file.sizeBytes}:${result.file.updatedAt}`,
     status: "",
     additions: 0,
     deletions: 0,

@@ -633,3 +633,48 @@
 .diff-deletion {
   color: var(--status-danger);
 }
+
+
+.workspace-active-file-preview {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-file-refresh {
+  position: absolute;
+  top: 56px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px var(--shadow-color);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.workspace-file-refresh:hover,
+.workspace-file-refresh:focus-visible {
+  background: var(--state-hover);
+}
+
+.workspace-file-refresh:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.workspace-file-refresh-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-primary);
+}

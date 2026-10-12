@@ -124,6 +124,11 @@ export async function handleWorkspaceRoutes({ deps, request, requestUrl, respons
     sendJson(response, 200, await deps.resolveWorkspaceFilePayload(decodeURIComponent(resolveFileMatch[1]!), requestUrl.searchParams.get("path")));
     return true;
   }
+  const workspaceFileVersionMatch = /^\/v1\/workspaces\/([^/]+)\/file-version$/.exec(requestUrl.pathname);
+  if (request.method === "GET" && workspaceFileVersionMatch) {
+    sendJson(response, 200, await deps.workspaceFileVersionPayload(decodeURIComponent(workspaceFileVersionMatch[1]!), requestUrl.searchParams.get("path")));
+    return true;
+  }
   const workspaceFileMatch = /^\/v1\/workspaces\/([^/]+)\/file$/.exec(requestUrl.pathname);
   if (request.method === "GET" && workspaceFileMatch) {
     sendJson(
