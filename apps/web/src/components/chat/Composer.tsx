@@ -729,7 +729,7 @@ export function Composer({
   const activeGoalRuntime = showGoalRuntime && goalRuntime?.tone === "active";
   const stopControlLabel = activeGoalRuntime ? "Pause goal" : "Stop response";
   const stopControlIcon = activeGoalRuntime ? "pause" : "stop";
-  const showWorkspaceFooterControls = experience === "work" || projectTarget.value !== "none";
+  const showWorkspaceFooterControls = projectTarget.value !== "none";
   const steerDrafts = composerSteerDraftsForScope(
     steerDraftsByScope,
     submissionScopeKey,
@@ -1584,7 +1584,7 @@ export function Composer({
       />
       {(showProjectFooter || surface === "chat" && taskSessionId) && (
         <div className="composer-footer">
-          {surface === "chat" && taskSessionId ? <ComposerResourceControls resources={chatResources} busy={busy} /> : null}
+          {surface === "chat" && taskSessionId && projectTarget.value !== "none" ? <ComposerResourceControls resources={chatResources} busy={busy} /> : null}
           {showProjectFooter ? (
             <ComposerProjectTargetControl
               busy={busy || projectTarget.busy}

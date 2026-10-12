@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Download } from "../icons";
 import { FileBreadcrumbs, workspaceFileDisplayName } from "./WorkspaceFileLocation";
+
+const WordPreview = lazy(() => import("./FilePagePreview"));
 
 export function WorkspaceDocumentPreview({ path, contentBase64 }: { path: string; contentBase64: string }) {
   const filename = workspaceFileDisplayName(path);
@@ -38,7 +40,9 @@ export function WorkspaceDocumentPreview({ path, contentBase64 }: { path: string
         </a>
       </div>
     </div>
-    <iframe src={objectUrl} title={`${path} preview`} />
+    {/\.docx$/i.test(path) ? <Suspense fallback={<div role="status">Loading document…</div>}>
+      <WordPreview thumbnail={false} file={{ path, content: contentBase64, contentEncoding: "base64", status: "", additions: 0, deletions: 0, patch: "" }} />
+    </Suspense> : <iframe src={objectUrl} title={`${path} preview`} />}
   </div>;
 }
 
