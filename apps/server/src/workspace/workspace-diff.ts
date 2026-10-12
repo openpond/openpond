@@ -537,13 +537,13 @@ export async function loadWorkspaceFileAtPath(repoPath: string, filePath: string
       );
       return documentContent === null
         ? detail
-        : { ...detail, content: documentContent };
+        : { ...detail, ...documentContent };
     }
   }
   let resolvedPath = normalizedPath;
-  let content =
-    (await readWorkspaceFile(repoPath, resolvedPath)) ??
-    (await readWorkspaceDocumentPreview(repoPath, resolvedPath));
+  let content = await readWorkspaceFile(repoPath, resolvedPath);
+  const documentPreview = content === null ? await readWorkspaceDocumentPreview(repoPath, resolvedPath) : null;
+  content ??= documentPreview?.content ?? null;
   if (content === null) {
     const basenameMatch = await resolveExplicitMarkdownBasenamePath(repoPath, normalizedPath);
     if (basenameMatch) {
@@ -558,6 +558,7 @@ export async function loadWorkspaceFileAtPath(repoPath: string, filePath: string
     additions: 0,
     deletions: 0,
     patch: "",
+    ...documentPreview,
     content,
   };
 }

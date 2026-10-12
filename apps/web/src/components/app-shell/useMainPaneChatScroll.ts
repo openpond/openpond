@@ -42,6 +42,7 @@ export function useMainPaneChatScroll({
   pendingApproval,
   showChatThread,
   showThinkingIndicator,
+  turnRunning,
   view,
 }: {
   browserConversationId: string | null;
@@ -53,6 +54,7 @@ export function useMainPaneChatScroll({
   pendingApproval: MainPaneProps["pendingApproval"];
   showChatThread: boolean;
   showThinkingIndicator: boolean;
+  turnRunning: boolean;
   view: MainPaneProps["view"];
 }) {
   const chatThreadRef = useRef<HTMLElement | null>(null);
@@ -65,6 +67,7 @@ export function useMainPaneChatScroll({
   const composerStackRef = useRef<HTMLDivElement | null>(null);
   const stickyChatScrollRef = useRef(true);
   const sentMessageAnchorRef = useRef<SentMessageAnchor | null>(null);
+  const observedRunningTurnRef = useRef(false);
   const observedSubmissionRef = useRef(0);
   const previousUserRowRef = useRef<HTMLElement | null>(null);
   const lastChatScrollTopRef = useRef(0);
@@ -640,6 +643,7 @@ export function useMainPaneChatScroll({
 
   useLayoutEffect(() => {
     sentMessageAnchorRef.current = null;
+    observedRunningTurnRef.current = false;
     chatThreadRef.current?.style.removeProperty("--chat-sent-message-space");
     pendingChatScrollRestoreRef.current = null;
     remoteHistoryLoadPendingRef.current = null;
@@ -682,6 +686,27 @@ export function useMainPaneChatScroll({
     const element = chatThreadRef.current;
     previousUserRowRef.current = element ? userMessageRows(element).at(-1) ?? null : null;
   });
+
+  useLayoutEffect(() => {
+    if (turnRunning) {
+      observedRunningTurnRef.current = true;
+      return;
+    }
+    let lastUserIndex = chatMessages.length - 1;
+    while (lastUserIndex >= 0 && chatMessages[lastUserIndex]?.role !== "user") lastUserIndex--;
+    const completedAnswer = chatMessages.slice(lastUserIndex + 1).some(message => message.role === "assistant" && message.finalAnswer);
+    if (!observedRunningTurnRef.current && !completedAnswer) return;
+    observedRunningTurnRef.current = false;
+    const element = chatThreadRef.current;
+    const anchor = sentMessageAnchorRef.current;
+    if (!element || !anchor) return;
+    sentMessageAnchorRef.current = null;
+    element.style.removeProperty("--chat-sent-message-space");
+    cancelSmoothChatScroll();
+    stickyChatScrollRef.current = anchor.following;
+    if (anchor.following) scrollChatToBottom(element, { settle: true });
+    updateChatScrollControls(element);
+  }, [chatMessages, turnRunning, cancelSmoothChatScroll, scrollChatToBottom, updateChatScrollControls]);
 
   useEffect(() => {
     const element = chatThreadRef.current;

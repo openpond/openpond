@@ -116,7 +116,7 @@ export const initialAppState: AppState = {
   busy: false,
   diffPanelOpen: false,
   diffPanelExpanded: false,
-  rightPanelMode: "changes",
+  rightPanelMode: "home",
   rightChatPanels: [],
   terminalOpen: false,
   syncingWorkspaceAppId: null,

@@ -126,6 +126,8 @@ import {
   readCodexHistoryThreadPayload,
 } from "./codex-history.js";
 import { createCodexStatusService } from "./codex-status-service.js";
+import { sessionFileArtifacts } from "./workspace/session-file-artifacts.js";
+import { createNativeHistoryWorkspace } from "./runtime/native-agents/history-workspace.js";
 import { createSessionStore } from "./store/session-store.js";
 import { createSessionTitleService } from "./session-title-service.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
@@ -389,6 +391,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     checkoutWorkspaceBranchPayload,
     workspaceDiffPayload,
     workspaceFilePayload,
+    workspaceFileVersionPayload,
     resolveWorkspaceFilePayload,
     workspaceHtmlPreviewPayload,
     htmlContentPreviewPayload,
@@ -485,6 +488,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     interruptTurn,
   } = createSessionStore({
     store,
+    qualifyNativeWorkspace: (native, cwd) => createNativeHistoryWorkspace(providersFilePath).qualifyWorkspace({ ...native, cwd }),
     defaultSessionCwd,
     createManagedLocalWorkCwd: async (sessionId) => {
       const workspacePath = path.join(storeDir, "work", "tasks", sessionId);
@@ -1729,6 +1733,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       extensionUpdateAllPayload,
       extensionRemovePayload,
       eventPagePayload,
+      sessionFilesPayload: async sessionId => ({ files: sessionFileArtifacts(await getSession(sessionId),
+        await store.runtimeEventsForSession(sessionId, { names: ["session.started", "session.updated", "tool.completed", "workspace_action_result", "assistant.delta"] })) }),
       listWorkOutputsPayload,
       captureWorkEvidencePayload: workEvidenceApi.capture,
       getWorkEvidencePayload: workEvidenceApi.get,
@@ -1812,6 +1818,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       checkoutWorkspaceBranchPayload,
       workspaceDiffPayload,
       workspaceFilePayload,
+      workspaceFileVersionPayload,
       resolveWorkspaceFilePayload,
       workspaceHtmlPreviewPayload,
       htmlContentPreviewPayload,

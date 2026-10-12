@@ -14,11 +14,12 @@ import { findLocalProject } from "../../workspace/local-projects.js";
 import { isNativeAgentId, nativeAgentLaunch } from "./config.js";
 import { nativeAgentEvent } from "./events.js";
 import { invalidateNativeAgent } from "./setup.js";
+import { createNativeHistoryWorkspace } from "./history-workspace.js";
 import { createNativeAgentApprovals } from "./approvals.js";
 import { createTaskCoordinationMcp, type TaskCoordinationBridge } from "../task-inbox/codex-mcp.js";
 
 type RunningSession = { reportingOnly: boolean; requestId: string; requestOrdinal: number; turn: Turn | null; startedAt: string; firstTokenMs: number | null; visibleUpdates: number; imageInput: boolean; client: AcpClient | ClaudeCliClient; native: AcpSessionResult; instanceId: string; cwd: string; additionalDirectories: string[]; turnId: string | null; replaying: boolean; session: Session; coordinated: string; taskTools: boolean; close(): Promise<void> };
-export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "store" | "storageHome" | "updateSession" | "appendRuntimeEvent" | "upsertApproval">) {
+export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "store" | "storageHome" | "getSession" | "updateSession" | "appendRuntimeEvent" | "upsertApproval">) {
   const runtimes = new Map<string, RunningSession>();
   const approvals = createNativeAgentApprovals(deps);
   const persistUsage = createSafeModelUsagePersistence({ upsert: deps.store.upsertModelUsageRecord?.bind(deps.store), appendRuntimeEvent: deps.appendRuntimeEvent });
@@ -40,6 +41,21 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
     const existing = runtimes.get(session.id);
     if (existing && existing.reportingOnly === reportingOnly && existing.instanceId === launch.instanceId && existing.cwd === cwd && JSON.stringify(existing.additionalDirectories) === JSON.stringify(additionalDirectories) && existing.coordinated === JSON.stringify(coordination?.tools.map(tool => tool.name) ?? [])) return existing;
     if (existing) { runtimes.delete(session.id); await existing.close(); }
+    // Repair project attachments made before folder changes qualified native resume.
+    // Account/configuration identity remains mandatory, and the target must be the
+    // selected local project's actual root, not an arbitrary working directory.
+    if (session.nativeAgent && session.nativeAgent.provider === session.provider
+      && session.nativeAgent.instanceId === launch.instanceId && session.nativeAgent.cwd !== cwd
+      && project?.workspacePath === cwd) {
+      const original = session.nativeAgent;
+      await createNativeHistoryWorkspace(join(deps.storageHome, "providers.json")).qualifyWorkspace({ ...original, cwd });
+      const current = await deps.getSession(session.id);
+      if (!current || current.provider !== session.provider || current.cwd !== session.cwd
+        || JSON.stringify(current.nativeAgent) !== JSON.stringify(original))
+        throw new Error("The conversation changed while restoring its project folder. Try again.");
+      session = await deps.updateSession(session.id, { nativeAgent: { ...original, cwd } });
+    }
+    if (!isNativeAgentId(session.provider)) throw new Error("The conversation provider changed during folder recovery.");
     if (session.nativeAgent && (session.nativeAgent.provider !== session.provider || session.nativeAgent.instanceId !== launch.instanceId || session.nativeAgent.cwd !== cwd)) {
       throw new Error("Native session belongs to a different agent account/configuration or workspace. Restore its original configuration to continue.");
     }

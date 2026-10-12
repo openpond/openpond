@@ -3,6 +3,7 @@ import { createHtmlPreviewService } from "./html-preview.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { loadLocalOutputFile, loadLocalOutputImage } from "./local-output-files.js";
+import { workspaceFileVersion } from "./workspace-file-version.js";
 import { resolveChatFile } from "./resolve-chat-file.js";
 import {
   CreateLocalProjectRequestSchema,
@@ -365,22 +366,23 @@ export function createServerWorkspacePayloads(deps: {
     return htmlPreviews.open(await workspaceRepoPathPayload(appId), filePath.trim(), Boolean(local));
   }
 
+  async function workspaceFileVersionPayload(appId: string, filePath: string | null) {
+    if (!filePath?.trim()) throw new Error("File path is required");
+    const local = await localPathWorkspaceForId(appId) ?? await findLocalWorkspace(appId);
+    return workspaceFileVersion(await workspaceRepoPathPayload(appId), filePath, Boolean(local));
+  }
+
   async function workspaceFilePayload(appId: string, filePath: string | null): Promise<WorkspaceDiffFile> {
     if (!filePath?.trim()) throw new Error("File path is required");
+    // Capture the version before reading so an edit during the read still
+    // advertises an update on the next metadata poll.
+    const before = await workspaceFileVersionPayload(appId, filePath);
     const localPathWorkspace = await localPathWorkspaceForId(appId);
-    if (localPathWorkspace) {
-      return WorkspaceDiffFileSchema.parse(
-        await loadLocalOutputFile(localPathWorkspace.paths.repoPath, filePath)
-      );
-    }
-    const localProject = await findLocalWorkspace(appId);
-    if (localProject) {
-      return WorkspaceDiffFileSchema.parse(
-        await loadLocalOutputFile(localProjectWorkspacePaths(localProject).repoPath, filePath)
-      );
-    }
-    const app = await findOpenPondApp(appId);
-    return WorkspaceDiffFileSchema.parse(await loadWorkspaceFile(storeDir, app, filePath));
+    const localProject = localPathWorkspace ? null : await findLocalWorkspace(appId);
+    const detail = localPathWorkspace ? await loadLocalOutputFile(localPathWorkspace.paths.repoPath, filePath)
+      : localProject ? await loadLocalOutputFile(localProjectWorkspacePaths(localProject).repoPath, filePath)
+      : await loadWorkspaceFile(storeDir, await findOpenPondApp(appId), filePath);
+    return { ...WorkspaceDiffFileSchema.parse(detail), readVersion: before.revision };
   }
 
   async function workspaceRepoPathPayload(appId: string): Promise<string> {
@@ -539,6 +541,7 @@ export function createServerWorkspacePayloads(deps: {
     checkoutWorkspaceBranchPayload,
     workspaceDiffPayload,
     workspaceFilePayload,
+    workspaceFileVersionPayload,
     resolveWorkspaceFilePayload,
     workspaceHtmlPreviewPayload,
     htmlContentPreviewPayload,

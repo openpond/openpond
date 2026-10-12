@@ -73,6 +73,7 @@ export type HttpRouteDeps = {
   extensionUpdateAllPayload: () => Promise<unknown>;
   extensionRemovePayload: (source: string) => Promise<unknown>;
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
+  sessionFilesPayload: (sessionId: string) => Promise<unknown>;
   listWorkOutputsPayload: () => Promise<unknown>;
   captureWorkEvidencePayload: (payload: unknown) => Promise<unknown>;
   getWorkEvidencePayload: (receiptId: string) => Promise<unknown>;
@@ -245,6 +246,7 @@ export type HttpRouteDeps = {
     appId: string,
     filePath: string | null
   ) => Promise<unknown>;
+  workspaceFileVersionPayload: (appId: string, filePath: string | null) => Promise<{ exists: boolean; revision: string | null }>;
   saveWorkspaceFilePayload: (
     appId: string,
     payload: unknown

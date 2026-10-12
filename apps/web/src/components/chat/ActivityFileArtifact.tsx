@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { ActivityItem } from "../../lib/app-models";
 import { copyToClipboard } from "../../lib/clipboard";
 import { revealLocalFile } from "../../lib/desktop-files";
-import { Copy, FileText, FolderOpen, PanelRight } from "../icons";
+import { Copy, FileText, FolderOpen } from "../icons";
 
 type FileArtifact = NonNullable<ActivityItem["artifacts"]>[number];
 
@@ -17,9 +17,11 @@ type FileArtifactContextMenu = {
 export function ActivityFileArtifact({
   artifact,
   onOpenFileInSidebar,
+  preview,
 }: {
   artifact: FileArtifact;
   onOpenFileInSidebar?: (path: string) => void;
+  preview?: ReactNode;
 }) {
   const [contextMenu, setContextMenu] =
     useState<FileArtifactContextMenu | null>(null);
@@ -30,6 +32,9 @@ export function ActivityFileArtifact({
       <div
         className="activity-artifact"
         title={artifact.path}
+        onClick={onOpenFileInSidebar ? event => {
+          if (!(event.target as Element).closest("button")) onOpenFileInSidebar(artifact.path);
+        } : undefined}
         onContextMenu={(event) => {
           event.preventDefault();
           setContextMenu({
@@ -46,7 +51,7 @@ export function ActivityFileArtifact({
             type="button"
             onClick={() => onOpenFileInSidebar(artifact.path)}
           >
-            <FileText aria-hidden size={14} />
+            {preview ? <span className="activity-artifact-preview" aria-hidden>{preview}</span> : <FileText aria-hidden size={14} />}
             <strong>{artifact.title}</strong>
           </button>
         ) : (
@@ -64,16 +69,6 @@ export function ActivityFileArtifact({
           >
             <FolderOpen aria-hidden size={14} />
           </button>
-          {onOpenFileInSidebar ? (
-            <button
-              aria-label={`Open ${artifact.title} in right sidebar`}
-              data-tooltip="Open in right sidebar"
-              type="button"
-              onClick={() => onOpenFileInSidebar(artifact.path)}
-            >
-              <PanelRight aria-hidden size={14} />
-            </button>
-          ) : null}
         </span>
       </div>
       <FileArtifactContextMenu menu={contextMenu} onClose={closeContextMenu} />

@@ -80,6 +80,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/native-agent-background-tasks.test.ts",
   "tests/native-agent-final-response.test.ts",
   "tests/native-history-sidebar.test.ts",
+  "tests/native-session-project-assignment.test.ts",
   "tests/openpond-command-access.test.ts",
   "tests/openpond-resources.test.ts",
   "tests/profile-benchmark-git.test.ts",
