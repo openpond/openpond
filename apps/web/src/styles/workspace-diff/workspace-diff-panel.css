@@ -740,12 +740,25 @@
 }
 
 .workspace-document-preview-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: 85px minmax(0, 1fr) 85px;
   align-items: center;
   gap: 9px;
   min-width: 0;
   border-bottom: 1px solid var(--border-default);
   padding: 10px 12px;
+}
+
+.workspace-document-preview-card > .workspace-file-location {
+  grid-column: 2;
+}
+
+.workspace-document-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
 }
 
 .workspace-document-preview-card strong {

@@ -1,17 +1,16 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { ChevronRight, ChevronUp } from "../icons";
+import { ChevronUp } from "../icons";
 import type { WorkspaceDiffFile, WorkspaceLspActionResponse, WorkspaceLspDiagnostic } from "@openpond/contracts";
 import { SyntaxLine, languageForPath } from "../chat/workspaceSyntax";
 import { MarkdownText } from "../chat/MarkdownText";
 import {
-  isAbsoluteWorkspaceDiffPath,
   isDocumentPath,
   isPresentationFile,
   isMarkdownPath,
-  normalizeWorkspaceDiffPath,
 } from "./workspace-diff-panel-model";
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
 import { useErrorToast } from "../../app/AppToastContext";
+import { FileBreadcrumbs } from "./WorkspaceFileLocation";
 import { WorkspaceDocumentPreview } from "./WorkspaceDocumentPreview";
 
 const FILE_TRUNCATED_MARKER = "\n\n[file truncated]";
@@ -23,59 +22,6 @@ const DIFF_ROW_HEIGHT = 22;
 const DIFF_DEFAULT_VIEWPORT_ROWS = 44;
 const DIFF_VIRTUALIZE_THRESHOLD = 160;
 const DIFF_VIRTUAL_OVERSCAN_ROWS = 12;
-
-function FileBreadcrumbs({
-  path,
-  workspaceName,
-  workspaceRootPath,
-  onSelectPath,
-}: {
-  path: string;
-  workspaceName: string | null;
-  workspaceRootPath?: string | null;
-  onSelectPath?: (path: string | null) => void;
-}) {
-  const displayPath = normalizeWorkspaceDiffPath(path, workspaceRootPath);
-  const absolute = isAbsoluteWorkspaceDiffPath(displayPath);
-  const root = absolute ? absoluteBreadcrumbRoot(displayPath) : workspaceName?.trim() || "Workspace";
-  const pathWithoutAbsoluteRoot = absolute && root !== "/" && displayPath.startsWith(`${root}/`)
-    ? displayPath.slice(root.length + 1)
-    : displayPath;
-  const parts = pathWithoutAbsoluteRoot.split("/").filter(Boolean);
-  const selectableFolders = Boolean(onSelectPath && !absolute);
-  return (
-    <span className="workspace-file-breadcrumbs" title={absolute ? displayPath : `${root} > ${displayPath}`}>
-      {onSelectPath && !absolute ? (
-        <button type="button" onClick={() => onSelectPath(null)}>
-          {root}
-        </button>
-      ) : (
-        <span>{root}</span>
-      )}
-      {parts.map((part, index) => {
-        const isFileName = index === parts.length - 1;
-        const folderPath = parts.slice(0, index + 1).join("/");
-        return (
-          <span className="workspace-file-breadcrumb-segment" key={`${index}-${part}`}>
-            <ChevronRight size={13} />
-            {onSelectPath && selectableFolders && !isFileName ? (
-              <button type="button" onClick={() => onSelectPath(folderPath)}>
-                {part}
-              </button>
-            ) : (
-              <span>{part}</span>
-            )}
-          </span>
-        );
-      })}
-    </span>
-  );
-}
-
-function absoluteBreadcrumbRoot(path: string): string {
-  const windowsDrive = /^[A-Za-z]:\//.exec(path);
-  return windowsDrive ? windowsDrive[0].slice(0, -1) : "/";
-}
 
 export function FilePreview({
   collapsed = false,
@@ -197,23 +143,25 @@ export function FilePreview({
     );
   }
   return (
-    <div className={`workspace-file-preview ${wordWrap ? "wrap" : ""}`}>
-      <div className="workspace-diff-file-heading">
-        <div>
-          <FileBreadcrumbs
-            path={file.path}
-            workspaceName={workspaceName}
-            workspaceRootPath={workspaceRootPath}
-            onSelectPath={onSelectBreadcrumbPath}
-          />
-          <span className="diff-addition">+{file.additions}</span>
-          <span className="diff-deletion">-{file.deletions}</span>
+    <div className={`workspace-file-preview ${wordWrap ? "wrap" : ""} ${shouldRenderDocument ? "document-only" : ""}`}>
+      {!shouldRenderDocument ? (
+        <div className="workspace-diff-file-heading">
+          <div>
+            <FileBreadcrumbs
+              path={file.path}
+              workspaceName={workspaceName}
+              workspaceRootPath={workspaceRootPath}
+              onSelectPath={onSelectBreadcrumbPath}
+            />
+            <span className="diff-addition">+{file.additions}</span>
+            <span className="diff-deletion">-{file.deletions}</span>
+          </div>
+          <span className="workspace-file-heading-end">
+            {saving ? <span className="workspace-file-save-state">Saving</span> : null}
+            {headerActions}
+          </span>
         </div>
-        <span className="workspace-file-heading-end">
-          {saving ? <span className="workspace-file-save-state">Saving</span> : null}
-          {headerActions}
-        </span>
-      </div>
+      ) : null}
       {!hasContent ? (
         <div className="workspace-diff-code-empty">{loading ? "Loading file content" : "No file content available."}</div>
       ) : shouldRenderMarkdown ? (

@@ -23,6 +23,7 @@ import {
 import type { SidebarFileStatus, WorkspaceDiffFile } from "@openpond/contracts";
 import { DiffOptionsMenu } from "./WorkspaceDiffOptions";
 import { WorkspaceFileBookmarkActions } from "./WorkspaceFileBookmarkActions";
+import { workspaceFileDisplayName } from "./WorkspaceFileLocation";
 import {
   nextRovingTabIndex,
   type DiffTab,
@@ -238,7 +239,7 @@ export function WorkspaceDiffTabs({
             >
               <FileText className="workspace-diff-tab-icon" size={13} />
               {dirtyFilePaths.has(file.path) && <span className="workspace-diff-tab-dirty" aria-hidden="true" />}
-              <span>{file.path.split("/").pop()}</span>
+              <span>{workspaceFileDisplayName(file.path)}</span>
             </button>
             {onSetFileBookmarkStatus ? (
               <WorkspaceFileBookmarkActions

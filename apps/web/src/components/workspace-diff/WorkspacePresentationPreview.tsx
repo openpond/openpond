@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import { Download } from "../icons";
+import { FileBreadcrumbs, workspaceFileDisplayName } from "./WorkspaceFileLocation";
 
 const PRESENTATION_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
 export default function WorkspacePresentationPreview({ path, contentBase64 }: { path: string; contentBase64: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const filename = path.replace(/\\/g, "/").split("/").pop() || "presentation";
+  const filename = workspaceFileDisplayName(path);
   const downloadName = /\.pptx$/i.test(filename) ? filename : `${filename}.pptx`;
   const bytes = useMemo(() => {
     try { return Uint8Array.from(atob(contentBase64.replace(/\s/g, "")), character => character.charCodeAt(0)); }
@@ -22,9 +23,29 @@ export default function WorkspacePresentationPreview({ path, contentBase64 }: { 
     // Each effect owns a separate stage so an obsolete async render cannot
     // overwrite the next deck, including during StrictMode effect replay.
     const stage = document.createElement("div");
+    // Render at a fixed width and scale the existing DOM. The viewer's adaptive
+    // resize rebuilds every slide, exposing white placeholders during a drag.
+    const renderWidth = 960;
+    stage.style.width = `${renderWidth}px`;
     host.replaceChildren(stage);
+    let scale = 1;
+    const fitStage = (width: number) => {
+      if (width <= 0) return;
+      const nextScale = width / renderWidth;
+      const scrollTop = host.scrollTop * nextScale / scale;
+      stage.style.zoom = String(nextScale);
+      host.scrollTop = scrollTop;
+      scale = nextScale;
+    };
+    const hostStyle = getComputedStyle(host);
+    fitStage(host.clientWidth - parseFloat(hostStyle.paddingLeft) - parseFloat(hostStyle.paddingRight));
+    const resizeObserver = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry) fitStage(entry.contentRect.width);
+    });
+    resizeObserver.observe(host);
     const url = URL.createObjectURL(new Blob([bytes], { type: PRESENTATION_CONTENT_TYPE }));
-    const viewer = new PptxViewer(stage, { fitMode: "contain", scrollContainer: host, zipLimits: RECOMMENDED_ZIP_LIMITS, lazySlides: true, lazyMedia: true, pdfjs: false });
+    const viewer = new PptxViewer(stage, { width: renderWidth, fitMode: "contain", scrollContainer: host, zipLimits: RECOMMENDED_ZIP_LIMITS, lazySlides: true, lazyMedia: true, pdfjs: false });
     setState({ source: bytes, count: 0, error: null, url });
     void viewer.open(bytes.buffer, { signal: controller.signal, renderMode: "list", listOptions: { windowed: true, initialSlides: 3, batchSize: 3 } })
       .then(() => {
@@ -35,6 +56,7 @@ export default function WorkspacePresentationPreview({ path, contentBase64 }: { 
       });
     return () => {
       controller.abort();
+      resizeObserver.disconnect();
       viewer.destroy();
       stage.remove();
       URL.revokeObjectURL(url);
@@ -43,9 +65,11 @@ export default function WorkspacePresentationPreview({ path, contentBase64 }: { 
 
   return <div className="workspace-document-preview workspace-presentation-preview">
     <div className="workspace-document-preview-card">
-      <strong title={path}>{downloadName}</strong>
-      <span>{current?.count ? `${current.count} slides` : "PowerPoint presentation"}</span>
-      {current?.url ? <a href={current.url} download={downloadName} aria-label="Download presentation" title="Download presentation"><Download size={16} aria-hidden="true" /></a> : null}
+      <FileBreadcrumbs path={path} />
+      <div className="workspace-document-preview-actions">
+        <span>{current?.count ? `${current.count} slides` : "PowerPoint"}</span>
+        {current?.url ? <a href={current.url} download={downloadName} aria-label="Download presentation" title="Download presentation"><Download size={16} aria-hidden="true" /></a> : null}
+      </div>
     </div>
     <div className="workspace-presentation-preview-body">
       {!bytes || current?.error ? <div className="workspace-diff-code-empty" role="alert">{current?.error ?? "Presentation preview unavailable."}</div>
