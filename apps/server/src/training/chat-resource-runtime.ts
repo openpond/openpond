@@ -22,6 +22,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   imports:ReturnType<typeof createDatasetImportService>;
   visuals:HtmlVisualService;
   improve?:(request:unknown)=>Promise<unknown>;
+  resolveInvocation?:(token:string)=>Promise<{sessionId:string;turnId:string}>;
 }) {
   const scopes = createChatExperimentScopes(deps.store);
   const sync = createLocalDatasetSync({store:deps.store,access:deps.access});
@@ -76,8 +77,10 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     return {visual:await deps.visuals.render(execution,{previewId:preview.previewId,title:"Experiment results"})};
   }
   async function request(kind:"dataset"|"experiment",raw:unknown) {
-    const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional()}).passthrough().parse(raw);
-    const {context,...input} = envelope;
+    const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
+    const {context:requestedContext,invocationToken,...input} = envelope;
+    if (invocationToken && !deps.resolveInvocation) throw new Error("CLI chat association is unavailable.");
+    const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
     if(kind==="dataset" && input.action==="resource_index") {
       const links=await deps.store.chatResourceLinks({});
       const unique=new Map<string,ChatResourceSummary>();
@@ -86,7 +89,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return {resources:[...unique.values()],links:links.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
     if (kind === "dataset" && ["context","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
-      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional()}).strict().parse(input.payload);
+      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
       const datasetChoices = (await deps.store.listLocalDatasetListings()).map(localDatasetSummary);
@@ -115,12 +118,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
           focus={...focus,experiment:record ? await experiments.summary(record) : null};
         }
         if(focus.dataset) {const pinned=await deps.store.readLocalDatasetListing(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
-        const graders = focus.dataset ? localGraderSummaries(await datasets.read(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [];
+        const graders = focus.dataset ? localGraderSummaries(await datasets.readListing(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [];
         return {focus:{...focus,scopeContext},datasets:datasetChoices,experiments:experimentChoices,graders};
       }
       if (!query.kind) throw new Error("Select the resource focus kind.");
       if (query.kind === "grader") {
-        scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,graders:focus.dataset ? localGraderSummaries(await datasets.read(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [],graderId:query.id ?? null,expectedSelectionVersion:query.expectedSelectionVersion});
+        scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,graders:focus.dataset ? localGraderSummaries(await datasets.readListing(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [],graderId:query.id ?? null,expectedSelectionVersion:query.expectedSelectionVersion});
         return {...focusFor(scopeContext),scopeContext};
       }
       if (query.kind === "dataset") {
@@ -133,7 +136,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         const pinned = experiment?.datasetId ? await deps.store.readLocalDatasetListing(experiment.datasetId,experiment.datasetRevision) : null;
         focus = {experiment:experiment ?? null,dataset:pinned ? localDatasetSummary(pinned) : null};
       }
-      const graders = focus.dataset ? localGraderSummaries(await datasets.read(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [];
+      const graders = focus.dataset ? localGraderSummaries(await datasets.readListing(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [];
       scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,dataset:focus.dataset,graders,...focus.experiment ? {run:focus.experiment} : {},expectedSelectionVersion:query.expectedSelectionVersion});
       return {...focus,scopeContext};
     }

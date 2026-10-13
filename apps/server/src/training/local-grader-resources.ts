@@ -1,7 +1,7 @@
 import { contentHash } from "@openpond/harness";
 import type { ChatResourceSummary,LocalDatasetRecord } from "@openpond/contracts";
 
-export function localGraderSummaries(record:LocalDatasetRecord):ChatResourceSummary[] {
+export function localGraderSummaries(record:Pick<LocalDatasetRecord,"checks"> & {workspace:Pick<LocalDatasetRecord["workspace"],"draft"|"contentHash">}):ChatResourceSummary[] {
   const draft=record.workspace.draft;
   const check=record.checks.find(check=>check.kind==="graders");
   return draft.graders.map(grader=>{

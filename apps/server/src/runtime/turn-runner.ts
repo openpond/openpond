@@ -3,7 +3,7 @@ import { HTML_VISUAL_INSTRUCTIONS } from "@openpond/contracts/html-visuals";
 import { visualTools } from "../visuals/visual-tools.js";
 import { chatResourceToolDefinitions } from "../openpond/chat-resource-tool-definitions.js";
 import { nativeToolMcpResult } from "../openpond/native-tool-calls.js";
-import { createOpenPondProfileSkillModelToolDefinitions } from "../openpond/model-tool-registry.js";
+import { createCommandModelToolDefinition, createOpenPondProfileSkillModelToolDefinitions } from "../openpond/model-tool-registry.js";
 import { materializeNativeEvaluationSkills } from "../harness/native-evaluation-skill-runtime.js";
 import { nativeImageContent } from "./native-agents/attachments.js";
 import { assertPonderDesktopExecution } from "../store/ponder-desktop-input.js";
@@ -1348,8 +1348,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const nativeCliSkillTools = nativeCliSkills.length && deps.readBuiltInOpenPondSkill
         ? createOpenPondProfileSkillModelToolDefinitions({ skills: nativeCliSkills, readProfileSkill: deps.readBuiltInOpenPondSkill })
         : [];
+      if (nativeCliSkills.length && executeOpenPondCommand) {
+        const command = createCommandModelToolDefinition({executeCommand:executeOpenPondCommand});
+        nativeCliSkillTools.push({...command,name:"openpond_exec_command",enabled:context=>context.session.openPondCommandAccessMode!=="disabled",
+          description:"Run an official OpenPond CLI workflow through the app command executor, preserving chat resource association. Use command: \"$OPENPOND_CLI_NODE\" \"$OPENPOND_CLI_ENTRY\" <arguments>. Existing command access policy applies."});
+      }
       const extraSystemContext = [
-        nativeCliSkills.length ? `For OpenPond datasets, graders, experiments, training, repos or deployments, read the openpond-cli skill using profile_skill_read. The skill provides the official CLI workflow and inline resource presentation guidance.` : "",
+        nativeCliSkills.length ? `For OpenPond datasets, graders, experiments, training, repos or deployments, read the openpond-cli skill using profile_skill_read. Execute CLI workflows through openpond_exec_command so the app supplies its installation and chat association context. The official command prefix is "$OPENPOND_CLI_NODE" "$OPENPOND_CLI_ENTRY". Use --local for installation-local resources.` : "",
         !session.systemKind && turn.metadata.chatResourceFocus ? `Optional resource focus supplied by the app (does not restrict other work): ${JSON.stringify(turn.metadata.chatResourceFocus)}. Resolve exact resource IDs/revisions with openpond_dataset/openpond_experiment before acting; disambiguate conflicting references.` : "",
         !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.provider === "codex" && htmlVisuals?.available() ? HTML_VISUAL_INSTRUCTIONS : "",
         selectedHarness?.instructionContext ?? null,

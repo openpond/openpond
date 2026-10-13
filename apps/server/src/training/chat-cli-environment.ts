@@ -1,0 +1,18 @@
+import { access } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const directory = path.dirname(fileURLToPath(import.meta.url));
+export async function bundledChatCliEnvironment(): Promise<NodeJS.ProcessEnv> {
+  const candidates = [
+    path.resolve(directory,"../../../cli/dist/cli.js"),
+    path.resolve(directory,"cli.js"),
+    path.resolve(directory,"../cli.js"),
+    path.resolve(directory,"../cli/cli.js"),
+    path.resolve(process.cwd(),"apps/cli/dist/cli.js"),
+  ];
+  for (const entry of candidates) {
+    if (await access(entry).then(()=>true,()=>false)) return { OPENPOND_CLI_NODE:process.execPath,OPENPOND_CLI_ENTRY:entry };
+  }
+  throw new Error("The bundled OpenPond CLI is unavailable. Repair the app installation before using CLI workflows.");
+}
