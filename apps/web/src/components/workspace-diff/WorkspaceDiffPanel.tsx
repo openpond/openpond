@@ -641,6 +641,7 @@ function WorkspaceDiffPanelInner({
       setSelectedPath(current => current && retained.has(current) ? current : null);
       setLoadedFiles(current => Object.fromEntries(Object.entries(current).filter(([path]) => retained.has(path))));
       setProvidedFilePaths(retained);
+      setProvidedSandboxIds(current => Object.fromEntries(Object.entries(current).filter(([path]) => retained.has(path))));
       providedLoads.current.retain(retained);
       setProvidedImageUrlsByPath(current => Object.fromEntries(Object.entries(current).filter(([path]) => retained.has(path))));
       setFileDrafts({});
@@ -904,6 +905,11 @@ function WorkspaceDiffPanelInner({
     }
     const normalizedPath = normalizeWorkspaceDiffPath(path, workspaceRootPath);
     if (!normalizedPath) return;
+    providedLoads.current.close(normalizedPath);
+    setProvidedSandboxIds(current => {
+      if (!Object.hasOwn(current, normalizedPath)) return current;
+      const next = { ...current }; delete next[normalizedPath]; return next;
+    });
     replaceNewTab(filesWithPreview ? "files" : normalizedPath);
     if (filesWithPreview) setFilesTabOpen(true);
     setProvidedFilePaths((current) => {
@@ -1241,6 +1247,10 @@ function WorkspaceDiffPanelInner({
       });
     }
     providedLoads.current.close(path);
+    setProvidedSandboxIds(current => {
+      if (!Object.hasOwn(current, path)) return current;
+      const next = { ...current }; delete next[path]; return next;
+    });
     setOpenFilePaths((current) => current.filter((candidate) => candidate !== path));
     setTabOrder(current => current.filter(key => key !== path));
     if (providedFilePaths.has(path)) {
