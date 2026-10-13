@@ -132,12 +132,14 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       for(const record of await deps.store.listLocalDatasetListings())unique.set("dataset:"+record.workspace.draft.id,localDatasetSummary(record));
       return {resources:[...unique.values()],links:visible.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
-    if (kind === "dataset" && ["context","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
-      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),graderId:z.string().min(1).nullable().optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
+    if (kind === "dataset" && ["context","set_model","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
+      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),graderId:z.string().min(1).nullable().optional(),name:z.string().optional(),evaluationModel:z.string().min(1).max(500).optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
       if(query.visualPublicationId)await deps.visuals.read(session.id,query.visualPublicationId);
-      const datasetChoices = (await deps.store.listLocalDatasetListings()).map(localDatasetSummary);
+      const datasetChoices = input.action === "context" ? (await deps.store.listLocalDatasetListings()).map(localDatasetSummary) : [];
+      const experimentChoices:ChatResourceSummary[] = [];
+      if (input.action === "context" || query.kind === "experiment") {
       const page = await experiments.service.list({teamId:experiments.scope}) as {items:import("@openpond/contracts").LocalExperimentRecord[]};
       const localChoices = await Promise.all(page.items.map(record=>experiments.summary(record)));
       const linkedTeam = team ? (await deps.store.chatResourceLinks({sessionId:session.id,kind:"experiment"})).filter(link=>link.summary.owner) : [];
@@ -152,7 +154,8 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if(profile)for(const link of new Map(linkedProfiles.map(link=>[link.summary.id,link])).values()) {
         try {profileChoices.push((await profile.inspect(link.summary.id,link.summary.profileRef)).summary);}catch {/* The selected Profile owns these choices. */}
       }
-      const experimentChoices=[...localChoices,...ownedChoices,...profileChoices,...await cloud.list()];
+      experimentChoices.push(...localChoices,...ownedChoices,...profileChoices,...await cloud.list());
+      }
       let scopeContext = chatExperimentContext(session.metadata);
       // Rehydrate saved training references from their owner and hide records
       // admitted by a different account. Persisted scope snapshots are not
@@ -215,6 +218,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         if(context)await deps.store.updateTurn(context.turnId,current=>({...current,metadata:{...current.metadata,
           chatExperimentScopeId:state.activeScopeId,chatExperimentSelectionVersion:state.selectionVersion}}));
         return {...focusFor(state),scopeContext:state};
+      }
+      if (input.action === "set_model") {
+        const catalog = await experiments.request({action:"models"}) as {models:{providerId:string;id:string}[]};
+        if (!query.evaluationModel || !catalog.models.some(model=>`${model.providerId}/${model.id}`===query.evaluationModel)) throw new Error("The selected evaluation model is unavailable. Refresh the model choices.");
+        scopeContext = await scopes.select(session.id,{evaluationModel:query.evaluationModel,expectedSelectionVersion:query.expectedSelectionVersion});
+        return selectedFocus(scopeContext);
       }
       if (input.action === "create_scope") {
         if (!query.operationId) throw new Error("Creating an experiment scope requires a stable operationId.");

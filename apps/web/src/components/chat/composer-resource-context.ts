@@ -3,10 +3,9 @@ import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 
 export function captureComposerResourceContext(resources: ReturnType<typeof useChatResourceFocus>, training?: ChatTrainingAttachment): TaskResourceContext[] {
   if (!resources.scope || !resources.focus.scopeContext) return [];
-  const selected = resources.scope.selectedGraderId
-    ? resources.graders.filter(grader => grader.id === resources.scope!.selectedGraderId)
-    : resources.graders;
-  const references = [resources.focus.dataset, resources.focus.experiment, ...selected]
+  const previous = resources.scope.runs.at(-1);
+  const run = resources.focus.experiment ?? (previous ? resources.experiments.find(item=>item.id===previous.id) ?? previous : null);
+  const references = [resources.focus.dataset, run, ...resources.graders]
     .filter((value): value is ChatResourceSummary => Boolean(value))
     .map(({kind, id, revision, datasetId, datasetRevision, owner, profileRef}) => ({
       kind, id, revision, datasetId, datasetRevision, owner, profileRef,
@@ -15,6 +14,7 @@ export function captureComposerResourceContext(resources: ReturnType<typeof useC
   return TaskResourceContextsSchema.parse([{
     scopeId: resources.scope.id,
     selectionVersion: resources.focus.scopeContext.selectionVersion,
+    ...(resources.scope.evaluationModel ? {evaluationModel:resources.scope.evaluationModel} : {}),
     resources: references,
     ...(job ? {training:[chatTrainingReference(job)]} : {}),
   }]);

@@ -50,7 +50,7 @@ Test graders against meaningful known-good and known-bad examples before claimin
 
 ## Experiments and improvements
 
-Discover available models before selecting an evaluated model. The agent answering this chat and the model under evaluation are separate choices. Pin the dataset revision and grader configuration; use a stable operation identity for replay where supported. Reconcile an uncertain submission before issuing a new run.
+Discover available models before selecting an evaluated model. In a scoped chat, persist the explicit choice with `openpond datasets select-model <providerId/modelId> --local --json` using an exact entry from `openpond experiments models --local --json`. Read the current selection with `openpond datasets context --local --json`; `evaluationModel` is the evaluation target. A user-named model overrides that saved choice once resolved to an available catalog entry; ambiguous names need clarification. Do not substitute the chat model or another provider when the chosen model is unavailable. The agent answering this chat and the model under evaluation are separate choices. Pin the dataset revision and grader configuration; use a stable operation identity for replay where supported. Reconcile an uncertain submission before issuing a new run.
 
 Use existing authorized limits. Ask for a missing spending ceiling when the selected operation requires one. A subscription run with unavailable dollar accounting must not be described as costing zero.
 
@@ -81,3 +81,11 @@ Include the exact returned resource IDs, revisions, and status in the result whe
 ### Retained training jobs in chat
 
 When the app supplies scoped CLI context, local training start/status and hosted start/submit/status commands retain the canonical job in the originating experiment scope. Local jobs keep their Model Run, model/version and artifact lineage; hosted jobs keep their API origin, workspace and hosted Model Project identity. These are training references, not graded evaluations. Inspect a saved job with the matching local or hosted status command to refresh it; do not submit a replacement because chat attachment failed. Hosted commands outside the app remain standalone. Never infer a trained model or successful artifact from a running job, and use the existing artifact/receipt commands before claiming training produced usable output.
+
+### State-aware actions
+
+The bar has one primary action based on retained run evidence and the selected configuration: New experiment, Set up, Run, Run updated, View progress, Improve, or Retry. Dataset/workspace or model changes require fresh evaluation evidence; an unchanged completed run leads to failure analysis. Improve proposes a concrete next experiment; it does not automatically train or deploy a model. Repeat run is an explicit overflow action and always creates separate evidence after reconciling uncertain submissions.
+
+The independent chat experiment runner currently evaluates all graders in the selected dataset revision. Selecting one grader in the bar is an inspection/test focus, not a run filter. This runner does not expose saved-answer regrading through the independent CLI route; do not claim that it does or repurpose grader fixture tests as experiment results. Team-owned scoring has its own CLI operations and authority. The independent bar uses Run updated for changed graders until compatible scoring is exposed for that owner.
+
+Setup and row inspection stay in the controls. Execution and improvement actions show a compact request preview, then append an unsent request with exact dataset, retained run, grader, and evaluation-model references. Opening an action never sends it. Train prepares hosted training on OpenPond and keeps serving/deployment separate. Dataset discovery still requires no numbered experiment.
