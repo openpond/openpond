@@ -317,6 +317,19 @@ describe("terminal one-shot chat result accumulator", () => {
     }
   });
 
+  // Native result snapshots repeat streamed text. Appending them duplicates the
+  // final answer; a previously truncated stream must not suppress the snapshot.
+  test("replaces streamed native output with its authoritative final snapshot", () => {
+    for (const maxOutputBytes of [null, 5]) {
+      const accumulator = createOneShotAccumulator({maxOutputBytes});
+      accumulator.apply(runtimeEvent({id:"chunk",name:"assistant.delta",output:"Long partial answer"}));
+      accumulator.apply(runtimeEvent({id:"final",name:"assistant.delta",output:"Done",data:{nativeMessageSnapshot:true}}));
+      const result = accumulator.result({terminal:"turn.completed",sessionId:"session-1",provider:"claude-code",model:"default",cwd:"/repo",startedAt:"2026-10-13T00:00:00Z",startedAtMs:Date.now(),error:null});
+      expect(result.finalMessage).toBe("Done");
+      expect(result.output).toEqual({finalMessageBytes:4,truncated:false,maxOutputBytes});
+    }
+  });
+
   test("caps final assistant output when max output bytes is set", () => {
     const accumulator = createOneShotAccumulator({ maxOutputBytes: 5 });
 

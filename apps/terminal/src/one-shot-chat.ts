@@ -355,8 +355,12 @@ export function createOneShotAccumulator(options: { maxOutputBytes?: number | nu
     apply(event) {
       total += 1;
       if (event.turnId) turnId = event.turnId;
-      if (event.name === "assistant.delta" && event.output && !finalMessageTruncated) {
-        const next = appendWithinByteLimit(finalMessage, finalMessageBytes, event.output, maxOutputBytes);
+      const finalSnapshot = event.name === "assistant.delta" && event.data !== null && typeof event.data === "object"
+        && "nativeMessageSnapshot" in event.data && event.data.nativeMessageSnapshot === true;
+      if (event.name === "assistant.delta" && event.output && (finalSnapshot || !finalMessageTruncated)) {
+        // Native providers send an authoritative final snapshot after streamed
+        // chunks. It replaces the partial answer, including a truncated one.
+        const next = appendWithinByteLimit(finalSnapshot ? "" : finalMessage, finalSnapshot ? 0 : finalMessageBytes, event.output, maxOutputBytes);
         finalMessage = next.text;
         finalMessageBytes = next.bytes;
         finalMessageTruncated = next.truncated;
