@@ -1,102 +1,78 @@
 import { chatTrainingAttachmentKey, type ChatTrainingAttachment } from "@openpond/contracts";
-import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useId, useState } from "react";
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { ComposerResourcePanel, type ResourcePanelKind } from "./ComposerResourcePanel";
 import { ComposerExperimentSetup } from "./ComposerExperimentSetup";
+import { experimentAction } from "./composer-experiment-action";
 import { DropdownSelect } from "../DropdownSelect";
-import { ChevronDown, MessageSquare, MoreVertical } from "../icons";
+import { ChevronDown, MoreVertical } from "../icons";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import "./composer-resources.css";
 
-export function ComposerResourceControls({ resources, busy, onDraft }: {
-  resources: ReturnType<typeof useChatResourceFocus>; busy: boolean; onDraft: (text: string, training?: ChatTrainingAttachment) => void;
+export function ComposerResourceControls({resources,busy,onDraft}: {
+  resources:ReturnType<typeof useChatResourceFocus>; busy:boolean; onDraft:(text:string,training?:ChatTrainingAttachment)=>void;
 }) {
-  const [renaming, setRenaming] = useState(false);
-  const [panel, setPanel] = useState<ResourcePanelKind>("experiment");
-  const [hasOpened, setHasOpened] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const panelId = useId();
-  function openPanel(next: ResourcePanelKind) { setRenaming(false); setPanel(next); setHasOpened(true); setExpanded(true); }
-  const [name, setName] = useState("");
-  const { scope, focus } = resources;
-  useEffect(() => { setRenaming(false); setExpanded(false); setHasOpened(false); }, [scope?.id]);
-  if (!scope) return null;
-  const ordinal = scope.ordinal;
-  const isExperiment = ordinal !== null;
-  const disabled = busy || resources.selecting;
-  const dataset = focus.dataset;
-  const datasets = dataset ? [dataset, ...resources.datasets.filter(candidate => candidate.id !== dataset.id || candidate.revision !== dataset.revision)] : resources.datasets;
-  const grader = resources.graders.find(candidate => candidate.id === scope.selectedGraderId);
-  const context = dataset ? `${dataset.name} V${dataset.revision}` : isExperiment ? `experiment ${scope.ordinal}` : "this dataset";
-  const run = focus.experiment;
-  const running = run && /running|queued|pending|starting/i.test(run.state);
-  const completed = run && /completed|complete|succeeded/i.test(run.state);
-  const primary = !isExperiment ? "New experiment" : !dataset ? "Add data" : !resources.graders.length ? "Add grader" : running ? "View run" : completed ? "Improve" : "Run";
-  const primaryDrafts = !["New experiment", "Add data", "Add grader"].includes(primary);
-  function draft(action: string) {
-    if (action === "New experiment" || action === "Add data") { openPanel("experiment"); return; }
-    if (action === "Create dataset") { openPanel("dataset"); return; }
-    if (action === "Add grader") { openPanel("grader"); return; }
-    if (action === "Train model") { openPanel("training"); return; }
-    if (action === "View rows" && !dataset?.owner && !dataset?.profileRef) { openPanel("rows"); return; }
-    const prompts: Record<string, string> = {
-      "Test grader": `Test ${grader ? grader.name : "the graders"} on ${context}.`,
-      "Run on saved outputs": `Grade this experiment's saved answers with ${grader ? grader.name : "the attached graders"}.`,
-      "Run": `Run an experiment on ${context}.`,
-      "View run": `How is this experiment going?`,
-      "Improve": `How can we improve this experiment's results?`,
-      "View rows": `Show the rows in ${context}.`,
-      "Improve dataset": `Check ${context} and suggest improvements.`,
-      "Compare results": `Compare this experiment with my earlier results.`,
-    };
-    if (prompts[action]) onDraft(prompts[action]!);
-  }
+  const [panel,setPanel]=useState<ResourcePanelKind>("experiment");
+  const [hasOpened,setHasOpened]=useState(false), [expanded,setExpanded]=useState(false);
+  const [action,setAction]=useState("Run");
+  const panelId=useId();
+  const {scope,focus}=resources;
+  useEffect(()=>{setExpanded(false);setHasOpened(false);},[scope?.id]);
+  if(!scope)return null;
+  const dataset=focus.dataset, isExperiment=scope.ordinal!==null, disabled=busy||resources.selecting;
+  const datasets=dataset ? [dataset,...resources.datasets.filter(item=>item.id!==dataset.id||item.revision!==dataset.revision)] : resources.datasets;
+  const previous=scope.runs.at(-1);
+  const run=focus.experiment ?? (previous ? resources.experiments.find(item=>item.id===previous.id) ?? previous : null);
+  const model=scope.evaluationModel;
+  const selectedGrader=resources.graders.find(item=>item.id===scope.selectedGraderId);
+  const executionReady=Boolean(dataset&&resources.graders.length&&resources.models.some(item=>`${item.providerId}/${item.id}`===model));
+  const actionReady=!["Run","Run updated","Repeat run","Retry"].includes(action)||(executionReady&&!run?.state.match(/^(running|queued|pending|starting)$/i));
+  const primary=experimentAction({isExperiment,dataset,graders:resources.graders.length,model,
+    modelAvailable:resources.models.some(item=>`${item.providerId}/${item.id}`===model),run});
+  function open(next:ResourcePanelKind) {setPanel(next);setHasOpened(true);setExpanded(true);}
+  function request(next:string) {setAction(next);open("action");}
+  const modelChoice=resources.models.find(item=>`${item.providerId}/${item.id}`===model);
+  const modelLabel=modelChoice ? `${modelChoice.name??modelChoice.id} (${modelChoice.providerId})` : model;
+  const gradersLabel=`${resources.graders.length} dataset grader${resources.graders.length===1?"":"s"}`;
+  const context=dataset ? `${dataset.name} V${dataset.revision}` : "this dataset";
+  const requests:Record<string,string>={
+    Run:`Run ${context} against ${modelLabel}, using ${gradersLabel}.`,
+    "Run updated":`Run the updated configuration for ${context} against ${modelLabel}, using ${gradersLabel}. Keep previous results for comparison.`,
+    Retry:`Inspect why the previous run stopped, then retry ${context} against ${modelLabel} with its dataset graders if appropriate. Reconcile any uncertain submission first.`,
+    "Repeat run":`Repeat ${context} against ${modelLabel} with its dataset graders as a new run. Preserve the previous results.`,
+    Improve:`Analyze the failures in experiment ${scope.ordinal}${run ? ` (run ${run.id})` : ""} and propose a concrete next experiment.`,
+    "View progress":`Check the progress of experiment ${scope.ordinal}${run ? ` (run ${run.id})` : ""}.`,
+    Compare:`Compare experiment ${scope.ordinal}${run ? ` (run ${run.id})` : ""} with its earlier results.`,
+    "Test grader":`Test ${selectedGrader?.name ?? "the dataset graders"} on ${context} against known-good and known-bad examples.`,
+  };
   return <div className={`composer-resource-area ${expanded ? "is-expanded" : ""}`}>
     <div className="composer-resource-bar" aria-label={isExperiment ? "Current experiment" : "Current dataset"}>
-      {isExperiment ? <DropdownSelect compact floating placement="top" floatingMenuWidth={280} label="Experiment scope" value={scope.id}
-        tooltip={`${scope.ordinal}: ${scope.name}`} className="composer-resource-number"
-        triggerContent={<><span>{scope.ordinal}</span><ChevronDown size={12} /></>}
-        options={[...(focus.scopeContext?.scopes ?? []).map(candidate => ({ value: candidate.id, label: `${candidate.ordinal}  ${candidate.name}` })), { value: "new", label: "New experiment", icon: "plus" }]}
-        onChange={value => { if (value === "new") openPanel("experiment"); else void resources.selectScope(value); setRenaming(false); }} disabled={disabled} /> : null}
+      {isExperiment ? <DropdownSelect compact floating placement="top" floatingMenuWidth={280} label="Experiment scope" value={scope.id} className="composer-resource-number"
+        triggerContent={<><span>{scope.ordinal}</span><ChevronDown size={12}/></>} tooltip={`${scope.ordinal}: ${scope.name}`}
+        options={[...(focus.scopeContext?.scopes??[]).map(item=>({value:item.id,label:`${item.ordinal}  ${item.name}`})),{value:"new",label:"New experiment",icon:"plus"}]}
+        onChange={value=>{if(value==="new")open("new-experiment");else void resources.selectScope(value);}} disabled={disabled}/> : null}
       <DropdownSelect compact floating searchable floatingMenuWidth={320} placement="top" label="Dataset focus" className="composer-resource-dataset"
-        value={dataset ? `${dataset.id}@${dataset.revision}` : ""}
-        triggerContent={<><span className="composer-resource-dataset-name">{dataset?.name ?? "Dataset"}</span>{dataset ? <span className="composer-resource-version">V{dataset.revision}</span> : null}<ChevronDown size={12} /></>}
-        tooltip={dataset ? `${dataset.name} V${dataset.revision}` : "Choose a dataset"}
-        options={[{ value: "", label: "Choose dataset" }, ...datasets.map(candidate => ({ value: `${candidate.id}@${candidate.revision}`, label: `${candidate.name} V${candidate.revision}`, description: `${candidate.taskCount ?? 0} tasks` })), { value: "create", label: "New dataset…", description: "Describe it in the panel below", icon: "plus" }]}
-        onChange={value => { if (value === "create") return draft("Create dataset"); const split = value.lastIndexOf("@"); void resources.select("dataset", split < 0 ? value : value.slice(0, split), split < 0 ? undefined : Number(value.slice(split + 1))); }} disabled={disabled} />
-      <DropdownSelect compact floating placement="top" floatingMenuWidth={280} label="Grader focus" className="composer-resource-graders" value={grader?.id ?? ""}
-        tooltip={grader?.name ?? `${resources.graders.length} graders`}
-        options={[{ value: "", label: "All graders", shortLabel: `Graders ${resources.graders.length}` }, ...resources.graders.map(candidate => ({ value: candidate.id, label: candidate.name })),
-          { value: "add", label: "Create grader…", description: "Describe it in the panel below", icon: "plus", disabled: !dataset, separatorBefore: true },
-          { value: "test", label: "Test grader…", description: "Draft a request in chat", disabled: !resources.graders.length },
-          ...(completed ? [{ value: "score", label: "Run on saved outputs…", disabled: !resources.graders.length }] : [])]}
-        onChange={value => { if (value === "add") draft("Add grader"); else if (value === "test") draft("Test grader"); else if (value === "score") draft("Run on saved outputs"); else void resources.select("grader", value); }} disabled={disabled || !dataset} />
-      <button type="button" className="composer-resource-primary" title={primaryDrafts ? "Draft a request in chat" : "Open setup below"} onClick={() => draft(primary)} disabled={disabled}>{primaryDrafts ? <MessageSquare size={12} aria-hidden /> : null}{primary}</button>
-      <DropdownSelect compact floating placement="top" floatingMenuWidth={250} label="More resource actions" value="" className="composer-resource-more"
-        triggerContent={<MoreVertical size={15} />}
-        options={[{ value: primary, label: `${primary}…`, description: ["New experiment", "Add data", "Add grader"].includes(primary) ? "Open setup below" : "Draft a request in chat" }, ...(dataset ? [{ value: "View rows", label: "View rows…" }, { value: "Improve dataset", label: "Improve dataset…", description: "Draft a request in chat" }, { value: "Train model", label: "Train on OpenPond…", description: "Prepare hosted model training" }] : []),
-          ...(completed ? [{ value: "Run", label: "Run again…" }, { value: "Compare results", label: "Compare results…" }] : []),
-          ...(scope.training ?? []).map((training,index)=>({value:`training:${chatTrainingAttachmentKey(training)}`,label:`View training ${index+1}…`,description:training.location === "cloud" ? "Hosted" : "Local",separatorBefore:index===0})),
-          ...(isExperiment ? [{ value: "New experiment", label: "New experiment…", separatorBefore: true }, { value: "rename", label: "Rename experiment…" }] : [])]}
-        onChange={value => { if (value.startsWith("training:")) {
-          const training = scope.training?.find(candidate=>`training:${chatTrainingAttachmentKey(candidate)}`===value);
-          if (training) onDraft("Check this training job and show its results and any model it produced.",training);
-        } else if (value === "rename") { setName(scope.name); setRenaming(true); setExpanded(true); } else draft(value); }} disabled={disabled} />
-      <button type="button" className="composer-resource-expand" aria-label={expanded ? "Collapse resource controls" : "Expand resource controls"}
-        aria-expanded={expanded} aria-controls={panelId} onClick={() => { setHasOpened(true); setExpanded(value => !value); }}><ChevronDown size={15} /></button>
+        value={dataset ? `${dataset.id}@${dataset.revision}` : ""} tooltip={context}
+        triggerContent={<><span className="composer-resource-dataset-name">{dataset?.name??"Dataset"}</span>{dataset ? <span className="composer-resource-version">V{dataset.revision}</span>:null}<ChevronDown size={12}/></>}
+        options={[{value:"",label:"Choose dataset"},...datasets.map(item=>({value:`${item.id}@${item.revision}`,label:`${item.name} V${item.revision}`})),{value:"create",label:"New dataset…",icon:"plus"}]}
+        onChange={value=>{if(value==="create")return open("dataset");const at=value.lastIndexOf("@");void resources.select("dataset",at<0?value:value.slice(0,at),at<0?undefined:Number(value.slice(at+1)));}} disabled={disabled}/>
+      <DropdownSelect compact floating placement="top" floatingMenuWidth={280} label="Grader focus" className="composer-resource-graders" value={scope.selectedGraderId??""}
+        options={[{value:"",label:"All graders",shortLabel:`Graders ${resources.graders.length}`},...resources.graders.map(item=>({value:item.id,label:item.name})),{value:"add",label:"Create grader…",icon:"plus",separatorBefore:true},{value:"test",label:"Test selected grader…",disabled:!scope.selectedGraderId}]}
+        onChange={value=>{if(value==="add")open("grader");else if(value==="test")request("Test grader");else void resources.select("grader",value);}} disabled={disabled||!dataset}/>
+      <button type="button" className="composer-resource-primary" disabled={disabled} onClick={()=>primary==="New experiment"||primary==="Set up"?open("experiment"):request(primary)}>{primary}</button>
+      {dataset && !dataset.owner && !dataset.profileRef ? <button type="button" className="composer-resource-secondary" disabled={disabled} onClick={()=>open("training")}>Train…</button>:null}
+      <DropdownSelect compact floating placement="top" floatingMenuWidth={250} label="More resource actions" value="" className="composer-resource-more" triggerContent={<MoreVertical size={15}/>}
+        options={[...(run ? [{value:"Compare",label:"Compare results…"},...(primary==="Improve"?[{value:"Repeat run",label:"Repeat run…"}]:[])]:[]),
+          ...(scope.training??[]).map((job,index)=>({value:`training:${chatTrainingAttachmentKey(job)}`,label:`Training ${index+1}…`,description:job.location==="cloud"?"Hosted":"Local"}))]}
+        onChange={value=>{if(value.startsWith("training:")){const job=scope.training?.find(item=>`training:${chatTrainingAttachmentKey(item)}`===value);if(job)onDraft("Check this training job and show its results and any model it produced.",job);}else request(value);}} disabled={disabled||!run&&!scope.training?.length}/>
+      <button type="button" className="composer-resource-expand" aria-label={expanded?"Collapse resource controls":"Expand resource controls"} aria-expanded={expanded} aria-controls={panelId}
+        onClick={()=>{setHasOpened(true);if(!expanded)setPanel("experiment");setExpanded(value=>!value);}}><ChevronDown size={15}/></button>
     </div>
-    <div id={panelId} className="composer-resource-expansion" inert={!expanded} aria-hidden={!expanded}>
-      <div className="composer-resource-expansion-inner">
-        {!renaming && hasOpened ? panel === "experiment"
-          ? <ComposerExperimentSetup resources={resources} busy={busy} onClose={() => setExpanded(false)} onAddGrader={() => openPanel("grader")} />
-          : <ComposerResourcePanel key={`${panel}:${dataset?.id}:${dataset?.revision}`} kind={panel} resources={resources} busy={busy}
-              onDraft={text => { onDraft(text); setExpanded(false); }} /> : null}
-    {renaming ? <div className="composer-resource-rename" onKeyDown={event => { if (!event.nativeEvent.isComposing && event.key === "Enter") { event.preventDefault(); event.stopPropagation(); if (!disabled && name.trim()) void resources.renameScope(scope.id, name).then(saved => { if (saved) { setRenaming(false); setExpanded(false); } }); } }}>
-      <input autoFocus aria-label="Experiment name" value={name} onChange={event => setName(event.target.value)} maxLength={500} disabled={disabled} />
-      <button type="button" disabled={disabled || !name.trim()} onClick={() => { void resources.renameScope(scope.id, name).then(saved => { if (saved) { setRenaming(false); setExpanded(false); } }); }}>Save</button><button type="button" onClick={() => { setRenaming(false); setExpanded(false); }}>Cancel</button>
-    </div> : null}
-      </div>
-    </div>
-    {resources.error && inlineErrorMessage(resources.error) ? <div role="status" className="chat-resource-error">{resources.error}</div> : null}
+    <div id={panelId} className="composer-resource-expansion" inert={!expanded} aria-hidden={!expanded}><div className="composer-resource-expansion-inner">
+      {hasOpened ? panel==="experiment"||panel==="new-experiment" ? <ComposerExperimentSetup resources={resources} busy={busy} createNew={panel==="new-experiment"||!isExperiment} onClose={()=>setExpanded(false)} onAddGrader={()=>open("grader")} onRows={()=>open("rows")}/>
+        : panel==="action" ? <div className="composer-resource-request"><div className="composer-experiment-setup-heading"><strong>{action}</strong><span>Continue in chat</span></div><p>{requests[action]}</p><button type="button" className="composer-experiment-create" disabled={disabled||!actionReady} onClick={()=>{onDraft(requests[action]!);setExpanded(false);}}>Add request to chat</button></div>
+        : <ComposerResourcePanel key={`${panel}:${dataset?.id}:${dataset?.revision}`} kind={panel} resources={resources} busy={busy} onDraft={text=>{onDraft(text);setExpanded(false);}}/> : null}
+    </div></div>
+    {resources.error&&inlineErrorMessage(resources.error)?<div role="status" className="chat-resource-error">{resources.error}</div>:null}
   </div>;
 }

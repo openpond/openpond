@@ -33,6 +33,7 @@ export const ChatResourceSummarySchema = z.object({
   name: z.string().max(500), state: z.string().max(100), datasetId: Id.optional(), datasetRevision: z.number().int().positive().optional(),
   taskCount: z.number().int().nonnegative().optional(), graderCount: z.number().int().nonnegative().optional(),
   checkState: z.string().optional(), syncState: z.string().optional(), model: z.string().optional(),
+  evaluationHash:Hash.optional(),
   graderId:Id.optional(),graderType:z.string().optional(),description:z.string().optional(),
   location:z.enum(["local","cloud"]).optional(),scoreLabel:z.string().optional(),
   owner:z.object({teamId:Id,actorId:Id}).strict().optional(),contentHash:Hash.optional(),profileRef:OpenPondProfileRefSchema.optional(),
@@ -48,6 +49,7 @@ export type ChatResourceSummary = z.infer<typeof ChatResourceSummarySchema>;
 export const ChatExperimentScopeSchema = z.object({
   id: Id, ordinal: z.number().int().positive(), name: z.string().trim().min(1).max(500),
   dataset: ChatResourceSummarySchema.nullable(),
+  evaluationModel: z.string().min(1).max(500).optional(),
   graders: z.array(ChatResourceSummarySchema), selectedGraderId: Id.nullable(),
   runs: z.array(ChatResourceSummarySchema), selectedRunId: Id.nullable(),
   training: z.array(ChatTrainingAttachmentSchema).optional(), selectedTrainingKey: z.string().max(4000).nullable().optional(),

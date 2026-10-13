@@ -4,6 +4,7 @@ import type { ClientConnection } from "../api/api-client";
 import { chatResourceRequest, type DatasetResponse } from "../api/chat-resource-api";
 
 export type ChatResourceFocus = { dataset: ChatResourceSummary | null; experiment: ChatResourceSummary | null; scopeContext?: ChatExperimentContext };
+export type EvaluationModel = {id:string;providerId:string;name?:string};
 type ContextResponse = { focus: ChatResourceFocus; datasets: ChatResourceSummary[]; experiments: ChatResourceSummary[]; graders: ChatResourceSummary[] };
 const emptyFocus = (): ChatResourceFocus => ({ dataset: null, experiment: null });
 
@@ -12,6 +13,10 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
   const [datasets, setDatasets] = useState<ChatResourceSummary[]>([]);
   const [experiments, setExperiments] = useState<ChatResourceSummary[]>([]);
   const [graders, setGraders] = useState<ChatResourceSummary[]>([]);
+  const [models, setModels] = useState<EvaluationModel[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [modelRefresh, setModelRefresh] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const generation = useRef(0), selection = useRef<AbortController | null>(null);
@@ -48,6 +53,17 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
     return () => { window.removeEventListener("openpond-resource-focus-changed",changed); reload.current = null; generation.current++; selection.current?.abort(); abort.abort(); clearTimeout(timer); };
   }, [connection, sessionId]);
 
+  useEffect(() => {
+    setModels([]); setModelsError(null);
+    if (!connection || !sessionId || !focus.scopeContext?.activeScopeId) return;
+    const abort = new AbortController(); setModelsLoading(true);
+    void chatResourceRequest<{models:EvaluationModel[]}>(connection,"experiment",{action:"models"},abort.signal)
+      .then(result => { if (!abort.signal.aborted) setModels(result.models); })
+      .catch(cause => { if (!abort.signal.aborted) setModelsError(cause instanceof Error ? cause.message : "Model choices unavailable."); })
+      .finally(() => { if (!abort.signal.aborted) setModelsLoading(false); });
+    return () => abort.abort();
+  }, [connection, sessionId, Boolean(focus.scopeContext?.activeScopeId), modelRefresh]);
+
   async function change(action: string, payload: Record<string, unknown>) {
     if (!connection || !sessionId || selection.current) return false;
     const admitted = ++generation.current;
@@ -73,7 +89,9 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
     return chatResourceRequest<DatasetResponse>(connection, "dataset", {action:"read", id:datasetId, expectedRevision:datasetRevision}, signal);
   }, [connection, datasetId, datasetRevision]);
   const scope = (focus.scopeContext ? chatResourceWorkspaces(focus.scopeContext).find(candidate => candidate.id === focus.scopeContext?.activeScopeId) : null) ?? null;
-  return { focus, scope, datasets, experiments, graders, selecting, error, readDataset,
+  return { focus, scope, datasets, experiments, graders, selecting, error, readDataset, models, modelsLoading, modelsError,
+    refreshModels: () => setModelRefresh(value => value + 1),
+    selectModel: (evaluationModel:string) => change("set_model", {evaluationModel}),
     select: (kind: "dataset" | "experiment" | "grader", id: string, revision?: number) => change("set_focus", { kind, id: id || null, ...(revision ? { revision } : {}) }),
     selectScope: (scopeId: string) => change("select_scope", { scopeId }),
     createScope: (graderId?: string | null) => change("create_scope", { operationId: `scope-${crypto.randomUUID()}`, ...(graderId !== undefined ? { graderId } : {}) }),

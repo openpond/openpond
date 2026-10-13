@@ -80,16 +80,16 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (availableGraders.some(grader => grader.datasetId !== source?.dataset?.id || grader.datasetRevision !== source?.dataset?.revision)) throw new Error("Dataset changed while loading graders. Reopen experiment setup.");
       if (graderId && !availableGraders.some(grader => grader.id === graderId)) throw new Error("Grader does not belong to the selected dataset revision.");
       const scope = source?.ordinal === null ? promote(state, source, operationId, now) : make(state, operationId, now);
-      if (source) { scope.dataset = source.dataset; scope.graders = availableGraders.map(grader => ({...grader, rows: []})); }
+      if (source) { scope.dataset = source.dataset; scope.evaluationModel = source.evaluationModel; scope.graders = availableGraders.map(grader => ({...grader, rows: []})); }
       scope.selectedGraderId = graderId === undefined ? source?.selectedGraderId ?? null : graderId;
       state.activeScopeId = scope.id; state.selectionVersion++; state.selectedAt = now;
     });
   }
 
-  async function select(sessionId: string, input: { scopeId?: string; name?: string; dataset?: ChatResourceSummary | null;
+  async function select(sessionId: string, input: { scopeId?: string; name?: string; evaluationModel?: string; dataset?: ChatResourceSummary | null;
     graders?: ChatResourceSummary[]; graderId?: string | null; run?: ChatResourceSummary; expectedSelectionVersion?: number;operationId?:string;visualPublicationId?:string }) {
     return change(sessionId, state => {
-      const hash=createHash("sha256").update(JSON.stringify({scopeId:input.scopeId,name:input.name,visualPublicationId:input.visualPublicationId,dataset:input.dataset ? [input.dataset.id,input.dataset.revision] : input.dataset,graderId:input.graderId,run:input.run?.id})).digest("hex");
+      const hash=createHash("sha256").update(JSON.stringify({scopeId:input.scopeId,name:input.name,evaluationModel:input.evaluationModel,visualPublicationId:input.visualPublicationId,dataset:input.dataset ? [input.dataset.id,input.dataset.revision] : input.dataset,graderId:input.graderId,run:input.run?.id})).digest("hex");
       const prior=input.operationId && Object.hasOwn(state.selectionOperations,input.operationId) ? state.selectionOperations[input.operationId] : undefined;
       if(prior) {
         if(prior.hash!==hash)throw new Error("Selection operation was reused for another resource.");
@@ -102,6 +102,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (input.scopeId && !scope) throw new Error("Experiment scope does not belong to this conversation.");
       if (!scope) scope = input.run ? make(state, `selection-${randomUUID()}`, now) : browsing(state, now);
       if (input.run && scope.ordinal === null) scope = promote(state, scope, `run-${input.run.id}`, now);
+      if (input.evaluationModel !== undefined) scope.evaluationModel = input.evaluationModel;
       if (input.name !== undefined) {
         const name = input.name.trim();
         if (!name || name.length > 500) throw new Error("Provide an experiment name of 1–500 characters.");
@@ -122,6 +123,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
         const index = scope.runs.findIndex(run => run.id === input.run!.id);
         if (index < 0) scope.runs.push(input.run); else scope.runs[index] = input.run;
         scope.selectedRunId = input.run.id;
+        if (input.run.model) scope.evaluationModel = input.run.model;
       }
       scope.updatedAt = now;
       state.activeScopeId = scope.id; state.selectionVersion++; state.selectedAt = now;
@@ -188,7 +190,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
         const matchesInputs = scope.dataset && scope.dataset.id === summary.datasetId
           && scope.dataset.revision === summary.datasetRevision
           && sameOwner;
-        if (!late && matchesInputs) scope.selectedRunId = summary.id;
+        if (!late && matchesInputs) { scope.selectedRunId = summary.id; if (summary.model) scope.evaluationModel = summary.model; }
       }
       scope.updatedAt = now;
       // Background completion updates the originating scope without selecting it.

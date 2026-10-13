@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import type { DatasetResponse } from "../../api/chat-resource-api";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 
-export type ResourcePanelKind = "experiment" | "dataset" | "grader" | "training" | "rows";
+export type ResourcePanelKind = "experiment" | "new-experiment" | "action" | "dataset" | "grader" | "training" | "rows";
 type Resources = ReturnType<typeof useChatResourceFocus>;
 
 export function ComposerResourcePanel({ kind, resources, busy, onDraft }: {
-  kind: Exclude<ResourcePanelKind, "experiment">; resources: Resources; busy: boolean; onDraft: (text: string) => void;
+  kind: Exclude<ResourcePanelKind, "experiment" | "new-experiment" | "action">; resources: Resources; busy: boolean; onDraft: (text: string) => void;
 }) {
   const [description, setDescription] = useState("");
   if (kind === "rows") return <DatasetRows resources={resources} />;

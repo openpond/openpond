@@ -12,8 +12,6 @@
 .composer-resource-bar > button:disabled { opacity: .5; }
 .composer-resource-bar .composer-resource-primary { display: inline-flex; align-items: center; gap: 4px; }
 .composer-resource-bar .composer-resource-primary, .composer-resource-bar .composer-resource-primary:hover { background: var(--accent-primary-fill); color: var(--text-on-accent); }
-.composer-resource-rename { display: flex; gap: 6px; align-items: center; padding: 6px 0; }
-.composer-resource-rename input { min-width: 0; flex: 1; }
 .composer-resource-area > .chat-resource-error { padding: 5px 0; }
 @container (max-width: 420px) {
   .composer-resource-bar { gap: 1px; padding-inline: 3px; }
@@ -54,11 +52,17 @@
 .composer-dataset-rows th:first-child { width: 28%; }
 .composer-dataset-rows .composer-experiment-setup-heading > div { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .composer-dataset-rows button { border: 0; background: transparent; color: inherit; }
-.composer-resource-rename { padding: 8px; }
 @media (prefers-reduced-motion: reduce) { .composer-resource-expansion, .composer-resource-expand svg { transition: none; } }
 
 @container (max-width: 420px) {
-  .composer-experiment-setup > .composer-experiment-setup-heading { display: none; }
-  .composer-experiment-setup .dropdown-select { flex-basis: calc(50% - 4px); }
+  .composer-experiment-setup > .composer-experiment-setup-heading strong { display: none; }
+  .composer-experiment-setup .dropdown-select { flex: 1 1 100px; }
   .composer-resource-request .composer-experiment-setup-heading > span { display: none; }
 }
+
+.composer-resource-secondary { border: 0; border-radius: 5px; padding: 6px 8px; font-size: 12px; background: var(--surface-raised); color: var(--text-primary); }
+.composer-resource-secondary:disabled { opacity: .5; }
+.composer-resource-request p { margin: 0; flex: 1 1 240px; font-size: 12px; line-height: 1.5; }
+.composer-experiment-setup .dropdown-trigger { overflow: hidden; }
+.composer-experiment-setup .dropdown-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer .composer-resource-area .composer-experiment-setup .dropdown-select.compact .dropdown-trigger { max-width: none; }
