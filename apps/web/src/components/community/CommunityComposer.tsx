@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import type { ChatAttachment, CommunityMember, CommunityMessage } from "@openpond/contracts";
 import {
   useEffect,
@@ -252,7 +253,7 @@ export function CommunityComposer(props: {
             ))}
           </div>
         ) : null}
-        {attachmentError ? <div className="composer-attachment-error" role="status">{attachmentError}</div> : null}
+        {attachmentError && inlineErrorMessage(attachmentError) ? <div className="composer-attachment-error" role="status">{attachmentError}</div> : null}
         <div
           className="composer-textarea-frame"
           onClick={(event) => {

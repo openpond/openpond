@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import type {
@@ -546,7 +547,7 @@ export function TasksetRuns({
               Create GRPO run with {version.id}
             </button>
           ))}
-          {bindingError ? <p className="training-banner error" role="alert">{bindingError}</p> : null}
+          {bindingError && inlineErrorMessage(bindingError) ? <p className="training-banner error" role="alert">{bindingError}</p> : null}
         </section>
       ) : null}
       <TasksetHistory
@@ -813,6 +814,7 @@ function TasksetAttempts({
   }, [taskset.id, training.actions]);
 
   if (loading) return <div className="labs-table-empty">Loading Attempts…</div>;
+  if (error && !inlineErrorMessage(error)) return null;
   if (error) return <div className="training-banner error" role="alert">{error}</div>;
   if (!operations?.attempts.length) {
     return (

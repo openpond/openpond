@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   DatasetFieldBinding,
@@ -279,7 +280,7 @@ export function HuggingFaceDatasetImportDialog({
           <DatasetImportProgress job={job!} />
         )}
 
-        {localError ? (
+        {localError && inlineErrorMessage(localError) ? (
           <div className="training-banner error" role="alert">{localError}</div>
         ) : null}
         <div className="training-dialog-actions">

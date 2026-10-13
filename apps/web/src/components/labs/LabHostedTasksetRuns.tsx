@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
 import type { ModelProject } from "@openpond/contracts";
 import type { ModelTasksetRunPageSchema, ModelTasksetRunResult } from "openpond-sdk/model-taskset-runs";
@@ -48,7 +49,7 @@ export function LabHostedTasksetRuns({ model, connection }: { model: ModelProjec
   return <section className="training-detail-section">
     <h2>Hosted evaluation runs</h2>
     <p>These evaluations continue in Sandbox while Desktop is closed.</p>
-    {error ? <p role="alert">{error}</p> : null}
+    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
     {!page && !error ? <p role="status">Loading hosted evaluations…</p> : null}
     <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Run</th><th>Taskset</th><th>Status</th><th>Metric</th><th>Actions</th></tr></thead><tbody>{page?.items.map(run => <tr key={run.id}><td>{run.policyKind === "fixture" ? "Fixture check" : "Model evaluation"}<small>{run.totalCount} attempts</small></td><td>Revision {run.taskset.revision}</td><td>{run.status} · {run.counts.completed + run.counts.failed + run.counts.cancelled}/{run.totalCount}</td><td>{run.metricName}: {run.score === null ? "Not scored" : run.score}</td><td>{run.resultAvailable ? <button className="training-text-button" type="button" disabled={busy} onClick={() => void open(run.id)}>View hosted result</button> : null}{["queued", "running", "cancelling"].includes(run.status) ? <button className="training-text-button" type="button" disabled={busy || run.status === "cancelling"} onClick={() => void cancel(run.id)}>{run.status === "cancelling" ? "Cancelling…" : "Cancel"}</button> : null}{run.error ? <p>{run.error.message}</p> : null}</td></tr>)}{page && !page.items.length ? <tr><td colSpan={5}>No hosted evaluations yet.</td></tr> : null}</tbody></table></div>
     {after ? <button className="training-text-button" type="button" onClick={() => { setAfter(null); setPage(null); }}>Latest evaluations</button> : null}{page?.nextCursor ? <button className="training-text-button" type="button" onClick={() => { setAfter(page.nextCursor); setPage(null); }}>Older evaluations</button> : null}

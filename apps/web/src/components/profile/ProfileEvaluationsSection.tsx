@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useRef, useState } from "react";
 
 import { api, type ClientConnection, type ProfileEvaluationDiscovery, type ProfileEvaluationPreparedRun, type ProfileEvaluationRunRequest, type ProfileWorkflowDiscovery } from "../../api";
@@ -250,14 +251,14 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
     <>
     {workflows ? <ProfileWorkflowsSection catalog={workflows} evaluations={evaluationCatalog}
       onEvaluate={openWorkflowEvaluations} onOpenRun={setInspectedRun} busy={busy} /> : null}
-    {workflowError ? <p role="alert">{workflowError}</p> : null}
+    {workflowError && inlineErrorMessage(workflowError) ? <p role="alert">{workflowError}</p> : null}
     <section ref={sectionRef} aria-label="Profile evaluations" className="profile-evaluations">
       <div className="profile-workflows-header">
         <h3>Evaluations</h3>
         <p>Checks and retained results for this Profile’s released components.</p>
       </div>
       {loading ? <p>Loading evaluations…</p> : null}
-      {error ? <p role="alert">{error}</p> : null}
+      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
       {runNotice ? <p role="status">{runNotice}</p> : null}
       {evaluationScope ? <div className="profile-evaluation-scope"><strong>{evaluationScope.kind === "workflow" ? `Workflow · ${evaluationScope.id}` : evaluationScope.kind === "skill" ? `Skill · ${evaluationScope.id}` : "Complete Profile"}</strong>
         <button type="button" disabled={busy} onClick={() => { setEvaluationScope(null); setSelectedId(null); setPlan(null); setRunNotice(null); }}>Show all evaluations</button></div> : null}

@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { useEffect, useRef, useState } from "react";
 import type { ClientConnection } from "../../../api/api-client";
 import { X } from "../../icons";
@@ -245,7 +246,7 @@ export function AgentLearningDialog({
               </button>
             </p>
           ) : null}
-          {error ? <p role="alert">{error}</p> : null}
+          {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
           <label className="agent-learning-check">
             <input
               type="checkbox"

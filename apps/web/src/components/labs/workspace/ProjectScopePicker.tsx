@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { useState } from "react";
 import { DropdownSelect } from "../../DropdownSelect";
 import type { Inventory, WorkspaceApi } from "./workspace-api";
@@ -65,7 +66,7 @@ export function ProjectScopePicker({
         ]}
         onChange={(value) => (value === MORE ? void loadMore() : onChange(value || null))}
       />
-      {error ? (
+      {error && inlineErrorMessage(error) ? (
         <span className="evaluation-scope-error" role="alert" title={error}>
           Projects unavailable
         </span>

@@ -1,5 +1,6 @@
 import { captureComposerResourceContext, composerResourceMetadata, mergeComposerResourceContexts } from "./composer-resource-context";
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ComposerResourceControls } from "./ComposerResourceControls";
@@ -1652,7 +1653,7 @@ export function Composer({
           onToggleDetails={() => setGoalDetailsOpen((open) => !open)}
         />
       )}
-      {composeNotice && (
+      {composeNotice && inlineErrorMessage(composeNotice.message) && (
         <div className={`composer-notice ${composeNotice.tone}`} role="status">
           {composeNotice.message}
         </div>
@@ -1698,7 +1699,7 @@ export function Composer({
             ))}
           </div>
         )}
-        {attachmentError && (
+        {attachmentError && inlineErrorMessage(attachmentError) && (
           <div className="composer-attachment-error" role="status">
             {attachmentError}
           </div>

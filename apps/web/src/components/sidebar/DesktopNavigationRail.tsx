@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Home, PanelsTopLeft } from "lucide-react";
+import { CircleAlert, Home, PanelsTopLeft } from "lucide-react";
+import { useConnectionStatus } from "../../hooks/useConnectionStatus";
 import { CalendarClock, FileOutput, FolderGit2, Globe2, MessageSquare, Shapes } from "../icons";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
@@ -9,6 +10,7 @@ import "../../styles/sidebar/desktop-navigation.css";
 
 export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps; open: boolean }) {
   const [accountOpen, setAccountOpen] = useState(false);
+  const connectionStatus = useConnectionStatus(sidebar.connection);
   const destinations = [
     { view: "chat", label: "Home", Icon: Home },
     { view: "scheduled", label: "Workflows", Icon: CalendarClock },
@@ -66,6 +68,12 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
           }}><Icon size={19} /></button>)}
     </div>
     <div className="desktop-rail-account">
+      {connectionStatus.error ? <button type="button" className="desktop-rail-button desktop-connection-error"
+        aria-label="OpenPond connection interrupted" aria-description={`${connectionStatus.error} Retrying every 5 seconds.`}
+        data-rail-tooltip={`${connectionStatus.error} Retrying every 5 seconds.`}
+        onClick={() => void navigateDesktopRoute({ kind: "settings", section: "diagnostics" })}>
+        <CircleAlert size={18} />
+      </button> : null}
       <UserAuthFooter account={sidebar.account} open={accountOpen} onOpenChange={setAccountOpen}
         hasRunningWork={sidebar.runningSessionIds.size > 0 || Object.values(sidebar.terminalSummaries).some(summary => summary.tabCount > 0)}
         connection={sidebar.connection} onOpenProviders={() => void navigateDesktopRoute({ kind: "settings", section: "providers" })}

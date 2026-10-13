@@ -34,13 +34,6 @@ function writeStoredConnection(storage: Storage, connection: ConnectionBase): vo
   storage.setItem(TOKEN_STORAGE_KEY, connection.token);
 }
 
-function clearStoredConnection(storage: Storage, connection: ConnectionBase): void {
-  const stored = readStoredConnection(storage);
-  if (stored?.serverUrl !== connection.serverUrl || stored.token !== connection.token) return;
-  storage.removeItem(SERVER_URL_STORAGE_KEY);
-  storage.removeItem(TOKEN_STORAGE_KEY);
-}
-
 function connectionFromInjectedWebConfig(): ConnectionBase | null {
   const injected = window.__OPENPOND_WEB_CONNECTION__;
   const serverUrl = injected?.serverUrl?.trim();
@@ -153,8 +146,7 @@ export async function resolveConnection(): Promise<ClientConnection> {
         platform: navigator.platform,
       };
     }
-    if (sessionStorage) clearStoredConnection(sessionStorage, candidate);
-    if (localStorage) clearStoredConnection(localStorage, candidate);
+    // A restart is not a reason to discard credentials needed by the next retry.
   }
   throw new Error(
     "No reachable OpenPond app server. Start `openpond ui` again and open the full printed URL.",

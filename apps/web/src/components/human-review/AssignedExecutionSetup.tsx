@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { HumanReviewViewSchema, type HumanReviewView } from "@openpond/evals/human-review";
@@ -24,6 +25,7 @@ function AssignedExecutionContent({context,review,route,onNavigate,onClose}:Para
     for (const id of evidence.taskIds ?? []) setup.toggle(release,id,true);
   },[review.id,review.generation]);
   if (!evidence) return <p role="status">Open or claim this assignment to access its exact tasks.</p>;
+  if (inventory.error && !inlineErrorMessage(inventory.error)) return null;
   if (inventory.error) return <p role="alert">{inventory.error.message}</p>;
   if (!setup.draft || !inventory.data) return <p role="status">Reading the assigned Dataset and authorized targets…</p>;
   return <ExperimentSetupPanel api={api} inventory={inventory.data} route={route} navigate={onNavigate}

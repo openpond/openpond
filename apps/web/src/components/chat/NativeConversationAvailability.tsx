@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SessionSchema, type RuntimeEvent, type Session } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { apiFetch } from "../../api/api-client";
+import { inlineErrorMessage } from "../../lib/error-messages";
 
 export function useNativeConversationAvailability({
   connection, sessionId, events, fallbackReason,
@@ -42,7 +43,7 @@ export function NativeConversationUnavailable({
   useEffect(() => { generation.current++; setBusy(false); setError(null); return () => { generation.current++; }; }, [connection, session?.id]);
   const historyId = !session?.metadata?.nativeBranch && session?.metadata?.nativeHistoryId;
   return <div className="composer dock native-conversation-unavailable">
-    <p role="status">{error ?? reason}</p>
+    <p role="status">{inlineErrorMessage(error) ?? reason}</p>
     {connection && typeof historyId === "string" ? <button type="button" disabled={busy} onClick={async () => {
       const current = generation.current;
       setBusy(true); setError(null);

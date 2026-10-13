@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";
 import { ExternalLink, Plus, RefreshCw, Settings } from "../icons";
@@ -636,7 +637,7 @@ export function AccountSettingsSection({
           ) : null}
         </div>
       </div>
-      {accountError ? (
+      {accountError && inlineErrorMessage(accountError) ? (
         <div className="settings-footnote warning account-error-footnote">
           <span>Account error</span>
           <strong>{accountError}</strong>
