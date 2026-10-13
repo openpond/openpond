@@ -32,7 +32,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
     if (existing) return existing;
     const ordinal = Math.max(0, ...state.scopes.map(scope => scope.ordinal)) + 1;
     const scope: ChatExperimentScope = { id: `experiment-scope-${randomUUID()}`, ordinal, name: `Experiment ${ordinal}`, dataset: null,
-      graders: [], runs: [], selectedRunId: null, turnIds: [], operationId, createdAt: now, updatedAt: now };
+      graders: [], selectedGraderId: null, runs: [], selectedRunId: null, turnIds: [], operationId, createdAt: now, updatedAt: now };
     state.scopes.push(scope);
     return scope;
   }
@@ -47,7 +47,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
   }
 
   async function select(sessionId: string, input: { scopeId?: string; name?: string; dataset?: ChatResourceSummary | null;
-    graders?: ChatResourceSummary[]; run?: ChatResourceSummary; expectedSelectionVersion?: number }) {
+    graders?: ChatResourceSummary[]; graderId?: string | null; run?: ChatResourceSummary; expectedSelectionVersion?: number }) {
     return change(sessionId, state => {
       if (input.expectedSelectionVersion !== undefined && input.expectedSelectionVersion !== state.selectionVersion) throw new Error("Resource selection changed. Refresh before selecting again.");
       const now = new Date().toISOString();
@@ -63,9 +63,16 @@ export function createChatExperimentScopes(store: SqliteStore) {
         scope.dataset = input.dataset;
         scope.selectedRunId = null;
         scope.graders = input.graders ?? [];
+        scope.selectedGraderId = null;
+      }
+      if (input.graders !== undefined && input.dataset === undefined) scope.graders = input.graders.map(grader=>({...grader,rows:[]}));
+      if (input.graderId !== undefined) {
+        if (input.graderId && !scope.graders.some(grader=>grader.id===input.graderId)) throw new Error("Grader does not belong to the selected dataset revision.");
+        scope.selectedGraderId = input.graderId;
       }
       if (input.run) {
-        if (!scope.runs.some(run => run.id === input.run!.id)) scope.runs.push(input.run);
+        const index = scope.runs.findIndex(run => run.id === input.run!.id);
+        if (index < 0) scope.runs.push(input.run); else scope.runs[index] = input.run;
         scope.selectedRunId = input.run.id;
       }
       scope.updatedAt = now;
@@ -93,7 +100,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
           && (!scope.dataset || scope.dataset.id !== summary.id || summary.revision >= scope.dataset.revision)) {
           const changed = scope.dataset?.id !== summary.id || scope.dataset?.revision !== summary.revision;
           scope.dataset = summary;
-          if (changed) scope.graders = [];
+          if (changed) { scope.graders = []; scope.selectedGraderId = null; }
         }
       } else if (summary.kind === "grader") {
         if (scope.dataset && scope.dataset.id === summary.datasetId && scope.dataset.revision === summary.datasetRevision) {

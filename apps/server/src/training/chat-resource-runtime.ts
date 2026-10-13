@@ -86,7 +86,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return {resources:[...unique.values()],links:links.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
     if (kind === "dataset" && ["context","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
-      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional()}).strict().parse(input.payload);
+      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional()}).strict().parse(input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
       const datasetChoices = (await deps.store.listLocalDatasetListings()).map(localDatasetSummary);
@@ -119,6 +119,10 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         return {focus:{...focus,scopeContext},datasets:datasetChoices,experiments:experimentChoices,graders};
       }
       if (!query.kind) throw new Error("Select the resource focus kind.");
+      if (query.kind === "grader") {
+        scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,graders:focus.dataset ? localGraderSummaries(await datasets.read(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [],graderId:query.id ?? null,expectedSelectionVersion:query.expectedSelectionVersion});
+        return {...focusFor(scopeContext),scopeContext};
+      }
       if (query.kind === "dataset") {
         const dataset = query.id ? localDatasetSummary(await datasets.readListing(query.id,query.revision)) : null;
         if (query.id && !dataset) throw new Error("Local Dataset was not found.");

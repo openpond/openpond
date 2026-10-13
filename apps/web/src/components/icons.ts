@@ -73,6 +73,7 @@ export { default as MessageSquare } from "lucide-react/dist/esm/icons/message-sq
 export { default as Mic } from "lucide-react/dist/esm/icons/mic.js";
 export { default as Minimize2 } from "lucide-react/dist/esm/icons/minimize-2.js";
 export { default as Monitor } from "lucide-react/dist/esm/icons/monitor.js";
+export { default as MoreVertical } from "lucide-react/dist/esm/icons/ellipsis-vertical.js";
 export { default as MoreHorizontal } from "lucide-react/dist/esm/icons/ellipsis.js";
 export { default as PackageCheck } from "lucide-react/dist/esm/icons/package-check.js";
 export { default as PanelLeft } from "lucide-react/dist/esm/icons/panel-left.js";

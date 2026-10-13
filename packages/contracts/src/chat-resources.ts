@@ -45,7 +45,7 @@ export type ChatResourceSummary = z.infer<typeof ChatResourceSummarySchema>;
 export const ChatExperimentScopeSchema = z.object({
   id: Id, ordinal: z.number().int().positive(), name: z.string().trim().min(1).max(500),
   dataset: ChatResourceSummarySchema.nullable(),
-  graders: z.array(ChatResourceSummarySchema),
+  graders: z.array(ChatResourceSummarySchema), selectedGraderId: Id.nullable(),
   runs: z.array(ChatResourceSummarySchema), selectedRunId: Id.nullable(),
   turnIds: z.array(Id), operationId: Id,
   createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
