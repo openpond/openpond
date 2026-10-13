@@ -70,11 +70,14 @@ async function selectNode(contents: WebContents, signal: AbortSignal): Promise<B
   const box = await debuggerApi.sendCommand("DOM.getBoxModel", { backendNodeId });
   const points = box.model.border as number[];
   const xs = points.filter((_value, index) => index % 2 === 0), ys = points.filter((_value, index) => index % 2 === 1);
-  const x = Math.max(0, Math.min(...xs)), y = Math.max(0, Math.min(...ys));
+  const metrics = await debuggerApi.sendCommand("Page.getLayoutMetrics");
+  const { pageX, pageY } = metrics.cssVisualViewport;
+  // DOM quads use viewport coordinates; screenshot clips use page coordinates.
+  const x = Math.max(0, Math.min(...xs) + pageX), y = Math.max(0, Math.min(...ys) + pageY);
   const node = (await debuggerApi.sendCommand("DOM.describeNode", { backendNodeId })).node;
   const attributes = node.attributes as string[] | undefined;
   const idIndex = attributes?.indexOf("id") ?? -1;
   const source = (await debuggerApi.sendCommand("DOM.getOuterHTML", { backendNodeId })).outerHTML as string;
-  return { rect: BrowserCaptureRectSchema.parse({ x, y, width: Math.ceil(Math.max(...xs) - x), height: Math.ceil(Math.max(...ys) - y) }),
+  return { rect: BrowserCaptureRectSchema.parse({ x, y, width: Math.ceil(Math.max(...xs) + pageX - x), height: Math.ceil(Math.max(...ys) + pageY - y) }),
     selector: `${node.localName || node.nodeName}${idIndex >= 0 ? `#${attributes![idIndex + 1]}` : ""}`.slice(0, 500), source: source.slice(0, 64_000) };
 }
