@@ -32,3 +32,17 @@ test("native shutdown acknowledges closed stdio and is shared by concurrent call
   expect(settled).toBe(true);
   expect(child.kill).toHaveBeenCalledTimes(1);
 });
+
+// Codex sends structured turn failures; string coercion loses the reason and
+// leaves users with [object Object] across both the CLI and desktop.
+test("preserves the provider's structured turn failure message", async () => {
+  const child=Object.assign(new EventEmitter(),{stdout:new PassThrough(),stderr:new PassThrough(),stdin:new PassThrough(),kill:vi.fn()});
+  native.child=child;
+  const client=new CodexAppServerClient({binaryPath:"test-codex"});
+  await client.start();
+  const failed=client.waitForTurn("failed-turn");
+  const check=expect(failed).rejects.toThrow("The model is temporarily unavailable. Try again later.");
+  child.stdout.write(JSON.stringify({method:"turn/completed",params:{turn:{id:"failed-turn",status:"failed",error:{message:"The model is temporarily unavailable. Try again later.",codexErrorInfo:"other"}}}})+"\n");
+  await check;
+  const stopping=client.stop();child.emit("close",0,null);await stopping;
+});

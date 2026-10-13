@@ -134,7 +134,10 @@ export function createCodexBridge(deps: {
 
   async function ingestCodexNotification(sessionId: string, notification: CodexNotification): Promise<void> {
     const params = notification.params as Record<string, unknown> | undefined;
-    const providerTurnId = stringValue(params, ["turnId", "turn_id"]);
+    // Lifecycle notifications carry their identity inside turn, unlike item deltas.
+    // Never infer a completed turn from whichever turn is currently active.
+    const providerTurnId = stringValue(params, ["turnId", "turn_id"])
+      ?? stringValue(asRecord(params?.turn), ["id"]);
 
     if (notification.method === "item/agentMessage/delta") {
       const context = await store.runtimeEventContext(sessionId, providerTurnId);

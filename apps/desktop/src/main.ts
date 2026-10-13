@@ -192,7 +192,8 @@ async function startServer(): Promise<ServerConnection> {
     await backendManager.stopServer();
     connection = null;
     serverProcess = null;
-    stopBrowserControlWorker();
+    // The preview worker reconnects independently while the backend restarts.
+    // Stop it only when replacing its connection or closing the desktop.
     serverProcessSampler.stop();
   }
   const serverPort = defaultServerPort();
@@ -319,7 +320,6 @@ async function startServer(): Promise<ServerConnection> {
     serverProcess = null;
     backendManager.releaseServer(ownedServerProcess);
     connection = null;
-    stopBrowserControlWorker();
     serverProcessSampler.stop();
   });
   let serverUrl: string;

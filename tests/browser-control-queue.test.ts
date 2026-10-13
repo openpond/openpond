@@ -36,6 +36,20 @@ describe("browser control queue", () => {
     queue.close();
   });
 
+  // A chart clicked while the backend reloads must wait for the same desktop
+  // to reconnect instead of reporting that HTML rendering is unsupported.
+  test("keeps an HTML preview request across desktop registration", async () => {
+    const queue=createBrowserControlQueue({timeoutMs:500});
+    try {
+      const result=queue.executor.previewHtml!({...browserBaseInput(),html:"<p>Chart</p>",width:680});
+      queue.registerDesktopExecutor({executorToken:"desktop-token",instanceId:"desktop-1",htmlPreview:true});
+      const claimed=await queue.claimNext(desktopRequest("desktop-token"));
+      expect(claimed.request?.operation).toBe("previewHtml");
+      queue.completeRequest(desktopRequest("desktop-token"),claimed.request!.id,{ok:true,output:"Captured",data:{preview:"saved"}});
+      await expect(result).resolves.toMatchObject({ok:true,data:{preview:"saved"}});
+    } finally {queue.close();}
+  });
+
   test("lets the desktop executor claim and complete queued browser requests", async () => {
     const queue = createBrowserControlQueue({ timeoutMs: 500 });
     queue.registerDesktopExecutor({ executorToken: "desktop-token", instanceId: "desktop-1" });

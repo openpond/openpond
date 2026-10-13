@@ -78,8 +78,8 @@ export function createHtmlVisualService(deps: {
       signal: AbortSignal;
     }, args: unknown) {
       const input = HtmlVisualPreviewRequestSchema.parse(args);
-      if (!deps.executor.previewHtml || !deps.executor.visualAvailable?.())
-        throw new Error('This desktop does not support HTML previews.');
+      if (!deps.executor.previewHtml)
+        throw new Error('The HTML preview renderer is unavailable.');
       context.signal.throwIfAborted();
       for (const [id, draft] of drafts)
         if (draft.expires < Date.now())
