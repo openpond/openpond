@@ -1,13 +1,15 @@
 ---
 name: openpond-cli
-description: Use the OpenPond CLI to create repos, watch deployments, and run tools without the web UI.
+description: Use the OpenPond CLI for datasets, graders, experiments, model training, repos, deployments, and tools.
 metadata:
   short-description: OpenPond CLI workflows
 ---
 
 # OpenPond CLI
 
-Use this skill when an agent needs to create or manage OpenPond apps via the CLI, without MCP.
+Use the official CLI for supported OpenPond operations, reusing its authentication and domain services. Check the installed command help before unfamiliar operations; use structured `--json` output and `--input-file` where supported.
+
+For dataset, grader, experiment, training, or learning-from-logs requests, read [Experiments and training](references/experiments-and-training.md). This guidance owns the conversational flow and useful inline presentation; the app supplies resource attachment and the compact experiment bar.
 
 ## Quick setup
 
