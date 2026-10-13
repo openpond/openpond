@@ -1,3 +1,4 @@
+import { MessageSquare } from "../icons";
 import { useEffect, useState } from "react";
 import type { DatasetResponse } from "../../api/chat-resource-api";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
@@ -13,9 +14,9 @@ export function ComposerResourcePanel({ kind, resources, busy, onDraft }: {
   const dataset = resources.focus.dataset;
   const context = dataset ? `${dataset.name} V${dataset.revision}` : "the selected dataset";
   const labels = {
-    dataset: {title:"New dataset", placeholder:"What examples should it contain?", button:"Draft dataset request"},
-    grader: {title:"Create grader", placeholder:"What should the grader check?", button:"Draft grader request"},
-    training: {title:"Train on OpenPond", placeholder:"What should the model learn? (optional)", button:"Draft training request"},
+    dataset: {title:"New dataset", placeholder:"What examples should it contain?", button:"Add to chat"},
+    grader: {title:"Create grader", placeholder:"What should the grader check?", button:"Add to chat"},
+    training: {title:"Train on OpenPond", placeholder:"What should the model learn? (optional)", button:"Add to chat"},
   }[kind];
   function submit() {
     const detail = description.trim();
@@ -26,9 +27,9 @@ export function ComposerResourcePanel({ kind, resources, busy, onDraft }: {
   }
   const disabled = busy || resources.selecting || kind !== "dataset" && !dataset || kind !== "training" && !description.trim();
   return <div className="composer-resource-request" onKeyDown={event => { if (!event.nativeEvent.isComposing && event.key === "Enter" && event.target instanceof HTMLInputElement) { event.preventDefault(); event.stopPropagation(); if (!disabled) submit(); } }}>
-    <div className="composer-experiment-setup-heading"><strong>{labels.title}</strong><span>{kind === "training" ? "Hosted training · plan in chat" : "Describe it, then continue in chat"}</span></div>
+    <div className="composer-experiment-setup-heading"><strong>{labels.title}</strong></div>
     <input autoFocus aria-label={labels.placeholder} placeholder={labels.placeholder} value={description} onChange={event => setDescription(event.target.value)} disabled={busy} />
-    <button type="button" className="composer-experiment-create" onClick={submit} disabled={disabled}>{labels.button}</button>
+    <button type="button" className="composer-experiment-create" onClick={submit} disabled={disabled}><MessageSquare size={13} aria-hidden /> {labels.button}</button>
   </div>;
 }
 

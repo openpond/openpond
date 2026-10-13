@@ -5,7 +5,7 @@ import { ComposerResourcePanel, type ResourcePanelKind } from "./ComposerResourc
 import { ComposerExperimentSetup } from "./ComposerExperimentSetup";
 import { experimentAction } from "./composer-experiment-action";
 import { DropdownSelect } from "../DropdownSelect";
-import { ChevronDown, MoreVertical } from "../icons";
+import { ChevronDown, MoreVertical, MessageSquare } from "../icons";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import "./composer-resources.css";
 
@@ -40,7 +40,7 @@ export function ComposerResourceControls({resources,busy,onDraft}: {
     "Run updated":`Run the updated configuration for ${context} against ${modelLabel}, using ${gradersLabel}. Keep previous results for comparison.`,
     Retry:`Inspect why the previous run stopped, then retry ${context} against ${modelLabel} with its dataset graders if appropriate. Reconcile any uncertain submission first.`,
     "Repeat run":`Repeat ${context} against ${modelLabel} with its dataset graders as a new run. Preserve the previous results.`,
-    Improve:`Analyze the failures in experiment ${scope.ordinal}${run ? ` (run ${run.id})` : ""} and propose a concrete next experiment.`,
+    Improve:`Review the results and coverage of experiment ${scope.ordinal} and propose a concrete next experiment.`,
     "View progress":`Check the progress of experiment ${scope.ordinal}${run ? ` (run ${run.id})` : ""}.`,
     Compare:`Compare experiment ${scope.ordinal}${run ? ` (run ${run.id})` : ""} with its earlier results.`,
     "Test grader":`Test ${selectedGrader?.name ?? "the dataset graders"} on ${context} against known-good and known-bad examples.`,
@@ -70,7 +70,7 @@ export function ComposerResourceControls({resources,busy,onDraft}: {
     </div>
     <div id={panelId} className="composer-resource-expansion" inert={!expanded} aria-hidden={!expanded}><div className="composer-resource-expansion-inner">
       {hasOpened ? panel==="experiment"||panel==="new-experiment" ? <ComposerExperimentSetup resources={resources} busy={busy} createNew={panel==="new-experiment"||!isExperiment} onClose={()=>setExpanded(false)} onAddGrader={()=>open("grader")} onRows={()=>open("rows")}/>
-        : panel==="action" ? <div className="composer-resource-request"><div className="composer-experiment-setup-heading"><strong>{action}</strong><span>Continue in chat</span></div><p>{requests[action]}</p><button type="button" className="composer-experiment-create" disabled={disabled||!actionReady} onClick={()=>{onDraft(requests[action]!);setExpanded(false);}}>Add request to chat</button></div>
+        : panel==="action" ? <div className="composer-resource-request"><div className="composer-experiment-setup-heading"><strong>{action}</strong></div><p>{requests[action]}</p><button type="button" className="composer-experiment-create" disabled={disabled||!actionReady} onClick={()=>{onDraft(requests[action]!);setExpanded(false);}}><MessageSquare size={13} aria-hidden /> Add to chat</button></div>
         : <ComposerResourcePanel key={`${panel}:${dataset?.id}:${dataset?.revision}`} kind={panel} resources={resources} busy={busy} onDraft={text=>{onDraft(text);setExpanded(false);}}/> : null}
     </div></div>
     {resources.error&&inlineErrorMessage(resources.error)?<div role="status" className="chat-resource-error">{resources.error}</div>:null}
