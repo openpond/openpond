@@ -1,7 +1,7 @@
 import { createServerStartupDeadline, isStorageStartupProgress, STORAGE_STARTUP_PROGRESS_PREFIX } from "../packages/runtime/src/ready-line-parser";
 import { describe, expect, test, vi } from "vitest";
 
-import { createReadyLineParser } from "../apps/desktop/src/child-process-ready";
+import { createReadyLineParser } from "@openpond/runtime/ready-line-parser";
 import { serverListenArgs } from "../apps/terminal/src/connection";
 import { createTerminalExitLatch } from "../apps/terminal/src/exit-latch";
 
