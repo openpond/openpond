@@ -12,7 +12,10 @@ export function mergeRuntimeEventLists(first: RuntimeEvent[], second: RuntimeEve
     seen.add(event.id);
     merged.push(event);
   }
-  return merged;
+  // A history page can begin after the live window. Keep persisted sequence
+  // order instead of letting merge argument order reorder conversation turns.
+  return merged.map((event, index) => ({ event, index }))
+    .sort(compareRuntimeEventOrder).map(({ event }) => event);
 }
 
 export function mergeLiveRuntimeEventLists(

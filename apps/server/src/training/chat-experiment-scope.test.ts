@@ -28,9 +28,15 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     await expect(scopes.select("chat-a", { scopeId:first.id,dataset:dataset(2),operationId:"visual-selection",visualPublicationId:"publication" })).rejects.toThrow("reused");
     await store.insertTurn(TurnSchema.parse({ id: "run-turn", sessionId: "chat-a", prompt: "Run", providerTurnId: null,
       startedAt: "2026-10-01T00:01:00.000Z", completedAt: null, status: "in_progress", error: null,
-      metadata: { chatExperimentScopeId: first.id } }));
+      metadata: { chatExperimentScopeId: first.id, chatExperimentSelectionVersion: selected.selectionVersion } }));
     const run: ChatResourceSummary = { kind: "experiment", id: "run-one", revision: 1, name: "Saved run", state: "Running", datasetId: "examples", datasetRevision: 1, rows: [] };
     await scopes.attach("chat-a", "run-turn", run);
+    expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).scopes[0]!.selectedRunId).toBe(run.id);
+    // A same-turn dataset update and delayed result must not label the old run
+    // with the updated draft's inputs, even without a selection-version change.
+    await scopes.attach("chat-a", "run-turn", dataset(2));
+    await scopes.attach("chat-a", "run-turn", { ...run, state: "Completed" });
+    expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).scopes[0]!.selectedRunId).toBeNull();
     await scopes.select("chat-a", { scopeId: first.id, dataset: dataset(2) });
     await scopes.attach("chat-a", "run-turn", dataset(1));
     await scopes.attach("chat-a", "run-turn", { ...run, state: "Completed" });
