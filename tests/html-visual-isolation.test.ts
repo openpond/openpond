@@ -73,8 +73,14 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     await evaluate(`(() => { window.measuredHeight=0; addEventListener('message', e => { if(e.data?.type==='openpond-visual-size')window.measuredHeight=e.data.height; }); const f=document.createElement('iframe');f.setAttribute('sandbox','allow-scripts');f.style.cssText='position:fixed;top:-300px;width:680px;height:640px';f.srcdoc=${JSON.stringify(htmlVisualDocument('<section style="height:640px">Clipped top</section>', "clipped"))};document.body.append(f); })()`);
     for (let i=0; i<30 && await evaluate("window.measuredHeight") !== 640; i++) await delay(100);
     expect(await evaluate("window.measuredHeight")).toBe(640);
-    await load(`<p>Network probe</p><img src="${url}/image"><iframe src="${url}/nested"></iframe><style>@import url('${url}/style');</style><script>fetch('${url}/fetch').catch(()=>{});navigator.sendBeacon('${url}/beacon','x');try{new Worker('${url}/worker')}catch{};window.open('${url}/popup');setTimeout(()=>{document.querySelectorAll('meta').forEach(e=>e.remove());location.href='${url}/navigate'},150)</script>`);
+    // Start the destructive navigation probe only after the visual reports
+    // ready. A fixed timer can navigate away before load under CI contention,
+    // testing scheduling rather than the parent's navigation boundary.
+    await load(`<button style="display:block;width:160px;height:60px" onclick="console.log('navigation probe started');document.querySelectorAll('meta').forEach(e=>e.remove());location.href='${url}/navigate'">Probe navigation</button><p>Network probe</p><img src="${url}/image"><iframe src="${url}/nested"></iframe><style>@import url('${url}/style');</style><script>fetch('${url}/fetch').catch(()=>{});navigator.sendBeacon('${url}/beacon','x');try{new Worker('${url}/worker')}catch{};window.open('${url}/popup')</script>`);
+    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 60, y: 25, button: "left", clickCount: 1 });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 60, y: 25, button: "left", clickCount: 1 });
     await delay(600);
+    expect((await evaluate("window.__openpondVisual.console")).map((row: {text:string})=>row.text)).toContain("navigation probe started");
     expect(requests).toEqual([]);
     // Failure story: selecting a resource button for a screenshot must not
     // trigger its action, and exported DOM must preserve live form state while

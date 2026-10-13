@@ -71,3 +71,7 @@ For learning from logs, resolve the selected sources and the requested recurrenc
 Preserve app-provided execution context. Use supported CLI attachment/context behavior when the installed runtime supplies it; do not invent session flags, set another chat's identity, or parse human-facing terminal decorations into resource records.
 
 Include the exact returned resource IDs, revisions, and status in the result when useful. The app should attach and track these through its server-owned resource events. Until that integration is available, report the saved references honestly; do not claim the bottom bar updated or that a resource was attached solely because a CLI command succeeded.
+
+### Retained training jobs in chat
+
+When the app supplies scoped CLI context, local training start/status and hosted start/submit/status commands retain the canonical job in the originating experiment scope. Local jobs keep their Model Run, model/version and artifact lineage; hosted jobs keep their API origin, workspace and hosted Model Project identity. These are training references, not graded evaluations. Inspect a saved job with the matching local or hosted status command to refresh it; do not submit a replacement because chat attachment failed. Hosted commands outside the app remain standalone. Never infer a trained model or successful artifact from a running job, and use the existing artifact/receipt commands before claiming training produced usable output.

@@ -1,9 +1,11 @@
+import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
+import { readChatTrainingAttachment } from "./chat-training-attachment.js";
 import type { createChatProfileExperiments } from "../evaluations/chat-profile-experiments.js";
 import { createChatTeamExperiments } from "../evaluations/chat-team-experiments.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
-import { ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
+import { chatTrainingAttachmentKey, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import type { LocalInferenceState } from "../evaluations/local-experiment-local-inference.js";
 import type { ChatResourceAction } from "../openpond/chat-resource-action.js";
@@ -109,6 +111,18 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
     const {context:requestedContext,invocationToken,...input} = envelope;
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
+    if (kind === "experiment" && ["attach_training", "read_training"].includes(String(input.action))) {
+      const ref = z.object({jobId:z.string().min(1).optional(),modelRunId:z.string().min(1).optional(),location:z.enum(["local","cloud"]).default("local"),apiOrigin:z.url().optional(),teamId:z.string().min(1).optional()}).strict()
+        .refine(value=>Boolean(value.jobId || value.modelRunId),"Provide a training job or Model Run ID.").parse(input.payload);
+      if (input.action === "attach_training" && !context) throw new Error("Training attachment requires the originating chat invocation.");
+      const access = await deps.access();
+      if (ref.location === "cloud" && (!ref.jobId || !ref.apiOrigin || !ref.teamId)) throw new Error("Hosted training requires its job, API origin and workspace.");
+      const training = ref.location === "cloud"
+        ? await readChatHostedTrainingAttachment(access,{jobId:ref.jobId!,apiOrigin:ref.apiOrigin!,teamId:ref.teamId!})
+        : await readChatTrainingAttachment(deps.store,ref,{teamId:access.teamId,actorId:access.actorId});
+      if (context && input.action === "attach_training") await scopes.attachTraining(context.sessionId,context.turnId,training);
+      return {training};
+    }
     if(kind==="dataset" && input.action==="resource_index") {
       const links=await deps.store.chatResourceLinks({});
       const unique=new Map<string,ChatResourceSummary>();
@@ -140,6 +154,31 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       }
       const experimentChoices=[...localChoices,...ownedChoices,...profileChoices,...await cloud.list()];
       let scopeContext = chatExperimentContext(session.metadata);
+      // Rehydrate saved training references from their owner and hide records
+      // admitted by a different account. Persisted scope snapshots are not
+      // authorization and are not a live status source.
+      async function refreshTraining(state:typeof scopeContext) {
+        if (!state.scopes.some(scope=>scope.training?.length)) return;
+        const access = await deps.access().catch(()=>null);
+        for (const scope of state.scopes) {
+          const visible = [];
+          for (const reference of scope.training ?? []) {
+            if (!access || reference.owner.teamId !== access.teamId || reference.owner.actorId !== access.actorId) continue;
+            if (reference.location === "cloud" && new URL(reference.apiOrigin).origin !== new URL(access.apiBaseUrl).origin) continue;
+            try { visible.push(reference.location === "cloud"
+              ? await readChatHostedTrainingAttachment(access,{jobId:reference.jobId,apiOrigin:reference.apiOrigin,...reference.owner})
+              : await readChatTrainingAttachment(deps.store,{jobId:reference.jobId},{teamId:access.teamId,actorId:access.actorId})); }
+            catch (error) {
+              // A hosted outage must not look like a successful empty result.
+              // The client retains the previous focus and displays the error.
+              if (reference.location === "cloud") throw error;
+            }
+          }
+          scope.training = visible;
+          if (!visible.some(reference=>chatTrainingAttachmentKey(reference)===scope.selectedTrainingKey)) scope.selectedTrainingKey = null;
+        }
+      }
+      await refreshTraining(scopeContext);
       const sourceTurn=context ? await deps.store.getTurn(context.turnId) : null;
       if(context && input.action!=="context") {
         const version=sourceTurn?.metadata.chatExperimentSelectionVersion;
@@ -172,6 +211,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         return localGraderSummaries(await datasets.readListing(dataset.id,dataset.revision)).map(grader=>({...grader,rows:[]}));
       }
       async function selectedFocus(state:typeof scopeContext) {
+        await refreshTraining(state);
         if(context)await deps.store.updateTurn(context.turnId,current=>({...current,metadata:{...current.metadata,
           chatExperimentScopeId:state.activeScopeId,chatExperimentSelectionVersion:state.selectionVersion}}));
         return {...focusFor(state),scopeContext:state};

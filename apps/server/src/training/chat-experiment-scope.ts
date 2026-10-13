@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   ChatExperimentContextSchema,
+  ChatTrainingAttachmentSchema,
+  chatTrainingAttachmentKey,
+  type ChatTrainingAttachment,
   TaskResourceContextsSchema,
   type ChatExperimentContext,
   type ChatExperimentScope,
@@ -155,5 +158,37 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
-  return { create, select, attach };
+  async function attachTraining(sessionId: string, turnId: string, input: ChatTrainingAttachment) {
+    const training = ChatTrainingAttachmentSchema.parse(input);
+    const turn = await store.getTurn(turnId);
+    if (!turn || turn.sessionId !== sessionId) throw new Error("Resource turn does not belong to this conversation.");
+    return change(sessionId, state => {
+      const contexts = TaskResourceContextsSchema.safeParse(turn.metadata.chatResourceContexts);
+      let targetId = typeof turn.metadata.chatExperimentScopeId === "string" ? turn.metadata.chatExperimentScopeId : null;
+      if (!targetId && contexts.success && contexts.data.length) {
+        const targets = [...new Set(contexts.data.map(context => context.scopeId))];
+        if (targets.length !== 1) throw new Error("Select the intended experiment scope before attaching training; the draft has multiple targets.");
+        targetId = targets[0]!;
+      }
+      const late = typeof turn.metadata.chatExperimentSelectionVersion === "number"
+        ? turn.metadata.chatExperimentSelectionVersion !== state.selectionVersion
+        : state.selectedAt !== null && state.selectedAt > turn.startedAt;
+      let scope = targetId ? state.scopes.find(candidate => candidate.id === targetId)
+        : state.scopes.find(candidate => candidate.turnIds.includes(turnId));
+      if (targetId && !scope) throw new Error("Resource scope does not belong to this conversation.");
+      if (!scope && !late) scope = state.scopes.find(candidate => candidate.id === state.activeScopeId);
+      const now = new Date().toISOString();
+      if (!scope) scope = make(state, `turn-${turnId}`, now);
+      if (!scope.turnIds.includes(turnId)) scope.turnIds.push(turnId);
+      const records = scope.training ??= [];
+      const key = chatTrainingAttachmentKey(training);
+      const index = records.findIndex(record => chatTrainingAttachmentKey(record) === key);
+      if (index < 0) records.push(training);
+      else if (training.updatedAt >= records[index]!.updatedAt) records[index] = training;
+      if (!late) scope.selectedTrainingKey = key;
+      scope.updatedAt = now;
+      if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
+    });
+  }
+  return { create, select, attach, attachTraining };
 }

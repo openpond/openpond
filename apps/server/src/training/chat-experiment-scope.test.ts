@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { SessionSchema, TurnSchema, type ChatResourceSummary } from "@openpond/contracts";
+import { SessionSchema, TurnSchema, type ChatTrainingAttachment, type ChatResourceSummary } from "@openpond/contracts";
 import { SqliteStore } from "../store/store.js";
 import { chatExperimentContext, createChatExperimentScopes } from "./chat-experiment-scope.js";
 
@@ -76,11 +76,23 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     await scopes.attach("chat-a", "run-turn", {...run,id:"matched-run",datasetId:"other"});
     expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).scopes[1]!.runs.map(run=>run.id)).toContain("matched-run");
     await expect(scopes.attach("chat-a", "run-turn", {...run,id:"unmatched-run",datasetId:"unknown"})).rejects.toThrow("Select the intended experiment scope");
+    const training: ChatTrainingAttachment = {location:"local",jobId:"training-job",modelRunId:"training-run",modelId:"model",modelVersionId:null,
+      adapterArtifactLineageId:null,owner:ownerA,taskset:{id:"published-training-data",revision:1,contentHash:"a".repeat(64)},
+      state:"running",executionState:"running",updatedAt:"2026-10-13T00:00:00.000Z"};
+    await expect(scopes.attachTraining("chat-a","run-turn",training)).rejects.toThrow("multiple targets");
+    await store.updateTurn("run-turn",current=>({...current,metadata:{chatExperimentScopeId:first.id,chatExperimentSelectionVersion:0}}));
+    await scopes.attachTraining("chat-a","run-turn",training);
+    await scopes.attachTraining("chat-a","run-turn",training);
+    await scopes.attachTraining("chat-a","run-turn",{...training,state:"prepared",updatedAt:"2026-10-12T00:00:00.000Z"});
+    await expect(scopes.attachTraining("chat-b","run-turn",training)).rejects.toThrow("does not belong");
     await store.close();
     store = new SqliteStore(home); scopes = createChatExperimentScopes(store);
     await scopes.create("chat-a", "create-a");
     state = chatExperimentContext((await store.getSession("chat-a"))?.metadata);
     expect(state.scopes).toHaveLength(2);
+    expect(state.scopes[0]!.training).toEqual([training]);
+    expect(state.scopes[0]!.dataset?.revision).toBe(2);
+    expect(state.scopes[0]!.selectedTrainingKey).toBeUndefined();
     expect(state.activeScopeId).toBe(second.id);
     expect(state.scopes[0]!.runs[0]!.datasetRevision).toBe(1);
     expect(chatExperimentContext((await store.getSession("chat-b"))?.metadata).scopes[0]!.dataset?.owner).toEqual(ownerA);
