@@ -14,14 +14,14 @@ test("the installation catalog exposes source associations and grader metadata w
   try {
     const service = createLocalDatasetService({ store, home });
     const created = await service.request({ action: "create", operationId: "catalog-create", payload: { name: "RFQ facts", draft: {
-      metadata: { profileTarget: { profileId: "example-customer", workflowId: "rfq-extract-facts" }, privateGold: "never-list-gold" },
+      metadata: { profileTarget: { profileId: "example-rfq", workflowId: "rfq-extract-facts" }, privateGold: "never-list-gold" },
       graders: [{ id: "facts", version: "1", label: "Source facts", kind: "content", privileged: true, rewardEligible: true,
         config: { operator: "final_answer_equals_expected", privateGold: "never-list-config" }, metadata: {} }],
       graderFixtures: [{ id: "fixture", taskId: "task", label: "positive", output: { answer: "never-list-fixture" }, infrastructureError: null,
         expectedPassed: true, expectedRewardEligible: true, metadata: {} }],
     } } }) as { record: LocalDatasetRecord };
     const catalog = await service.request({ action: "list", payload: { view: "catalog" } });
-    expect(catalog).toMatchObject([{ summary: { name: "RFQ facts", rows: [] }, profileTarget: { profileId: "example-customer", workflowId: "rfq-extract-facts" },
+    expect(catalog).toMatchObject([{ summary: { name: "RFQ facts", rows: [] }, profileTarget: { profileId: "example-rfq", workflowId: "rfq-extract-facts" },
       graders: [{ name: "Source facts", privileged: true, rewardEligible: true }] }]);
     const bytes = JSON.stringify(catalog);
     expect(bytes).not.toMatch(/never-list|graderFixtures|sourceRefs|files|config"/);
