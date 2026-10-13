@@ -8,6 +8,7 @@ import { type AcpSessionResult } from "@openpond/agent-runtime/acp/types";
 import { ProviderModelSchema, isRegisteredAcpProvider, type ProviderSettings, type ProviderConfig } from "@openpond/contracts/providers";
 import { isNativeAgentId, NATIVE_AGENTS, nativeAgentLaunch, type NativeAgentId } from "./config.js";
 import { createNativeCapabilityProbe } from "./capability-probes.js";
+import { refreshLocalExecutablePath } from "@openpond/runtime/executable-search-path";
 
 export type NativeAgentSetupResult = {
   provider: NativeAgentId;
@@ -25,6 +26,9 @@ const cache = new Map<string, { result: NativeAgentSetupResult; expires: number 
 const probing = new Map<string, Promise<NativeAgentSetupResult>>();
 
 export async function probeNativeAgent(provider: NativeAgentId, config?: Partial<ProviderConfig>, options: { force?: boolean; authMethodId?: string; signal?: AbortSignal } = {}): Promise<NativeAgentSetupResult> {
+  options.signal?.throwIfAborted();
+  if (!config?.binaryPath) await refreshLocalExecutablePath(options.force);
+  options.signal?.throwIfAborted();
   const launch = nativeAgentLaunch(provider, config);
   const prior = cache.get(launch.instanceId);
   if (!options.force && !options.authMethodId && prior && prior.expires > Date.now()) return prior.result;
