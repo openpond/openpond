@@ -38,7 +38,7 @@ export async function captureBrowserPage(contents: WebContents, mode: BrowserCap
     contents.removeListener("did-start-navigation", onNavigation); contents.removeListener("destroyed", onNavigation);
     contents.debugger.removeListener("detach", onNavigation);
     if (!contents.isDestroyed() && contents.debugger.isAttached()) {
-      await contents.debugger.sendCommand("Overlay.setInspectMode", { mode: "none" }).catch(() => {});
+      await contents.debugger.sendCommand("Overlay.setInspectMode", { mode: "none", highlightConfig: {} }).catch(() => {});
       if (attached) contents.debugger.detach();
     }
   }
@@ -65,7 +65,7 @@ async function selectNode(contents: WebContents, signal: AbortSignal): Promise<B
     void debuggerApi.sendCommand("Overlay.setInspectMode", { mode: "searchForNode", highlightConfig: { showInfo: true, showStyles: true, contentColor: color, borderColor: { ...color, a: 1 } } })
       .catch(error => finish(undefined, error instanceof Error ? error : new Error(String(error))));
   });
-  await debuggerApi.sendCommand("Overlay.setInspectMode", { mode: "none" });
+  await debuggerApi.sendCommand("Overlay.setInspectMode", { mode: "none", highlightConfig: {} });
   await debuggerApi.sendCommand("Overlay.hideHighlight");
   const box = await debuggerApi.sendCommand("DOM.getBoxModel", { backendNodeId });
   const points = box.model.border as number[];
