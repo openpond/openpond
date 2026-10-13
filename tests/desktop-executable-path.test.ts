@@ -40,7 +40,7 @@ describe.skipIf(process.platform === "win32")("desktop executable discovery", ()
   test("discovers providers installed after the search path was initialized", async () => {
     const home = await mkdtemp(path.join(tmpdir(), "openpond-late-install-"));
     fixtures.push(home);
-    const searchPath = await resolveDesktopExecutablePath({ home, env: { HOME: home, SHELL: path.join(home, "missing-shell"), PATH: path.dirname(process.execPath) } });
+    const searchPath = await resolveDesktopExecutablePath({ home, shellCandidates: [path.join(home, "missing-shell")], env: { HOME: home, SHELL: path.join(home, "missing-shell"), PATH: path.dirname(process.execPath) } });
     await mkdir(path.join(home, ".local", "bin"), { recursive: true });
     await writeFile(path.join(home, ".local", "bin", "claude"), '#!/usr/bin/env node\nconsole.log("claude");\n', { mode: 0o755 });
     const { stdout } = await execute("claude", ["--version"], { env: { PATH: searchPath }, timeout: 5_000 });
@@ -54,7 +54,9 @@ describe.skipIf(process.platform === "win32")("desktop executable discovery", ()
     await symlink(process.execPath, path.join(runtime, "node"));
     vi.stubEnv("HOME", home);
     vi.stubEnv("BUN_INSTALL", path.join(home, ".bun"));
-    vi.stubEnv("SHELL", path.join(home, "missing-shell"));
+    const shell = path.join(home, "fixture-shell");
+    await writeFile(shell, `#!/bin/sh\nprintf '__OPENPOND_EXECUTABLE_PATH__%s\\0' "$PATH"\n`, { mode: 0o755 });
+    vi.stubEnv("SHELL", shell);
     vi.stubEnv("PATH", runtime);
     await initializeDesktopExecutablePath({ info() {} } as Parameters<typeof initializeDesktopExecutablePath>[0]);
     await expectAgentsLaunch(process.env.PATH!);
@@ -86,7 +88,7 @@ describe.skipIf(process.platform === "win32")("desktop executable discovery", ()
     await symlink(process.execPath, path.join(runtime, "node"));
     const shell = path.join(home, "shell");
     if (failure === "timeout") await writeFile(shell, "#!/bin/sh\nexec /bin/sleep 10\n", { mode: 0o755 });
-    const searchPath = await resolveDesktopExecutablePath({ home, env: { HOME: home, SHELL: shell, PATH: "/usr/bin:/bin" }, shellTimeoutMs: 50 });
+    const searchPath = await resolveDesktopExecutablePath({ home, shellCandidates: [shell], env: { HOME: home, SHELL: shell, PATH: "/usr/bin:/bin" }, shellTimeoutMs: 50 });
     expect(searchPath.split(path.delimiter)).toContain(runtime);
     expect(new Set(searchPath.split(path.delimiter)).size).toBe(searchPath.split(path.delimiter).length);
     await expectAgentsLaunch(searchPath);

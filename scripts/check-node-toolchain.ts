@@ -26,7 +26,7 @@ const skippedFiles = new Set([
 ]);
 
 const compatibilityFiles = new Set([
-  "apps/desktop/src/desktop-executable-path-bun-compat.ts",
+  "packages/runtime/src/executable-installation-bun-compat.ts",
   "apps/cli/src/cli/project-source-upload.ts",
   "apps/server/src/openpond/command-access.ts",
   "apps/server/src/openpond/context-compaction/file-ledger.ts",
