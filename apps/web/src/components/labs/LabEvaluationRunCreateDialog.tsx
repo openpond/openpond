@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useMemo, useState, type FormEvent } from "react";
 import type {
   ContinualBenchPanelRelease,
@@ -99,7 +100,7 @@ export function LabEvaluationRunCreateDialog({
           <label><span>Maximum evaluation GPU seconds</span><input min="1" required step="1" type="number" value={maxGpuSeconds} onChange={(event) => setMaxGpuSeconds(Number(event.currentTarget.value))} /></label>
         </div>
         <p className="labs-detail-copy">Starting is explicit and may allocate paid evaluation resources. The evidence state will update independently; advance/hold remains a separate operator action.</p>
-        {error ? <div className="labs-rename-error" role="alert">{error}</div> : null}
+        {error && inlineErrorMessage(error) ? <div className="labs-rename-error" role="alert">{error}</div> : null}
         {!candidates.length ? <div className="training-run-placeholder">No sealed comparison release has a trained Model Version yet.</div> : null}
         <footer><button disabled={busy} type="button" onClick={onClose}>Cancel</button><button disabled={busy || !selected || !panel || maximumSpendUsd <= 0 || maxGpuSeconds <= 0} type="submit">{busy ? "Starting…" : "Start evaluation"}</button></footer>
       </form>

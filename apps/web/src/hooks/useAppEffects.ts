@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { SessionSchema, type Approval, type RuntimeEvent, type Session } from "@openpond/contracts";
 import { api, openEventStream, type ClientConnection } from "../api";
+import { connectionStatus, reportConnectionFailure } from "../api/connection-status";
 import type { SidebarSectionMenuId } from "../app/app-state";
 import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 
@@ -223,7 +224,7 @@ export function useRuntimeEvents({
         clearDisconnectTimer();
         disconnectTimer = window.setTimeout(() => {
           if (!source.isOpen()) {
-            setError("Event stream disconnected");
+            reportConnectionFailure(eventConnection);
             onDisconnected?.();
           }
         }, 2000);
@@ -233,6 +234,7 @@ export function useRuntimeEvents({
         clearDisconnectTimer();
         clearEventStreamError();
         window.dispatchEvent(new Event("openpond-runtime-connected"));
+        if (connectionStatus(eventConnection).error) onDisconnected?.();
       },
       { afterSequence },
     );

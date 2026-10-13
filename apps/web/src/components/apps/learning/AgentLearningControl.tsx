@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { useMemo, useState } from "react";
 import type { ClientConnection } from "../../../api/api-client";
 import type { AgentInventory, AgentSource } from "../agent-connections";
@@ -219,7 +220,7 @@ export function AgentLearningControl({
       {projectId && !bindings.length && query.data ? (
         <small>Sync this agent to the selected Project to use its local connection.</small>
       ) : null}
-      {error ? <small role="alert">{error}</small> : null}
+      {error && inlineErrorMessage(error) ? <small role="alert">{error}</small> : null}
       {open && connection && teamId ? (
         <AgentLearningDialog
           key={projectId}
@@ -313,7 +314,7 @@ function LearningJoinDialog({
             </select>
           </label>
         ) : null}
-        {error ? <p role="alert">{error}</p> : null}
+        {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
         <div className="settings-button-row">
           <button type="button" disabled={busy} onClick={onClose}>
             Cancel

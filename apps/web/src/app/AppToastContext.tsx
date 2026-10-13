@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ShowAppToast } from "./app-state";
-import { errorMessageForToast } from "../lib/error-messages";
+import { errorMessageForToast, isConnectionErrorMessage } from "../lib/error-messages";
 
 const AppToastContext = createContext<ShowAppToast | null>(null);
 
@@ -41,7 +41,8 @@ export function useErrorToast(
   const enabled = options.enabled ?? true;
   const fallback = options.fallback ?? "Something went wrong.";
   const prefix = options.prefix?.trim() ?? "";
-  const message = error == null || error === ""
+  const rawMessage = error instanceof Error ? error.message : String(error ?? "");
+  const message = error == null || error === "" || isConnectionErrorMessage(rawMessage)
     ? null
     : `${prefix}${prefix ? ": " : ""}${errorMessageForToast(error, fallback)}`;
 

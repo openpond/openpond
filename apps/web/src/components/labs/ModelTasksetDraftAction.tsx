@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useRef, useState } from "react";
 import type { ModelProject } from "@openpond/contracts";
 import { ModelTasksetDraftRequestSchema, type ModelTasksetDraftRequest } from "openpond-sdk/model-taskset-authoring";
@@ -41,6 +42,6 @@ export function ModelTasksetDraftAction({ model, training, onOpen }: {
       try { localStorage.removeItem(storageKey); setRequest(null); setError(null); }
       catch (error) { setError(error instanceof Error ? error.message : "The pending request could not be cleared."); }
     }}>Use current selection for a new draft</button> : null}
-    {error ? <p role="alert">{error}</p> : null}
+    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
   </>;
 }

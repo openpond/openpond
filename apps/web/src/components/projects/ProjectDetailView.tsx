@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import type { OpenPondActionCatalogEntry } from "@openpond/contracts";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, type ClientConnection } from "../../api";
@@ -173,7 +174,7 @@ export function ProjectDetailView({
         <button aria-selected={tab === "website"} onClick={() => setTab("website")} role="tab" type="button">Website</button>
       </div>
 
-      {error ? <div className="project-detail-error" role="alert">{error}</div> : null}
+      {error && inlineErrorMessage(error) ? <div className="project-detail-error" role="alert">{error}</div> : null}
       {tab === "source" ? (
         <ProjectSourceTable loading={loading} rows={sourceRows} />
       ) : tab === "actions" ? (

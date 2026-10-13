@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
 import type { TrainingCandidateDecision, TrainingCandidateDecisionRequest } from "openpond-sdk/training";
 import { api, type ClientConnection, type ManagedCandidateReview as Review } from "../../api";
@@ -72,7 +73,7 @@ export function ManagedCandidateReview({ connection, lineageId, jobId, onSaved }
         <p className="training-muted">Review {decision.revision} · {new Date(decision.decidedAt).toLocaleString()}</p>
       </> : <p className="training-muted">{loading ? "Loading candidate review…" : view ? "No candidate decision recorded." : "Candidate review unavailable."}</p>}
       {view ? <p className="training-muted">Last synced {new Date(view.syncedAt).toLocaleString()}. Acceptance keeps this candidate for later use; serving is activated separately.</p> : null}
-      {error ? <p role="alert" className="training-error">{error}</p> : null}
+      {error && inlineErrorMessage(error) ? <p role="alert" className="training-error">{error}</p> : null}
       <div className="training-dialog-actions">
         <button className="training-button secondary" type="button" disabled={loading || saving} onClick={() => setRefresh(value => value + 1)}>Refresh review</button>
         <button className="training-button" type="button" disabled={!ready || loading || saving || decision?.request.decision === "accepted"} onClick={() => begin("accepted")}>Accept candidate</button>
@@ -85,7 +86,7 @@ export function ManagedCandidateReview({ connection, lineageId, jobId, onSaved }
           <div className="training-dialog-header"><h2>{outcome === "accepted" ? "Accept this candidate?" : "Reject this candidate?"}</h2></div>
           <p>The adapter and its recorded evaluation remain in the candidate’s history.</p>
           <label className="training-promotion-reason"><span>Reason</span><textarea autoFocus maxLength={5000} value={reason} onChange={event => setReason(event.target.value)} /></label>
-          {error ? <p role="alert" className="training-error">{error}</p> : null}
+          {error && inlineErrorMessage(error) ? <p role="alert" className="training-error">{error}</p> : null}
           <div className="training-dialog-actions">
             <button className="training-button secondary" type="button" disabled={saving} onClick={() => setOutcome(null)}>Cancel</button>
             <button className={`training-button ${outcome === "rejected" ? "danger" : ""}`} type="button" disabled={saving || !reason.trim()} onClick={() => void save()}>{saving ? "Saving…" : attempt ? "Retry save" : "Save decision"}</button>

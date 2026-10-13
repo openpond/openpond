@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { AcpAgentBrowser } from "./AcpAgentBrowser";
 import { apiFetch } from "../../api/api-client";
 import { UrlModelConnections } from "./UrlModelConnections";
@@ -292,7 +293,7 @@ export function ProviderSettingsSection({
         </div>
       ) : null}
 
-      {removalError ? <p role="alert">{removalError}</p> : null}
+      {removalError && inlineErrorMessage(removalError) ? <p role="alert">{removalError}</p> : null}
 
       <UrlModelConnections connection={connection} onChanged={async () => { if (connection) onProvidersChanged(await api.providerSettings(connection)); }} />
 

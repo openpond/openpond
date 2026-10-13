@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
 import type { ManagedTrainingRunEvidence } from "@openpond/contracts";
 import type { TrainingEvaluationTaskPage } from "openpond-sdk/training";
@@ -94,7 +95,7 @@ function EvaluationPage({
       {loading ? (
         <p className="training-muted">Loading recorded answers…</p>
       ) : null}
-      {error ? (
+      {error && inlineErrorMessage(error) ? (
         <div role="alert">
           <p>{error}</p>
           <button

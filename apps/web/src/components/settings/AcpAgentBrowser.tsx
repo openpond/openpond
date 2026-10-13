@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import type { ChatProvider, ProviderSettings } from "@openpond/contracts";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
@@ -71,7 +72,7 @@ export function AcpAgentBrowser({ connection, onChanged, onAdded }: { connection
       </div>
       <div className="provider-dialog-body" role="tabpanel" id={`${tabId}-panel`} aria-labelledby={`${tabId}-${custom ? "custom" : "registry"}-tab`}>
       <p>{custom ? "Register an installed agent using its ACP executable and launch settings." : "Browse agents from the Agent Client Protocol registry."}</p>
-      {error ? <p role="alert">{error}</p> : null}
+      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
       <form className="provider-card-form" onSubmit={event => void add(event)}>
         {custom ? <>
           <label className="settings-select-field"><span>Name</span><input required maxLength={160} value={customName} disabled={adding} onChange={event => setCustomName(event.target.value)} placeholder="My ACP agent" /></label>

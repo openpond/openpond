@@ -1,6 +1,7 @@
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { modelDisplayLabel } from "../../lib/model-display";
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { NativeSetupTerminal } from "../terminal/NativeSetupTerminal";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, CircleAlert, Loader2, RefreshCw } from "../icons";
@@ -108,7 +109,7 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
   }
   const models = result?.settings.modelCaches[providerId]?.models ?? cachedModels;
   const modelNames = [...new Set(models.map(model => modelDisplayLabel(model.displayName || model.id)))];
-  const message = error ?? result?.error;
+  const message = inlineErrorMessage(error ?? result?.error);
   return <div className="provider-dialog-body native-agent-setup">
     <p>{registered ? `Uses the configured ${status.displayName} ACP command and its own login.` : `Uses your existing ${status.displayName} installation and login.`}</p>
     <div className="native-connection-status">

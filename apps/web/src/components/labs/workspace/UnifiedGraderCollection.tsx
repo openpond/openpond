@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import type { z } from "zod";
 import type { GraderCatalogPageSchema } from "openpond-sdk/learning";
 import { useLocalLearningCatalog, useProjectLocalProfiles, localDatasetsForProject, profileDisplayName } from "./local-learning-catalog";
@@ -26,9 +27,9 @@ export function UnifiedGraderCollection({ api, inventory, route, navigate, items
   const open = (row: typeof rows[number]) => navigate({ ...route, resourceId: row.id, executionLocation: row.location,
     revision: row.revision, contentHash: row.hash, detailTab: "overview", after: null });
   return <>
-    {associations.error ? <p role="alert">Desktop Profile associations: {associations.error.message} <button className="training-text-button" onClick={() => void associations.refetch()}>Retry</button></p> : null}
-    {error ? <p role="alert">Hosted graders: {error} <button className="training-text-button" onClick={retry}>Retry</button></p> : null}
-    {local.error ? <p role="alert">Desktop graders: {local.error.message} <button className="training-text-button" onClick={() => void local.refetch()}>Retry</button></p> : null}
+    {associations.error && inlineErrorMessage(associations.error) ? <p role="alert">Desktop Profile associations: {associations.error.message} <button className="training-text-button" onClick={() => void associations.refetch()}>Retry</button></p> : null}
+    {error && inlineErrorMessage(error) ? <p role="alert">Hosted graders: {error} <button className="training-text-button" onClick={retry}>Retry</button></p> : null}
+    {local.error && inlineErrorMessage(local.error) ? <p role="alert">Desktop graders: {local.error.message} <button className="training-text-button" onClick={() => void local.refetch()}>Retry</button></p> : null}
     <div className="evaluation-table-scroll evaluation-table-frame"><table className="training-data-table evaluation-workspace-table evaluation-resource-table">
       <thead><tr><th>Grader</th><th>Profile</th><th>Workflow</th><th>Type</th><th>Version</th><th>Dataset</th><th>Checks</th><th>Location</th></tr></thead>
       <tbody>{rows.map(row => <tr key={row.key} tabIndex={0} onClick={() => open(row)} onKeyDown={event => { if (event.key === "Enter") open(row); }}>
