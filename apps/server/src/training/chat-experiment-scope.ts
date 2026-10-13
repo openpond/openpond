@@ -107,7 +107,8 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!scope) scope = make(state, `turn-${turnId}`, now);
       if (!scope.turnIds.includes(turnId)) scope.turnIds.push(turnId);
       const sameOwner = scope.dataset?.owner?.teamId === summary.owner?.teamId
-        && scope.dataset?.owner?.actorId === summary.owner?.actorId;
+        && scope.dataset?.owner?.actorId === summary.owner?.actorId
+        && (!scope.dataset?.profileRef || JSON.stringify(scope.dataset.profileRef)===JSON.stringify(summary.profileRef));
       if (summary.kind === "dataset") {
         if ((!late || !scope.dataset || (scope.dataset.id === summary.id && scope.dataset.revision === summary.revision && sameOwner))
           && (!scope.dataset || scope.dataset.id !== summary.id || summary.revision >= scope.dataset.revision)) {
@@ -128,7 +129,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
         // Retain it without presenting that newer draft as the run's inputs.
         const matchesInputs = scope.dataset && scope.dataset.id === summary.datasetId
           && scope.dataset.revision === summary.datasetRevision
-          && scope.dataset.owner?.teamId === summary.owner?.teamId && scope.dataset.owner?.actorId === summary.owner?.actorId;
+          && sameOwner;
         if (!late && matchesInputs) scope.selectedRunId = summary.id;
       }
       scope.updatedAt = now;

@@ -14,6 +14,8 @@ import { createManagedTrainingComposition } from "./training/managed-training-co
 import {closeCoordinatedEvaluations,createCoordinatedQualificationRuntime} from "./evaluations/coordinated-qualification-runtime.js";
 import { createCoordinatedEvaluationRuntime } from "./evaluations/coordinated-evaluation-runtime.js";
 import {createCurrentWorkspaceIdentity} from "./human-review/current-workspace-identity.js";
+import { loadChatProfilePackage } from "./evaluations/chat-profile-package.js";
+import { createChatProfileExperiments } from "./evaluations/chat-profile-experiments.js";
 import { createProfileEvaluationRuntime } from "./harness/profile-evaluation-runtime.js";
 import { createConfigurationPayloads } from "./api/configuration-payloads.js";
 import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
@@ -1618,6 +1620,11 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     interruptSessionTurn:turnRunner.interruptSessionTurn,
   });
 
+  const chatProfileExperiments=createChatProfileExperiments({store,loadPackage:run=>loadChatProfilePackage({store,home:storeDir,resolveExternalDataset:resolveProfileExternalDataset},run),selectedProfile:selectedEvaluationProfile,
+    selectedProfileRef:async()=>(await loadOpenPondProfileLibrary()).lastUsed,
+    execute:profileEvaluationRunPayload,discover:profileEvaluationsPayload,prepare:profileEvaluationPreparePayload,resolveInvocation:cliInvocations.resolve,attach:chatResources.associate});
+  chatResources.setProfileOwner(chatProfileExperiments);
+
   const sessionFilesPayload = createSessionFileIndex({
     getSession,
     latestSequence: async id => (await store.threadDetailProjection(id))?.latestEventSequence ?? 0,
@@ -1785,9 +1792,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       profileCurrentPayload,
       profileCatalogPayload,
       profileWorkflowsPayload,
-      profileEvaluationsPayload,
-      profileEvaluationPreparePayload,
-      profileEvaluationRunPayload,
+      profileEvaluationsPayload:chatProfileExperiments.discover,
+      profileEvaluationPreparePayload:chatProfileExperiments.prepare,
+      profileEvaluationRunPayload:chatProfileExperiments.request,
       profileEvaluationRunSuitePayload,
       profileEvaluationComparePayload,
       profileEvaluationSaveReportPayload,
