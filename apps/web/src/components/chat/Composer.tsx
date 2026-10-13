@@ -1658,10 +1658,10 @@ export function Composer({
           {composeNotice.message}
         </div>
       )}
-      {surface === "chat" && taskSessionId ? <ComposerResourceControls resources={chatResources} busy={busy} onDraft={text => {
+      {surface === "chat" && taskSessionId ? <ComposerResourceControls resources={chatResources} busy={busy} onDraft={(text, training) => {
         const existing = inputRef.current?.getPrompt() ?? prompt;
         try {
-          resourceDrafts.current.set(submissionScopeKey, mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], captureComposerResourceContext(chatResources)));
+          resourceDrafts.current.set(submissionScopeKey, mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], captureComposerResourceContext(chatResources, training)));
         } catch {
           showToast("Send or clear the current resource actions before adding more.", "info");
           return;

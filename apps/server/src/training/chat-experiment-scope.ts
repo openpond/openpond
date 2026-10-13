@@ -166,7 +166,11 @@ export function createChatExperimentScopes(store: SqliteStore) {
       const contexts = TaskResourceContextsSchema.safeParse(turn.metadata.chatResourceContexts);
       let targetId = typeof turn.metadata.chatExperimentScopeId === "string" ? turn.metadata.chatExperimentScopeId : null;
       if (!targetId && contexts.success && contexts.data.length) {
-        const targets = [...new Set(contexts.data.map(context => context.scopeId))];
+        const matches = contexts.data.filter(context=>context.training?.some(reference=>
+          reference.location === training.location && reference.jobId === training.jobId
+          && reference.owner.teamId === training.owner.teamId && reference.owner.actorId === training.owner.actorId
+          && (reference.location !== "cloud" || training.location === "cloud" && reference.apiOrigin === training.apiOrigin)));
+        const targets = [...new Set((matches.length ? matches : contexts.data).map(context => context.scopeId))];
         if (targets.length !== 1) throw new Error("Select the intended experiment scope before attaching training; the draft has multiple targets.");
         targetId = targets[0]!;
       }
