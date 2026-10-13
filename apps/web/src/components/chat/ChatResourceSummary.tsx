@@ -89,7 +89,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
     if (!context) setLaunched(response.summaries);setSetup(false);setOperationId(null);
   }
   const rows = expanded && details ? "record" in details ? details.record.workspace.draft.tasks.map(t=>({id:t.id,label:typeof t.input.prompt === "string" ? t.input.prompt : JSON.stringify(t.input),detail:details.record.workspace.draft.graders.map(g=>g.label).join(", "),score:undefined})) : details.cases.map(c=>({id:c.id,label:c.taskId,detail:c.error ?? c.output ?? c.status,score:c.score})) : current.rows;
-  const primary:ResourceAction = {label:expanded ? "Collapse" : current.kind === "dataset" ? "View all" : "View results",disabled:busy || !connection || unsaved,run:()=>void perform(view)};
+  const primary:ResourceAction = {label:expanded ? "Collapse" : current.kind === "dataset" ? "View rows" : "View results",disabled:busy || !connection || unsaved,run:()=>void perform(view)};
   const actions:ResourceAction[]=[];
   const action=(label:string,run:()=>Promise<void>,disabled=false)=>actions.push({label,run:()=>void perform(run),disabled:busy || !connection || disabled});
   if(current.kind === "dataset") {
@@ -109,7 +109,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
   const metric=current.score == null ? "" : `${Number((current.score*100).toFixed(1))}%`;
   const summary=current.kind === "dataset" ? `${current.taskCount ?? 0} examples · ${current.graderCount ?? 0} graders`
     : `${current.evaluatedCount ?? 0}/${current.taskCount ?? 0} graded${metric ? ` · ${metric}` : ""}`;
-  return <section className="chat-resource-summary" aria-label={`${current.kind}: ${current.name}`}>
+  return <section className={`chat-resource-summary ${expanded ? "" : "compact"}`} aria-label={`${current.kind}: ${current.name}`}>
     <ChatResourceToolbar name={current.name} version={current.revision} summary={summary} primary={primary} actions={actions}>
       <dl>
         <dt>Status</dt><dd>{current.state}</dd>
@@ -123,11 +123,11 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
         </>}
       </dl>
     </ChatResourceToolbar>
-    <div className={`training-table-wrap chat-resource-table ${expanded ? "expanded" : ""}`} tabIndex={0} aria-label="Resource rows">
+    {expanded && <div className={`training-table-wrap chat-resource-table ${expanded ? "expanded" : ""}`} tabIndex={0} aria-label="Resource rows">
       <table className="training-data-table evaluation-workspace-table"><thead><tr><th>{current.kind === "dataset" ? "Task" : "Case"}</th><th>{current.kind === "dataset" ? "Graders" : "Outcome"}</th>{current.kind === "experiment" && <th>Score</th>}</tr></thead>
         <tbody>{rows.length ? rows.map(row=><tr key={row.id}><td>{row.label}</td><td>{row.detail}</td>{current.kind === "experiment" && <td>{row.score == null ? "Unavailable" : `${(row.score*100).toFixed(1)}%`}</td>}</tr>) : <tr><td colSpan={current.kind === "experiment" ? 3 : 2}>{["Creating","Importing"].includes(current.state) ? "Waiting for saved tasks…" : "No saved rows to show."}</td></tr>}</tbody>
       </table>
-    </div>
+    </div>}
     {setup && <div className="chat-resource-run-setup"><p>Run the saved Dataset, version {current.kind === "dataset" ? current.revision : current.datasetRevision}. The total budget includes model calls and grading.{location === "cloud" ? " Cloud execution publishes this exact revision and enables Dataset sync." : ""}</p>
       <DropdownSelect label="Execution location" value={location} options={[{value:"local",label:"Local"},{value:"cloud",label:"Cloud",description:"Publish this saved version and run in the linked workspace"}]} onChange={value=>{setLocation(value as "local"|"cloud");setSelectedModels([]);setModel("");setOperationId(null);}} disabled={busy}/>
       <DropdownSelect label="Evaluated model" value={model} options={[{value:"",label:"Select model"},...models.filter(model=>location === "local" || model.providerId === "openpond").map(m=>({value:`${m.providerId}/${m.id}`,label:m.name,description:m.providerId}))]} onChange={value=>{setModel(value);setOperationId(null);}} disabled={busy} />

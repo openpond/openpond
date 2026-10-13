@@ -38,6 +38,7 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
       "Run": `Run an experiment on ${context}.`,
       "View run": `How is this experiment going?`,
       "Improve": `How can we improve this experiment's results?`,
+      "View rows": `Show the rows in ${context}.`,
       "Improve dataset": `Check ${context} and suggest improvements.`,
       "Train model": `Help me train a model with ${context}.`,
       "Compare results": `Compare this experiment with my earlier results.`,
@@ -69,7 +70,7 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
       <button type="button" className="composer-resource-primary" onClick={() => draft(primary)} disabled={disabled}>{primary}</button>
       <DropdownSelect compact floating placement="top" floatingMenuWidth={250} label="More experiment actions" value="" className="composer-resource-more"
         triggerContent={<MoreVertical size={15} />}
-        options={[{ value: primary, label: `${primary}…` }, ...(dataset ? [{ value: "Improve dataset", label: "Improve dataset…" }, { value: "Train model", label: "Train model…" }] : []),
+        options={[{ value: primary, label: `${primary}…` }, ...(dataset ? [{ value: "View rows", label: "View rows…" }, { value: "Improve dataset", label: "Improve dataset…" }, { value: "Train model", label: "Train model…" }] : []),
           ...(completed ? [{ value: "Run", label: "Run again…" }, { value: "Compare results", label: "Compare results…" }] : []),
           ...(scope.training ?? []).map((training,index)=>({value:`training:${chatTrainingAttachmentKey(training)}`,label:`View training ${index+1}…`,description:training.location === "cloud" ? "Hosted" : "Local",separatorBefore:index===0})),
           ...(isExperiment ? [{ value: "New experiment", label: "New experiment…", separatorBefore: true }, { value: "rename", label: "Rename experiment…" }] : [])]}

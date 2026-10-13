@@ -29,3 +29,5 @@
 
 .chat-resource-grader-editor { padding: 12px; margin-top: 12px; background: var(--surface-panel); border-radius: 8px; }
 .chat-resource-grader-editor textarea { width: 100%; min-height: 140px; }
+
+.chat-resource-summary.compact .chat-resource-toolbar { border-bottom: 1px solid var(--border-default); border-radius: 8px; }
