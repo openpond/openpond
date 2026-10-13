@@ -50,7 +50,8 @@ export const ChatExperimentScopeSchema = z.object({
   dataset: ChatResourceSummarySchema.nullable(),
   graders: z.array(ChatResourceSummarySchema), selectedGraderId: Id.nullable(),
   runs: z.array(ChatResourceSummarySchema), selectedRunId: Id.nullable(),
-  training: z.array(ChatTrainingAttachmentSchema).optional(), selectedTrainingJobId: Id.nullable().optional(),
+  training: z.array(ChatTrainingAttachmentSchema).optional(), selectedTrainingKey: z.string().max(4000).nullable().optional(),
+  selectedTrainingJobId: Id.nullable().optional(),
   turnIds: z.array(Id), operationId: Id,
   createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
 }).strict();

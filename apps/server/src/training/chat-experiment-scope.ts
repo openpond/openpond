@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   ChatExperimentContextSchema,
   ChatTrainingAttachmentSchema,
+  chatTrainingAttachmentKey,
   type ChatTrainingAttachment,
   TaskResourceContextsSchema,
   type ChatExperimentContext,
@@ -180,11 +181,11 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!scope) scope = make(state, `turn-${turnId}`, now);
       if (!scope.turnIds.includes(turnId)) scope.turnIds.push(turnId);
       const records = scope.training ??= [];
-      const index = records.findIndex(record => record.jobId === training.jobId
-        && record.owner.teamId === training.owner.teamId && record.owner.actorId === training.owner.actorId);
+      const key = chatTrainingAttachmentKey(training);
+      const index = records.findIndex(record => chatTrainingAttachmentKey(record) === key);
       if (index < 0) records.push(training);
       else if (training.updatedAt >= records[index]!.updatedAt) records[index] = training;
-      if (!late) scope.selectedTrainingJobId = training.jobId;
+      if (!late) scope.selectedTrainingKey = key;
       scope.updatedAt = now;
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });

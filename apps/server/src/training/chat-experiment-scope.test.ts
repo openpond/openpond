@@ -76,7 +76,7 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     await scopes.attach("chat-a", "run-turn", {...run,id:"matched-run",datasetId:"other"});
     expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).scopes[1]!.runs.map(run=>run.id)).toContain("matched-run");
     await expect(scopes.attach("chat-a", "run-turn", {...run,id:"unmatched-run",datasetId:"unknown"})).rejects.toThrow("Select the intended experiment scope");
-    const training: ChatTrainingAttachment = {jobId:"training-job",modelRunId:"training-run",modelId:"model",modelVersionId:null,
+    const training: ChatTrainingAttachment = {location:"local",jobId:"training-job",modelRunId:"training-run",modelId:"model",modelVersionId:null,
       adapterArtifactLineageId:null,owner:ownerA,taskset:{id:"published-training-data",revision:1,contentHash:"a".repeat(64)},
       state:"running",executionState:"running",updatedAt:"2026-10-13T00:00:00.000Z"};
     await expect(scopes.attachTraining("chat-a","run-turn",training)).rejects.toThrow("multiple targets");
@@ -92,7 +92,7 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     expect(state.scopes).toHaveLength(2);
     expect(state.scopes[0]!.training).toEqual([training]);
     expect(state.scopes[0]!.dataset?.revision).toBe(2);
-    expect(state.scopes[0]!.selectedTrainingJobId).toBeUndefined();
+    expect(state.scopes[0]!.selectedTrainingKey).toBeUndefined();
     expect(state.activeScopeId).toBe(second.id);
     expect(state.scopes[0]!.runs[0]!.datasetRevision).toBe(1);
     expect(chatExperimentContext((await store.getSession("chat-b"))?.metadata).scopes[0]!.dataset?.owner).toEqual(ownerA);
