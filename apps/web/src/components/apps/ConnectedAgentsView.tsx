@@ -14,6 +14,7 @@ import { useAgentInventory } from "./useAgentInventory";
 import { useAgentDialogFocus } from "./useAgentDialogFocus";
 import type { ReactNode } from "react";
 import { AgentConversationSetup } from "./AgentConversationSetup";
+import { DropdownSelect } from "../DropdownSelect";
 import { AgentLearningControl } from "./learning/AgentLearningControl";
 import { useLearningOptions } from "./learning/client";
 import "../../styles/apps/connected-agents.css";
@@ -218,21 +219,9 @@ export function ConnectedAgentsView({
       </div>
       <label className="agent-project-scope">
         Project
-        <select
-          aria-label="Connections project"
-          value={projectId}
-          disabled={!projects.length}
-          onChange={(event) => projectState.select(event.target.value)}
-        >
-          <option value="">
-            {projectLoading && !projects.length ? "Fetching projects…" : "Select project"}
-          </option>
-          {projects.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.content.name}
-            </option>
-          ))}
-        </select>
+        <DropdownSelect label="Connections project" value={projectId} disabled={!projects.length} onChange={projectState.select} searchable
+          options={[{ value: "", label: projectLoading && !projects.length ? "Fetching projects…" : "Select project" },
+            ...projects.map(item => ({ value: item.id, label: item.content.name }))]} />
       </label>
       {projectError ? <p role="alert">{projectError}</p> : null}
       {error ? <p role="alert">{error}</p> : null}

@@ -65,14 +65,14 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       const links=await deps.store.chatResourceLinks({});
       const unique=new Map<string,ChatResourceSummary>();
       for(const link of links)unique.set(link.summary.kind+":"+link.summary.id,link.summary);
-      for(const record of await deps.store.listLocalDatasets())unique.set("dataset:"+record.workspace.draft.id,localDatasetSummary(record));
+      for(const record of await deps.store.listLocalDatasetListings())unique.set("dataset:"+record.workspace.draft.id,localDatasetSummary(record));
       return {resources:[...unique.values()],links:links.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
     if (kind === "dataset" && (input.action === "context" || input.action === "set_focus")) {
       const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional()}).parse(input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
-      const datasetChoices = (await deps.store.listLocalDatasets()).map(localDatasetSummary);
+      const datasetChoices = (await deps.store.listLocalDatasetListings()).map(localDatasetSummary);
       const page = await experiments.service.list({teamId:experiments.scope}) as {items:import("@openpond/contracts").LocalExperimentRecord[]};
       const localChoices = await Promise.all(page.items.map(record=>experiments.summary(record)));
       const experimentChoices=[...localChoices,...await cloud.list()];
@@ -83,18 +83,18 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
           const record=await deps.store.readLocalExperimentRecord(experiments.scope,focus.experiment.id);
           focus={...focus,experiment:record ? await experiments.summary(record) : null};
         }
-        if(focus.dataset) {const pinned=await deps.store.readLocalDataset(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
+        if(focus.dataset) {const pinned=await deps.store.readLocalDatasetListing(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
         return {focus,datasets:datasetChoices,experiments:experimentChoices};
       }
       if (!query.kind) throw new Error("Select the resource focus kind.");
       if (query.kind === "dataset") {
-        const dataset = query.id ? localDatasetSummary(await datasets.read(query.id,query.revision)) : null;
+        const dataset = query.id ? localDatasetSummary(await datasets.readListing(query.id,query.revision)) : null;
         if (query.id && !dataset) throw new Error("Local Dataset was not found.");
         focus = {dataset:dataset ?? null,experiment:dataset && focus.experiment && focus.experiment.datasetId === dataset.id && focus.experiment.datasetRevision === dataset.revision ? focus.experiment : null};
       } else {
         const experiment = query.id ? experimentChoices.find(e=>e.id === query.id) : null;
         if (query.id && !experiment) throw new Error("Local Experiment was not found.");
-        const pinned = experiment?.datasetId ? await deps.store.readLocalDataset(experiment.datasetId,experiment.datasetRevision) : null;
+        const pinned = experiment?.datasetId ? await deps.store.readLocalDatasetListing(experiment.datasetId,experiment.datasetRevision) : null;
         focus = {experiment:experiment ?? null,dataset:pinned ? localDatasetSummary(pinned) : null};
       }
       await deps.store.updateSession(session.id,current=>({...current,metadata:{...current.metadata,chatResourceFocus:focus}}));

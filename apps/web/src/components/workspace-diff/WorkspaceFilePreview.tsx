@@ -78,7 +78,9 @@ export function FilePreview({
 }) {
   useErrorToast(error, { prefix: "File preview" });
   useErrorToast(saveError, { prefix: "Save failed" });
-  const displayContent = draftContent ?? file.content ?? "";
+  // Binary previews must use the loaded bytes, never a text-editor draft of
+  // the previous revision left behind by workspace diff polling.
+  const displayContent = file.contentEncoding === "base64" ? file.content ?? "" : draftContent ?? file.content ?? "";
   const lines = useMemo(() => displayContent.split("\n").slice(0, 800), [displayContent]);
   const language = languageForPath(file.path);
   const hasContent = draftContent != null || file.content != null;
@@ -163,7 +165,7 @@ export function FilePreview({
         </div>
       ) : null}
       {!hasContent ? (
-        <div className="workspace-diff-code-empty">{loading ? "Loading file content" : "No file content available."}</div>
+        <div className="workspace-diff-code-empty">{loading ? "Loading file content…" : error ?? "No file content available."}</div>
       ) : shouldRenderMarkdown ? (
         <div className="workspace-markdown-preview">
           <MarkdownText content={displayContent} />

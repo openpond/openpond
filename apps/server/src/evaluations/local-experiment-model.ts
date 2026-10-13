@@ -7,11 +7,12 @@ import { LocalExperimentError } from "./local-experiment-contract.js";
 import { hostedTokenPricingFromCatalog, hostedUsageCostUsd, type HostedTokenPricing } from "../training/hosted-token-pricing.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 import type { LocalExperimentStorage } from "../store/store-local-experiments.js";
+import { resolveHarnessExperimentSampling } from "openpond-sdk/experiments";
 
 export type LocalModelStreamScope={store:LocalExperimentStorage;ownerId:string;teamId:string;executionId:string;caseId:string};
 export type LocalModelAdmission={model:LocalExperimentDefinition["model"];pricing:HostedTokenPricing|null;maximumChargeUsd:number;stream?:typeof streamOpenPondHostedChatTurn;streamFactory?:(scope:LocalModelStreamScope)=>typeof streamOpenPondHostedChatTurn};
 export async function prepareLocalExperimentModel(policy:LocalExperimentDefinition["configuration"]["request"]["policy"],catalog=loadOpenPondHostedModels,nativeHarnessAdmitted=false):Promise<LocalModelAdmission> {
-  if(policy.kind==="hosted_harness")return prepareLocalExperimentModel({kind:"hosted_chat",modelId:policy.modelId,maxOutputTokens:4096,temperature:0,topP:1},catalog);
+  if(policy.kind==="hosted_harness")return prepareLocalExperimentModel({kind:"hosted_chat",modelId:policy.modelId,...resolveHarnessExperimentSampling(policy)},catalog);
   if(policy.kind!=="hosted_chat")throw new LocalExperimentError("local_target_not_qualified","Select an explicit model target for local execution.",422);
   if(policy.harness&&!nativeHarnessAdmitted)throw new LocalExperimentError("local_harness_not_qualified","This released Harness requires its native turn executor; it cannot run as a model-only case.",422);
   const reply=await catalog();

@@ -1,49 +1,36 @@
-import type {
-  TrainingActivityResponse,
-  TrainingStateResponse,
-} from "@openpond/contracts";
+import type { TrainingActivityResponse, TrainingStateResponse } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 
-type ActivityState = Pick<
-  TrainingStateResponse,
-  | "jobs"
-  | "creations"
-  | "minerRuns"
-  | "datasetImports"
-  | "tasksetDrafts"
-  | "tasksets"
-  | "modelProjects"
->;
+type Item<K extends keyof TrainingStateResponse> = TrainingStateResponse[K] extends (infer T)[]
+  ? T
+  : never;
+type Fields<K extends keyof TrainingStateResponse, F extends keyof Item<K>> = Pick<Item<K>, F>[];
+export type TrainingActivityState = {
+  jobs: Fields<"jobs", "id" | "status" | "updatedAt">;
+  creations: Fields<"creations", "id" | "state" | "updatedAt">;
+  minerRuns: Fields<"minerRuns", "id" | "status" | "updatedAt">;
+  datasetImports: Fields<"datasetImports", "id" | "status" | "updatedAt">;
+  tasksetDrafts: Fields<"tasksetDrafts", "id" | "revision" | "updatedAt">;
+  tasksets: Fields<"tasksets", "id" | "revision" | "contentHash" | "updatedAt">;
+  modelProjects: Fields<"modelProjects", "id" | "revision" | "updatedAt">;
+};
 
-const ACTIVE_JOB_STATUSES = new Set([
-  "queued",
-  "starting",
-  "running",
-  "cancelling",
-  "reconciling",
-]);
+const ACTIVE_JOB_STATUSES = new Set(["queued", "starting", "running", "cancelling", "reconciling"]);
 const ACTIVE_CREATION_STATES = new Set(["planning", "materializing", "validating"]);
 const ACTIVE_MINER_STATUSES = new Set(["queued", "running", "cancelling"]);
-const ACTIVE_IMPORT_STATUSES = new Set([
-  "inspecting",
-  "materializing",
-  "validating",
-  "cancelling",
-]);
+const ACTIVE_IMPORT_STATUSES = new Set(["inspecting", "materializing", "validating", "cancelling"]);
 
 export function projectTrainingActivity(input: {
   profileId: string;
-  state: ActivityState;
+  state: TrainingActivityState;
   generatedAt?: string;
 }): TrainingActivityResponse {
   const activeCounts = {
     jobs: input.state.jobs.filter((item) => ACTIVE_JOB_STATUSES.has(item.status)).length,
-    creations: input.state.creations.filter((item) =>
-      ACTIVE_CREATION_STATES.has(item.state),
-    ).length,
-    minerRuns: input.state.minerRuns.filter((item) =>
-      ACTIVE_MINER_STATUSES.has(item.status),
-    ).length,
+    creations: input.state.creations.filter((item) => ACTIVE_CREATION_STATES.has(item.state))
+      .length,
+    minerRuns: input.state.minerRuns.filter((item) => ACTIVE_MINER_STATUSES.has(item.status))
+      .length,
     datasetImports: input.state.datasetImports.filter((item) =>
       ACTIVE_IMPORT_STATUSES.has(item.status),
     ).length,

@@ -2,38 +2,22 @@ import type { PonderDesktopOperation } from "@openpond/contracts/ponder-desktop"
 import { assertPonderDesktopRecipient } from "./ponder-desktop-input.js";
 import { localSessionOwnershipRevision } from "../remote-relay/session-ownership.js";
 import { attachLocalSessionOwner } from "./local-session-ownership.js";
-import type {
-  Approval,
-  RuntimeEvent,
-  Session,
-  Turn
-} from "@openpond/contracts";
+import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
 import { listCache, readCache, writeCache } from "@openpond/persistence";
 import { sanitizeRuntimeEvent } from "../runtime/runtime-event-sanitizer.js";
-import type {
-  CacheEntry,
-  PayloadRow,
-  StoreData
-} from "../types.js";
+import type { CacheEntry, PayloadRow, StoreData } from "../types.js";
 import { now } from "../utils.js";
 import type { RuntimeHistoryStorage } from "./runtime-history-storage.js";
-import {
-  sessionRuntimeSummaries,
-  sessionWithRuntimeSummary,
-} from "./session-runtime-summary.js";
+import { sessionRuntimeSummaries, sessionWithRuntimeSummary } from "./session-runtime-summary.js";
 import { sessionWithSidebarActivity } from "./session-sidebar-activity.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
   runtimeEventWithSequence,
   threadDetailProjectionFromRow,
-  type ThreadDetailProjection
+  type ThreadDetailProjection,
 } from "./store-codecs.js";
 import { SqliteStoreCore } from "./store-core.js";
-import { normalizeSessionPayload } from "./store-persistence.js";
-
-
-
-
+import { normalizeSessionPayload, readStoreData, persistStoreData } from "./store-persistence.js";
 
 type EventPagePayloadRow = PayloadRow & {
   sequence: number;
@@ -58,13 +42,13 @@ type RuntimeEventPageQuery = {
 };
 
 type RuntimeEventPageRows = {
-  entries: Array<{ sequence: number; event: RuntimeEvent; }>;
+  entries: Array<{ sequence: number; event: RuntimeEvent }>;
   totalMatchingEvents: number;
   remainingMatchingEvents: number;
 };
 
 type RuntimeEventRecentWindow = {
-  entries: Array<{ sequence: number; event: RuntimeEvent; }>;
+  entries: Array<{ sequence: number; event: RuntimeEvent }>;
   latestSequence: number;
   oldestSequence: number;
   totalEvents: number;
@@ -73,6 +57,11 @@ type RuntimeEventRecentWindow = {
 };
 
 export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistoryStorage {
+  private runtimeSummaryCache: ReturnType<typeof sessionRuntimeSummaries> | null = null;
+  private sessionRuntimeSummaries() {
+    return (this.runtimeSummaryCache ??= sessionRuntimeSummaries(this.data.turns));
+  }
+
   async attachLocalSessionOwner(input: Parameters<typeof attachLocalSessionOwner>[1]) {
     await this.ready;
     const write = this.writeQueue.then(() => {
@@ -80,22 +69,31 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       db.exec("BEGIN IMMEDIATE");
       try {
         const session = attachLocalSessionOwner(db, input);
-        db.run("UPDATE projection_session_shells SET payload = ?, updated_at = ? WHERE id = ?",
-          [JSON.stringify(session), session.updatedAt, session.id]);
+        db.run("UPDATE projection_session_shells SET payload = ?, updated_at = ? WHERE id = ?", [
+          JSON.stringify(session),
+          session.updatedAt,
+          session.id,
+        ]);
         db.exec("COMMIT");
-        const index = this.data.sessions.findIndex(item => item.id === session.id);
+        const index = this.data.sessions.findIndex((item) => item.id === session.id);
         if (index >= 0) this.data.sessions[index] = session;
         return session;
-      } catch (error) { db.exec("ROLLBACK"); throw error; }
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     });
-    this.writeQueue = write.then(() => {}, () => {});
+    this.writeQueue = write.then(
+      () => {},
+      () => {},
+    );
     return write;
   }
   readonly harnessStoragePlacement = "local" as const;
   async snapshot(): Promise<StoreData> {
     await this.ready;
     await this.writeQueue;
-    return structuredClone(this.data);
+    return readStoreData({ allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params) });
   }
 
   async sessionShells(): Promise<Session[]> {
@@ -104,26 +102,23 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     const rows = await this.all<PayloadRow>(
       "SELECT payload FROM projection_session_shells ORDER BY sort_index ASC",
     );
-    const runtimeBySessionId = sessionRuntimeSummaries(this.data.turns);
+    const runtimeBySessionId = this.sessionRuntimeSummaries();
     return rows.map((row) => {
       const session = normalizeSessionPayload(JSON.parse(row.payload));
-      return sessionWithRuntimeSummary(
-        session,
-        runtimeBySessionId.get(session.id)
-      );
+      return sessionWithRuntimeSummary(session, runtimeBySessionId.get(session.id));
     });
   }
 
   async getSession(sessionId: string): Promise<Session | null> {
     await this.ready;
     await this.writeQueue;
-    const row = await this.get<PayloadRow>("SELECT payload FROM projection_session_shells WHERE id = ?", [sessionId]);
+    const row = await this.get<PayloadRow>(
+      "SELECT payload FROM projection_session_shells WHERE id = ?",
+      [sessionId],
+    );
     if (!row) return null;
     const session = normalizeSessionPayload(JSON.parse(row.payload));
-    return sessionWithRuntimeSummary(
-      session,
-      sessionRuntimeSummaries(this.data.turns).get(sessionId)
-    );
+    return sessionWithRuntimeSummary(session, this.sessionRuntimeSummaries().get(sessionId));
   }
 
   async pendingApprovals(): Promise<Approval[]> {
@@ -143,7 +138,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       "SELECT payload FROM turns WHERE provider_turn_id = ? ORDER BY sort_index DESC LIMIT 1",
       [providerTurnId],
     );
-    return row ? JSON.parse(row.payload) as Turn : null;
+    return row ? (JSON.parse(row.payload) as Turn) : null;
   }
 
   async latestTurnForSession(sessionId: string, status?: Turn["status"]): Promise<Turn | null> {
@@ -154,18 +149,21 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
         "SELECT payload FROM projection_latest_turns WHERE session_id = ?",
         [sessionId],
       );
-      return row ? JSON.parse(row.payload) as Turn : null;
+      return row ? (JSON.parse(row.payload) as Turn) : null;
     }
     const row = status
       ? await this.get<PayloadRow>(
-        "SELECT payload FROM turns WHERE session_id = ? AND status = ? ORDER BY sort_index DESC LIMIT 1",
-        [sessionId, status],
-      )
+          "SELECT payload FROM turns WHERE session_id = ? AND status = ? ORDER BY sort_index DESC LIMIT 1",
+          [sessionId, status],
+        )
       : null;
-    return row ? JSON.parse(row.payload) as Turn : null;
+    return row ? (JSON.parse(row.payload) as Turn) : null;
   }
 
-  async latestPersistedTurnForSession(sessionId: string, status?: Turn["status"]): Promise<Turn | null> {
+  async latestPersistedTurnForSession(
+    sessionId: string,
+    status?: Turn["status"],
+  ): Promise<Turn | null> {
     await this.ready;
     // Managed-child completion polling must be able to observe a committed
     // terminal turn even while provider cleanup has a later write queued. This
@@ -179,7 +177,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       sql,
       status ? [sessionId, status] : [sessionId],
     );
-    return row ? JSON.parse(row.payload) as Turn : null;
+    return row ? (JSON.parse(row.payload) as Turn) : null;
   }
 
   private async persistedLifecycleRow<Row>(sql: string, params: unknown[]): Promise<Row | null> {
@@ -219,12 +217,12 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     sessionId: string;
     beforeSortIndex?: number | null;
     limit?: number;
-  }): Promise<{ turns: Turn[]; nextBeforeSortIndex: number | null; }> {
+  }): Promise<{ turns: Turn[]; nextBeforeSortIndex: number | null }> {
     await this.ready;
     await this.writeQueue;
     const limit = Math.max(1, Math.min(200, Math.trunc(input.limit ?? 50)));
     const before = input.beforeSortIndex;
-    const rows = await this.all<PayloadRow & { sort_index: number; }>(
+    const rows = await this.all<PayloadRow & { sort_index: number }>(
       `SELECT sort_index, payload FROM turns
        WHERE session_id = ? ${before === undefined || before === null ? "" : "AND sort_index < ?"}
        ORDER BY sort_index DESC LIMIT ?`,
@@ -243,7 +241,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
   async countTurnsForSession(sessionId: string): Promise<number> {
     await this.ready;
     await this.writeQueue;
-    const row = await this.get<{ count: number; }>(
+    const row = await this.get<{ count: number }>(
       "SELECT COUNT(*) AS count FROM turns WHERE session_id = ?",
       [sessionId],
     );
@@ -253,7 +251,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
   async hasSubagentParentWakeTurn(sessionId: string, messageId: string): Promise<boolean> {
     await this.ready;
     await this.writeQueue;
-    const row = await this.get<{ count: number; }>(
+    const row = await this.get<{ count: number }>(
       `SELECT COUNT(*) AS count FROM turns
        WHERE session_id = ?
          AND json_extract(payload, '$.metadata.subagentParentWake.messageId') = ?`,
@@ -265,7 +263,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
   async countSubagentParentWakeTurns(sessionId: string, fromRunId: string): Promise<number> {
     await this.ready;
     await this.writeQueue;
-    const row = await this.get<{ count: number; }>(
+    const row = await this.get<{ count: number }>(
       `SELECT COUNT(*) AS count FROM turns
        WHERE session_id = ?
          AND json_extract(payload, '$.metadata.subagentParentWake.fromRunId') = ?`,
@@ -277,7 +275,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
   async latestEventSequence(): Promise<number> {
     await this.ready;
     await this.writeQueue;
-    const row = await this.get<{ sequence: number | null; }>(
+    const row = await this.get<{ sequence: number | null }>(
       "SELECT MAX(sequence) AS sequence FROM events",
       [],
     );
@@ -299,13 +297,13 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     await this.writeQueue;
     const whereSession = query.sessionId ? "session_id = ?" : "1 = 1";
     const sessionParams = query.sessionId ? [query.sessionId] : [];
-    const total = await this.get<{ count: number; }>(
+    const total = await this.get<{ count: number }>(
       `SELECT COUNT(*) AS count FROM events WHERE ${whereSession}`,
       sessionParams,
     );
     if (query.beforeSequence !== null) {
       const remainingParams = [...sessionParams, query.beforeSequence];
-      const remaining = await this.get<{ count: number; }>(
+      const remaining = await this.get<{ count: number }>(
         `SELECT COUNT(*) AS count FROM events WHERE ${whereSession} AND sequence < ?`,
         remainingParams,
       );
@@ -329,7 +327,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     }
 
     const remainingParams = [...sessionParams, query.afterSequence];
-    const remaining = await this.get<{ count: number; }>(
+    const remaining = await this.get<{ count: number }>(
       `SELECT COUNT(*) AS count FROM events WHERE ${whereSession} AND sequence > ?`,
       remainingParams,
     );
@@ -372,9 +370,10 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       params.push(...query.names);
     }
     if (query.excludeReasoningDeltas) where.push("name <> 'assistant.reasoning.delta'");
-    const limit = query.limit === undefined || query.limit === null
-      ? null
-      : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));
+    const limit =
+      query.limit === undefined || query.limit === null
+        ? null
+        : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));
     if (limit !== null) params.push(limit);
     const rows = await this.all<EventPagePayloadRow>(
       `SELECT sequence, payload FROM events
@@ -401,9 +400,10 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       where.push(`name IN (${query.names.map(() => "?").join(", ")})`);
       params.push(...query.names);
     }
-    const limit = query.limit === undefined || query.limit === null
-      ? null
-      : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));
+    const limit =
+      query.limit === undefined || query.limit === null
+        ? null
+        : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));
     if (limit !== null) params.push(limit);
     const rows = await this.all<EventPagePayloadRow>(
       `SELECT sequence, payload FROM events
@@ -434,9 +434,10 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       where.push(`name IN (${query.names.map(() => "?").join(", ")})`);
       params.push(...query.names);
     }
-    const limit = query.limit === undefined || query.limit === null
-      ? null
-      : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));
+    const limit =
+      query.limit === undefined || query.limit === null
+        ? null
+        : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));
     if (limit !== null) params.push(limit);
     const rows = await this.persistedLifecycleRows<EventPagePayloadRow>(
       `SELECT sequence, payload FROM events
@@ -469,7 +470,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     await this.ready;
     await this.writeQueue;
     const normalizedLimit = Math.max(0, Math.trunc(limit));
-    const total = await this.get<{ count: number; }>("SELECT COUNT(*) AS count FROM events", []);
+    const total = await this.get<{ count: number }>("SELECT COUNT(*) AS count FROM events", []);
     const latest = await this.latestEventSequence();
     if (normalizedLimit === 0) {
       return {
@@ -514,15 +515,13 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
        LIMIT ?`,
       ["diagnostic", Math.max(0, Math.trunc(limit))],
     );
-    return rows
-      .map((row) => runtimeEventWithSequence(row.payload, row.sequence))
-      .reverse();
+    return rows.map((row) => runtimeEventWithSequence(row.payload, row.sequence)).reverse();
   }
 
   async latestRuntimeEventSequenceByName(name: RuntimeEvent["name"]): Promise<number> {
     await this.ready;
     await this.writeQueue;
-    const row = await this.get<{ sequence: number | null; }>(
+    const row = await this.get<{ sequence: number | null }>(
       "SELECT MAX(sequence) AS sequence FROM events WHERE name = ?",
       [name],
     );
@@ -532,7 +531,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
   async runtimeEventRowsByNameAfter(
     name: RuntimeEvent["name"],
     afterSequence: number,
-  ): Promise<Array<{ sequence: number; event: RuntimeEvent; }>> {
+  ): Promise<Array<{ sequence: number; event: RuntimeEvent }>> {
     await this.ready;
     await this.writeQueue;
     const rows = await this.all<EventPagePayloadRow>(
@@ -550,31 +549,54 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
   async sessionCount(): Promise<number> {
     await this.ready;
     await this.writeQueue;
-    const row = await this.get<{ count: number; }>("SELECT COUNT(*) AS count FROM sessions", []);
+    const row = await this.get<{ count: number }>("SELECT COUNT(*) AS count FROM sessions", []);
     return row?.count ?? 0;
   }
 
-  async insertSessionAtFront(session: Session, desktopOperation?: PonderDesktopOperation): Promise<void> {
+  async insertSessionAtFront(
+    session: Session,
+    desktopOperation?: PonderDesktopOperation,
+  ): Promise<void> {
     await this.ready;
     const write = this.writeQueue.then(() => {
       const db = this.database;
       db.exec("BEGIN IMMEDIATE");
       try {
-        if (desktopOperation) assertPonderDesktopRecipient(db, desktopOperation,
-          session, null, localSessionOwnershipRevision(session, null));
+        if (desktopOperation)
+          assertPonderDesktopRecipient(
+            db,
+            desktopOperation,
+            session,
+            null,
+            localSessionOwnershipRevision(session, null),
+          );
         db.run("UPDATE sessions SET sort_index = sort_index + 1", []);
         db.run("UPDATE projection_session_shells SET sort_index = sort_index + 1", []);
+        db.run("INSERT INTO sessions (id, sort_index, payload, updated_at) VALUES (?, ?, ?, ?)", [
+          session.id,
+          0,
+          JSON.stringify(session),
+          session.updatedAt,
+        ]);
         db.run(
-          "INSERT INTO sessions (id, sort_index, payload, updated_at) VALUES (?, ?, ?, ?)",
-          [session.id, 0, JSON.stringify(session), session.updatedAt],
+          "INSERT INTO projection_session_shells (id, sort_index, payload, updated_at) VALUES (?, 0, ?, ?)",
+          [session.id, JSON.stringify(session), session.updatedAt],
         );
-        db.run("INSERT INTO projection_session_shells (id, sort_index, payload, updated_at) VALUES (?, 0, ?, ?)",
-          [session.id, JSON.stringify(session), session.updatedAt]);
-        const detail = { sessionId: session.id, eventCount: 0, latestEventSequence: 0, latestEventAt: null,
-          latestTurnId: null, latestTurnStatus: null, pendingApprovalCount: 0, updatedAt: session.updatedAt };
-        db.run(`INSERT INTO projection_thread_details (session_id, event_count, latest_event_sequence, latest_event_at,
+        const detail = {
+          sessionId: session.id,
+          eventCount: 0,
+          latestEventSequence: 0,
+          latestEventAt: null,
+          latestTurnId: null,
+          latestTurnStatus: null,
+          pendingApprovalCount: 0,
+          updatedAt: session.updatedAt,
+        };
+        db.run(
+          `INSERT INTO projection_thread_details (session_id, event_count, latest_event_sequence, latest_event_at,
           latest_turn_id, latest_turn_status, pending_approval_count, payload, updated_at) VALUES (?, 0, 0, NULL, NULL, NULL, 0, ?, ?)`,
-          [session.id, JSON.stringify(detail), session.updatedAt]);
+          [session.id, JSON.stringify(detail), session.updatedAt],
+        );
         db.exec("COMMIT");
       } catch (error) {
         db.exec("ROLLBACK");
@@ -586,26 +608,25 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     await write;
   }
 
-  async updateSession(sessionId: string, updater: (session: Session) => Session): Promise<Session | null> {
+  async updateSession(
+    sessionId: string,
+    updater: (session: Session) => Session,
+  ): Promise<Session | null> {
     await this.ready;
     let updated: Session | null = null;
     const write = this.writeQueue.then(async () => {
       const index = this.data.sessions.findIndex((session) => session.id === sessionId);
       if (index === -1) return;
-      const runtimeSummary = sessionRuntimeSummaries(this.data.turns).get(sessionId);
+      const runtimeSummary = this.sessionRuntimeSummaries().get(sessionId);
       updated = sessionWithRuntimeSummary(
-        updater(
-          sessionWithRuntimeSummary(
-            this.data.sessions[index]!,
-            runtimeSummary
-          )
-        ),
-        runtimeSummary
+        updater(sessionWithRuntimeSummary(this.data.sessions[index]!, runtimeSummary)),
+        runtimeSummary,
       );
-      await this.run(
-        "UPDATE sessions SET payload = ?, updated_at = ? WHERE id = ?",
-        [JSON.stringify(updated), updated.updatedAt, sessionId],
-      );
+      await this.run("UPDATE sessions SET payload = ?, updated_at = ? WHERE id = ?", [
+        JSON.stringify(updated),
+        updated.updatedAt,
+        sessionId,
+      ]);
       await this.upsertSessionShellProjection(updated, index);
       await this.rebuildThreadDetailProjectionForSession(sessionId);
       this.data.sessions[index] = updated;
@@ -630,10 +651,11 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       await this.exec("BEGIN IMMEDIATE");
       try {
         for (const update of updates) {
-          await this.run(
-            "UPDATE sessions SET payload = ?, updated_at = ? WHERE id = ?",
-            [JSON.stringify(update.session), update.session.updatedAt, update.session.id],
-          );
+          await this.run("UPDATE sessions SET payload = ?, updated_at = ? WHERE id = ?", [
+            JSON.stringify(update.session),
+            update.session.updatedAt,
+            update.session.id,
+          ]);
           await this.upsertSessionShellProjection(update.session, update.index);
           await this.rebuildThreadDetailProjectionForSession(update.session.id);
         }
@@ -656,7 +678,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     await this.ready;
     await this.writeQueue;
     const row = await this.get<PayloadRow>("SELECT payload FROM turns WHERE id = ?", [turnId]);
-    return row ? JSON.parse(row.payload) as Turn : null;
+    return row ? (JSON.parse(row.payload) as Turn) : null;
   }
 
   async insertTurn(turn: Turn): Promise<void> {
@@ -676,6 +698,7 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
         ],
       );
       this.data.turns.push(turn);
+      this.runtimeSummaryCache = null;
       await this.rebuildLatestTurnProjectionForSession(turn.sessionId);
       await this.rebuildThreadDetailProjectionForSession(turn.sessionId);
     });
@@ -707,22 +730,34 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       // managed child can observe terminal completion without waiting for
       // unrelated provider cleanup or projection work.
       this.data.turns[index] = updated;
+      this.runtimeSummaryCache = null;
       if (updated.status !== "in_progress") {
         for (let approvalIndex = 0; approvalIndex < this.data.approvals.length; approvalIndex++) {
           const approval = this.data.approvals[approvalIndex]!;
-          if (approval.status !== "pending" || approval.sessionId !== updated.sessionId || !approval.turnId
-            || (approval.turnId !== updated.id && approval.turnId !== updated.providerTurnId)) continue;
+          if (
+            approval.status !== "pending" ||
+            approval.sessionId !== updated.sessionId ||
+            !approval.turnId ||
+            (approval.turnId !== updated.id && approval.turnId !== updated.providerTurnId)
+          )
+            continue;
           const cancelled: Approval = { ...approval, status: "cancelled" };
-          await this.run("UPDATE approvals SET status=?,payload=?,updated_at=? WHERE id=?",
-            [cancelled.status, JSON.stringify(cancelled), now(), cancelled.id]);
+          await this.run("UPDATE approvals SET status=?,payload=?,updated_at=? WHERE id=?", [
+            cancelled.status,
+            JSON.stringify(cancelled),
+            now(),
+            cancelled.id,
+          ]);
           await this.upsertApprovalProjection(cancelled, approvalIndex);
           this.data.approvals[approvalIndex] = cancelled;
         }
       }
       await this.rebuildLatestTurnProjectionForSession(previousSessionId);
-      if (updated.sessionId !== previousSessionId) await this.rebuildLatestTurnProjectionForSession(updated.sessionId);
+      if (updated.sessionId !== previousSessionId)
+        await this.rebuildLatestTurnProjectionForSession(updated.sessionId);
       await this.rebuildThreadDetailProjectionForSession(previousSessionId);
-      if (updated.sessionId !== previousSessionId) await this.rebuildThreadDetailProjectionForSession(updated.sessionId);
+      if (updated.sessionId !== previousSessionId)
+        await this.rebuildThreadDetailProjectionForSession(updated.sessionId);
     });
     this.writeQueue = write.catch(() => undefined);
     await write;
@@ -732,16 +767,21 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
   async getApproval(approvalId: string): Promise<Approval | null> {
     await this.ready;
     await this.writeQueue;
-    const row = await this.get<PayloadRow>("SELECT payload FROM approvals WHERE id = ?", [approvalId]);
-    return row ? JSON.parse(row.payload) as Approval : null;
+    const row = await this.get<PayloadRow>("SELECT payload FROM approvals WHERE id = ?", [
+      approvalId,
+    ]);
+    return row ? (JSON.parse(row.payload) as Approval) : null;
   }
 
   async upsertApproval(approval: Approval): Promise<void> {
     await this.ready;
     const write = this.writeQueue.then(async () => {
       if (approval.status === "pending" && approval.turnId) {
-        const turn = this.data.turns.find(value => value.sessionId === approval.sessionId
-          && (value.id === approval.turnId || value.providerTurnId === approval.turnId));
+        const turn = this.data.turns.find(
+          (value) =>
+            value.sessionId === approval.sessionId &&
+            (value.id === approval.turnId || value.providerTurnId === approval.turnId),
+        );
         if (turn && turn.status !== "in_progress") approval = { ...approval, status: "cancelled" };
       }
       const index = this.data.approvals.findIndex((candidate) => candidate.id === approval.id);
@@ -756,7 +796,14 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
            status = excluded.status,
            payload = excluded.payload,
            updated_at = excluded.updated_at`,
-        [approval.id, approval.sessionId, approval.status, sortIndex, JSON.stringify(approval), now()],
+        [
+          approval.id,
+          approval.sessionId,
+          approval.status,
+          sortIndex,
+          JSON.stringify(approval),
+          now(),
+        ],
       );
       await this.upsertApprovalProjection(approval, sortIndex);
       await this.rebuildThreadDetailProjectionForSession(approval.sessionId);
@@ -780,12 +827,22 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     return listCache<T>(this.home, type);
   }
 
-  async setCacheEntry<T>(type: string, key: string, payload: T, error: string | null = null): Promise<CacheEntry<T>> {
+  async setCacheEntry<T>(
+    type: string,
+    key: string,
+    payload: T,
+    error: string | null = null,
+  ): Promise<CacheEntry<T>> {
     await this.ready;
     return writeCache(this.home, type, key, payload, { error });
   }
 
-  async setCacheError(type: string, key: string, fallbackPayload: unknown, error: string): Promise<void> {
+  async setCacheError(
+    type: string,
+    key: string,
+    fallbackPayload: unknown,
+    error: string,
+  ): Promise<void> {
     const existing = await this.getCacheEntry<unknown>(type, key);
     await this.setCacheEntry(type, key, existing?.payload ?? fallbackPayload, error);
   }
@@ -794,10 +851,18 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     await this.ready;
     let snapshot: StoreData = { sessions: [], turns: [], events: [], approvals: [] };
     const write = this.writeQueue.then(async () => {
-      fn(this.data);
-      await this.persist();
+      const data = await readStoreData({
+        allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params),
+      });
+      fn(data);
+      await persistStoreData(data, {
+        exec: (sql) => this.exec(sql),
+        run: (sql, params) => this.run(sql, params),
+      });
+      this.data = { sessions: data.sessions, turns: data.turns, approvals: data.approvals };
+      this.runtimeSummaryCache = null;
       await this.rebuildReadModels();
-      snapshot = structuredClone(this.data);
+      snapshot = structuredClone(data);
     });
     this.writeQueue = write.catch(() => undefined);
     await write;
@@ -811,15 +876,21 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       await this.exec("BEGIN IMMEDIATE");
       try {
         const persistedRuntimeEvent = await this.insertRuntimeEventRecord(safeRuntimeEvent);
-        const sessionIndex = this.data.sessions.findIndex((session) => session.id === persistedRuntimeEvent.sessionId);
+        const sessionIndex = this.data.sessions.findIndex(
+          (session) => session.id === persistedRuntimeEvent.sessionId,
+        );
         const currentSession = this.data.sessions[sessionIndex];
-        const session = currentSession ? sessionWithSidebarActivity(currentSession, persistedRuntimeEvent) : null;
+        const session = currentSession
+          ? sessionWithSidebarActivity(currentSession, persistedRuntimeEvent)
+          : null;
         if (session && session !== currentSession) {
-          await this.run("UPDATE sessions SET payload = ? WHERE id = ?", [JSON.stringify(session), session.id]);
+          await this.run("UPDATE sessions SET payload = ? WHERE id = ?", [
+            JSON.stringify(session),
+            session.id,
+          ]);
           await this.upsertSessionShellProjection(session, sessionIndex);
         }
         await this.exec("COMMIT");
-        this.data.events.push(persistedRuntimeEvent);
         if (session && session !== currentSession) this.data.sessions[sessionIndex] = session;
         return persistedRuntimeEvent;
       } catch (error) {
@@ -827,13 +898,18 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
         throw error;
       }
     });
-    this.writeQueue = write.then(() => undefined, () => undefined);
+    this.writeQueue = write.then(
+      () => undefined,
+      () => undefined,
+    );
     return await write;
   }
 
   private async insertRuntimeEventRecord(runtimeEvent: RuntimeEvent): Promise<RuntimeEvent> {
-    const index = this.data.events.length;
     const sequence = await this.nextEventSequence();
+    // Sequence is monotonic across reopen/delete; reuse it for sort order so
+    // append never needs an unindexed scan of the historical events table.
+    const index = sequence - 1;
     const persistedRuntimeEvent = { ...runtimeEvent, sequence };
     await this.run(
       "INSERT INTO events (id, session_id, turn_id, name, timestamp, sequence, sort_index, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -856,8 +932,8 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
 
   async runtimeEventContext(
     sessionId: string,
-    providerTurnId?: string | null
-  ): Promise<{ appId?: string | null; turnId?: string | null; }> {
+    providerTurnId?: string | null,
+  ): Promise<{ appId?: string | null; turnId?: string | null }> {
     await this.ready;
     await this.writeQueue;
     const turn = providerTurnId
@@ -869,6 +945,4 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
       turnId: turn?.id,
     };
   }
-
-
 }

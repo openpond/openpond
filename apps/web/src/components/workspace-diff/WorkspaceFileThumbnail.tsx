@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import type { WorkspaceDiffFile } from "@openpond/contracts";
+import { useQuery } from "@tanstack/react-query";
 import { api, type ClientConnection } from "../../api";
 import { connectionQueryScope } from "../../lib/query-scope";
 import { localFileWorkspaceId } from "../../lib/local-file-workspace";
@@ -19,7 +19,6 @@ export function WorkspaceFileThumbnail({ path, connection, workspaceId, sandboxI
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
-  const [loaded, setLoaded] = useState<{ key: string; file: WorkspaceDiffFile } | null>(null);
   const image = isWorkspaceImagePath(path);
   const sourceId = localFileWorkspaceId(path) || workspaceId;
   const key = `${connectionQueryScope(connection)}:${sourceId}:${sandboxId ?? ""}:${path}`;
@@ -33,14 +32,14 @@ export function WorkspaceFileThumbnail({ path, connection, workspaceId, sandboxI
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
-    if (!visible || !connection || (image && !sandboxId) || (!sourceId && !sandboxId)) return;
-    let cancelled = false;
-    const request = sandboxId ? readSandboxFile(connection, sandboxId, path) : api.workspaceFile(connection, sourceId!, path);
-    void request.then(file => { if (!cancelled) setLoaded({ key, file }); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [connection, image, key, path, revision, sandboxId, sourceId, visible]);
-  const file = loaded?.key === key ? loaded.file : null;
+  const loaded = useQuery({
+    queryKey: ["file-thumbnail", key, revision],
+    enabled: Boolean(visible && connection && (!image || sandboxId) && (sourceId || sandboxId)),
+    queryFn: () => sandboxId ? readSandboxFile(connection!, sandboxId, path) : api.workspaceFile(connection!, sourceId!, path),
+    staleTime: revision ? Infinity : 15_000,
+    gcTime: 60_000,
+  });
+  const file = loaded.data;
   const sandboxImage = image && sandboxId && file?.contentEncoding === "base64" && file.content
     ? `data:image/${/\.jpe?g$/i.test(path) ? "jpeg" : path.split(".").pop()?.toLowerCase()};base64,${file.content}` : null;
   return <span ref={ref} className="workspace-file-thumbnail">

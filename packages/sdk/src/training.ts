@@ -241,9 +241,17 @@ const LearnedRewardSourceSchema = z
   })
   .strict();
 
+export const TrainingQualificationBaseModelSchema = ModelProjectBaseModelSchema.extend({
+  revision: z.string().regex(/^[a-f0-9]{40,64}$/),
+  tokenizerRevision: z.string().regex(/^[a-f0-9]{40,64}$/),
+  chatTemplateHash: HashSchema,
+}).strict();
+
 export const PolicyOptimizationRequestSchema = z
   .object({
     kind: z.literal("policy_optimize"),
+    /** Collect and grade one original-learner group without optimizer work. */
+    executionMode: z.literal("qualification").optional(),
     baseModel: ModelProjectBaseModelSchema,
     recipe: ModelProjectRecipeDocumentSchema,
     rewardSource: z.discriminatedUnion("kind", [
@@ -290,6 +298,24 @@ export const TrainingJobSubmissionSchema = z
   })
   .strict()
   .superRefine((submission, context) => {
+    if (submission.job.kind === "policy_optimize" && submission.job.executionMode === "qualification") {
+      const job = submission.job;
+      if (!TrainingQualificationBaseModelSchema.safeParse(job.baseModel).success) {
+        context.addIssue({ code: "custom", path: ["job", "baseModel"], message: "Qualification requires immutable model and tokenizer revisions and a SHA-256 chat-template pin." });
+      }
+      if (job.resumeFrom || job.recipe.continuation !== undefined || job.rewardSource.kind !== "deterministic" || job.recipe.method !== "grpo") {
+        context.addIssue({
+          code: "custom", path: ["job"],
+          message: "Qualification requires the original GRPO learner, deterministic reward, and no resume or continuation.",
+        });
+      }
+      if (!submission.requestedCapabilities.some(requirement => requirement.required && requirement.id === "managed_rl.policy.qualification" && requirement.version === "1")) {
+        context.addIssue({
+          code: "custom", path: ["requestedCapabilities"],
+          message: "Qualification must require managed_rl.policy.qualification@1.",
+        });
+      }
+    }
     if (submission.approval.maximumSpendUsd !== submission.budget.maximumSpendUsd) {
       context.addIssue({
         code: "custom",
@@ -327,6 +353,7 @@ export const TrainingJobSchema = z
     id: IdSchema,
     teamId: IdSchema,
     kind: TrainingJobKindSchema,
+    executionMode: z.literal("qualification").optional(),
     modelProjectId: IdSchema,
     portableProjectId: IdSchema,
     sourceProjectRevision: z.number().int().positive(),
@@ -402,6 +429,25 @@ export const TrainingJobOutputSchema = z
   })
   .strict();
 
+/** Evidence that collection used the pinned original learner and never updated it. */
+export const TrainingQualificationEvidenceSchema = z.object({
+  schemaVersion: z.literal("openpond.trainingQualificationEvidence.v1"),
+  baseModel: TrainingQualificationBaseModelSchema,
+  group: ModelProjectImmutableRefSchema,
+  rolloutReceipts: z.array(ModelProjectImmutableRefSchema).min(1).max(1_000),
+  rewardEvidenceHash: HashSchema,
+  groupsCompleted: z.literal(1),
+  optimizerUpdatesApplied: z.literal(0),
+  optimizerUpdatesSkipped: z.literal(0),
+  trainingStepsCreated: z.literal(0),
+  checkpointsCreated: z.literal(0),
+  artifactsCreated: z.literal(0),
+}).strict().superRefine((evidence, context) => {
+  if (new Set(evidence.rolloutReceipts.map(receipt => receipt.id)).size !== evidence.rolloutReceipts.length) {
+    context.addIssue({ code: "custom", path: ["rolloutReceipts"], message: "Qualification rollout receipt identities must be unique." });
+  }
+});
+
 export const TrainingExecutionReceiptSchema = z
   .object({
     schemaVersion: z.literal("openpond.trainingExecutionReceipt.v2"),
@@ -418,6 +464,7 @@ export const TrainingExecutionReceiptSchema = z
     spendUsd: z.number().nonnegative(),
     durationSeconds: z.number().nonnegative(),
     cleanupComplete: z.boolean(),
+    qualification: TrainingQualificationEvidenceSchema.optional(),
     issuer: IdSchema,
     issuedAt: TimestampSchema,
     signature: z.string().trim().min(1).max(10_000).nullable(),
@@ -438,6 +485,8 @@ export async function parseAndVerifyTrainingExecutionReceipt(
     teamId?: string;
     jobId?: string;
     requireCleanup?: boolean;
+    qualificationSubmission?: TrainingJobSubmission;
+    outputs?: TrainingJobOutput[];
   },
 ): Promise<TrainingExecutionReceipt> {
   const receipt = TrainingExecutionReceiptSchema.parse(value);
@@ -468,7 +517,30 @@ export async function parseAndVerifyTrainingExecutionReceipt(
       "The execution receipt does not attest complete terminal cleanup.",
     );
   }
+  if (expected.qualificationSubmission) {
+    const submission = await parseAndVerifyTrainingJobSubmission(expected.qualificationSubmission);
+    if (submission.job.kind !== "policy_optimize" || submission.job.executionMode !== "qualification") {
+      throw new OpenPondProtocolError("qualification_submission_required", "Expected an immutable qualification submission.");
+    }
+    await assertTrainingQualificationReceipt(receipt, { submissionHash: submission.contentHash, baseModel: submission.job.baseModel, outputs: expected.outputs });
+  }
   return receipt;
+}
+
+export async function assertTrainingQualificationReceipt(
+  receipt: TrainingExecutionReceipt,
+  expected: { submissionHash: string; baseModel?: z.infer<typeof ModelProjectBaseModelSchema>; outputs?: TrainingJobOutput[] },
+): Promise<void> {
+  const evidence = TrainingQualificationEvidenceSchema.parse(receipt.qualification);
+  if (receipt.submissionHash !== expected.submissionHash || !receipt.cleanupComplete) {
+    throw new OpenPondProtocolError("qualification_receipt_mismatch", "Qualification must attest the expected submission and complete cleanup.");
+  }
+  if (expected.baseModel && await canonicalSha256(evidence.baseModel) !== await canonicalSha256(expected.baseModel)) {
+    throw new OpenPondProtocolError("qualification_learner_mismatch", "Qualification used a different original learner or tokenizer.");
+  }
+  if (expected.outputs?.some(output => ["checkpoint", "adapter", "scorer"].includes(output.kind))) {
+    throw new OpenPondProtocolError("qualification_updated_artifact", "Qualification must not publish trained artifacts or checkpoints.");
+  }
 }
 
 export const TrainingJobOutputsSchema = z
@@ -514,6 +586,7 @@ export const TrainingCapabilitiesSchema = z
     capabilityHash: HashSchema,
     jobKinds: z.array(TrainingJobKindSchema),
     methods: z.array(z.string().trim().min(1).max(200)),
+    executionModes: z.array(z.enum(["training", "qualification"])).optional(),
     placements: z.array(z.enum(["local", "remote", "colocated", "provider_native"])),
     controls: z
       .object({
@@ -535,6 +608,7 @@ export const TrainingCapabilitiesSchema = z
   .strict();
 
 export type TrainingJobSubmission = z.infer<typeof TrainingJobSubmissionSchema>;
+export type TrainingQualificationEvidence = z.infer<typeof TrainingQualificationEvidenceSchema>;
 export type TrainingInputArtifactUpload = z.infer<typeof TrainingInputArtifactUploadSchema>;
 export type TrainingInputArtifact = z.infer<typeof TrainingInputArtifactSchema>;
 export type TrainingJob = z.infer<typeof TrainingJobSchema>;

@@ -2,6 +2,7 @@
 export * from "./contracts.js";
 export * from "./discovery.js";
 export * from "./history.js";
+export * from "./selection.js";
 export * from "./collector-contracts.js";
 export * from "./collector-store.js";
 export * from "./collector.js";

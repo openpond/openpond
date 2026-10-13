@@ -43,3 +43,43 @@ function nextLineEnd(value: string): number {
   if (cr < 0) return lf;
   return Math.min(lf, cr);
 }
+
+export const STORAGE_STARTUP_PROGRESS_PREFIX = "OPENPOND_STORAGE_PROGRESS ";
+export type StorageStartupProgress = {
+  phase: "backup" | "verify" | "migrate" | "complete";
+  message: string;
+  percent?: number;
+};
+
+export function isStorageStartupProgress(value: unknown): value is StorageStartupProgress {
+  if (!value || typeof value !== "object") return false;
+  const progress = value as StorageStartupProgress;
+  return (
+    ["backup", "verify", "migrate", "complete"].includes(progress.phase) &&
+    typeof progress.message === "string" &&
+    progress.message.length <= 200 &&
+    (progress.percent === undefined ||
+      (Number.isFinite(progress.percent) && progress.percent >= 0 && progress.percent <= 100))
+  );
+}
+
+/** Ordinary startup stays bounded; a declared storage upgrade needs room to
+ * copy and verify a large database. Completion restores the ordinary deadline. */
+export function createServerStartupDeadline(timeoutMs: number, expired: () => void) {
+  let stopped = false;
+  let timer = setTimeout(expired, timeoutMs);
+  return {
+    progress(value: StorageStartupProgress) {
+      if (stopped) return;
+      clearTimeout(timer);
+      timer = setTimeout(
+        expired,
+        value.phase === "complete" ? timeoutMs : Math.max(timeoutMs, 30 * 60_000),
+      );
+    },
+    stop() {
+      stopped = true;
+      clearTimeout(timer);
+    },
+  };
+}

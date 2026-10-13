@@ -15,6 +15,10 @@
     "./ready-line-parser": {
       "import": "./dist/ready-line-parser.js",
       "types": "./dist/ready-line-parser.d.ts"
+    },
+    "./executable-search-path": {
+      "import": "./dist/executable-search-path.js",
+      "types": "./dist/executable-search-path.d.ts"
     }
   },
   "scripts": {

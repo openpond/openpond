@@ -48,8 +48,10 @@ export async function readCredential<T>(home: string, id: string): Promise<Crede
   return record ? decrypt(home, id, record, await readKey(home, false)) : null;
 }
 
-export async function readCredentials<T>(home: string, prefix: string): Promise<Record<string, CredentialValue<T>>> {
-  const vault = await readVault(home), entries = Object.entries(vault.records).filter(([id]) => id.startsWith(prefix));
+export async function readCredentials<T>(home: string, selection: string | readonly string[]): Promise<Record<string, CredentialValue<T>>> {
+  if (Array.isArray(selection) && selection.length === 0) return {};
+  const ids = typeof selection === "string" ? null : new Set(selection);
+  const vault = await readVault(home), entries = Object.entries(vault.records).filter(([id]) => typeof selection === "string" ? id.startsWith(selection) : ids!.has(id));
   if (!entries.length) return {};
   const key = await readKey(home, false);
   return Object.fromEntries(entries.map(([id, record]) => [id, decrypt<T>(home, id, record, key)]));

@@ -15,7 +15,7 @@ const GENERATED_MANIFESTS = new Set(["taskset.json", "capabilities.json", "data/
 export function isGeneratedTasksetPublicationFilePath(path: string): boolean { return GENERATED_MANIFESTS.has(path); }
 
 /** Seal one captured file population; hosts own filesystem or object-store capture. */
-export function prepareAuthoredTasksetSource(tasksetInput: Taskset, sourceFiles: ReadonlyMap<string, Uint8Array>, adapterId: string) {
+export function prepareAuthoredTasksetSource(tasksetInput: Taskset, sourceFiles: ReadonlyMap<string, Uint8Array>, adapterId: string, maximumBytes = MAX_TASKSET_PACKAGE_BYTES) {
   const taskset = TasksetSchema.parse(tasksetInput);
   if (taskset.metadata.taskDefinition !== undefined || taskset.metadata.rewardBinding !== undefined) return { taskset, generatedFiles: [] as GeneratedTaskFile[] };
   const bytes = new Map<string, Uint8Array>();
@@ -23,7 +23,7 @@ export function prepareAuthoredTasksetSource(tasksetInput: Taskset, sourceFiles:
   for (const [name, data] of sourceFiles) {
     TasksetDraftFilePathSchema.parse(name);
     total += data.byteLength;
-    if (bytes.size >= 10_000 || total > MAX_TASKSET_PACKAGE_BYTES * 3 / 4) throw new Error("Taskset source exceeds the package byte limit.");
+    if (bytes.size >= 10_000 || total > maximumBytes * 3 / 4) throw new Error("Taskset source exceeds the package byte limit.");
     bytes.set(name, data.slice());
   }
   const aggregator = taskset.metrics?.customAggregator;

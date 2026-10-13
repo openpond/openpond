@@ -17,8 +17,10 @@ export function compileTasksetDraftWorkspace(input: {
   adapterId: string;
   now: string;
   source?: TasksetPackage;
+  maximumBytes?: number;
+  sourceWorkspaceHash?: string;
 }) {
-  const workspace = validateTasksetDraftWorkspace(input.workspace);
+  const workspace = validateTasksetDraftWorkspace(input.workspace, input.maximumBytes);
   const preparation = input.preparation === null ? null : ModelTasksetDraftPreparationSchema.parse(input.preparation);
   if (preparation ? workspace.draft.id !== preparation.draftId || workspace.draft.modelScope?.modelId !== preparation.lineage.owner.modelId
     || workspace.draft.profileId !== preparation.lineage.owner.scopeId
@@ -26,10 +28,10 @@ export function compileTasksetDraftWorkspace(input: {
     : workspace.draft.modelScope?.source !== undefined) throw new Error("Taskset draft differs from its retained source preparation.");
   // Validation and publication may happen in different requests. Package
   // identity depends on saved bytes, including their timestamp, not wall time.
-  const taskset = publishTasksetDraft({ draft: workspace.draft, now: workspace.draft.updatedAt, sourcePackageHash: workspace.contentHash });
+  const taskset = publishTasksetDraft({ draft: workspace.draft, now: workspace.draft.updatedAt, sourcePackageHash: input.sourceWorkspaceHash ?? workspace.contentHash });
   const files = new Map(workspace.files.map(file => [file.path, decodeTasksetDraftWorkspaceFile(file)]));
   for (const [path, source] of renderTasksetDraftManifests(workspace.draft)) if (!isGeneratedTasksetPublicationFilePath(path)) files.set(path, new TextEncoder().encode(source));
-  const authored = prepareAuthoredTasksetSource(taskset, files, input.adapterId);
+  const authored = prepareAuthoredTasksetSource(taskset, files, input.adapterId, input.maximumBytes);
   for (const file of authored.generatedFiles) files.set(file.path, new TextEncoder().encode(file.content));
   const releases = materializePortableTasksetRelease({ taskset: authored.taskset, adapterId: input.adapterId });
   const inventory = AuthoredTasksetFileInventorySchema.parse(authored.taskset.metadata.portableFileInventory);
@@ -40,7 +42,7 @@ export function compileTasksetDraftWorkspace(input: {
       if (!bytes) throw new Error(`Captured Taskset file is missing: ${entry.sourcePath}.`);
       return { asset: entry.asset, base64: Buffer.from(bytes).toString("base64") };
     }),
-  });
+  }, input.maximumBytes);
   return preparation ? publishModelTasksetDraftPackage({ preparation, edited, source: input.source }) : edited;
 }
 

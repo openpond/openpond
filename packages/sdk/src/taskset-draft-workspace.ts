@@ -11,8 +11,8 @@ const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const TasksetDraftWorkspaceFileSchema = z.object({
   path: TasksetDraftFilePathSchema,
   contentHash: HashSchema,
-  sizeBytes: z.number().int().nonnegative().max(MAX_TASKSET_DRAFT_WORKSPACE_BYTES),
-  base64: z.string().max(MAX_TASKSET_DRAFT_WORKSPACE_BYTES),
+  sizeBytes: z.number().int().nonnegative(),
+  base64: z.string(),
 }).strict();
 const WorkspaceContentSchema = z.object({
   schemaVersion: z.literal("openpond.tasksetDraftWorkspace.v1"),
@@ -25,15 +25,15 @@ export type TasksetDraftWorkspaceFile = z.infer<typeof TasksetDraftWorkspaceFile
 
 /** Files are retained separately from the structured document, including bytes
  * too large for the code editor. Publication remains a separate validation step. */
-export function createTasksetDraftWorkspace(input: z.input<typeof WorkspaceContentSchema>): TasksetDraftWorkspace {
-  assertBoundedTaskJson(input, MAX_TASKSET_DRAFT_WORKSPACE_BYTES);
+export function createTasksetDraftWorkspace(input: z.input<typeof WorkspaceContentSchema>, maximumBytes = MAX_TASKSET_DRAFT_WORKSPACE_BYTES): TasksetDraftWorkspace {
+  assertBoundedTaskJson(input, maximumBytes);
   const content = WorkspaceContentSchema.parse(input);
   content.files.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-  return validateTasksetDraftWorkspace({ ...content, contentHash: contentHash(content) });
+  return validateTasksetDraftWorkspace({ ...content, contentHash: contentHash(content) }, maximumBytes);
 }
 
-export function validateTasksetDraftWorkspace(input: unknown): TasksetDraftWorkspace {
-  assertBoundedTaskJson(input, MAX_TASKSET_DRAFT_WORKSPACE_BYTES);
+export function validateTasksetDraftWorkspace(input: unknown, maximumBytes = MAX_TASKSET_DRAFT_WORKSPACE_BYTES): TasksetDraftWorkspace {
+  assertBoundedTaskJson(input, maximumBytes);
   const workspace = TasksetDraftWorkspaceSchema.parse(input);
   const { contentHash: expectedHash, ...content } = workspace;
   if (contentHash(content) !== expectedHash) throw new Error("Taskset draft workspace differs from its retained bytes.");
@@ -69,8 +69,8 @@ export function listTasksetDraftWorkspaceFiles(input: TasksetDraftWorkspace) {
   return { draftRevision: workspace.draft.revision, files: files.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0) };
 }
 
-export function saveTasksetDraftWorkspaceDocument(input: { workspace: TasksetDraftWorkspace; expectedDraftRevision: number; draft: unknown; now: string }): TasksetDraftWorkspace {
-  const workspace = editableWorkspace(input.workspace, input.expectedDraftRevision);
+export function saveTasksetDraftWorkspaceDocument(input: { workspace: TasksetDraftWorkspace; expectedDraftRevision: number; draft: unknown; now: string; maximumBytes?: number }): TasksetDraftWorkspace {
+  const workspace = editableWorkspace(input.workspace, input.expectedDraftRevision, input.maximumBytes);
   const draft = TasksetDraftSchema.parse(input.draft);
   const current = workspace.draft;
   if (draft.id !== current.id || draft.profileId !== current.profileId || contentHash(draft.modelScope) !== contentHash(current.modelScope)) throw new Error("Taskset draft Model ownership cannot change.");
@@ -84,12 +84,12 @@ export function saveTasksetDraftWorkspaceDocument(input: { workspace: TasksetDra
   const module = aggregator ? files.find(file => file.path === aggregator.module) : undefined;
   return createTasksetDraftWorkspace({ schemaVersion: workspace.schemaVersion, files,
     draft: { ...draft, revision: current.revision + 1, status: "draft", updatedAt: input.now,
-      ...(aggregator && module ? { metrics: { ...draft.metrics, customAggregator: { ...aggregator, contentHash: module.contentHash } } } : {}) } });
+      ...(aggregator && module ? { metrics: { ...draft.metrics, customAggregator: { ...aggregator, contentHash: module.contentHash } } } : {}) } }, input.maximumBytes);
 }
 
-export function saveTasksetDraftWorkspaceFile(input: { workspace: TasksetDraftWorkspace; mutation: TasksetDraftFileMutation; now: string }): TasksetDraftWorkspace {
+export function saveTasksetDraftWorkspaceFile(input: { workspace: TasksetDraftWorkspace; mutation: TasksetDraftFileMutation; now: string; maximumBytes?: number }): TasksetDraftWorkspace {
   const mutation = TasksetDraftFileMutationSchema.parse(input.mutation);
-  const workspace = editableWorkspace(input.workspace, mutation.expectedDraftRevision);
+  const workspace = editableWorkspace(input.workspace, mutation.expectedDraftRevision, input.maximumBytes);
   if (workspace.draft.id !== mutation.draftId) throw new Error("Taskset draft file belongs to another draft.");
   if (!isWritableTasksetDraftFilePath(mutation.path)) throw new Error("This file is managed by the Taskset forms or retained source history.");
   const previous = workspace.files.find(file => file.path === mutation.path);
@@ -101,11 +101,11 @@ export function saveTasksetDraftWorkspaceFile(input: { workspace: TasksetDraftWo
     files.push({ path: mutation.path, contentHash: sha256(bytes), sizeBytes: bytes.byteLength, base64: base64(bytes) });
   }
   return createTasksetDraftWorkspace({ schemaVersion: workspace.schemaVersion, files,
-    draft: { ...workspace.draft, revision: workspace.draft.revision + 1, status: "draft", updatedAt: input.now } });
+    draft: { ...workspace.draft, revision: workspace.draft.revision + 1, status: "draft", updatedAt: input.now } }, input.maximumBytes);
 }
 
-function editableWorkspace(input: unknown, expectedRevision: number): TasksetDraftWorkspace {
-  const workspace = validateTasksetDraftWorkspace(input);
+function editableWorkspace(input: unknown, expectedRevision: number, maximumBytes?: number): TasksetDraftWorkspace {
+  const workspace = validateTasksetDraftWorkspace(input, maximumBytes);
   if (workspace.draft.status === "published") throw new Error("Published Taskset drafts are immutable.");
   if (workspace.draft.revision !== expectedRevision) throw new Error("Taskset draft changed. Reload before saving.");
   return workspace;

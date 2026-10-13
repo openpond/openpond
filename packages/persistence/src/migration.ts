@@ -1,3 +1,4 @@
+import { cachedInitialization, initializationSignature, rememberInitialization } from "./initialization-cache.js";
 import { previewMigration } from "./migration-preview.js";
 import { validateManagedArtifacts } from "./artifacts.js";
 import { resolveMigrationTarget } from "./migration-conflicts.js";
@@ -27,13 +28,18 @@ const ignoredDirectories = new Set(["cache", "logs", "diagnostics", "backups", "
 export async function initializeHome(home: string, options: MigrationOptions = {}): Promise<MigrationReport> {
   home = path.resolve(home);
   assertStorageAncestors(home);
+  const signature = Object.keys(options).length === 0 ? await initializationSignature(home) : null;
+  const cached = cachedInitialization(home, signature);
+  if (cached) return cached;
   const marker = await readJsonFile<Record<string, unknown> | null>(storagePaths(home).marker, () => null);
   const pending = await readMigrationJournal(home);
   if (marker) {
     assertLayout(marker, home);
     if (!pending || pending.status === "verified") {
       if (options.sourceBrowserState && !options.dryRun) await importBrowserMetadataOnce(home, options.sourceBrowserState);
-      return report(home, "current", pending);
+      const result = report(home, "current", pending);
+      if (signature && signature === await initializationSignature(home)) rememberInitialization(home, signature, result);
+      return result;
     }
   }
   if (pending && !options.dryRun) return recoverMigration(home);

@@ -1,6 +1,9 @@
-export type AppStartupStageId = "connecting" | "account" | "team" | "ready";
+export type AppStartupStageId = "connecting" | "account" | "ready";
 
 export type AppStartupState = {
+  error?: string | null;
+  retrying?: boolean;
+  retry?: () => void;
   label: string;
   ready: boolean;
   stage: AppStartupStageId;
@@ -9,7 +12,6 @@ export type AppStartupState = {
 const APP_STARTUP_LABELS: Record<AppStartupStageId, string> = {
   connecting: "Connecting to OpenPond",
   account: "Loading account",
-  team: "Loading default team",
   ready: "Ready",
 };
 

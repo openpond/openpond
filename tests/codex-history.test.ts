@@ -1465,3 +1465,30 @@ describe("codex history", () => {
     }
   });
 });
+
+// Sidebar refreshes share catalog reads, but file append/replacement/deletion
+// must still update titles and workspace metadata instead of serving stale caches.
+test("history catalog cache observes append, replacement, and deletion", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "openpond-history-catalog-"));
+  const { readPromptHistory, readSessionIndex, readGlobalState } = await import("../apps/server/src/codex-history-catalog");
+  try {
+    const file = path.join(home, "history.jsonl");
+    const record = (id: string, text: string) => JSON.stringify({ session_id: id, ts: 1780015997, text }) + "\n";
+    await writeFile(file, record("one", "First prompt"));
+    const [first, shared] = await Promise.all([readPromptHistory(home), readPromptHistory(home)]);
+    expect(first).toBe(shared);
+    await writeFile(file, record("two", "Second prompt"), { flag: "a" });
+    expect([...(await readPromptHistory(home)).keys()]).toEqual(["one", "two"]);
+    await writeFile(file, record("new", "Replacement"));
+    expect([...(await readPromptHistory(home)).keys()]).toEqual(["new"]);
+    await rm(file);
+    expect((await readPromptHistory(home)).size).toBe(0);
+    const index = path.join(home, "session_index.jsonl");
+    await writeFile(index, JSON.stringify({ id: "one", thread_name: "A title", updated_at: "2026-10-12T00:00:00Z" }) + "\n");
+    expect((await readSessionIndex(home)).get("one")?.threadName).toBe("A title");
+    await writeFile(index, JSON.stringify({ id: "one", thread_name: "B title", updated_at: "2026-10-12T00:00:00Z" }) + "\n");
+    expect((await readSessionIndex(home)).get("one")?.threadName).toBe("B title");
+    await writeFile(path.join(home, ".codex-global-state.json"), JSON.stringify({ "thread-workspace-root-hints": { one: "/first" } }));
+    expect((await readGlobalState(home)).workspaceRootHints.get("one")).toBe("/first");
+  } finally { await rm(home, { recursive: true, force: true }); }
+});

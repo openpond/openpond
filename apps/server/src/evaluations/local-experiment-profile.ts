@@ -14,6 +14,9 @@ import type { HarnessStateStore } from "../store/harness-state-store.js";
 import type { LocalExperimentDefinition,LocalExperimentAdmission } from "./local-experiment-contract.js";
 import type { ProfileOriginAuthority } from "./local-experiment-profile-origin.js";
 import { LocalExperimentError } from "./local-experiment-contract.js";
+import type { TurnDispatcherPort } from "../runtime/turns/ports.js";
+import { supportsLocalProfileEnvironment } from "./local-profile-work.js";
+import { resolveHarnessExperimentSampling } from "openpond-sdk/experiments";
 
 type Prepared=Awaited<ReturnType<ReturnType<typeof createProfileEvaluationRunPreparationService>>>;
 type Stream=typeof streamOpenPondHostedChatTurn;
@@ -32,8 +35,9 @@ export function createLocalProfileExperimentOwner(deps:{
   resolveProfileRef?:(repositoryId:string,profileId:string,reference:{id:string;contentHash:string})=>Promise<OpenPondProfileRef>;
   store:HarnessStateStore;actorId():Promise<string>;teamId():Promise<string>;
   prepare:ReturnType<typeof createProfileEvaluationRunPreparationService>;
+  prepareNativeModel?:(configuration:LocalExperimentDefinition["configuration"])=>Promise<import("./local-experiment-model.js").LocalModelAdmission>;
   loadPackage(prepared:Prepared):Promise<TasksetPackage>;
-  createSession(request:unknown):Promise<Session>;sendTurn(sessionId:string,request:unknown):Promise<Turn>;
+  createSession(request:unknown):Promise<Session>;sendTurn:TurnDispatcherPort["sendTurn"];
   interruptSessionTurn(sessionId:string,reason?:string):Promise<Turn>;
 }) {
   const profileRef=async(repositoryId:string,profileId:string,reference:{id:string;contentHash:string}):Promise<OpenPondProfileRef>=> {
@@ -49,10 +53,13 @@ export function createLocalProfileExperimentOwner(deps:{
   async function resolve(configuration:LocalExperimentDefinition["configuration"],value:TasksetPackage) {
     const policy=configuration.request.policy;
     if(policy.kind!=="hosted_harness")throw new LocalExperimentError("local_profile_policy_required","Select an exact prepared Profile target.",422);
+    if(policy.localRuntime&&(policy.maxOutputTokens!==undefined||policy.temperature!==undefined||policy.topP!==undefined))
+      throw new LocalExperimentError("local_profile_sampling_not_qualified","This native provider runtime does not admit output or sampling overrides.",422);
     const actor=await deps.actorId(),team=await deps.teamId();
     if(!actor||team!==configuration.request.teamId)throw new LocalExperimentError("local_workspace_denied","The Profile belongs to another account or workspace.",403);
+    if(policy.localRuntime){if(!deps.prepareNativeModel)throw new LocalExperimentError("local_profile_model_unavailable","The native Profile model owner is unavailable.",422);await deps.prepareNativeModel(configuration);}
     const prepared=await deps.prepare({id:`local-profile-${contentHash(configuration).slice(0,40)}`,createdAt:"1970-01-01T00:00:00.000Z",
-      profileRef:await profileRef(policy.profileRepositoryId,policy.source.profileId,policy.source.harnessRelease),profileSource:{sourceRevision:policy.source.sourceRevision,harnessRelease:policy.source.harnessRelease},externalDatasetBinding:policy.source.externalDatasetBinding,definitionId:policy.source.definitionId,modelRef:{providerId:"openpond",modelId:policy.modelId},maximumSpendUsd:configuration.maximumCostUsd});
+      profileRef:await profileRef(policy.profileRepositoryId,policy.source.profileId,policy.source.harnessRelease),profileSource:{sourceRevision:policy.source.sourceRevision,harnessRelease:policy.source.harnessRelease},externalDatasetBinding:policy.source.externalDatasetBinding,definitionId:policy.source.definitionId,modelRef:{providerId:policy.localRuntime?.providerId??"openpond",modelId:policy.modelId},maximumSpendUsd:configuration.maximumCostUsd},{modelSampling:policy.localRuntime?undefined:resolveHarnessExperimentSampling(policy)});
     // Preparation authorizes the accepted Profile reference before any retained
     // workspace/source inspection. Hashes alone never grant source authority.
     await resolveLocalProfileExperimentSource(deps.store,policy.source.harnessRelease,prepared.profileRef,deps.authorizeOrigin);
@@ -62,8 +69,7 @@ export function createLocalProfileExperimentOwner(deps:{
       ||prepared.taskset.contentHash!==value.taskset.contentHash)
       throw new LocalExperimentError("local_profile_source_conflict","Prepare this exact Profile and Dataset through the local runtime before running. Hosted or changed source receipts are not local authority.",422);
 
-    if(value.taskset.environment.kind!=="text"||value.taskset.tools.some(tool=>!["work_exec","work_save_output"].includes(tool.name))||value.taskset.policy.connectedAppScopes.length
-      ||value.taskset.capabilities.some(item=>item.required&&item.id!=="private-verifier"&&!(item.id==="tools"&&item.scopes.every(scope=>["work_exec","work_save_output"].includes(scope)&&value.taskset.tools.some(tool=>tool.name===scope)))))
+    if(!supportsLocalProfileEnvironment(value))
       throw new LocalExperimentError("local_profile_environment_not_qualified","This Profile requires an additional admitted local tool or Work environment.",422);
     const population=configuration.request.population,expected=prepared.manifest.population;
     const keys=new Set(population.map(member=>JSON.stringify([member.taskId,member.seed])));
@@ -94,7 +100,7 @@ export function createLocalProfileExperimentOwner(deps:{
     const executor=createProfileWorkflowEvaluationExecutor({...prepared,attachments,requiredOutputs:task.requiredOutputs??[],createSession:async request=>{
         signal.throwIfAborted();await resolveLocalProfileExperimentSource(deps.store,source.harnessRelease,prepared.profileRef,deps.authorizeOrigin);
         signal.throwIfAborted();return deps.createSession(request);
-      },sendTurn:deps.sendTurn,
+      },sendTurn:(id,request,limits)=>deps.sendTurn(id,request,undefined,undefined,limits),
       interruptSessionTurn:deps.interruptSessionTurn,runtimeEventsForTurn:id=>deps.store.runtimeEventsForTurn(id),
       maximumOutputBytes:262_144,retainOutputLimitEvidence:true,onOutputLimit:hash=>{overflowHash=hash;},validateTerminalTurn:async(session,turn)=>{
         if(turn.sessionId!==session.id||!turn.profileSnapshot||contentHash(turn.profileSnapshot.ref)!==contentHash(prepared.profileRef)
@@ -127,7 +133,7 @@ export function createLocalProfileExperimentOwner(deps:{
     package:async(configuration)=>{
       const policy=configuration.request.policy;if(policy.kind!=="hosted_harness")throw new Error("An exact Profile policy is required.");
       const prepared=await deps.prepare({id:`local-profile-package-${contentHash(configuration).slice(0,40)}`,createdAt:"1970-01-01T00:00:00.000Z",
-        profileRef:await profileRef(policy.profileRepositoryId,policy.source.profileId,policy.source.harnessRelease),profileSource:{sourceRevision:policy.source.sourceRevision,harnessRelease:policy.source.harnessRelease},externalDatasetBinding:policy.source.externalDatasetBinding,definitionId:policy.source.definitionId,modelRef:{providerId:"openpond",modelId:policy.modelId},maximumSpendUsd:configuration.maximumCostUsd});
+        profileRef:await profileRef(policy.profileRepositoryId,policy.source.profileId,policy.source.harnessRelease),profileSource:{sourceRevision:policy.source.sourceRevision,harnessRelease:policy.source.harnessRelease},externalDatasetBinding:policy.source.externalDatasetBinding,definitionId:policy.source.definitionId,modelRef:{providerId:policy.localRuntime?.providerId??"openpond",modelId:policy.modelId},maximumSpendUsd:configuration.maximumCostUsd},{modelSampling:policy.localRuntime?undefined:resolveHarnessExperimentSampling(policy)});
       const value=await deps.loadPackage(prepared);await resolve(configuration,value);return value;
     }} satisfies LocalProfileOwner,async isolatedProfileEvaluationForTurn(session:Session){if(session.metadata?.localProfileExperiment===undefined)return false;const owner=sessions.get(session.id);if(!owner)throw new Error("This target Session has no actual admitted case owner.");return Boolean(owner.isolated);},
     async resolveModelTools(context:Parameters<import("../runtime/app-server-embedding.js").ResolveAppServerModelTools>[0]){if(context.session.metadata?.localProfileExperiment===undefined)return null;const owner=sessions.get(context.session.id);if(!owner)throw new Error("This target Session has no actual admitted case owner.");return owner.isolated?owner.isolated.resolveTools(context):null;},

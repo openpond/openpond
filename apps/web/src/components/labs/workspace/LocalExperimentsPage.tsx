@@ -92,6 +92,7 @@ export function LocalExperimentsPage({
     navigate({
       ...route,
       page: "graders",
+      executionLocation: "hosted",
       resourceId: release.id,
       revision: release.revision,
       contentHash: release.contentHash,
@@ -277,7 +278,7 @@ export function LocalExperimentsPage({
               ) : null}
             </>
           ) : null}
-          {tab !== "configuration" ? <LocalExperimentUsage execution={pass ?? execution} /> : null}
+          {tab !== "configuration" ? <LocalExperimentUsage execution={pass ?? execution} evidence={detail.evidence.data?.result.cases} /> : null}
           <LocalExperimentGrading
             key={execution.id}
             api={api}

@@ -5,6 +5,65 @@ import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { ClaudeCliClient } from "../src/acp/claude-cli-client.js";
 
+// A quota rejection may have only a synthetic assistant error, followed by a
+// bare failed result. Losing it hides the reset time; retaining it across turns
+// would misdiagnose a later failure. Exercise both at the subprocess boundary.
+it.skipIf(process.platform === "win32")("preserves native Claude failure details and clears them before retrying", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "openpond-claude-errors-"));
+  const executable = join(directory, "claude");
+  await writeFile(executable, `#!${process.execPath}\n` + String.raw`
+const readline = require('node:readline');
+const send = value => process.stdout.write(JSON.stringify(value)+'\n');
+readline.createInterface({input:process.stdin}).on('line', line => {
+ const value = JSON.parse(line);
+ if (value.type === 'control_request') send({type:'control_response',response:{subtype:'success',request_id:value.request_id,response:{}}});
+ if (value.type !== 'user') return;
+ const prompt = value.message.content[0].text;
+ if (prompt === 'quota' || prompt === 'quota-empty-errors') {
+   send({type:'assistant',...(prompt === 'quota' ? {isApiErrorMessage:true} : {}),error:'rate_limit',message:{content:[{type:'text',text:'Usage limited; retry after reset'}]}});
+   send({type:'result',is_error:true,...(prompt === 'quota-empty-errors' ? {errors:[]} : {})});
+ } else if (prompt.startsWith('window-')) {
+   const rateLimitType = prompt.slice('window-'.length);
+   send({type:'rate_limit_event',rate_limit_info:{status:'rejected',rateLimitType,resetsAt:1791833400}});
+   send({type:'assistant',error:'rate_limit',message:{content:[{type:'text',text:"You've hit your session limit · resets 3:30pm (America/New_York)"}]}});
+   send({type:'result',is_error:true});
+ } else if (prompt === 'quota-metadata-only') {
+   send({type:'rate_limit_event',rate_limit_info:{status:'rejected',rateLimitType:'five_hour',resetsAt:1791833400}});
+   send({type:'result',is_error:true});
+ } else if (prompt === 'result-error') send({type:'result',is_error:true,result:'Provider unavailable'});
+ else if (prompt === 'explicit-error') send({type:'result',is_error:true,errors:['', 'Authentication rejected'],result:'Less specific detail'});
+ else if (prompt === 'generic-error') send({type:'result',is_error:true,errors:[]});
+ else send({type:'result',is_error:false,result:'Recovered'});
+ send({type:'system',subtype:'session_state_changed',state:'idle'});
+});`, { mode: 0o700 });
+  const updates: string[] = [];
+  const client = new ClaudeCliClient({ command: executable, args: [], cwd: directory, requestTimeoutMs: 2_000,
+    onUpdate: async (_id, value) => { if (value.sessionUpdate === "agent_message_final") updates.push(String((value.content as { text: string }).text)); },
+  });
+  try {
+    const session = await client.createSession(directory);
+    const prompt = (text: string) => client.prompt(session.sessionId, [{ type: "text", text }]);
+    await expect(prompt("quota")).rejects.toThrow("Usage limited; retry after reset");
+    await expect(prompt("quota-empty-errors")).rejects.toThrow("Usage limited; retry after reset");
+    for (const [window, label] of [["five_hour", "5-hour"], ["seven_day", "Weekly"], ["seven_day_opus", "Weekly Opus"]]) {
+      const error = await prompt(`window-${window}`).catch((error: Error) => error);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(label);
+      expect((error as Error).message).toContain("3:30pm (America/New_York)");
+    }
+    await expect(prompt("window-unknown")).rejects.toThrow("You've hit your session limit");
+    const metadataError = await prompt("quota-metadata-only").catch((error: Error) => error);
+    expect(metadataError).toBeInstanceOf(Error);
+    expect((metadataError as Error).message).toContain("5-hour");
+    expect((metadataError as Error).message).toContain("Oct 12");
+    await expect(prompt("retry")).resolves.toEqual({ stopReason: "end_turn" });
+    await expect(prompt("result-error")).rejects.toThrow("Provider unavailable");
+    await expect(prompt("explicit-error")).rejects.toThrow("Authentication rejected");
+    await expect(prompt("generic-error")).rejects.toThrow("Claude turn failed.");
+    expect(updates).toEqual(["Recovered"]);
+  } finally { await client.stop(); await rm(directory, { recursive: true, force: true }); }
+});
+
 // Resuming the implementer to acknowledge a review must not inherit its coding
 // tools or bypass mode. Exercise the actual subprocess/control boundary.
 it.skipIf(process.platform === "win32")("resumes a reporting-only acknowledgment without coding tools or bypass permissions", async () => {

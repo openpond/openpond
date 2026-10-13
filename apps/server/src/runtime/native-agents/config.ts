@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { isRegisteredAcpProvider, type ProviderConfig } from "@openpond/contracts";
+import { executableSearchPath, findLocalExecutable } from "@openpond/runtime/executable-search-path";
 
 export const NATIVE_AGENT_IDS = ["claude-code", "grok-build", "opencode"] as const;
 export type BuiltinNativeAgentId = typeof NATIVE_AGENT_IDS[number];
@@ -39,11 +40,16 @@ export function nativeAgentLaunch(provider: NativeAgentId, config?: Partial<Prov
     return { command, args, env, instanceId, sourceHome };
   }
   const definition = NATIVE_AGENTS[provider];
-  const command = config?.binaryPath || definition.command;
+  const searchPath = executableSearchPath();
+  const command = config?.binaryPath || findLocalExecutable(definition.command, { PATH: searchPath }) || definition.command;
   if (config?.binaryPath && !isAbsolute(config.binaryPath)) throw new Error("A configured agent executable must be an absolute path.");
   if (config?.sourceHome && !isAbsolute(config.sourceHome)) throw new Error("A configured agent home must be an absolute path.");
   const sourceHome = resolve(config?.sourceHome || process.env[definition.homeVariable] || definition.defaultHome());
-  const env: NodeJS.ProcessEnv = { ...process.env, [definition.homeVariable]: sourceHome };
+  // npm launchers use /usr/bin/env node. Keep the runtime installed beside a
+  // discovered launcher ahead of an older system Node from the GUI PATH.
+  const launchPath = isAbsolute(command) && process.platform !== "win32"
+    ? [...new Set([dirname(command), ...searchPath.split(delimiter)])].join(delimiter) : searchPath;
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: launchPath, [definition.homeVariable]: sourceHome };
   // On macOS, setting CLAUDE_CONFIG_DIR (even to ~/.claude) selects a
   // different Keychain item. Keep the native login's original namespace.
   if (provider === "claude-code" && !config?.sourceHome) {

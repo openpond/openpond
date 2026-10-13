@@ -75,13 +75,16 @@ export function preloadOpenPondOrganizations(input: {
   const cached = organizationsByAccountKey.get(normalizedAccountKey);
   if (!input.force) {
     if (cached?.updatedAt) return Promise.resolve(cached.organizations);
-    if (cached?.promise) return cached.promise;
   }
+  // Force bypasses a saved value, not a request already refreshing that value.
+  if (cached?.promise) return cached.promise;
 
   const promise = input
     .fetchOrganizations()
     .then((organizations) => {
-      writeOpenPondOrganizationsToMemory(normalizedAccountKey, organizations);
+      if (organizationsByAccountKey.get(normalizedAccountKey)?.promise === promise) {
+        writeOpenPondOrganizationsToMemory(normalizedAccountKey, organizations);
+      }
       return organizations;
     })
     .catch((error) => {

@@ -1,5 +1,5 @@
-import { backup } from "node:sqlite";
-import { openStorageDatabase } from "@openpond/persistence";
+import type { StorageStartupProgress } from "@openpond/runtime/ready-line-parser";
+import { withFileLock } from "@openpond/persistence";
 import { PersistenceError } from "@openpond/persistence";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -8,7 +8,7 @@ import type { Logger } from "@openpond/logging";
 import type { PayloadRow, StoreData } from "../types.js";
 import { now } from "../utils.js";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SQLITE_CREATE_SCHEMA_SQL } from "./store-schema.js";
-import { normalizeSessionPayload, persistStoreData, readStoreData } from "./store-persistence.js";
+import { normalizeSessionPayload, readStoreMetadata } from "./store-persistence.js";
 import {
   createCreateImproveRunTables,
   createGraderAuditTables,
@@ -32,7 +32,6 @@ import {
 import {
   threadDetailProjectionFromRow,
   threadDetailProjectionPayload,
-  timestampForPath,
   type ThreadDetailProjection,
   type ThreadDetailProjectionRow,
 } from "./store-codecs.js";
@@ -57,6 +56,7 @@ import { TRAINING_TABLES_SQL } from "./store-training-base-schema.js";
 import { LEARNING_TABLES_SQL } from "./store-learning-schema.js";
 import { MODEL_PROJECT_AUTHORING_TABLES_SQL } from "./store-model-project-authoring-schema.js";
 import { pruneMigrationBackups } from "./store-backup-retention.js";
+import { ensureMigrationBackup } from "./store-migration-backup.js";
 import { TASK_INBOX_SCHEMA_SQL } from "./store-task-inbox-schema.js";
 import { CHAT_RESOURCE_TABLES_SQL } from "./store-chat-resource-schema.js";
 import type { SqliteDomainContext } from "./store-domain.js";
@@ -68,6 +68,7 @@ type TableInfoRow = { name: string };
 const SQLITE_OPEN_RETRY_DELAYS_MS = [0, 100, 250, 500] as const;
 
 export type SqliteStoreCoreOptions = {
+  onMigrationProgress?: (progress: StorageStartupProgress) => void;
   logger?: Logger;
 };
 
@@ -86,16 +87,18 @@ export class SqliteStoreCore {
 
   readonly storePath: string;
   readonly home: string;
-  protected data: StoreData = { sessions: [], turns: [], events: [], approvals: [] };
+  protected data: Omit<StoreData, "events"> = { sessions: [], turns: [], approvals: [] };
   protected ready: Promise<void>;
   protected db: OpenPondSqliteConnection | null = null;
   protected writeQueue: Promise<void> = Promise.resolve();
   protected readonly logger?: Logger;
+  protected readonly onMigrationProgress?: (progress: StorageStartupProgress) => void;
 
   constructor(storeDir: string, options: SqliteStoreCoreOptions = {}) {
     this.home = path.resolve(storeDir);
     this.storePath = path.join(this.home, "state", "state.sqlite");
     this.logger = options.logger;
+    this.onMigrationProgress = options.onMigrationProgress;
     this.ready = this.load(storeDir);
   }
 
@@ -126,27 +129,24 @@ export class SqliteStoreCore {
 
   protected async load(storeDir: string): Promise<void> {
     await fs.mkdir(path.dirname(this.storePath), { recursive: true, mode: 0o700 });
-    const hadDatabase = await this.fileExists(this.storePath);
-    await this.openDatabaseWithRecovery();
-    await this.runMigrations(storeDir, hadDatabase);
-    this.data = await readStoreData({
-      allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params),
-    });
-    await pruneMigrationBackups(storeDir)
-      .then(({ removed, retained }) => {
-        if (removed.length === 0) return;
-        this.logger?.info("sqlite migration backups pruned", {
-          removed,
-          retained,
-          storePath: this.storePath,
-        });
-      })
-      .catch((error) => {
-        this.logger?.warn("sqlite migration backup pruning failed", {
-          error,
-          storePath: this.storePath,
-        });
+    await withFileLock(path.join(storeDir, "runtime", "schema-migration"), async () => {
+      const hadDatabase = await this.fileExists(this.storePath);
+      await this.openDatabaseWithRecovery();
+      const protectedBackup = await this.runMigrations(storeDir, hadDatabase);
+      this.data = await readStoreMetadata({
+        allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params),
       });
+      // Never prune when migration or loading failed. Serialize pruning with
+      // migration ownership so another process cannot remove a retry snapshot.
+      await pruneMigrationBackups(storeDir, { protectedBackup })
+        .then(({ removed, retained }) => {
+          if (removed.length) this.logger?.info("sqlite migration backups pruned", { removed, retained, storePath: this.storePath });
+        })
+        .catch(error => this.logger?.warn("sqlite migration backup pruning failed", { error, storePath: this.storePath }));
+    }, 300_000).catch(async error => {
+      await this.closeDatabaseHandle();
+      throw error;
+    });
   }
 
   protected async configureDatabase(): Promise<void> {
@@ -179,29 +179,39 @@ export class SqliteStoreCore {
     });
   }
 
-  protected async runMigrations(storeDir: string, hadDatabase: boolean): Promise<void> {
+  protected async runMigrations(storeDir: string, hadDatabase: boolean): Promise<string | undefined> {
     const currentVersion = await this.userVersion();
     if (currentVersion > CURRENT_SQLITE_SCHEMA_VERSION) {
-      throw new Error(
-        `SQLite schema version ${currentVersion} is newer than this app supports (${CURRENT_SQLITE_SCHEMA_VERSION})`
-      );
+      throw new Error(`SQLite schema version ${currentVersion} is newer than this app supports (${CURRENT_SQLITE_SCHEMA_VERSION})`);
     }
     if (currentVersion === CURRENT_SQLITE_SCHEMA_VERSION) return;
 
-    if (hadDatabase) await this.backupDatabaseFiles(storeDir, `before-v${currentVersion + 1}`);
-
-    for (const migration of SQLITE_MIGRATIONS.filter((candidate) => candidate.version > currentVersion)) {
-      await this.exec("BEGIN IMMEDIATE");
-      try {
+    this.onMigrationProgress?.({ phase: "backup", message: "Preparing your data upgrade" });
+    // Normalize the WAL before fingerprinting so a rolled-back attempt can
+    // reuse its verified snapshot after closing and reopening the database.
+    const checkpoint = await this.get<{ busy: number }>("PRAGMA wal_checkpoint(TRUNCATE)", []);
+    if (checkpoint?.busy) throw new Error("Database is busy; close other OpenPond processes before upgrading its schema.");
+    await this.exec("BEGIN IMMEDIATE");
+    try {
+      // A separate process may have upgraded while this connection waited.
+      if (await this.userVersion() !== currentVersion) throw new Error("Database schema changed while preparing migration; retry startup.");
+      const backupDir = hadDatabase ? await ensureMigrationBackup({ storeDir, storePath: this.storePath, sourceVersion: currentVersion, logger: this.logger, onProgress: this.onMigrationProgress }) : undefined;
+      for (const migration of SQLITE_MIGRATIONS.filter(candidate => candidate.version > currentVersion)) {
+        this.onMigrationProgress?.({ phase: "migrate", message: "Updating your local data" });
+        this.logger?.info("sqlite migration applying", { version: migration.version, storePath: this.storePath });
         await migration.run(this);
         await this.exec(`PRAGMA user_version = ${migration.version}`);
-        await this.exec("COMMIT");
-        this.logger?.info("sqlite migration completed", { version: migration.version, storePath: this.storePath });
-      } catch (error) {
-        await this.exec("ROLLBACK").catch(() => undefined);
-        this.logger?.error("sqlite migration failed", { version: migration.version, error });
-        throw error;
       }
+      this.onMigrationProgress?.({ phase: "verify", message: "Verifying your updated data" });
+      await this.assertHealthyDatabaseWithRetry();
+      await this.exec("COMMIT");
+      this.onMigrationProgress?.({ phase: "complete", message: "Data upgrade complete. Starting OpenPond" });
+      this.logger?.info("sqlite migration completed", { fromVersion: currentVersion, version: CURRENT_SQLITE_SCHEMA_VERSION, storePath: this.storePath });
+      return backupDir;
+    } catch (error) {
+      await this.exec("ROLLBACK").catch(() => undefined);
+      this.logger?.error("sqlite migration failed; upgrade rolled back", { fromVersion: currentVersion, error });
+      throw error;
     }
   }
 
@@ -214,6 +224,9 @@ export class SqliteStoreCore {
     try {
       this.db = await this.openDatabaseWithRetry();
       await this.configureDatabase();
+      if (await this.userVersion() < CURRENT_SQLITE_SCHEMA_VERSION) {
+        this.onMigrationProgress?.({ phase: "verify", message: "Checking your data before the upgrade" });
+      }
       await this.assertHealthyDatabaseWithRetry();
     } catch (error) {
       await this.closeDatabaseHandle();
@@ -244,14 +257,6 @@ export class SqliteStoreCore {
       error: lastError,
     });
     throw lastError;
-  }
-
-  protected async backupDatabaseFiles(storeDir: string, label: string): Promise<void> {
-    const backupDir = path.join(storeDir, "backups", `state-${timestampForPath()}-${label}`);
-    await fs.mkdir(backupDir, { recursive: true, mode: 0o700 });
-    const source = openStorageDatabase(this.storePath, true);
-    try { await backup(source, path.join(backupDir, "state.sqlite")); } finally { source.close(); }
-    this.logger?.info("sqlite backup created", { backupDir, copied: 1 });
   }
 
   protected databaseFiles(): string[] {
@@ -314,6 +319,10 @@ export class SqliteStoreCore {
 
   async createSidebarFileBookmarkTables(): Promise<void> {
     await ensureSidebarFileBookmarkTables((sql) => this.exec(sql));
+  }
+
+  async createEventTurnIndex(): Promise<void> {
+    await this.exec("CREATE INDEX IF NOT EXISTS events_turn_sequence_idx ON events(turn_id, sequence)");
   }
 
   async createHotQueryIndexes(): Promise<void> {
@@ -929,15 +938,10 @@ export class SqliteStoreCore {
     }
   }
 
-  protected async persist(): Promise<void> {
-    await persistStoreData(this.data, {
-      exec: (sql) => this.exec(sql),
-      run: (sql, params) => this.run(sql, params),
-    });
-  }
 
   async close(): Promise<void> {
-    await this.ready;
+    // A failed startup still owns an open handle and must release its locks.
+    await this.ready.catch(() => undefined);
     await this.writeQueue;
     await this.closeDatabaseHandle();
   }

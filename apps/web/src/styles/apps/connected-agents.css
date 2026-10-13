@@ -251,6 +251,35 @@
 .provider-details-dialog [hidden] {
   display: none;
 }
+.provider-dialog-backdrop > .git-dialog.provider-details-dialog:has(.conversation-upload-picker) {
+  width: min(840px, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.provider-details-dialog:has(.conversation-upload-picker) > :is(.provider-dialog-header, .provider-chat-toggle, .provider-agent-tabs) { flex-shrink: 0; }
+.provider-details-dialog:has(.conversation-upload-picker) > [role="tabpanel"]:has(.conversation-upload-picker) { min-height: 0; overflow-y: auto; }
+.provider-details-dialog:has(.conversation-upload-picker) > .agent-conversation-setup { min-height: 0; overflow-y: auto; }
+.conversation-upload-picker { display: grid; gap: 12px; min-width: 0; }
+.conversation-upload-picker h3 { margin: 6px 0 0; font-size: 14px; font-weight: 500; }
+.conversation-upload-picker p { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.conversation-upload-toolbar, .conversation-upload-selection { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.conversation-upload-toolbar input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-panel); color: var(--text-primary); font: inherit; }
+.conversation-upload-selection { color: var(--text-secondary); font-size: 12px; }
+.conversation-upload-table { max-height: 360px; overflow: auto; }
+.conversation-upload-table table { width: 100%; table-layout: fixed; }
+.conversation-upload-table th:first-child { width: 48px; }
+.conversation-upload-table th:last-child { width: 120px; }
+.conversation-upload-table thead { position: sticky; top: 0; z-index: 1; }
+.conversation-upload-title, .conversation-upload-table small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-upload-table small { color: var(--text-muted); font-size: 11px; line-height: 1.6; }
+.conversation-upload-table time { white-space: nowrap; color: var(--text-secondary); }
+.conversation-upload-picker > .settings-button-row { position: sticky; bottom: 0; z-index: 2; padding: 10px 0; background: var(--surface-floating); }
+.agent-sync-form .dropdown-select { min-width: 0; }
+.agent-sync-form .dropdown-trigger { width: 100%; }
+@media (max-width: 650px) { .conversation-upload-toolbar { flex-direction: column; align-items: stretch; } .conversation-upload-table th:last-child { width: 100px; } }
 @media (max-width: 650px) {
   .agent-connections-heading {
     align-items: flex-start;

@@ -72,6 +72,14 @@ export class CollectorStore {
         this.database.exec("COMMIT");
         return;
       }
+      if (prior && JSON.stringify(prior.selectedSessionKeys) !== JSON.stringify(connection.selectedSessionKeys)) {
+        const owner = JSON.parse(this.setting("owner") || "{}") as { pid?: number };
+        if (owner.pid) {
+          let alive = true;
+          try { process.kill(owner.pid, 0); } catch (error) { alive = (error as NodeJS.ErrnoException).code !== "ESRCH"; }
+          if (alive) throw new Error("Cancel or finish the running import before changing its conversation selection.");
+        }
+      }
       const identityChanged =
         !!prior &&
         (prior.source.instanceId !== connection.source.instanceId ||
@@ -80,7 +88,8 @@ export class CollectorStore {
           prior.apiBaseUrl !== connection.apiBaseUrl ||
           prior.account !== connection.account);
       if (identityChanged) connection = { ...connection, destinations: undefined };
-      if (prior && (identityChanged || prior.since !== connection.since)) {
+      if (prior && (identityChanged || prior.since !== connection.since ||
+        JSON.stringify(prior.selectedSessionKeys) !== JSON.stringify(connection.selectedSessionKeys))) {
         this.database.prepare("DELETE FROM settings WHERE key=?").run(`coverage:${connection.id}`);
         this.database.prepare("DELETE FROM coverage_sessions WHERE connection_id=?").run(connection.id);
         // Scope changes fence queued evidence too: do not upload a wider old
@@ -92,7 +101,16 @@ export class CollectorStore {
         this.database.prepare("DELETE FROM settings WHERE key=?").run(`syncAcknowledged:${connection.id}`);
         connection = { ...connection, completedSyncRevision: 0 };
         this.error(connection.id, null);
-        for (const table of ["source_scans", "checkpoints", "pending"])
+        if (!identityChanged && prior.since === connection.since) {
+          // Preserve acknowledged boundaries when adding conversations, but
+          // reacquire every queued boundary whose snapshot is being discarded.
+          this.database.prepare(`DELETE FROM checkpoints WHERE connection_id=? AND EXISTS (
+            SELECT 1 FROM pending p, json_each(p.payload,'$.boundaryIds') b
+            WHERE p.connection_id=checkpoints.connection_id
+              AND json_extract(p.payload,'$.sessionKey')=checkpoints.session_key
+              AND b.value=checkpoints.boundary_id)`).run(connection.id);
+        }
+        for (const table of identityChanged || prior.since !== connection.since ? ["source_scans", "checkpoints", "pending"] : ["source_scans", "pending"])
           this.database
             .prepare(`DELETE FROM ${table} WHERE connection_id=?`)
             .run(connection.id);
@@ -338,6 +356,7 @@ export class CollectorStore {
             ),
             lastAdmissionAt: this.setting(`lastAdmission:${row.id}`),
             since: config.since,
+            selectedConversations: config.selectedSessionKeys?.length ?? null,
             schedule,
             nextRunAt: schedule && config.state === "active" ? nextScheduledSync(schedule) : null,
             lastSuccessfulSyncAt: this.setting(`lastSuccess:${row.id}`),

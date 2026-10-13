@@ -6,7 +6,7 @@ import {
   ROOT_QUALIFICATION_TESTS,
   ROOT_SYSTEM_TESTS,
   ROOT_UI_TESTS,
-} from "./scripts/test-suite-config";
+} from "./scripts/test-suite-config.ts";
 
 const cliIntegrationTests = CLI_INTEGRATION_TESTS.map((entry) => `apps/cli/${entry}`);
 
@@ -48,9 +48,8 @@ const memory = {
 };
 
 export default defineConfig({
-  esbuild: {
-    jsx: "automatic",
-    jsxImportSource: "react",
+  oxc: {
+    jsx: { runtime: "automatic", importSource: "react" },
   },
   test: {
     coverage: {
