@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { chatResourceWorkspaces, type ChatExperimentContext, type ChatResourceSummary } from "@openpond/contracts";
 import type { ClientConnection } from "../api/api-client";
-import { chatResourceRequest } from "../api/chat-resource-api";
+import { chatResourceRequest, type DatasetResponse } from "../api/chat-resource-api";
 
 export type ChatResourceFocus = { dataset: ChatResourceSummary | null; experiment: ChatResourceSummary | null; scopeContext?: ChatExperimentContext };
 type ContextResponse = { focus: ChatResourceFocus; datasets: ChatResourceSummary[]; experiments: ChatResourceSummary[]; graders: ChatResourceSummary[] };
@@ -67,8 +67,13 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
       if (selection.current === abort) { selection.current = null; setSelecting(false); reload.current?.(); }
     }
   }
+  const datasetId = focus.dataset?.id, datasetRevision = focus.dataset?.revision;
+  const readDataset = useCallback((signal: AbortSignal) => {
+    if (!connection || !datasetId || !datasetRevision) return Promise.reject(new Error("Select a dataset to inspect its rows."));
+    return chatResourceRequest<DatasetResponse>(connection, "dataset", {action:"read", id:datasetId, expectedRevision:datasetRevision}, signal);
+  }, [connection, datasetId, datasetRevision]);
   const scope = (focus.scopeContext ? chatResourceWorkspaces(focus.scopeContext).find(candidate => candidate.id === focus.scopeContext?.activeScopeId) : null) ?? null;
-  return { focus, scope, datasets, experiments, graders, selecting, error,
+  return { focus, scope, datasets, experiments, graders, selecting, error, readDataset,
     select: (kind: "dataset" | "experiment" | "grader", id: string, revision?: number) => change("set_focus", { kind, id: id || null, ...(revision ? { revision } : {}) }),
     selectScope: (scopeId: string) => change("select_scope", { scopeId }),
     createScope: (graderId?: string | null) => change("create_scope", { operationId: `scope-${crypto.randomUUID()}`, ...(graderId !== undefined ? { graderId } : {}) }),

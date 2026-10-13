@@ -20,8 +20,8 @@ export function ComposerExperimentSetup({ resources, busy, onClose, onAddGrader 
     return () => document.removeEventListener("keydown", escape);
   }, [onClose]);
   const choices = dataset ? [dataset, ...resources.datasets.filter(item => item.id !== dataset.id || item.revision !== dataset.revision)] : resources.datasets;
-  return <div ref={panel} className="composer-experiment-setup" role="dialog" aria-label="New experiment">
-    <div className="composer-experiment-setup-heading"><strong>New experiment</strong><button type="button" onClick={onClose} aria-label="Close experiment setup">×</button></div>
+  return <div ref={panel} className="composer-experiment-setup" role="region" aria-label="New experiment">
+    <div className="composer-experiment-setup-heading"><strong>New experiment</strong><span>Choose the dataset and graders</span></div>
     <DropdownSelect compact floating placement="top" searchable label="Experiment dataset"
       value={dataset ? `${dataset.id}@${dataset.revision}` : ""}
       options={[{ value: "", label: "Choose dataset" }, ...choices.map(item => ({ value: `${item.id}@${item.revision}`, label: `${item.name} V${item.revision}` }))]}
@@ -30,7 +30,7 @@ export function ComposerExperimentSetup({ resources, busy, onClose, onAddGrader 
     <DropdownSelect compact floating placement="top" label="Experiment grader" value={graderId}
       options={[{ value: "", label: resources.graders.length ? "All graders" : "Choose a grader" },
         ...resources.graders.map(item => ({ value: item.id, label: item.name })),
-        { value: "add", label: "Add grader…", icon: "plus", separatorBefore: true }]}
+        { value: "add", label: "Create grader…", icon: "plus", separatorBefore: true }]}
       onChange={value => { if (value === "add") onAddGrader(); else setGraderId(value); }} disabled={disabled || !dataset} />
     <button type="button" className="composer-experiment-create" disabled={disabled || !dataset || !resources.graders.length}
       onClick={() => { void resources.createScope(graderId || null).then(created => { if (created) onClose(); }); }}>Create experiment</button>
