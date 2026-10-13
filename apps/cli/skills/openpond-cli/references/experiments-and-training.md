@@ -32,7 +32,7 @@ Read the installed command help for exact flags and input contracts; capability 
 | Dataset discovery, authoring, import, revisions, and validation | `openpond datasets` |
 | Local dataset schema and grader authoring/checks | `openpond datasets schema`, `list-graders`, `read-grader`, `save-grader`, `test-grader`, `check-graders` with `--local` |
 | Model choices, execution, saved results, cases, and comparisons | `openpond experiments` |
-| Qualified source-component improvement | `openpond improve` |
+| Resource diagnosis and improvement | Read results, edit the selected resource, test, run, and compare through `datasets` / `experiments` |
 | Model projects, training preparation/execution, status, and artifacts | `openpond training` |
 | Supported continual experiment manifests and reports | `openpond continual` |
 
@@ -42,9 +42,11 @@ Use `datasets context --local --json` to inspect the current scope; `datasets se
 
 Use the application's supplied local server context and OpenPond home when present. Pass that home with `--home`; the standard development desktop uses `~/.openpond/openpond-app-dev`. Check this context before diagnosing missing authentication. Do not guess a second installation, scrape credentials, or switch teams to get an operation to succeed. Local dataset commands use `--local`; hosted operations have their own explicit destination/account options. Local experiment execution may still call a paid remote inference provider.
 
+For Diagnose, Improve, or grader repair, read [Diagnose and improve](diagnose-and-improve.md).
+
 ## Dataset and grader work
 
-Inspect source schemas and representative examples before importing or mapping data. Preserve source provenance and save useful drafts even when validation is incomplete. Read the supported dataset schema before authoring an unfamiliar request.
+Use the bundled openpond-taskset-authoring skill for deeper task design, split isolation, provenance, and grader calibration. Inspect source schemas and representative examples before importing or mapping data. Preserve source provenance and save useful drafts even when validation is incomplete. Read the supported dataset schema before authoring an unfamiliar request.
 
 Test graders against meaningful known-good and known-bad examples before claiming they are qualified. Distinguish saved data, structural validation, grader checks, and model performance. Editing a grader creates new evidence; it does not retroactively change the original experiment result.
 
@@ -56,7 +58,7 @@ Use existing authorized limits. Ask for a missing spending ceiling when the sele
 
 Inspect status, results, coverage, and failed cases before claiming success or proposing an improvement. Report pass rate only when the grader defines pass/fail; otherwise report the actual score. Compare matched inputs when making improvement claims, and identify changed-input comparisons.
 
-`openpond improve` is the qualified source-component lifecycle. Inspect its eligible options; it is not a universal model-training command. For a model-only experiment, use failure analysis, another supported evaluation, or training preparation as appropriate to the user's objective. Applying a tested Profile component is separate from creating or testing it.
+Use the resource-specific Diagnose/Improve guidance above. The older source-component improvement API is not the general chat improvement path.
 
 ## Composer actions
 
@@ -84,8 +86,17 @@ When the app supplies scoped CLI context, local training start/status and hosted
 
 ### State-aware actions
 
-The bar has one primary action based on retained run evidence and the selected configuration: New experiment, Set up, Run, Run updated, View progress, Improve, or Retry. Dataset/workspace or model changes require fresh evaluation evidence; an unchanged completed run leads to failure analysis. Improve proposes a concrete next experiment; it does not automatically train or deploy a model. Repeat run is an explicit overflow action and always creates separate evidence after reconciling uncertain submissions.
+The bar has one primary action based on retained run evidence and the selected configuration: New experiment, Set up, Run, Run updated, View progress, Improve, or Retry. Dataset/workspace or model changes require fresh evaluation evidence; an unchanged completed run leads to result and coverage analysis. Improve makes a targeted change, validates it, and evaluates it within the authorized scope; it does not automatically train or deploy a model. Repeat run is an explicit overflow action and always creates separate evidence after reconciling uncertain submissions.
 
 The independent chat experiment runner currently evaluates all graders in the selected dataset revision. Selecting one grader in the bar is an inspection/test focus, not a run filter. This runner does not expose saved-answer regrading through the independent CLI route; do not claim that it does or repurpose grader fixture tests as experiment results. Team-owned scoring has its own CLI operations and authority. The independent bar uses Run updated for changed graders until compatible scoring is exposed for that owner.
 
 Setup and row inspection stay in the controls. Execution and improvement actions show a compact request preview, then append an unsent request with exact dataset, retained run, grader, and evaluation-model references. Opening an action never sends it. Train prepares hosted training on OpenPond and keeps serving/deployment separate. Dataset discovery still requires no numbered experiment.
+
+
+### Execution destination
+
+The experiment remembers executionLocation (local or cloud), independently of evaluationModel. Read it with datasets context; use datasets select-destination local|hosted --local --json through the scoped executor for an explicit conversational choice. Prefer the destination pinned to the current draft over later scope changes. Local is the default for new working data and configurations. An existing hosted record retains its owning backend.
+
+For independent installation datasets, experiments run --local orchestrates locally; experiments run-cloud --local requests hosted execution through the local app bridge and publishes the required version using the existing owner. Hosted execution supports available OpenPond models, not Codex subscription models. Team/Profile resources have separate capability and ownership rules: inspect those commands and report an unsupported combination instead of moving the resource or guessing a fallback. Merely choosing Hosted does not upload data or run anything.
+
+Train prepares hosted training separately from this evaluation setting. Inspect supported preparation and publishing commands, upload only the required saved assets, and retain the local source and upload lineage.

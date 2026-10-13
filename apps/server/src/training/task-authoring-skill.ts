@@ -69,7 +69,8 @@ export async function loadTasksetAuthoringProfileSkill(
   const root = await resolveTasksetAuthoringSkillRoot(repoRoot);
   const artifact = await loadTasksetAuthoringSkillArtifact(repoRoot);
   const body = artifact.bundle;
-  const builtIn = BUILT_IN_OPENPOND_PROFILE_SKILLS[0];
+  const builtIn = BUILT_IN_OPENPOND_PROFILE_SKILLS.find(skill => skill.name === SKILL_DIRECTORY);
+  if (!builtIn) throw new Error("Taskset Authoring skill metadata is missing.");
   return {
     ...builtIn,
     path: path.join(root, "SKILL.md"),

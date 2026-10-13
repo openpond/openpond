@@ -25,7 +25,7 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     expect(discovered.scopes).toHaveLength(0);
     expect(discovered.datasetFocus?.dataset).toBeNull();
     expect(discovered.activeScopeId).toBe(discovered.datasetFocus!.id);
-    const focused = await scopes.select("chat-b", { dataset: dataset(1), evaluationModel:"codex/model-a" });
+    const focused = await scopes.select("chat-b", { dataset: dataset(1), evaluationModel:"codex/model-a", executionLocation:"cloud" });
     expect(await scopes.ensure("chat-b")).toEqual(focused);
     expect(focused.scopes).toHaveLength(0);
     store.close();
@@ -38,6 +38,7 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     const promoted = await scopes.create("chat-b", "explicit-experiment", focused.selectionVersion, setupGrader.id, [setupGrader]);
     expect(promoted.scopes[0]?.selectedGraderId).toBe(setupGrader.id);
     expect(promoted.scopes[0]?.evaluationModel).toBe("codex/model-a");
+    expect(promoted.scopes[0]?.executionLocation).toBe("cloud");
     expect(promoted.scopes[0]?.ordinal).toBe(1);
     expect(promoted.scopes[0]?.dataset?.id).toBe("examples");
     expect(promoted.datasetFocus).toBeUndefined();

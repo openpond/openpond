@@ -10,6 +10,7 @@ test("resource actions distinguish changed evidence and preserve draft model tar
   const run:ChatResourceSummary={kind:"experiment",id:"run",revision:1,name:"Run",state:"completed",datasetId:"data",datasetRevision:1,model:"codex/model-a",rows:[],evaluationHash:dataset.evaluationHash};
   const ready={isExperiment:true,dataset,graders:1,model:run.model,modelAvailable:true,run};
   expect(experimentAction(ready)).toBe("Improve");
+  expect(experimentAction({...ready,executionLocation:"cloud"})).toBe("Run updated");
   expect(experimentAction({...ready,isExperiment:false})).toBe("New experiment");
   expect(experimentAction({...ready,run:null})).toBe("Run");
   expect(experimentAction({...ready,dataset:{...dataset,revision:2,evaluationHash:"b".repeat(64)}})).toBe("Run updated");
@@ -22,7 +23,9 @@ test("resource actions distinguish changed evidence and preserve draft model tar
   const resources={scope:{id:"scope",runs:[run],evaluationModel:run.model,selectedGraderId:null},focus:{dataset,experiment:null,scopeContext:{selectionVersion:1}},graders:[],experiments:[run]} as unknown as Parameters<typeof captureComposerResourceContext>[0];
   const drafted=captureComposerResourceContext(resources);
   resources.scope!.evaluationModel="openpond/model-b";
+  resources.scope!.executionLocation="cloud";
   const combined=mergeComposerResourceContexts(drafted,captureComposerResourceContext(resources));
+  expect(combined.map(context=>context.executionLocation)).toEqual(["local","cloud"]);
   expect(combined.map(context=>context.evaluationModel)).toEqual(["codex/model-a","openpond/model-b"]);
   expect(combined[0]!.resources).toContainEqual(expect.objectContaining({kind:"experiment",id:"run"}));
 });

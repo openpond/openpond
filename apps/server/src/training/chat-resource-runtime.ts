@@ -132,8 +132,8 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       for(const record of await deps.store.listLocalDatasetListings())unique.set("dataset:"+record.workspace.draft.id,localDatasetSummary(record));
       return {resources:[...unique.values()],links:visible.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
-    if (kind === "dataset" && ["context","set_model","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
-      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),graderId:z.string().min(1).nullable().optional(),name:z.string().optional(),evaluationModel:z.string().min(1).max(500).optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
+    if (kind === "dataset" && ["context","set_destination","set_model","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
+      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),graderId:z.string().min(1).nullable().optional(),name:z.string().optional(),evaluationModel:z.string().min(1).max(500).optional(),executionLocation:z.enum(["local","cloud"]).optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
       if(query.visualPublicationId)await deps.visuals.read(session.id,query.visualPublicationId);
@@ -218,6 +218,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         if(context)await deps.store.updateTurn(context.turnId,current=>({...current,metadata:{...current.metadata,
           chatExperimentScopeId:state.activeScopeId,chatExperimentSelectionVersion:state.selectionVersion}}));
         return {...focusFor(state),scopeContext:state};
+      }
+      if (input.action === "set_destination") {
+        if (!query.executionLocation) throw new Error("Choose Local or Hosted execution.");
+        if (query.executionLocation === "cloud" && (focus.dataset?.owner || focus.dataset?.profileRef)) throw new Error("Hosted execution for this resource owner is not available in these controls.");
+        scopeContext = await scopes.select(session.id,{executionLocation:query.executionLocation,expectedSelectionVersion:query.expectedSelectionVersion});
+        return selectedFocus(scopeContext);
       }
       if (input.action === "set_model") {
         const catalog = await experiments.request({action:"models"}) as {models:{providerId:string;id:string}[]};

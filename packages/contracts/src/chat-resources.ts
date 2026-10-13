@@ -50,6 +50,7 @@ export const ChatExperimentScopeSchema = z.object({
   id: Id, ordinal: z.number().int().positive(), name: z.string().trim().min(1).max(500),
   dataset: ChatResourceSummarySchema.nullable(),
   evaluationModel: z.string().min(1).max(500).optional(),
+  executionLocation: z.enum(["local", "cloud"]).optional(),
   graders: z.array(ChatResourceSummarySchema), selectedGraderId: Id.nullable(),
   runs: z.array(ChatResourceSummarySchema), selectedRunId: Id.nullable(),
   training: z.array(ChatTrainingAttachmentSchema).optional(), selectedTrainingKey: z.string().max(4000).nullable().optional(),

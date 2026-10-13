@@ -54,7 +54,7 @@ test("steering retains bounded resource references through durable admission and
     appendRuntimeEvent: async value => { await f.store.appendRuntimeEvent(value); },
   });
   const training = [{location:"local",jobId:"job",owner:{teamId:"team",actorId:"actor"},modelRunId:"model-run",modelId:"model",modelVersionId:null,adapterArtifactLineageId:null}];
-  const resourceContexts = [{scopeId:"scope-one",selectionVersion:4,evaluationModel:"codex/model-a",resources:[{kind:"dataset",id:"quotes",revision:3}],training}];
+  const resourceContexts = [{scopeId:"scope-one",selectionVersion:4,evaluationModel:"codex/model-a",executionLocation:"local",resources:[{kind:"dataset",id:"quotes",revision:3}],training}];
   const request = {prompt:"Test this dataset.",expectedTurnId:"turn-a",idempotencyKey:"resource-action",resourceContexts};
   let receipt;
   try {
@@ -62,6 +62,7 @@ test("steering retains bounded resource references through durable admission and
     expect((await runtime.steer("a", request)).id).toBe(receipt.id);
     await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],resources:[{kind:"dataset",id:"quotes",revision:4}]}]})).rejects.toThrow("different content");
     await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],evaluationModel:"openpond/model-b"}]})).rejects.toThrow("different content");
+    await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],executionLocation:"cloud"}]})).rejects.toThrow("different content");
     await expect(runtime.steer("a", {...request,idempotencyKey:"permission-attempt",resourceContexts:[{...resourceContexts[0],approvalPolicy:"never"}]})).rejects.toThrow();
     await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],training:[{...training[0],jobId:"different-job"}]}]})).rejects.toThrow("different content");
     const included = await f.store.includeTaskInputs("a", "turn-a", "owner", "resource-request");
