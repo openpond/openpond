@@ -11,9 +11,10 @@ export function sessionFileArtifacts(session: Session, events: RuntimeEvent[]): 
   const deleted = new Set<string>();
   const positions = new Map<string, number>();
   let position = 0;
-  const messages = new Map<string, FileContext & { text: string; revision: string; position: number }>();
+  let updatedAt = session.createdAt;
+  const messages = new Map<string, FileContext & { text: string; revision: string; position: number; updatedAt: string }>();
   let context: FileContext = { cwd: session.cwd, sandboxId: cloudSandbox(session) };
-  function add(rawPath: string, title: unknown, contentType: string, sizeBytes: unknown, source: FileContext, deleting = false, revision?: string, filePosition = position) {
+  function add(rawPath: string, title: unknown, contentType: string, sizeBytes: unknown, source: FileContext, deleting = false, revision?: string, filePosition = position, fileUpdatedAt = updatedAt) {
     if (/^(?!file:)[a-z][a-z\d+.-]+:/i.test(rawPath.replace(/^[A-Za-z]:[\\/]/, ""))) return;
     let target = rawPath;
     try { if (target.startsWith("file://")) target = fileURLToPath(target); } catch { return; }
@@ -29,20 +30,21 @@ export function sessionFileArtifacts(session: Session, events: RuntimeEvent[]): 
     if (deleted.has(key) || filePosition < (positions.get(key) ?? -1)) return;
     const parsed = SessionFileArtifactSchema.safeParse({ path: target,
       title: typeof title === "string" && title.trim() ? title : target.split(/[\\/]/).pop(),
-      contentType, revision, sizeBytes: typeof sizeBytes === "number" ? sizeBytes : null, sandboxId: source.sandboxId });
+      contentType, revision, updatedAt: fileUpdatedAt, sizeBytes: typeof sizeBytes === "number" ? sizeBytes : null, sandboxId: source.sandboxId });
     if (parsed.success) { files.set(key, parsed.data); positions.set(key, filePosition); }
   }
   for (const event of events) {
     position += 1;
+    updatedAt = event.timestamp;
     const data = record(event.data);
     const snapshot = record(data?.session);
     if ((event.name === "session.started" || event.name === "session.updated") && snapshot)
       context = { cwd: typeof snapshot.cwd === "string" ? snapshot.cwd : null, sandboxId: cloudSandbox(snapshot) };
     if (event.name === "assistant.delta") {
       const id = String(data?.nativeMessageId ?? data?.messageId ?? data?.itemId ?? event.turnId ?? event.id);
-      const prior = messages.get(id) ?? { ...context, text: "", revision: event.id, position };
+      const prior = messages.get(id) ?? { ...context, text: "", revision: event.id, position, updatedAt };
       const text = event.output ?? (typeof data?.delta === "string" ? data.delta : "");
-      messages.set(id, { ...prior, revision: event.id, position, text: data?.nativeMessageSnapshot ? text : prior.text + text });
+      messages.set(id, { ...prior, revision: event.id, position, updatedAt, text: data?.nativeMessageSnapshot ? text : prior.text + text });
       continue;
     }
     if (event.name !== "workspace_action_result" && event.name !== "tool.completed") continue;
@@ -74,7 +76,7 @@ export function sessionFileArtifacts(session: Session, events: RuntimeEvent[]): 
         docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", pdf: "application/pdf",
         png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif",
         md: "text/markdown", txt: "text/plain" } as Record<string, string>)[extension ?? ""] ?? "application/octet-stream";
-      add(target, match[1], mime, null, message, false, message.revision, message.position);
+      add(target, match[1], mime, null, message, false, message.revision, message.position, message.updatedAt);
     }
   }
   return [...files.entries()].sort(([a], [b]) => positions.get(b)! - positions.get(a)!).map(([, file]) => file);

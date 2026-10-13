@@ -150,4 +150,6 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   { version: 68, run: (store) => store.createChatResourceTables() },
   { version: 69, run: (store) => store.createChatResourceTables() },
   { version: 70, run: (store) => store.createChatResourceTables() },
+  // Turn-scoped activity/review reads must not scan the full event history.
+  { version: 71, run: (store) => store.createEventTurnIndex() },
 ];

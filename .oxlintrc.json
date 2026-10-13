@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": { "correctness": "error" },
+  "ignorePatterns": [
+    "**/dist/**",
+    "apps/web/build/**",
+    "**/node_modules/**",
+    "**/generated/**",
+    "**/*.generated.*",
+    "packages/evals/src/task-schema-meta-validator.js",
+    "**/fixtures/**",
+    "**/conformance/**",
+    ".openpond/**",
+    "coverage/**",
+    "tmp/**",
+    "release-assets/**"
+  ]
+}

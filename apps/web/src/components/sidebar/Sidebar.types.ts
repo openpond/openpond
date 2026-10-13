@@ -40,7 +40,7 @@ export type SidebarProps = {
   onProductAreaChange: (productArea: ProductArea) => void;
   experience: Experience;
   view: AppView;
-  modelProjects: ModelProject[];
+  modelProjects: Pick<ModelProject, "id" | "name">[];
   modelTrainingActivityByProjectId: Record<
     string,
     { label: string; status: string }
@@ -104,6 +104,7 @@ export type SidebarProps = {
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
   setSelectedSessionId: Dispatch<SetStateAction<string | null>>;
+  requestComposerFocus: () => void;
   setSearchOpen: Dispatch<SetStateAction<boolean>>;
   setSectionMenuOpen: Dispatch<SetStateAction<SidebarSectionMenuId | null>>;
   setSettingsSection: Dispatch<SetStateAction<SettingsSection>>;

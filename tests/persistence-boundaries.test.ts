@@ -14,16 +14,18 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   initializeHome, readConfig, patchConfig, updatePreferences, readPreferences, clearCache,
-  writeCredential, readCredential, storagePaths, getLocalRecord, resolveEffectiveConfig, setProjectTrust,
+  writeCredential, readCredential, readCredentials, storagePaths, getLocalRecord, getLocalRecords, resolveEffectiveConfig, setProjectTrust,
   assertConfigRunCurrent, deleteCredential, exportRecoveryBackup, restoreRecoveryBackup, exportSettings,
   readCache, writeCache, readAccountConfiguration, updateAccountConfiguration, recoverMigration, readMigrationJournal,
   publishManagedArtifact, withManagedArtifact, releaseArtifactReference, collectArtifactOrphans,
   resolveStoredPath,
 } from "../packages/persistence/src/index";
+import { readClientChoices, updateClientChoices } from "../packages/persistence/src/client-state";
 import { startRecoveryServer } from "../apps/server/src/api/startup-recovery";
 import { createOpenPondServer } from "../apps/server/src/index";
 import { windowsPowerShellEnvironment } from "../packages/persistence/src/windows-powershell";
 import { PersistenceError } from "../packages/persistence/src/errors";
+import { readStorageDatabase } from "../packages/persistence/src/readonly-database";
 import { writeProviderChatGptSubscriptionCredential, readProviderSecrets, deleteProviderCredential, updateProviderCredentialValidation } from "../apps/server/src/openpond/provider-secrets";
 
 const run = promisify(execFile);
@@ -32,12 +34,121 @@ describe("persistence data and concurrency boundaries", () => {
   beforeEach(async () => { home = await mkdtemp(path.join(tmpdir(), "openpond-storage-boundary-")); });
   afterEach(async () => { await rm(home, { recursive: true, force: true }); });
 
+  // A model choice must survive reloads and must never leak to another account.
+  test("persists chat selection separately for each client preference owner", async () => {
+    await initializeHome(home);
+    const original = await readClientChoices(home);
+    const selection = { provider: "codex" as const, model: "gpt-6.1-sol" };
+    await updateClientChoices(home, original.owner, { chatSelection: selection });
+    await updateClientChoices(home, original.owner, { sidebarPresentation: "inbox" });
+    expect((await readClientChoices(home)).value).toMatchObject({ chatSelection: selection, sidebarPresentation: "inbox" });
+
+    const config = await readConfig(home);
+    await patchConfig(home, config.rawRevision, [{ op: "set", path: ["defaults", "account_id"], value: "another-account" }]);
+    const switched = await readClientChoices(home);
+    expect(switched.owner).not.toBe(original.owner);
+    expect(switched.value.chatSelection).toBeUndefined();
+    await expect(updateClientChoices(home, original.owner, { chatSelection: selection }))
+      .rejects.toMatchObject({ issue: { code: "CLIENT_OWNER_CHANGED" } });
+  });
+
+  // Caching a completed migration must never hide later tampering or a new recovery journal.
+  test("revalidates initialized homes after marker or journal changes", async () => {
+    await initializeHome(home);
+    await initializeHome(home);
+    const marker = await readFile(storagePaths(home).marker, "utf8");
+    await writeFile(storagePaths(home).marker, JSON.stringify({ schemaVersion: "invalid", version: 1 }));
+    await expect(initializeHome(home)).rejects.toBeDefined();
+    await writeFile(storagePaths(home).marker, marker);
+    expect((await initializeHome(home)).status).toBe("current");
+    const journal = path.join(storagePaths(home).runtime, "migration.json");
+    await mkdir(path.dirname(journal), { recursive: true });
+    await writeFile(journal, JSON.stringify({ schemaVersion: "invalid" }));
+    await expect(initializeHome(home)).rejects.toMatchObject({ issue: { code: "INVALID_MIGRATION_JOURNAL" } });
+    await rm(journal);
+    expect((await initializeHome(home)).status).toBe("current");
+  });
+
+  // A metadata read must work alongside a writer and cannot create missing tables.
+  test("local record reads do not acquire write authority or initialize schemas", async () => {
+    await initializeHome(home);
+    await mkdir(path.dirname(storagePaths(home).database), { recursive: true });
+    const database = new DatabaseSync(storagePaths(home).database);
+    try {
+      database.exec("PRAGMA journal_mode = WAL; CREATE TABLE account_selection (id TEXT PRIMARY KEY, payload TEXT, revision INTEGER)");
+      database.prepare("INSERT INTO account_selection VALUES (?, ?, ?)").run("current", JSON.stringify({ account: "one" }), 1);
+      database.exec("BEGIN IMMEDIATE");
+      expect(getLocalRecord(home, "account_selection", "current")).toEqual({ value: { account: "one" }, revision: 1 });
+      expect(getLocalRecord(home, "profile_installations", "missing")).toBeNull();
+      const requests = [{ table: "account_selection" as const, id: "current" }, { table: "profile_installations" as const, id: "missing" }];
+      expect(getLocalRecords(home, requests)).toEqual([{ value: { account: "one" }, revision: 1 }, null]);
+      expect(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()).toEqual([{ name: "account_selection" }]);
+      database.exec("ROLLBACK");
+      database.prepare("UPDATE account_selection SET payload = ?, revision = 2").run(JSON.stringify({ account: "two" }));
+      expect(getLocalRecords(home, requests)[0]).toEqual({ value: { account: "two" }, revision: 2 });
+    } finally { database.close(); }
+  });
+
+  // Reused readers must see commits and replacement files, reject path substitution,
+  // and release unused handles instead of retaining stale databases indefinitely.
+  test.runIf(process.platform !== "win32")("reused read connections follow file replacement and expire when idle", async () => {
+    const file = path.join(home, "reader.sqlite");
+    const create = (target: string, value: number) => {
+      const db = new DatabaseSync(target);
+      db.exec(`CREATE TABLE value (n INTEGER); INSERT INTO value VALUES (${value})`);
+      db.close();
+    };
+    create(file, 1);
+    const first = readStorageDatabase(file, null, db => db)!;
+    expect(readStorageDatabase(file, null, db => db)).toBe(first);
+    const replacement = path.join(home, "replacement.sqlite");
+    create(replacement, 2);
+    await fs.rename(replacement, file);
+    expect(readStorageDatabase(file, null, db => db.prepare("SELECT n FROM value").get())).toEqual({ n: 2 });
+    expect(() => first.prepare("SELECT 1")).toThrow();
+    await fs.rename(file, replacement);
+    await fs.symlink(replacement, file);
+    expect(() => readStorageDatabase(file, null, () => true)).toThrow(PersistenceError);
+    await fs.unlink(file);
+    expect(readStorageDatabase(file, null, () => true)).toBeNull();
+    await fs.rename(replacement, file);
+    vi.useFakeTimers();
+    try {
+      const idle = readStorageDatabase(file, null, db => db)!;
+      vi.advanceTimersByTime(10_001);
+      expect(() => idle.prepare("SELECT 1")).toThrow();
+    } finally { vi.useRealTimers(); }
+  });
+
+  // Polling a cache must not need a writer lock; expiration and external changes
+  // still apply even while a read-only connection is being reused.
+  test("cache hits are read-only and observe updates and expiration", async () => {
+    await initializeHome(home);
+    await writeCache(home, "catalog", "one", { version: 1 }, { ttlMs: 1_000 });
+    const db = new DatabaseSync(storagePaths(home).cache);
+    try {
+      db.exec("BEGIN IMMEDIATE");
+      expect((await readCache(home, "catalog", "one"))?.payload).toEqual({ version: 1 });
+      db.prepare("UPDATE entries SET payload = ?").run(JSON.stringify({ version: 2 }));
+      db.exec("COMMIT");
+      expect((await readCache(home, "catalog", "one"))?.payload).toEqual({ version: 2 });
+      const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2_000);
+      try {
+        expect(await readCache(home, "catalog", "one")).toBeNull();
+        expect((await readCache(home, "catalog", "one", { allowStale: true }))?.payload).toEqual({ version: 2 });
+      } finally { clock.mockRestore(); }
+    } finally { db.close(); }
+  });
+
   // Account mutations must never expose another account's workspace, including CLI changes.
   test("resets workspace selection with account authority changes and preserves same-account preferences", async () => {
     await initializeHome(home);
     const first = { handle: "first", baseUrl: "https://openpond.ai", apiKey: "first-key" };
     const second = { handle: "second", baseUrl: "https://openpond.ai", apiKey: "second-key" };
     await updateAccountConfiguration(home, () => ({ accounts: [first, second], activeProfile: first }));
+    const [sharedA, sharedB] = await Promise.all([readAccountConfiguration(home), readAccountConfiguration(home)]);
+    sharedA.accounts![0]!.handle = "caller mutation";
+    expect(sharedB.accounts![0]!.handle).toBe("first");
     await updatePreferences(home, { defaultTeamId: "first-team" });
     await updateAccountConfiguration(home, (value) => ({ ...value, accounts: [first, { ...second, apiKey: "inactive-key" }] }));
     expect((await readPreferences(home)).preferences.defaultTeamId).toBe("first-team");
@@ -145,6 +256,24 @@ describe("persistence data and concurrency boundaries", () => {
     const text = await readFile(storagePaths(home).config, "utf8");
     expect(text).not.toContain("sidebar");
     expect((await readConfig(home)).document.editor).toBeUndefined();
+  });
+
+  // Batched account loads must decrypt only exact selected IDs and observe
+  // subsequent revocation, without keeping a decrypted vault between calls.
+  test("credential batches preserve exact selection and immediate revocation", async () => {
+    await writeCredential(home, "account:one", { token: "one" }, null);
+    await writeCredential(home, "account:two", { token: "two" }, null);
+    await writeCredential(home, "account:one-extra", { token: "unrelated" }, null);
+    const vault = JSON.parse(await readFile(storagePaths(home).credentials, "utf8"));
+    vault.records["account:one-extra"].tag = Buffer.alloc(16).toString("base64");
+    await writeFile(storagePaths(home).credentials, JSON.stringify(vault));
+    expect(await readCredentials(home, ["account:one", "account:two", "missing"])).toEqual({
+      "account:one": { revision: 1, value: { token: "one" } },
+      "account:two": { revision: 1, value: { token: "two" } },
+    });
+    await deleteCredential(home, "account:one");
+    expect(await readCredentials(home, ["account:one"])).toEqual({});
+    await expect(readCredentials(home, ["account:one-extra"])).rejects.toMatchObject({ issue: { code: "CREDENTIAL_RECOVERY_REQUIRED" } });
   });
 
   // Losing the encryption key must preserve the encrypted evidence and never create a replacement key.

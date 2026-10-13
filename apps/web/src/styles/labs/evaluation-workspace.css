@@ -123,6 +123,9 @@
 .evaluation-history-table .evaluation-col-target{width:150px}
 .evaluation-history-table .evaluation-col-dataset{width:170px}
 .evaluation-history-table .evaluation-col-model{width:140px}
+.evaluation-history-table .evaluation-col-cost{width:128px}
+.evaluation-cost-usage{display:inline-grid;gap:4px;text-align:right}
+.evaluation-cost-usage small{font-size:11px;line-height:16px}
 .evaluation-history-table .evaluation-col-tasks{width:64px}
 .evaluation-history-table .evaluation-col-score{width:96px}
 .evaluation-history-table .evaluation-col-errors{width:160px}
@@ -171,3 +174,11 @@
 .evaluation-task-table th:last-child{width:96px}
 .evaluation-task-input{color:var(--text-secondary);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
 .evaluation-version-banner{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:8px 12px;border:1px solid var(--border-default);border-radius:8px;background:var(--surface-raised);color:var(--text-secondary);font-size:13px}
+
+.evaluation-history-table .evaluation-col-profile{width:140px}
+.evaluation-history-table .evaluation-col-workflow{width:160px}
+.evaluation-history-table .evaluation-col-origin{width:80px}
+.evaluation-resource-table{table-layout:fixed;min-width:1100px}
+.evaluation-resource-table th:first-child{width:240px}
+.evaluation-resource-table th:nth-child(2){width:140px}
+.evaluation-resource-table th:nth-child(3){width:160px}

@@ -71,7 +71,8 @@ button:disabled {
   color: var(--status-danger);
 }
 
-.renderer-error-screen button {
+.renderer-error-screen button,
+.app-splash-retry {
   border: 1px solid var(--border-default);
   border-radius: 6px;
   background: var(--action-primary);

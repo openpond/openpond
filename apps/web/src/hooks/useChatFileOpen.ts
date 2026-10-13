@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { connectionQueryScope } from "../lib/query-scope";
 import { localFileWorkspaceId } from "../lib/local-file-workspace";
 import { api, type ClientConnection } from "../api";
 import { normalizeChatFilePath } from "../lib/chat-file-links";
@@ -38,11 +39,18 @@ export function useChatFileOpen({
     requestedPath: string; candidates: string[]; truncated: boolean; source?: boolean;
   } | null>(null);
   const requestVersion = useRef(0);
+  const scopeVersion = useRef(0);
+  const fileRequestId = useRef(0);
+  const connectionScope = connectionQueryScope(connection);
   useEffect(() => {
     requestVersion.current++;
     setFileResolution(null);
     return () => { requestVersion.current++; };
-  }, [connection, activeWorkspaceAppId, conversationKey, rightSidebarSandboxId]);
+  }, [connectionScope, activeWorkspaceAppId, conversationKey, rightSidebarSandboxId]);
+  useEffect(() => {
+    scopeVersion.current++;
+    return () => { scopeVersion.current++; };
+  }, [connectionScope, conversationKey]);
   const openResolvedFile = useCallback(
     async (path: string, options?: { source?: boolean; sandboxId?: string | null; local?: boolean }) => {
       if (/[\\/]$/.test(path)) {
@@ -75,39 +83,50 @@ export function useChatFileOpen({
           });
         return;
       }
+      // Load the document renderer alongside its bytes rather than beginning
+      // a second download only after the file response completes.
+      if (/\.pptx$/i.test(path)) void import("../components/workspace-diff/WorkspacePresentationPreview").catch(() => {});
+      if (/\.docx$/i.test(path)) {
+        void import("../components/workspace-diff/FilePagePreview").catch(() => {});
+        void import("docx-preview").catch(() => {});
+      }
       if (options?.sandboxId && connection) {
-        const version = requestVersion.current;
+        const version = scopeVersion.current;
+        const loadId = ++fileRequestId.current;
+        onShowDiffPanel();
+        setOpenDiffFileRequest({ id: ++fileRequestId.current, loadId, sandboxId: options.sandboxId, path, file: placeholderFile(path), loading: true });
         try {
           const file = await readSandboxFile(connection, options.sandboxId, path);
-          if (version !== requestVersion.current) return;
-          onShowDiffPanel();
+          if (version !== scopeVersion.current) return;
           const imageUrl = isWorkspaceImagePath(file.path) && file.content
             ? `data:image/${/\.jpe?g$/i.test(path) ? "jpeg" : path.split(".").pop()};base64,${file.content}` : undefined;
-          setOpenDiffFileRequest({ id: Date.now(), path: file.path, file, imageUrl });
+          setOpenDiffFileRequest({ id: ++fileRequestId.current, loadId, sandboxId: options.sandboxId, path: file.path, file, imageUrl });
         } catch (error) {
-          if (version === requestVersion.current) showToast(error instanceof Error ? error.message : "Could not open this file.", "error");
+          if (version === scopeVersion.current) setOpenDiffFileRequest({ id: ++fileRequestId.current, loadId, sandboxId: options.sandboxId, path, file: placeholderFile(path), error: error instanceof Error ? error.message : "Could not open this file." });
         }
         return;
       }
       const normalizedFile = normalizeChatFilePath(path, { workspaceRootPath });
-      const filePath = normalizedFile?.path ?? path;
+      const filePath = options?.local ? path : normalizedFile?.path ?? path;
       const standaloneWorkspaceId = localFileWorkspaceId(filePath);
       if ((options?.local || (!activeWorkspaceAppId && !rightSidebarUsesSandbox)) && connection && standaloneWorkspaceId) {
-        const version = requestVersion.current;
+        const version = scopeVersion.current;
+        const loadId = ++fileRequestId.current;
+        onShowDiffPanel();
+        setOpenDiffFileRequest({ id: ++fileRequestId.current, loadId, sandboxId: null, path: filePath, file: placeholderFile(filePath), loading: true });
         try {
           const image = isWorkspaceImagePath(filePath) ? await api.signLocalImageUrl(connection, { path: filePath }) : null;
           const file = image ? placeholderFile(filePath) : await api.workspaceFile(connection, standaloneWorkspaceId, filePath);
-          if (version !== requestVersion.current) return;
-          onShowDiffPanel();
-          setOpenDiffFileRequest({ id: Date.now(), path: file.path, file, imageUrl: image?.url });
+          if (version !== scopeVersion.current) return;
+          setOpenDiffFileRequest({ id: ++fileRequestId.current, loadId, sandboxId: null, path: file.path, file, imageUrl: image?.url });
         } catch (error) {
-          if (version === requestVersion.current) showToast(error instanceof Error ? error.message : "Could not open this file.", "error");
+          if (version === scopeVersion.current) setOpenDiffFileRequest({ id: ++fileRequestId.current, loadId, sandboxId: null, path: filePath, file: placeholderFile(filePath), error: error instanceof Error ? error.message : "Could not open this file." });
         }
         return;
       }
       onShowDiffPanel();
       setOpenDiffFileRequest({
-        id: Date.now(),
+        id: ++fileRequestId.current,
         path: options?.source && isHtmlFilePath(path) ? (normalizedFile?.path ?? path).replace(/[?#].*$/, "") : normalizedFile?.path ?? path,
         source: options?.source,
       });

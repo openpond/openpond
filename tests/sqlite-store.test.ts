@@ -574,6 +574,57 @@ describe("SqliteStore hardening", () => {
     });
   });
 
+  // A failed later migration must leave both the original schema/data and its
+  // recovery copy intact; retrying must not fill disk with duplicate copies.
+  test("rolls back an upgrade batch, reuses its verified backup, and detects changed source data", async () => {
+    await withStoreDir(async storeDir => {
+      const storePath = path.join(storeDir, "state", "state.sqlite");
+      const initial = new SqliteStore(storeDir);
+      await initial.snapshot();
+      await initial.close();
+      const old = openTestDatabase(storePath);
+      await run(old, "PRAGMA user_version = 67");
+      await close(old);
+      class FailingMigration extends SqliteStore {
+        private calls = 0;
+        override async createChatResourceTables(): Promise<void> {
+          await this.exec("CREATE TABLE IF NOT EXISTS migration_attempt_marker (id INTEGER)");
+          if (++this.calls === 2) throw new Error("injected migration failure");
+        }
+      }
+      const fail = async () => {
+        const store = new FailingMigration(storeDir);
+        try { await expect(store.snapshot()).rejects.toThrow("injected migration failure"); }
+        finally { await store.close(); }
+      };
+      await fail();
+      expect(await userVersion(storePath)).toBe(67);
+      const inspection = openTestDatabase(storePath);
+      expect(await all(inspection, "SELECT name FROM sqlite_master WHERE name = 'migration_attempt_marker'")).toEqual([]);
+      await close(inspection);
+      const backups = () => readdir(path.join(storeDir, "backups"));
+      const first = await backups();
+      expect(first).toHaveLength(1);
+      await fail();
+      expect(await backups()).toEqual(first);
+      const changed = openTestDatabase(storePath);
+      await run(changed, "INSERT INTO sessions (id, sort_index, payload, updated_at) VALUES (?, ?, ?, ?)", ["changed", 0, JSON.stringify(session("changed")), new Date().toISOString()]);
+      await close(changed);
+      await fail();
+      expect(await backups()).toHaveLength(2);
+      // Tampering invalidates the receipt instead of silently trusting a broken recovery copy.
+      const names = await backups();
+      for (const name of names) await writeFile(path.join(storeDir, "backups", name, "state.sqlite"), "corrupt");
+      await fail();
+      expect(await backups()).toHaveLength(3); // no pruning on failure
+      const recovered = new SqliteStore(storeDir);
+      expect((await recovered.snapshot()).sessions.map(item => item.id)).toContain("changed");
+      await recovered.close();
+      expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      expect(await backups()).toHaveLength(2);
+    });
+  });
+
   test("preserves corrupt authoritative bytes and refuses to create empty history", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state", "state.sqlite");
@@ -690,6 +741,7 @@ describe("SqliteStore hardening", () => {
         approvals[2],
       ]);
 
+      expect((await store.runtimeEventsForTurn("turn-a2")).map(event => event.id)).toEqual(["event-a2", "event-a3"]);
       const page = await store.runtimeEventPageRows({
         sessionId: "session-a",
         afterSequence: 1,
@@ -726,6 +778,8 @@ describe("SqliteStore hardening", () => {
       await store.close();
 
       const db = openTestDatabase(path.join(storeDir, "state", "state.sqlite"));
+      const queryPlan = await all<{ detail: string }>(db, "EXPLAIN QUERY PLAN SELECT sequence, payload FROM events WHERE turn_id = ? ORDER BY sequence", ["turn-a2"]);
+      expect(queryPlan.some(row => row.detail.includes("events_turn_sequence_idx"))).toBe(true);
       try {
         const rows = await all<{ name: string }>(
           db,
@@ -872,6 +926,41 @@ describe("SqliteStore hardening", () => {
         expect(counts).toEqual({ sessions: 2, turns: 1, approvals: 1 });
       } finally {
         await close(db);
+      }
+    });
+  });
+
+  // Protects the paging/memory boundary: opening a history must not hydrate every event,
+  // and queued appends after reopening must preserve the prior history and sequence.
+  test("reopens event history without loading all payloads and preserves concurrent appends", async () => {
+    await withStoreDir(async (storeDir) => {
+      const initial = new SqliteStore(storeDir);
+      await initial.mutate(data => {
+        data.sessions.push(session("paged"));
+        data.events.push(runtimeEvent("old", "paged", "turn-old"));
+      });
+      await initial.close();
+      class PagedStore extends SqliteStore {
+        protected override async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+          if (/SELECT\s+payload\s+FROM\s+events\s+ORDER/i.test(sql) && !/LIMIT/i.test(sql)) {
+            throw new Error("Unbounded event payload read");
+          }
+          return super.all<T>(sql, params);
+        }
+      }
+      const reopened = new PagedStore(storeDir);
+      try {
+        await reopened.getSession("paged");
+        const appended = await Promise.all([
+          reopened.appendRuntimeEvent(runtimeEvent("new-a", "paged", "turn-a")),
+          reopened.appendRuntimeEvent(runtimeEvent("new-b", "paged", "turn-b")),
+        ]);
+        expect(appended.map(event => event.sequence)).toEqual([2, 3]);
+        const page = await reopened.runtimeEventPageRows({ sessionId: "paged", afterSequence: 0, beforeSequence: null, limit: 10 });
+        expect(page.entries.map(entry => entry.event.id)).toEqual(["old", "new-a", "new-b"]);
+        expect(page.totalMatchingEvents).toBe(3);
+      } finally {
+        await reopened.close();
       }
     });
   });

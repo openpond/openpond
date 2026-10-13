@@ -1,16 +1,18 @@
+import { SidebarInbox } from "./SidebarInbox";
+import { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
+export { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
 import { SidebarNewThreadButton } from "./SidebarNavigation";
 import { SidebarTeamAvatars } from "./SidebarTeamAvatars";
 import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
 import { Inbox, List } from "../icons";
 import { clientChoiceStorage } from "../../lib/client-choice-storage";
-import { sidebarInboxEntryDateGroups, sidebarInboxTime } from "../../lib/sidebar-inbox";
+import { sidebarInboxTime } from "../../lib/sidebar-inbox";
 import { sidebarWorkflowInbox, sidebarWorkflowRows, type SidebarWorkflowRow } from "../../lib/sidebar-workflow-list";
 import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import type { Session } from "@openpond/contracts";
 import { useEffect, useMemo, useState } from "react";
 import {
-  SIDEBAR_CHAT_PAGE_SIZE,
   SIDEBAR_TASK_INITIAL_LIMIT,
   type SidebarProjectItem,
 } from "../../lib/app-models";
@@ -70,36 +72,6 @@ function readSidebarPresentation(): "inbox" | "grouped" {
   const saved = clientChoiceStorage.getItem("openpond.sidebar.presentation.v1");
   if (saved === "inbox" || saved === "grouped") return saved;
   return isDesktopShell() ? "inbox" : "grouped";
-}
-
-export function nextSidebarChatVisibleCount(
-  currentCount: number,
-  totalCount: number
-): number {
-  return Math.min(
-    Math.max(currentCount, SIDEBAR_TASK_INITIAL_LIMIT) +
-      SIDEBAR_CHAT_PAGE_SIZE,
-    totalCount
-  );
-}
-
-export function previousSidebarChatVisibleCount(
-  currentCount: number,
-  totalCount: number
-): number {
-  const boundedCount = Math.max(
-    SIDEBAR_TASK_INITIAL_LIMIT,
-    Math.min(currentCount, totalCount)
-  );
-  if (boundedCount <= SIDEBAR_TASK_INITIAL_LIMIT)
-    return SIDEBAR_TASK_INITIAL_LIMIT;
-  const pageCount = Math.ceil(
-    (boundedCount - SIDEBAR_TASK_INITIAL_LIMIT) / SIDEBAR_CHAT_PAGE_SIZE
-  );
-  return Math.max(
-    SIDEBAR_TASK_INITIAL_LIMIT,
-    SIDEBAR_TASK_INITIAL_LIMIT + (pageCount - 1) * SIDEBAR_CHAT_PAGE_SIZE
-  );
 }
 
 export type SidebarTaskGroup = {
@@ -830,8 +802,12 @@ export function SidebarSectionList({
             selectedTasksetId={selectedTasksetId}
             tasksets={tasksetOptions}
           />;
-  const inboxChildren = sidebarTaskRows({ activeSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => !session.archived), doneSessions: Object.values(childSessionRowsByParentId).flat().filter((session) => session.archived), filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: "recent" });
-  const inboxRows = sidebarWorkflowInbox([...ordinaryFilteredTaskRows, ...inboxChildren], workflowRows, workflowSessionIds, activityTimes, inProgressSessionIds);
+  const inboxRows = useMemo(() => {
+    if (!inboxView) return [];
+    const children = Object.values(childSessionRowsByParentId).flat();
+    const inboxChildren = sidebarTaskRows({ activeSessions: children.filter(session => !session.archived), doneSessions: children.filter(session => session.archived), filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: "recent" });
+    return sidebarWorkflowInbox([...ordinaryFilteredTaskRows, ...inboxChildren], workflowRows, workflowSessionIds, activityTimes, inProgressSessionIds);
+  }, [inboxView, childSessionRowsByParentId, taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, ordinaryFilteredTaskRows, workflowRows, workflowSessionIds, activityTimes]);
 
   function renderWorkflowGroups(groups: SidebarWorkflowRow[]) {
     return <SidebarWorkflowGroups groups={groups} toggleSessionPinned={toggleSessionPinned}
@@ -880,15 +856,12 @@ export function SidebarSectionList({
           {renderWorkflowGroups(pinnedWorkflowRows)}
         </div>
       ) : null}
-      {inboxView ? <section className="sidebar-thread-inbox" aria-label="Thread inbox">
-        {sidebarInboxEntryDateGroups(inboxRows, entry => entry).map((group) => <div key={group.key}>
-          {group.label ? <h3 className="sidebar-inbox-date">{group.label}</h3> : null}
-          {group.entries.map(entry => entry.kind === "workflow"
-            ? <div key={entry.id}>{renderWorkflowGroups([entry.workflow])}</div>
-            : renderTaskSession(entry.session, { projectLabel: sidebarProjectIdBySessionId[entry.session.id] || trainingSessionIds.has(entry.session.id) ? projectLabelForSession(entry.session) : null }))}
-        </div>)}
-        {inboxRows.length === 0 && visiblePinnedRows.length === 0 && pinnedWorkflowRows.length === 0 ? <div className="empty-row">{sidebarTaskEmptyLabel(taskFilter, taskNoun)}</div> : null}
-      </section> : <>
+      {inboxView ? <SidebarInbox rows={inboxRows} count={chatRowsVisibleCount} setCount={setChatRowsVisibleCount}
+        selectedSessionId={selectedSessionId}
+        emptyLabel={visiblePinnedRows.length === 0 && pinnedWorkflowRows.length === 0 ? sidebarTaskEmptyLabel(taskFilter, taskNoun) : null}
+        renderWorkflow={workflow => renderWorkflowGroups([workflow])}
+        renderSession={session => renderTaskSession(session, { projectLabel: sidebarProjectIdBySessionId[session.id] || trainingSessionIds.has(session.id) ? projectLabelForSession(session) : null })}
+      /> : <>
       {renderWorkflowGroups(workflowRows.filter(row => !row.pinned))}
       {groupedTaskRows.filter(group => group.key === "training").map(renderTaskGroup)}
       <SidebarSection

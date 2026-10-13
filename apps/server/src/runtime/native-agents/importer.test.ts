@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, rm, writeFile, access } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
@@ -146,6 +146,59 @@ test("preserves exact source and destination, quotes setup, and reads safe retai
       if (prior[index] === undefined) delete process.env[key];
       else process.env[key] = prior[index];
     });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+// Failure story: searching uploads data, selection drops records beyond page 1,
+// or the terminal command uses a changed source/selection instead of consent.
+test("searches local Claude conversations and hands a validated frozen selection to the CLI", async () => {
+  const home = await mkdtemp(join(tmpdir(), "agent-upload-selection-"));
+  const keys = ["OPENPOND_HOME", "OPENPOND_COLLECTOR_DIR", "OPENPOND_COLLECTOR_CLI", "OPENPOND_COLLECTOR_EXECUTABLE"] as const;
+  const previous = keys.map(key => process.env[key]);
+  try {
+    process.env.OPENPOND_HOME = home;
+    process.env.OPENPOND_COLLECTOR_DIR = join(home, "collector");
+    process.env.OPENPOND_COLLECTOR_CLI = join(home, "cli.mjs");
+    process.env.OPENPOND_COLLECTOR_EXECUTABLE = "/bin/echo";
+    await writeFile(process.env.OPENPOND_COLLECTOR_CLI, "");
+    const root = join(home, "claude"), folder = join(root, "projects", "review");
+    await mkdir(folder, { recursive: true });
+    for (let index = 0; index < 51; index++) {
+      const sessionId = `conversation-${index}`;
+      await writeFile(join(folder, `${sessionId}.jsonl`), [
+        { uuid: "u", parentUuid: null, sessionId, type: "user", cwd: index === 0 ? "/work/Invoices" : "/work/Review", timestamp: "2026-10-01T00:00:00Z", message: { content: `Review request ${index}` } },
+        { uuid: "a", parentUuid: "u", sessionId, type: "assistant", timestamp: "2026-10-01T00:00:01Z", message: { content: "Reviewed", stop_reason: "end_turn" } },
+      ].map(row => JSON.stringify(row)).join("\n") + "\n");
+    }
+    const source: NativeSource = { source: "claude_code", machineId: "machine", instanceId: "chosen", root,
+      acquisition: "files", available: true, capabilities: { history: true, live: false, nativeResume: false } };
+    fixture.sources = [source];
+    const store = await CollectorStore.open(process.env.OPENPOND_COLLECTOR_DIR);
+    try { store.put({ id: "connection", source, teamId: "team", projectId: "project", apiBaseUrl: "https://api.example.test", revision: 1, since: null, keepSyncing: false, selectedSessionKeys: [], state: "active" }); }
+    finally { store.close(); }
+    type Page = { total: number; items: Array<{ key: string; nativeSessionId: string }>; nextOffset: number | null };
+    const list = (query = "", offset = 0) => handleNativeImporter({ command: "conversations", connectionId: "connection", query, range: "all", offset }, home) as Promise<Page>;
+    const first = await list();
+    expect(first).toMatchObject({ total: 51, nextOffset: 50 });
+    expect(first.items).toHaveLength(50);
+    expect((await list("", 50)).items).toHaveLength(1);
+    expect((await list("invoices")).total).toBe(1);
+    const selected = await list("conversation-50");
+    expect(selected.items).toHaveLength(1);
+    const sessionKeys = [selected.items[0]!.key];
+    const result = await handleNativeImporter({ command: "upload", connectionId: "connection", sessionKeys }, home) as { command: string };
+    const { stdout } = await promisify(execFile)("bash", ["-c", result.command]);
+    const selectionFile = stdout.split("--selection-file ")[1]!.split(" --collector-dir")[0]!;
+    expect(JSON.parse(await readFile(selectionFile, "utf8"))).toEqual({ sourceInstanceId: "chosen", sessionKeys });
+    expect(stdout).toContain("import sync connection");
+    await expect(handleNativeImporter({ command: "upload", connectionId: "connection", sessionKeys: ["f".repeat(64)] }, home)).rejects.toThrow("no longer available");
+    const unchanged = await CollectorStore.open(process.env.OPENPOND_COLLECTOR_DIR);
+    try {
+      expect(unchanged.status()).toMatchObject({ running: false, connections: [{ admitted: 0, queued: 0, selectedConversations: 0 }] });
+    } finally { unchanged.close(); }
+  } finally {
+    keys.forEach((key, index) => { if (previous[index] === undefined) delete process.env[key]; else process.env[key] = previous[index]; });
     await rm(home, { recursive: true, force: true });
   }
 });

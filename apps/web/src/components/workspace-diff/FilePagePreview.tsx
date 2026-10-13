@@ -3,6 +3,7 @@ import type { WorkspaceDiffFile } from "@openpond/contracts";
 import { FileText } from "../icons";
 import { isPresentationFile } from "./workspace-diff-panel-model";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { queueThumbnailPreview } from "./preview-work-queue";
 
 export default function FilePagePreview({ file, thumbnail = true }: { file: WorkspaceDiffFile; thumbnail?: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -30,7 +31,7 @@ export default function FilePagePreview({ file, thumbnail = true }: { file: Work
     const observer = new ResizeObserver(fit);
     observer.observe(host);
     if (thumbnail && host.parentElement) observer.observe(host.parentElement);
-    void (async () => {
+    const render = async () => {
       const bytes = Uint8Array.from(atob(file.content!), value => value.charCodeAt(0));
       if (isPresentationFile(file)) {
         const { PptxViewer, RECOMMENDED_ZIP_LIMITS } = await import("@aiden0z/pptx-renderer");
@@ -71,7 +72,9 @@ export default function FilePagePreview({ file, thumbnail = true }: { file: Work
         if (thumbnail) Array.from(stage.querySelectorAll(`section.${className}`)).slice(1).forEach(page => page.remove());
       }
       if (!controller.signal.aborted) { fit(); setReady(true); }
-    })().catch(() => { if (!controller.signal.aborted) setFailed(true); });
+    };
+    void (thumbnail ? queueThumbnailPreview(controller.signal, render) : render())
+      .catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => {
       controller.abort();
       observer.disconnect();

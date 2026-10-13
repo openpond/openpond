@@ -64,6 +64,7 @@ export type ExperimentExecutionContext = z.infer<typeof ExperimentExecutionConte
 
 export const PrepareHarnessExperimentSchema = z.object({
   operationId: Id, profileRepositoryId: Id, definitionId: Id, modelId: Id,
+  localRuntime: HarnessExperimentPolicySchema.shape.localRuntime,
   maxOutputTokens: HarnessExperimentPolicySchema.shape.maxOutputTokens,
   temperature: HarnessExperimentPolicySchema.shape.temperature,
   topP: HarnessExperimentPolicySchema.shape.topP,

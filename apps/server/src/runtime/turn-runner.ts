@@ -1324,7 +1324,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         : [];
       const nativeEvaluation = session.metadata?.profileEvaluationRun !== undefined;
       let nativeEvaluationSkillRuntime: ProfileSkillRuntime | null = null;
-      if (nativeEvaluation && selectedHarness?.skillRuntime.readSkill
+      if (nativeEvaluation && !isolatedProfileEvaluation && selectedHarness?.skillRuntime.readSkill
         && (session.provider === "codex" || isNativeAgentId(session.provider))) {
         if (!session.cwd || !selectedHarness.release.bundlePath) {
           throw new Error("Native evaluation skills require an owned task workspace and local release bundle.");
@@ -1345,7 +1345,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         nativeEvaluationSkills.length ? `Load released Profile skills using profile_skill_read, not paths relative to the task workspace. Available skills: ${JSON.stringify(selectedHarness!.skillRuntime.skills.map(skill=>({name:skill.name,description:skill.description})))}` : "",
         subagentSystemContextForSession(session, subagentDelegation),
       ].filter(Boolean).join("\n\n");
-      if (session.provider === "openpond") {
+      if (session.provider === "openpond" || isolatedProfileEvaluation && session.provider === "codex") {
         const providerTurnId = `openpond-${turn.id}`;
         const model =
           turnModelRef?.modelId || input.model || DEFAULT_OPENPOND_CHAT_MODEL;
@@ -1356,12 +1356,12 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           && htmlVisuals?.available() === true
           && providerSettings?.modelCaches[session.provider]?.models.find(candidate => candidate.id === model)?.capabilities.vision === true;
         const contextLimitTokens = trustedProviderContextLimit({
-          provider: "openpond",
+          provider: session.provider,
           model,
           settings: providerSettings,
         });
         const modelOutputLimit = trustedProviderOutputLimit({
-          provider: "openpond",
+          provider: session.provider,
           model,
           settings: providerSettings,
         });
@@ -1417,7 +1417,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           session,
           turn,
           turnPermissions,
-          provider: "openpond",
+          provider: session.provider,
           model,
           modelOutputLimit,
           contextLimitTokens,

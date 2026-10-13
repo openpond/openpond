@@ -22,6 +22,13 @@ If the window goes blank, press Ctrl+Shift+R (Cmd+Shift+R on macOS) to retry aft
 
 Use `pnpm dev --no-watch` to disable backend restarts, or `pnpm stable` for the separate frozen desktop build without renderer hot reload. Typechecking and release builds remain available through `pnpm typecheck` and `pnpm build`.
 
+## Toolchain
+
+The web app uses Vite 8. SDK, Harness, Evals, and dev prerequisite builds use native TypeScript 7 with persistent compiler caches; `pnpm typecheck` keeps the JavaScript compiler for the full workspace, and `pnpm typecheck:native` is available for comparison (the full graph exceeded 5 GB during local validation). The `typescript` dependency also supplies the compiler API used by repository checks. Both compilers use the shared, low-priority local compiler queue.
+
+Use `pnpm lint` to audit correctness rules, `pnpm format <files>` to format selected files, and `pnpm format:check <files>` to check formatting. These commands use pinned Oxlint/Oxfmt versions; existing repository-wide findings are not yet a CI gate. Avoid repository-wide formatting during unrelated work.
+
+
 ## Test Commands
 
 Use the smallest confidence layer that matches the change:

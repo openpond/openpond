@@ -12,6 +12,7 @@ import {
 } from "@openpond/evals/native-conversations";
 import { readProvidersFile } from "../../openpond/provider-settings.js";
 import { nativeTerminalCommand } from "./terminal-command.js";
+import { retainedUploadConnection, uploadConversationPage, saveUploadSelection } from "./importer-selection.js";
 
 const Line = z
   .string()
@@ -32,6 +33,8 @@ const Request = z
   .object({
     command: z.enum([
       "inventory",
+      "conversations",
+      "upload",
       "status",
       "stop",
       "sync",
@@ -50,6 +53,11 @@ const Request = z
       z.object({ frequency: z.literal("daily"), time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u) }).strict(),
       z.object({ frequency: z.literal("weekly"), time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/u), day: z.number().int().min(0).max(6) }).strict(),
     ]).nullable().optional(),
+    query: z.string().max(500).optional(),
+    range: z.enum(["day", "week", "all"]).optional(),
+    offset: z.number().int().min(0).max(10_000).optional(),
+    refresh: z.boolean().optional(),
+    sessionKeys: z.array(z.string().regex(/^[a-f0-9]{64}$/)).min(1).max(10_000).optional(),
   })
   .strict();
 
@@ -74,7 +82,7 @@ async function discover(storeDir: string, directory: string) {
 
 /** Shared CLI state and quoted setup commands; reading inventory never starts collection. */
 export async function handleNativeImporter(payload: unknown, storeDir: string) {
-  const { command, connectionId, setup, schedule } = Request.parse(payload);
+  const { command, connectionId, setup, schedule, query, range, offset, sessionKeys, refresh } = Request.parse(payload);
   const directory = collectorDirectory();
   if (command === "inventory") {
     const [sources, collector] = await Promise.all([
@@ -97,9 +105,11 @@ export async function handleNativeImporter(payload: unknown, storeDir: string) {
     return { sources, collector, directory, statusCommand };
   }
   if (command === "status") return collectorStatus(directory);
+  if (command === "conversations") return uploadConversationPage(await retainedUploadConnection(directory, connectionId), query ?? "", range ?? "all", offset ?? 0, refresh);
   if (
     [
       "sync",
+      "upload",
       "schedule",
       "connect",
       "reconnect",
@@ -125,10 +135,19 @@ export async function handleNativeImporter(payload: unknown, storeDir: string) {
       if (!connectionId || schedule === undefined) throw new Error("Select a source and its continual import setting.");
       return setCollectorSchedule({ directory, executable, args: [cli], environment }, connectionId, schedule);
     }
+    if (command === "upload") {
+      const retained = await retainedUploadConnection(directory, connectionId);
+      if (retained.state !== "active") throw new Error("Resume or reconnect this source before uploading.");
+      if ((await collectorStatus(directory)).running) throw new Error("Cancel or finish the running import before choosing conversations.");
+      if (!sessionKeys) throw new Error("Select at least one conversation to upload.");
+      const file = await saveUploadSelection(directory, retained, sessionKeys);
+      return { command: nativeTerminalCommand(executable, [cli, "import", "sync", retained.id, "--selection-file", file, "--collector-dir", directory], environment) };
+    }
     if (command === "sync") {
       const status = await collectorStatus(directory);
       if (!status.connections.some(item => item.state === "active" && (!connectionId || item.id === connectionId)))
         throw new Error("Connect or resume a source before importing.");
+      if (!status.connections.some(item => item.state === "active" && (!connectionId || item.id === connectionId) && item.selectedConversations !== 0)) throw new Error("Choose conversations before starting an upload.");
       return { command: nativeTerminalCommand(executable, [cli, "import", "sync", ...(connectionId ? [connectionId] : []), "--collector-dir", directory], environment) };
     }
     if (command !== "connect") {

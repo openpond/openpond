@@ -44,8 +44,8 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
     setSelectedSessionId(session.id);
     const projectId = props.sidebarProjectIdBySessionId[session.id] ?? null;
     setSelectedProjectId(projectId); setSelectedAppId(projectId ? null : session.appId);
-    setView("chat"); return true;
-  }, [setSelectedSessionId, setSelectedProjectId, setSelectedAppId, setView, props.sidebarProjectIdBySessionId]);
+    setView("chat"); props.requestComposerFocus(); return true;
+  }, [setSelectedSessionId, setSelectedProjectId, setSelectedAppId, setView, props.sidebarProjectIdBySessionId, props.requestComposerFocus]);
   const accountScopeKey = JSON.stringify({ account: props.account?.activeProfile ?? null, baseUrl: props.account?.baseUrl ?? null,
     owner: props.account?.profile?.id ?? null, state: props.account?.state ?? null, teamId: props.selectedTeamId ?? null });
   const ponderEnabled = productArea === "chat" && props.account?.state === "signed_in";

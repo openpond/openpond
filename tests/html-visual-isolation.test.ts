@@ -41,14 +41,23 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     const evaluate = async (expression: string) => (await cdp!.send<{ result: { value: any } }>("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result.value;
     const load = async (html: string) => {
       await cdp!.send("Page.navigate", { url: `data:text/html,${encodeURIComponent(htmlVisualDocument(html, "boundary"))}` });
-      for (let i = 0; i < 30; i++) { if (await evaluate("window.__openpondVisual?.ready")) return; await delay(100); }
+      for (let i = 0; i < 30; i++) {
+        if (await evaluate("window.__openpondVisual?.ready")) {
+          // The ready message can precede the frame's first paint. Native
+          // mouse input must wait until Chromium has committed its hit targets.
+          await cdp!.send("Page.bringToFront");
+          await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+          return;
+        }
+        await delay(100);
+      }
       throw new Error("Visual did not load");
     };
     await load(`<button style="display:block;width:160px;height:60px" onclick="document.querySelector('section').style.height='380px';console.log('clicked')">Expand</button><section style="height:160px">Content</section><script>try{parent.document.body;console.log('parent readable')}catch{console.log('parent denied')}try{localStorage.setItem('secret','x');console.log('storage available')}catch{console.log('storage denied')}console.log(typeof window.openpond,typeof require)</script>`);
     expect(await evaluate("window.__openpondVisual.height")).toBe(220);
     await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 60, y: 25, button: "left", clickCount: 1 });
     await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 60, y: 25, button: "left", clickCount: 1 });
-    await delay(300);
+    for (let i = 0; i < 30 && await evaluate("window.__openpondVisual.height") !== 440; i++) await delay(100);
     const state = await evaluate("window.__openpondVisual");
     expect(state.height).toBe(440);
     expect(state.console.map((row: { text: string }) => row.text)).toEqual(expect.arrayContaining(["parent denied", "storage denied", "undefined undefined", "clicked"]));

@@ -1,4 +1,4 @@
-import { mkdir, readdir, writeFile, utimes } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 
@@ -23,8 +23,6 @@ describe("SQLite migration backup retention", () => {
         const backupDir = path.join(backupsDir, name);
         await mkdir(backupDir);
         await writeFile(path.join(backupDir, "state.sqlite"), name);
-        const old = new Date(Date.now() - 31 * 86_400_000);
-        await utimes(backupDir, old, old);
       }
 
       const result = await pruneMigrationBackups(storeDir);
@@ -45,6 +43,19 @@ describe("SQLite migration backup retention", () => {
         "state-20260803010000-before-v47",
         "state-20260804010000-before-v48",
       ]);
+    });
+  });
+
+  // Large histories must not multiply disk use, but the latest recovery copy
+  // cannot be discarded just because the database itself exceeds the budget.
+  test("enforces a disk budget while preserving the protected recovery copy", async () => {
+    await withTempDirectory("openpond-backup-budget-", async storeDir => {
+      const names = ["state-20260801010000-before-v45", "state-20260802010000-before-v46"];
+      for (const name of names) {
+        await mkdir(path.join(storeDir, "backups", name), { recursive: true });
+        await writeFile(path.join(storeDir, "backups", name, "state.sqlite"), "1234567890");
+      }
+      expect(await pruneMigrationBackups(storeDir, { maxBytes: 5, protectedBackup: path.join(storeDir, "backups", names[0]!) })).toEqual({ retained: [names[0]], removed: [names[1]] });
     });
   });
 

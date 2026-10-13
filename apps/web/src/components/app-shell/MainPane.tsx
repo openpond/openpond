@@ -1,3 +1,4 @@
+import { rememberChatSelection } from "../../lib/chat-selection-preference";
 import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
 import { OpenHtmlVisualContext } from "../visuals/html-visual-context";
 import { HtmlVisualPanel } from "../visuals/HtmlVisualPanel";
@@ -1027,6 +1028,7 @@ export function MainPane({
       if (trainingChatHandoff && model !== trainingChatHandoff.model.modelId) {
         onTrainingChatHandoffDismiss();
       }
+      rememberChatSelection(activeProvider, model);
       setDraftProvider(activeProvider);
       setDraftModel(model);
     },

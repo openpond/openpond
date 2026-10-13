@@ -1,3 +1,5 @@
+import { readPromptHistory, readSessionIndex, readGlobalState, type CodexHistoryIndexEntry, type CodexHistoryPromptEntry } from "./codex-history-catalog.js";
+import { readJsonlRecords } from "./codex-history-jsonl.js";
 import {
   createReadStream,
   existsSync,
@@ -36,7 +38,6 @@ import {
   codexControlMessage,
   codexHomePath,
   isCodexInjectedUserMessage,
-  isoFromEpochSeconds,
   isoFromFileName,
   isoTimestamp,
   latestIso,
@@ -47,7 +48,6 @@ import {
   parseJson,
   parseMaybeJson,
   safeId,
-  stringMap,
   stringValue,
   truncateText,
   type CodexRecord,
@@ -64,19 +64,6 @@ const PROMPT_MAX_LENGTH = 30_000;
 const ASSISTANT_MAX_LENGTH = 60_000;
 const TOOL_OUTPUT_MAX_LENGTH = 8_000;
 const MAX_CODEX_HISTORY_IMAGE_BYTES = 15 * 1024 * 1024;
-
-type CodexHistoryIndexEntry = {
-  id: string;
-  threadName: string | null;
-  updatedAt: string | null;
-};
-
-type CodexHistoryPromptEntry = {
-  firstPrompt: string | null;
-  latestPrompt: string | null;
-  firstAt: string | null;
-  latestAt: string | null;
-};
 
 export type CodexHistoryThread = {
   threadId: string;
@@ -912,80 +899,6 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
   return { accept, finish };
 }
 
-async function readPromptHistory(
-  codexHome: string
-): Promise<Map<string, CodexHistoryPromptEntry>> {
-  const entries = new Map<string, CodexHistoryPromptEntry>();
-  await readJsonlRecords(path.join(codexHome, "history.jsonl"), (record) => {
-    const payload = asRecord(record);
-    const threadId = stringValue(payload?.session_id);
-    const text = normalizeTitleText(stringValue(payload?.text) ?? "");
-    const timestamp = isoFromEpochSeconds(numberValue(payload?.ts));
-    if (!threadId || !text || !timestamp) return;
-    const current = entries.get(threadId) ?? {
-      firstPrompt: null,
-      latestPrompt: null,
-      firstAt: null,
-      latestAt: null,
-    };
-    if (
-      !current.firstAt ||
-      millisFromIso(timestamp) < millisFromIso(current.firstAt)
-    ) {
-      current.firstAt = timestamp;
-      current.firstPrompt = text;
-    }
-    if (
-      !current.latestAt ||
-      millisFromIso(timestamp) > millisFromIso(current.latestAt)
-    ) {
-      current.latestAt = timestamp;
-      current.latestPrompt = text;
-    }
-    entries.set(threadId, current);
-  }).catch(() => undefined);
-  return entries;
-}
-
-async function readSessionIndex(
-  codexHome: string
-): Promise<Map<string, CodexHistoryIndexEntry>> {
-  const entries = new Map<string, CodexHistoryIndexEntry>();
-  await readJsonlRecords(
-    path.join(codexHome, "session_index.jsonl"),
-    (record) => {
-      const payload = asRecord(record);
-      const id = stringValue(payload?.id);
-      if (!id) return;
-      entries.set(id, {
-        id,
-        threadName:
-          normalizeTitleText(stringValue(payload?.thread_name) ?? "") || null,
-        updatedAt: isoTimestamp(stringValue(payload?.updated_at)),
-      });
-    }
-  ).catch(() => undefined);
-  return entries;
-}
-
-async function readGlobalState(codexHome: string): Promise<{
-  workspaceRootHints: Map<string, string>;
-}> {
-  const filePath = path.join(codexHome, ".codex-global-state.json");
-  let payload: unknown;
-  try {
-    payload = JSON.parse(await fs.readFile(filePath, "utf8"));
-  } catch {
-    payload = null;
-  }
-  const state = asRecord(payload);
-  return {
-    workspaceRootHints: stringMap(
-      asRecord(state?.["thread-workspace-root-hints"])
-    ),
-  };
-}
-
 async function readCodexSessionMetadata(
   file: CodexHistoryFile
 ): Promise<SessionMetadata> {
@@ -1152,19 +1065,6 @@ async function statusForCodexHistoryFile(
   };
 }
 
-async function readJsonlRecords(
-  filePath: string,
-  onRecord: (record: CodexRecord) => void
-): Promise<void> {
-  const stream = createReadStream(filePath, { encoding: "utf8" });
-  const reader = createInterface({ input: stream, crlfDelay: Infinity });
-  for await (const line of reader) {
-    if (!line.trim()) continue;
-    const record = parseJson(line);
-    if (record) onRecord(record);
-  }
-}
-
 async function readInitialJsonlRecords(
   filePath: string,
   maxRecords: number,
@@ -1214,13 +1114,8 @@ function titleForThread(
   indexEntry: CodexHistoryIndexEntry | undefined,
   prompt: CodexHistoryPromptEntry | undefined
 ): string {
-  return truncateText(
-    indexEntry?.threadName ??
-      prompt?.firstPrompt ??
-      prompt?.latestPrompt ??
-      "Codex chat",
-    80
-  );
+  const title = indexEntry?.threadName ?? prompt?.firstPrompt ?? prompt?.latestPrompt ?? "Codex chat";
+  return title.length > 80 ? `${title.slice(0, 79)}…` : title;
 }
 
 function commandFromToolCall(name: string, args: unknown): string {
@@ -1417,7 +1312,7 @@ function sessionMetadataWithCodexGoalRuntime(
   metadata: Session["metadata"] | undefined,
   goalRuntime: CodexHistoryGoalRuntimeMetadata | null
 ): Session["metadata"] | undefined {
-  const next = { ...(metadata ?? {}) };
+  const next = { ...metadata };
   delete next.codexGoalRuntime;
   if (goalRuntime) next.codexGoalRuntime = goalRuntime;
   return Object.keys(next).length > 0 ? next : undefined;

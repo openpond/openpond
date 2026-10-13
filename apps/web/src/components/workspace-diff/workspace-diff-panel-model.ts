@@ -17,6 +17,10 @@ export type WorkspaceDiffOpenFileRequest = {
   id: number;
   path: string;
   file?: WorkspaceDiffFile;
+  loading?: boolean;
+  loadId?: number;
+  sandboxId?: string | null;
+  error?: string;
   imageUrl?: string;
   source?: boolean;
 };

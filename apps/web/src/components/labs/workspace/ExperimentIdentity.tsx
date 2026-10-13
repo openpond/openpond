@@ -66,7 +66,7 @@ export function ExperimentIdentity({
           type="button"
           className="evaluation-identity-name"
           title={`${title || id}\n${id}`}
-          onClick={onOpen}
+          onClick={event => { event.stopPropagation(); onOpen(); }}
           onMouseEnter={revealTitle}
           onFocus={revealTitle}
           onMouseLeave={resetTitle}

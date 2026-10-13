@@ -1,7 +1,8 @@
+import path from "node:path";
 import { createHash } from "node:crypto";
 import { readConfig, updateConfig, type ConfigSnapshot } from "./config.js";
-import { readCredential, writeCredential, newCredentialId, deleteCredential } from "./credentials.js";
-import { getLocalRecord, withLocalDatabase } from "./database.js";
+import { readCredentials, writeCredential, newCredentialId, deleteCredential } from "./credentials.js";
+import { getLocalRecords, withLocalDatabase } from "./database.js";
 import { storagePaths } from "./home.js";
 import { withFileLock } from "./private-file.js";
 import { PersistenceError } from "./errors.js";
@@ -36,27 +37,47 @@ function activeAccountAuthority(configuration: PersistedAccountConfiguration): u
   return [accountId(account.handle, account.baseUrl), account.apiBaseUrl, account.chatApiBaseUrl, account.apiKey, account.session?.token];
 }
 
+const pendingAccountReads = new Map<string, Promise<PersistedAccountConfiguration>>();
+
 export async function readAccountConfiguration(home: string): Promise<PersistedAccountConfiguration> {
-  return withFileLock(`${storagePaths(home).runtime}/accounts`, () => readUnlocked(home));
+  const key = path.resolve(home);
+  let pending = pendingAccountReads.get(key);
+  if (!pending) {
+    pending = withFileLock(`${storagePaths(key).runtime}/accounts`, () => readUnlocked(key))
+      .finally(() => pendingAccountReads.delete(key));
+    pendingAccountReads.set(key, pending);
+  }
+  // Share overlapping reads, never cache credentials after completion or let a
+  // caller mutate another caller's view. Account writes still own the same lock.
+  return structuredClone(await pending);
 }
 async function readUnlocked(home: string, snapshot?: ConfigSnapshot): Promise<PersistedAccountConfiguration> {
   const { document } = snapshot ?? await readConfig(home);
+  const definitions = Object.entries(document.accounts ?? {});
+  const records = getLocalRecords(home, [
+    ...definitions.map(([id]) => ({ table: "account_sessions" as const, id })),
+    { table: "account_selection", id: "last_used" },
+    { table: "profile_installations", id: "library" },
+  ]);
+  const sessions = new Map(definitions.map(([id], index) => [id, records[index]?.value as AccountSession | undefined]));
+  const secrets = await readCredentials<AccountSecrets>(home, definitions.flatMap(([, account]) =>
+    account.enabled !== false && account.credential?.source === "secret" ? [account.credential.id] : []));
   const accounts: PersistedAccountView[] = [];
-  for (const [id, account] of Object.entries(document.accounts ?? {})) {
+  for (const [id, account] of definitions) {
     if (account.enabled === false) continue;
     let secret: AccountSecrets = {};
     if (account.credential?.source === "secret") {
-      const stored = await readCredential<AccountSecrets>(home, account.credential.id);
+      const stored = secrets[account.credential.id];
       if (!stored) throw new PersistenceError({ code: "CREDENTIAL_MISSING", path: storagePaths(home).config, message: `The credential referenced by account ${id} is unavailable.`, action: "Reconnect this account or restore its credential backup." });
       secret = stored.value.context === credentialContext(account) ? stored.value : {};
     } else if (account.credential?.source === "env") secret = { apiKey: process.env[account.credential.name] };
-    const session = getLocalRecord<AccountSession>(home, "account_sessions", id)?.value;
+    const session = sessions.get(id);
     accounts.push({ handle: account.handle, ...(account.base_url ? { baseUrl: account.base_url } : {}), ...(account.api_base_url ? { apiBaseUrl: account.api_base_url } : {}), ...(account.chat_api_base_url ? { chatApiBaseUrl: account.chat_api_base_url } : {}), ...(account.environment ? { environment: account.environment } : {}), ...(secret.apiKey ? { apiKey: secret.apiKey } : {}), ...((session || secret.token) ? { session: { ...session, ...(secret.token ? { token: secret.token } : {}) } } : {}) });
   }
   const selected = document.defaults?.account_id ? document.accounts?.[document.defaults.account_id] : undefined;
   if (document.defaults?.account_id && (!selected || selected.enabled === false)) throw new PersistenceError({ code: "INVALID_ACCOUNT_DEFAULT", path: storagePaths(home).config, message: "The configured default account is missing or disabled.", action: "Choose an enabled default account or remove defaults.account_id." });
-  const activeProfile = selected ? { handle: selected.handle, baseUrl: selected.base_url } : getLocalRecord<PersistedAccountConfiguration["activeProfile"]>(home, "account_selection", "last_used")?.value;
-  let profile = getLocalRecord<unknown>(home, "profile_installations", "library")?.value;
+  const activeProfile = selected ? { handle: selected.handle, baseUrl: selected.base_url } : records[definitions.length]?.value as PersistedAccountConfiguration["activeProfile"];
+  let profile = records[definitions.length + 1]?.value;
   const pinnedProfile = document.defaults?.profile_ref;
   if (pinnedProfile) {
     const library = profile as { profiles?: { source: string; repositoryId: string; profile: string; repoPath: string }[] } | undefined;

@@ -19,6 +19,30 @@ import { workspaceDiffSinceBaseline } from "../apps/server/src/workspace/server-
 import { createServerWorkspacePayloads } from "../apps/server/src/workspace/server-workspace-payloads";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { buildFileTree } from "../apps/web/src/components/workspace-diff/workspace-diff-summary-model";
+import { FileLoadTracker } from "../apps/web/src/components/workspace-diff/file-load-tracker";
+import { createPreviewWorkQueue } from "../apps/web/src/components/workspace-diff/preview-work-queue";
+
+// A discarded thumbnail must neither hold up the next document nor start
+// expensive work after its New tab has been closed.
+test("thumbnail work is serialized and closing a preview releases the queue", async () => {
+  const queue = createPreviewWorkQueue(async () => {});
+  const active = new AbortController();
+  const skipped = new AbortController();
+  const calls: string[] = [];
+  let started!: () => void;
+  const start = new Promise<void>(resolve => { started = resolve; });
+  const first = queue(active.signal, async () => {
+    calls.push("first"); started();
+    await new Promise<void>(resolve => active.signal.addEventListener("abort", () => resolve(), { once: true }));
+  });
+  const second = queue(skipped.signal, async () => { calls.push("closed"); });
+  const third = queue(new AbortController().signal, async () => { calls.push("next"); });
+  await start;
+  expect(calls).toEqual(["first"]);
+  skipped.abort(); active.abort();
+  await Promise.all([first, second, third]);
+  expect(calls).toEqual(["first", "next"]);
+});
 
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
@@ -376,11 +400,16 @@ describe("workspace diff", () => {
       expect(diff.appId).toBe(workspaceId);
       expect(diff.repoFiles).toContain("README.md");
       expect(file.content).toBe("# Codex cwd\n");
+      const absoluteReadme = path.join(repoPath, "README.md");
+      expect((await payloads.workspaceFilePayload(workspaceId, absoluteReadme)).path).toBe(absoluteReadme);
       // Explicit local outputs open outside the cwd, while workspace-relative
       // traversal and the shared/hosted workspace loader remain contained.
       const output = await payloads.workspaceFilePayload(workspaceId, outputPath);
       expect(output.path).toBe(outputPath);
       expect(Buffer.from(output.content ?? "", "base64")).toEqual(outputBytes);
+      const standaloneOutput = await payloads.workspaceFilePayload(localPathWorkspaceId(outputDir), outputPath);
+      expect(standaloneOutput.path).toBe(outputPath);
+      expect(standaloneOutput.readVersion).toBe(output.readVersion);
       const homePath = `~/${path.relative(os.homedir(), outputPath)}`;
       const homeOutput = await payloads.workspaceFilePayload(workspaceId, homePath);
       expect(homeOutput.path).toBe(homePath);
@@ -447,12 +476,36 @@ test("open file versions detect same-name edits and replacements within the work
   expect(edited.revision).not.toBe(initial.revision);
   await writeFile(path.join(folder, "next.pptx"), "third");
   await rename(path.join(folder, "next.pptx"), target);
-  expect((await workspaceFileVersion(folder, target)).revision).not.toBe(edited.revision);
-  expect(await workspaceFileVersion(folder, "missing.pptx")).toEqual({ exists: false, revision: null });
+  const replaced = await workspaceFileVersion(folder, target);
+  expect(replaced.revision).not.toBe(edited.revision);
+  await writeFile(target, "third");
+  await utimes(target, new Date("2026-02-01"), new Date("2026-02-01"));
+  expect((await workspaceFileVersion(folder, target)).revision).toBe(replaced.revision);
+  expect(await workspaceFileVersion(folder, "missing.pptx")).toMatchObject({ exists: false, revision: null });
   await writeFile(path.join(root, "outside.pptx"), "other");
   await expect(workspaceFileVersion(folder, "../outside.pptx", true)).rejects.toThrow("outside the workspace");
   await expect(workspaceFileVersion(folder, path.join(root, "outside.pptx"))).rejects.toThrow("outside the workspace");
   expect((await workspaceFileVersion(folder, path.join(root, "outside.pptx"), true)).exists).toBe(true);
   await symlink(root, path.join(folder, "escape"), "dir");
   await expect(workspaceFileVersion(folder, "escape/outside.pptx")).rejects.toThrow("outside the workspace");
+});
+
+// Network responses can complete in any order while the user changes tabs.
+test("file reads cannot reopen closed tabs or replace a newer request", () => {
+  const loads = new FileLoadTracker();
+  expect(loads.receive("a.pdf", { loadId: 1, loading: true })).toBe("open");
+  expect(loads.receive("b.pdf", { loadId: 2, loading: true })).toBe("open");
+  expect(loads.receive("a.pdf", { loadId: 1 })).toBe("complete");
+  loads.close("b.pdf");
+  expect(loads.receive("b.pdf", { loadId: 2 })).toBe("ignore");
+  loads.receive("a.pdf", { loadId: 3, loading: true });
+  loads.receive("a.pdf", { loadId: 4, loading: true });
+  expect(loads.receive("a.pdf", { loadId: 4 })).toBe("complete");
+  expect(loads.receive("a.pdf", { loadId: 3 })).toBe("ignore");
+  expect(loads.receive("fast.pdf", { loadId: 5 })).toBe("open");
+  loads.receive("local.pdf", { loadId: 6, loading: true });
+  loads.receive("remote.pdf", { loadId: 7, loading: true });
+  loads.retain(new Set(["local.pdf"]));
+  expect(loads.receive("remote.pdf", { loadId: 7 })).toBe("ignore");
+  expect(loads.receive("local.pdf", { loadId: 6 })).toBe("complete");
 });

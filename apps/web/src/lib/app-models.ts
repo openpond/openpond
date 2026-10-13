@@ -981,6 +981,6 @@ export function chatModelLabel(model: string, settings?: ProviderSettings | null
   return (
     [...OPENPOND_MODEL_OPTIONS, ...CODEX_MODEL_OPTIONS].find(
       (option) => option.value === model,
-    )?.label ?? model
+    )?.label ?? modelDisplayLabel(model)
   );
 }

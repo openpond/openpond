@@ -8,7 +8,7 @@ Parsing, aliases, command help, and this reference use the same authoritative re
 
 ```text
 Usage:
-  openpond import <connect|reconnect|discover|status|coverage|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--until <ISO-cutoff>] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]
+  openpond import <connect|reconnect|discover|status|conversations|coverage|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--upload] [--selection-file <path>] [--query <text>] [--offset <number>] [--until <ISO-cutoff>] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]
 
 Options:
   --at <string>
@@ -21,16 +21,20 @@ Options:
   --json
   --leaf <string>
   --off
+  --offset <string>
   --on <string>
   --project <string>
+  --query <string>
   --range <string>
   --revision <string>
   --scheduled
+  --selection-file <string>
   --session <string>
   --source <string>
   --source-path <string>
   --team <string>
   --until <string>
+  --upload
   --weekly
   --yes
 ```
@@ -39,7 +43,7 @@ Options:
 ```text
 Usage:
   openpond datasets <schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]
-  openpond datasets <upload|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]
+  openpond datasets <upload|save|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]
   openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]
 
 Options:
@@ -138,11 +142,13 @@ Options:
 
 ```text
 Usage:
+  openpond experiments <signal-plan|signal-report> --input-file <path> [--json]
   openpond experiments <models|run|run-cloud|list|read|status|cancel|result|compare|case> [id] [candidate-id] --local [--server-url <loopback-origin>] [--input-file <path>] [--receipt-id <id>] [--json]
   openpond experiments <profile-catalog|prepare-profile|run-profile|inspect-profile> --local [--server-url <loopback-origin>] [--input-file <path>] [--json]
-  openpond experiments <prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]
+  openpond experiments <prepare-harness|run|read|list|status|diagnostics|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]
 
 Options:
+  --after-call-id <string>
   --after-id <string>
   --after-sequence <integer>
   --content-hash <string>
@@ -941,6 +947,13 @@ Usage:
   openpond training <create-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-run-id|run-id|model-id>
   openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]
   openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
+  openpond training hosted-models|hosted-batches|hosted-preparations|hosted-capabilities --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-model <model-project-id> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-sync-model <input.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-prepare|hosted-start|hosted-stage|hosted-submit <input.json> --team-id <id> [--api-base-url <url>] [--yes] [--json]
+  openpond training hosted-qualify <input.json> --team-id <id> [--api-base-url <url>] --yes [--json]
+  openpond training hosted-status|hosted-watch|hosted-cancel|hosted-artifacts|hosted-logs|hosted-events <job-id> --team-id <id> [--api-base-url <url>] [--interval-ms <ms>] [--json]
+  openpond training hosted-watch <job-id> --team-id <id> [--deadline-at <ISO-time>] [--cleanup-reserve-ms <ms>] [--wait-for-cleanup] [--cleanup-timeout-ms <ms>] [--interval-ms <ms>] [--json]
   openpond training status <run-id> [--json]
   openpond training watch <run-id> [--interval-ms <ms>] [--json]
   openpond training logs <run-id> [--json]
@@ -950,8 +963,12 @@ Usage:
   openpond training benchmark <model-id> [--provider <id>] [--model <id>] [--reasoning-effort <level>] [--max-spend <usd>] [--json]
 
 Options:
+  --account <string>
   --api-base-url <string>
+  --cleanup-reserve-ms <integer>
+  --cleanup-timeout-ms <integer>
   --comparison-series-entry <string>
+  --deadline-at <string>
   --destination <string>
   --detach
   --export-approved
@@ -971,6 +988,8 @@ Options:
   --retention-days <integer>
   --rollout-placement <string>
   --run-preset <string>
+  --team-id <string>
+  --wait-for-cleanup
   --yes
 ```
 ## taskset

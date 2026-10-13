@@ -1093,3 +1093,10 @@ export type ModelBinding = z.infer<typeof ModelBindingSchema>;
 export type TrainingStateResponse = z.infer<typeof TrainingStateResponseSchema>;
 export type TrainingActivityResponse = z.infer<typeof TrainingActivityResponseSchema>;
 export type TasksetOperationalState = z.infer<typeof TasksetOperationalStateSchema>;
+
+/** Small navigation read; full training history is loaded by its workspace. */
+export type TrainingNavigationResponse = {
+  projects: Array<{ id: string; name: string; teamId: string | null }>;
+  activityByProjectId: Record<string, { status: string; label: string }>;
+  creationSessionIds: string[];
+};

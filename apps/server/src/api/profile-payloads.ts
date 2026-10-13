@@ -1,4 +1,5 @@
 import {assertNativeProfilePrivateGrading} from "../evaluations/native-profile-private-grading.js";
+import {assertLocalProfileWorkRuntime} from "../evaluations/local-profile-work.js";
 import {z} from "zod";
 import { readFile } from "node:fs/promises";
 
@@ -154,6 +155,7 @@ export function createProfilePayloads(deps: {
   }
 
   const prepareProfileEvaluationRun = createProfileEvaluationRunPreparationService({
+    boundedWorkComputeAvailable: assertLocalProfileWorkRuntime,
     privateGradingPreflight:assertNativeProfilePrivateGrading,
     resolveExternalDataset: deps.resolveExternalDataset,
     prepareLocalDatasetBinding:deps.prepareLocalDatasetBinding,

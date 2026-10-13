@@ -9,6 +9,7 @@ import type { CollectorStore } from "./collector-store.js";
 import type { CollectorCoverageSession } from "../connected-evidence/collector-coverage-contracts.js";
 import { CollectorCoverage } from "./collector-coverage.js";
 import { CollectorSourceCache } from "./collector-source-cache.js";
+import { nativeSessionSelectionKey } from "./selection.js";
 
 /** One pass over a frozen listing per page. Unchanged revisions are cheap; a
  * failed source is tried again only in a later explicitly launched job. */
@@ -24,22 +25,28 @@ export async function acquireCollectorSource(input: {
   const cache = new CollectorSourceCache(store);
   let cursor: string | undefined, processed = 0, discovered = 0;
   const failures: string[] = [];
+  const selection = connection.selectedSessionKeys ? new Set(connection.selectedSessionKeys) : null;
+  const found = new Set<string>();
+  let enumerated = 0;
   do {
     await check();
     progress({ phase: "discovering" });
     // File mtimes and native activity summaries are not event-time authority.
     // Enumerate the source, then apply the consented window to native events.
     const page = await listSessions(connection.source, { cursor, limit: 50 });
-    discovered += page.items.length;
-    if (discovered > 10_000) throw new Error("Source inventory exceeds 10,000 sessions. Select a narrower import window.");
-    for (const native of page.items) {
+    enumerated += page.items.length;
+    if (enumerated > 10_000) throw new Error("Source inventory exceeds 10,000 sessions. Select a narrower source directory.");
+    const items = page.items.filter(native => !selection || selection.has(nativeSessionSelectionKey(native)));
+    for (const native of items) found.add(nativeSessionSelectionKey(native));
+    discovered += items.length;
+    for (const native of items) {
       const scanKey = JSON.stringify([native.path, native.nativeSessionId]);
       store.coverage.record(connection.id, { sourceKeyHash: CollectorCoverage.sourceKey(scanKey),
         nativeRevisionHash: native.storageRevision ? contentHash([native.storageRevision, agentImportNormalizerRevision(connection.source.source)]) : null,
         state: "reading", reason: null, unknownTimeBoundaries: 0, normalized: [] });
     }
     progress({ discovered });
-    for (const native of page.items) {
+    for (const native of items) {
       await check();
       // Do not parse another transcript while any retained admission is blocked.
       await drain();
@@ -133,7 +140,9 @@ export async function acquireCollectorSource(input: {
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
   store.progress.discovered(connection.id);
-  store.coverage.finish(connection.id, true);
+  // A chosen subset cannot certify coverage of the entire source window.
+  store.coverage.finish(connection.id, selection === null);
+  if (selection && [...selection].some(key => !found.has(key))) throw new Error("A selected conversation is no longer available. Review the upload selection.");
   if (failures.length) throw new Error(`${failures.length} session(s) need attention. ${failures[0]}`);
 }
 

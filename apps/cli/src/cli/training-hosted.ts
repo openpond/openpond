@@ -1,0 +1,124 @@
+import { readFile } from "node:fs/promises";
+import { loadOpenPondAccountContext } from "@openpond/runtime";
+import { createTrainingClient, parseAndVerifyTrainingJobSubmission, parseAndVerifyTrainingPreparationReceipt, TrainingPreparationRequestSchema, type TrainingInputArtifactUpload } from "openpond-sdk/training";
+import { createModelProjectsClient, HostedModelProjectSyncSchema } from "openpond-sdk/model-projects";
+import { OpenPondLearningClient } from "openpond-sdk/learning";
+import { optionString, parseBooleanOption } from "./common/options";
+import { resolveApiBaseUrlOption } from "./common/urls";
+import { cancelHostedTrainingJob, parseHostedWatchOptions, watchHostedTrainingJob } from "./training-hosted-lifecycle";
+
+type Options = Record<string, string | boolean>;
+const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
+
+/** Hosted operations use the public SDK and account credential store directly.
+ * They never start, contact, or depend on the local app server. */
+export async function runHostedTrainingCommand(options: Options, rest: string[]): Promise<void> {
+  const action = rest[0], target = rest[1];
+  const watchOptions = action === "hosted-watch" ? parseHostedWatchOptions(options) : null;
+  const requestBound = { deadlineAt: watchOptions?.deadlineAt ?? null };
+  const context = await accountContext(options);
+  if (!context.token) throw new Error("Sign in to an OpenPond account before using hosted training.");
+  const baseUrl = resolveApiBaseUrlOption(options) ?? context.apiBaseUrl;
+  if (new URL(baseUrl).origin !== new URL(context.apiBaseUrl).origin)
+    throw new Error("The hosted API URL must match the signed-in account’s API origin.");
+  const teamId = optionString(options, "teamId");
+  if (!teamId) throw new Error("Hosted training requires --team-id <workspace-id>.");
+  const headers = new Headers({ "x-openpond-team-id": teamId });
+  if (context.token.startsWith("opk_")) {
+    headers.set("Authorization", `ApiKey ${context.token}`);
+    headers.set("openpond-api-key", context.token);
+  } else headers.set("Authorization", `Bearer ${context.token}`);
+  const request: typeof fetch = (url, init) => {
+    const remaining = requestBound.deadlineAt === null ? Infinity : requestBound.deadlineAt - Date.now();
+    if (remaining <= 0) throw new DOMException("Hosted watch deadline reached", "TimeoutError");
+    const timeout = AbortSignal.timeout(Math.max(1, Math.min(watchOptions ? 10_000 : 180_000, remaining)));
+    return fetch(url, {
+      ...init, redirect: "error", signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
+    });
+  };
+  const client = createTrainingClient({ baseUrl, headers, fetch: request });
+  const readInput = async () => {
+    if (!target) throw new Error(`${action} requires an input JSON file.`);
+    const bytes = await readFile(target);
+    if (bytes.byteLength > 64 * 1024 * 1024) throw new Error("Hosted training input exceeds 64 MiB.");
+    return JSON.parse(bytes.toString("utf8"));
+  };
+  if (rest.length > 2) throw new Error(`${action} accepts at most one identifier or input file.`);
+  if (action === "hosted-models") {
+    print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).list()); return;
+  }
+  if (action === "hosted-model") {
+    if (!target) throw new Error("hosted-model requires a Model Project ID.");
+    print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).get(target)); return;
+  }
+  if (action === "hosted-sync-model") {
+    const input = HostedModelProjectSyncSchema.parse(await readInput());
+    print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).upsert(input)); return;
+  }
+  if (action === "hosted-capabilities") { print(await client.capabilities()); return; }
+  if (action === "hosted-batches") {
+    const learning = new OpenPondLearningClient({ baseUrl, apiKey: context.token, scope: teamId, fetch: request });
+    print(await learning.list("batch", { limit: 100 })); return;
+  }
+  if (action === "hosted-preparations") { print(await client.listPreparations(teamId)); return; }
+  if (action === "hosted-jobs") { print(await client.listJobs({ limit: 100 })); return; }
+  if (action === "hosted-prepare") {
+    const input = TrainingPreparationRequestSchema.parse(await readInput());
+    if (input.teamId !== teamId) throw new Error("Preparation input belongs to a different workspace.");
+    print(await client.prepareRun(input)); return;
+  }
+  if (action === "hosted-start") {
+    const receipt = await parseAndVerifyTrainingPreparationReceipt(await readInput());
+    if (receipt.plan.request.teamId !== teamId) throw new Error("Preparation belongs to a different workspace.");
+    if (!parseBooleanOption(options.yes)) throw new Error("Starting paid hosted training requires --yes.");
+    print(await client.startPreparation(receipt.plan.id, { teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision })); return;
+  }
+  if (action === "hosted-stage") {
+    print(await client.stageArtifact(await readInput() as TrainingInputArtifactUpload)); return;
+  }
+  if (action === "hosted-submit" || action === "hosted-qualify") {
+    const input = await parseAndVerifyTrainingJobSubmission(await readInput());
+    if (action === "hosted-qualify" && (input.job.kind !== "policy_optimize" || input.job.executionMode !== "qualification")) {
+      throw new Error("hosted-qualify requires an immutable policy_optimize submission with executionMode=qualification.");
+    }
+    if (!parseBooleanOption(options.yes)) throw new Error("Submitting paid hosted training requires --yes.");
+    if (input.job.kind === "policy_optimize" && input.job.executionMode === "qualification") {
+      const capabilities = await client.capabilities();
+      if (!capabilities.executionModes?.includes("qualification")) {
+        throw new Error("This hosted runtime does not advertise original-learner qualification support.");
+      }
+    }
+    const job = await client.createJob(input);
+    if (job.teamId !== teamId || job.submissionHash !== input.contentHash || job.kind !== input.job.kind ||
+      input.job.kind === "policy_optimize" && job.executionMode !== input.job.executionMode) {
+      throw new Error(`Hosted submission response identity or execution mode mismatch; inspect hosted-status ${job.id} before attempting another submission.`);
+    }
+    print(job); return;
+  }
+  if (!target) throw new Error(`${action} requires a hosted job ID.`);
+  if (action === "hosted-status") { print(await client.getJob(target)); return; }
+  if (action === "hosted-cancel") {
+    print(await cancelHostedTrainingJob(client, target, teamId)); return;
+  }
+  if (action === "hosted-artifacts") { print(await client.outputs(target)); return; }
+  if (action === "hosted-logs") { print(await client.logs(target)); return; }
+  if (action === "hosted-events") { print(await client.events(target)); return; }
+  if (action === "hosted-watch" && watchOptions) {
+    await watchHostedTrainingJob({ client, jobId: target, teamId, options: watchOptions, print, requestBound });
+    return;
+  }
+  throw new Error(`Unknown hosted training command: ${action}`);
+}
+
+async function accountContext(options: Options) {
+  // Credential-store reconciliation can briefly overlap another CLI or app.
+  // Retry only this local read; never automatically repeat a paid submission.
+  for (let attempt = 0; ; attempt++) {
+    try { return await loadOpenPondAccountContext(optionString(options, "account")); }
+    catch (error) {
+      const issue = (error as { issue?: { code?: string } }).issue;
+      if (issue?.code !== "STORAGE_BUSY" || attempt >= 29) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+    }
+  }
+}

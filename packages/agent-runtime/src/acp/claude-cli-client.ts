@@ -1,5 +1,6 @@
 import { ClaudeObservations } from "./claude-observations.js";
 import { ClaudeBackgroundTasks } from "./claude-background-tasks.js";
+import { claudeRateLimitError } from "./claude-rate-limit.js";
 import { signalNativeProcess } from "./process-tree.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -21,6 +22,8 @@ export class ClaudeCliClient {
   private turn: { resolve(value: { stopReason: string }): void; reject(error: Error): void; signal?: AbortSignal; resultReceived: boolean; idle: boolean; cancellationAcknowledged: boolean; settled: boolean; replyOrdinal: number } | null = null;
   private messageId = "";
   private lastTextMessageId: string | null = null;
+  private apiErrorText: string | null = null;
+  private rateLimitInfo: AcpObject | null = null;
   private completedResultIds = new Set<string>();
   private permissions = new Set<AbortController>();
   private updates: Promise<void> = Promise.resolve();
@@ -102,6 +105,8 @@ export class ClaudeCliClient {
     this.stderrTail = "";
     this.messageId = randomUUID();
     this.lastTextMessageId = null;
+    this.apiErrorText = null;
+    this.rateLimitInfo = null;
     const promise = new Promise<{ stopReason: string }>((resolve, reject) => { this.turn = { resolve, reject, signal, resultReceived: false, idle: false, cancellationAcknowledged: false, settled: false, replyOrdinal: 0 }; });
     let kill: ReturnType<typeof setTimeout> | undefined;
     const abort = () => {
@@ -159,6 +164,10 @@ export class ClaudeCliClient {
     // A replayed completion can arrive after the following prompt starts.
     // Fence it before observations or settlement can affect that new turn.
     if (message.type === "result" && typeof message.uuid === "string" && this.completedResultIds.has(message.uuid)) return;
+    if (message.type === "rate_limit_event") {
+      if (this.turn && !this.turn.settled) this.rateLimitInfo = record(message.rate_limit_info);
+      return;
+    }
     this.backgroundTasks.observe(message);
     if (message.type === "system" && message.subtype === "session_state_changed") {
       const turn = this.turn;
@@ -168,6 +177,8 @@ export class ClaudeCliClient {
         turn.resultReceived = false; turn.replyOrdinal++;
         this.observations = this.createObservations();
         this.messageId = randomUUID(); this.lastTextMessageId = null;
+        this.apiErrorText = null;
+        this.rateLimitInfo = null;
       }
       // A result ends a reply, not the process's background jobs. Only settle
       // on a later idle signal, after the completion follow-up has also ended.
@@ -203,6 +214,15 @@ export class ClaudeCliClient {
     } else if (message.type === "assistant") {
       if (!this.turn || this.turn.settled || this.turn.resultReceived) return;
       const assistant = record(message.message), content = assistant.content;
+      // Quota/auth failures arrive as synthetic assistant messages without
+      // streamed deltas. The following result can omit both errors and result.
+      if (!message.parent_tool_use_id && (message.isApiErrorMessage === true || typeof message.error === "string")) {
+        this.apiErrorText = (Array.isArray(content) ? content.map(record)
+          .filter((part) => part.type === "text" && typeof part.text === "string")
+          .map((part) => String(part.text).trim()).filter(Boolean).join("\n") : "") || null;
+        if (message.error === "rate_limit" && message.quotaLimits) this.rateLimitInfo = record(message.quotaLimits);
+        return;
+      }
       if (!message.parent_tool_use_id && typeof assistant.id === "string" && Array.isArray(content) && content.some((part) => record(part).type === "text")) this.lastTextMessageId = assistant.id;
       if (!message.parent_tool_use_id && Array.isArray(content) && content.some((part) => record(part).type === "tool_use")) this.lastTextMessageId = null;
       for (const block of Array.isArray(content) ? content.map(record) : []) if (block.type === "tool_use") this.tool({ sessionUpdate: "tool_call_update", toolCallId: block.id, title: block.name, status: "in_progress", rawInput: block.input });
@@ -223,7 +243,11 @@ export class ClaudeCliClient {
       }
       this.observations.result(message, Boolean(this.turn.signal?.aborted));
       if (message.is_error && !this.turn.signal?.aborted) {
-        this.turn.settled = true; this.turn.reject(new Error(Array.isArray(message.errors) ? message.errors.map(String).join("; ") : "Claude turn failed."));
+        const errors = Array.isArray(message.errors) ? message.errors.map(String).map((error) => error.trim()).filter(Boolean).join("; ") : "";
+        const result = typeof message.result === "string" ? message.result.trim() : "";
+        this.turn.settled = true;
+        this.turn.reject(new Error(claudeRateLimitError(this.rateLimitInfo, this.apiErrorText || result || errors)
+          || errors || this.apiErrorText || result || "Claude turn failed."));
       }
     }
   }
