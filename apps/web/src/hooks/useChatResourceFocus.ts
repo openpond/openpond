@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatExperimentContext, ChatResourceSummary } from "@openpond/contracts";
+import { chatResourceWorkspaces, type ChatExperimentContext, type ChatResourceSummary } from "@openpond/contracts";
 import type { ClientConnection } from "../api/api-client";
 import { chatResourceRequest } from "../api/chat-resource-api";
 
@@ -58,7 +58,7 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
         ...(focusRef.current.scopeContext ? { expectedSelectionVersion: focusRef.current.scopeContext.selectionVersion } : {}),
       } }, abort.signal);
       if (admitted === generation.current && !abort.signal.aborted) { setFocus(next); focusRef.current = next;
-        setGraders(next.scopeContext?.scopes.find(scope=>scope.id===next.scopeContext?.activeScopeId)?.graders ?? []); setError(null); }
+        setGraders((next.scopeContext ? chatResourceWorkspaces(next.scopeContext).find(scope=>scope.id===next.scopeContext?.activeScopeId) : null)?.graders ?? []); setError(null); }
       return !abort.signal.aborted;
     } catch (cause) {
       if (admitted === generation.current && !abort.signal.aborted) setError(cause instanceof Error ? cause.message : "Resource selection failed.");
@@ -67,11 +67,11 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
       if (selection.current === abort) { selection.current = null; setSelecting(false); reload.current?.(); }
     }
   }
-  const scope = focus.scopeContext?.scopes.find(candidate => candidate.id === focus.scopeContext?.activeScopeId) ?? null;
+  const scope = (focus.scopeContext ? chatResourceWorkspaces(focus.scopeContext).find(candidate => candidate.id === focus.scopeContext?.activeScopeId) : null) ?? null;
   return { focus, scope, datasets, experiments, graders, selecting, error,
     select: (kind: "dataset" | "experiment" | "grader", id: string, revision?: number) => change("set_focus", { kind, id: id || null, ...(revision ? { revision } : {}) }),
     selectScope: (scopeId: string) => change("select_scope", { scopeId }),
-    createScope: () => change("create_scope", { operationId: `scope-${crypto.randomUUID()}` }),
+    createScope: (graderId?: string | null) => change("create_scope", { operationId: `scope-${crypto.randomUUID()}`, ...(graderId !== undefined ? { graderId } : {}) }),
     renameScope: (scopeId: string, name: string) => change("rename_scope", { scopeId, name }),
   };
 }

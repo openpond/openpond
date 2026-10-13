@@ -56,12 +56,19 @@ export const ChatExperimentScopeSchema = z.object({
   createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
 }).strict();
 export type ChatExperimentScope = z.infer<typeof ChatExperimentScopeSchema>;
+// Dataset browsing retains exact references without allocating an experiment.
+export const ChatDatasetFocusSchema = ChatExperimentScopeSchema.extend({ ordinal: z.null() });
+export type ChatDatasetFocus = z.infer<typeof ChatDatasetFocusSchema>;
 export const ChatExperimentContextSchema = z.object({
+  datasetFocus: ChatDatasetFocusSchema.optional(),
   scopes: z.array(ChatExperimentScopeSchema), activeScopeId: Id.nullable(),
   selectionVersion: z.number().int().nonnegative(), selectedAt: z.iso.datetime().nullable(),
   selectionOperations: z.record(z.string(),z.object({hash:Hash,version:z.number().int().nonnegative(),visualPublicationId:z.string().optional(),resource:ChatResourceSummarySchema.optional()}).strict()).default({}),
 }).strict();
 export type ChatExperimentContext = z.infer<typeof ChatExperimentContextSchema>;
+export function chatResourceWorkspaces(context: ChatExperimentContext) {
+  return [...context.scopes, ...(context.datasetFocus ? [context.datasetFocus] : [])];
+}
 
 export const LocalDatasetRequestSchema = z.object({
   action: z.enum(["schema", "list", "read", "create", "save", "file", "validate", "check_graders", "check_sources", "package", "import", "inspect_source", "import_source", "upload", "sync", "pause_sync", "disconnect_sync", "related_chats", "list_graders", "read_grader", "save_grader", "test_grader", "publish"]),

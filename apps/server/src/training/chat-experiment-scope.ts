@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   ChatExperimentContextSchema,
+  chatResourceWorkspaces,
   ChatTrainingAttachmentSchema,
   chatTrainingAttachmentKey,
   type ChatTrainingAttachment,
@@ -41,13 +42,47 @@ export function createChatExperimentScopes(store: SqliteStore) {
     return scope;
   }
 
-  async function create(sessionId: string, operationId: string, expectedSelectionVersion?:number) {
+  function browsing(state: ChatExperimentContext, now: string) {
+    return state.datasetFocus ??= {
+      id: `dataset-focus-${randomUUID()}`, ordinal: null, name: "Datasets",
+      dataset: null, graders: [], selectedGraderId: null, runs: [], selectedRunId: null,
+      turnIds: [], operationId: "dataset-discovery", createdAt: now, updatedAt: now,
+    };
+  }
+
+  function promote(state: ChatExperimentContext, source: NonNullable<ChatExperimentContext["datasetFocus"]>, operationId: string, now: string) {
+    const scope: ChatExperimentScope = { ...source, ordinal: Math.max(0, ...state.scopes.map(item => item.ordinal)) + 1,
+      operationId, updatedAt: now };
+    scope.name = `Experiment ${scope.ordinal}`;
+    state.scopes.push(scope);
+    delete state.datasetFocus;
+    return scope;
+  }
+
+  async function ensure(sessionId: string) {
+    return change(sessionId, state => {
+      if (state.activeScopeId) return;
+      const now = new Date().toISOString();
+      const scope = browsing(state, now);
+      state.activeScopeId = scope.id;
+      state.selectionVersion++;
+      state.selectedAt = now;
+    });
+  }
+
+  async function create(sessionId: string, operationId: string, expectedSelectionVersion?:number, graderId?: string | null, graders?: ChatResourceSummary[]) {
     return change(sessionId, state => {
       if(expectedSelectionVersion!==undefined && expectedSelectionVersion!==state.selectionVersion)throw new Error("Resource selection changed. Refresh before creating another experiment.");
       if (state.scopes.some(scope => scope.operationId === operationId)) return;
       const now = new Date().toISOString();
-      const scope = make(state, operationId, now);
-      if (state.activeScopeId !== scope.id) { state.activeScopeId = scope.id; state.selectionVersion++; state.selectedAt = now; }
+      const source = chatResourceWorkspaces(state).find(item => item.id === state.activeScopeId);
+      const availableGraders = graders ?? source?.graders ?? [];
+      if (availableGraders.some(grader => grader.datasetId !== source?.dataset?.id || grader.datasetRevision !== source?.dataset?.revision)) throw new Error("Dataset changed while loading graders. Reopen experiment setup.");
+      if (graderId && !availableGraders.some(grader => grader.id === graderId)) throw new Error("Grader does not belong to the selected dataset revision.");
+      const scope = source?.ordinal === null ? promote(state, source, operationId, now) : make(state, operationId, now);
+      if (source) { scope.dataset = source.dataset; scope.graders = availableGraders.map(grader => ({...grader, rows: []})); }
+      scope.selectedGraderId = graderId === undefined ? source?.selectedGraderId ?? null : graderId;
+      state.activeScopeId = scope.id; state.selectionVersion++; state.selectedAt = now;
     });
   }
 
@@ -63,9 +98,10 @@ export function createChatExperimentScopes(store: SqliteStore) {
       }
       if (input.expectedSelectionVersion !== undefined && input.expectedSelectionVersion !== state.selectionVersion) throw new Error("Resource selection changed. Refresh before selecting again.");
       const now = new Date().toISOString();
-      let scope = state.scopes.find(candidate => candidate.id === (input.scopeId ?? state.activeScopeId));
+      let scope = chatResourceWorkspaces(state).find(candidate => candidate.id === (input.scopeId ?? state.activeScopeId));
       if (input.scopeId && !scope) throw new Error("Experiment scope does not belong to this conversation.");
-      if (!scope) scope = make(state, `selection-${randomUUID()}`, now);
+      if (!scope) scope = input.run ? make(state, `selection-${randomUUID()}`, now) : browsing(state, now);
+      if (input.run && scope.ordinal === null) scope = promote(state, scope, `run-${input.run.id}`, now);
       if (input.name !== undefined) {
         const name = input.name.trim();
         if (!name || name.length > 500) throw new Error("Provide an experiment name of 1–500 characters.");
@@ -118,14 +154,15 @@ export function createChatExperimentScopes(store: SqliteStore) {
       // An explicit operation selection wins even when this turn previously
       // produced a result for another experiment.
       let scope = targetId
-        ? state.scopes.find(candidate => candidate.id === targetId)
-        : state.scopes.find(candidate => candidate.turnIds.includes(turnId));
+        ? chatResourceWorkspaces(state).find(candidate => candidate.id === targetId)
+        : chatResourceWorkspaces(state).find(candidate => candidate.turnIds.includes(turnId));
       const late = typeof turn.metadata.chatExperimentSelectionVersion === "number"
         ? turn.metadata.chatExperimentSelectionVersion !== state.selectionVersion
         : state.selectedAt !== null && state.selectedAt > turn.startedAt;
-      if (!scope && !targetId && !late) scope = state.scopes.find(candidate => candidate.id === state.activeScopeId);
+      if (!scope && !targetId && !late) scope = chatResourceWorkspaces(state).find(candidate => candidate.id === state.activeScopeId);
       if (targetId && !scope) throw new Error("Resource scope does not belong to this conversation.");
-      if (!scope) scope = make(state, `turn-${turnId}`, now);
+      if (!scope) scope = browsing(state, now);
+      if (summary.kind === "experiment" && scope.ordinal === null) scope = promote(state, scope, `turn-${turnId}`, now);
       if (!scope.turnIds.includes(turnId)) scope.turnIds.push(turnId);
       const sameOwner = scope.dataset?.owner?.teamId === summary.owner?.teamId
         && scope.dataset?.owner?.actorId === summary.owner?.actorId
@@ -177,10 +214,10 @@ export function createChatExperimentScopes(store: SqliteStore) {
       const late = typeof turn.metadata.chatExperimentSelectionVersion === "number"
         ? turn.metadata.chatExperimentSelectionVersion !== state.selectionVersion
         : state.selectedAt !== null && state.selectedAt > turn.startedAt;
-      let scope = targetId ? state.scopes.find(candidate => candidate.id === targetId)
-        : state.scopes.find(candidate => candidate.turnIds.includes(turnId));
+      let scope = targetId ? chatResourceWorkspaces(state).find(candidate => candidate.id === targetId)
+        : chatResourceWorkspaces(state).find(candidate => candidate.turnIds.includes(turnId));
       if (targetId && !scope) throw new Error("Resource scope does not belong to this conversation.");
-      if (!scope && !late) scope = state.scopes.find(candidate => candidate.id === state.activeScopeId);
+      if (!scope && !late) scope = chatResourceWorkspaces(state).find(candidate => candidate.id === state.activeScopeId);
       const now = new Date().toISOString();
       if (!scope) scope = make(state, `turn-${turnId}`, now);
       if (!scope.turnIds.includes(turnId)) scope.turnIds.push(turnId);
@@ -194,5 +231,5 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
-  return { create, select, attach, attachTraining };
+  return { ensure, create, select, attach, attachTraining };
 }
