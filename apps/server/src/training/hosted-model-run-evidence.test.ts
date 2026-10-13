@@ -4,7 +4,7 @@ import type { SqliteStore } from "../store/store.js";
 import { createHostedModelRunEvidence } from "./hosted-model-run-evidence.js";
 
 const remote = vi.hoisted(() => ({ getJob: vi.fn(), events: vi.fn(), outputs: vi.fn(), evaluationTasks: vi.fn() }));
-vi.mock("openpond-sdk/training", () => ({ createTrainingClient: () => remote }));
+vi.mock("openpond-sdk/training", async (original) => ({ ...await original<typeof import("openpond-sdk/training")>(), createTrainingClient: () => remote }));
 
 describe("API-created run evidence boundaries", () => {
   // Imported runs have no local execution manifest; they must retain the same
