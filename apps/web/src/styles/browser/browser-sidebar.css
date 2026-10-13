@@ -191,7 +191,8 @@
 }
 
 .browser-snapshot-menu { top: 32px; bottom: auto; width: 200px; }
-.browser-snapshot-status { position: absolute; top: 0; left: 12px; right: 12px; z-index: 4; padding: 10px; border-radius: 8px; background: var(--surface-floating); color: var(--text-primary); font-size: 12px; box-shadow: 0 4px 16px var(--shadow-color); pointer-events: none; }
+.workspace-diff-panel.browser-sidebar-panel.has-capture-status { grid-template-rows: 41px 42px auto minmax(0, 1fr); }
+.browser-snapshot-status { margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--border-default); background: var(--surface-floating); color: var(--text-primary); font-size: 12px; }
 .browser-snapshot-preview { height: 100%; overflow: auto; padding: 12px; }
 .browser-snapshot-image img { display: block; width: 100%; height: auto; }
 .browser-snapshot-preview details { margin-top: 12px; color: var(--text-muted); font-size: 12px; }
