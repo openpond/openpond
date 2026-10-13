@@ -4,7 +4,7 @@ import { optionString, parseBooleanOption } from "./common";
 
 export async function runLocalDatasetsCommand(options:Record<string,string|boolean>,rest:string[]) {
   const [action,id] = rest;
-  if (!action || rest.length > 2) throw new Error("Usage: datasets <context|select|select-model|new-experiment|select-experiment|rename-experiment|schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]");
+  if (!action || rest.length > 2) throw new Error("Usage: datasets <context|select|select-model|select-destination|new-experiment|select-experiment|rename-experiment|schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]");
   const base = new URL(optionString(options,"serverUrl") || process.env.OPENPOND_LOCAL_API_URL || DEFAULT_LOCAL_TRAINING_API_URL);
   if (base.protocol !== "http:" || !["localhost","127.0.0.1","[::1]"].includes(base.hostname) || base.username || base.password || base.search || base.hash || base.pathname !== "/") throw new Error("Local Datasets require an HTTP loopback server origin.");
   // Packaging returns both the bounded authored workspace and its sealed files.
@@ -17,6 +17,7 @@ export async function runLocalDatasetsCommand(options:Record<string,string|boole
   }
   const revision = optionString(options,"expectedRevision");
   const conversational:Record<string,unknown> | null = action === "context" ? {action:"context",payload}
+    : action === "select-destination" ? {action:"set_destination",payload:{executionLocation:id === "hosted" ? "cloud" : id}}
     : action === "select-model" ? {action:"set_model",payload:{evaluationModel:id}}
     : action === "new-experiment" ? {action:"create_scope",payload:{operationId:optionString(options,"operationId")}}
     : action === "select" ? {action:"set_focus",payload:{kind:"dataset",id:id ?? null,...revision ? {revision:Number(revision)} : {}}}

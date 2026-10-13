@@ -74,7 +74,7 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
         ...(focusRef.current.scopeContext ? { expectedSelectionVersion: focusRef.current.scopeContext.selectionVersion } : {}),
       } }, abort.signal);
       if (admitted === generation.current && !abort.signal.aborted) { setFocus(next); focusRef.current = next;
-        setGraders((next.scopeContext ? chatResourceWorkspaces(next.scopeContext).find(scope=>scope.id===next.scopeContext?.activeScopeId) : null)?.graders ?? []); setError(null); }
+        if (action !== "set_model" && action !== "set_destination") setGraders((next.scopeContext ? chatResourceWorkspaces(next.scopeContext).find(scope=>scope.id===next.scopeContext?.activeScopeId) : null)?.graders ?? []); setError(null); }
       return !abort.signal.aborted;
     } catch (cause) {
       if (admitted === generation.current && !abort.signal.aborted) setError(cause instanceof Error ? cause.message : "Resource selection failed.");
@@ -91,6 +91,7 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
   const scope = (focus.scopeContext ? chatResourceWorkspaces(focus.scopeContext).find(candidate => candidate.id === focus.scopeContext?.activeScopeId) : null) ?? null;
   return { focus, scope, datasets, experiments, graders, selecting, error, readDataset, models, modelsLoading, modelsError,
     refreshModels: () => setModelRefresh(value => value + 1),
+    selectDestination: (executionLocation:"local"|"cloud") => change("set_destination", {executionLocation}),
     selectModel: (evaluationModel:string) => change("set_model", {evaluationModel}),
     select: (kind: "dataset" | "experiment" | "grader", id: string, revision?: number) => change("set_focus", { kind, id: id || null, ...(revision ? { revision } : {}) }),
     selectScope: (scopeId: string) => change("select_scope", { scopeId }),

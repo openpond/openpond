@@ -15,6 +15,7 @@ export function captureComposerResourceContext(resources: ReturnType<typeof useC
     scopeId: resources.scope.id,
     selectionVersion: resources.focus.scopeContext.selectionVersion,
     ...(resources.scope.evaluationModel ? {evaluationModel:resources.scope.evaluationModel} : {}),
+    executionLocation: resources.scope.executionLocation ?? "local",
     resources: references,
     ...(job ? {training:[chatTrainingReference(job)]} : {}),
   }]);

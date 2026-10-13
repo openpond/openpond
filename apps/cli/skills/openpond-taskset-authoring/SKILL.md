@@ -53,16 +53,18 @@ attach the run to it. Taskset creation alone does not imply trained weights.
 6. Author varied tasks with semantic families isolated by split. Label examples
    `extracted`, `corrected`, `synthetic`, or `expert_authored`.
 7. Prefer deterministic graders. Pin, calibrate, and version any model judge.
-8. Use ordinary conversational confirmation before materializing the proposed
-   Taskset. Do not expose the underlying action payload.
+8. Materialize the requested Taskset through supported CLI operations; ask only
+   for missing material choices. Do not expose the underlying action payload.
 9. Validate schema and lifecycle, grader fixtures, leakage, reward hacking,
    optional reference-solution solvability, and a bounded base-model baseline.
 10. Return a compact readiness summary and keep training as the next, separate
     action.
 
-Use the installed Dataset Builder actions for design, materialization, and
-testing, following their schemas internally. Do not recite those schemas in the
-chat.
+Use the official OpenPond CLI for dataset schema, create/import/save, validation,
+and grader read/save/test operations. Read installed help and use the scoped
+executor supplied by the app so saved resources attach to the chat. Do not
+recreate the old Dataset Builder action workflow or invent unavailable commands.
+Use openpond-cli guidance for execution and resource-specific Diagnose/Improve.
 
 Treat fixed synthetic smoke fixtures as diagnostics rather than evidence of a
 general capability. Historical assistant messages are candidate outcomes, not
