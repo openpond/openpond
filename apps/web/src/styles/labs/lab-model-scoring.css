@@ -14,6 +14,10 @@
   background: color-mix(in srgb, var(--surface-panel) 88%, var(--surface-page));
 }
 
+:root[data-theme="light"] .labs-scoring-evidence {
+  background: var(--surface-panel);
+}
+
 .labs-scoring-evidence {
   background:
     linear-gradient(105deg, color-mix(in srgb, var(--accent-primary) 6%, transparent), transparent 42%),
