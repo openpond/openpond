@@ -13,6 +13,8 @@ import { createChatExperiments } from "../evaluations/chat-experiments.js";
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
 import type { HtmlVisualService } from "../visuals/visual-service.js";
 import { chatExperimentReport } from "../evaluations/chat-experiment-report.js";
+import { chatExperimentContext, createChatExperimentScopes } from "./chat-experiment-scope.js";
+import { localGraderSummaries } from "./local-grader-resources.js";
 
 export async function createChatResourceRuntime(deps:{store:SqliteStore;home:string;ownerId:string;state:LocalInferenceState;
   codexStatus?:()=>Promise<import("@openpond/contracts").CodexStatus>;
@@ -21,6 +23,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   visuals:HtmlVisualService;
   improve?:(request:unknown)=>Promise<unknown>;
 }) {
+  const scopes = createChatExperimentScopes(deps.store);
   const sync = createLocalDatasetSync({store:deps.store,access:deps.access});
   const datasets = createLocalDatasetService({store:deps.store,home:deps.home,syncAction:sync.action,onSaved:sync.onSaved,
     sourceAction:createChatDatasetSourceAction({store:deps.store,imports:deps.imports,create:input=>datasets.request(input)})});
@@ -43,7 +46,21 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   async function wait(id:string){if(await deps.store.readChatHostedExperiment(id))return cloud.wait(id);await experiments.service.wait(id);return dispatch("experiment",{action:"result",payload:{id}});}
   async function emit(sessionId:string,turnId:string,summary:ChatResourceSummary) {
     await deps.store.linkChatResource(sessionId,turnId,summary);
+    // Pending authoring messages can have provisional IDs. Only saved resources
+    // become configuration inputs; failed scaffolds must not create fake drafts.
+    if (summary.kind !== "dataset" || await deps.store.readLocalDatasetListing(summary.id,summary.revision)) {
+      if (summary.kind !== "dataset" && summary.datasetId) {
+        const dataset = await deps.store.readLocalDatasetListing(summary.datasetId,summary.datasetRevision);
+        if (dataset) await scopes.attach(sessionId,turnId,localDatasetSummary(dataset));
+      }
+      await scopes.attach(sessionId,turnId,summary);
+    }
     await deps.append({id:randomUUID(),name:"workspace_action_result",source:"server",sessionId,turnId,timestamp:new Date().toISOString(),action:"chat_resource",status:"completed",data:{chatResource:summary}});
+  }
+  function attachedSummaries(action:unknown, object:Record<string,unknown>):ChatResourceSummary[] {
+    if (["list","models","schema","profile_catalog"].includes(String(action))) return [];
+    return [object.summary,...Array.isArray(object.summaries) ? object.summaries : []]
+      .map(value=>ChatResourceSummarySchema.safeParse(value)).filter(value=>value.success).map(value=>value.data);
   }
   async function charts(context:{sessionId:string;turnId:string},raw:unknown) {
     const input=z.object({ids:z.array(z.string().min(1)).min(1).max(8),operationId:z.string().min(1).max(200)}).strict().parse(raw);
@@ -68,23 +85,38 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       for(const record of await deps.store.listLocalDatasetListings())unique.set("dataset:"+record.workspace.draft.id,localDatasetSummary(record));
       return {resources:[...unique.values()],links:links.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
-    if (kind === "dataset" && (input.action === "context" || input.action === "set_focus")) {
-      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional()}).parse(input.payload);
+    if (kind === "dataset" && ["context","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
+      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional()}).strict().parse(input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
       const datasetChoices = (await deps.store.listLocalDatasetListings()).map(localDatasetSummary);
       const page = await experiments.service.list({teamId:experiments.scope}) as {items:import("@openpond/contracts").LocalExperimentRecord[]};
       const localChoices = await Promise.all(page.items.map(record=>experiments.summary(record)));
       const experimentChoices=[...localChoices,...await cloud.list()];
-      const focusSchema = z.object({dataset:ChatResourceSummarySchema.nullable(),experiment:ChatResourceSummarySchema.nullable()});
-      let focus = focusSchema.safeParse(session.metadata?.chatResourceFocus).success ? focusSchema.parse(session.metadata?.chatResourceFocus) : {dataset:null,experiment:null};
+      let scopeContext = chatExperimentContext(session.metadata);
+      const focusFor = (state:typeof scopeContext) => {
+        const scope = state.scopes.find(candidate=>candidate.id===state.activeScopeId);
+        return {dataset:scope?.dataset ?? null,experiment:scope?.runs.find(run=>run.id===scope.selectedRunId) ?? null};
+      };
+      let focus = focusFor(scopeContext);
+      if (input.action === "create_scope") {
+        if (!query.operationId) throw new Error("Creating an experiment scope requires a stable operationId.");
+        scopeContext = await scopes.create(session.id,query.operationId);
+        return {...focusFor(scopeContext),scopeContext};
+      }
+      if (input.action === "select_scope" || input.action === "rename_scope") {
+        if (!query.scopeId) throw new Error("Select an experiment scope.");
+        scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,...input.action === "rename_scope" ? {name:z.string().trim().min(1).max(500).parse(query.name)} : {},expectedSelectionVersion:query.expectedSelectionVersion});
+        return {...focusFor(scopeContext),scopeContext};
+      }
       if (input.action === "context") {
         if(focus.experiment?.location==="local") {
           const record=await deps.store.readLocalExperimentRecord(experiments.scope,focus.experiment.id);
           focus={...focus,experiment:record ? await experiments.summary(record) : null};
         }
         if(focus.dataset) {const pinned=await deps.store.readLocalDatasetListing(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
-        return {focus,datasets:datasetChoices,experiments:experimentChoices};
+        const graders = focus.dataset ? localGraderSummaries(await datasets.read(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [];
+        return {focus:{...focus,scopeContext},datasets:datasetChoices,experiments:experimentChoices,graders};
       }
       if (!query.kind) throw new Error("Select the resource focus kind.");
       if (query.kind === "dataset") {
@@ -97,8 +129,9 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         const pinned = experiment?.datasetId ? await deps.store.readLocalDatasetListing(experiment.datasetId,experiment.datasetRevision) : null;
         focus = {experiment:experiment ?? null,dataset:pinned ? localDatasetSummary(pinned) : null};
       }
-      await deps.store.updateSession(session.id,current=>({...current,metadata:{...current.metadata,chatResourceFocus:focus}}));
-      return focus;
+      const graders = focus.dataset ? localGraderSummaries(await datasets.read(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [];
+      scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,dataset:focus.dataset,graders,...focus.experiment ? {run:focus.experiment} : {},expectedSelectionVersion:query.expectedSelectionVersion});
+      return {...focus,scopeContext};
     }
     if (context) {
       const [session,turn] = await Promise.all([deps.store.getSession(context.sessionId),deps.store.getTurn(context.turnId)]);
@@ -115,7 +148,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const result = await dispatch(kind,input);
     if (context && result && typeof result === "object") {
       const object = result as Record<string,unknown>;
-      const summaries = [object.summary,...Array.isArray(object.summaries) ? object.summaries : []].map(value=>ChatResourceSummarySchema.safeParse(value)).filter(value=>value.success).map(value=>value.data);
+      const summaries = attachedSummaries(input.action,object);
       for (const summary of summaries) await emit(context.sessionId,context.turnId,summary);
       if (kind === "experiment" && typeof input.action === "string" && ["run","run_cloud"].includes(input.action)) for (const summary of summaries) void wait(summary.id).then(async result=> {
         const updated = result as {summary:ChatResourceSummary};
@@ -153,7 +186,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       throw error;
     }
     const object = result && typeof result === "object" ? result as Record<string,unknown> : {};
-    const summaries = [object.summary,...(Array.isArray(object.summaries) ? object.summaries : [])].map(value=>ChatResourceSummarySchema.safeParse(value)).filter(value=>value.success).map(value=>value.data);
+    const summaries = attachedSummaries(action,object);
     for (const summary of summaries) await emit(context.session.id,context.turnId,summary);
     if (kind === "experiment" && typeof action === "string" && ["run","run_cloud"].includes(action)) {
       for (const summary of summaries) void wait(summary.id).then(async result=> {

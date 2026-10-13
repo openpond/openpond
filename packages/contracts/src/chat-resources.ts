@@ -40,6 +40,23 @@ export const ChatResourceSummarySchema = z.object({
 }).strict();
 export type ChatResourceSummary = z.infer<typeof ChatResourceSummarySchema>;
 
+// A conversational experiment is a configuration scope, not an execution.
+// Runs retain their own immutable dataset/grader pins.
+export const ChatExperimentScopeSchema = z.object({
+  id: Id, ordinal: z.number().int().positive(), name: z.string().trim().min(1).max(500),
+  dataset: ChatResourceSummarySchema.nullable(),
+  graders: z.array(ChatResourceSummarySchema),
+  runs: z.array(ChatResourceSummarySchema), selectedRunId: Id.nullable(),
+  turnIds: z.array(Id), operationId: Id,
+  createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
+}).strict();
+export type ChatExperimentScope = z.infer<typeof ChatExperimentScopeSchema>;
+export const ChatExperimentContextSchema = z.object({
+  scopes: z.array(ChatExperimentScopeSchema), activeScopeId: Id.nullable(),
+  selectionVersion: z.number().int().nonnegative(), selectedAt: z.iso.datetime().nullable(),
+}).strict();
+export type ChatExperimentContext = z.infer<typeof ChatExperimentContextSchema>;
+
 export const LocalDatasetRequestSchema = z.object({
   action: z.enum(["schema", "list", "read", "create", "save", "file", "validate", "check_graders", "check_sources", "package", "import", "inspect_source", "import_source", "upload", "sync", "pause_sync", "disconnect_sync", "related_chats", "list_graders", "read_grader", "save_grader", "test_grader", "publish"]),
   id: Id.optional(), operationId: Id.optional(), expectedRevision: z.number().int().nonnegative().optional(),
