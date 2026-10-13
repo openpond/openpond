@@ -81,7 +81,7 @@ export async function watchHostedTrainingJob(input: {
     input.requestBound.deadlineAt = Number.isFinite(bound) ? bound : null;
     if (Date.now() >= bound) throw cleanupDeadlineError(jobId);
     try {
-      const job = options.cancelAt !== null && Date.now() >= options.cancelAt && !cancellationAcknowledged
+      const job: TrainingJob = options.cancelAt !== null && Date.now() >= options.cancelAt && !cancellationAcknowledged
         ? await cancelHostedTrainingJob(client, jobId, teamId)
         : await client.getJob(jobId);
       assertJobIdentity(job, jobId, teamId, submissionHash);

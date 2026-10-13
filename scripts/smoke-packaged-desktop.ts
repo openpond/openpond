@@ -596,7 +596,9 @@ function isUsableTarget(target: DevtoolsTarget): target is Required<DevtoolsTarg
 async function waitForRendererBridge(cdp: CdpClient, timeoutMs: number): Promise<void> {
   await waitFor(async () => evaluateValue<boolean>(
     cdp,
-    `document.readyState === "complete" &&
+    // The temporary data: startup page also receives the preload bridge.
+    `window.location.protocol === "http:" &&
+      document.readyState === "complete" &&
       typeof window.openpond === "object" &&
       typeof window.openpond.getConnection === "function" &&
       typeof window.openpond.browser?.open === "function"`,
