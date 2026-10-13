@@ -1338,7 +1338,18 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const nativeEvaluationSkills = nativeEvaluationSkillRuntime?.readSkill
         ? createOpenPondProfileSkillModelToolDefinitions({skills:nativeEvaluationSkillRuntime.skills,readProfileSkill:nativeEvaluationSkillRuntime.readSkill})
         : [];
+      // Ordinary native chats share the maintained CLI guidance; evaluation
+      // harnesses keep only their released skills so results remain reproducible.
+      const nativeCliSkills = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
+        && (session.provider === "codex" || isNativeAgentId(session.provider))
+        && deps.loadBuiltInOpenPondSkills && deps.readBuiltInOpenPondSkill
+        ? (await deps.loadBuiltInOpenPondSkills()).filter(skill => skill.name === "openpond-cli" && skill.enabled && skill.validationStatus === "valid")
+        : [];
+      const nativeCliSkillTools = nativeCliSkills.length && deps.readBuiltInOpenPondSkill
+        ? createOpenPondProfileSkillModelToolDefinitions({ skills: nativeCliSkills, readProfileSkill: deps.readBuiltInOpenPondSkill })
+        : [];
       const extraSystemContext = [
+        nativeCliSkills.length ? `For OpenPond datasets, graders, experiments, training, repos or deployments, read the openpond-cli skill using profile_skill_read. The skill provides the official CLI workflow and inline resource presentation guidance.` : "",
         !session.systemKind && turn.metadata.chatResourceFocus ? `Optional resource focus supplied by the app (does not restrict other work): ${JSON.stringify(turn.metadata.chatResourceFocus)}. Resolve exact resource IDs/revisions with openpond_dataset/openpond_experiment before acting; disambiguate conflicting references.` : "",
         !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.provider === "codex" && htmlVisuals?.available() ? HTML_VISUAL_INSTRUCTIONS : "",
         selectedHarness?.instructionContext ?? null,
@@ -1674,7 +1685,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
         const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : coordinationTools;
         const visualToolsEnabled = !nativeEvaluation && peerInput?.payload.taskReportingOnly !== true && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
-        const definitions = [...coordinationDefinitions, ...nativeEvaluationSkills, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : []), ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
+        const definitions = [...coordinationDefinitions, ...nativeEvaluationSkills, ...nativeCliSkillTools, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : []), ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
         const providerTurnId = await runSteeredNativeTurn({ runtime: nativeAgents, inbox: taskInbox, store: inboxStore, getSession,
           taskToolInstructions: [coordinationDefinitions.length ? TASK_COORDINATION_INSTRUCTIONS : "", visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : ""].filter(Boolean).join("\n\n"),
@@ -1714,7 +1725,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (turnCwd && turnCwd !== session.cwd)
         session = await updateSession(session.id, { cwd: turnCwd });
       activeTurn.session = session;
-      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...nativeEvaluationSkills, ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : []), ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.workspaceKind !== "sandbox" ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
+      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...nativeEvaluationSkills, ...nativeCliSkillTools, ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : []), ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.workspaceKind !== "sandbox" ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
       const runtime = await ensureCodexRuntime(session, {
         ...input,
         coordination: coordinationDefinitions.length ? {
