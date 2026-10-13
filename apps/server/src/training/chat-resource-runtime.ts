@@ -1,3 +1,4 @@
+import { createChatTeamExperiments } from "../evaluations/chat-team-experiments.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
@@ -22,7 +23,8 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   imports:ReturnType<typeof createDatasetImportService>;
   visuals:HtmlVisualService;
   improve?:(request:unknown)=>Promise<unknown>;
-  resolveInvocation?:(token:string)=>Promise<{sessionId:string;turnId:string}>;
+  teamExperiments:Parameters<typeof createChatTeamExperiments>[0]["service"];
+  resolveInvocation:(token:string)=>Promise<{sessionId:string;turnId:string}>;
 }) {
   const scopes = createChatExperimentScopes(deps.store);
   const sync = createLocalDatasetSync({store:deps.store,access:deps.access});
@@ -30,10 +32,21 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     sourceAction:createChatDatasetSourceAction({store:deps.store,imports:deps.imports,create:input=>datasets.request(input)})});
   let experiments:Awaited<ReturnType<typeof createChatExperiments>>;
   try { experiments = await createChatExperiments({store:deps.store,home:deps.home,ownerId:deps.ownerId,state:deps.state,datasets,codexStatus:deps.codexStatus,hosted:{access:deps.access}}); } catch(error) {await sync.close();throw error;}
+  const team = createChatTeamExperiments({service:deps.teamExperiments,
+    resolveInvocation:deps.resolveInvocation,attach:async(context,resources)=>{for(const summary of resources)await emit(context.sessionId,context.turnId,summary);}});
   const cloud=createChatCloudExperiments({store:deps.store,datasets,access:deps.access});
   async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal):Promise<unknown> {
     if(kind==="dataset")return datasets.request(input,signal);
     const envelope=z.object({action:z.string(),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(input);
+    if (typeof envelope.payload.id === "string" && team) {
+      const linked = (await deps.store.chatResourceLinks({kind:"experiment",id:envelope.payload.id})).find(link=>link.summary.owner)?.summary;
+      if (linked?.owner && ["read","status","result","cancel"].includes(envelope.action)) {
+        const current = await team.inspect(linked.owner,linked.id);
+        if (envelope.action !== "cancel") return current;
+        await deps.teamExperiments!.request({teamId:linked.owner.teamId,action:"cancel",payload:{id:linked.id}});
+        return team.inspect(linked.owner,linked.id);
+      }
+    }
     if(envelope.action==="run_cloud")return cloud.run(envelope.payload);
     if(envelope.action==="list") {const local=await experiments.request(envelope) as {items:unknown[];summaries:ChatResourceSummary[]};return {...local,summaries:[...local.summaries,...await cloud.list()]};}
     if(envelope.action==="compare") {
@@ -46,16 +59,22 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   }
   async function wait(id:string){if(await deps.store.readChatHostedExperiment(id))return cloud.wait(id);await experiments.service.wait(id);return dispatch("experiment",{action:"result",payload:{id}});}
   async function emit(sessionId:string,turnId:string,summary:ChatResourceSummary) {
+    if(summary.owner) {
+      const access=await deps.access();
+      if(access.teamId!==summary.owner.teamId || access.actorId!==summary.owner.actorId)throw new Error("Resource owner changed before chat attachment.");
+    }
     await deps.store.linkChatResource(sessionId,turnId,summary);
     // Pending authoring messages can have provisional IDs. Only saved resources
     // become configuration inputs; failed scaffolds must not create fake drafts.
-    if (summary.kind !== "dataset" || await deps.store.readLocalDatasetListing(summary.id,summary.revision)) {
-      if (summary.kind !== "dataset" && summary.datasetId) {
+    if (summary.kind !== "dataset" || summary.owner || await deps.store.readLocalDatasetListing(summary.id,summary.revision)) {
+      if (summary.kind !== "dataset" && !summary.owner && summary.datasetId) {
         const dataset = await deps.store.readLocalDatasetListing(summary.datasetId,summary.datasetRevision);
         if (dataset) await scopes.attach(sessionId,turnId,localDatasetSummary(dataset));
       }
       await scopes.attach(sessionId,turnId,summary);
     }
+    // Team inputs are immutable pins, not installation-local authoring cards.
+    if (summary.owner && summary.kind !== "experiment") return;
     await deps.append({id:randomUUID(),name:"workspace_action_result",source:"server",sessionId,turnId,timestamp:new Date().toISOString(),action:"chat_resource",status:"completed",data:{chatResource:summary}});
   }
   function attachedSummaries(action:unknown, object:Record<string,unknown>):ChatResourceSummary[] {
@@ -79,14 +98,15 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   async function request(kind:"dataset"|"experiment",raw:unknown) {
     const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
     const {context:requestedContext,invocationToken,...input} = envelope;
-    if (invocationToken && !deps.resolveInvocation) throw new Error("CLI chat association is unavailable.");
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
     if(kind==="dataset" && input.action==="resource_index") {
       const links=await deps.store.chatResourceLinks({});
       const unique=new Map<string,ChatResourceSummary>();
-      for(const link of links)unique.set(link.summary.kind+":"+link.summary.id,link.summary);
+      const access=links.some(link=>link.summary.owner) ? await deps.access() : null;
+      const visible=links.filter(link=>!link.summary.owner || link.summary.owner.teamId===access?.teamId && link.summary.owner.actorId===access?.actorId);
+      for(const link of visible)unique.set(link.summary.kind+":"+link.summary.id,link.summary);
       for(const record of await deps.store.listLocalDatasetListings())unique.set("dataset:"+record.workspace.draft.id,localDatasetSummary(record));
-      return {resources:[...unique.values()],links:links.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
+      return {resources:[...unique.values()],links:visible.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
     if (kind === "dataset" && ["context","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
       const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
@@ -96,7 +116,14 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       const datasetChoices = (await deps.store.listLocalDatasetListings()).map(localDatasetSummary);
       const page = await experiments.service.list({teamId:experiments.scope}) as {items:import("@openpond/contracts").LocalExperimentRecord[]};
       const localChoices = await Promise.all(page.items.map(record=>experiments.summary(record)));
-      const experimentChoices=[...localChoices,...await cloud.list()];
+      const linkedTeam = team ? (await deps.store.chatResourceLinks({sessionId:session.id,kind:"experiment"})).filter(link=>link.summary.owner) : [];
+      const ownedChoices:ChatResourceSummary[]=[];
+      for(const link of new Map(linkedTeam.map(link=>[link.summary.id,link])).values()) {
+        try {const current=await team!.inspect(link.summary.owner!,link.summary.id);
+          if(!ownedChoices.some(summary=>summary.id===current.summary.id))ownedChoices.push(current.summary);
+        } catch {/* Records from a previous account are not choices in the active account. */}
+      }
+      const experimentChoices=[...localChoices,...ownedChoices,...await cloud.list()];
       let scopeContext = chatExperimentContext(session.metadata);
       const sourceTurn=context ? await deps.store.getTurn(context.turnId) : null;
       if(context && input.action!=="context") {
@@ -110,6 +137,20 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         return {dataset:scope?.dataset ?? null,experiment:scope?.runs.find(run=>run.id===scope.selectedRunId) ?? null};
       };
       let focus = focusFor(scopeContext);
+      async function verifyOwner(dataset:ChatResourceSummary) {
+        if(!dataset.owner)return;
+        const access=await deps.access();
+        if(access.teamId!==dataset.owner.teamId || access.actorId!==dataset.owner.actorId)throw new Error("Select the account and workspace that own this dataset pin.");
+      }
+      async function gradersFor(dataset:ChatResourceSummary|null) {
+        if(!dataset)return [];
+        if(dataset.owner) {
+          await verifyOwner(dataset);
+          if(focus.experiment?.owner && team)return (await team.inspect(focus.experiment.owner,focus.experiment.id)).inputs.filter(resource=>resource.kind==="grader");
+          return scopeContext.scopes.find(scope=>scope.id===scopeContext.activeScopeId)?.graders.filter(grader=>grader.datasetId===dataset.id && grader.datasetRevision===dataset.revision) ?? [];
+        }
+        return localGraderSummaries(await datasets.readListing(dataset.id,dataset.revision)).map(grader=>({...grader,rows:[]}));
+      }
       async function selectedFocus(state:typeof scopeContext) {
         if(context)await deps.store.updateTurn(context.turnId,current=>({...current,metadata:{...current.metadata,
           chatExperimentScopeId:state.activeScopeId,chatExperimentSelectionVersion:state.selectionVersion}}));
@@ -126,30 +167,35 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         return selectedFocus(scopeContext);
       }
       if (input.action === "context") {
-        if(focus.experiment?.location==="local") {
+        if(focus.experiment?.owner && team)focus={...focus,experiment:(await team.inspect(focus.experiment.owner,focus.experiment.id)).summary};
+        if(focus.experiment?.location==="local" && !focus.experiment.owner) {
           const record=await deps.store.readLocalExperimentRecord(experiments.scope,focus.experiment.id);
           focus={...focus,experiment:record ? await experiments.summary(record) : null};
         }
-        if(focus.dataset) {const pinned=await deps.store.readLocalDatasetListing(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
-        const graders = focus.dataset ? localGraderSummaries(await datasets.readListing(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [];
+        if(focus.dataset?.owner)await verifyOwner(focus.dataset);
+        if(focus.dataset && !focus.dataset.owner) {const pinned=await deps.store.readLocalDatasetListing(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
+        const graders = await gradersFor(focus.dataset);
         return {focus:{...focus,scopeContext},datasets:datasetChoices,experiments:experimentChoices,graders};
       }
       if (!query.kind) throw new Error("Select the resource focus kind.");
       if (query.kind === "grader") {
-        scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,graders:focus.dataset ? localGraderSummaries(await datasets.readListing(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [],graderId:query.id ?? null,expectedSelectionVersion:query.expectedSelectionVersion});
+        scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,graders:await gradersFor(focus.dataset),graderId:query.id ?? null,expectedSelectionVersion:query.expectedSelectionVersion});
         return selectedFocus(scopeContext);
       }
       if (query.kind === "dataset") {
-        const dataset = query.id ? localDatasetSummary(await datasets.readListing(query.id,query.revision)) : null;
+        const sameOwnerPin = focus.dataset?.owner && query.id === focus.dataset.id && query.revision === focus.dataset.revision;
+        const dataset = sameOwnerPin ? focus.dataset : query.id ? localDatasetSummary(await datasets.readListing(query.id,query.revision)) : null;
+        if(dataset?.owner)await verifyOwner(dataset);
         if (query.id && !dataset) throw new Error("Local Dataset was not found.");
         focus = {dataset:dataset ?? null,experiment:dataset && focus.experiment && focus.experiment.datasetId === dataset.id && focus.experiment.datasetRevision === dataset.revision ? focus.experiment : null};
       } else {
         const experiment = query.id ? experimentChoices.find(e=>e.id === query.id) : null;
         if (query.id && !experiment) throw new Error("Local Experiment was not found.");
-        const pinned = experiment?.datasetId ? await deps.store.readLocalDatasetListing(experiment.datasetId,experiment.datasetRevision) : null;
-        focus = {experiment:experiment ?? null,dataset:pinned ? localDatasetSummary(pinned) : null};
+        const associated=experiment?.owner && team ? (await team.inspect(experiment.owner,experiment.id)).inputs.find(resource=>resource.kind==="dataset") : null;
+        const pinned = !experiment?.owner && experiment?.datasetId ? await deps.store.readLocalDatasetListing(experiment.datasetId,experiment.datasetRevision) : null;
+        focus = {experiment:experiment ?? null,dataset:associated ?? (pinned ? localDatasetSummary(pinned) : null)};
       }
-      const graders = focus.dataset ? localGraderSummaries(await datasets.readListing(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [];
+      const graders = await gradersFor(focus.dataset);
       scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,dataset:focus.dataset,graders,...focus.experiment ? {run:focus.experiment} : {},expectedSelectionVersion:query.expectedSelectionVersion,operationId:query.operationId,visualPublicationId:query.visualPublicationId});
       return selectedFocus(scopeContext);
     }
@@ -216,5 +262,5 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     }
     return result;
   };
-  return {datasets,experiments,request,execute,close:async()=>{cloud.close();await sync.close();await experiments.service.close();}};
+  return {datasets,experiments,request,execute,teamRequest:team.request,close:async()=>{cloud.close();await sync.close();await experiments.service.close();}};
 }

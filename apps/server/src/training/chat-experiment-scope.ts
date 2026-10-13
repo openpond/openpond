@@ -106,15 +106,17 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (targetId && !scope) throw new Error("Resource scope does not belong to this conversation.");
       if (!scope) scope = make(state, `turn-${turnId}`, now);
       if (!scope.turnIds.includes(turnId)) scope.turnIds.push(turnId);
+      const sameOwner = scope.dataset?.owner?.teamId === summary.owner?.teamId
+        && scope.dataset?.owner?.actorId === summary.owner?.actorId;
       if (summary.kind === "dataset") {
-        if ((!late || !scope.dataset || (scope.dataset.id === summary.id && scope.dataset.revision === summary.revision))
+        if ((!late || !scope.dataset || (scope.dataset.id === summary.id && scope.dataset.revision === summary.revision && sameOwner))
           && (!scope.dataset || scope.dataset.id !== summary.id || summary.revision >= scope.dataset.revision)) {
-          const changed = scope.dataset?.id !== summary.id || scope.dataset?.revision !== summary.revision;
+          const changed = scope.dataset?.id !== summary.id || scope.dataset?.revision !== summary.revision || !sameOwner || scope.dataset?.contentHash !== summary.contentHash;
           scope.dataset = summary;
           if (changed) { scope.graders = []; scope.selectedGraderId = null; scope.selectedRunId = null; }
         }
       } else if (summary.kind === "grader") {
-        if (scope.dataset && scope.dataset.id === summary.datasetId && scope.dataset.revision === summary.datasetRevision) {
+        if (scope.dataset && scope.dataset.id === summary.datasetId && scope.dataset.revision === summary.datasetRevision && sameOwner) {
           const index = scope.graders.findIndex(grader => grader.id === summary.id);
           if (index < 0) scope.graders.push(summary);
           else if (summary.revision >= scope.graders[index]!.revision) scope.graders[index] = summary;
@@ -125,7 +127,8 @@ export function createChatExperimentScopes(store: SqliteStore) {
         // A run can arrive after its dataset was revised in the same turn.
         // Retain it without presenting that newer draft as the run's inputs.
         const matchesInputs = scope.dataset && scope.dataset.id === summary.datasetId
-          && scope.dataset.revision === summary.datasetRevision;
+          && scope.dataset.revision === summary.datasetRevision
+          && scope.dataset.owner?.teamId === summary.owner?.teamId && scope.dataset.owner?.actorId === summary.owner?.actorId;
         if (!late && matchesInputs) scope.selectedRunId = summary.id;
       }
       scope.updatedAt = now;

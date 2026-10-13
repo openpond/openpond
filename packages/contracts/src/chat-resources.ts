@@ -33,6 +33,7 @@ export const ChatResourceSummarySchema = z.object({
   checkState: z.string().optional(), syncState: z.string().optional(), model: z.string().optional(),
   graderId:Id.optional(),graderType:z.string().optional(),description:z.string().optional(),
   location:z.enum(["local","cloud"]).optional(),scoreLabel:z.string().optional(),
+  owner:z.object({teamId:Id,actorId:Id}).strict().optional(),contentHash:Hash.optional(),
   score: z.number().nullable().optional(), costUsd: z.number().nonnegative().nullable().optional(),
   evaluatedCount: z.number().int().nonnegative().optional(), failedCount: z.number().int().nonnegative().optional(),
   qualityFailureCount:z.number().int().nonnegative().optional(),executionFailureCount:z.number().int().nonnegative().optional(),ungradedCount:z.number().int().nonnegative().optional(),
