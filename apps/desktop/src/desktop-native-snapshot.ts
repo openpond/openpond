@@ -1,6 +1,7 @@
 import type { WebContents } from "electron";
 import { BrowserCaptureRectSchema, type BrowserCaptureMode, type BrowserCaptureResult, type BrowserDomCapture } from "@openpond/contracts/browser-snapshots";
 import { HTML_VISUAL_THEME } from "@openpond/contracts/html-visuals";
+import { snapshotImage } from "./desktop-snapshot-image.js";
 
 const pending = new Map<number, AbortController>();
 export function cancelBrowserCapture(contents: WebContents) { pending.get(contents.id)?.abort(); }
@@ -28,7 +29,7 @@ export async function captureBrowserPage(contents: WebContents, mode: BrowserCap
     const screenshot = await contents.debugger.sendCommand("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { ...capture.rect, scale: 1 } });
     controller.signal.throwIfAborted();
     if (screenshot.data.length > 28_000_000) throw new Error("The snapshot is too large to save.");
-    return { ok: true, image: { dataUrl: `data:image/png;base64,${screenshot.data}`, width: capture.rect.width, height: capture.rect.height, selector: capture.selector, source: capture.source } };
+    return { ok: true, image: snapshotImage(`data:image/png;base64,${screenshot.data}`, { selector: capture.selector, source: capture.source }) };
   } catch (error) {
     return controller.signal.aborted || (error instanceof Error && error.name === "AbortError") ? { ok: false, canceled: true, error: "Snapshot canceled." }
       : { ok: false, error: error instanceof Error ? error.message : String(error) };

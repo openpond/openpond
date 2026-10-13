@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { expect, it } from "vitest";
 import { CdpClient } from "../scripts/desktop-harness/cdp";
 import { htmlVisualDocument } from "../packages/contracts/src/html-visual-document";
+import { PNG } from "pngjs";
 
 const chromePath = process.env.OPENPOND_TEST_CHROME ?? "/usr/bin/google-chrome";
 const hasChrome = await access(chromePath).then(() => true, () => false);
@@ -80,11 +81,18 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     // stripping executable handlers before the isolated image renderer sees it.
     await cdp.send("Page.navigate", { url: "data:text/html,<body id=snapshot-host></body>" });
     for (let i = 0; i < 30 && !await evaluate("!!document.getElementById('snapshot-host')"); i++) await delay(100);
-    const snapshotHtml = '<button id="probe" style="width:160px;height:60px" data-openpond-resource-kind="dataset" data-openpond-resource-id="examples" data-openpond-resource-revision="1" onclick="document.querySelector(\'output\').textContent=\'acted\'">Select resource</button><input value="initial"><output>untouched</output><script>document.querySelector("input").value="edited"</script>';
-    await evaluate(`(() => {window.snapshotReady=false;window.resourceSelections=0;addEventListener('message',e=>{if(e.data?.type==='openpond-visual-size'&&e.data.ready)window.snapshotReady=true;if(e.data?.type==='openpond-visual-snapshot')window.captureResult=e.data;if(e.data?.type==='openpond-visual-resource-select')window.resourceSelections++});const frame=document.createElement('iframe');frame.style.cssText='position:fixed;left:0;top:0;width:680px;height:600px;border:0';frame.setAttribute('sandbox','allow-scripts');frame.srcdoc=${JSON.stringify(htmlVisualDocument(snapshotHtml, "snapshot-test"))};document.body.append(frame)})()`);
+    const snapshotHtml = '<button id="probe" style="width:160px;height:60px" data-openpond-resource-kind="dataset" data-openpond-resource-id="examples" data-openpond-resource-revision="1" onclick="document.querySelector(\'output\').textContent=\'acted\'">Select resource</button><input value="initial"><output>untouched</output><svg width="200" height="100" viewBox="0 0 200 100" style="display:block;margin-left:300px;margin-top:40px"><defs><linearGradient id="tone"><stop stop-color="#00aa77"/><stop offset="1" stop-color="#00aa77"/></linearGradient></defs><rect id="shape" x="30" y="20" width="60" height="40" fill="url(about:srcdoc#tone)" /></svg><script>document.querySelector("input").value="edited"</script>';
+    await evaluate(`(() => {window.snapshotReady=false;window.resourceSelections=0;addEventListener('message',e=>{if(e.data?.type==='openpond-visual-size'&&e.data.ready)window.snapshotReady=true;if(e.data?.type==='openpond-visual-snapshot')window.captureResult=e.data;if(e.data?.type==='openpond-visual-snapshot-ready')window.pickerReady=e.data.requestId;if(e.data?.type==='openpond-visual-resource-select')window.resourceSelections++});const frame=document.createElement('iframe');frame.style.cssText='position:fixed;left:0;top:0;width:680px;height:600px;border:0';frame.setAttribute('sandbox','allow-scripts');frame.srcdoc=${JSON.stringify(htmlVisualDocument(snapshotHtml, "snapshot-test"))};document.body.append(frame)})()`);
     for (let i = 0; i < 30 && !await evaluate("window.snapshotReady"); i++) await delay(100);
     expect(await evaluate("window.snapshotReady")).toBe(true);
-    const command = (action: string, requestId: string) => evaluate(`document.querySelector('iframe').contentWindow.postMessage({type:'openpond-snapshot-command',identity:'snapshot-test',action:${JSON.stringify(action)},requestId:${JSON.stringify(requestId)}},'*')`);
+    const command = async (action: string, requestId: string) => {
+      await evaluate(`document.querySelector('iframe').contentWindow.postMessage({type:'openpond-snapshot-command',identity:'snapshot-test',action:${JSON.stringify(action)},requestId:${JSON.stringify(requestId)}},'*')`);
+      if (action !== "node") return;
+      for (let i = 0; i < 50 && await evaluate("window.pickerReady") !== requestId; i++) await delay(100);
+      expect(await evaluate("window.pickerReady")).toBe(requestId);
+      await cdp!.send("Page.bringToFront");
+      await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    };
     await command("node", "node-test");
     await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 50, y: 25 });
     await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 50, y: 25, button: "left", clickCount: 1 });
@@ -104,6 +112,21 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     await command("node", "cancel-test"); await command("cancel", "cancel-test");
     for (let i = 0; i < 30 && await evaluate("window.captureResult?.requestId") !== "cancel-test"; i++) await delay(100);
     expect(await evaluate("window.captureResult.canceled")).toBe(true);
+    await command("node", "svg-test");
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 350, y: 130 });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 350, y: 130, button: "left", clickCount: 1 });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 350, y: 130, button: "left", clickCount: 1 });
+    for (let i = 0; i < 30 && await evaluate("window.captureResult?.requestId") !== "svg-test"; i++) await delay(100);
+    const svgResult = await evaluate("window.captureResult");
+    expect(svgResult).toMatchObject({ requestId: "svg-test" });
+    expect(svgResult.error).toBeUndefined();
+    const svg = svgResult.capture;
+    expect(svg.selector).toBe("rect#shape");
+    await cdp.send("Page.navigate", { url: `data:text/html,${encodeURIComponent(`<body style="margin:0">${svg.html}</body>`)}` });
+    for (let i = 0; i < 30 && !await evaluate("!!document.querySelector('svg')"); i++) await delay(100);
+    const screenshot = await cdp.send<{ data: string }>("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 60, height: 40, scale: 1 } });
+    const pixels = PNG.sync.read(Buffer.from(screenshot.data, "base64"));
+    expect([...pixels.data.subarray((20 * pixels.width + 30) * 4, (20 * pixels.width + 30) * 4 + 4)]).toEqual([0, 170, 119, 255]);
   } finally {
     await cdp?.send("Browser.close").catch(() => undefined);
     cdp?.close();

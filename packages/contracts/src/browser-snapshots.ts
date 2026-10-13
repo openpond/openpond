@@ -24,9 +24,12 @@ function createInspector(deliver: (result: { capture?: BrowserDomCapture; cancel
   function selector(element: Element) {
     return `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}${[...element.classList].slice(0, 3).map(name => `.${name}`).join("")}`.slice(0, 500);
   }
-  function markup(element: Element, width: number) {
-    let clone = element.cloneNode(true) as HTMLElement;
-    const originals = [element, ...element.querySelectorAll("*")];
+  function markup(element: Element, width: number, height: number) {
+    let svg = element instanceof SVGElement && element.tagName.toLowerCase() !== "svg" ? element.ownerSVGElement : null;
+    while (svg?.ownerSVGElement) svg = svg.ownerSVGElement;
+    const root = svg ?? element;
+    let clone = root.cloneNode(true) as HTMLElement;
+    const originals = [root, ...root.querySelectorAll("*")];
     const copies = [clone, ...clone.querySelectorAll("*")];
     for (let i = 0; i < originals.length; i++) {
       const original = originals[i]!;
@@ -36,7 +39,13 @@ function createInspector(deliver: (result: { capture?: BrowserDomCapture; cancel
       for (const attribute of attributes) if (/^on/i.test(attribute.name)) copy.removeAttribute(attribute.name);
       if (copy instanceof HTMLElement || copy instanceof SVGElement) {
         const style = getComputedStyle(original);
-        copy.style.cssText = [...style].map(name => `${name}:${style.getPropertyValue(name)};`).join("");
+        copy.style.cssText = [...style].map(name => {
+          const value = style.getPropertyValue(name).replace(/url\((["']?)(.*?)\1\)/g, (match, _quote, url: string) => {
+            const hash = url.indexOf("#");
+            return hash > 0 && [document.baseURI.split("#")[0], document.URL.split("#")[0]].includes(url.slice(0, hash)) ? `url("#${url.slice(hash + 1)}")` : match;
+          });
+          return `${name}:${value};`;
+        }).join("");
         copy.style.setProperty("animation", "none");
         copy.style.setProperty("transition", "none");
       }
@@ -51,7 +60,7 @@ function createInspector(deliver: (result: { capture?: BrowserDomCapture; cancel
       if (original instanceof HTMLCanvasElement) {
         const image = document.createElement("img");
         image.src = original.toDataURL("image/png"); image.style.cssText = copy.style.cssText;
-        if (original === element) clone = image; else copy.replaceWith(image);
+        if (original === root) clone = image; else copy.replaceWith(image);
       }
       if (original.shadowRoot) throw new Error("This element has a shadow root. Capture it from a native browser tab.");
     }
@@ -59,9 +68,17 @@ function createInspector(deliver: (result: { capture?: BrowserDomCapture; cancel
     clone.style.setProperty("inset", "auto"); clone.style.setProperty("width", `${width}px`);
     clone.style.setProperty("max-width", "none");
     const wrapper = document.createElement("div");
+    wrapper.style.width = `${width}px`; wrapper.style.height = `${height}px`;
     for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) {
       const color = getComputedStyle(ancestor).backgroundColor;
       if (color && color !== "rgba(0, 0, 0, 0)" && color !== "transparent") { wrapper.style.backgroundColor = color; break; }
+    }
+    if (svg) {
+      // SVG descendants need their viewBox, definitions and ancestor transforms.
+      // Render the original SVG context and crop it to the selected node's box.
+      const rootBounds = svg.getBoundingClientRect(), bounds = element.getBoundingClientRect();
+      Object.assign(wrapper.style, { position: "relative", overflow: "hidden", width: `${width}px`, height: `${Math.ceil(bounds.height)}px` });
+      Object.assign(clone.style, { position: "absolute", left: `${rootBounds.left - bounds.left}px`, top: `${rootBounds.top - bounds.top}px`, width: `${rootBounds.width}px`, height: `${rootBounds.height}px` });
     }
     wrapper.append(clone);
     return wrapper.outerHTML;
@@ -76,7 +93,7 @@ function createInspector(deliver: (result: { capture?: BrowserDomCapture; cancel
         rect: { x: full ? 0 : Math.max(0, bounds.left + scrollX), y: full ? 0 : Math.max(0, bounds.top + scrollY), width, height },
         selector: full ? "Full page" : selector(element),
         source: element.outerHTML.slice(0, 64_000),
-        ...(serialize ? { html: markup(element, width) } : {}),
+        ...(serialize ? { html: markup(element, width, height) } : {}),
       } });
     } catch (error) { deliver({ error: error instanceof Error ? error.message : String(error) }); }
   }
