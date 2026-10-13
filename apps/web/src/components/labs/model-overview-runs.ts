@@ -4,6 +4,7 @@ import { resolveRunStatus } from "./LabRunStatusBadge";
 
 export type ModelOverviewRun = {
   key: string;
+  hostedJobId?: string;
   kind: string;
   label: string;
   status: string;
@@ -32,6 +33,7 @@ export function modelOverviewRuns(entries: RunEntry[]): ModelOverviewRun[] {
     const candidate = evidence?.evaluations.find(item => item.kind === "candidate");
     const baseline = evidence?.evaluations.find(item => item.kind === "baseline");
     return {
+      hostedJobId: typeof job?.metadata.hostedJobId === "string" ? job.metadata.hostedJobId : evidence?.providerRunId,
       key, kind, status: resolveRunStatus({ job, lifecycleRun: run }), updatedAt,
       label: kind === "evaluation" ? "Evaluation" : kind === "rollout_smoke" ? "Preflight rollout" : typeof method === "string" ? `${method.toUpperCase()} training` : "Training",
       reward: run?.reward?.raw ?? evidence?.reward.finalMean ?? null,
