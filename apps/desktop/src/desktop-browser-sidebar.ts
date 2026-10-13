@@ -303,8 +303,11 @@ export class BrowserSidebarManager {
   }
 
   async capturePage(input: BrowserTabInput & { mode: BrowserCaptureMode }) {
-    const runtime = await this.runtimeForBrowserInput(input, { requireVisible: true });
-    await this.waitForRuntimeSettled(runtime);
+    const runtime = this.runtime(input);
+    if (this.activeConversationId !== input.conversationId || !this.bounds || !runtime?.view.getVisible()) {
+      throw new Error("Open the browser page before taking a snapshot.");
+    }
+    if (runtime.loading) throw new Error("Wait for the page to finish loading.");
     return captureBrowserPage(runtime.view.webContents, input.mode);
   }
 

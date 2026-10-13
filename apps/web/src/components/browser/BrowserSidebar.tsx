@@ -81,7 +81,7 @@ export function BrowserSidebar({
         activeTab={activeDocumentTab ?? browser.activeTab}
         documentName={activeDocumentTab?.url}
         available={browser.available}
-        snapshotActions={<BrowserSnapshotMenu available={Boolean(activeVisual ? window.openpond?.browser?.captureHtml : browser.activeTab && window.openpond?.browser?.capturePage)} busy={Boolean(snapshot.busy)}
+        snapshotActions={<BrowserSnapshotMenu available={!snapshot.image && Boolean(activeVisual ? window.openpond?.browser?.captureHtml : browser.activeTab && !browser.activeTab.loading && window.openpond?.browser?.capturePage)} busy={Boolean(snapshot.busy)}
           onCapture={mode => void snapshot.capture(mode)} onCancel={snapshot.cancel} />}
         onBack={() => void browser.back()}
         onClearData={clearData}
