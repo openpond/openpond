@@ -21,7 +21,7 @@ test("pauses hidden history polling, coalesces resume, and releases subscription
     loadPayload: load,
   });
   const subscription = {
-    connection: { serverUrl: "http://localhost", token: "test" },
+    connection: { serverUrl: "http://localhost", token: "test", platform: "linux" },
     sessionId: "history",
     locallyActive: true,
     reportedActive: true,
