@@ -1,4 +1,6 @@
+import type { TaskResourceContext } from "@openpond/contracts";
 export type ComposerSteerDraft = {
+  resourceContexts?: TaskResourceContext[];
   createdAt: string;
   id: string;
   prompt: string;
@@ -22,10 +24,11 @@ export function composerSteerPreview(prompt: string, maxLength = 120): string {
 
 export function createComposerSteerDraft(
   prompt: string,
-  options: { id?: string; now?: string } = {},
+  options: { id?: string; now?: string; resourceContexts?: TaskResourceContext[] } = {},
 ): ComposerSteerDraft {
   const now = options.now ?? new Date().toISOString();
   return {
+    ...(options.resourceContexts ? { resourceContexts: structuredClone(options.resourceContexts) } : {}),
     createdAt: now,
     id: options.id ?? nextSteerDraftId(),
     prompt,
@@ -44,11 +47,12 @@ export function replaceComposerSteerDraftForEdit(
   drafts: ComposerSteerDraft[],
   draftId: string,
   displacedComposerPrompt?: string,
+  resourceContexts?: TaskResourceContext[],
 ): ComposerSteerDraft[] {
   const displacedPrompt = displacedComposerPrompt?.trim();
   return drafts.flatMap((draft) => {
     if (draft.id !== draftId) return [draft];
-    return displacedPrompt ? [createComposerSteerDraft(displacedPrompt)] : [];
+    return displacedPrompt ? [createComposerSteerDraft(displacedPrompt, { resourceContexts })] : [];
   });
 }
 

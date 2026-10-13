@@ -1,10 +1,11 @@
-import type { TaskInput } from "@openpond/contracts";
+import { TaskResourceContextsSchema, type TaskResourceContext, type TaskInput } from "@openpond/contracts";
 import type { TaskInboxController } from "../../hooks/useTaskInbox";
 import { ComposerSteerRow } from "./ComposerSteerRow";
 
-export function TaskInboxPanel({ inbox, onRestore }: {
+export function TaskInboxPanel({ inbox, onRestore, canRestore }: {
   inbox: TaskInboxController;
-  onRestore(body: string): void;
+  canRestore?(contexts: TaskResourceContext[]): boolean;
+  onRestore(body: string, contexts: TaskResourceContext[]): void;
 }) {
   const snapshot = inbox.snapshot;
   const queued = snapshot?.inputs.filter((input) => input.senderKind === "user" && input.kind === "queued" && input.state === "pending") ?? [];
@@ -32,7 +33,7 @@ export function TaskInboxPanel({ inbox, onRestore }: {
             ? { action: "steer", expectedRevision: input.revision, expectedTurnId: activeTurnId }
             : { action: "resume", expectedRevision: input.revision })}
           onDelete={() => void inbox.mutate(input, { action: "cancel", expectedRevision: input.revision })}
-          onEdit={() => void restoreQueuedTaskInput(inbox, input, onRestore)}
+          onEdit={() => void restoreQueuedTaskInput(inbox, input, onRestore, canRestore)}
         />;
       })}
     </div>}
@@ -43,9 +44,14 @@ export function TaskInboxPanel({ inbox, onRestore }: {
 export async function restoreQueuedTaskInput(
   inbox: Pick<TaskInboxController, "mutate">,
   input: TaskInput,
-  onRestore: (body: string) => void,
+  onRestore: (body: string, contexts: TaskResourceContext[]) => void,
+  canRestore?: (contexts: TaskResourceContext[]) => boolean,
 ): Promise<void> {
+  const metadata = input.payload.metadata as Record<string, unknown> | undefined;
+  const parsed = TaskResourceContextsSchema.safeParse(metadata?.chatResourceContexts);
+  const contexts = parsed.success ? parsed.data : [];
+  if (canRestore && !canRestore(contexts)) return;
   if (await inbox.mutate(input, { action: "cancel", expectedRevision: input.revision })) {
-    onRestore(input.body);
+    onRestore(input.body, contexts);
   }
 }
