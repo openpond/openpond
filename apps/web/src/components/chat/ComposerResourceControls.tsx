@@ -16,24 +16,24 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
   const dataset = focus.dataset;
   const datasets = dataset ? [dataset, ...resources.datasets.filter(candidate => candidate.id !== dataset.id || candidate.revision !== dataset.revision)] : resources.datasets;
   const grader = resources.graders.find(candidate => candidate.id === scope.selectedGraderId);
-  const context = `Experiment ${scope.ordinal}${scope.name === `Experiment ${scope.ordinal}` ? "" : ` (${scope.name})`}${dataset ? ` using ${dataset.name} V${dataset.revision} (dataset ${dataset.id}${dataset.owner ? `, team ${dataset.owner.teamId}, actor ${dataset.owner.actorId}, content hash ${dataset.contentHash}` : ""})` : ""}`;
+  const context = dataset ? `${dataset.name} V${dataset.revision}` : `experiment ${scope.ordinal}`;
   const run = focus.experiment;
   const running = run && /running|queued|pending|starting/i.test(run.state);
   const completed = run && /completed|complete|succeeded/i.test(run.state);
   const primary = !dataset ? "Add data" : !resources.graders.length ? "Add grader" : running ? "View run" : completed ? "Improve" : "Run";
   function draft(action: string) {
     const prompts: Record<string, string> = {
-      "Add data": `Help me choose or create a dataset for ${context}.`,
-      "Create dataset": `Create a new dataset for ${context}.`,
-      "Add grader": `Create a grader for ${context}. Inspect its examples and test known-good and known-bad answers.`,
-      "Test grader": `Test ${grader ? `${grader.name} (${grader.graderId})` : "the attached graders"} for ${context} using calibration examples.`,
-      "Run on saved outputs": `Score the saved outputs of experiment ${run?.id} with ${grader ? `${grader.name} (${grader.graderId})` : "the attached graders"}. Retain a separate scoring result and preserve the original run.`,
-      "Run": `Run a new evaluation for ${context} with its attached graders. Use the configured model or help me choose one if missing. Preserve earlier results.`,
-      "View run": `Inspect the status and saved evidence of experiment ${run?.id} in ${context}.`,
-      "Improve": `Inspect experiment ${run?.id} in ${context}, analyze failed cases, and propose an eligible improvement. Preserve the baseline for comparison.`,
-      "Improve dataset": `Review the dataset in ${context} for gaps, duplicates, and missing edge cases. Propose a new revision.`,
-      "Train model": `Help me train a model using ${context}. Check compatible models, training-data eligibility, and execution options before starting.`,
-      "Compare results": `Compare experiment ${run?.id} in ${context} with a compatible saved experiment using matched inputs.`,
+      "Add data": `Help me choose a dataset for ${context}.`,
+      "Create dataset": `Create a dataset for experiment ${scope.ordinal}.`,
+      "Add grader": `Add a grader to ${context}.`,
+      "Test grader": `Test ${grader ? grader.name : "the graders"} on ${context}.`,
+      "Run on saved outputs": `Grade this experiment's saved answers with ${grader ? grader.name : "the attached graders"}.`,
+      "Run": `Run an experiment on ${context}.`,
+      "View run": `How is this experiment going?`,
+      "Improve": `How can we improve this experiment's results?`,
+      "Improve dataset": `Check ${context} and suggest improvements.`,
+      "Train model": `Help me train a model with ${context}.`,
+      "Compare results": `Compare this experiment with my earlier results.`,
     };
     if (prompts[action]) onDraft(prompts[action]!);
   }

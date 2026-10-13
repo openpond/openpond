@@ -4,6 +4,10 @@ Use this guidance when the user asks to create or inspect a dataset, author a gr
 
 ## Work from the conversation
 
+Treat ordinary requests such as “check this dataset,” “edit these examples,” or “run this grader” as enough to begin. Resolve the referenced resource from the current conversation and attached experiment, read what you need, and do the requested work. Keep command syntax, executor names, invocation context, and internal IDs out of conversational replies unless they help diagnose an error or the user asks for them. The user does not need to tell you to load this skill or call a particular tool.
+
+Use inline HTML for dataset browsing, example inspection, grader checks, and results when a visual makes the answer easier to use. Publish it through the host's existing HTML preview/render tools as part of the response doing that work. Keep a brief explanation alongside it; do not repeat the same inventory or results as a long bullet list. An edit can update the dataset and show the changed examples in that response's HTML. Do not create a separate conversation or a permanent panel just to display it. Use short conversational action text such as “Check this dataset” or “Test this grader”; exact resource references belong in the host's structured context.
+
 - Inspect the current experiment and linked dataset when the app supplies their references. Otherwise discover existing resources before asking whether to reuse or create one. Ask only for choices that materially affect the work and cannot be inferred from the request or existing context.
 - A dataset can be authored without a model, Profile, cloud account, or executed experiment. If the app provides a draft experiment scope, keep working in it; do not launch a run merely to give the UI an experiment ID.
 - Several datasets and runs can belong to a conversation. Use explicit IDs and revisions for operations; inspecting a candidate must not silently replace a baseline or alter another run's saved inputs.
@@ -11,7 +15,7 @@ Use this guidance when the user asks to create or inspect a dataset, author a gr
 
 ## Discovery and inline selection
 
-For “list my datasets” or similar discovery, read existing resources and return a compact selectable table using the host's inline UI capabilities. Show names, versions, and enough local/hosted context to distinguish records. Keep long collections bounded; fetch more when requested rather than loading every dataset's contents. Do not attach all discovery results.
+For “list my datasets” or similar discovery, read existing resources and return a compact selectable HTML table using the host's inline UI capabilities. Show names, versions, and enough local/hosted context to distinguish records. Keep long collections bounded; fetch more when requested rather than loading every dataset's contents. Do not attach all discovery results.
 
 For a published OpenPond HTML picker, render Select buttons with `data-openpond-resource-kind="dataset"`, `data-openpond-resource-id="<exact-id>"`, and `data-openpond-resource-revision="<revision>"`; experiments use kind `experiment`. The host validates a real click, selects the resource, collapses the picker with Change, and queues a canonical selection message. Keep this presentation compact and use a saved-record table. Do not add scripts that call APIs or manufacture selection messages.
 
@@ -36,7 +40,7 @@ When the app provides a scoped command executor, run the CLI with `"$OPENPOND_CL
 
 Use `datasets context --local --json` to inspect the current scope; `datasets select <id> --local --expected-revision <revision>` selects an existing dataset. `datasets new-experiment --local --operation-id <stable-id>` creates a configuration scope without compute. Scope selection/rename use `select-experiment` and `rename-experiment`; check their current help. These commands require app-supplied context. Mere `datasets list` discovery does not attach all records.
 
-Use the application's supplied local server context when present. Do not guess a second installation, scrape credentials, or switch teams to get an operation to succeed. Local dataset commands use `--local`; hosted operations have their own explicit destination/account options. Local experiment execution may still call a paid remote inference provider.
+Use the application's supplied local server context and OpenPond home when present. Pass that home with `--home`; the standard development desktop uses `~/.openpond/openpond-app-dev`. Check this context before diagnosing missing authentication. Do not guess a second installation, scrape credentials, or switch teams to get an operation to succeed. Local dataset commands use `--local`; hosted operations have their own explicit destination/account options. Local experiment execution may still call a paid remote inference provider.
 
 ## Dataset and grader work
 
