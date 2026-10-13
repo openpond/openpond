@@ -491,7 +491,13 @@ function registerIpcHandlers(): void {
     }
     return desktopUpdater!.restart((payload as { hasRunningWork: boolean }).hasRunningWork);
   });
-  handleTrackedIpc("openpond:connection", () => ensureServer());
+  handleTrackedIpc("openpond:connection", async () => {
+    const server=await ensureServer();
+    // Server recovery can stop the worker without reloading the window.
+    // Restore the same preview executor whenever the renderer reconnects.
+    if(mainWindow && !mainWindow.isDestroyed())ensureBrowserControlWorker(server);
+    return server;
+  });
   handleTrackedIpc("openpond:desktop:runtimeInfo", () => {
     const devMode =
       !app.isPackaged && process.env.OPENPOND_DESKTOP_DEV_MODE === "1";
