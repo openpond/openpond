@@ -25,3 +25,23 @@ test("training keeps the admitted job when chat attachment fails and standalone 
   await client.modelRun("saved-run","status","GET");
   expect(requests).toHaveLength(3);
 });
+
+// Hosted commands remain standalone; only an app-scoped invocation can send its
+// signed reference to the local app, and failure never invalidates remote work.
+test("hosted training attachment requires scoped loopback context and sends references only", async()=>{
+  const {attachHostedTrainingToChat} = await import("../src/cli/training-chat-attachment");
+  const request = vi.fn<typeof fetch>(async()=>new Response("{}"));
+  const warn = vi.fn();
+  const input = {jobId:"remote-job",teamId:"team",apiOrigin:"https://api.example.test"};
+  vi.stubEnv("OPENPOND_CHAT_INVOCATION","");
+  await attachHostedTrainingToChat(input,{request,warn});
+  expect(request).not.toHaveBeenCalled();
+  vi.stubEnv("OPENPOND_CHAT_INVOCATION","scoped");
+  vi.stubEnv("OPENPOND_LOCAL_API_URL","https://unrelated.example.test");
+  await attachHostedTrainingToChat(input,{request,warn});
+  expect(request).not.toHaveBeenCalled();
+  expect(warn).toHaveBeenCalledOnce();
+  vi.stubEnv("OPENPOND_LOCAL_API_URL","http://127.0.0.1:17874");
+  await attachHostedTrainingToChat(input,{request,warn});
+  expect(JSON.parse(String(request.mock.calls[0]![1]!.body))).toEqual({action:"attach_training",invocationToken:"scoped",payload:{location:"cloud",...input}});
+});
