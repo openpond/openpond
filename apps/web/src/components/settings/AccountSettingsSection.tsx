@@ -24,6 +24,7 @@ import {
   readOpenPondOrganizationsFromMemory,
 } from "../../lib/openpond-organization-memory";
 import { preloadSandboxAgents } from "../../lib/sandbox-agent-memory";
+import { openGettingStarted } from "../onboarding/onboarding-lifecycle";
 
 type AccountSettingsSectionProps = {
   payload: BootstrapPayload | null;
@@ -431,6 +432,7 @@ export function AccountSettingsSection({
       <div className="account-settings-title">
         <h1>Account</h1>
         <div className="account-settings-title-actions">
+          <button className="settings-secondary compact" disabled={!connection || saving} type="button" onClick={openGettingStarted}>Get started</button>
           <button
             className="settings-secondary compact account-add-action"
             disabled={!connection || saving}

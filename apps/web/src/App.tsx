@@ -3,6 +3,7 @@ import { AppRuntimeView } from "./app/AppRuntimeView";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useAppPrimaryRuntime } from "./app/useAppPrimaryRuntime";
 import { useAppSecondaryRuntime } from "./app/useAppSecondaryRuntime";
+import { DesktopGettingStarted } from "./components/onboarding/DesktopGettingStarted";
 
 const queries = createWorkspaceQueryClient();
 
@@ -13,5 +14,9 @@ export function App() {
 function AppRuntime() {
   const primary = useAppPrimaryRuntime();
   const secondary = useAppSecondaryRuntime(primary);
-  return <AppRuntimeView primary={primary} secondary={secondary} />;
+  return <>
+    <AppRuntimeView primary={primary} secondary={secondary} />
+    <DesktopGettingStarted ready={primary.startup.ready} connection={primary.connection}
+      payload={primary.bootstrap} onPayload={primary.applyBootstrapPayload} />
+  </>;
 }
