@@ -27,6 +27,9 @@ contextBridge.exposeInMainWorld("openpond", {
   restartDesktopApp: () => ipcRenderer.invoke("openpond:desktop:restart"),
   reloadDesktopApp: () => ipcRenderer.invoke("openpond:desktop:reload"),
   browser: {
+    capturePage: (payload: unknown) => ipcRenderer.invoke("openpond:browser:capturePage", payload),
+    cancelCapture: (payload: unknown) => ipcRenderer.invoke("openpond:browser:cancelCapture", payload),
+    captureHtml: (payload: unknown) => ipcRenderer.invoke("openpond:browser:captureHtml", payload),
     open: (payload: unknown) => ipcRenderer.invoke("openpond:browser:open", payload),
     newTab: (payload: unknown) => ipcRenderer.invoke("openpond:browser:newTab", payload),
     selectTab: (payload: unknown) => ipcRenderer.invoke("openpond:browser:selectTab", payload),

@@ -47,6 +47,7 @@ it("delivers preview pixels through MCP and recovers one immutable, owned public
     await expect(service.render({ ...context, callId: "invalid-title" }, { previewId: receipt.previewId, title: "Bad\nTitle" })).rejects.toThrow("single-line");
     const publish = { previewId: receipt.previewId, title: "Comparison" };
     await expect(service.render({ ...context, callId: "publish" }, publish)).rejects.toThrow("interruption");
+    expect(await service.list("a")).toEqual([]);
     failAppend = false;
     service = createHtmlVisualService(deps); await service.recover();
     const ref = await service.render({ ...context, callId: "publish" }, publish);
@@ -59,6 +60,10 @@ it("delivers preview pixels through MCP and recovers one immutable, owned public
     const revision = await service.preview(context, { html: "<p>Revised</p>" });
     const revised = await service.render({ ...context, turnId: "turn-b", callId: "revise" }, { previewId: revision.previewId, title: "Comparison", visualId: ref.visualId });
     expect(revised.output.revision).toBe(2); expect(revised.visualId).toBe(ref.visualId);
+    // The sidebar catalog survives transcript pagination and exposes only the
+    // latest ready revision belonging to the requested conversation.
+    expect(await service.list("a")).toEqual([revised]);
+    expect(await service.list("b")).toEqual([]);
     expect((await service.read("a", ref.publicationId)).bytes).toEqual(saved.bytes);
     const rows = buildChatMessages([...events, ...events]);
     expect(rows.map(row => row.visual?.output.revision)).toEqual([1, 2]);

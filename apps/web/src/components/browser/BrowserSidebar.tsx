@@ -1,29 +1,50 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import "../../styles/browser/browser-sidebar.css";
 import { Globe2 } from "../icons";
 import { useBrowserSidebar } from "../../hooks/useBrowserSidebar";
 import { BrowserTabs } from "./BrowserTabs";
 import { BrowserToolbar } from "./BrowserToolbar";
 import { BrowserViewport } from "./BrowserViewport";
+import type { ClientConnection } from "../../api";
+import type { useHtmlVisualTabs } from "../../hooks/useHtmlVisualTabs";
+import { HtmlVisual } from "../visuals/HtmlVisual";
+import type { HtmlVisualSnapshotHandle } from "../visuals/useHtmlVisualSnapshot";
+import { BrowserSnapshotMenu } from "./BrowserSnapshotMenu";
+import { BrowserSnapshotPreview } from "./BrowserSnapshotPreview";
+import { useBrowserCapture } from "./useBrowserCapture";
 
 export function BrowserSidebar({
   conversationId,
   expanded,
   onResizeStart,
+  connection = null,
+  visualTabs,
 }: {
   conversationId: string;
   expanded: boolean;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  connection?: ClientConnection | null;
+  visualTabs?: ReturnType<typeof useHtmlVisualTabs>;
 }) {
   const browser = useBrowserSidebar(conversationId);
+  const [reloadVersions, setReloadVersions] = useState<Record<string, number>>({});
+  const activeVisual = visualTabs?.tabs.find(tab => tab.publicationId === visualTabs.activeId);
+  const visualSnapshot = useRef<HtmlVisualSnapshotHandle | null>(null);
+  const snapshot = useBrowserCapture(conversationId, browser.activeTab?.id ?? null, activeVisual?.publicationId ?? null, visualSnapshot);
+  const documentTabs: BrowserTabState[] = (visualTabs?.tabs ?? []).map(visual => ({
+    id: visual.publicationId, url: `${visual.output.title}.html`, title: visual.output.title,
+    faviconUrl: null, loading: false, canGoBack: false, canGoForward: false, error: null,
+  }));
+  const activeDocumentTab = documentTabs.find(tab => tab.id === activeVisual?.publicationId);
   const setBounds = useCallback((bounds: BrowserBounds | null) => {
     void window.openpond?.browser?.setBounds({ conversationId, bounds });
   }, [conversationId]);
 
   const navigate = useCallback((url: string) => {
+    visualTabs?.showBrowser();
     void browser.open(url, { explicitFile: true });
-  }, [browser]);
+  }, [browser, visualTabs]);
 
   const clearData = useCallback(() => {
     if (!window.confirm("Clear browser data for this conversation? Tabs, cookies, cache, and local storage for this conversation will be removed.")) {
@@ -44,36 +65,56 @@ export function BrowserSidebar({
         />
       )}
       <BrowserTabs
-        activeTabId={browser.state.activeTabId}
-        tabs={browser.state.tabs}
-        onCloseTab={(tabId) => void browser.closeTab(tabId)}
-        onNewTab={() => void browser.newTab()}
-        onSelectTab={(tabId) => void browser.selectTab(tabId)}
+        activeTabId={activeVisual?.publicationId ?? browser.state.activeTabId}
+        tabs={[...browser.state.tabs, ...documentTabs]}
+        onCloseTab={(tabId) => {
+          if (documentTabs.some(tab => tab.id === tabId)) visualTabs?.close(tabId);
+          else void browser.closeTab(tabId);
+        }}
+        onNewTab={() => { visualTabs?.showBrowser(); void browser.newTab(); }}
+        onSelectTab={(tabId) => {
+          if (documentTabs.some(tab => tab.id === tabId)) visualTabs?.select(tabId);
+          else { visualTabs?.showBrowser(); void browser.selectTab(tabId); }
+        }}
       />
       <BrowserToolbar
-        activeTab={browser.activeTab}
+        activeTab={activeDocumentTab ?? browser.activeTab}
+        documentName={activeDocumentTab?.url}
         available={browser.available}
+        snapshotActions={<BrowserSnapshotMenu available={Boolean(activeVisual ? window.openpond?.browser?.captureHtml : browser.activeTab && window.openpond?.browser?.capturePage)} busy={Boolean(snapshot.busy)}
+          onCapture={mode => void snapshot.capture(mode)} onCancel={snapshot.cancel} />}
         onBack={() => void browser.back()}
         onClearData={clearData}
         onForward={() => void browser.forward()}
         onNavigate={navigate}
         onOpenExternal={() => void browser.openExternal()}
-        onReload={() => void browser.reload()}
+        onReload={() => {
+          if (activeVisual) setReloadVersions(current => ({ ...current, [activeVisual.publicationId]: (current[activeVisual.publicationId] ?? 0) + 1 }));
+          else void browser.reload();
+        }}
         onStop={() => void browser.stop()}
       />
       <div className="browser-content">
-        {!browser.available ? (
+        {snapshot.busy === "node" ? <p className="browser-snapshot-status" role="status">Hover to highlight an element, then click to capture it. Press Esc to cancel.</p> : null}
+        {snapshot.error ? <p className="browser-snapshot-status" role="alert">{snapshot.error}</p> : null}
+        {snapshot.image ? <BrowserSnapshotPreview image={snapshot.image} onClose={snapshot.close} /> : null}
+        {visualTabs?.tabs.map(visual => (
+          <div key={visual.publicationId} className="browser-visual-document" role="tabpanel" aria-label={visual.output.title} hidden={Boolean(snapshot.image) || visual.publicationId !== activeVisual?.publicationId}>
+            <HtmlVisual key={reloadVersions[visual.publicationId] ?? 0} visual={visual} connection={connection} expanded snapshotRef={visual.publicationId === activeVisual?.publicationId ? visualSnapshot : undefined} />
+          </div>
+        ))}
+        {!activeVisual && !browser.available ? (
           <div className="browser-empty-state">
             <Globe2 size={18} />
             <span>Desktop browser bridge unavailable.</span>
           </div>
-        ) : browser.state.tabs.length === 0 ? (
+        ) : !activeVisual && browser.state.tabs.length === 0 ? (
           <div className="browser-empty-state">
             <Globe2 size={18} />
             <span>Enter a URL to open a browser tab for this conversation.</span>
           </div>
         ) : null}
-        <BrowserViewport active={browser.available && browser.state.tabs.length > 0} onBounds={setBounds} />
+        <BrowserViewport active={!snapshot.image && !activeVisual && browser.available && browser.state.tabs.length > 0} onBounds={setBounds} />
       </div>
     </aside>
   );

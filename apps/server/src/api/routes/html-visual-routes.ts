@@ -3,6 +3,15 @@ import type { HttpRouteContext } from "../http-route-types.js";
 // Authenticated data, never executable HTML on the application origin. Clients
 // render through the shared double-sandbox document; downloads are attachments.
 export async function handleHtmlVisualRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
+  const list = /^\/v1\/sessions\/([^/]+)\/visuals$/.exec(requestUrl.pathname);
+  if (list && request.method === 'GET') {
+    response.setHeader('Cache-Control', 'private, no-store');
+    try {
+      if (!deps.htmlVisuals) throw new Error('Visuals are unavailable.');
+      sendJson(response, 200, { visuals: await deps.htmlVisuals.list(decodeURIComponent(list[1]!)) });
+    } catch { sendJson(response, 404, { error: 'Visuals are unavailable.' }); }
+    return true;
+  }
   const match = /^\/v1\/sessions\/([^/]+)\/visuals\/(visual_pub_[a-f0-9]{32})\/(document|source|preview)$/.exec(requestUrl.pathname);
   if (!match || request.method !== 'GET')
     return false;

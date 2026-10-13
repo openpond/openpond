@@ -6,7 +6,7 @@ import { sessionApi } from "../../api/session-api";
 import type { ChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import type { HtmlVisualResourceSelection } from "@openpond/contracts/html-visuals";
 import { SendTurnRequestSchema } from "@openpond/contracts/requests";
-import { HtmlVisualPanel } from "../visuals/HtmlVisualPanel";
+import { useHtmlVisualTabs } from "../../hooks/useHtmlVisualTabs";
 import { htmlContentPreviewUrl, isHtmlFilePath } from "../../lib/html-preview";
 import {
   lazy,
@@ -324,6 +324,7 @@ export function MainPane({
   );
   const [openDiffFileRequest, setOpenDiffFileRequest] =
     useState<WorkspaceDiffOpenFileRequest | null>(null);
+  const htmlVisualTabs = useHtmlVisualTabs(browserConversationId);
   const [rightSidebarSourceOverride, setRightSidebarSourceOverride] =
     useState<RightSidebarFileSource | null>(null);
   const [labSkillSource, setLabSkillSource] =
@@ -1089,10 +1090,13 @@ export function MainPane({
         explicitFile: options?.explicitFile,
         newTab: options?.newTab,
       }).then((opened) => {
-        if (opened && window.openpond?.browser) onShowBrowserPanel();
+        if (opened && window.openpond?.browser) {
+          htmlVisualTabs.showBrowser();
+          onShowBrowserPanel();
+        }
       }).catch((error) => showToast(error instanceof Error ? error.message : "Could not open browser.", "error"));
     },
-    [browserConversationId, onShowBrowserPanel, showToast]
+    [browserConversationId, htmlVisualTabs.showBrowser, onShowBrowserPanel, showToast]
   );
   const workspaceRootPath = resolveChatWorkspaceRootPath({
     projectTargetDetail: projectTarget.detail,
@@ -1312,13 +1316,10 @@ export function MainPane({
       trainingSummary={trainingSidebarSummary}
     />
   ) : null;
-  const [expandedVisual, setExpandedVisual] = useState<HtmlVisualReference | null>(null);
-  useEffect(() => { setExpandedVisual(null); }, [selectedSessionId]);
-  useEffect(() => { if (rightPanelMode !== "browser") setExpandedVisual(null); }, [rightPanelMode]);
   const openHtmlVisual = useCallback((visual: HtmlVisualReference) => {
-    setExpandedVisual(visual);
+    htmlVisualTabs.open(visual);
     onShowBrowserPanel();
-  }, [onShowBrowserPanel]);
+  }, [htmlVisualTabs.open, onShowBrowserPanel]);
   const selectHtmlResource = useCallback(async (visual:HtmlVisualReference,resource:HtmlVisualResourceSelection,operationId:string) => {
     if(!connection || visual.sessionId!==selectedSessionId)throw new Error("Open the originating conversation to select this resource.");
     const context=await chatResourceRequest<{focus:ChatResourceFocus}>(connection,"dataset",{action:"context",payload:{sessionId:visual.sessionId}});
@@ -1333,13 +1334,11 @@ export function MainPane({
     window.dispatchEvent(new CustomEvent("openpond-resource-focus-changed",{detail:{sessionId:visual.sessionId}}));
     return message;
   },[connection,selectedSessionId]);
-  const browserPanel = showBrowserPanel && expandedVisual ? (
-    <HtmlVisualPanel visual={expandedVisual} connection={connection} expanded={diffPanelExpanded}
-      onResizeStart={onDiffPanelResizeStart} onToggleExpanded={onToggleDiffPanelExpanded}
-      onClose={() => { setExpandedVisual(null); if (diffPanelExpanded) onToggleDiffPanelExpanded(); }} />
-  ) : showBrowserPanel ? (
+  const browserPanel = showBrowserPanel ? (
     <BrowserSidebar
       conversationId={browserConversationId}
+      connection={connection}
+      visualTabs={htmlVisualTabs}
       expanded={diffPanelExpanded}
       onResizeStart={onDiffPanelResizeStart}
     />

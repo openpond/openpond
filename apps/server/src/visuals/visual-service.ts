@@ -60,6 +60,17 @@ export function createHtmlVisualService(deps: {
     store.delete(publication.reference.publicationId);
   }
   return {
+    async list(sessionId: string) {
+      if (!await deps.getSession(sessionId)) throw new Error('Visual conversation is unavailable.');
+      const latest = new Map<string, HtmlVisualReference>();
+      for (const publication of store.list(sessionId)) {
+        if (!publication.ready) continue;
+        const reference = publication.reference;
+        const previous = latest.get(reference.visualId);
+        if (!previous || previous.output.revision < reference.output.revision) latest.set(reference.visualId, reference);
+      }
+      return [...latest.values()].sort((a, b) => a.output.createdAt.localeCompare(b.output.createdAt));
+    },
     available() { return !!deps.executor.previewHtml && deps.executor.visualAvailable?.() === true; },
     async recover() {
       for (const publication of store.list()) {

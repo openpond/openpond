@@ -1,4 +1,5 @@
 import { HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, type HtmlVisualTheme } from "./html-visuals.js";
+import { browserSnapshotInspectorSource } from "./browser-snapshots.js";
 
 // The trusted outer document contains no author markup. Its frame-src policy
 // prevents the author frame navigating itself to a network URL; the inner CSP
@@ -18,10 +19,24 @@ export function htmlVisualDocument(html: string, identity: string, initialTheme:
     const send = data => parent.postMessage({ ...data, identity: ${json(identity)} }, '*');
     const resourceToken=Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');
     send({type:'openpond-resource-ready',resourceToken});
+    let snapshotRequest=null;
+    const inspector=${browserSnapshotInspectorSource()}(result=>{
+      if(!snapshotRequest)return;
+      send({type:'openpond-snapshot-result',resourceToken,requestId:snapshotRequest,...result});
+      snapshotRequest=null;
+    },true);
+    addEventListener('message',e=>{
+      const data=e.data;
+      if(e.source!==parent || data?.type!=='openpond-snapshot-command' || typeof data.requestId!=='string')return;
+      if(data.action==='cancel'){inspector.cancel();return;}
+      snapshotRequest=data.requestId;
+      if(data.action==='page')inspector.page();
+      else if(data.action==='node')inspector.start();
+    });
     // Declarative resource buttons use a trusted user click. Author scripts
     // receive no API transport, credentials, or arbitrary host command bridge.
     document.addEventListener('click',e=>{
-      if(!e.isTrusted)return;
+      if(!e.isTrusted || snapshotRequest)return;
       const button=e.target?.closest?.('button[data-openpond-resource-id]');
       if(!button || button.disabled)return;
       const kind=button.dataset.openpondResourceKind,id=button.dataset.openpondResourceId;
@@ -62,10 +77,12 @@ export function htmlVisualDocument(html: string, identity: string, initialTheme:
     addEventListener('message', e=>{
       const d=e.data;if(!d||typeof d!=='object')return;
       if(e.source===parent && parent!==window && d.type==='openpond-theme' && d.identity===identity){frame.contentWindow.postMessage({type:'openpond-theme',theme:d.theme},'*');return;}
+      if(e.source===parent && parent!==window && d.type==='openpond-snapshot-command' && d.identity===identity){if(d.action==='node')frame.focus();frame.contentWindow.postMessage(d,'*');return;}
       if(e.source!==frame.contentWindow || d.identity!==identity)return;
       if(d.type==='openpond-interaction' && parent!==window)parent.postMessage({type:'openpond-visual-interaction',identity},'*');
       if(d.type==='openpond-resource-ready' && resourceToken===null && typeof d.resourceToken==='string' && d.resourceToken.length<100)resourceToken=d.resourceToken;
       if(d.type==='openpond-resource-select' && resourceToken!==null && d.resourceToken===resourceToken && parent!==window)parent.postMessage({type:'openpond-visual-resource-select',identity,resource:d.resource},'*');
+      if(d.type==='openpond-snapshot-result' && resourceToken!==null && d.resourceToken===resourceToken && parent!==window)parent.postMessage({type:'openpond-visual-snapshot',identity,requestId:d.requestId,capture:d.capture,canceled:d.canceled,error:d.error},'*');
       if(d.type==='openpond-console' && state.console.length<40 && ['log','warn','error'].includes(d.level) && typeof d.text==='string')state.console.push({level:d.level,text:d.text.slice(0,2000)});
       if(d.type==='openpond-size' && Number.isFinite(d.height)){
         const height=Math.max(80,Math.min(${HTML_VISUAL_MAX_HEIGHT},Math.ceil(d.height)));state.height=height;if(d.ready===true)state.ready=true;
