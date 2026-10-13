@@ -19,6 +19,29 @@ import { workspaceDiffSinceBaseline } from "../apps/server/src/workspace/server-
 import { createServerWorkspacePayloads } from "../apps/server/src/workspace/server-workspace-payloads";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { buildFileTree } from "../apps/web/src/components/workspace-diff/workspace-diff-summary-model";
+import { createPreviewWorkQueue } from "../apps/web/src/components/workspace-diff/preview-work-queue";
+
+// A discarded thumbnail must neither hold up the next document nor start
+// expensive work after its New tab has been closed.
+test("thumbnail work is serialized and closing a preview releases the queue", async () => {
+  const queue = createPreviewWorkQueue(async () => {});
+  const active = new AbortController();
+  const skipped = new AbortController();
+  const calls: string[] = [];
+  let started!: () => void;
+  const start = new Promise<void>(resolve => { started = resolve; });
+  const first = queue(active.signal, async () => {
+    calls.push("first"); started();
+    await new Promise<void>(resolve => active.signal.addEventListener("abort", () => resolve(), { once: true }));
+  });
+  const second = queue(skipped.signal, async () => { calls.push("closed"); });
+  const third = queue(new AbortController().signal, async () => { calls.push("next"); });
+  await start;
+  expect(calls).toEqual(["first"]);
+  skipped.abort(); active.abort();
+  await Promise.all([first, second, third]);
+  expect(calls).toEqual(["first", "next"]);
+});
 
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
@@ -447,8 +470,12 @@ test("open file versions detect same-name edits and replacements within the work
   expect(edited.revision).not.toBe(initial.revision);
   await writeFile(path.join(folder, "next.pptx"), "third");
   await rename(path.join(folder, "next.pptx"), target);
-  expect((await workspaceFileVersion(folder, target)).revision).not.toBe(edited.revision);
-  expect(await workspaceFileVersion(folder, "missing.pptx")).toEqual({ exists: false, revision: null });
+  const replaced = await workspaceFileVersion(folder, target);
+  expect(replaced.revision).not.toBe(edited.revision);
+  await writeFile(target, "third");
+  await utimes(target, new Date("2026-02-01"), new Date("2026-02-01"));
+  expect((await workspaceFileVersion(folder, target)).revision).toBe(replaced.revision);
+  expect(await workspaceFileVersion(folder, "missing.pptx")).toMatchObject({ exists: false, revision: null });
   await writeFile(path.join(root, "outside.pptx"), "other");
   await expect(workspaceFileVersion(folder, "../outside.pptx", true)).rejects.toThrow("outside the workspace");
   await expect(workspaceFileVersion(folder, path.join(root, "outside.pptx"))).rejects.toThrow("outside the workspace");

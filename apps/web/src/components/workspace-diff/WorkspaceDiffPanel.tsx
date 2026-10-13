@@ -184,7 +184,7 @@ function detailedWorkspaceFile(
   path: string,
 ): WorkspaceDiffFile {
   if (current && loaded?.content != null) {
-    return { ...current, content: loaded.content, contentType: loaded.contentType, contentEncoding: loaded.contentEncoding, readVersion: loaded.readVersion };
+    return { ...current, content: loaded.content, contentType: loaded.contentType, contentEncoding: loaded.contentEncoding, readVersion: loaded.readVersion, readStamp: loaded.readStamp };
   }
   if (loaded && !current && hasWorkspaceFileDetail(loaded)) return loaded;
   if (current && hasWorkspaceFileDetail(current)) return current;
@@ -361,6 +361,9 @@ function WorkspaceDiffPanelInner({
   const [hideWhiteSpace, setHideWhiteSpace] = useState(false);
   const [splitView, setSplitView] = useState(false);
   const [loadedFiles, setLoadedFiles] = useState<Record<string, WorkspaceDiffFile>>({});
+  const pendingProvidedFiles = useRef(new Map<string, number>());
+  const cancelledProvidedLoads = useRef(new Set<number>());
+  const [providedSandboxIds, setProvidedSandboxIds] = useState<Record<string, string | null>>({});
   const [providedFilePaths, setProvidedFilePaths] = useState<Set<string>>(
     () => new Set()
   );
@@ -516,13 +519,13 @@ function WorkspaceDiffPanelInner({
   const openFileContentByPath = useMemo(() => {
     const next: Record<string, string> = {};
     for (const path of openFilePaths) {
-      if (isWorkspaceImagePath(path)) continue;
+      if (isWorkspaceImagePath(path) || isDocumentPath(path)) continue;
       const file =
         currentDiffFileByPath.get(path) ??
         loadedFiles[path] ??
         displayDiffFileByPath.get(path) ??
         placeholderFile(path);
-      if (file.content != null) next[path] = file.content;
+      if (file.content != null && file.contentEncoding !== "base64") next[path] = file.content;
     }
     return next;
   }, [currentDiffFileByPath, displayDiffFileByPath, loadedFiles, openFilePaths]);
@@ -592,7 +595,7 @@ function WorkspaceDiffPanelInner({
   }, [onRefresh]);
 
   useEffect(() => {
-    if (!viewState) return;
+    if (!viewState || providedFilePaths.size > 0) return;
     const next = normalizeWorkspaceDiffPanelViewState(viewState, workspaceRootPath);
     if (workspaceDiffPanelViewStatesEqual(appliedViewStateRef.current, next)) return;
     appliedViewStateRef.current = next;
@@ -601,7 +604,7 @@ function WorkspaceDiffPanelInner({
     setActiveTab(current => tabRequest?.tab === "outputs" && current === "outputs" ? current : next.activeTab);
     setOpenFilePaths(next.openFilePaths);
     setSelectedPath(next.selectedPath);
-  }, [viewState, workspaceRootPath, tabRequest?.tab]);
+  }, [viewState, workspaceRootPath, tabRequest?.tab, providedFilePaths]);
 
   useEffect(() => {
     if (providedFilePaths.size > 0) return;
@@ -631,11 +634,19 @@ function WorkspaceDiffPanelInner({
       previousSourceKeyRef.current = sourceKey;
       lspAbortControllerRef.current?.abort(new Error("lsp_diagnostics_source_changed"));
       lspAbortControllerRef.current = null;
-      setOpenFilePaths([]);
-      setSelectedPath(null);
-      setLoadedFiles({});
-      setProvidedFilePaths(new Set());
-      setProvidedImageUrlsByPath({});
+      // Explicit local file tabs own their location. Project hydration or a
+      // workspace switch must not erase an in-flight preview from this chat.
+      const retained = new Set([...providedFilePaths].filter(path => localFileWorkspaceId(path) && providedSandboxIds[path] === null));
+      setOpenFilePaths(current => current.filter(path => retained.has(path)));
+      setSelectedPath(current => current && retained.has(current) ? current : null);
+      setLoadedFiles(current => Object.fromEntries(Object.entries(current).filter(([path]) => retained.has(path))));
+      setProvidedFilePaths(retained);
+      for (const [path, loadId] of pendingProvidedFiles.current) {
+        if (retained.has(path)) continue;
+        cancelledProvidedLoads.current.add(loadId);
+        pendingProvidedFiles.current.delete(path);
+      }
+      setProvidedImageUrlsByPath(current => Object.fromEntries(Object.entries(current).filter(([path]) => retained.has(path))));
       setFileDrafts({});
       setExpandedFileTreeFolders(new Set());
       setSandboxDiff(null);
@@ -663,7 +674,7 @@ function WorkspaceDiffPanelInner({
     if (!openFileRequest.file && !canOpenRequestedFile) return;
     lastOpenFileRequestIdRef.current = openFileRequest.id;
     if (openFileRequest.file) {
-      openProvidedFile(openFileRequest.file, openFileRequest.imageUrl, openFileRequest.source);
+      openProvidedFile(openFileRequest.file, openFileRequest.imageUrl, openFileRequest.source, openFileRequest);
       return;
     }
     openFile(openFileRequest.path, { source: openFileRequest.source });
@@ -785,7 +796,7 @@ function WorkspaceDiffPanelInner({
     : null;
 
   useEffect(() => {
-    if (!connection || !selectedDetailPath) return undefined;
+    if (!connection || !selectedDetailPath || providedFilePaths.has(selectedDetailPath)) return undefined;
     if (isWorkspaceImagePath(selectedDetailPath)) {
       setFileError(null);
       setFileLoadingPath((current) => (current === selectedDetailPath ? null : current));
@@ -861,6 +872,7 @@ function WorkspaceDiffPanelInner({
     sandboxId,
     sandboxMode,
     selectedDetailPath,
+    providedFilePaths,
   ]);
 
   function replaceNewTab(key: string) {
@@ -928,16 +940,32 @@ function WorkspaceDiffPanelInner({
     setSearchQuery("");
   }
 
-  function openProvidedFile(file: WorkspaceDiffFile, imageUrl?: string, source = false) {
+  function openProvidedFile(file: WorkspaceDiffFile, imageUrl?: string, source = false, request?: { loading?: boolean; error?: string; loadId?: number; sandboxId?: string | null }) {
     if (isHtmlFilePath(file.path) && file.content != null && !source && connection) {
       void htmlContentPreviewUrl(connection, file.path, file.content).then(onOpenBrowserUrl)
         .catch((error) => setHtmlPreviewError(error instanceof Error ? error.message : "Could not open HTML preview."));
       return;
     }
-    const normalizedPath = normalizeWorkspaceDiffPath(file.path, workspaceRootPath);
+    const normalizedPath = localFileWorkspaceId(file.path) ? file.path : normalizeWorkspaceDiffPath(file.path, workspaceRootPath);
     if (!normalizedPath) return;
-    replaceNewTab(filesWithPreview ? "files" : normalizedPath);
-    if (filesWithPreview) setFilesTabOpen(true);
+    const pendingLoad = pendingProvidedFiles.current.get(normalizedPath);
+    const response = request?.loadId !== undefined && !request.loading;
+    if (response && cancelledProvidedLoads.current.delete(request.loadId!)) return;
+    if (response && pendingLoad !== undefined && pendingLoad !== request.loadId) return;
+    const completing = response && pendingLoad !== undefined;
+    if (completing) {
+      pendingProvidedFiles.current.delete(normalizedPath);
+    }
+    if (request?.loading && request.loadId !== undefined) {
+      if (pendingLoad !== undefined) cancelledProvidedLoads.current.add(pendingLoad);
+      pendingProvidedFiles.current.set(normalizedPath, request.loadId);
+    }
+    if (completing && !filesWithPreview && !openFilePaths.includes(normalizedPath)) return;
+    if (!completing) {
+      replaceNewTab(filesWithPreview ? "files" : normalizedPath);
+      if (filesWithPreview) setFilesTabOpen(true);
+    }
+    if (request?.sandboxId !== undefined) setProvidedSandboxIds(current => ({ ...current, [normalizedPath]: request.sandboxId! }));
     const normalizedFile = { ...file, path: normalizedPath };
     setLoadedFiles((current) => ({ ...current, [normalizedPath]: normalizedFile }));
     setProvidedFilePaths((current) => {
@@ -956,9 +984,14 @@ function WorkspaceDiffPanelInner({
         ? current
         : { ...current, [normalizedPath]: imageUrl };
     });
+    if (completing) {
+      if (selectedPath === normalizedPath) setFileError(request?.error ?? null);
+      setFileLoadingPath(current => current === normalizedPath ? null : current);
+      return;
+    }
     setFileReloadRequest(null);
-    setFileError(null);
-    setFileLoadingPath(null);
+    setFileError(request?.error ?? null);
+    setFileLoadingPath(request?.loading ? normalizedPath : null);
     if (!filesWithPreview) {
       setOpenFilePaths((current) =>
         current.includes(normalizedPath) ? current : [...current, normalizedPath],
@@ -1219,6 +1252,9 @@ function WorkspaceDiffPanelInner({
         return next;
       });
     }
+    const pendingLoad = pendingProvidedFiles.current.get(path);
+    if (pendingLoad !== undefined) cancelledProvidedLoads.current.add(pendingLoad);
+    pendingProvidedFiles.current.delete(path);
     setOpenFilePaths((current) => current.filter((candidate) => candidate !== path));
     setTabOrder(current => current.filter(key => key !== path));
     if (providedFilePaths.has(path)) {
@@ -1478,8 +1514,8 @@ function WorkspaceDiffPanelInner({
   ) : null;
   const selectedFilePreview = selectedPath ? (
     <div className="workspace-active-file-preview">
-    <WorkspaceFileRefresh key={`${sourceKey}:${selectedPath}`} file={fileForPath(selectedPath)} connection={connection}
-      workspaceId={appId} sandboxId={sandboxMode ? sandboxId : null} dirty={dirtyFilePaths.has(selectedPath)}
+    <WorkspaceFileRefresh key={`${sourceKey}:${providedSandboxIds[selectedPath] ?? "local"}:${selectedPath}`} file={fileForPath(selectedPath)} connection={connection}
+      workspaceId={appId} sandboxId={Object.hasOwn(providedSandboxIds, selectedPath) ? providedSandboxIds[selectedPath]! : sandboxMode ? sandboxId : null} dirty={dirtyFilePaths.has(selectedPath)}
       onReload={(file, imageUrl) => {
         setLoadedFiles(current => ({ ...current, [selectedPath]: { ...file, path: selectedPath } }));
         setFileDrafts(current => { const next = { ...current }; delete next[selectedPath]; return next; });

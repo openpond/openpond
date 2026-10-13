@@ -126,7 +126,7 @@ import {
   readCodexHistoryThreadPayload,
 } from "./codex-history.js";
 import { createCodexStatusService } from "./codex-status-service.js";
-import { sessionFileArtifacts } from "./workspace/session-file-artifacts.js";
+import { createSessionFileIndex } from "./workspace/session-file-index.js";
 import { createNativeHistoryWorkspace } from "./runtime/native-agents/history-workspace.js";
 import { createSessionStore } from "./store/session-store.js";
 import { createSessionTitleService } from "./session-title-service.js";
@@ -1611,6 +1611,12 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     interruptSessionTurn:turnRunner.interruptSessionTurn,
   });
 
+  const sessionFilesPayload = createSessionFileIndex({
+    getSession,
+    latestSequence: async id => (await store.threadDetailProjection(id))?.latestEventSequence ?? 0,
+    events: id => store.runtimeEventsForSession(id, { names: ["session.started", "session.updated", "tool.completed", "workspace_action_result", "assistant.delta"] }),
+  });
+
   const agentRuntime = createAppServer({
     ports: createAgentRuntimePorts({
       steerSessionTurn: turnRunner.steerSessionTurn,
@@ -1733,8 +1739,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       extensionUpdateAllPayload,
       extensionRemovePayload,
       eventPagePayload,
-      sessionFilesPayload: async sessionId => ({ files: sessionFileArtifacts(await getSession(sessionId),
-        await store.runtimeEventsForSession(sessionId, { names: ["session.started", "session.updated", "tool.completed", "workspace_action_result", "assistant.delta"] })) }),
+      sessionFilesPayload,
       listWorkOutputsPayload,
       captureWorkEvidencePayload: workEvidenceApi.capture,
       getWorkEvidencePayload: workEvidenceApi.get,

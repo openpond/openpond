@@ -1,4 +1,5 @@
 import type { RuntimeEvent, WorkspaceDiffFile, WorkspaceDiffSummary } from "@openpond/contracts";
+import { fileContentVersion } from "../../lib/file-content-version";
 import { isWorkspaceImagePath } from "../../lib/workspace-images";
 import { api, type ClientConnection } from "../../api";
 import type { SandboxFileEntry, SandboxGitDiff, SandboxGitStatus, SandboxRecord } from "../../lib/sandbox-types";
@@ -30,7 +31,8 @@ export async function readSandboxFile(
   if (result.file.isBinary && result.file.truncated) throw new Error("This file is too large to preview completely.");
   return {
     path: result.file.path,
-    readVersion: `${result.file.sizeBytes}:${result.file.updatedAt}`,
+    readStamp: `${result.file.sizeBytes}:${result.file.updatedAt}`,
+    readVersion: await fileContentVersion(result.file.contentsBase64),
     status: "",
     additions: 0,
     deletions: 0,

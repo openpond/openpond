@@ -47,7 +47,7 @@ export default function WorkspacePresentationPreview({ path, contentBase64 }: { 
     const url = URL.createObjectURL(new Blob([bytes], { type: PRESENTATION_CONTENT_TYPE }));
     const viewer = new PptxViewer(stage, { width: renderWidth, fitMode: "contain", scrollContainer: host, zipLimits: RECOMMENDED_ZIP_LIMITS, lazySlides: true, lazyMedia: true, pdfjs: false });
     setState({ source: bytes, count: 0, error: null, url });
-    void viewer.open(bytes.buffer, { signal: controller.signal, renderMode: "list", listOptions: { windowed: true, initialSlides: 3, batchSize: 3 } })
+    void viewer.open(bytes.buffer, { signal: controller.signal, renderMode: "list", listOptions: { windowed: true, initialSlides: 1, batchSize: 3 } })
       .then(() => {
         if (!controller.signal.aborted) setState({ source: bytes, count: viewer.slideCount, error: viewer.slideCount ? null : "This presentation contains no slides.", url });
       })

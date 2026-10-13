@@ -31,6 +31,7 @@ export function RightSidebarOverview({ messages, events, actions, onOpenFile, co
     queryFn: async () => (await api.sessionFiles(connection!, sessionId!)).files,
     staleTime: 15_000,
     refetchOnWindowFocus: true,
+    refetchInterval: 5_000,
   });
   const files = useMemo(() => {
     // The persisted index owns source identity; old transcript artifacts must
@@ -44,7 +45,7 @@ export function RightSidebarOverview({ messages, events, actions, onOpenFile, co
       if (output.kind !== "file" || output.location.kind !== "local") continue;
       artifacts.set(`local:${output.location.path}`, { path: output.location.path, title: output.title, sizeBytes: output.sizeBytes, contentType: output.contentType, sandboxId: null });
     }
-    return [...artifacts.values()].reverse();
+    return [...artifacts.values()];
   }, [messages, published, sandboxId, saved.data]);
 
   return (
