@@ -1,3 +1,4 @@
+import type { createChatProfileExperiments } from "../evaluations/chat-profile-experiments.js";
 import { createChatTeamExperiments } from "../evaluations/chat-team-experiments.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -26,6 +27,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   teamExperiments:Parameters<typeof createChatTeamExperiments>[0]["service"];
   resolveInvocation:(token:string)=>Promise<{sessionId:string;turnId:string}>;
 }) {
+  let profile:ReturnType<typeof createChatProfileExperiments>|null=null;
   const scopes = createChatExperimentScopes(deps.store);
   const sync = createLocalDatasetSync({store:deps.store,access:deps.access});
   const datasets = createLocalDatasetService({store:deps.store,home:deps.home,syncAction:sync.action,onSaved:sync.onSaved,
@@ -38,6 +40,10 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal):Promise<unknown> {
     if(kind==="dataset")return datasets.request(input,signal);
     const envelope=z.object({action:z.string(),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(input);
+    if (typeof envelope.payload.id === "string" && profile) {
+      const linked=(await deps.store.chatResourceLinks({kind:"experiment",id:envelope.payload.id})).find(link=>link.summary.profileRef)?.summary;
+      if(linked?.profileRef && ["read","status","result"].includes(envelope.action))return profile.inspect(linked.id,linked.profileRef);
+    }
     if (typeof envelope.payload.id === "string" && team) {
       const linked = (await deps.store.chatResourceLinks({kind:"experiment",id:envelope.payload.id})).find(link=>link.summary.owner)?.summary;
       if (linked?.owner && ["read","status","result","cancel"].includes(envelope.action)) {
@@ -59,6 +65,10 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   }
   async function wait(id:string){if(await deps.store.readChatHostedExperiment(id))return cloud.wait(id);await experiments.service.wait(id);return dispatch("experiment",{action:"result",payload:{id}});}
   async function emit(sessionId:string,turnId:string,summary:ChatResourceSummary) {
+    if(summary.profileRef) {
+      if(!profile)throw new Error("Profile experiment association is unavailable.");
+      await profile.authorize(summary.profileRef);
+    }
     if(summary.owner) {
       const access=await deps.access();
       if(access.teamId!==summary.owner.teamId || access.actorId!==summary.owner.actorId)throw new Error("Resource owner changed before chat attachment.");
@@ -66,15 +76,15 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     await deps.store.linkChatResource(sessionId,turnId,summary);
     // Pending authoring messages can have provisional IDs. Only saved resources
     // become configuration inputs; failed scaffolds must not create fake drafts.
-    if (summary.kind !== "dataset" || summary.owner || await deps.store.readLocalDatasetListing(summary.id,summary.revision)) {
-      if (summary.kind !== "dataset" && !summary.owner && summary.datasetId) {
+    if (summary.kind !== "dataset" || summary.owner || summary.profileRef || await deps.store.readLocalDatasetListing(summary.id,summary.revision)) {
+      if (summary.kind !== "dataset" && !summary.owner && !summary.profileRef && summary.datasetId) {
         const dataset = await deps.store.readLocalDatasetListing(summary.datasetId,summary.datasetRevision);
         if (dataset) await scopes.attach(sessionId,turnId,localDatasetSummary(dataset));
       }
       await scopes.attach(sessionId,turnId,summary);
     }
     // Team inputs are immutable pins, not installation-local authoring cards.
-    if (summary.owner && summary.kind !== "experiment") return;
+    if ((summary.owner || summary.profileRef) && summary.kind !== "experiment") return;
     await deps.append({id:randomUUID(),name:"workspace_action_result",source:"server",sessionId,turnId,timestamp:new Date().toISOString(),action:"chat_resource",status:"completed",data:{chatResource:summary}});
   }
   function attachedSummaries(action:unknown, object:Record<string,unknown>):ChatResourceSummary[] {
@@ -123,7 +133,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
           if(!ownedChoices.some(summary=>summary.id===current.summary.id))ownedChoices.push(current.summary);
         } catch {/* Records from a previous account are not choices in the active account. */}
       }
-      const experimentChoices=[...localChoices,...ownedChoices,...await cloud.list()];
+      const linkedProfiles=(await deps.store.chatResourceLinks({sessionId:session.id,kind:"experiment"})).filter(link=>link.summary.profileRef);
+      const profileChoices:ChatResourceSummary[]=[];
+      if(profile)for(const link of new Map(linkedProfiles.map(link=>[link.summary.id,link])).values()) {
+        try {profileChoices.push((await profile.inspect(link.summary.id,link.summary.profileRef)).summary);}catch {/* The selected Profile owns these choices. */}
+      }
+      const experimentChoices=[...localChoices,...ownedChoices,...profileChoices,...await cloud.list()];
       let scopeContext = chatExperimentContext(session.metadata);
       const sourceTurn=context ? await deps.store.getTurn(context.turnId) : null;
       if(context && input.action!=="context") {
@@ -138,14 +153,19 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       };
       let focus = focusFor(scopeContext);
       async function verifyOwner(dataset:ChatResourceSummary) {
+        if(dataset.profileRef) {
+          if(!profile)throw new Error("Profile experiment association is unavailable.");
+          await profile.authorize(dataset.profileRef);
+        }
         if(!dataset.owner)return;
         const access=await deps.access();
         if(access.teamId!==dataset.owner.teamId || access.actorId!==dataset.owner.actorId)throw new Error("Select the account and workspace that own this dataset pin.");
       }
       async function gradersFor(dataset:ChatResourceSummary|null) {
         if(!dataset)return [];
-        if(dataset.owner) {
+        if(dataset.profileRef || dataset.owner) {
           await verifyOwner(dataset);
+          if(focus.experiment?.profileRef && profile)return (await profile.inspect(focus.experiment.id,focus.experiment.profileRef)).inputs.filter(resource=>resource.kind==="grader");
           if(focus.experiment?.owner && team)return (await team.inspect(focus.experiment.owner,focus.experiment.id)).inputs.filter(resource=>resource.kind==="grader");
           return scopeContext.scopes.find(scope=>scope.id===scopeContext.activeScopeId)?.graders.filter(grader=>grader.datasetId===dataset.id && grader.datasetRevision===dataset.revision) ?? [];
         }
@@ -167,13 +187,14 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         return selectedFocus(scopeContext);
       }
       if (input.action === "context") {
+        if(focus.experiment?.profileRef && profile)focus={...focus,experiment:(await profile.inspect(focus.experiment.id,focus.experiment.profileRef)).summary};
         if(focus.experiment?.owner && team)focus={...focus,experiment:(await team.inspect(focus.experiment.owner,focus.experiment.id)).summary};
-        if(focus.experiment?.location==="local" && !focus.experiment.owner) {
+        if(focus.experiment?.location==="local" && !focus.experiment.owner && !focus.experiment.profileRef) {
           const record=await deps.store.readLocalExperimentRecord(experiments.scope,focus.experiment.id);
           focus={...focus,experiment:record ? await experiments.summary(record) : null};
         }
-        if(focus.dataset?.owner)await verifyOwner(focus.dataset);
-        if(focus.dataset && !focus.dataset.owner) {const pinned=await deps.store.readLocalDatasetListing(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
+        if(focus.dataset?.owner || focus.dataset?.profileRef)await verifyOwner(focus.dataset);
+        if(focus.dataset && !focus.dataset.owner && !focus.dataset.profileRef) {const pinned=await deps.store.readLocalDatasetListing(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
         const graders = await gradersFor(focus.dataset);
         return {focus:{...focus,scopeContext},datasets:datasetChoices,experiments:experimentChoices,graders};
       }
@@ -183,16 +204,16 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         return selectedFocus(scopeContext);
       }
       if (query.kind === "dataset") {
-        const sameOwnerPin = focus.dataset?.owner && query.id === focus.dataset.id && query.revision === focus.dataset.revision;
+        const sameOwnerPin = (focus.dataset?.owner || focus.dataset?.profileRef) && query.id === focus.dataset.id && query.revision === focus.dataset.revision;
         const dataset = sameOwnerPin ? focus.dataset : query.id ? localDatasetSummary(await datasets.readListing(query.id,query.revision)) : null;
-        if(dataset?.owner)await verifyOwner(dataset);
+        if(dataset?.owner || dataset?.profileRef)await verifyOwner(dataset);
         if (query.id && !dataset) throw new Error("Local Dataset was not found.");
         focus = {dataset:dataset ?? null,experiment:dataset && focus.experiment && focus.experiment.datasetId === dataset.id && focus.experiment.datasetRevision === dataset.revision ? focus.experiment : null};
       } else {
         const experiment = query.id ? experimentChoices.find(e=>e.id === query.id) : null;
         if (query.id && !experiment) throw new Error("Local Experiment was not found.");
-        const associated=experiment?.owner && team ? (await team.inspect(experiment.owner,experiment.id)).inputs.find(resource=>resource.kind==="dataset") : null;
-        const pinned = !experiment?.owner && experiment?.datasetId ? await deps.store.readLocalDatasetListing(experiment.datasetId,experiment.datasetRevision) : null;
+        const associated=experiment?.profileRef && profile ? (await profile.inspect(experiment.id,experiment.profileRef)).inputs.find(resource=>resource.kind==="dataset") : experiment?.owner && team ? (await team.inspect(experiment.owner,experiment.id)).inputs.find(resource=>resource.kind==="dataset") : null;
+        const pinned = !experiment?.owner && !experiment?.profileRef && experiment?.datasetId ? await deps.store.readLocalDatasetListing(experiment.datasetId,experiment.datasetRevision) : null;
         focus = {experiment:experiment ?? null,dataset:associated ?? (pinned ? localDatasetSummary(pinned) : null)};
       }
       const graders = await gradersFor(focus.dataset);
@@ -262,5 +283,8 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     }
     return result;
   };
-  return {datasets,experiments,request,execute,teamRequest:team.request,close:async()=>{cloud.close();await sync.close();await experiments.service.close();}};
+  return {datasets,experiments,request,execute,
+    setProfileOwner:(owner:ReturnType<typeof createChatProfileExperiments>)=>{if(profile)throw new Error("Profile owner is already registered.");profile=owner;},
+    associate:async(context:{sessionId:string;turnId:string},resources:ChatResourceSummary[])=>{for(const summary of resources)await emit(context.sessionId,context.turnId,summary);},
+    teamRequest:team.request,close:async()=>{cloud.close();await sync.close();await experiments.service.close();}};
 }

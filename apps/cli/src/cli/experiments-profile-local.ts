@@ -44,7 +44,7 @@ export async function runLocalProfileExperimentCommand(
   });
   const response = await request(new URL(endpoint, base), {
     method: payload ? "POST" : "GET",
-    ...(payload ? { headers: { "content-type": "application/json" }, body: JSON.stringify(payload) } : {}),
+    ...(payload ? { headers: { "content-type": "application/json" }, body: JSON.stringify({...payload,...["prepare-profile","run-profile","inspect-profile"].includes(action) && process.env.OPENPOND_CHAT_INVOCATION ? {invocationToken:process.env.OPENPOND_CHAT_INVOCATION} : {}}) } : {}),
   });
   const result: unknown = await response.json();
   if (!response.ok) {
