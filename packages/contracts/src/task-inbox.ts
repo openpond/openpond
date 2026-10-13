@@ -1,3 +1,4 @@
+import { ChatTrainingReferenceSchema } from "./chat-training-reference.js";
 import { z } from "zod";
 import { OpenPondProfileRefSchema } from "./profile-ref.js";
 
@@ -40,6 +41,7 @@ export type TaskInputAdmission = Pick<TaskInput,
 export const TaskResourceContextSchema = z.object({
   scopeId: z.string().trim().min(1).max(240),
   selectionVersion: z.number().int().nonnegative(),
+  training: z.array(ChatTrainingReferenceSchema).max(16).optional(),
   resources: z.array(z.object({
     kind: z.enum(["dataset", "grader", "experiment"]),
     id: z.string().trim().min(1).max(240),

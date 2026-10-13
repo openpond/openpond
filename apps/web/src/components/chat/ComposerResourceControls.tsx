@@ -1,3 +1,4 @@
+import { chatTrainingAttachmentKey, type ChatTrainingAttachment } from "@openpond/contracts";
 import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
 import { DropdownSelect } from "../DropdownSelect";
@@ -6,7 +7,7 @@ import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import "./composer-resources.css";
 
 export function ComposerResourceControls({ resources, busy, onDraft }: {
-  resources: ReturnType<typeof useChatResourceFocus>; busy: boolean; onDraft: (text: string) => void;
+  resources: ReturnType<typeof useChatResourceFocus>; busy: boolean; onDraft: (text: string, training?: ChatTrainingAttachment) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
@@ -65,8 +66,12 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
         triggerContent={<MoreVertical size={15} />}
         options={[{ value: primary, label: `${primary}…` }, ...(dataset ? [{ value: "Improve dataset", label: "Improve dataset…" }, { value: "Train model", label: "Train model…" }] : []),
           ...(completed ? [{ value: "Run", label: "Run again…" }, { value: "Compare results", label: "Compare results…" }] : []),
+          ...(scope.training ?? []).map((training,index)=>({value:`training:${chatTrainingAttachmentKey(training)}`,label:`View training ${index+1}…`,description:training.location === "cloud" ? "Hosted" : "Local",separatorBefore:index===0})),
           { value: "rename", label: "Rename experiment…", separatorBefore: true }]}
-        onChange={value => { if (value === "rename") { setName(scope.name); setRenaming(true); } else draft(value); }} disabled={disabled} />
+        onChange={value => { if (value.startsWith("training:")) {
+          const training = scope.training?.find(candidate=>`training:${chatTrainingAttachmentKey(candidate)}`===value);
+          if (training) onDraft("Check this training job and show its results and any model it produced.",training);
+        } else if (value === "rename") { setName(scope.name); setRenaming(true); } else draft(value); }} disabled={disabled} />
     </div>
     {renaming ? <form className="composer-resource-rename" onSubmit={event => { event.preventDefault(); void resources.renameScope(scope.id, name).then(saved => { if (saved) setRenaming(false); }); }}>
       <input autoFocus aria-label="Experiment name" value={name} onChange={event => setName(event.target.value)} maxLength={500} disabled={disabled} />

@@ -1,7 +1,7 @@
-import { TaskResourceContextsSchema, type ChatResourceSummary, type TaskResourceContext } from "@openpond/contracts";
+import { chatTrainingAttachmentKey, chatTrainingReference, type ChatTrainingAttachment, TaskResourceContextsSchema, type ChatResourceSummary, type TaskResourceContext } from "@openpond/contracts";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 
-export function captureComposerResourceContext(resources: ReturnType<typeof useChatResourceFocus>): TaskResourceContext[] {
+export function captureComposerResourceContext(resources: ReturnType<typeof useChatResourceFocus>, training?: ChatTrainingAttachment): TaskResourceContext[] {
   if (!resources.scope || !resources.focus.scopeContext) return [];
   const selected = resources.scope.selectedGraderId
     ? resources.graders.filter(grader => grader.id === resources.scope!.selectedGraderId)
@@ -11,10 +11,12 @@ export function captureComposerResourceContext(resources: ReturnType<typeof useC
     .map(({kind, id, revision, datasetId, datasetRevision, owner, profileRef}) => ({
       kind, id, revision, datasetId, datasetRevision, owner, profileRef,
     }));
+  const job = training ?? resources.scope.training?.find(candidate => chatTrainingAttachmentKey(candidate) === resources.scope!.selectedTrainingKey);
   return TaskResourceContextsSchema.parse([{
     scopeId: resources.scope.id,
     selectionVersion: resources.focus.scopeContext.selectionVersion,
     resources: references,
+    ...(job ? {training:[chatTrainingReference(job)]} : {}),
   }]);
 }
 
