@@ -4,6 +4,7 @@ import type { WorkspaceDiffFile } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 import { connectionQueryScope } from "../../lib/query-scope";
 import { localFileWorkspaceId } from "../../lib/local-file-workspace";
+import { fileContentVersion } from "../../lib/file-content-version";
 import { isWorkspaceImagePath } from "../../lib/workspace-images";
 import { useAppToast } from "../../app/AppToastContext";
 import { RefreshCw } from "../icons";
@@ -20,9 +21,11 @@ export function WorkspaceFileRefresh({ connection, workspaceId, sandboxId, file,
   const sourceId = localFileWorkspaceId(file.path) || workspaceId;
   const toast = useAppToast();
   const [busy, setBusy] = useState(false);
+  const [comparisonReady, setComparisonReady] = useState(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [baseline, setBaseline] = useState<string | null | undefined>(file.readVersion);
+  const sandboxVersion = useRef<{ stamp: string; revision: string | null | undefined } | null>(null);
   const version = useQuery({
     queryKey: ["open-file-version", connectionQueryScope(connection), sandboxId ?? sourceId, file.path],
     enabled: Boolean(connection && (sandboxId || sourceId)),
@@ -31,16 +34,36 @@ export function WorkspaceFileRefresh({ connection, workspaceId, sandboxId, file,
       const parent = file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) || "/" : ".";
       const { files } = await api.sandboxFiles(connection!, sandboxId, { path: parent, recursive: false });
       const entry = files.find(entry => entry.path === file.path || entry.path.split("/").pop() === file.path.split("/").pop());
-      return { exists: Boolean(entry), revision: entry ? `${entry.sizeBytes}:${entry.updatedAt}` : null };
+      if (!entry) return { exists: false, revision: null };
+      const stamp = `${entry.sizeBytes}:${entry.updatedAt}`;
+      if (file.readStamp === stamp) return { exists: true, revision: file.readVersion ?? null };
+      if (sandboxVersion.current?.stamp === stamp) return { exists: true, revision: sandboxVersion.current.revision ?? null };
+      const current = await readSandboxFile(connection!, sandboxId, file.path);
+      sandboxVersion.current = { stamp, revision: current.readVersion };
+      return { exists: true, revision: current.readVersion ?? null };
     },
     refetchInterval: 5_000,
     refetchOnWindowFocus: true,
   });
+  const checkVersion = version.refetch;
   useEffect(() => {
-    if (file.readVersion !== undefined) setBaseline(file.readVersion);
-    else if (baseline === undefined && version.data) setBaseline(version.data.revision);
-  }, [baseline, file.readVersion, version.data]);
-  const changed = baseline !== undefined && version.data && baseline !== version.data.revision;
+    let cancelled = false;
+    setComparisonReady(false);
+    void (async () => {
+      const digest = file.contentEncoding === "base64" && file.content
+        ? await fileContentVersion(file.content) : file.readVersion;
+      if (cancelled) return;
+      setBaseline(digest);
+      if (connection && (sandboxId || sourceId)) await checkVersion();
+      if (!cancelled) setComparisonReady(true);
+    })().catch(() => { if (!cancelled) setComparisonReady(true); });
+    return () => { cancelled = true; };
+  }, [checkVersion, connection, file.content, file.contentEncoding, file.readVersion, sandboxId, sourceId]);
+
+  useEffect(() => {
+    if (baseline === undefined && !file.content && version.data) setBaseline(version.data.revision);
+  }, [baseline, file.content, version.data]);
+  const changed = comparisonReady && baseline !== undefined && !version.isError && version.data?.exists && baseline !== version.data.revision;
 
   async function refresh() {
     if (!connection || (!sandboxId && !sourceId) || busy) return;
@@ -71,12 +94,12 @@ export function WorkspaceFileRefresh({ connection, workspaceId, sandboxId, file,
     } finally { if (mounted.current) setBusy(false); }
   }
 
-  return <button type="button" className={`workspace-file-refresh ${changed ? "updated" : ""}`}
+  if (!changed && !busy) return null;
+  return <button type="button" className="workspace-file-refresh"
     disabled={busy || !connection || (!sandboxId && !sourceId)} onClick={() => void refresh()}
-    aria-label={changed ? "Refresh updated file" : "Refresh file"}
-    title={changed ? "The file changed. Refresh to show the latest version." : "Reload this file from disk"}>
+    aria-label="Reload updated file"
+    title={changed ? "The file changed. Reload to show the latest version." : "Reload this file from disk"}>
     <RefreshCw size={14} className={busy ? "spinning" : undefined} />
-    <span>{busy ? "Refreshing…" : "Refresh"}</span>
-    {changed ? <span className="workspace-file-refresh-dot" aria-label="Update available" /> : null}
+    <span>{busy ? "Reloading…" : "Reload"}</span>
   </button>;
 }

@@ -646,6 +646,7 @@ export function visibleChatFileArtifacts(messages: ChatMessage[]): Array<{
     for (const activity of message.activities ?? []) {
       for (const artifact of activity.artifacts ?? []) {
         if (!artifact.path || artifact.sizeBytes === null) continue;
+        artifacts.delete(artifact.path);
         artifacts.set(artifact.path, {
           path: artifact.path,
           title: artifact.title,
@@ -654,9 +655,7 @@ export function visibleChatFileArtifacts(messages: ChatMessage[]): Array<{
       }
     }
   }
-  return [...artifacts.values()].sort((left, right) =>
-    right.path.localeCompare(left.path)
-  );
+  return [...artifacts.values()].reverse();
 }
 
 export function workOutputsFromEvents(events: RuntimeEvent[]): OutputRef[] {

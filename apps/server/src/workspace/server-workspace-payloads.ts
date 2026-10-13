@@ -3,7 +3,7 @@ import { createHtmlPreviewService } from "./html-preview.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { loadLocalOutputFile, loadLocalOutputImage } from "./local-output-files.js";
-import { workspaceFileVersion } from "./workspace-file-version.js";
+import { fileContentVersion, workspaceFileVersion } from "./workspace-file-version.js";
 import { resolveChatFile } from "./resolve-chat-file.js";
 import {
   CreateLocalProjectRequestSchema,
@@ -382,7 +382,10 @@ export function createServerWorkspacePayloads(deps: {
     const detail = localPathWorkspace ? await loadLocalOutputFile(localPathWorkspace.paths.repoPath, filePath)
       : localProject ? await loadLocalOutputFile(localProjectWorkspacePaths(localProject).repoPath, filePath)
       : await loadWorkspaceFile(storeDir, await findOpenPondApp(appId), filePath);
-    return { ...WorkspaceDiffFileSchema.parse(detail), readVersion: before.revision };
+    const parsed = WorkspaceDiffFileSchema.parse(detail);
+    return { ...parsed, readStamp: before.stamp ?? undefined,
+      readVersion: parsed.contentEncoding === "base64" && parsed.content
+        ? fileContentVersion(Buffer.from(parsed.content, "base64")) : before.revision };
   }
 
   async function workspaceRepoPathPayload(appId: string): Promise<string> {

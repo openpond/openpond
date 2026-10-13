@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
@@ -71,4 +71,40 @@ test("conversation file references keep their original folder and sandbox across
   expect(files.map(file => file.path)).toEqual(["/workspace/deck.pptx", "/workspace/deck.pptx", "/new-project/report.docx", "/old-project/notes/report.docx", "/old-project/outputs/deck.pptx"]);
   expect(sessionFileArtifacts(session, [...events, event("tool.completed", { artifacts: [{ ...artifact, path: "/workspace/deck.pptx" }] }, { action: "work_output_delete", status: "completed" })]))
     .toHaveLength(4);
+});
+
+
+// Rewriting a saved filename must move it to the front even without another
+// output event; repeated refreshes must not rescan immutable transcript history.
+test("conversation file refreshes sort by disk updates and reuse the persisted index", async () => {
+  const { createSessionFileIndex } = await import("../apps/server/src/workspace/session-file-index.js");
+  const { SessionSchema, RuntimeEventSchema } = await import("@openpond/contracts");
+  const directory = await mkdtemp(join(tmpdir(), "openpond-file-order-"));
+  try {
+    const a = join(directory, "z-first.txt");
+    const b = join(directory, "a-second.txt");
+    await writeFile(a, "old"); await writeFile(b, "new");
+    await utimes(a, new Date("2026-01-01"), new Date("2026-01-01"));
+    await utimes(b, new Date("2026-02-01"), new Date("2026-02-01"));
+    const session = SessionSchema.parse({ id: "files", title: "Files", provider: "claude-code", experience: "work",
+      appId: null, appName: null, cwd: directory, codexThreadId: null, status: "idle",
+      createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", pinned: false, archived: false, order: 0 });
+    const events = vi.fn(async () => [RuntimeEventSchema.parse({ id: "1", sessionId: session.id,
+      name: "tool.completed", timestamp: session.createdAt, source: "server", data: { artifacts: [a, b].map(path => ({ path, contentType: "text/plain" })) } })]);
+    let sequence = 1;
+    const index = createSessionFileIndex({ getSession: async () => session, latestSequence: async () => sequence, events });
+    const [first, concurrent] = await Promise.all([index(session.id), index(session.id)]);
+    expect(first.files.map(file => file.path)).toEqual([b, a]);
+    expect(concurrent.files).toEqual(first.files);
+    expect(events).toHaveBeenCalledTimes(1);
+    await writeFile(a, "updated");
+    await utimes(a, new Date("2026-03-01"), new Date("2026-03-01"));
+    const next = await index(session.id);
+    expect(next.files.map(file => file.path)).toEqual([a, b]);
+    expect(next.files[0]?.revision).not.toBe(first.files[1]?.revision);
+    expect(events).toHaveBeenCalledTimes(1);
+    sequence += 1;
+    await index(session.id);
+    expect(events).toHaveBeenCalledTimes(2);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
