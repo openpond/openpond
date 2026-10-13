@@ -6,6 +6,7 @@ import type { ChatResourceSummary, LocalExperimentResult } from "@openpond/contr
 const escape = (value:string) => value.replace(/[&<>"']/g,character => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[character]!));
 const percent = (value:number|null|undefined) => value == null ? "Unavailable" : (value*100).toFixed(1)+"%";
 const cost = (value:number|null|undefined) => value == null ? "Unavailable" : "$"+value.toFixed(4);
+const count = (value:number|null|undefined) => value == null ? "Unavailable" : String(value);
 
 /** A report is a view of exact retained evidence. Text is escaped, missing
  * measurements stay missing, and the document has no executable app actions. */
@@ -21,10 +22,9 @@ export function chatExperimentReport(runs:{summary:ChatResourceSummary;evidence?
   const pins = retained.map(({summary,view})=>'<li>'+display(summary.id,200)+' · Dataset '+display(summary.datasetId ?? "",200)+' version '+(summary.datasetRevision ?? "")+' · retained result '+display(view.contentHash,200)+'</li>').join("");
   const runLabel = (summary:ChatResourceSummary)=>'<span class="run-label">'+display(summary.name,160)+'<small>'+display(summary.model ?? "Selected model")+' · Dataset version '+(summary.datasetRevision ?? "Unavailable")+' · run '+display(summary.id.slice(-8),8)+'</small></span>';
   const rows = retained.map(({summary})=>{
-    const quality = summary.qualityFailureCount ?? 0;
-    const infrastructure = summary.executionFailureCount ?? 0;
-    const unavailable = summary.ungradedCount ?? summary.taskCount ?? 0;
-    return '<tr><th scope="row">'+runLabel(summary)+'</th><td>'+escape(summary.state)+'</td><td>'+percent(summary.score)+'<small> · '+display(summary.scoreLabel ?? "Mean task score")+'</small>'+'</td><td>'+(summary.evaluatedCount ?? 0)+'/'+(summary.taskCount ?? 0)+'</td><td>'+quality+'</td><td>'+infrastructure+'</td><td>'+unavailable+'</td><td>'+cost(summary.costUsd)+'</td></tr>';
+    const coverage = summary.evaluatedCount == null || summary.taskCount == null
+      ? "Unavailable" : `${summary.evaluatedCount}/${summary.taskCount}`;
+    return '<tr><th scope="row">'+runLabel(summary)+'</th><td>'+escape(summary.state)+'</td><td>'+percent(summary.score)+'<small> · '+display(summary.scoreLabel ?? "Mean task score")+'</small>'+'</td><td>'+coverage+'</td><td>'+count(summary.qualityFailureCount)+'</td><td>'+count(summary.executionFailureCount)+'</td><td>'+count(summary.ungradedCount)+'</td><td>'+cost(summary.costUsd)+'</td></tr>';
   }).join("");
   const bars = retained.map(({summary})=>'<div class="bar-row">'+runLabel(summary)+'<div class="track">'+(summary.score==null ? '<span>Unavailable</span>' : '<div class="bar" style="width:'+Math.max(0,Math.min(100,summary.score*100))+'%"></div>')+'</div><strong>'+percent(summary.score)+'</strong></div>').join("");
   const cases = retained.flatMap(({summary,view})=>view.cases.slice(0,3).map(row=>'<tr><td>'+runLabel(summary)+'</td><td>'+display(row.taskId)+'</td><td>'+display(row.error ?? row.output ?? row.status,300)+'</td><td>'+percent(row.score)+'</td></tr>')).join("");
