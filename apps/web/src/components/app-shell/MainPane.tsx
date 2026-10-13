@@ -1047,14 +1047,14 @@ export function MainPane({
     ]
   );
   const changeMainComposerProvider = useCallback(
-    (provider: ChatProvider) => {
+    (provider: ChatProvider, model?: string) => {
       if (
         trainingChatHandoff &&
         provider !== trainingChatHandoff.model.providerId
       ) {
         onTrainingChatHandoffDismiss();
       }
-      changeDraftProvider(provider);
+      changeDraftProvider(provider, model);
     },
     [changeDraftProvider, onTrainingChatHandoffDismiss, trainingChatHandoff]
   );

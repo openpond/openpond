@@ -134,7 +134,7 @@ export function RightChatPanelStack({
   onOpenProfileSettings: () => void;
   onOpenSession?: (sessionId: string) => void;
   onOpenPonder?: () => void;
-  onProviderChange: (panelId: string, provider: ChatProvider) => void;
+  onProviderChange: (panelId: string, provider: ChatProvider, model?: string) => void;
   onProviderSetupOpen: () => void;
   onPromptChange: (panelId: string, prompt: string) => void;
   onProfileTargetChange: (sessionId: string | null, value: string) => void;
@@ -416,7 +416,7 @@ export function RightChatPanelStack({
             onOpenProfileSettings={onOpenProfileSettings}
             onOpenSession={onOpenSession}
             onOpenPonder={onOpenPonder}
-            onProviderChange={(provider) => onProviderChange(activePanel.id, provider)}
+            onProviderChange={(provider, model) => onProviderChange(activePanel.id, provider, model)}
             onProviderSetupOpen={onProviderSetupOpen}
             onPromptChange={(prompt) => onPromptChange(activePanel.id, prompt)}
             onProfileTargetChange={(value) => onProfileTargetChange(activePanel.sessionId, value)}

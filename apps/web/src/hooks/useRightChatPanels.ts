@@ -14,7 +14,7 @@ import type { ComposerSubmitOptions } from "../components/chat/Composer";
 import type { WorkspaceDiffTabRequest } from "../components/workspace-diff/workspace-diff-panel-model";
 import type { ComposerSlashCommand } from "../lib/composer-slash-commands";
 import type { AppView } from "../lib/app-models";
-import { normalizeChatModel } from "../lib/app-models";
+import { preferredChatModel, rememberChatSelection } from "../lib/chat-selection-preference";
 import type { PendingChatUserMessage } from "../lib/pending-chat-messages";
 import {
   activateRightChatSessionPanel,
@@ -291,21 +291,25 @@ export function useRightChatPanels(input: {
   );
   const updateRightChatModel = useCallback(
     (panelId: string, model: string) => {
+      const panel = rightChatPanels.find((entry) => entry.id === panelId);
+      if (panel) rememberChatSelection(panel.provider, model);
       setRightChatPanels((current) =>
         current.map((panel) => (panel.id === panelId ? { ...panel, model } : panel)),
       );
     },
-    [setRightChatPanels],
+    [rightChatPanels, setRightChatPanels],
   );
   const updateRightChatProvider = useCallback(
-    (panelId: string, provider: RightChatPanel["provider"]) => {
+    (panelId: string, provider: RightChatPanel["provider"], selectedModel?: string) => {
+      const model = selectedModel ?? preferredChatModel(provider, providerSettings);
+      rememberChatSelection(provider, model);
       setRightChatPanels((current) =>
         current.map((panel) =>
           panel.id === panelId
             ? {
                 ...panel,
                 provider,
-                model: normalizeChatModel(provider, panel.model, providerSettings),
+                model,
               }
             : panel,
         ),
