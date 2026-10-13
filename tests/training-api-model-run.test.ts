@@ -226,3 +226,45 @@ describe("training API Model Run approval forwarding", () => {
     expect(resume).toHaveBeenCalledWith("model_run_eval");
   });
 });
+
+// Polling must agree with the full snapshot across profiles, and navigation must
+// never pull task bodies or training traces into every chat window.
+test("training overview reads compact metadata with the same revision scope as full state", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { DatabaseSync } = await import("node:sqlite");
+  const { SqliteStore } = await import("../apps/server/src/store/store");
+  const { projectTrainingActivity } = await import("../apps/server/src/training/training-activity");
+  const directory = await mkdtemp(join(tmpdir(), "openpond-training-overview-"));
+  const store = new SqliteStore(directory);
+  let database: InstanceType<typeof DatabaseSync> | undefined;
+  const timestamp = "2026-10-12T00:00:00.000Z";
+  try {
+    await store.sessionShells();
+    database = new DatabaseSync(store.storePath);
+    const taskset = { id: "taskset", revision: 1, contentHash: "a".repeat(64), updatedAt: timestamp };
+    const model = { id: "model-other-profile", name: "Other profile model", revision: 1, updatedAt: timestamp };
+    database.prepare("INSERT INTO tasksets (id, profile_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(taskset.id, "selected", "ready", JSON.stringify({ ...taskset, tasks: [{ body: "x".repeat(2_000_000) }] }), timestamp, timestamp);
+    database.prepare("INSERT INTO model_projects (id, profile_id, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(model.id, "other", JSON.stringify(model), timestamp, timestamp);
+    database.prepare("INSERT INTO training_sources (id, profile_id, source_kind, session_id, source_hash, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run("source", "selected", "chat", "chat-source", "a".repeat(64), JSON.stringify({ sessionId: "chat-source" }), timestamp, timestamp);
+    const creation = { id: "creation", state: "ready", updatedAt: timestamp };
+    database.prepare("INSERT INTO task_creation_snapshots (id, profile_id, state, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(creation.id, "selected", creation.state, JSON.stringify({ ...creation, request: { sourceIds: ["source"] } }), timestamp, timestamp);
+    const metadata = await store.readTrainingActivityState("selected");
+    const snapshot = { jobs: [], creations: [creation], minerRuns: [], datasetImports: [], tasksetDrafts: [], tasksets: [taskset], modelProjects: [model] };
+    const expected = projectTrainingActivity({ profileId: "selected", state: snapshot as never });
+    expect(projectTrainingActivity({ profileId: "selected", state: { ...metadata, jobs: [] } }).revision).toBe(expected.revision);
+    expect(JSON.stringify(metadata).length).toBeLessThan(2000);
+    expect(await store.readTrainingNavigation("selected")).toEqual({
+      projects: [{ id: model.id, name: model.name, teamId: null }],
+      activityByProjectId: {}, creationSessionIds: ["chat-source"],
+    });
+    expect((await store.readTrainingNavigation("other")).creationSessionIds).toEqual([]);
+    database.prepare("UPDATE model_projects SET payload = json_set(payload, '$.revision', 2) WHERE id = ?").run(model.id);
+    expect(projectTrainingActivity({ profileId: "selected", state: { ...await store.readTrainingActivityState("selected"), jobs: [] } }).revision).not.toBe(expected.revision);
+  } finally {
+    database?.close();
+    await store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

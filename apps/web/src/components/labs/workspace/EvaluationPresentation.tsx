@@ -1,4 +1,5 @@
 import { chatModelLabel } from "../../../lib/app-models";
+import { modelDisplayLabel } from "../../../lib/model-display";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { Check, Circle, LoaderCircle, X } from "lucide-react";
@@ -18,7 +19,8 @@ export function EvaluationStatus({ status, iconOnly=false }: { status: string; i
 }
 
 export function EvaluationModel({ name, onOpen }: { name: string; onOpen?: () => void }) {
-  return onOpen ? <button type="button" title={chatModelLabel(name)} className="evaluation-model" onClick={event => { event.stopPropagation(); onOpen(); }}>{chatModelLabel(name)}</button> : <span title={chatModelLabel(name)} className="evaluation-model">{chatModelLabel(name)}</span>;
+  const label = modelDisplayLabel(chatModelLabel(name));
+  return onOpen ? <button type="button" title={label} className="evaluation-model" onClick={event => { event.stopPropagation(); onOpen(); }}>{label}</button> : <span title={label} className="evaluation-model">{label}</span>;
 }
 
 export function EvaluationTime({ value }: { value?: string | null }) {

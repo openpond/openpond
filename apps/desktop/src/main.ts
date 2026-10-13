@@ -22,7 +22,6 @@ import {
   tokenFilePath,
 } from "./desktop-environment.js";
 import { closeBrowserSidebarManagers, registerBrowserSidebarIpc } from "./desktop-browser-ipc.js";
-import { createReadyLineParser } from "./child-process-ready.js";
 import { DesktopBackendManager } from "./desktop-backend-manager.js";
 import { createDesktopUpdater } from "./desktop-updater.js";
 import type { DesktopUpdateController } from "./desktop-update-controller.js";
@@ -42,10 +41,10 @@ import {
   readRecentLogs,
 } from "./desktop-diagnostics.js";
 import { recoverDesktopHomeRuntime } from "./desktop-home-runtime.js";
-import { singleFlightDesktopStartup } from "./desktop-server-startup.js";
+import { singleFlightDesktopStartup, waitForDesktopServerReady } from "./desktop-server-startup.js";
 import { configureApplicationMenu, installDesktopRecoveryShortcuts } from "./desktop-application-menu.js";
 import { DesktopWindowRecovery } from "./desktop-window-recovery.js";
-import { showLoadError } from "./desktop-startup-page.js";
+import { showLoadError, showStartupProgressPage, updateStartupProgress } from "./desktop-startup-page.js";
 import { minimizeWindow } from "./desktop-window-controls.js";
 import { DesktopBrowserControlWorker } from "./desktop-browser-control-worker.js";
 import {
@@ -178,59 +177,6 @@ function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-async function waitForReady(child: ChildProcessWithoutNullStreams, fallbackUrl: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const cleanup = () => {
-      clearTimeout(timer);
-      child.stdout.off("data", onStdout);
-      child.stderr.off("data", onStderr);
-      child.off("exit", onExit);
-      child.off("error", onError);
-    };
-    const finish = (url: string) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      desktopLogger().info("server ready", { url });
-      resolve(url);
-    };
-    const fail = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
-    };
-    const parser = createReadyLineParser<{ url?: string }>("OPENPOND_APP_SERVER_READY ", (payload) => {
-      finish(payload.url || fallbackUrl);
-    });
-    const timer = setTimeout(
-      () => fail(new Error("OpenPond App server did not start in time")),
-      desktopServerReadyTimeoutMs(),
-    );
-    const onStdout = (chunk: Buffer) => {
-      try {
-        parser.push(chunk.toString("utf8"));
-      } catch (error) {
-        fail(error instanceof Error ? error : new Error(String(error)));
-      }
-    };
-    const onStderr = (chunk: Buffer) => {
-      const output = chunk.toString("utf8");
-      desktopLogger().warn("server stderr", { output });
-      console.error(output);
-    };
-    const onExit = (code: number | null) => {
-      parser.flush();
-      fail(new Error(`OpenPond App server exited with code ${code ?? "unknown"}`));
-    };
-    const onError = (error: Error) => fail(error);
-    child.stdout.on("data", onStdout);
-    child.stderr.on("data", onStderr);
-    child.once("exit", onExit);
-    child.once("error", onError);
-  });
-}
 
 const ensureServer = singleFlightDesktopStartup(startServer);
 
@@ -379,7 +325,11 @@ async function startServer(): Promise<ServerConnection> {
   let serverUrl: string;
   let token: string | null;
   try {
-    serverUrl = await waitForReady(serverProcess, existingUrl);
+    serverUrl = await waitForDesktopServerReady(serverProcess, existingUrl, {
+      timeoutMs: desktopServerReadyTimeoutMs(), logger: desktopLogger(),
+      onProgress: progress => { if (mainWindow) updateStartupProgress(mainWindow, progress); },
+      onSettled: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setProgressBar(-1); },
+    });
     token = await readToken();
     if (!token) throw new Error("OpenPond App server did not write a capability token");
     const launchedHealth = await health(serverUrl);
@@ -484,6 +434,7 @@ function loadMainWindow(window: BrowserWindow): Promise<void> {
 async function loadWindowContent(window: BrowserWindow): Promise<void> {
   if (window.isDestroyed() || desktopShutdownStarted) return;
   if (browserHomeError) throw browserHomeError;
+  await showStartupProgressPage(window, url => { startupPageUrl = url; });
   const server = await ensureServer();
   startupPageUrl = null;
   if ((await health(server.serverUrl))?.recovery) {

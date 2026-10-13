@@ -63,9 +63,8 @@ import {
 } from "./model-create-improve.js";
 import { attachModelTargetRefs } from "../runtime/create-pipeline/target-adapters.js";
 import { createEvidenceSnapshot, createTasksetRef } from "./create-improve-taskset-lineage.js";
-import { syncModelTrainingCreateImproveRuns } from "./model-create-improve-reconciliation.js";
 import { legacyBaseModelPreference } from "./base-model-candidates.js";
-import { projectTrainingActivity } from "./training-activity.js";
+import { createTrainingStateReader } from "./training-state.js";
 import {
   linkHarnessReviewTaskset,
   startHarnessReviewTasksetAuthoring,
@@ -81,9 +80,6 @@ import {
   requiredImmutableRef,
   sameImmutableRef,
 } from "./harness-training-api-inputs.js";
-import {
-  loadBenchmarkHistory,
-} from "./training-benchmark-state.js";
 import {
   handleModelRunControl,
   isModelRunControlAction,
@@ -137,6 +133,13 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
     storeDir: deps.storeDir,
     modelStream: deps.modelStream,
   });
+  const { state, activity } = createTrainingStateReader(deps, async profileId => {
+    await deps.benchmarkTasksets.ensureHarnessRefiner({ profileId });
+    await comparisonSeries.reconcileEntries();
+    await comparisonEvaluations.reconcileIntakeBatches();
+    await modelCurrency.reconcileAll();
+    await comparisonEvaluationScheduler.reconcileAutomatic();
+  });
   async function request(
     action: string,
     payload: unknown,
@@ -172,6 +175,7 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
       profileId: requiredString(input.profileId, "profileId"), modelId: requiredString(input.modelId, "modelId") });
     if (action === "begin_model_batch_review") return beginLocalModelBatchReview({ store: deps.store, storeDir: deps.storeDir,
       profileId: requiredString(input.profileId, "profileId"), request: input.request });
+    if (action === "navigation") return deps.store.readTrainingNavigation(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "activity") return activity(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "portable_catalog") {
@@ -1466,139 +1470,6 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
     return { ...result, createImproveRunId: run.id };
   }
 
-  async function state(profileId: string) {
-    await deps.benchmarkTasksets.ensureHarnessRefiner({ profileId });
-    await comparisonSeries.reconcileEntries();
-    await comparisonEvaluations.reconcileIntakeBatches();
-    await modelCurrency.reconcileAll();
-    await comparisonEvaluationScheduler.reconcileAutomatic();
-    const [
-      sources,
-      creations,
-      tasksetDrafts,
-      tasksets,
-      datasetImports,
-      datasetArtifacts,
-      candidates,
-      minerConfig,
-      minerRuns,
-      modelProjects,
-      comparisonSeriesRecords,
-      modelCurrencySnapshots,
-      continualBenchIssueReviews,
-      continualLearningDailyBatches,
-      modelTasksets,
-      execution,
-    ] = await Promise.all([
-      deps.store.listTrainingSources(profileId),
-      deps.store.listTaskCreationSnapshots(profileId),
-      deps.store.listTasksetDrafts(profileId),
-      deps.store.listTasksets(profileId),
-      deps.store.listDatasetImportJobs(profileId),
-      deps.datasetArtifacts.summaries(profileId),
-      deps.store.listTaskCandidates(profileId, "all"),
-      deps.taskMiner.config(profileId),
-      deps.store.listTaskMinerRuns(profileId),
-      deps.store.listModelProjects(),
-      // Model Projects are an account-wide library. Comparison Series must use
-      // the same scope or a series disappears whenever the active assistant
-      // profile changes even though its Project, Runs, and Versions remain
-      // visible on the Models dashboard.
-      deps.store.listModelComparisonSeries(),
-      deps.store.listModelCurrencySnapshots(),
-      deps.store.listContinualBenchIssueReviews(),
-      deps.store.listContinualLearningDailyBatches(),
-      deps.store.listTasksets(),
-      deps.training.state(),
-    ]);
-    const [reconciledModelVersions, reconciledModelRuns, reconciledComparisonSeriesEntries] = await Promise.all([
-      deps.store.listModelVersions(),
-      deps.store.listModelRuns(),
-      deps.store.listModelComparisonSeriesEntries(),
-    ]);
-    await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
-    const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
-    const evaluationResults = (await Promise.all(
-      tasksets.map((taskset) => deps.store.listEvaluationResults(taskset.id)),
-    )).flat();
-    const { benchmarkRuns, benchmarkComparisons } = await loadBenchmarkHistory(
-      deps.store,
-      tasksets,
-    );
-    const activity = projectTrainingActivity({
-      profileId,
-      state: {
-        jobs: execution.jobs,
-        creations,
-        minerRuns,
-        datasetImports,
-        tasksetDrafts,
-        tasksets,
-        modelProjects,
-      },
-    });
-    return {
-      schemaVersion: "openpond.trainingState.v1",
-      profileId,
-      sources,
-      creations,
-      tasksetDrafts,
-      tasksets,
-      benchmarkRuns,
-      benchmarkComparisons,
-      datasetImports,
-      datasetArtifacts,
-      graderAuditReports,
-      evaluationResults,
-      candidates,
-      minerConfig,
-      minerRuns,
-      modelProjects,
-      modelVersions: reconciledModelVersions,
-      modelRuns: reconciledModelRuns,
-      comparisonSeries: comparisonSeriesRecords,
-      comparisonSeriesEntries: reconciledComparisonSeriesEntries,
-      modelCurrencySnapshots,
-      continualBenchIssueReviews,
-      continualLearningDailyBatches,
-      modelTasksets,
-      ...execution,
-      activityRevision: activity.revision,
-      generatedAt: new Date().toISOString(),
-    };
-  }
-
-  async function activity(profileId: string) {
-    const [
-      creations,
-      datasetImports,
-      minerRuns,
-      tasksetDrafts,
-      tasksets,
-      modelProjects,
-      execution,
-    ] = await Promise.all([
-      deps.store.listTaskCreationSnapshots(profileId),
-      deps.store.listDatasetImportJobs(profileId),
-      deps.store.listTaskMinerRuns(profileId),
-      deps.store.listTasksetDrafts(profileId),
-      deps.store.listTasksets(),
-      deps.store.listModelProjects(profileId),
-      deps.training.activity({ background: true }),
-    ]);
-    return projectTrainingActivity({
-      profileId,
-      state: {
-        jobs: execution.jobs,
-        creations,
-        minerRuns,
-        datasetImports,
-        tasksetDrafts,
-        tasksets: tasksets.filter((taskset) => taskset.profileId === profileId),
-        modelProjects,
-      },
-    });
-  }
 
   async function datasetCatalog(profileId: string) {
     const [tasksets, artifactSummaries] = await Promise.all([

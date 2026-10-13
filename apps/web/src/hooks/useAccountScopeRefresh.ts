@@ -31,7 +31,8 @@ export function useAccountScopeRefresh({ connection, events, refreshRef, setBoot
     refreshRef.current = refresh;
     const onFocus = () => { void refresh.refresh(); };
     window.addEventListener("focus", onFocus);
-    void refresh.refresh();
+    // Bootstrap supplies the initial snapshot. Refresh only for subsequent
+    // focus or authority changes instead of racing a duplicate startup read.
     return () => {
       refresh.dispose();
       refreshRef.current = null;

@@ -1067,8 +1067,7 @@ function WorkspaceDiffPanelInner({
         }));
       } finally {
         if (lspAbortControllerRef.current === controller) lspAbortControllerRef.current = null;
-        if (controller.signal.aborted) return;
-        if (requestSeq === lspRequestSeqRef.current) {
+        if (!controller.signal.aborted && requestSeq === lspRequestSeqRef.current) {
           setLspCheckingPath((current) => (current === path ? null : current));
         }
       }

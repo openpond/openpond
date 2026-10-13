@@ -133,7 +133,7 @@ jobs:
           fi
 
           if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
-            latest_nightly_tag="$(git tag --sort=-creatordate --list 'v*-nightly.*' | head -n 1)"
+            latest_nightly_tag="$(git tag --sort=-creatordate --list 'v*-nightly.*' | sed -n '1p')"
             if [[ -n "${latest_nightly_tag}" ]]; then
               latest_nightly_sha="$(git rev-list -n 1 "${latest_nightly_tag}")"
               if [[ "${latest_nightly_sha}" == "${GITHUB_SHA}" ]]; then
@@ -162,7 +162,7 @@ jobs:
               fi
             fi
             if [[ "${target}" == "cli" ]]; then
-              latest_stable_tag="$(git tag --list 'cli-v*' --sort=-version:refname | head -n 1)"
+              latest_stable_tag="$(git tag --list 'cli-v*' --sort=-version:refname | sed -n '1p')"
             else
               latest_stable_tag="$(bash scripts/latest-stable-release-tag.sh)"
             fi

@@ -55,6 +55,7 @@ export function collectionState(
 ) {
   if (connection.state === "disconnected") return "Disconnected";
   if (connection.state === "paused") return "Paused";
+  if (connection.selectedConversations === 0) return "Choose conversations to upload";
   if (status.running && connection.run?.state === "running") return "Importing conversations";
   if (connection.error || connection.run?.state === "failed") return "Needs attention";
   const schedule = connection.schedule;

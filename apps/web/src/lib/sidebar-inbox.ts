@@ -6,7 +6,7 @@ const ACTIVITY_EVENTS = new Set([
 ]);
 
 /** Polling, diagnostics, renames and per-token deltas never reorder the inbox. */
-export function sidebarActivityTimes(events: readonly RuntimeEvent[]): Record<string, string> {
+export function sidebarActivityTimes(events: Iterable<RuntimeEvent>): Record<string, string> {
   const times: Record<string, string> = {};
   for (const event of events) {
     if (!event.sessionId) continue;
@@ -49,4 +49,9 @@ export function sidebarInboxEntryDateGroups<T>(entries: readonly T[], resolve: (
     group.entries.push(entry);
   }
   return groups;
+}
+
+/** Walk per-session arrays without allocating a second full event list. */
+export function* sidebarEventsBySession(sessions: ReadonlyMap<string, readonly RuntimeEvent[]>): Iterable<RuntimeEvent> {
+  for (const events of sessions.values()) yield* events;
 }

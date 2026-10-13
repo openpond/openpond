@@ -1,3 +1,6 @@
+import { UnifiedExperimentsPage } from "./UnifiedExperimentsPage";
+import { LocalGraderPage } from "./LocalGraderPage";
+import { LocalSavedDatasetPage } from "./LocalSavedDatasetPage";
 import {
   WorkspaceResourceName,
   WorkspacePanelHost,
@@ -11,14 +14,13 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ClientConnection } from "../../../api/api-client";
 import { modelsLocation, type ModelsRoute } from "../models-route";
-import { createWorkspaceApi, type Inventory } from "./workspace-api";
+import { createWorkspaceApi, workspaceApiForLocation, type Inventory } from "./workspace-api";
 import { HostedExperimentsPage } from "./HostedExperimentsPage";
 import { LocalExperimentsPage } from "./LocalExperimentsPage";
 import { LocalProfileDatasetPage } from "./LocalProfileDatasetPage";
 import { HostedDatasetsPage } from "./HostedDatasetsPage";
 import { HostedGradersPage } from "./HostedGradersPage";
 import { ProjectScopePicker } from "./ProjectScopePicker";
-import { DropdownSelect } from "../../DropdownSelect";
 import { EvaluationSetupProvider, useEvaluationSetup } from "./EvaluationSetupState";
 import { ExperimentSetupPanel } from "./ExperimentSetupPanel";
 import "../../../styles/labs/evaluation-workspace.css";
@@ -59,11 +61,13 @@ function HostedEvaluationWorkspaceContent({
             accountKey,
             actorId,
             projectId: route.projectId ?? null,
-            executionLocation: route.executionLocation,
+            executionLocation: route.resourceId ? route.executionLocation ?? (route.resourceId.startsWith("local-") ? "local" : "hosted") : "local",
           })
         : null,
-    [connection, teamId, accountKey, actorId, route.projectId, route.executionLocation],
+    [connection, teamId, accountKey, actorId, route.projectId, route.executionLocation, route.resourceId],
   );
+  const hostedApi = useMemo(() => api ? workspaceApiForLocation(api, "hosted") : null, [api]);
+  const setupApi = useMemo(() => api ? workspaceApiForLocation(api, setup.reviewRoute?.executionLocation ?? api.location) : null, [api, setup.reviewRoute?.executionLocation]);
   const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (route.projectId !== undefined) return;
@@ -114,7 +118,7 @@ function HostedEvaluationWorkspaceContent({
   if (!api)
     return (
       <div className="labs-table-empty" role="status">
-        Connect an OpenPond account and choose a workspace to open hosted datasets, graders and
+        Connect an OpenPond account and choose a workspace to open datasets, graders and
         experiments.
       </div>
     );
@@ -126,7 +130,7 @@ function HostedEvaluationWorkspaceContent({
           data-panel-open={panel?.open}
           data-panel-side="right"
           style={{ "--evaluation-panel-width": `${panel?.width ?? 440}px` } as CSSProperties}
-          aria-label="Hosted Models workspace"
+          aria-label="Training workspace"
         >
           <div className="evaluation-workspace-main">
             <div className="evaluation-workspace-scope evaluation-scope-bar">
@@ -137,99 +141,39 @@ function HostedEvaluationWorkspaceContent({
                 selectedId={route.projectId ?? null}
                 onChange={changeProject}
               />
-              <DropdownSelect
-                className="evaluation-scope-select"
-                label="Execution location"
-                value={api.location}
-                options={[
-                  {
-                    value: "hosted",
-                    label: "Hosted",
-                    description:
-                      api.location === "hosted" ? inventory.data?.apiOrigin : undefined,
-                  },
-                  { value: "local", label: "Local Desktop", description: "Runs on this computer" },
-                ]}
-                onChange={(value) =>
-                  onNavigate({
-                    ...route,
-                    executionLocation: value as "local" | "hosted",
-                    resourceId: null,
-                    detailTab: null,
-                    executionId: null,
-                    passId: null,
-                    after: null,
-                    revision: undefined,
-                    contentHash: undefined,
-                  })
-                }
-              />
+
             </div>
             {inventory.error ? (
               <div role="alert">
                 <p>{inventory.error.message}</p>
+                <button className="training-button secondary" onClick={() => void inventory.refetch()}>Retry workspace</button>
                 {route.projectId ? (
                   <button className="training-button secondary" onClick={() => changeProject(null)}>
                     Return to All projects
                   </button>
-                ) : (
-                  <button
-                    className="training-button secondary"
-                    onClick={() => void inventory.refetch()}
-                  >
-                    Retry
-                  </button>
-                )}
+                ) : null}
               </div>
             ) : null}
             {inventory.isPending ? <p role="status">Loading workspace…</p> : null}
             {route.page === "graders" ? (
-              <HostedGradersPage
-                key={`${api.key}:${route.resourceId ?? "collection"}`}
-                api={api}
-                route={route}
-                navigate={onNavigate}
-              />
+              route.resourceId && api.location === "local" ? <LocalGraderPage api={api} route={route} navigate={onNavigate} /> :
+              <HostedGradersPage key={`${api.key}:${route.resourceId ?? "collection"}`} api={hostedApi!} inventory={inventory.data ?? null} route={route} navigate={onNavigate} />
             ) : route.page === "datasets" ? (
-              api.location === "local" && route.resourceId?.startsWith("local-profile-") ? (
-                <LocalProfileDatasetPage api={api} route={route} navigate={onNavigate} />
-              ) : (
-                <HostedDatasetsPage
-                  key={`${api.key}:${route.resourceId ?? "collection"}`}
-                  api={api}
-                  inventory={inventory.data ?? null}
-                  inventoryLoading={inventory.isPending}
-                  inventoryError={inventory.error?.message}
-                  route={route}
-                  navigate={onNavigate}
-                  onLocalDatasets={onLocalDatasets}
-                  onRefresh={() => void inventory.refetch()}
-                />
-              )
-            ) : api.location === "local" ? (
-              <LocalExperimentsPage
-                key={`${api.key}:${route.resourceId ?? "collection"}`}
-                api={api}
-                route={route}
-                navigate={onNavigate}
-                onOpenWork={onOpenWork}
-              />
-            ) : (
-              <HostedExperimentsPage
-                key={`${api.key}:${route.resourceId ?? "collection"}`}
-                api={api}
-                inventory={inventory.data ?? null}
-                inventoryLoading={inventory.isPending}
-                inventoryError={inventory.error?.message}
-                route={route}
-                navigate={onNavigate}
-                onOpenWork={onOpenWork}
-                refresh={() => void inventory.refetch()}
-              />
-            )}
+              route.resourceId && api.location === "local" ? (
+                route.resourceId.startsWith("local-profile-") ? <LocalProfileDatasetPage api={api} route={route} navigate={onNavigate} /> :
+                <LocalSavedDatasetPage api={api} route={route} navigate={onNavigate} />
+              ) : <HostedDatasetsPage key={`${hostedApi!.key}:${route.resourceId ?? "collection"}`} api={hostedApi!}
+                inventory={inventory.data ?? null} inventoryLoading={inventory.isPending} inventoryError={inventory.error?.message}
+                route={{...route, executionLocation: "hosted"}} navigate={onNavigate} onLocalDatasets={onLocalDatasets} onRefresh={() => void inventory.refetch()} />
+            ) : !route.resourceId ? <UnifiedExperimentsPage api={api} route={route} navigate={onNavigate} /> : api.location === "local" ? (
+              <LocalExperimentsPage key={`${api.key}:${route.resourceId}`} api={api} route={route} navigate={onNavigate} onOpenWork={onOpenWork} />
+            ) : <HostedExperimentsPage key={`${api.key}:${route.resourceId}`} api={api} inventory={inventory.data ?? null}
+              inventoryLoading={inventory.isPending} inventoryError={inventory.error?.message} route={route} navigate={onNavigate}
+              onOpenWork={onOpenWork} refresh={() => void inventory.refetch()} />}
+
             {setup.draft || setup.advancedTarget ? (
               <ExperimentSetupPanel
-                api={api}
+                api={setupApi!}
                 inventory={inventory.data ?? null}
                 route={route}
                 navigate={onNavigate}
@@ -249,6 +193,7 @@ function HostedEvaluationWorkspaceContent({
                     revision: undefined,
                     contentHash: undefined,
                     resourceId: value.id,
+                    executionLocation: setupApi!.location,
                     detailTab: "overview",
                     executionId: null,
                     passId: null,
@@ -300,7 +245,6 @@ export function HostedEvaluationWorkspace(
         props.connection?.serverUrl ?? null,
         props.teamId,
         props.route.projectId ?? null,
-        props.route.executionLocation ?? "hosted",
       ])}
     >
       <WorkspacePanelControls onControl={props.onSidebarControl}>

@@ -9,6 +9,8 @@ import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { NativeSetupTerminal } from "../terminal/NativeSetupTerminal";
 import type { AgentInventory, AgentSource } from "./agent-connections";
 import { collectionState } from "./agent-connections";
+import { DropdownSelect } from "../DropdownSelect";
+import { ConversationUploadPicker } from "./ConversationUploadPicker";
 
 export function AgentConversationSetup({
   agent,
@@ -37,7 +39,7 @@ export function AgentConversationSetup({
     sources.length === 1 ? sources[0]!.instanceId : "",
   );
   const [destination, setDestination] = useState(projectId);
-  const [range, setRange] = useState("week");
+  const [uploadConnectionId, setUploadConnectionId] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function AgentConversationSetup({
     ) ?? [];
   const accountBaseUrl = account?.baseUrl ?? account?.activeProfile?.baseUrl;
   const apiBaseUrl = account?.apiBaseUrl;
-  async function action(action: string, connectionId?: string) {
+  async function action(action: string, connectionId?: string, sessionKeys?: string[]) {
     if (!connection || busy || command) return;
     setBusy(true);
     setError(null);
@@ -63,6 +65,7 @@ export function AgentConversationSetup({
           body: JSON.stringify({
             command: action,
             ...(connectionId ? { connectionId } : {}),
+            ...(sessionKeys ? { sessionKeys } : {}),
             ...(action === "connect"
               ? {
                   setup: {
@@ -71,7 +74,7 @@ export function AgentConversationSetup({
                     projectId: destination,
                     accountBaseUrl,
                     apiBaseUrl,
-                    range,
+                    range: "all",
                   },
                 }
               : {}),
@@ -91,11 +94,24 @@ export function AgentConversationSetup({
     }
   }
   const disabled = busy || command !== null;
+  const selectedConnection = connections.find(item => item.id === uploadConnectionId);
+  const terminal = command && connection ? <NativeSetupTerminal
+    connection={connection} command={command}
+    onComplete={() => { setCommand(null); setUploadConnectionId(null); void onRefresh(); }}
+    onClose={() => { setCommand(null); void onRefresh(); }} /> : null;
+  if (selectedConnection && connection) return <div className="agent-conversation-setup provider-dialog-body">
+    <ConversationUploadPicker key={selectedConnection.id} connection={connection} connectionId={selectedConnection.id}
+      projectName={projects.find(project => project.id === selectedConnection.projectId && selectedConnection.teamId === teamId)?.content.name ?? selectedConnection.projectId}
+      disabled={disabled || !!inventory?.collector.running} onClose={() => setUploadConnectionId(null)}
+      onUpload={keys => action("upload", selectedConnection.id, keys)} />
+    {error ? <p role="alert">{error}</p> : null}
+    {terminal}
+  </div>;
   return (
     <div className="agent-conversation-setup provider-dialog-body">
       <p>
         Sync saved {agent.name} conversations to an existing OpenPond project.
-        Setup uses the OpenPond CLI and browser authorization.
+        Connecting authorizes the destination. Choose conversations and confirm an upload when ready.
       </p>
       {connections.map((item) => (
         <section
@@ -117,6 +133,7 @@ export function AgentConversationSetup({
           <span>
             {item.admitted} tasks imported · {item.queued} updates queued
           </span>
+          <small>{item.selectedConversations === null ? "All history approved for sync" : `${item.selectedConversations} conversations approved for sync`}</small>
           {item.backfill.total > 0 && item.backfill.stage !== "complete" ? (
             <>
               <progress
@@ -137,6 +154,8 @@ export function AgentConversationSetup({
           </small>
           {item.error ? <p role="alert">{item.error}</p> : null}
           <div className="settings-button-row">
+            <button type="button" className="agent-connect-button" disabled={disabled || item.state !== "active" || inventory?.collector.running}
+              onClick={() => setUploadConnectionId(item.id)}>Choose conversations…</button>
             {item.state === "disconnected" ? (
               <button
                 type="button"
@@ -210,26 +229,9 @@ export function AgentConversationSetup({
         </h3>
         <label className="agent-source-field">
           Source installation
-          <select
-            aria-label="Source installation"
-            value={source?.instanceId ?? ""}
-            disabled={disabled}
-            onChange={(event) => setSourceId(event.target.value)}
-          >
-            <option value="">Select installation</option>
-            {sources.map((item) => (
-              <option
-                key={item.instanceId}
-                value={item.instanceId}
-                disabled={!item.available || !item.capabilities.history}
-              >
-                {item.root}
-                {item.available && item.capabilities.history
-                  ? ""
-                  : " (unavailable)"}
-              </option>
-            ))}
-          </select>
+          <DropdownSelect label="Source installation" value={source?.instanceId ?? ""} disabled={disabled} onChange={setSourceId}
+            options={[{ value: "", label: "Select installation" }, ...sources.map(item => ({ value: item.instanceId, label: item.root,
+              disabled: !item.available || !item.capabilities.history }))]} />
         </label>
         {source?.reason ? <small>{source.reason}</small> : null}
         {!sources.some(
@@ -244,34 +246,10 @@ export function AgentConversationSetup({
         ) : null}
         <label>
           Project
-          <select
-            aria-label="Project"
-            value={destination}
-            disabled={disabled || !teamId}
-            onChange={(event) => setDestination(event.target.value)}
-          >
-            <option value="">Select project</option>
-            {projects.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.content.name}
-              </option>
-            ))}
-          </select>
+          <DropdownSelect label="Upload destination project" value={destination} disabled={disabled || !teamId} onChange={setDestination}
+            searchable options={[{ value: "", label: "Select project" }, ...projects.map(item => ({ value: item.id, label: item.content.name }))]} />
         </label>
-        <label>
-          Import history
-          <select
-            aria-label="Import history"
-            value={range}
-            disabled={disabled}
-            onChange={(event) => setRange(event.target.value)}
-          >
-            <option value="day">Last day</option>
-            <option value="week">Last week</option>
-            <option value="all">All history</option>
-          </select>
-        </label>
-        <p>This imports the selected history once and shows progress in the CLI. Continual imports are off by default and can be scheduled in Settings.</p>
+        <p>No conversations are uploaded during setup. Continual imports are off by default and can be scheduled after choosing conversations.</p>
         <button type="button" onClick={() => navigateDesktopRoute({ kind: "settings", section: "conversation-imports" })}>Manage continual imports in Settings</button>
         {account?.state !== "signed_in" || !teamId ? (
           <small>
@@ -316,20 +294,7 @@ export function AgentConversationSetup({
         </details>
       ) : null}
       {error ? <p role="alert">{error}</p> : null}
-      {command && connection ? (
-        <NativeSetupTerminal
-          connection={connection}
-          command={command}
-          onComplete={() => {
-            setCommand(null);
-            void onRefresh();
-          }}
-          onClose={() => {
-            setCommand(null);
-            void onRefresh();
-          }}
-        />
-      ) : null}
+      {terminal}
     </div>
   );
 }

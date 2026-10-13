@@ -1,3 +1,5 @@
+import { DropdownSelect } from "../../DropdownSelect";
+import { modelDisplayLabel } from "../../../lib/model-display";
 import { AdvancedRefinerExperimentSetup } from "./AdvancedRefinerExperimentSetup";
 import { ReviewedExperimentScheduleControl } from "./ReviewedExperimentScheduleControl";
 import { ClaudeCodeChoice } from "../../human-review/ClaudeCodeChoice";
@@ -699,26 +701,21 @@ function OrdinaryExperimentSetupPanel({
               <EvaluationCard title="Model and budget">
                 <label>
                   Model
-                  <select
+                  <DropdownSelect
+                    label="Model"
                     value={modelId}
                     disabled={Boolean(localRuntime)}
-                    onChange={(event) =>
-                      patch({
-                        modelId: event.target.value,
-                        localRuntime: undefined,
-                      })
-                    }
-                  >
-                    <option value="">Choose model</option>
-                    {(localDataset
-                      ? sampling.data?.models
-                      : models.data?.models
-                    )?.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.name}
-                      </option>
-                    ))}
-                  </select>
+                    searchable
+                    floating
+                    options={[
+                      { value: "", label: "Choose model" },
+                      ...((localDataset ? sampling.data?.models : models.data?.models) ?? []).map(model => ({
+                        value: model.id,
+                        label: modelDisplayLabel(model.name),
+                      })),
+                    ]}
+                    onChange={value => patch({ modelId: value, localRuntime: undefined })}
+                  />
                 </label>
                 {!localRuntime &&
                 localDataset &&

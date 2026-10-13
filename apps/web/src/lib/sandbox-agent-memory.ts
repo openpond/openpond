@@ -53,13 +53,16 @@ export function preloadSandboxAgents(input: {
   const cached = sandboxAgentsByTeamId.get(cacheKey);
   if (!input.force) {
     if (cached?.updatedAt) return Promise.resolve(cached.agents);
-    if (cached?.promise) return cached.promise;
   }
+  // Force bypasses a saved value, not a request already refreshing that value.
+  if (cached?.promise) return cached.promise;
 
   const promise = input
     .fetchAgents(normalizedTeamId)
     .then((agents) => {
-      writeSandboxAgentsToMemory(normalizedTeamId, agents, input.accountKey);
+      if (sandboxAgentsByTeamId.get(cacheKey)?.promise === promise) {
+        writeSandboxAgentsToMemory(normalizedTeamId, agents, input.accountKey);
+      }
       return agents;
     })
     .catch((error) => {

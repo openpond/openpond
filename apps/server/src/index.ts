@@ -258,7 +258,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     keyFilePath: providerSecretsKeyPath(storeDir),
   };
   const { token, tokenFile } = await ensureCapabilityToken(storeDir);
-  const store = new SqliteStore(storeDir, { logger });
+  const store = new SqliteStore(storeDir, { logger, onMigrationProgress: options.onStorageProgress });
   onStartupFailure(() => store.close());
   await store.recentTurns(1);
   // A previous process's lease cannot authorize admission in this process.
@@ -373,6 +373,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     recordClientDiagnosticPayload,
     updatePersonalizationPayload,
     bootstrapPayload,
+    currentAccountPayload,
     skillSourceFilePayload,
     codexHistoryThreadPayload,
     patchCodexHistorySessionPayload,
@@ -525,7 +526,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     storeDir,
     workspaceDiffPayload,
   });
-  const reviewIdentity=createCurrentWorkspaceIdentity({account:async()=>(await bootstrapPayload()).account,defaultTeam:async()=>(await loadAppPreferences()).defaultTeamId});
+  const reviewIdentity=createCurrentWorkspaceIdentity({account:currentAccountPayload,defaultTeam:async()=>(await loadAppPreferences()).defaultTeamId});
   let candidateWorkspaceTool: ReturnType<typeof createCoordinatedEvaluationRuntime>["executeCandidateWorkspaceTool"] | undefined;
   const {
     closeCloudWorkspaceReadiness,
@@ -791,7 +792,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     modelStream: trainingModelStream,
     judgeProvider: createLearningHostedJudgeProvider({ stream: streamOpenPondHostedChatTurn }),
   });
-  const {localExperiments,localNativeOwner,localProfileOwner,improvements,trainingPayload,experimentImprovementPayload,turnTools,executeCandidateWorkspaceTool}=createCoordinatedEvaluationRuntime({store,storeDir,ownerId:serverId,localInferenceState:localByokRuntimeState,
+  const {localExperiments,localNativeOwner,localProfileOwner,improvements,trainingPayload,experimentImprovementPayload,turnTools,executeCandidateWorkspaceTool}=createCoordinatedEvaluationRuntime({store,storeDir,ownerId:serverId,localInferenceState:localByokRuntimeState,codexStatus:()=>refreshCodexStatus(true),
     resolveAccess:resolveHostedApiAccess,prepare:prepareProfileEvaluationRun,workflows:profileWorkflowsPayload,
     ...reviewIdentity,trainingRequest:trainingApi.request,loadAgentRuntime:createCandidateAgentRuntimeLoader({storeDir,loadArchive:createWorkAgentSdkArchiveLoader({storeDir})}),
     createSession,saveOutput:workOutputService.saveOwnedOutputBytes,

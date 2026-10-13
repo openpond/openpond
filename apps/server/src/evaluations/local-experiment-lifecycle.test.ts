@@ -178,9 +178,10 @@ test("local ceiling rejects before dispatch and missing usage retains an uncerta
   const stream:typeof streamOpenPondHostedChatTurn=async function*(){dispatches++;yield {type:"text_delta",text:"pond",raw:{}};yield {type:"finish",finishReason:"stop",raw:{}};};
   let service=createLocalExperimentService({store,actorId:async()=>"local-proof-actor",catalog,stream,ownerId:"charge-owner-one",teamId:async()=>"owned-workspace"});
   try {
-    await service.recover();const rejected=await service.run(savedInput(0.0001));
-    await service.wait(rejected.id);expect(dispatches).toBe(0);
-    expect((await service.status({teamId:"owned-workspace",id:rejected.id})).status).toBe("failed");
+    await service.recover();
+    await expect(service.run(savedInput(0.0001))).rejects.toMatchObject({code:"experiment_budget_exhausted"});
+    expect(dispatches).toBe(0);
+    expect((await service.list({teamId:"owned-workspace"})).items).toHaveLength(0);
     const input=savedInput(0.0015);input.configuration.operationId="uncertain-run";input.configuration.request.operationId="uncertain-run";
     const execution=await service.run(input);await service.wait(execution.id);
     const retained=await service.status({teamId:"owned-workspace",id:execution.id});

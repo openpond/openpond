@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test, vi } from "vitest";
@@ -8,6 +8,7 @@ import { scheduledSyncDue, scheduledMinute, nextScheduledSync } from "../src/nat
 import { collectorServiceFiles } from "../src/native-conversations/collector-service-files.js";
 import type { CollectorConnection, CollectorAdmission } from "../src/native-conversations/collector-contracts.js";
 import { summarizeCollectorCoverage, type CollectorCoverageManifest } from "../src/connected-evidence/collector-coverage-contracts.js";
+import { nativeSessionSelectionKey, nativeUploadInventory, validateNativeUploadSelection } from "../src/native-conversations/selection.js";
 
 const connection = (root: string): CollectorConnection => ({ id: "source", projectId: "project", teamId: "team", apiBaseUrl: "https://example.test", revision: 1, since: null, keepSyncing: false, state: "active",
   source: { source: "pi", root, machineId: "machine", instanceId: "instance", acquisition: "files", available: true, capabilities: { history: true, live: true, nativeResume: false } } });
@@ -16,6 +17,59 @@ const transcript = [
   { type: "message", id: "u", parentId: null, timestamp: "2026-10-02T00:00:01Z", message: { role: "user", content: "A durable request" } },
   { type: "message", id: "a", parentId: "u", timestamp: "2026-10-02T00:00:02Z", message: { role: "assistant", content: "A durable answer", stopReason: "stop" } },
 ].map(row => JSON.stringify(row)).join("\n") + "\n";
+
+// Failure story: authorizing one conversation uploads its siblings or future
+// arrivals; adding another selection repeats settled uploads or loses retries.
+test("saved upload consent fences transcripts, survives restart, and extends without duplicate admission", async () => {
+  const root = await mkdtemp(join(tmpdir(), "collector-selection-"));
+  const directory = join(root, "state"), sourceRoot = join(root, "source");
+  await mkdir(join(sourceRoot, "sessions"), { recursive: true });
+  const first = join(sourceRoot, "sessions", "first.jsonl"), second = join(sourceRoot, "sessions", "second.jsonl");
+  await writeFile(first, transcript);
+  await writeFile(second, transcript.replaceAll("conversation", "second"));
+  let store = await CollectorStore.open(directory);
+  const current = { ...connection(sourceRoot), selectedSessionKeys: [] as string[] };
+  const admitted: CollectorAdmission[] = [];
+  const transport = { heartbeat: async (value: CollectorConnection) => ({ revision: value.revision, state: value.state }),
+    publishCoverage: async () => {}, admit: async (_: CollectorConnection, entry: CollectorAdmission) => { admitted.push(entry); } };
+  const scan = () => runCollector({ directory, trigger: "manual", signal: new AbortController().signal, transport });
+  try {
+    store.put(current);
+    await scan();
+    expect(admitted).toHaveLength(0);
+    expect(store.status().connections[0]!.run).toBeNull();
+    const inventory = await nativeUploadInventory(current.source);
+    const selected = inventory.find(item => item.nativeSessionId === "conversation")!;
+    const key = nativeSessionSelectionKey(selected);
+    await expect(validateNativeUploadSelection(current.source, { sourceInstanceId: "sibling", sessionKeys: [key] })).rejects.toThrow("another source");
+    await expect(validateNativeUploadSelection(current.source, { sourceInstanceId: current.source.instanceId, sessionKeys: ["f".repeat(64)] })).rejects.toThrow("no longer available");
+    store.put({ ...current, selectedSessionKeys: [key] });
+    store.close(); store = await CollectorStore.open(directory);
+    await scan();
+    expect(admitted).toHaveLength(1);
+    expect(admitted[0]!.sessionKey).toContain('"conversation"');
+    expect(store.status().connections[0]!.coverage!.listingComplete).toBe(false);
+    await writeFile(join(sourceRoot, "sessions", "later.jsonl"), transcript.replaceAll("conversation", "later"));
+    await scan();
+    expect(admitted).toHaveLength(1);
+    const next = inventory.find(item => item.nativeSessionId === "second")!;
+    store.put({ ...current, selectedSessionKeys: [key, nativeSessionSelectionKey(next)] });
+    await scan();
+    expect(admitted).toHaveLength(2);
+    expect(admitted[1]!.sessionKey).toContain('"second"');
+    // An active worker owns its exact selection; UI changes cannot erase its queue.
+    store.set("owner", JSON.stringify({ pid: process.pid, nonce: "fixture" }));
+    expect(() => store.put({ ...current, selectedSessionKeys: [] })).toThrow("running import");
+    store.set("owner", "");
+    // Narrowing consent removes retry bytes, with no wider upload on the next run.
+    store.enqueue({ ...admitted[1]!, operationId: "pending-unapproved" }, [{ id: admitted[1]!.boundaryIds[0]!, revision: "pending" }]);
+    expect(store.queued(current.id)).toBe(1);
+    store.put({ ...current, selectedSessionKeys: [key] });
+    expect(store.queued(current.id)).toBe(0);
+    await scan();
+    expect(admitted).toHaveLength(2);
+  } finally { store.close(); await rm(root, { recursive: true, force: true }); }
+});
 
 // Failure story: a moving cutoff or guessed timestamp declares complete study
 // coverage even though a requested turn was omitted or newer work was admitted.

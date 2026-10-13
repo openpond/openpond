@@ -41,6 +41,15 @@ export async function runSandboxCommand(
   const subcommand = rest[0] || "list";
   const client = await resolveSandboxClient(options);
 
+  if (subcommand === "get") {
+    const sandboxId = rest[1];
+    if (!sandboxId || rest.length !== 2) {
+      throw new Error("usage: sandbox get <sandboxId>");
+    }
+    console.log(JSON.stringify({ sandbox: await client.get(sandboxId) }, null, 2));
+    return;
+  }
+
   if (subcommand === "list") {
     const teamId =
       typeof options.teamId === "string" ? options.teamId.trim() : "";
@@ -711,6 +720,6 @@ export async function runSandboxCommand(
   }
 
   throw new Error(
-    "usage: sandbox <list|mcp-config|runtime-list|runtime-get|runtime-events|runtime-status|runtime-event|runtime-preserve-source|pricing|costs|secrets|secret-create|secret-rotate|secret-attach|secret-revoke|secret-delete|snapshots|published-snapshots|run-published-snapshot|snapshot-fork|snapshot-validate|snapshot-publish|create|exec|port|preview|stop|start|delete|receipts|logs|billing|process-start|process-list|process-get|process-stop|process-stream|pty-start|pty-list|pty-get|pty-write|pty-stop|pty-stream|upload-file|download-file|list-files|search-files|delete-file|stat-file|mkdir|move-file|git-status|git-diff|git-export-patch|git-branch|git-commit|git-pull|git-push|smoke> [args]"
+    "usage: sandbox <list|get|mcp-config|runtime-list|runtime-get|runtime-events|runtime-status|runtime-event|runtime-preserve-source|pricing|costs|secrets|secret-create|secret-rotate|secret-attach|secret-revoke|secret-delete|snapshots|published-snapshots|run-published-snapshot|snapshot-fork|snapshot-validate|snapshot-publish|create|exec|port|preview|stop|start|delete|receipts|logs|billing|process-start|process-list|process-get|process-stop|process-stream|pty-start|pty-list|pty-get|pty-write|pty-stop|pty-stream|upload-file|download-file|list-files|search-files|delete-file|stat-file|mkdir|move-file|git-status|git-diff|git-export-patch|git-branch|git-commit|git-pull|git-push|smoke> [args]"
   );
 }

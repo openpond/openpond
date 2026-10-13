@@ -52,6 +52,8 @@ export interface CollectorConnection {
   projectId: string;
   revision: number;
   since: string | null;
+  /** Explicit local upload consent. Empty means connected without upload consent. */
+  selectedSessionKeys?: string[];
   /** Hosted registration metadata; local recurrence is an explicit schedule. */
   keepSyncing: boolean;
   state: "active" | "paused" | "disconnected";
@@ -79,6 +81,7 @@ export interface CollectorStatus {
     pendingBytes: number;
     lastAdmissionAt: string | null;
     since: string | null;
+    selectedConversations: number | null;
     schedule: CollectorSchedule | null;
     nextRunAt: string | null;
     lastSuccessfulSyncAt: string | null;

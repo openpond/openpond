@@ -8,6 +8,7 @@ let connection: ClientConnection | null = null, state: State | null = null;
 let pending: ClientChoices = {}, inFlight: ClientChoices = {}, sending = false, generation = 0;
 let failure: string | null = null;
 let connectionRequest = 0;
+let connecting: { serverUrl: string; token: string; signal?: AbortSignal; promise: Promise<void> } | null = null;
 export const CLIENT_CHOICES_CHANGED = "openpond-client-choices-changed";
 function publish() {
   listeners.forEach((listener) => listener());
@@ -20,16 +21,28 @@ export function useHydratedClientChoice(refresh: () => void): void {
   latest.current = refresh;
   useEffect(() => subscribeClientChoices(() => latest.current()), []);
 }
-export async function connectClientChoices(next: ClientConnection): Promise<void> {
+export function connectClientChoices(next: ClientConnection, options: { force?: boolean; signal?: AbortSignal } = {}): Promise<void> {
+  if (!options.force && !connecting?.signal?.aborted && connecting?.serverUrl === next.serverUrl && connecting.token === next.token) {
+    return connecting.promise;
+  }
+  const promise = hydrateClientChoices(next, options.signal).finally(() => {
+    if (connecting?.promise === promise) connecting = null;
+  });
+  connecting = { serverUrl: next.serverUrl, token: next.token, signal: options.signal, promise };
+  return promise;
+}
+
+async function hydrateClientChoices(next: ClientConnection, signal?: AbortSignal): Promise<void> {
   const requestId = ++connectionRequest;
-  const result = await apiFetch<{ clientState: State | null }>(next, "/v1/configuration");
+  const result = await apiFetch<{ clientState: State | null }>(next, "/v1/configuration", { signal });
   if (result.clientState?.revision === null) {
     const legacy = legacyViewChoices();
     if (Object.keys(legacy.patch).length) {
-      result.clientState = await apiFetch<State>(next, "/v1/configuration", { method: "POST", body: JSON.stringify({ action: "client-state", owner: result.clientState.owner, patch: legacy.patch, importOnly: true }) });
+      result.clientState = await apiFetch<State>(next, "/v1/configuration", { signal, method: "POST", body: JSON.stringify({ action: "client-state", owner: result.clientState.owner, patch: legacy.patch, importOnly: true }) });
       for (const key of legacy.keys) try { window.localStorage.removeItem(key); } catch { /* Acknowledged server state remains authoritative. */ }
     }
   }
+  signal?.throwIfAborted();
   if (requestId !== connectionRequest) return;
   const ownerChanged = connection?.serverUrl !== next.serverUrl || connection?.token !== next.token || state?.owner !== result.clientState?.owner;
   if (ownerChanged) { generation++; pending = {}; inFlight = {}; failure = null; }

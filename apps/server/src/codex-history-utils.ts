@@ -57,7 +57,7 @@ export function truncateText(value: string, maxLength: number): string {
 }
 
 export function normalizeTitleText(value: string): string {
-  return value.replace(/[^\S\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return value.replace(/\s+/g, " ").trim();
 }
 
 export function parseMaybeJson(value: string): unknown | null {

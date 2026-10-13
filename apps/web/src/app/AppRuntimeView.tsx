@@ -1,8 +1,9 @@
+import { rememberChatSelection } from "../lib/chat-selection-preference";
 import { useToastPresentation } from "../hooks/useToastPresentation";
 import { useThreadNotifications } from "../hooks/useThreadNotifications";
 import { useThreadNotificationReveal } from "../hooks/useThreadNotificationReveal";
 import { connectionQueryScope } from "../lib/query-scope";
-import { sidebarActivityTimes } from "../lib/sidebar-inbox";
+import { sidebarActivityTimes, sidebarEventsBySession } from "../lib/sidebar-inbox";
 import { usePonderActivity } from "../components/ponder/usePonderActivity";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
@@ -168,6 +169,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     connection,
     startup,
     training,
+    trainingNavigation,
     cloudProjectsCollapsed,
     chatsCollapsed,
     savedForLaterCollapsed,
@@ -873,7 +875,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     showToast,
     training.actions,
   ]);
-  const sidebarActivity = useMemo(() => sidebarActivityTimes([...runtimeIndexes.eventsBySessionId.values()].flat()), [runtimeIndexes.eventsBySessionId]);
+  const sidebarActivity = useMemo(() => sidebarActivityTimes(sidebarEventsBySession(runtimeIndexes.eventsBySessionId)), [runtimeIndexes.eventsBySessionId]);
   if (!startup.ready) {
     return <AppSplash startup={startup} />;
   }
@@ -973,57 +975,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const selectedChatHistoryLoading = Boolean(
     selectedChatHistoryLoadState?.loading
   );
-  const modelTrainingActivityByProjectId = (() => {
-    const payload = training.payload;
-    if (!payload) return {};
-    const plansById = new Map(payload.plans.map((plan) => [plan.id, plan]));
-    const activeStatuses = new Set([
-      "queued",
-      "starting",
-      "running",
-      "cancelling",
-      "reconciling",
-    ]);
-    const labels: Record<string, string> = {
-      queued: "Queued",
-      starting: "Starting",
-      running: "Running",
-      cancelling: "Cancelling",
-      reconciling: "Reconciling",
-    };
-    const activities: Record<
-      string,
-      { label: string; status: string }
-    > = {};
-    for (const run of [...payload.modelRuns].sort((left, right) =>
-      right.updatedAt.localeCompare(left.updatedAt)
-    )) {
-      if (run.kind === "evaluation" || !["prepared", "running"].includes(run.status)) {
-        continue;
-      }
-      const linkedJob = payload.jobs
-        .filter((job) => job.metadata.modelRunId === run.id)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-      if (linkedJob && !activeStatuses.has(linkedJob.status)) continue;
-      const status = linkedJob?.status ?? (run.status === "prepared" ? "starting" : "running");
-      activities[run.modelId] = {
-        label: labels[status] ?? "Running",
-        status,
-      };
-    }
-    for (const job of [...payload.jobs].sort((left, right) =>
-      right.updatedAt.localeCompare(left.updatedAt)
-    )) {
-      if (!activeStatuses.has(job.status)) continue;
-      const modelId = plansById.get(job.planId)?.modelId;
-      if (!modelId || activities[modelId]) continue;
-      activities[modelId] = {
-        label: labels[job.status] ?? "Active",
-        status: job.status,
-      };
-    }
-    return activities;
-  })();
+
 
   return (
     <AppToastProvider showToast={showToast}>
@@ -1039,10 +991,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             setPonderMode("activity");
           },
           productArea,
-          modelProjects: (training.payload?.modelProjects ?? []).filter((project) =>
-            project.hosted === null || project.hosted.teamId === (appDefaults.defaultTeamId?.trim() ?? null),
+          modelProjects: (trainingNavigation.data?.projects ?? []).filter((project) =>
+            project.teamId === null || project.teamId === (appDefaults.defaultTeamId?.trim() ?? null),
           ),
-          modelTrainingActivityByProjectId,
+          modelTrainingActivityByProjectId: trainingNavigation.data?.activityByProjectId ?? {},
           onProductAreaChange: changeProductArea,
           experience: activeExperience,
           view,
@@ -1098,6 +1050,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           platform,
           arch: connection?.arch ?? null,
           onSidebarResizeStart: startSidebarResize,
+          requestComposerFocus: requestMainComposerFocus,
           setSidebarOpen,
           setView,
           setSelectedAppId,
@@ -1251,7 +1204,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             contextWindowStatus,
             showToast,
             onProviderChange: changeDraftProvider,
-            onModelChange: setDraftModel,
+            onModelChange: (model: string) => {
+              rememberChatSelection(activeProvider, model);
+              setDraftModel(model);
+            },
             onCodexPermissionModeChange: changeCodexPermissionMode,
             onCodexReasoningEffortChange: changeCodexReasoningEffort,
             onOpenPondCommandAccessModeChange: changeOpenPondCommandAccessMode,
