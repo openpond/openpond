@@ -41,6 +41,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/cloud-api-core.test.ts",
   "tests/cloud-private-persistence.test.ts",
   "tests/claude-plan-credentials.test.ts",
+  "tests/native-agent-discovery.test.ts",
   "tests/codex-bridge-usage.test.ts",
   "tests/codex-history-file-index.test.ts",
   "tests/codex-history-revision.test.ts",
