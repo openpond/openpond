@@ -1,7 +1,10 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { buildProviderSettings, getProviderPreset } from "../apps/server/src/openpond/provider-registry";
 import { ProviderCatalogSchema, ProviderModelCacheSchema } from "@openpond/contracts";
+import { ClientChoicesSchema } from "@openpond/persistence/schemas/client-state";
+import { clientChoiceStorage } from "../apps/web/src/lib/client-choice-storage";
+import { preferredChatModel, readChatSelectionPreference, rememberChatSelection } from "../apps/web/src/lib/chat-selection-preference";
 import { composerModelGroups, modelSelectionForGroup } from "../apps/web/src/components/chat/composer-model-options";
 import {
   defaultProviderCredentialTab,
@@ -21,6 +24,35 @@ import {
 } from "../apps/web/src/lib/app-models";
 
 describe("provider model option capping", () => {
+  // Failure story: switching providers loses their previous model or routes a
+  // hosted model to a native agent; only the final pair survives a reload.
+  test("restores each provider's model across switches and preference reloads", () => {
+    let serialized: string | null = null;
+    vi.spyOn(clientChoiceStorage, "getItem").mockImplementation(() => serialized);
+    vi.spyOn(clientChoiceStorage, "setItem").mockImplementation((_key, value) => {
+      serialized = JSON.stringify(ClientChoicesSchema.parse({ chatSelection: JSON.parse(value) }).chatSelection);
+    });
+    const settings = buildProviderSettings({ file: { version: 1, providers: {
+      "claude-code": { enabled: true, baseUrl: null, defaultModel: null, modelOverrides: [], updatedAt: null },
+    }, modelCaches: {} } });
+    const groups = () => composerModelGroups({ currentProvider: "openpond",
+      currentModelOptions: modelOptionsForProvider("openpond", settings),
+      providerOptions: providerOptionsFromSettings(settings, { enabledOnly: true }), providerSettings: settings });
+    const native = () => groups().find((group) => group.provider === "claude-code")!;
+    const hostedModel = modelOptionsForProvider("openpond", settings)[0]!.value;
+    rememberChatSelection("openpond", hostedModel);
+    expect(modelSelectionForGroup(native())).toEqual({ provider: "claude-code", model: "" });
+    expect(preferredChatModel("claude-code", settings)).toBe("");
+    rememberChatSelection("claude-code", "haiku");
+    rememberChatSelection("openpond", hostedModel);
+    expect(modelSelectionForGroup(native())).toEqual({ provider: "claude-code", model: "haiku" });
+    expect(preferredChatModel("claude-code", settings)).toBe("haiku");
+    expect(preferredChatModel("openpond", settings)).toBe(hostedModel);
+    expect(readChatSelectionPreference()).toMatchObject({ provider: "openpond", model: hostedModel,
+      modelsByProvider: { "claude-code": "haiku", openpond: hostedModel } });
+    rememberChatSelection("openpond", "removed-model");
+    expect(modelSelectionForGroup(groups().find((group) => group.provider === "openpond")!)!.model).toBe(hostedModel);
+  });
 
   // Failure story: a native provider with a lazy catalog is unreachable from the
   // picker, or presentation cleanup changes its exact advertised routing ID.
