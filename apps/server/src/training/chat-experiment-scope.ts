@@ -111,7 +111,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
           && (!scope.dataset || scope.dataset.id !== summary.id || summary.revision >= scope.dataset.revision)) {
           const changed = scope.dataset?.id !== summary.id || scope.dataset?.revision !== summary.revision;
           scope.dataset = summary;
-          if (changed) { scope.graders = []; scope.selectedGraderId = null; }
+          if (changed) { scope.graders = []; scope.selectedGraderId = null; scope.selectedRunId = null; }
         }
       } else if (summary.kind === "grader") {
         if (scope.dataset && scope.dataset.id === summary.datasetId && scope.dataset.revision === summary.datasetRevision) {
@@ -122,7 +122,11 @@ export function createChatExperimentScopes(store: SqliteStore) {
       } else {
         const index = scope.runs.findIndex(run => run.id === summary.id);
         if (index < 0) scope.runs.push(summary); else scope.runs[index] = summary;
-        if (!late) scope.selectedRunId = summary.id;
+        // A run can arrive after its dataset was revised in the same turn.
+        // Retain it without presenting that newer draft as the run's inputs.
+        const matchesInputs = scope.dataset && scope.dataset.id === summary.datasetId
+          && scope.dataset.revision === summary.datasetRevision;
+        if (!late && matchesInputs) scope.selectedRunId = summary.id;
       }
       scope.updatedAt = now;
       // Background completion updates the originating scope without selecting it.

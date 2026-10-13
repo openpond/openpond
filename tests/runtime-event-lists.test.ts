@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest";
+import { IncrementalChatProjector } from "../apps/web/src/lib/incremental-chat-projector";
+import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import type { RuntimeEvent } from "@openpond/contracts";
 import {
   latestRuntimeEventSequence,
@@ -19,6 +21,38 @@ describe("runtime event list merging", () => {
       first[1],
       second[1],
     ]);
+  });
+
+  // Loading a newer page over a fuller live window must not move the old
+  // turn start behind its publication or the subsequent selection response.
+  test("replays overlapping history windows in durable sequence order", () => {
+    const visual = {
+      visualId: `visual_${"a".repeat(32)}`, publicationId: `visual_pub_${"b".repeat(32)}`,
+      sessionId: "session_1", turnId: "picker", heights: [{ width: 680, height: 200 }],
+      output: { id: "output", title: "Dataset picker", sourceTaskId: "session_1", sourceTurnId: "picker",
+        revision: 1, createdAt: "2026-07-01T10:00:00.000Z", kind: "file", contentType: "text/html",
+        sizeBytes: 100, sha256: "c".repeat(64), validation: [],
+        location: { kind: "managed", fileId: "file", downloadPath: "/visual.html" } },
+    };
+    const live = [
+      runtimeEvent("picker-start", 10, { turnId: "picker", args: { prompt: "List datasets" } }),
+      runtimeEvent("published-picker", 11, { turnId: "picker", name: "visual.published", data: { visual } }),
+      runtimeEvent("picker-complete", 12, { turnId: "picker", name: "turn.completed" }),
+    ];
+    const newerPage = [live[1]!, live[2]!,
+      runtimeEvent("selection-start", 13, { turnId: "selection", args: { prompt: "Selected dataset" } }),
+      runtimeEvent("selection-answer", 14, { turnId: "selection", name: "assistant.delta", output: "Selected" }),
+    ];
+    const merged = mergeRuntimeEventLists(newerPage, live);
+    expect(merged.map(event => event.id)).toEqual([
+      "picker-start", "published-picker", "picker-complete", "selection-start", "selection-answer",
+    ]);
+    expect(mergeRuntimeEventLists(live, newerPage)).toEqual(merged);
+    const projector = new IncrementalChatProjector();
+    projector.project(live);
+    const projected = projector.project(merged);
+    expect(projected).toEqual(buildChatMessages([...live, ...newerPage.slice(2)]));
+    expect(projected.filter(message => message.role === "visual")).toMatchObject([{ visual }]);
   });
 
   test("preserves the live transcript when bootstrap returns a partial event window", () => {
@@ -94,8 +128,8 @@ describe("runtime event list merging", () => {
       "selected-apply-result",
     ]);
     expect(mergeRuntimeEventLists(cache[selectedSessionId] ?? [], refreshedSelectedEvents).map((event) => event.id)).toEqual([
-      "selected-apply-result",
       "selected-bootstrap",
+      "selected-apply-result",
     ]);
   });
 
