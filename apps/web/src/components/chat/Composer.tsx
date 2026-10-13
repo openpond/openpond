@@ -1284,7 +1284,7 @@ export function Composer({
       const sent = await onSubmit([], null, null, {
         preservePrompt: true,
         promptOverride: draft.prompt,
-        turnMetadata: {chatResourceFocus:chatResources.focus,...steeringActiveTurn ? {interactionKind:"steer"} : {}},
+        turnMetadata: {chatExperimentScopeId:chatResources.scope?.id,chatResourceFocus:{dataset:chatResources.focus.dataset,experiment:chatResources.focus.experiment,graderId:chatResources.scope?.selectedGraderId},...steeringActiveTurn ? {interactionKind:"steer"} : {}},
       });
       updateSteerDraftsForScope(submissionScope, (current) =>
         composerSteerDraftsAfterSubmit(current, draftId, sent)
@@ -1361,14 +1361,14 @@ export function Composer({
         payloads,
         selectedAction,
         selectedCommand,
-        selectedDisplayPrompt || promptOverride || options.preservePrompt || chatResources.focus.dataset || chatResources.focus.experiment
+        selectedDisplayPrompt || promptOverride || options.preservePrompt || chatResources.scope || chatResources.focus.dataset || chatResources.focus.experiment
           ? {
               ...(selectedDisplayPrompt
                 ? { displayPrompt: selectedDisplayPrompt }
                 : {}),
               ...(promptOverride !== undefined ? { promptOverride } : {}),
               ...(options.preservePrompt ? { preservePrompt: true } : {}),
-              turnMetadata: {chatResourceFocus:chatResources.focus},
+              turnMetadata: {chatExperimentScopeId:chatResources.scope?.id,chatResourceFocus:{dataset:chatResources.focus.dataset,experiment:chatResources.focus.experiment,graderId:chatResources.scope?.selectedGraderId}},
             }
           : undefined,
       );
@@ -1586,7 +1586,6 @@ export function Composer({
       />
       {(showProjectFooter || surface === "chat" && taskSessionId) && (
         <div className="composer-footer">
-          {surface === "chat" && taskSessionId && projectTarget.value !== "none" ? <ComposerResourceControls resources={chatResources} busy={busy} /> : null}
           {showProjectFooter ? (
             <ComposerProjectTargetControl
               busy={busy || projectTarget.busy}
@@ -1646,6 +1645,12 @@ export function Composer({
           {composeNotice.message}
         </div>
       )}
+      {surface === "chat" && taskSessionId ? <ComposerResourceControls resources={chatResources} busy={busy} onDraft={text => {
+        const existing = inputRef.current?.getPrompt() ?? prompt;
+        const next = existing.trim() ? `${existing}\n\n${text}` : text;
+        onPromptChange(next);
+        requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(next.length));
+      }} /> : null}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu
