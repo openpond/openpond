@@ -21,6 +21,10 @@ Use this root skill as the default entrypoint when importing this repository int
 
 ## What this skill covers
 
+- Dataset discovery, authoring, and validation
+- Grader calibration and experiment execution, inspection, and comparison
+- Supported model training and continual experiment workflows
+
 - API key login and auth flows (`openpond login`)
 - Repo create/push workflows (`openpond repo create`, `openpond repo push`)
 - Deployment watch workflows (`openpond deploy watch`)
