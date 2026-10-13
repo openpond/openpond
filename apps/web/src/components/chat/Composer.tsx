@@ -178,7 +178,7 @@ export function Composer({
   taskSessionId = null,
   taskEvents = EMPTY_TASK_EVENTS,
   steerActiveResponses = false,
-  submissionScopeKey = "default",
+  submissionScopeKey = "default", composerDraftStore,
   getCurrentSubmissionScopeKey,
   voiceInputChannelKey = submissionScopeKey,
   initialSteerDrafts = EMPTY_STEER_DRAFTS,
@@ -226,7 +226,7 @@ export function Composer({
   const useActiveSteering = steerActiveResponses;
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
   const chatResources = useChatResourceFocus(surface === "chat" ? connection : null,taskSessionId ?? null);
-  const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources);
+  const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources, composerDraftStore);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
