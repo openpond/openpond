@@ -1284,7 +1284,7 @@ export function Composer({
       const sent = await onSubmit([], null, null, {
         preservePrompt: true,
         promptOverride: draft.prompt,
-        turnMetadata: {chatExperimentScopeId:chatResources.scope?.id,chatResourceFocus:{dataset:chatResources.focus.dataset,experiment:chatResources.focus.experiment,graderId:chatResources.scope?.selectedGraderId},...steeringActiveTurn ? {interactionKind:"steer"} : {}},
+        turnMetadata: {chatExperimentScopeId:chatResources.scope?.id,chatExperimentSelectionVersion:chatResources.focus.scopeContext?.selectionVersion,chatResourceFocus:{dataset:chatResources.focus.dataset,experiment:chatResources.focus.experiment,graderId:chatResources.scope?.selectedGraderId},...steeringActiveTurn ? {interactionKind:"steer"} : {}},
       });
       updateSteerDraftsForScope(submissionScope, (current) =>
         composerSteerDraftsAfterSubmit(current, draftId, sent)
@@ -1368,7 +1368,7 @@ export function Composer({
                 : {}),
               ...(promptOverride !== undefined ? { promptOverride } : {}),
               ...(options.preservePrompt ? { preservePrompt: true } : {}),
-              turnMetadata: {chatExperimentScopeId:chatResources.scope?.id,chatResourceFocus:{dataset:chatResources.focus.dataset,experiment:chatResources.focus.experiment,graderId:chatResources.scope?.selectedGraderId}},
+              turnMetadata: {chatExperimentScopeId:chatResources.scope?.id,chatExperimentSelectionVersion:chatResources.focus.scopeContext?.selectionVersion,chatResourceFocus:{dataset:chatResources.focus.dataset,experiment:chatResources.focus.experiment,graderId:chatResources.scope?.selectedGraderId}},
             }
           : undefined,
       );

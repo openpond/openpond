@@ -24,3 +24,11 @@
   .composer-resource-bar .dropdown-trigger, .composer-resource-bar > button { min-height: 44px; }
   .composer-resource-bar .composer-resource-primary { display: none; }
 }
+
+.composer-resource-bar .composer-resource-dataset-name { flex: 1 1 auto; min-width: 0; max-width: none; text-align: left; }
+.composer-resource-bar .composer-resource-version { flex: 0 0 auto; max-width: none; color: var(--text-muted); }
+.composer .composer-resource-area .composer-resource-bar .dropdown-select.compact .dropdown-trigger { max-width: none; }
+@container (max-width: 320px) {
+  .composer-resource-bar .composer-resource-graders { flex: 0 0 60px; }
+  .composer-resource-bar .composer-resource-add { display: none; }
+}

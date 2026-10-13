@@ -89,28 +89,41 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return {resources:[...unique.values()],links:links.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
     if (kind === "dataset" && ["context","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
-      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
+      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
+      if(query.visualPublicationId)await deps.visuals.read(session.id,query.visualPublicationId);
       const datasetChoices = (await deps.store.listLocalDatasetListings()).map(localDatasetSummary);
       const page = await experiments.service.list({teamId:experiments.scope}) as {items:import("@openpond/contracts").LocalExperimentRecord[]};
       const localChoices = await Promise.all(page.items.map(record=>experiments.summary(record)));
       const experimentChoices=[...localChoices,...await cloud.list()];
       let scopeContext = chatExperimentContext(session.metadata);
+      const sourceTurn=context ? await deps.store.getTurn(context.turnId) : null;
+      if(context && input.action!=="context") {
+        const version=sourceTurn?.metadata.chatExperimentSelectionVersion;
+        if(typeof version==="number")query.expectedSelectionVersion=version;
+        else if(sourceTurn && scopeContext.selectedAt && scopeContext.selectedAt>sourceTurn.startedAt)throw new Error("Resource focus changed after this turn began. Continue from the current selection.");
+        else query.expectedSelectionVersion=scopeContext.selectionVersion;
+      }
       const focusFor = (state:typeof scopeContext) => {
         const scope = state.scopes.find(candidate=>candidate.id===state.activeScopeId);
         return {dataset:scope?.dataset ?? null,experiment:scope?.runs.find(run=>run.id===scope.selectedRunId) ?? null};
       };
       let focus = focusFor(scopeContext);
+      async function selectedFocus(state:typeof scopeContext) {
+        if(context)await deps.store.updateTurn(context.turnId,current=>({...current,metadata:{...current.metadata,
+          chatExperimentScopeId:state.activeScopeId,chatExperimentSelectionVersion:state.selectionVersion}}));
+        return {...focusFor(state),scopeContext:state};
+      }
       if (input.action === "create_scope") {
         if (!query.operationId) throw new Error("Creating an experiment scope requires a stable operationId.");
-        scopeContext = await scopes.create(session.id,query.operationId);
-        return {...focusFor(scopeContext),scopeContext};
+        scopeContext = await scopes.create(session.id,query.operationId,query.expectedSelectionVersion);
+        return selectedFocus(scopeContext);
       }
       if (input.action === "select_scope" || input.action === "rename_scope") {
         if (!query.scopeId) throw new Error("Select an experiment scope.");
         scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,...input.action === "rename_scope" ? {name:z.string().trim().min(1).max(500).parse(query.name)} : {},expectedSelectionVersion:query.expectedSelectionVersion});
-        return {...focusFor(scopeContext),scopeContext};
+        return selectedFocus(scopeContext);
       }
       if (input.action === "context") {
         if(focus.experiment?.location==="local") {
@@ -124,7 +137,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if (!query.kind) throw new Error("Select the resource focus kind.");
       if (query.kind === "grader") {
         scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,graders:focus.dataset ? localGraderSummaries(await datasets.readListing(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [],graderId:query.id ?? null,expectedSelectionVersion:query.expectedSelectionVersion});
-        return {...focusFor(scopeContext),scopeContext};
+        return selectedFocus(scopeContext);
       }
       if (query.kind === "dataset") {
         const dataset = query.id ? localDatasetSummary(await datasets.readListing(query.id,query.revision)) : null;
@@ -137,8 +150,8 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         focus = {experiment:experiment ?? null,dataset:pinned ? localDatasetSummary(pinned) : null};
       }
       const graders = focus.dataset ? localGraderSummaries(await datasets.readListing(focus.dataset.id,focus.dataset.revision)).map(grader=>({...grader,rows:[]})) : [];
-      scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,dataset:focus.dataset,graders,...focus.experiment ? {run:focus.experiment} : {},expectedSelectionVersion:query.expectedSelectionVersion});
-      return {...focus,scopeContext};
+      scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,dataset:focus.dataset,graders,...focus.experiment ? {run:focus.experiment} : {},expectedSelectionVersion:query.expectedSelectionVersion,operationId:query.operationId,visualPublicationId:query.visualPublicationId});
+      return selectedFocus(scopeContext);
     }
     if (context) {
       const [session,turn] = await Promise.all([deps.store.getSession(context.sessionId),deps.store.getTurn(context.turnId)]);

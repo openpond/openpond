@@ -14,3 +14,7 @@
 .html-visual-panel { position: relative; display: flex; flex-direction: column; min-width: 0; }
 .html-visual-panel > .html-visual-toolbar { padding: 12px; border-bottom: 1px solid var(--border-default); margin: 0; }
 .html-visual-panel-body { overflow: auto; padding: 16px; flex: 1; min-height: 0; }
+
+.html-visual-selection-receipt { display: flex; align-items: center; gap: 8px; padding: 8px 0; color: var(--text-primary); font-size: 13px; }
+.html-visual-selection-receipt span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.html-visual-selection-receipt button { border: 0; background: transparent; color: var(--text-muted); padding: 4px; font: inherit; }

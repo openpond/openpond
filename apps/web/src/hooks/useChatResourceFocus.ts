@@ -42,8 +42,10 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
       }
     };
     reload.current = () => void load();
+    const changed=(event:Event)=>{if((event as CustomEvent<{sessionId:string}>).detail?.sessionId===sessionId)void load();};
+    window.addEventListener("openpond-resource-focus-changed",changed);
     void load();
-    return () => { reload.current = null; generation.current++; selection.current?.abort(); abort.abort(); clearTimeout(timer); };
+    return () => { window.removeEventListener("openpond-resource-focus-changed",changed); reload.current = null; generation.current++; selection.current?.abort(); abort.abort(); clearTimeout(timer); };
   }, [connection, sessionId]);
 
   async function change(action: string, payload: Record<string, unknown>) {
@@ -55,7 +57,8 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
         sessionId, ...payload,
         ...(focusRef.current.scopeContext ? { expectedSelectionVersion: focusRef.current.scopeContext.selectionVersion } : {}),
       } }, abort.signal);
-      if (admitted === generation.current && !abort.signal.aborted) { setFocus(next); focusRef.current = next; setError(null); }
+      if (admitted === generation.current && !abort.signal.aborted) { setFocus(next); focusRef.current = next;
+        setGraders(next.scopeContext?.scopes.find(scope=>scope.id===next.scopeContext?.activeScopeId)?.graders ?? []); setError(null); }
       return !abort.signal.aborted;
     } catch (cause) {
       if (admitted === generation.current && !abort.signal.aborted) setError(cause instanceof Error ? cause.message : "Resource selection failed.");

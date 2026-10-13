@@ -22,7 +22,10 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     let state = chatExperimentContext((await store.getSession("chat-a"))?.metadata);
     expect(state.scopes.map(scope => scope.ordinal)).toEqual([1, 2]);
     const first = state.scopes[0]!;
-    await scopes.select("chat-a", { scopeId: first.id, dataset: dataset(1) });
+    const selected=await scopes.select("chat-a", { scopeId: first.id, dataset: dataset(1),operationId:"visual-selection",visualPublicationId:"publication" });
+    const replay=await scopes.select("chat-a", { scopeId: first.id, dataset: dataset(1),operationId:"visual-selection",visualPublicationId:"publication",expectedSelectionVersion:0 });
+    expect(replay.selectionVersion).toBe(selected.selectionVersion);
+    await expect(scopes.select("chat-a", { scopeId:first.id,dataset:dataset(2),operationId:"visual-selection",visualPublicationId:"publication" })).rejects.toThrow("reused");
     await store.insertTurn(TurnSchema.parse({ id: "run-turn", sessionId: "chat-a", prompt: "Run", providerTurnId: null,
       startedAt: "2026-10-01T00:01:00.000Z", completedAt: null, status: "in_progress", error: null,
       metadata: { chatExperimentScopeId: first.id } }));
@@ -43,6 +46,7 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     await expect(scopes.select("chat-a", { dataset: dataset(1), expectedSelectionVersion: 0 })).rejects.toThrow("changed");
     const second = state.scopes[1]!;
     await scopes.select("chat-a", { scopeId: second.id });
+    await expect(scopes.select("chat-a", { scopeId:first.id,dataset:dataset(1),operationId:"visual-selection",visualPublicationId:"publication" })).rejects.toThrow("newer");
     await scopes.create("chat-a", "create-a");
     await scopes.attach("chat-a", "run-turn", { ...run, state: "Completed" });
     expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).activeScopeId).toBe(second.id);
