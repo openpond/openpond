@@ -19,6 +19,7 @@ import { workspaceDiffSinceBaseline } from "../apps/server/src/workspace/server-
 import { createServerWorkspacePayloads } from "../apps/server/src/workspace/server-workspace-payloads";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { buildFileTree } from "../apps/web/src/components/workspace-diff/workspace-diff-summary-model";
+import { FileLoadTracker } from "../apps/web/src/components/workspace-diff/file-load-tracker";
 import { createPreviewWorkQueue } from "../apps/web/src/components/workspace-diff/preview-work-queue";
 
 // A discarded thumbnail must neither hold up the next document nor start
@@ -482,4 +483,24 @@ test("open file versions detect same-name edits and replacements within the work
   expect((await workspaceFileVersion(folder, path.join(root, "outside.pptx"), true)).exists).toBe(true);
   await symlink(root, path.join(folder, "escape"), "dir");
   await expect(workspaceFileVersion(folder, "escape/outside.pptx")).rejects.toThrow("outside the workspace");
+});
+
+// Network responses can complete in any order while the user changes tabs.
+test("file reads cannot reopen closed tabs or replace a newer request", () => {
+  const loads = new FileLoadTracker();
+  expect(loads.receive("a.pdf", { loadId: 1, loading: true })).toBe("open");
+  expect(loads.receive("b.pdf", { loadId: 2, loading: true })).toBe("open");
+  expect(loads.receive("a.pdf", { loadId: 1 })).toBe("complete");
+  loads.close("b.pdf");
+  expect(loads.receive("b.pdf", { loadId: 2 })).toBe("ignore");
+  loads.receive("a.pdf", { loadId: 3, loading: true });
+  loads.receive("a.pdf", { loadId: 4, loading: true });
+  expect(loads.receive("a.pdf", { loadId: 4 })).toBe("complete");
+  expect(loads.receive("a.pdf", { loadId: 3 })).toBe("ignore");
+  expect(loads.receive("fast.pdf", { loadId: 5 })).toBe("open");
+  loads.receive("local.pdf", { loadId: 6, loading: true });
+  loads.receive("remote.pdf", { loadId: 7, loading: true });
+  loads.retain(new Set(["local.pdf"]));
+  expect(loads.receive("remote.pdf", { loadId: 7 })).toBe("ignore");
+  expect(loads.receive("local.pdf", { loadId: 6 })).toBe("complete");
 });
