@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  dts-bundle-generator>typescript: 5.9.3
+
 importers:
 
   .:
@@ -5644,7 +5647,7 @@ snapshots:
 
   dts-bundle-generator@9.5.1:
     dependencies:
-      typescript: 7.0.2
+      typescript: 5.9.3
       yargs: 17.7.3
 
   dunder-proto@1.0.1:
