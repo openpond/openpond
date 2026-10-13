@@ -16,6 +16,7 @@ import { createHttpRequestHandler, type HttpRouteDeps } from "../apps/server/src
 import { createSubagentCompletionRuntime } from "../apps/server/src/runtime/subagents/completion-runtime";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import { restoreQueuedTaskInput } from "../apps/web/src/components/chat/TaskInboxPanel";
+import { taskInputModelText } from "@openpond/contracts/task-inbox";
 
 const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const dispose of cleanup.splice(0).reverse()) await dispose(); });
@@ -39,6 +40,35 @@ function input(overrides: Partial<TaskInputAdmission> = {}): TaskInputAdmission 
   return { id: "input-1", sessionId: "a", senderSessionId: null, senderKind: "user", kind: "steer",
     body: "Preserve the API", payload: {}, idempotencyKey: "intent-1", replyTo: null, expectedTurnId: "turn-a", ...overrides };
 }
+
+// A resource action delivered during an active turn must retain its exact
+// revision across retries and restart, without accepting execution permissions.
+test("steering retains bounded resource references through durable admission and model delivery", async () => {
+  const f = await fixture();
+  await f.store.openTaskInboxTurn("a", "turn-a", "owner");
+  const runtime = createTaskInboxRuntime({ store: f.store,
+    getSession: async id => (await f.store.getSession(id))!, listSessions: () => f.store.sessionShells(),
+    getTurn: id => f.store.getTurn(id), latestTurn: id => f.store.latestTurnForSession(id),
+    getSubagentRun: async () => null, getActiveTurn: () => undefined, recoverInterruptedTurn: async () => {},
+    startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: work => work(),
+    appendRuntimeEvent: async value => { await f.store.appendRuntimeEvent(value); },
+  });
+  const resourceContexts = [{scopeId:"scope-one",selectionVersion:4,resources:[{kind:"dataset",id:"quotes",revision:3}]}];
+  const request = {prompt:"Test this dataset.",expectedTurnId:"turn-a",idempotencyKey:"resource-action",resourceContexts};
+  let receipt;
+  try {
+    receipt = await runtime.steer("a", request);
+    expect((await runtime.steer("a", request)).id).toBe(receipt.id);
+    await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],resources:[{kind:"dataset",id:"quotes",revision:4}]}]})).rejects.toThrow("different content");
+    await expect(runtime.steer("a", {...request,idempotencyKey:"permission-attempt",resourceContexts:[{...resourceContexts[0],approvalPolicy:"never"}]})).rejects.toThrow();
+    const included = await f.store.includeTaskInputs("a", "turn-a", "owner", "resource-request");
+    expect(included).toHaveLength(1);
+    expect(taskInputModelText(included[0]!)).toContain(JSON.stringify(resourceContexts));
+    expect(taskInputModelText({...included[0]!,senderKind:"task"})).not.toContain(JSON.stringify(resourceContexts));
+  } finally { await runtime.close(); }
+  await f.reopen();
+  expect((await f.store.getTaskInput(receipt!.id))?.payload).toEqual({metadata:{chatResourceContexts:resourceContexts}});
+});
 
 // Failure story: editing a queued message puts it in the composer while the
 // saved copy can still run, or restores stale text after another client edits it.
