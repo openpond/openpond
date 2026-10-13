@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { TaskSignals } from "@openpond/agent-runtime";
-import { SessionSchema, SubagentRunSchema, TaskWaitSchema, TurnSchema, type TaskInputAdmission } from "@openpond/contracts";
+import { TaskResourceContextsSchema, SessionSchema, SubagentRunSchema, TaskWaitSchema, TurnSchema, type TaskInputAdmission } from "@openpond/contracts";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { createTaskInboxRuntime } from "../apps/server/src/runtime/task-inbox/runtime";
 import { createTaskCoordinationMcp } from "../apps/server/src/runtime/task-inbox/codex-mcp";
@@ -53,7 +53,8 @@ test("steering retains bounded resource references through durable admission and
     startFollowup: vi.fn(), dispatchFollowup: async () => {}, yieldWhileWaiting: work => work(),
     appendRuntimeEvent: async value => { await f.store.appendRuntimeEvent(value); },
   });
-  const resourceContexts = [{scopeId:"scope-one",selectionVersion:4,resources:[{kind:"dataset",id:"quotes",revision:3}]}];
+  const training = [{location:"local",jobId:"job",owner:{teamId:"team",actorId:"actor"},modelRunId:"model-run",modelId:"model",modelVersionId:null,adapterArtifactLineageId:null}];
+  const resourceContexts = [{scopeId:"scope-one",selectionVersion:4,resources:[{kind:"dataset",id:"quotes",revision:3}],training}];
   const request = {prompt:"Test this dataset.",expectedTurnId:"turn-a",idempotencyKey:"resource-action",resourceContexts};
   let receipt;
   try {
@@ -61,10 +62,12 @@ test("steering retains bounded resource references through durable admission and
     expect((await runtime.steer("a", request)).id).toBe(receipt.id);
     await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],resources:[{kind:"dataset",id:"quotes",revision:4}]}]})).rejects.toThrow("different content");
     await expect(runtime.steer("a", {...request,idempotencyKey:"permission-attempt",resourceContexts:[{...resourceContexts[0],approvalPolicy:"never"}]})).rejects.toThrow();
+    await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],training:[{...training[0],jobId:"different-job"}]}]})).rejects.toThrow("different content");
     const included = await f.store.includeTaskInputs("a", "turn-a", "owner", "resource-request");
     expect(included).toHaveLength(1);
-    expect(taskInputModelText(included[0]!)).toContain(JSON.stringify(resourceContexts));
-    expect(taskInputModelText({...included[0]!,senderKind:"task"})).not.toContain(JSON.stringify(resourceContexts));
+    const serialized = JSON.stringify(TaskResourceContextsSchema.parse(resourceContexts));
+    expect(taskInputModelText(included[0]!)).toContain(serialized);
+    expect(taskInputModelText({...included[0]!,senderKind:"task"})).not.toContain(serialized);
   } finally { await runtime.close(); }
   await f.reopen();
   expect((await f.store.getTaskInput(receipt!.id))?.payload).toEqual({metadata:{chatResourceContexts:resourceContexts}});

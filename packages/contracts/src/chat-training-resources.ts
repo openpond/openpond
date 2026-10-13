@@ -1,3 +1,4 @@
+import { ChatTrainingReferenceSchema, type ChatTrainingReference } from "./chat-training-reference.js";
 import { z } from "zod";
 import { TrainingJobSchema as HostedTrainingJobSchema } from "openpond-sdk/training";
 import { VersionedReleaseRefSchema } from "./release-core.js";
@@ -33,4 +34,13 @@ export type ChatTrainingAttachment = z.infer<typeof ChatTrainingAttachmentSchema
 export function chatTrainingAttachmentKey(training: ChatTrainingAttachment): string {
   return JSON.stringify([training.location,training.location === "cloud" ? training.apiOrigin : null,
     training.owner.teamId,training.owner.actorId,training.jobId]);
+}
+
+export function chatTrainingReference(training: ChatTrainingAttachment): ChatTrainingReference {
+  const common = {location:training.location,jobId:training.jobId,owner:training.owner};
+  return ChatTrainingReferenceSchema.parse(training.location === "cloud"
+    ? {...common,apiOrigin:training.apiOrigin,modelProjectId:training.job.modelProjectId,
+      portableProjectId:training.job.portableProjectId,submissionHash:training.job.submissionHash}
+    : {...common,modelRunId:training.modelRunId,modelId:training.modelId,
+      modelVersionId:training.modelVersionId,adapterArtifactLineageId:training.adapterArtifactLineageId});
 }

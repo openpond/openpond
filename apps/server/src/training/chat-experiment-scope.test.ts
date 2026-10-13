@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { SessionSchema, TurnSchema, type ChatTrainingAttachment, type ChatResourceSummary } from "@openpond/contracts";
+import { SessionSchema, TurnSchema, chatTrainingReference, type ChatTrainingAttachment, type ChatResourceSummary } from "@openpond/contracts";
 import { SqliteStore } from "../store/store.js";
 import { chatExperimentContext, createChatExperimentScopes } from "./chat-experiment-scope.js";
 
@@ -80,6 +80,12 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
       adapterArtifactLineageId:null,owner:ownerA,taskset:{id:"published-training-data",revision:1,contentHash:"a".repeat(64)},
       state:"running",executionState:"running",updatedAt:"2026-10-13T00:00:00.000Z"};
     await expect(scopes.attachTraining("chat-a","run-turn",training)).rejects.toThrow("multiple targets");
+    await store.updateTurn("run-turn",current=>({...current,metadata:{chatResourceContexts:[
+      {scopeId:first.id,selectionVersion:0,resources:[],training:[chatTrainingReference(training)]},
+      {scopeId:second.id,selectionVersion:0,resources:[],training:[chatTrainingReference({...training,jobId:"other-job",modelRunId:"other-run"})]},
+    ]}}));
+    await scopes.attachTraining("chat-a","run-turn",training);
+    expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).scopes[0]!.training).toEqual([training]);
     await store.updateTurn("run-turn",current=>({...current,metadata:{chatExperimentScopeId:first.id,chatExperimentSelectionVersion:0}}));
     await scopes.attachTraining("chat-a","run-turn",training);
     await scopes.attachTraining("chat-a","run-turn",training);
