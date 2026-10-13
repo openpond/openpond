@@ -4,7 +4,7 @@ import { optionString, parseBooleanOption } from "./common";
 
 export async function runLocalDatasetsCommand(options:Record<string,string|boolean>,rest:string[]) {
   const [action,id] = rest;
-  if (!action || rest.length > 2) throw new Error("Usage: datasets <schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]");
+  if (!action || rest.length > 2) throw new Error("Usage: datasets <context|select|new-experiment|select-experiment|rename-experiment|schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]");
   const base = new URL(optionString(options,"serverUrl") || process.env.OPENPOND_LOCAL_API_URL || DEFAULT_LOCAL_TRAINING_API_URL);
   if (base.protocol !== "http:" || !["localhost","127.0.0.1","[::1]"].includes(base.hostname) || base.username || base.password || base.search || base.hash || base.pathname !== "/") throw new Error("Local Datasets require an HTTP loopback server origin.");
   // Packaging returns both the bounded authored workspace and its sealed files.
@@ -16,7 +16,14 @@ export async function runLocalDatasetsCommand(options:Record<string,string|boole
     payload = JSON.parse(await readFile(file,"utf8"));
   }
   const revision = optionString(options,"expectedRevision");
-  const response = await request(new URL("/v1/local-datasets",base),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:action.replaceAll("-","_"),...(id?{id}:{}),...(options.operationId?{operationId:optionString(options,"operationId")}:{}),...(revision?{expectedRevision:Number(revision)}:{}),payload})});
+  const conversational:Record<string,unknown> | null = action === "context" ? {action:"context",payload}
+    : action === "new-experiment" ? {action:"create_scope",payload:{operationId:optionString(options,"operationId")}}
+    : action === "select" ? {action:"set_focus",payload:{kind:"dataset",id:id ?? null,...revision ? {revision:Number(revision)} : {}}}
+    : action === "select-experiment" ? {action:"select_scope",payload:{scopeId:id}}
+    : action === "rename-experiment" ? {action:"rename_scope",payload:{scopeId:id,...payload as object}}
+    : null;
+  if (conversational && !process.env.OPENPOND_CHAT_INVOCATION) throw new Error("Chat selection commands require the app's scoped command executor.");
+  const response = await request(new URL("/v1/local-datasets",base),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...(conversational ?? {action:action.replaceAll("-","_"),...(id?{id}:{}),...(options.operationId?{operationId:optionString(options,"operationId")}:{}),...(revision?{expectedRevision:Number(revision)}:{}),payload}),...(process.env.OPENPOND_CHAT_INVOCATION ? {invocationToken:process.env.OPENPOND_CHAT_INVOCATION} : {})})});
   const result = await response.json() as Record<string,unknown>;
   if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : `Local Dataset request failed (${response.status}).`);
   if (parseBooleanOption(options.json)) { console.log(JSON.stringify(result,null,2)); return; }

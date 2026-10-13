@@ -30,6 +30,10 @@ Read the installed command help for exact flags and input contracts; capability 
 | Model projects, training preparation/execution, status, and artifacts | `openpond training` |
 | Supported continual experiment manifests and reports | `openpond continual` |
 
+When the app provides a scoped command executor, run the CLI with `"$OPENPOND_CLI_NODE" "$OPENPOND_CLI_ENTRY"` as its prefix (`openpond_exec_command` for native agents; the existing `exec_command` for hosted chat). This uses the app's bundled installation and attaches saved results to the originating chat. Do not use the provider's unrelated shell for these workflows or copy invocation credentials into arguments.
+
+Use `datasets context --local --json` to inspect the current scope; `datasets select <id> --local --expected-revision <revision>` selects an existing dataset. `datasets new-experiment --local --operation-id <stable-id>` creates a configuration scope without compute. Scope selection/rename use `select-experiment` and `rename-experiment`; check their current help. These commands require app-supplied context. Mere `datasets list` discovery does not attach all records.
+
 Use the application's supplied local server context when present. Do not guess a second installation, scrape credentials, or switch teams to get an operation to succeed. Local dataset commands use `--local`; hosted operations have their own explicit destination/account options. Local experiment execution may still call a paid remote inference provider.
 
 ## Dataset and grader work

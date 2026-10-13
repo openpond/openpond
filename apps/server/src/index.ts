@@ -120,6 +120,8 @@ import {
 } from "./openpond/model-tool-registry.js";
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
+import { createChatCliInvocation } from "./training/chat-cli-invocation.js";
+import { bundledChatCliEnvironment } from "./training/chat-cli-environment.js";
 import { runOpenPondDirectCommand } from "./openpond/direct-command.js";
 import {
   isCodexHistorySessionId,
@@ -558,9 +560,13 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     saveWorkAgentPackage: workAgentPackageService.saveWorkAgentPackage,
     saveWorkOutput: workOutputService.saveWorkOutput,
   });
+  const cliInvocations = createChatCliInvocation(store);
   const openPondCommandAccess = createOpenPondCommandAccessService({
     upsertApproval,
     appendRuntimeEvent,
+    managedChatCwd:path.join(storeDir,"workspace","chat-cli"),
+    executionEnvironment:async input=>input.session.systemKind ? {} : ({...await bundledChatCliEnvironment(),OPENPOND_HOME:storeDir,OPENPOND_LOCAL_API_URL:`http://127.0.0.1:${actualPort}`,
+      ...input.turnId ? {OPENPOND_CHAT_INVOCATION:await cliInvocations.issue(input.session.id,input.turnId)} : {OPENPOND_CHAT_INVOCATION:undefined}}),
   });
   const workSandboxLifecycle = createWorkSandboxLifecycleService({
     storeDir,
@@ -815,7 +821,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   onStartupFailure(()=>improvements.close());
   onStartupFailure(()=>schedules.stop());
   await localExperiments.recover();
-  const chatResources = await createChatResourceRuntime({store,home:storeDir,ownerId:serverId,state:localByokRuntimeState,codexStatus:()=>refreshCodexStatus(true),imports:datasetImportService,visuals:htmlVisuals,improve:experimentImprovementPayload,append:appendRuntimeEvent,
+  const chatResources = await createChatResourceRuntime({store,home:storeDir,ownerId:serverId,state:localByokRuntimeState,codexStatus:()=>refreshCodexStatus(true),imports:datasetImportService,visuals:htmlVisuals,improve:experimentImprovementPayload,append:appendRuntimeEvent,resolveInvocation:cliInvocations.resolve,
     access:async()=>({...await resolveHostedApiAccess(),actorId:await reviewIdentity.actorId(),teamId:await reviewIdentity.teamId()})});
   onStartupFailure(()=>chatResources.close());
   trainingApi.learning.start();
