@@ -1,3 +1,4 @@
+import type { ComposerDraftStore } from "../../lib/composer-draft-store";
 import type {
   ChatAttachment,
   ChatProvider,
@@ -55,6 +56,7 @@ export type ComposerProps = {
   taskEvents?: readonly RuntimeEvent[];
   steerActiveResponses?: boolean;
   submissionScopeKey?: string;
+  composerDraftStore?: ComposerDraftStore;
   getCurrentSubmissionScopeKey?: () => string;
   voiceInputChannelKey?: string;
   initialSteerDrafts?: ComposerSteerDraft[];
