@@ -35,6 +35,7 @@ export { default as ClipboardCopy } from "lucide-react/dist/esm/icons/clipboard-
 export { default as Cloud } from "lucide-react/dist/esm/icons/cloud.js";
 export { default as CloudUpload } from "lucide-react/dist/esm/icons/cloud-upload.js";
 export { default as Code2 } from "lucide-react/dist/esm/icons/code-xml.js";
+export { default as Camera } from "lucide-react/dist/esm/icons/camera.js";
 export { default as Columns2 } from "lucide-react/dist/esm/icons/columns-2.js";
 export { default as Copy } from "lucide-react/dist/esm/icons/copy.js";
 export { default as CreditCard } from "lucide-react/dist/esm/icons/credit-card.js";

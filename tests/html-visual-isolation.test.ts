@@ -75,6 +75,35 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     await load(`<p>Network probe</p><img src="${url}/image"><iframe src="${url}/nested"></iframe><style>@import url('${url}/style');</style><script>fetch('${url}/fetch').catch(()=>{});navigator.sendBeacon('${url}/beacon','x');try{new Worker('${url}/worker')}catch{};window.open('${url}/popup');setTimeout(()=>{document.querySelectorAll('meta').forEach(e=>e.remove());location.href='${url}/navigate'},150)</script>`);
     await delay(600);
     expect(requests).toEqual([]);
+    // Failure story: selecting a resource button for a screenshot must not
+    // trigger its action, and exported DOM must preserve live form state while
+    // stripping executable handlers before the isolated image renderer sees it.
+    await cdp.send("Page.navigate", { url: "data:text/html,<body id=snapshot-host></body>" });
+    for (let i = 0; i < 30 && !await evaluate("!!document.getElementById('snapshot-host')"); i++) await delay(100);
+    const snapshotHtml = '<button id="probe" style="width:160px;height:60px" data-openpond-resource-kind="dataset" data-openpond-resource-id="examples" data-openpond-resource-revision="1" onclick="document.querySelector(\'output\').textContent=\'acted\'">Select resource</button><input value="initial"><output>untouched</output><script>document.querySelector("input").value="edited"</script>';
+    await evaluate(`(() => {window.snapshotReady=false;window.resourceSelections=0;addEventListener('message',e=>{if(e.data?.type==='openpond-visual-size'&&e.data.ready)window.snapshotReady=true;if(e.data?.type==='openpond-visual-snapshot')window.captureResult=e.data;if(e.data?.type==='openpond-visual-resource-select')window.resourceSelections++});const frame=document.createElement('iframe');frame.style.cssText='position:fixed;left:0;top:0;width:680px;height:600px;border:0';frame.setAttribute('sandbox','allow-scripts');frame.srcdoc=${JSON.stringify(htmlVisualDocument(snapshotHtml, "snapshot-test"))};document.body.append(frame)})()`);
+    for (let i = 0; i < 30 && !await evaluate("window.snapshotReady"); i++) await delay(100);
+    expect(await evaluate("window.snapshotReady")).toBe(true);
+    const command = (action: string, requestId: string) => evaluate(`document.querySelector('iframe').contentWindow.postMessage({type:'openpond-snapshot-command',identity:'snapshot-test',action:${JSON.stringify(action)},requestId:${JSON.stringify(requestId)}},'*')`);
+    await command("node", "node-test");
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 50, y: 25 });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 50, y: 25, button: "left", clickCount: 1 });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 50, y: 25, button: "left", clickCount: 1 });
+    for (let i = 0; i < 30 && !await evaluate("window.captureResult"); i++) await delay(100);
+    const selected = await evaluate("window.captureResult");
+    expect(selected.requestId).toBe("node-test");
+    expect(selected.capture.rect).toEqual({ x: 0, y: 0, width: 160, height: 60 });
+    expect(selected.capture.html).not.toContain("onclick=");
+    expect(await evaluate("window.resourceSelections")).toBe(0);
+    await command("page", "page-test");
+    for (let i = 0; i < 30 && await evaluate("window.captureResult?.requestId") !== "page-test"; i++) await delay(100);
+    const page = await evaluate("window.captureResult");
+    expect(page.capture.html).toContain('value="edited"');
+    expect(page.capture.html).toContain("untouched");
+    expect(page.capture.html).not.toContain("<script");
+    await command("node", "cancel-test"); await command("cancel", "cancel-test");
+    for (let i = 0; i < 30 && await evaluate("window.captureResult?.requestId") !== "cancel-test"; i++) await delay(100);
+    expect(await evaluate("window.captureResult.canceled")).toBe(true);
   } finally {
     await cdp?.send("Browser.close").catch(() => undefined);
     cdp?.close();
