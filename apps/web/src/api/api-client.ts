@@ -61,10 +61,11 @@ async function performFetch<T>(connection: ClientConnection, path: string, init?
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    const error =
-      payload && typeof payload === "object" && "error" in payload
-        ? String(payload.error)
-        : response.statusText;
+    const detail = payload && typeof payload === "object" ? payload.error : undefined;
+    const message = typeof detail === "string" ? detail : detail?.message;
+    const error = typeof message === "string" && message.trim()
+      ? message
+      : response.statusText || `Request failed (${response.status}).`;
     throw new ApiRequestError(error, response.status);
   }
   if (response.status === 204) return undefined as T;

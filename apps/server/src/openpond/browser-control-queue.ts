@@ -83,7 +83,13 @@ export function createBrowserControlQueue(input: {
   const executor: BrowserHarnessToolExecutor = {
     available: () => isDesktopConnected(),
     visualAvailable: () => isDesktopConnected() && desktop?.htmlPreview === true,
-    previewHtml: (request) => enqueue("previewHtml", "html_preview", request),
+    previewHtml: async (request) => {
+      await waitForPreviewConnection(request.signal);
+      if (!closed && !request.signal.aborted && (!isDesktopConnected() || !desktop?.htmlPreview)) {
+        return { ok: false, action: "html_preview", output: "The desktop preview renderer is reconnecting. Try again in a moment." };
+      }
+      return enqueue("previewHtml", "html_preview", request);
+    },
     open: (request) => enqueue("open", "openpond_browser_open", request),
     snapshot: (request) => enqueue("snapshot", "openpond_browser_snapshot", request),
     moveCursor: (request) => enqueue("moveCursor", "openpond_browser_move_cursor", request),
@@ -92,6 +98,25 @@ export function createBrowserControlQueue(input: {
     pressKey: (request) => enqueue("pressKey", "openpond_browser_key", request),
     scroll: (request) => enqueue("scroll", "openpond_browser_scroll", request),
   };
+
+  async function waitForPreviewConnection(signal: AbortSignal): Promise<void> {
+    if (closed || signal.aborted || (isDesktopConnected() && desktop?.htmlPreview)) return;
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        waiters.delete(check);
+        signal.removeEventListener("abort", finish);
+        resolve();
+      };
+      const check = () => {
+        if (closed || (isDesktopConnected() && desktop?.htmlPreview)) finish();
+      };
+      const timer = setTimeout(finish, Math.min(timeoutMs, 5_000));
+      waiters.add(check);
+      signal.addEventListener("abort", finish, { once: true });
+      check();
+    });
+  }
 
   function registerDesktopExecutor(payload: unknown): { ok: true; registered: true; instanceId: string } {
     const record = asRecord(payload);
