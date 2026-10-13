@@ -56,6 +56,14 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     await scopes.create("chat-a", "create-a");
     await scopes.attach("chat-a", "run-turn", { ...run, state: "Completed" });
     expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).activeScopeId).toBe(second.id);
+    await store.insertTurn(TurnSchema.parse({ id:"owner-turn",sessionId:"chat-b",prompt:"Inspect",providerTurnId:null,
+      startedAt:new Date().toISOString(),completedAt:null,status:"in_progress",error:null,metadata:{} }));
+    const ownerA={teamId:"team-a",actorId:"actor-a"},ownerB={teamId:"team-b",actorId:"actor-b"};
+    await scopes.attach("chat-b","owner-turn",{...dataset(1),owner:ownerA});
+    await scopes.attach("chat-b","owner-turn",{...run,owner:ownerB});
+    await scopes.attach("chat-b","owner-turn",{kind:"grader",id:"foreign-grader",revision:1,name:"Foreign",state:"Pinned",datasetId:"examples",datasetRevision:1,owner:ownerB,rows:[]});
+    const ownedScope=chatExperimentContext((await store.getSession("chat-b"))?.metadata).scopes[0]!;
+    expect(ownedScope.selectedRunId).toBeNull();expect(ownedScope.graders).toEqual([]);
     await store.close();
     store = new SqliteStore(home); scopes = createChatExperimentScopes(store);
     await scopes.create("chat-a", "create-a");
@@ -63,6 +71,6 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     expect(state.scopes).toHaveLength(2);
     expect(state.activeScopeId).toBe(second.id);
     expect(state.scopes[0]!.runs[0]!.datasetRevision).toBe(1);
-    expect(chatExperimentContext((await store.getSession("chat-b"))?.metadata).scopes).toEqual([]);
+    expect(chatExperimentContext((await store.getSession("chat-b"))?.metadata).scopes[0]!.dataset?.owner).toEqual(ownerA);
   } finally { await store.close(); await rm(home, { recursive: true, force: true }); }
 });

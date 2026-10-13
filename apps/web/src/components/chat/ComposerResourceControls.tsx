@@ -16,7 +16,7 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
   const dataset = focus.dataset;
   const datasets = dataset ? [dataset, ...resources.datasets.filter(candidate => candidate.id !== dataset.id || candidate.revision !== dataset.revision)] : resources.datasets;
   const grader = resources.graders.find(candidate => candidate.id === scope.selectedGraderId);
-  const context = `Experiment ${scope.ordinal}${scope.name === `Experiment ${scope.ordinal}` ? "" : ` (${scope.name})`}${dataset ? ` using ${dataset.name} V${dataset.revision} (dataset ${dataset.id})` : ""}`;
+  const context = `Experiment ${scope.ordinal}${scope.name === `Experiment ${scope.ordinal}` ? "" : ` (${scope.name})`}${dataset ? ` using ${dataset.name} V${dataset.revision} (dataset ${dataset.id}${dataset.owner ? `, team ${dataset.owner.teamId}, actor ${dataset.owner.actorId}, content hash ${dataset.contentHash}` : ""})` : ""}`;
   const run = focus.experiment;
   const running = run && /running|queued|pending|starting/i.test(run.state);
   const completed = run && /completed|complete|succeeded/i.test(run.state);
