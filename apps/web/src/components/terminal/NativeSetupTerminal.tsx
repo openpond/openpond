@@ -3,11 +3,12 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ClientConnection } from "../../api/api-client";
 import type { TerminalTab } from "./terminal-overlay-types";
+import { AppDialog } from "../dialogs/AppDialog";
 
 const TerminalOverlay = lazy(() => import("./TerminalOverlay").then((module) => ({ default: module.TerminalOverlay })));
 
 /** Uses the existing authenticated terminal service for native login and the shared Importer CLI. */
-export function NativeSetupTerminal({ connection, command, onClose, onComplete }: { connection: ClientConnection; command: string; onClose(): void; onComplete?(): void }) {
+export function NativeSetupTerminal({ connection, command, onClose, onComplete, modal = false }: { connection: ClientConnection; command: string; onClose(): void; onComplete?(): void; modal?: boolean }) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [scope] = useState(() => ({ kind: "draft" as const, id: `native-setup-${crypto.randomUUID()}` }));
   const completed = useRef(false);
@@ -18,5 +19,8 @@ export function NativeSetupTerminal({ connection, command, onClose, onComplete }
       onComplete?.();
     }
   }, [tabs, command, onComplete]);
-  return createPortal(<div className="native-setup-terminal"><Suspense fallback={<p role="status">Opening setup terminal…</p>}><TerminalOverlay open disposeOnUnmount connection={connection} scope={scope} tabs={tabs} onTabsChange={setTabs} cwd={null} appId={null} workspaceName="Agent setup" queuedCommand={queued} onClose={onClose} /></Suspense></div>, document.body);
+  const terminal = <Suspense fallback={<p role="status">Opening setup terminal…</p>}><TerminalOverlay open disposeOnUnmount connection={connection} scope={scope} tabs={tabs} onTabsChange={setTabs} cwd={null} appId={null} workspaceName="Agent setup" queuedCommand={queued} onClose={onClose} /></Suspense>;
+  return createPortal(modal
+    ? <AppDialog ariaLabel="Agent setup terminal" backdropClassName="native-setup-modal-backdrop" className="native-setup-terminal" onClose={onClose}>{terminal}</AppDialog>
+    : <div className="native-setup-terminal">{terminal}</div>, document.body);
 }
