@@ -15,7 +15,7 @@ Use inline HTML for dataset browsing, example inspection, grader checks, and res
 
 ## Discovery and inline selection
 
-For “list my datasets” or similar discovery, read existing resources and return a compact selectable HTML table using the host's inline UI capabilities. Show names, versions, and enough local/hosted context to distinguish records. Keep long collections bounded; fetch more when requested rather than loading every dataset's contents. Do not attach all discovery results.
+For “list my datasets” or similar discovery, read existing resources and return a compact selectable HTML table using the host's inline UI capabilities. In a local desktop chat, start with `"$OPENPOND_CLI_NODE" "$OPENPOND_CLI_ENTRY" datasets list --local --json`; omitting `--local` selects the hosted/team command family and requires different arguments. Show names, versions, and enough local/hosted context to distinguish records. Keep long collections bounded; fetch more when requested rather than loading every dataset's contents. Do not attach all discovery results. After publishing the picker, use one short sentence to invite selection. Put per-dataset explanations inside expandable Details in the HTML; do not repeat the inventory in a Markdown table or bullet list.
 
 For a published OpenPond HTML picker, render Select buttons with `data-openpond-resource-kind="dataset"`, `data-openpond-resource-id="<exact-id>"`, and `data-openpond-resource-revision="<revision>"`; experiments use kind `experiment`. The host validates a real click, selects the resource, collapses the picker with Change, and queues a canonical selection message. Keep this presentation compact and use a saved-record table. Do not add scripts that call APIs or manufacture selection messages.
 
