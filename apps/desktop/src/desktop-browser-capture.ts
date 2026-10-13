@@ -1,6 +1,7 @@
 import { BrowserWindow, session } from "electron";
 import { randomUUID } from "node:crypto";
 import { BrowserDomCaptureSchema, type BrowserCaptureResult } from "@openpond/contracts/browser-snapshots";
+import { snapshotImage } from "./desktop-snapshot-image.js";
 
 export { captureBrowserPage, cancelBrowserCapture } from "./desktop-native-snapshot.js";
 
@@ -27,7 +28,7 @@ export async function captureHtmlSnapshot(input: unknown, ownerId: number): Prom
     if (image.isEmpty()) throw new Error("The snapshot could not be rendered.");
     const dataUrl = image.toDataURL();
     if (dataUrl.length > 28_000_000) throw new Error("The snapshot is too large to save.");
-    return { ok: true, image: { dataUrl, ...image.getSize(), selector: capture.selector, source: capture.source } };
+    return { ok: true, image: snapshotImage(dataUrl, { selector: capture.selector, source: capture.source }) };
   } finally {
     capturing.delete(ownerId);
     clearTimeout(timeout); if (!window.isDestroyed()) window.destroy();
