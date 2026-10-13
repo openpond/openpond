@@ -270,17 +270,19 @@ export class TrainingApiClient {
     this.request = input.request ?? fetch;
   }
 
-  modelRun(
+  async modelRun(
     id: string,
     action: "status" | "logs" | "artifacts" | "cancel" | "resume",
     method: "GET" | "POST",
     body?: unknown,
   ): Promise<unknown> {
-    return this.json(
+    const result = await this.json(
       `/v1/training/model-runs/${encodeURIComponent(id)}/${action}`,
       method,
       body,
     );
+    await this.attachTraining({modelRunId:id});
+    return result;
   }
 
   prepareModelProject(id: string, body: unknown): Promise<unknown> {
@@ -291,12 +293,27 @@ export class TrainingApiClient {
     );
   }
 
-  startModelProject(id: string, body: unknown): Promise<unknown> {
-    return this.json(
+  async startModelProject(id: string, body: unknown): Promise<unknown> {
+    const result = await this.json(
       `/v1/training/model-projects/${encodeURIComponent(id)}/training/start`,
       "POST",
       body,
     );
+    const job = result && typeof result === "object" && "job" in result ? result.job : null;
+    if (job && typeof job === "object" && "id" in job && typeof job.id === "string") await this.attachTraining({jobId:job.id});
+    return result;
+  }
+
+  private async attachTraining(reference: {jobId?:string;modelRunId?:string}): Promise<void> {
+    const invocationToken = process.env.OPENPOND_CHAT_INVOCATION;
+    if (!invocationToken) return;
+    try {
+      await this.json("/v1/chat-experiments","POST",{action:"attach_training",payload:reference,invocationToken});
+    } catch (error) {
+      // The owner already accepted the operation. Preserve that success so a
+      // failed chat projection never invites resubmission of a paid job.
+      console.error(`Training operation succeeded, but chat attachment failed: ${error instanceof Error ? error.message : String(error)}. Inspect the saved job to retry attachment; do not submit it again.`);
+    }
   }
 
   trainingState(profileId?: string): Promise<unknown> {
