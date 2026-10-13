@@ -64,6 +64,18 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     await scopes.attach("chat-b","owner-turn",{kind:"grader",id:"foreign-grader",revision:1,name:"Foreign",state:"Pinned",datasetId:"examples",datasetRevision:1,owner:ownerB,rows:[]});
     const ownedScope=chatExperimentContext((await store.getSession("chat-b"))?.metadata).scopes[0]!;
     expect(ownedScope.selectedRunId).toBeNull();expect(ownedScope.graders).toEqual([]);
+    // One conversational turn can address two experiments. The second explicit
+    // selection must not be overridden by the first scope's turn history.
+    await store.updateTurn("run-turn", current => ({...current, metadata:{...current.metadata,chatExperimentScopeId:second.id}}));
+    await scopes.attach("chat-a", "run-turn", {...run,id:"second-run"});
+    expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).scopes[1]!.runs.map(run=>run.id)).toContain("second-run");
+    await store.updateTurn("run-turn", current => ({...current, metadata:{chatResourceContexts:[
+      {scopeId:first.id,selectionVersion:0,resources:[{kind:"dataset",id:"examples",revision:1}]},
+      {scopeId:second.id,selectionVersion:0,resources:[{kind:"dataset",id:"other",revision:1}]},
+    ]}}));
+    await scopes.attach("chat-a", "run-turn", {...run,id:"matched-run",datasetId:"other"});
+    expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).scopes[1]!.runs.map(run=>run.id)).toContain("matched-run");
+    await expect(scopes.attach("chat-a", "run-turn", {...run,id:"unmatched-run",datasetId:"unknown"})).rejects.toThrow("Select the intended experiment scope");
     await store.close();
     store = new SqliteStore(home); scopes = createChatExperimentScopes(store);
     await scopes.create("chat-a", "create-a");

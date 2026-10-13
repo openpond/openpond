@@ -1,3 +1,5 @@
+import { captureComposerResourceContext, composerResourceMetadata, mergeComposerResourceContexts } from "./composer-resource-context";
+import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ComposerResourceControls } from "./ComposerResourceControls";
@@ -206,7 +208,7 @@ export function Composer({
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
   onOpenPondCommandAccessModeChange,
-  onPromptChange,
+  onPromptChange: changePrompt,
   onMentionAppSelect,
   onSaveTaskDraft,
   showToast,
@@ -224,6 +226,8 @@ export function Composer({
   const useActiveSteering = steerActiveResponses;
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
   const chatResources = useChatResourceFocus(surface === "chat" ? connection : null,taskSessionId ?? null);
+  const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1252,6 +1256,7 @@ export function Composer({
   const { stageCurrentSteerDraft, submitImmediateSteer } = createComposerTaskSubmission({
     running, scope: submissionScopeKey, inbox: taskInbox,
     getPrompt: () => inputRef.current?.getPrompt() ?? prompt,
+    getResourceContexts: currentResourceContexts,
     hasFilesOrActions: Boolean(attachments.length || selectedAction || selectedCommand),
     provider, model, codexPermissionMode, codexReasoningEffort, openPondCommandAccessMode,
     getCurrentSubmissionScopeKey, onSubmit, showToast,
@@ -1262,8 +1267,8 @@ export function Composer({
     },
     finish: (scope) => { taskInputSubmissionScopesRef.current.delete(scope); },
     clear: clearComposerPrompt, setError: setAttachmentError,
-    stageLocal: (body) => {
-      updateSteerDraftsForScope(submissionScopeKey, (current) => [...current, createComposerSteerDraft(body)]);
+    stageLocal: (body, contexts) => {
+      updateSteerDraftsForScope(submissionScopeKey, (current) => [...current, createComposerSteerDraft(body, { resourceContexts: contexts })]);
       window.requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(0));
     },
   });
@@ -1284,7 +1289,7 @@ export function Composer({
       const sent = await onSubmit([], null, null, {
         preservePrompt: true,
         promptOverride: draft.prompt,
-        turnMetadata: {chatExperimentScopeId:chatResources.scope?.id,chatExperimentSelectionVersion:chatResources.focus.scopeContext?.selectionVersion,chatResourceFocus:{dataset:chatResources.focus.dataset,experiment:chatResources.focus.experiment,graderId:chatResources.scope?.selectedGraderId},...steeringActiveTurn ? {interactionKind:"steer"} : {}},
+        turnMetadata: {...composerResourceMetadata(draft.resourceContexts ?? []), ...steeringActiveTurn ? {interactionKind:"steer"} : {}},
       });
       updateSteerDraftsForScope(submissionScope, (current) =>
         composerSteerDraftsAfterSubmit(current, draftId, sent)
@@ -1321,8 +1326,9 @@ export function Composer({
       return;
     }
     updateSteerDraftsForScope(submissionScopeKey, (current) =>
-      replaceComposerSteerDraftForEdit(current, draft.id, prompt)
+      replaceComposerSteerDraftForEdit(current, draft.id, prompt, currentResourceContexts())
     );
+    resourceDrafts.current.set(submissionScopeKey, draft.resourceContexts ?? []);
     onPromptChange(draft.prompt);
     setCursorIndex(draft.prompt.length);
     window.requestAnimationFrame(() => {
@@ -1338,6 +1344,7 @@ export function Composer({
     if (!beginSubmissionForScope(submissionScope)) return false;
     setAddMenuOpen(false);
     setAttachmentError(null);
+    const submissionContexts = currentResourceContexts();
     const stagedAttachments = stageAttachmentsForSubmit();
     try {
       setSerializingAttachmentScopeKey(
@@ -1361,17 +1368,18 @@ export function Composer({
         payloads,
         selectedAction,
         selectedCommand,
-        selectedDisplayPrompt || promptOverride || options.preservePrompt || chatResources.scope || chatResources.focus.dataset || chatResources.focus.experiment
+        selectedDisplayPrompt || promptOverride || options.preservePrompt || submissionContexts.length
           ? {
               ...(selectedDisplayPrompt
                 ? { displayPrompt: selectedDisplayPrompt }
                 : {}),
               ...(promptOverride !== undefined ? { promptOverride } : {}),
               ...(options.preservePrompt ? { preservePrompt: true } : {}),
-              turnMetadata: {chatExperimentScopeId:chatResources.scope?.id,chatExperimentSelectionVersion:chatResources.focus.scopeContext?.selectionVersion,chatResourceFocus:{dataset:chatResources.focus.dataset,experiment:chatResources.focus.experiment,graderId:chatResources.scope?.selectedGraderId}},
+              turnMetadata: composerResourceMetadata(submissionContexts),
             }
           : undefined,
       );
+      if (sent && resourceDrafts.current.get(submissionScope) === submissionContexts) resourceDrafts.current.delete(submissionScope);
       settleStagedAttachments(
         stagedAttachments,
         sent ? "dispose" : "restore",
@@ -1617,9 +1625,13 @@ export function Composer({
           <ComposerCreateImproveStrip runtime={createImproveRuntime} />
         </Suspense>
       ) : null}
-      {taskInbox.enabled ? <TaskInboxPanel inbox={taskInbox} onRestore={(body) => {
+      {taskInbox.enabled ? <TaskInboxPanel inbox={taskInbox} canRestore={contexts => {
+        try { mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], contexts); return true; }
+        catch { showToast("Send or clear the current resource actions before editing this queued message.", "info"); return false; }
+      }} onRestore={(body, contexts) => {
         const currentScope = !getCurrentSubmissionScopeKey || getCurrentSubmissionScopeKey() === submissionScopeKey;
         const currentPrompt = currentScope ? inputRef.current?.getPrompt() ?? prompt : prompt;
+        resourceDrafts.current.set(submissionScopeKey, mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], contexts));
         onPromptChange(currentPrompt.trim() ? `${currentPrompt}\n\n${body}` : body);
         if (currentScope) inputRef.current?.focusAtPromptIndex(0);
       }} /> : <ComposerSteerQueue
@@ -1647,6 +1659,12 @@ export function Composer({
       )}
       {surface === "chat" && taskSessionId ? <ComposerResourceControls resources={chatResources} busy={busy} onDraft={text => {
         const existing = inputRef.current?.getPrompt() ?? prompt;
+        try {
+          resourceDrafts.current.set(submissionScopeKey, mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], captureComposerResourceContext(chatResources)));
+        } catch {
+          showToast("Send or clear the current resource actions before adding more.", "info");
+          return;
+        }
         const next = existing.trim() ? `${existing}\n\n${text}` : text;
         onPromptChange(next);
         requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(next.length));

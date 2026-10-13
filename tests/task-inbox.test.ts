@@ -74,7 +74,8 @@ test("steering retains bounded resource references through durable admission and
 // saved copy can still run, or restores stale text after another client edits it.
 test("editing a queued message restores it only after cancelling its saved revision", async () => {
   const f = await fixture();
-  const queued = await f.store.admitTaskInput(input({ kind: "queued", expectedTurnId: null }));
+  const contexts = [{scopeId:"original-scope",selectionVersion:2,resources:[{kind:"dataset",id:"quotes",revision:3}]}];
+  const queued = await f.store.admitTaskInput(input({ kind: "queued", expectedTurnId: null, payload: {metadata:{chatResourceContexts:contexts}} }));
   const restore = vi.fn();
   const inbox = {
     mutate: async (row: typeof queued, change: Parameters<typeof f.store.mutateTaskInput>[2]) => {
@@ -91,8 +92,11 @@ test("editing a queued message restores it only after cancelling its saved revis
   expect(restore).not.toHaveBeenCalled();
   expect((await f.store.taskInboxSnapshot("a")).inputs[0]).toMatchObject({ state: "pending", body: edited.body });
 
+  await restoreQueuedTaskInput(inbox, edited, restore, () => false);
+  expect(restore).not.toHaveBeenCalled();
+  expect((await f.store.taskInboxSnapshot("a")).inputs[0]).toMatchObject({state:"pending"});
   await restoreQueuedTaskInput(inbox, edited, restore);
-  expect(restore).toHaveBeenCalledExactlyOnceWith(edited.body);
+  expect(restore).toHaveBeenCalledExactlyOnceWith(edited.body, contexts);
   expect((await f.store.taskInboxSnapshot("a")).inputs[0]).toMatchObject({ state: "cancelled" });
   expect(await f.store.reserveTaskFollowup("a", "next-turn", "owner")).toBeNull();
 });

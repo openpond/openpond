@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   ChatExperimentContextSchema,
+  TaskResourceContextsSchema,
   type ChatExperimentContext,
   type ChatExperimentScope,
   type ChatResourceSummary,
@@ -97,8 +98,25 @@ export function createChatExperimentScopes(store: SqliteStore) {
     if (!turn || turn.sessionId !== sessionId) throw new Error("Resource turn does not belong to this conversation.");
     return change(sessionId, state => {
       const now = new Date().toISOString();
-      const targetId = typeof turn.metadata.chatExperimentScopeId === "string" ? turn.metadata.chatExperimentScopeId : null;
-      let scope = state.scopes.find(candidate => candidate.turnIds.includes(turnId) || candidate.id === targetId);
+      let targetId = typeof turn.metadata.chatExperimentScopeId === "string" ? turn.metadata.chatExperimentScopeId : null;
+      const contexts = TaskResourceContextsSchema.safeParse(turn.metadata.chatResourceContexts);
+      if (!targetId && contexts.success && contexts.data.length) {
+        const matches = contexts.data.filter(context => context.resources.some(resource => {
+          const sameOwner = resource.owner?.teamId === summary.owner?.teamId
+            && resource.owner?.actorId === summary.owner?.actorId
+            && JSON.stringify(resource.profileRef) === JSON.stringify(summary.profileRef);
+          return sameOwner && ((resource.kind === summary.kind && resource.id === summary.id && resource.revision === summary.revision)
+            || (resource.kind === "dataset" && resource.id === summary.datasetId && resource.revision === summary.datasetRevision));
+        }));
+        const targets = [...new Set(matches.map(context => context.scopeId))];
+        if (targets.length !== 1) throw new Error("Select the intended experiment scope before attaching this resource; the draft has multiple or unmatched targets.");
+        targetId = targets[0]!;
+      }
+      // An explicit operation selection wins even when this turn previously
+      // produced a result for another experiment.
+      let scope = targetId
+        ? state.scopes.find(candidate => candidate.id === targetId)
+        : state.scopes.find(candidate => candidate.turnIds.includes(turnId));
       const late = typeof turn.metadata.chatExperimentSelectionVersion === "number"
         ? turn.metadata.chatExperimentSelectionVersion !== state.selectionVersion
         : state.selectedAt !== null && state.selectedAt > turn.startedAt;
