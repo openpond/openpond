@@ -898,46 +898,41 @@ export function createServerPayloads(deps: {
       extensionManager.list(),
     ]);
     const codex = getCodexStatus();
-    const providers = providerSettingsBootstrapSummary(
-      await loadProviderSettings({
-        account: openPond.account,
-        codex,
-        refreshCatalog: true,
-      })
-    );
-    const cloudProjects = await loadCloudProjectsForBootstrap(
-      openPond.account,
-      {
-        force: bootstrapOptions.refreshCloudProjects === true,
-        refreshIfMissing: bootstrapOptions.refreshCloudProjects !== false,
-      }
-    );
     const openPondCodexThreadIds = new Set(
       sessionShells
         .map((session) => session.codexThreadId)
         .filter((threadId): threadId is string => Boolean(threadId))
     );
-    const [codexHistorySessions, codexHistorySidebarPreferences] =
-      await Promise.all([
-        loadCodexHistorySessions({
-          excludeThreadIds: openPondCodexThreadIds,
-          metadataLimit: BOOTSTRAP_CODEX_HISTORY_LIMIT,
-        }).catch(() => []),
-        loadCodexHistorySidebarPreferences(store),
-      ]);
-    const linkedLocalProjects = await inferLocalProjectOpenPondLinks(
-      localProjects,
-      openPond.apps
-    );
-    const namedSessionShells = await sessionsWithTasksetNames(
-      sessionShells,
-      (tasksetId) => store.getTaskset(tasksetId)
-    );
     const scope = openPondCacheScope(openPond.account);
-    const [sidebarAppPreferences, sidebarFileBookmarks] = await Promise.all([
+    // These reads depend on the initial snapshot, but not on each other. In
+    // particular, provider discovery must not delay history or workspace reads.
+    const [
+      providers,
+      cloudProjects,
+      codexHistorySessions,
+      codexHistorySidebarPreferences,
+      linkedLocalProjects,
+      namedSessionShells,
+      sidebarAppPreferences,
+      sidebarFileBookmarks,
+    ] = await Promise.all([
+      loadProviderSettings({ account: openPond.account, codex, refreshCatalog: true })
+        .then(providerSettingsBootstrapSummary),
+      loadCloudProjectsForBootstrap(openPond.account, {
+        force: bootstrapOptions.refreshCloudProjects === true,
+        refreshIfMissing: bootstrapOptions.refreshCloudProjects !== false,
+      }),
+      loadCodexHistorySessions({
+        excludeThreadIds: openPondCodexThreadIds,
+        metadataLimit: BOOTSTRAP_CODEX_HISTORY_LIMIT,
+      }).catch(() => []),
+      loadCodexHistorySidebarPreferences(store),
+      inferLocalProjectOpenPondLinks(localProjects, openPond.apps),
+      sessionsWithTasksetNames(sessionShells, (tasksetId) => store.getTaskset(tasksetId)),
       store.getSidebarAppPreferences(scope),
       listSidebarFileBookmarksForScope(scope),
     ]);
+    // Provider catalog refresh may persist configuration; return its final revision.
     const configuration = await resolveEffectiveConfig(storeDir);
     const payload: BootstrapPayload = {
       configuration: { rawRevision: configuration.sources.find((source) => source.layer === "user")!.revision, effectiveRevision: configuration.effectiveRevision, sources: configuration.sources, provenance: configuration.provenance },
@@ -1813,6 +1808,7 @@ export function createServerPayloads(deps: {
     return enclaveService(action, payload, signal);
   }
   return {
+    currentAccountPayload: async () => (await loadOpenPondData()).account,
     resolveProfileExternalDataset:profileDatasets.resolveExternalDataset,
     enclavePayload,
     openPondCacheScope,

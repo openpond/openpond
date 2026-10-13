@@ -254,8 +254,8 @@ export type {
 
 export const api = {
   ...communityApi,
-  bootstrap: (connection: ClientConnection) =>
-    apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1"),
+  bootstrap: (connection: ClientConnection, signal?: AbortSignal) =>
+    apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1", { signal }),
   accountScopeSnapshot: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?ensureProfile=0"),
   localProjectActions: (connection: ClientConnection, projectId: string) =>
@@ -719,15 +719,17 @@ export const api = {
         body: JSON.stringify(input),
       }
     ),
-  trainingState: (connection: ClientConnection, profileId: string) =>
+  trainingState: (connection: ClientConnection, profileId: string, signal?: AbortSignal) =>
     apiFetch<TrainingStateResponse>(
       connection,
-      `/v1/training?profileId=${encodeURIComponent(profileId)}`
+      `/v1/training?profileId=${encodeURIComponent(profileId)}`,
+      { signal }
     ),
-  trainingActivity: (connection: ClientConnection, profileId: string) =>
+  trainingActivity: (connection: ClientConnection, profileId: string, signal?: AbortSignal) =>
     apiFetch<TrainingActivityResponse>(
       connection,
-      `/v1/training/activity?profileId=${encodeURIComponent(profileId)}`
+      `/v1/training/activity?profileId=${encodeURIComponent(profileId)}`,
+      { signal }
     ),
   portableTrainingCatalog: (
     connection: ClientConnection,

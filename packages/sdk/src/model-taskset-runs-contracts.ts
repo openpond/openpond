@@ -83,7 +83,7 @@ export function verifyHarnessExperimentManifest(request: ModelTasksetRunRequest,
     || canonicalJson(manifest.execution.harnessRelease) !== canonicalJson(policy.source.harnessRelease)
     || manifest.metadata.profileRepositoryId !== policy.profileRepositoryId
     || manifest.packageHash !== policy.packageHash || manifest.policy.kind !== "model"
-    || manifest.policy.model.provider !== "openpond" || manifest.policy.model.model !== policy.modelId
+    || manifest.policy.model.provider !== (policy.localRuntime?.providerId ?? "openpond") || manifest.policy.model.model !== policy.modelId
     || manifest.policy.model.revision !== null || manifest.policy.model.artifactHash !== (policy.candidate?.contentHash??null)
     || manifest.policy.model.tokenizerRevision !== null || manifest.policy.model.chatTemplateHash !== null
     || manifest.policy.configurationHash !== policy.modelConfigurationHash

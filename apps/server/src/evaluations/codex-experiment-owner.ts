@@ -11,7 +11,7 @@ import type {LocalModelAdmission} from "./local-experiment-model.js";
 import type {LocalExperimentDefinition} from "./local-experiment-contract.js";
 import {LocalExperimentError} from "./local-experiment-contract.js";
 
-const Completion=z.object({response:z.object({choices:z.array(z.object({message:z.object({content:z.string().nullable(),tool_calls:z.array(z.unknown())})})).length(1)}),usage:z.object({promptTokens:z.number().int().nonnegative(),completionTokens:z.number().int().nonnegative(),totalTokens:z.number().int().nonnegative()}).optional()});
+const Completion=z.object({response:z.object({choices:z.array(z.object({message:z.object({content:z.string().nullable(),tool_calls:z.array(z.object({id:z.string(),type:z.literal("function"),function:z.object({name:z.string(),arguments:z.string()})}))})})).length(1)}),usage:z.object({promptTokens:z.number().int().nonnegative(),completionTokens:z.number().int().nonnegative(),totalTokens:z.number().int().nonnegative()}).optional()});
 function fail(message:string):never {throw new LocalExperimentError("codex_experiment_not_ready",message,422);}
 
 /** Subscription owner reuses the existing native policy executor. Neither chat
@@ -40,15 +40,19 @@ export function createCodexExperimentOwner(deps:{state:LocalInferenceState;statu
     },
     async prepare(configuration:LocalExperimentDefinition["configuration"]):Promise<LocalModelAdmission> {
       const policy=configuration.request.policy;
-      if(policy.kind!=="hosted_chat" || policy.localRuntime?.providerId!=="codex")fail("Select an exact Codex experiment runtime.");
+      if(!["hosted_chat","hosted_harness"].includes(policy.kind) || !("localRuntime" in policy) || policy.localRuntime?.providerId!=="codex")fail("Select an exact Codex experiment runtime.");
+      if(policy.kind!=="hosted_chat" && policy.kind!=="hosted_harness")fail("Select a supported Codex target.");
+      const profile = policy.kind === "hosted_harness";
       const runtime=policy.localRuntime,selected=await resolve(policy.modelId);
       if(selected.configurationHash!==runtime.configurationHash || selected.accountHash!==runtime.accountHash || runtime.reasoningEffort!=="low")fail("Codex account, model or runtime changed. Review its current model pin.");
-      if(policy.harness || policy.candidate || policy.temperature!==0 || policy.topP!==1 || policy.maxOutputTokens>4096 || runtime.maximumRequestCostUsd>configuration.maximumCostUsd)fail("Codex evaluation requires a model-only text target with default sampling and a supported output allowance.");
-      const model={providerId:"codex" as const,modelId:policy.modelId,maxOutputTokens:policy.maxOutputTokens,messages:policy.messages??[],configurationHash:contentHash({modelId:policy.modelId,runtime,messages:policy.messages??[],maxOutputTokens:policy.maxOutputTokens})};
+      if(policy.candidate || policy.kind === "hosted_chat" && (policy.harness || policy.temperature!==0 || policy.topP!==1 || policy.maxOutputTokens>4096) || runtime.maximumRequestCostUsd>configuration.maximumCostUsd)fail("Codex evaluation requires its qualified text or Profile owner and a supported request allocation.");
+      const maxOutputTokens=policy.kind === "hosted_chat" ? policy.maxOutputTokens : 4096;
+      const messages=policy.kind === "hosted_chat" ? policy.messages??[] : [];
+      const model={providerId:"codex" as const,modelId:policy.modelId,maxOutputTokens,messages,configurationHash:contentHash({modelId:policy.modelId,runtime,messages,maxOutputTokens})};
       return {model,pricing:null,maximumChargeUsd:runtime.maximumRequestCostUsd,streamFactory(scope){return async function*(request) {
         const latest=await resolve(model.modelId);
         if(latest.configurationHash!==runtime.configurationHash)fail("Codex account or runtime changed before dispatch.");
-        if(request.tools?.length)fail("Codex text evaluations do not admit environment tools.");
+        if(!profile && request.tools?.length)fail("Codex text evaluations do not admit environment tools.");
         if(Buffer.byteLength(JSON.stringify(request.messages))>262144)fail("Codex evaluation input exceeds its retained text allowance.");
         const cwd=await mkdtemp(path.join(os.tmpdir(),"openpond-codex-eval-"));
         const executor=(deps.runtime ?? createCodexTasksetPolicyRuntime)({modelId:model.modelId,runId:scope.executionId,cwd,binaryPath:latest.status.binaryPath!,reasoningEffort:runtime.reasoningEffort,isolatedAccountHash:runtime.accountHash});
@@ -56,14 +60,15 @@ export function createCodexExperimentOwner(deps:{state:LocalInferenceState;statu
         const abort=()=>{void executor.close().catch(()=>undefined);};signal.addEventListener("abort",abort,{once:true});
         try {
           signal.throwIfAborted();
-          const result=Completion.parse(await executor.complete({messages:request.messages,tools:[],deliveryId:scope.caseId,turnIndex:request.requestId},signal));
+          const result=Completion.parse(await executor.complete({messages:request.messages,tools:profile ? request.tools??[] : [],deliveryId:scope.caseId,turnIndex:request.requestId},signal));
           signal.throwIfAborted();
           const message=result.response.choices[0]!.message;
-          if(message.tool_calls.length || message.content===null)fail("The Codex model did not return a text task answer.");
-          if(Buffer.byteLength(message.content)>Math.min(262144,model.maxOutputTokens*4))fail("Codex output exceeds this run's retained output allowance.");
-          yield {type:"text_delta",text:message.content,raw:{}};
+          if(!profile && message.tool_calls.length || !message.tool_calls.length && message.content===null)fail("The Codex model did not return an admitted task response.");
+          if(message.content!==null && Buffer.byteLength(message.content)>Math.min(262144,model.maxOutputTokens*4))fail("Codex output exceeds this run's retained output allowance.");
+          if(message.content!==null)yield {type:"text_delta",text:message.content,raw:{}};
+          if(message.tool_calls.length)yield {type:"tool_call_delta",toolCalls:message.tool_calls,raw:{}};
           if(result.usage)yield {type:"usage",usage:{prompt_tokens:result.usage.promptTokens,completion_tokens:result.usage.completionTokens,total_tokens:result.usage.totalTokens},raw:{}};
-          yield {type:"finish",finishReason:"stop",raw:{}};
+          yield {type:"finish",finishReason:message.tool_calls.length ? "tool_calls" : "stop",raw:{}};
         } finally {signal.removeEventListener("abort",abort);await executor.close();await rm(cwd,{recursive:true,force:true});}
       };}};
     },

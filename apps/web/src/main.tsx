@@ -1,6 +1,8 @@
 import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { AppSplash } from "./components/splash/AppSplash";
+import { appStartupState } from "./startup/app-startup";
 import "./styles.css";
 
 const App = lazy(() => import("./App").then((module) => ({ default: module.App })));
@@ -27,7 +29,7 @@ window.addEventListener("unhandledrejection", (event) => {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      <Suspense fallback={null}>
+      <Suspense fallback={<AppSplash startup={appStartupState("connecting")} />}>
         <App />
       </Suspense>
     </ErrorBoundary>

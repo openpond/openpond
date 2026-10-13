@@ -131,6 +131,9 @@ export function createLocalExperimentRunAdmission(deps: {
             deps.catalog,
             qualified.native,
           );
+    if (model.maximumChargeUsd > configuration.maximumCostUsd + 1e-12)
+      throw new LocalExperimentError("experiment_budget_exhausted",
+        `The $${configuration.maximumCostUsd} cap cannot cover this model's $${model.maximumChargeUsd.toFixed(6)} maximum request reservation. Increase the cap before starting; no model call was made.`, 422);
     await deps.requireActor(ownerActorId);
     await deps.requireTeam(teamId);
     const id = `local-run-${contentHash([teamId, ownerActorId, configuration.operationId]).slice(0, 48)}`,

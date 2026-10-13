@@ -22,8 +22,8 @@ export { tasksetPackageSourceId as importedTasksetPackageDirectory } from "openp
 
 /** The cache retains the exact portable encoding independently of the local
  * Taskset projection, whose Profile/provenance give it a different hash. */
-export async function cacheTasksetPackage(home: string, input: TasksetPackage): Promise<void> {
-  const value = validateTasksetPackage(input);
+export async function cacheTasksetPackage(home: string, input: TasksetPackage, maximumBytes = MAX_TASKSET_PACKAGE_BYTES): Promise<void> {
+  const value = validateTasksetPackage(input,maximumBytes);
   const directory = path.join(home, "training", "portable-packages");
   await mkdir(directory, { recursive: true });
   const file = path.join(directory, `${value.contentHash}.json`);
@@ -34,18 +34,18 @@ export async function cacheTasksetPackage(home: string, input: TasksetPackage): 
     try { await link(payload, file); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      await readCachedTasksetPackage(home, value.contentHash);
+      await readCachedTasksetPackage(home, value.contentHash,maximumBytes);
     }
   } finally { await rm(temporary, { recursive: true, force: true }); }
 }
 
-export async function readCachedTasksetPackage(home: string, hash: string): Promise<TasksetPackage> {
+export async function readCachedTasksetPackage(home: string, hash: string, maximumBytes = MAX_TASKSET_PACKAGE_BYTES): Promise<TasksetPackage> {
   if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("Invalid Taskset package cache identity.");
   const file = path.join(home, "training", "portable-packages", `${hash}.json`);
   const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const status = await handle.stat();
-    if (!status.isFile() || status.size > MAX_TASKSET_PACKAGE_BYTES) throw new Error("Taskset package cache must be a bounded regular file.");
+    if (!status.isFile() || status.size > maximumBytes) throw new Error("Taskset package cache must be a bounded regular file.");
     const bytes = Buffer.alloc(status.size);
     let offset = 0;
     while (offset < bytes.length) {
@@ -54,7 +54,7 @@ export async function readCachedTasksetPackage(home: string, hash: string): Prom
       offset += result.bytesRead;
     }
     if ((await handle.read(Buffer.alloc(1), 0, 1, offset)).bytesRead) throw new Error("Taskset package cache changed during read.");
-    const value = validateTasksetPackage(JSON.parse(bytes.toString("utf8")));
+    const value = validateTasksetPackage(JSON.parse(bytes.toString("utf8")),maximumBytes);
     if (value.contentHash !== hash) throw new Error("Cached Taskset package differs from its saved receipt.");
     return value;
   } finally { await handle.close(); }

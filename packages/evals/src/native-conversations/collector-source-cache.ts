@@ -14,7 +14,7 @@ export class CollectorSourceCache {
 
   private selection(connection: CollectorConnection, until: string, revision: string) {
     return contentHash([connection.source, connection.projectId, connection.teamId,
-      connection.apiBaseUrl, connection.account ?? null, connection.since, until, revision]);
+      connection.apiBaseUrl, connection.account ?? null, connection.since, connection.selectedSessionKeys ?? null, until, revision]);
   }
 
   read(connection: CollectorConnection, until: string, sessionKey: string, revision: string) {

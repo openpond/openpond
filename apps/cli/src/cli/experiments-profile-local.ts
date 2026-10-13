@@ -40,7 +40,7 @@ export async function runLocalProfileExperimentCommand(
     maximumResponseBytes: 32 * 1024 * 1024,
     // The admitted case limit is still enforced by the server. An observer
     // timeout must not cut off a normal 15-minute artifact workflow.
-    timeoutMs: action === "run-profile" ? 1_200_000 : 60_000,
+    timeoutMs: action === "run-profile" || action === "prepare-profile" ? 1_200_000 : 60_000,
   });
   const response = await request(new URL(endpoint, base), {
     method: payload ? "POST" : "GET",

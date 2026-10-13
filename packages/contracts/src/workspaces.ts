@@ -57,6 +57,7 @@ export const WorkspaceDiffFileSchema = z.object({
   contentType: z.string().optional(),
   contentEncoding: z.enum(["base64"]).optional(),
   readVersion: z.string().nullable().optional(),
+  readStamp: z.string().optional(),
 });
 
 export type WorkspaceDiffFile = z.infer<typeof WorkspaceDiffFileSchema>;
@@ -179,6 +180,7 @@ export const SessionFileArtifactSchema = z.object({
   sizeBytes: z.number().nonnegative().nullable(),
   sandboxId: z.string().nullable(),
   revision: z.string().optional(),
+  updatedAt: z.string().optional(),
 });
 export type SessionFileArtifact = z.infer<typeof SessionFileArtifactSchema>;
 export const SessionFilesResponseSchema = z.object({ files: z.array(SessionFileArtifactSchema) });

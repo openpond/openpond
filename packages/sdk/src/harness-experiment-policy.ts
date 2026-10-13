@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ProfileEvaluationRunSourceSchema, ProfileExternalDatasetBindingSchema } from "@openpond/evals";
+import { CodexExperimentRuntimeSchema } from "./codex-experiment-runtime.js";
 
 const Id = z.string().trim().min(1).max(240);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -26,6 +27,7 @@ export const HarnessExperimentPolicySchema = z.object({
   maxOutputTokens: HarnessExperimentSamplingSchema.shape.maxOutputTokens.removeDefault().optional(),
   temperature: HarnessExperimentSamplingSchema.shape.temperature.removeDefault().optional(),
   topP: HarnessExperimentSamplingSchema.shape.topP.removeDefault().optional(),
+  localRuntime: CodexExperimentRuntimeSchema.optional(),
   candidate:z.object({artifactId:Id,contentHash:Hash,preparationId:Id,dispatchId:Id,baseProfileId:Id,workerImageDigest:z.string().regex(/^sha256:[a-f0-9]{64}$/)}).strict().optional(),
   sourceCandidate:ProfileEvaluationRunSourceSchema.shape.sourceCandidate,
   reasoningEffort: z.enum(["off", "low", "medium", "high", "xhigh", "max"]).optional(),

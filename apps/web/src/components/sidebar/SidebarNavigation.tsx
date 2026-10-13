@@ -43,7 +43,7 @@ type SidebarDestinationProps = {
   setSelectedSessionId: Dispatch<SetStateAction<string | null>>;
   setView: Dispatch<SetStateAction<AppView>>;
   view: AppView;
-  modelProjects?: ModelProject[];
+  modelProjects?: Pick<ModelProject, "id" | "name">[];
   modelTrainingActivityByProjectId?: Record<
     string,
     { label: string; status: string }

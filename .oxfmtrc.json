@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": false,
+  "ignorePatterns": [
+    "**/dist/**",
+    "apps/web/build/**",
+    "**/node_modules/**",
+    "**/generated/**",
+    "**/*.generated.*",
+    "packages/evals/src/task-schema-meta-validator.js",
+    "**/fixtures/**",
+    "**/conformance/**",
+    ".openpond/**",
+    "coverage/**",
+    "tmp/**",
+    "release-assets/**",
+    "pnpm-lock.yaml"
+  ]
+}

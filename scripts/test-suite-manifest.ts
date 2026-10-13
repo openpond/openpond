@@ -22,6 +22,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/learning-schedule.test.ts",
   "tests/model-batch-review.test.ts",
   "tests/persistence-boundaries.test.ts",
+  "tests/training-api-model-run.test.ts",
   "tests/store-domain-lifecycle.test.ts",
   "tests/url-model-connections.test.ts",
   "tests/profile-workflow-git-import.test.ts",

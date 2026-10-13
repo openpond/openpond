@@ -19,7 +19,8 @@ export async function runLocalExperimentsCommand(options:Record<string,string|bo
   const base=new URL(rawUrl);
   if(base.protocol!=="http:"||!["localhost","127.0.0.1"].includes(base.hostname)||base.username||base.password||base.search||base.hash||base.pathname!=="/")
     throw new Error("Local Experiments require an HTTP loopback server origin.");
-  const request=await createLocalAuthenticatedRequest(base.origin);
+  // Preparation/admission can load a released Work closure before returning an ID.
+  const request=await createLocalAuthenticatedRequest(base.origin,{timeoutMs:["prepare-harness","run"].includes(action)?1_200_000:60_000});
   async function command(action:string,payload:unknown):Promise<Record<string,unknown>> {
     const response=await request(new URL(teamId ? "/v1/local-experiments" : "/v1/chat-experiments",base),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...teamId ? {teamId} : {},action,payload})});
     const reply=await response.json() as Record<string,unknown>;
