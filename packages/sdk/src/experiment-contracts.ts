@@ -64,6 +64,9 @@ export type ExperimentExecutionContext = z.infer<typeof ExperimentExecutionConte
 
 export const PrepareHarnessExperimentSchema = z.object({
   operationId: Id, profileRepositoryId: Id, definitionId: Id, modelId: Id,
+  maxOutputTokens: HarnessExperimentPolicySchema.shape.maxOutputTokens,
+  temperature: HarnessExperimentPolicySchema.shape.temperature,
+  topP: HarnessExperimentPolicySchema.shape.topP,
   reasoningEffort: z.enum(["off", "low", "medium", "high", "xhigh", "max"]).optional(),
   maximumCostUsd: z.number().finite().positive().max(10_000),
   externalDatasetBinding: ProfileExternalDatasetBindingSchema.optional(),

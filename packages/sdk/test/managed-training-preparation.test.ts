@@ -7,6 +7,10 @@ import { HarnessRunManifestSchema, ResolvedTrainingBundleManifestSchema } from "
 import { prepareManagedTrainingSubmission, type ManagedTrainingPreparationInput } from "../src/managed-training-preparation.js";
 import { parseAndVerifyTrainingInputArtifactUpload, parseAndVerifyTrainingJobSubmission } from "../src/training.js";
 import type { TrainingEvaluationSource } from "../src/training-evaluation-source.js";
+import { bindTasksetExecutionReleases, createEnvironmentRelease, createVerifierSetRelease } from "@openpond/evals";
+import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
+import { createTasksetPackage } from "../src/taskset-packages.js";
+import { prepareOrdinaryTasksetQualification } from "../src/training-bundle.js";
 
 // Failure story: a hosted retry or mutable caller must not replace the recipe,
 // approved budget, held-out bytes or inventory under an already selected Run.
@@ -41,7 +45,52 @@ test("prepares one immutable manual/hosted submission and rejects changed inputs
   await expect(prepareManagedTrainingSubmission({ ...expected, project: { ...expected.project, revision: 4 } })).rejects.toThrow("exact Model Project revision");
 });
 
-async function fixture(): Promise<ManagedTrainingPreparationInput> {
+// Failure story: a validation-only qualification must retain its private grader
+// and task population, and its artifact cannot be replayed as optimizer work.
+test("qualifies an ordinary private package without inventing training or held-out data", async () => {
+  const ordinary = await fixture();
+  const text = "export function verify(input) { return {score: input.output === input.task.expectedOutput.answer ? 1 : 0, passed: true}; }";
+  const asset = { id: "private-verifier", path: "verifiers/answer.mjs", mediaType: "text/javascript", visibility: "verifier" as const,
+    sizeBytes: Buffer.byteLength(text), contentHash: sha256(text) };
+  const environment = createEnvironmentRelease({ schemaVersion: "openpond.environmentRelease.v1", id: "qualification-env", revision: 1,
+    contract: { protocolVersion: "openpond.environment.v1", kind: "text", entrypoint: "text", stateful: false, deterministicSeeds: true,
+      lifecycle: ["create", "reset", "step", "collect", "destroy"], networkPolicy: "none", defaultTimeoutMs: 1_000 },
+    actionSchemaRef: null, observationSchemaRef: null, stateSchemaRef: null, artifactCollection: { maxArtifacts: 1, maxTotalBytes: 1 }, adapterConformanceHashes: {}, metadata: {} });
+  const verifierSet = createVerifierSetRelease({ schemaVersion: "openpond.verifierSetRelease.v1", id: "qualification-verifiers", revision: 1,
+    graders: [{ id: "answer", version: "1", kind: "custom_verifier", weight: 1, hardGate: true, rewardEligible: true, privileged: true,
+      verifierRef: asset, timeoutMs: 1_000, networkPolicy: "none" }], isolation: { processBoundary: "isolated_process", networkPolicy: "none", defaultTimeoutMs: 1_000 }, calibrationReceiptRefs: [], metadata: {} });
+  const taskContent = { schemaVersion: "openpond.tasksetRelease.v2", id: "qualification-tasks", revision: 1,
+    policy: { policyVisibleFields: ["input"], privilegedFields: ["expectedOutput"], hiddenGraderRefs: ["answer"], connectedAppScopes: [] },
+    environment: environment.contract, tools: [], capabilities: [], graders: verifierSet.graders,
+    tasks: ["first", "second"].map(id => ({ id, clusterKey: "same-family", split: "validation", input: { prompt: id }, expectedOutput: { answer: "private retained answer" },
+      policyVisibleContext: {}, privilegedContextRef: null, artifactRefs: [], tags: [] })), metadata: { ordinaryAuthoring: { instructions: "Answer the supplied question." } } };
+  const taskset = bindTasksetExecutionReleases({ taskset: TasksetReleaseSchema.parse({ ...taskContent, contentHash: contentHash(taskContent) }), environment, verifierSet });
+  const source = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment, verifierSet, files: [{ asset, base64: Buffer.from(text).toString("base64") }] });
+  const project = ModelProjectSchema.parse({ ...ordinary.project, trainingSetup: { ...ordinary.project.trainingSetup,
+    baseModel: { ...ordinary.project.trainingSetup.baseModel, revision: "a".repeat(40), tokenizerRevision: "a".repeat(40) },
+    tasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash }, evaluationTasksetRef: null } });
+  const prepared = await prepareOrdinaryTasksetQualification({ package: source, modelProject: project, modelRunId: "qualification",
+    runtime: ordinary.manifest.runtimeTarget, compute: ordinary.manifest.computeTarget, engine: ordinary.manifest.engine,
+    harnessRelease: ordinary.manifest.harnessRelease, openpondRelease: "fixture", workerProtocol: "fixture",
+    approval: { ...ordinary.approval, approvedAt: ordinary.manifest.approval.approvedAt } });
+  expect(prepared.submission.job).toMatchObject({ executionMode: "qualification", resumeFrom: null });
+  expect(prepared.submission.source.taskset).toEqual(project.trainingSetup.tasksetRef);
+  expect(prepared.submission.source.evaluation).toBeUndefined();
+  expect(prepared.artifact.payload).toMatchObject({ executionMode: "qualification", validationTasks: [], validationAssets: [] });
+  const dataset = JSON.parse(Buffer.from(prepared.bundle.assets.get("dataset/qualification.json")!).toString());
+  expect(dataset.tasks.map((task: { metadata: { portableTaskRecord: unknown } }) => task.metadata.portableTaskRecord)).toEqual(taskset.tasks);
+  expect(prepared.bundle.assets.has("dataset/train.json")).toBe(false);
+  expect(prepared.bundle.assets.has("evaluation-source.json")).toBe(false);
+  expect(JSON.stringify(prepared.submission)).not.toContain("private retained answer");
+  const payload = prepared.artifact.payload as { resolvedBundle: { files: ManagedTrainingPreparationInput["files"] } };
+  const replay = { ...ordinary, project, manifest: prepared.bundle.manifest, bundleManifest: prepared.bundle.resolvedBundleManifest,
+    files: payload.resolvedBundle.files, evaluationSource: undefined };
+  await expect(prepareManagedTrainingSubmission(replay)).rejects.toThrow("execution mode");
+  await expect(prepareManagedTrainingSubmission({ ...ordinary, executionMode: "qualification" })).rejects.toThrow("execution mode");
+  await expect(prepareManagedTrainingSubmission({ ...replay, executionMode: "qualification", bundleManifest: ordinary.bundleManifest })).rejects.toThrow("execution mode");
+});
+
+async function fixture(): Promise<ManagedTrainingPreparationInput & { evaluationSource: TrainingEvaluationSource }> {
   const job = await parseAndVerifyTrainingJobSubmission(JSON.parse(await readFile(new URL("../fixtures/training/v2/policy-optimize.valid.json", import.meta.url), "utf8")));
   if (job.job.kind !== "policy_optimize") throw new Error("Expected policy fixture");
   const stamp = job.approval.approvedAt;
