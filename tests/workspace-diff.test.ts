@@ -400,11 +400,16 @@ describe("workspace diff", () => {
       expect(diff.appId).toBe(workspaceId);
       expect(diff.repoFiles).toContain("README.md");
       expect(file.content).toBe("# Codex cwd\n");
+      const absoluteReadme = path.join(repoPath, "README.md");
+      expect((await payloads.workspaceFilePayload(workspaceId, absoluteReadme)).path).toBe(absoluteReadme);
       // Explicit local outputs open outside the cwd, while workspace-relative
       // traversal and the shared/hosted workspace loader remain contained.
       const output = await payloads.workspaceFilePayload(workspaceId, outputPath);
       expect(output.path).toBe(outputPath);
       expect(Buffer.from(output.content ?? "", "base64")).toEqual(outputBytes);
+      const standaloneOutput = await payloads.workspaceFilePayload(localPathWorkspaceId(outputDir), outputPath);
+      expect(standaloneOutput.path).toBe(outputPath);
+      expect(standaloneOutput.readVersion).toBe(output.readVersion);
       const homePath = `~/${path.relative(os.homedir(), outputPath)}`;
       const homeOutput = await payloads.workspaceFilePayload(workspaceId, homePath);
       expect(homeOutput.path).toBe(homePath);
