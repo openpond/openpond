@@ -7,7 +7,7 @@ export function useGoalRuntimeClock(enabled: boolean): string {
 
   useEffect(() => {
     if (!enabled) return undefined;
-    const update = () => setObservedAt(new Date().toISOString());
+    const update = () => { if (document.visibilityState !== "hidden") setObservedAt(new Date().toISOString()); };
     update();
     const interval = window.setInterval(update, GOAL_RUNTIME_TICK_MS);
     return () => window.clearInterval(interval);

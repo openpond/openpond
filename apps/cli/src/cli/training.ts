@@ -35,6 +35,10 @@ export async function runTrainingCommand(
   dependencies: TrainingCommandDependencies = {},
 ): Promise<void> {
   const subcommand = rest[0];
+  if (subcommand?.startsWith("hosted-")) {
+    await (await import("./training-hosted")).runHostedTrainingCommand(options, rest);
+    return;
+  }
   const id = rest[1];
   if (
     !subcommand ||

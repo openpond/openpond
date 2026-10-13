@@ -282,7 +282,7 @@ export function createHostedToolLoopRuntime(deps: {
         )
       : [];
     if (deps.resolveModelTools) {
-      if (!nativeToolsEnabledForProvider(params.provider)) throw new Error("Embedded Work requires native tool transport.");
+      if (!isolatedProfile && !nativeToolsEnabledForProvider(params.provider)) throw new Error("Embedded Work requires native tool transport.");
       nativeToolDefinitions = await deps.resolveModelTools({
         session: params.session, turn: params.turn, signal: params.signal,
         harness: params.harness ?? null, declarations: params.harnessDeclarations ?? [],
@@ -290,7 +290,7 @@ export function createHostedToolLoopRuntime(deps: {
       });
     }
     if(candidateAuthoring)nativeToolDefinitions=nativeToolDefinitions.filter(definition=>candidateAuthoringToolNames.has(definition.name));
-    if ((session.metadata?.standaloneExperiment !== undefined || session.metadata?.localProfileExperiment !== undefined)) {
+    if (!isolatedProfile && (session.metadata?.standaloneExperiment !== undefined || session.metadata?.localProfileExperiment !== undefined)) {
       nativeToolDefinitions = isolateStandaloneExperimentTools(nativeToolDefinitions, params.harnessDeclarations ?? []);
     }
     const effectiveToolCatalog = createAgentToolCatalogProjection(

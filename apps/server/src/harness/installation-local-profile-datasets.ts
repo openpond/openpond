@@ -35,17 +35,17 @@ export function createInstallationLocalProfileDatasets(deps:{store:SqliteStore;s
     if(compiled.harnessRelease.contentHash!==selected.harnessRelease.contentHash)throw new Error("The local Dataset's frozen Profile source changed.");
     return {catalog,protectedClosureHash:compiledCandidateExecutableIdentity(compiled).protectedClosureHash};
   }
-  async function savedPackage(id:string,workspaceHash:string) {
-    const record=await deps.store.readLocalDatasetByWorkspaceHash(id,workspaceHash);
-    if(!record||record.ownerId!==await deps.store.localResourceOwnerId())throw new Error("The exact installation-local Dataset workspace is unavailable to this owner.");
-    return {record,packageValue:datasets.compile(record)};
+  async function savedPackage(id:string,workspaceHash:string,taskIds:string[]) {
+    const selected=await deps.store.readLocalDatasetProjection(id,taskIds,{workspaceHash});
+    if(!selected||selected.record.ownerId!==await deps.store.localResourceOwnerId())throw new Error("The exact installation-local Dataset workspace is unavailable to this owner.");
+    return {record:selected.record,packageValue:datasets.compile(selected.record,undefined,selected.sourceWorkspaceHash)};
   }
   const prepareBinding:InstallationLocalDatasetBindingPreparation=async(raw,selected,definition)=>{
     const selection=InstallationLocalDatasetSelectionSchema.parse(raw);
-    const record=await datasets.read(selection.id,selection.revision);
+    const record=await datasets.readListing(selection.id,selection.revision);
     if(record.workspace.contentHash!==selection.workspaceHash)throw new Error("The selected local Dataset revision or workspace hash changed.");
     if(new Set(selection.taskIds).size!==selection.taskIds.length)throw new Error("Select each local Dataset task once.");
-    const {package:value}=await datasets.packageDataset(selection.id,selection.revision);
+    const {package:value}=await datasets.packageDataset(selection.id,selection.revision,selection.taskIds);
     const tasks=selection.taskIds.map(id=>value.taskset.tasks.find(task=>task.id===id));
     if(tasks.some(task=>!task)||tasks.some(task=>task!.split!==tasks[0]!.split))throw new Error("Select existing local Dataset tasks from one exact split.");
     const {catalog,protectedClosureHash}=await profileAuthority(selected);
@@ -67,14 +67,15 @@ export function createInstallationLocalProfileDatasets(deps:{store:SqliteStore;s
     const source=cached?z.object({sourceTasksetId:ReleaseIdSchema,sourcePackageHash:ReleaseHashSchema}).passthrough().safeParse(cached.taskset.metadata):null;
     // A cloud package may be cached too. Only a real installation-local saved
     // record chooses this owner; cache metadata cannot grant local access.
-    const local=source?.success?await deps.store.readLocalDataset(source.data.sourceTasksetId):null;
+    const local=source?.success?await deps.store.readLocalDatasetListing(source.data.sourceTasksetId):null;
     if(!cached||!source?.success||!local) {
       if(!deps.remote)throw new Error("This external Dataset has no installation-local owner.");
       return deps.remote(binding,selected);
     }
     const localSource=source.data,cachedHash=cached.contentHash,localOwnerId=local.ownerId;
     async function read() {
-      const {record,packageValue}=await savedPackage(localSource.sourceTasksetId,localSource.sourcePackageHash);
+      const taskIds=[...new Set(binding.population.map(member=>member.taskId))];
+      const {record,packageValue}=await savedPackage(localSource.sourceTasksetId,localSource.sourcePackageHash,taskIds);
       if(record.ownerId!==localOwnerId||packageValue.contentHash!==cachedHash)throw new Error("The cached Dataset differs from its exact saved local source.");
       const authority=await profileAuthority(selected);
       if(binding.profileId!==selected.profileRef.profileId||binding.declaredProfileCatalogHash!==authority.catalog.catalogHash||binding.protectedProfileClosureHash!==authority.protectedClosureHash)

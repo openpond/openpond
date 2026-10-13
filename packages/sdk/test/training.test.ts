@@ -210,6 +210,31 @@ describe("Training SDK contracts", () => {
     ).toThrow("Approved spend must equal");
   });
 
+  it("requires explicit qualification support and forbids a resumed learner", async () => {
+    // A no-update request must never silently become ordinary training or resume an adapter.
+    const base = submission();
+    const qualification = {
+      ...base,
+      job: { ...base.job, executionMode: "qualification" as const, baseModel: {
+        ...base.job.baseModel, revision: "a".repeat(40), tokenizerRevision: "b".repeat(40), chatTemplateHash: HASH,
+      } },
+      requestedCapabilities: [{ id: "managed_rl.policy.qualification", version: "1", required: true }],
+    };
+    const parsed = TrainingJobSubmissionSchema.parse(qualification);
+    expect(parsed.job).toHaveProperty("executionMode", "qualification");
+    expect(await trainingJobSubmissionHash(parsed)).not.toBe(await trainingJobSubmissionHash(base));
+    expect(TrainingJobSubmissionSchema.parse(base).job).not.toHaveProperty("executionMode");
+    expect(() => TrainingJobSubmissionSchema.parse({ ...qualification, requestedCapabilities: [] })).toThrow("must require");
+    expect(() => TrainingJobSubmissionSchema.parse({
+      ...qualification,
+      job: { ...qualification.job, resumeFrom: { id: "checkpoint-1", contentHash: HASH } },
+    })).toThrow("original GRPO learner");
+    expect(() => TrainingJobSubmissionSchema.parse({
+      ...qualification,
+      job: { ...qualification.job, recipe: { ...qualification.job.recipe, method: "ppo" } },
+    })).toThrow("original GRPO learner");
+  });
+
   it("accepts an immutable learned scorer without qualification evidence", () => {
     const base = submission();
     const learned = TrainingJobSubmissionSchema.parse({

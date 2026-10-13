@@ -1,12 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { contentHash } from "@openpond/harness";
 import { LocalDatasetRecordSchema, ChatResourceSummarySchema, type LocalDatasetRecord, type ChatResourceSummary } from "@openpond/contracts";
-import { validateTasksetDraftWorkspace } from "openpond-sdk/taskset-drafts";
+import { validateTasksetDraftWorkspace,TasksetDraftWorkspaceFileSchema } from "openpond-sdk/taskset-drafts";
 import { SqliteStoreDomain } from "./store-domain.js";
+import {localDatasetProjectionPaths,projectLocalDatasetWorkspace} from "../training/local-dataset-projection.js";
+
+const LocalDatasetListingSchema=LocalDatasetRecordSchema.omit({workspace:true}).extend({workspace:LocalDatasetRecordSchema.shape.workspace.omit({files:true})});
+export type LocalDatasetListing=ReturnType<typeof LocalDatasetListingSchema.parse>;
 
 /** This installation owns local resources independently of account/workspace
  * selection. Hosted destinations retain their own explicit authorization. */
 export class SqliteChatResourceStore extends SqliteStoreDomain {
+  private datasetListings = new Map<string,{stamp:string;value:LocalDatasetListing}>();
+  private datasetListingDataVersion: number | null = null;
   async listChatHostedExperiments():Promise<unknown[]> {await this.ready;await this.writeQueue;return this.database.all<{payload:string}>("SELECT payload FROM chat_hosted_experiments ORDER BY id",[]).map(row=>JSON.parse(row.payload) as unknown);}
   async readChatHostedExperiment(id:string):Promise<unknown|null> {
     await this.ready;await this.writeQueue;
@@ -57,8 +63,60 @@ export class SqliteChatResourceStore extends SqliteStoreDomain {
       [id,workspaceHash],LocalDatasetRecordSchema.parse);
   }
 
-  async listLocalDatasets(): Promise<LocalDatasetRecord[]> {
+  async listLocalDatasets(syncOnly=false): Promise<LocalDatasetRecord[]> {
+    if(syncOnly) {
+      const linked=(await this.listLocalDatasetListings()).filter(record=>record.sync);
+      const records=await Promise.all(linked.map(record=>this.readLocalDataset(record.workspace.draft.id)));
+      return records.filter((record):record is LocalDatasetRecord=>record!==null);
+    }
     return this.listParsedPayloads("SELECT payload FROM local_dataset_workspaces ORDER BY updated_at DESC", [], LocalDatasetRecordSchema.parse);
+  }
+
+  async listLocalDatasetListings():Promise<LocalDatasetListing[]> {
+    // Catalog polling needs authored metadata, never every PDF's base64 bytes.
+    await this.ready;await this.writeQueue;
+    // Even SQLite JSON projection must scan every base64 byte. Poll small row
+    // stamps and hydrate metadata once per edit, rather than once per UI poll.
+    const version=this.database.get<{data_version:number}>("PRAGMA data_version",[])!.data_version;
+    if(this.datasetListingDataVersion!==version)this.datasetListings.clear();
+    this.datasetListingDataVersion=version;
+    const rows=this.database.all<{id:string;revision:number;updated_at:string}>("SELECT id,revision,updated_at FROM local_dataset_workspaces ORDER BY updated_at DESC",[]);
+    const ids=new Set(rows.map(row=>row.id));
+    for(const id of this.datasetListings.keys())if(!ids.has(id))this.datasetListings.delete(id);
+    return rows.map(row=>{
+      const stamp=`${row.revision}:${row.updated_at}`;
+      const cached=this.datasetListings.get(row.id);
+      if(cached?.stamp===stamp)return structuredClone(cached.value);
+      const payload=this.database.get<{payload:string}>("SELECT json_remove(payload,'$.workspace.files') AS payload FROM local_dataset_workspaces WHERE id=?",[row.id])!.payload;
+      const value=LocalDatasetListingSchema.parse(JSON.parse(payload));
+      this.datasetListings.set(row.id,{stamp,value});return structuredClone(value);
+    });
+  }
+
+  async readLocalDatasetListing(id:string,revision?:number):Promise<LocalDatasetListing|null> {
+    return this.getParsedPayload(revision===undefined ? "SELECT json_remove(payload,'$.workspace.files') AS payload FROM local_dataset_workspaces WHERE id=?" : "SELECT json_remove(payload,'$.workspace.files') AS payload FROM local_dataset_versions WHERE id=? AND revision=?",
+      revision===undefined ? [id] : [id,revision],LocalDatasetListingSchema.parse);
+  }
+
+  /** Saved versions own the complete source hash. Hydrate just the selected
+   * closure so admission never copies unrelated binary strings into JS heaps. */
+  async readLocalDatasetProjection(id:string,taskIds:string[],selection:{revision?:number;workspaceHash?:string}) {
+    await this.ready;await this.writeQueue;
+    const where=selection.workspaceHash ? "id=? AND json_extract(payload,'$.workspace.contentHash')=?" : selection.revision===undefined ? "id=?" : "id=? AND revision=?";
+    const table=selection.workspaceHash || selection.revision!==undefined ? "local_dataset_versions" : "local_dataset_workspaces";
+    const params=selection.workspaceHash ? [id,selection.workspaceHash] : selection.revision===undefined ? [id] : [id,selection.revision];
+    const row=this.database.get<{payload:string}>(`SELECT json_remove(payload,'$.workspace.files') AS payload FROM ${table} WHERE ${where}`,params);
+    if(!row)return null;
+    const listing=LocalDatasetListingSchema.parse(JSON.parse(row.payload));
+    const {paths,policyPaths}=localDatasetProjectionPaths(listing.workspace.draft,taskIds);
+    const publicPaths=[...policyPaths],selectedPaths=[...paths];
+    const excluded=publicPaths.length ? `json_extract(file.value,'$.path') NOT IN (${publicPaths.map(()=>"?").join(",")})` : "1";
+    const included=selectedPaths.length ? ` OR json_extract(file.value,'$.path') IN (${selectedPaths.map(()=>"?").join(",")})` : "";
+    const files=this.database.all<{payload:string}>(`SELECT file.value AS payload FROM ${table} saved,json_each(saved.payload,'$.workspace.files') file WHERE saved.${where} AND (${excluded}${included})`,[...params,...publicPaths,...selectedPaths])
+      .map(file=>TasksetDraftWorkspaceFileSchema.parse(JSON.parse(file.payload)));
+    const sourceWorkspaceHash=listing.workspace.contentHash;
+    const workspace=projectLocalDatasetWorkspace({...listing.workspace,files},taskIds);
+    return {record:LocalDatasetRecordSchema.parse({...listing,workspace}),sourceWorkspaceHash};
   }
 
   async recoverLocalDatasetOperation(operationId: string, requestHash: string): Promise<LocalDatasetRecord | null> {
@@ -71,7 +129,7 @@ export class SqliteChatResourceStore extends SqliteStoreDomain {
 
   async saveLocalDataset(input: {record: LocalDatasetRecord; expectedRevision: number; operationId: string; requestHash: string}): Promise<LocalDatasetRecord> {
     const record = LocalDatasetRecordSchema.parse(input.record);
-    validateTasksetDraftWorkspace(record.workspace);
+    validateTasksetDraftWorkspace(record.workspace,Number.POSITIVE_INFINITY);
     if (record.workspace.draft.profileId !== record.ownerId || record.workspace.draft.modelScope !== null) throw new Error("Independent local Dataset ownership cannot change.");
     await this.ready;
     const write = this.writeQueue.then(() => {
@@ -99,7 +157,7 @@ export class SqliteChatResourceStore extends SqliteStoreDomain {
         this.database.run("INSERT INTO local_dataset_workspaces(id,revision,payload,updated_at) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at", [id, record.workspace.draft.revision, payload, record.workspace.draft.updatedAt]);
         this.database.run("INSERT INTO local_dataset_versions(id,revision,payload) VALUES(?,?,?)", [id, record.workspace.draft.revision, payload]);
         this.database.run("INSERT INTO local_dataset_operations(operation_id,request_hash,payload) VALUES(?,?,?)", [input.operationId, input.requestHash, payload]);
-        this.database.exec("COMMIT"); return record;
+        this.database.exec("COMMIT"); this.datasetListings.delete(id); return record;
       } catch (error) { this.database.exec("ROLLBACK"); throw error; }
     });
     this.writeQueue = write.then(() => undefined, () => undefined); return write;
@@ -119,7 +177,7 @@ export class SqliteChatResourceStore extends SqliteStoreDomain {
         if (next.ownerId !== current.ownerId || next.projectId !== current.projectId || next.workspace.contentHash !== current.workspace.contentHash) throw new Error("Metadata updates cannot edit Dataset bytes or ownership.");
         this.database.run("UPDATE local_dataset_workspaces SET payload=? WHERE id=?", [JSON.stringify(next), id]);
         this.database.run("UPDATE local_dataset_versions SET payload=? WHERE id=? AND revision=?", [JSON.stringify(next), id, next.workspace.draft.revision]);
-        this.database.exec("COMMIT"); return next;
+        this.database.exec("COMMIT"); this.datasetListings.delete(id); return next;
       } catch (error) { this.database.exec("ROLLBACK"); throw error; }
     });
     this.writeQueue = write.then(() => undefined, () => undefined); return write;

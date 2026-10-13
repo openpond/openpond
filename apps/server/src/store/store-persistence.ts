@@ -68,16 +68,19 @@ export function storedSessionExperience(
   return hasDevelopmentContext ? "development" : "chat";
 }
 
+export async function readStoreMetadata(reader: StoreDbReader): Promise<Omit<StoreData, "events">> {
+  return {
+    sessions: (await readStorePayloads<Session>(reader, "sessions")).map(normalizeSessionPayload),
+    turns: await readStorePayloads<Turn>(reader, "turns"),
+    approvals: await readStorePayloads<Approval>(reader, "approvals"),
+  };
+}
+
+/** Full history is materialized only for an explicit snapshot/bulk mutation. */
 export async function readStoreData(reader: StoreDbReader): Promise<StoreData> {
   return {
-    sessions: (await readStorePayloads<Session>(reader, "sessions")).map(
-      normalizeSessionPayload
-    ),
-    turns: await readStorePayloads<Turn>(reader, "turns"),
-    events: (await readStorePayloads<RuntimeEvent>(reader, "events")).map(
-      sanitizeRuntimeEvent
-    ),
-    approvals: await readStorePayloads<Approval>(reader, "approvals"),
+    ...await readStoreMetadata(reader),
+    events: (await readStorePayloads<RuntimeEvent>(reader, "events")).map(sanitizeRuntimeEvent),
   };
 }
 

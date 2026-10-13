@@ -1,14 +1,62 @@
-import { mkdtemp,rm } from "node:fs/promises";
+import { mkdtemp,rm,mkdir,writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect,test } from "vitest";
-import { contentHash } from "@openpond/harness";
+import { contentHash,sha256 } from "@openpond/harness";
 import { compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
 import { createTasksetDraftWorkspace,saveTasksetDraftWorkspaceDocument } from "openpond-sdk/taskset-drafts";
 import { SqliteStore } from "../store/store.js";
 import { createLocalDatasetService } from "./local-dataset-service.js";
 import { createLocalDatasetSync } from "./local-dataset-sync.js";
 import type { LocalDatasetRecord } from "@openpond/contracts";
+
+// Failure story: a local PDF corpus larger than the hosted envelope must retain
+// all bytes and revisions, while a selected run excludes unrelated PDF inputs.
+// The same corpus must still fail the default hosted compilation boundary.
+test("large folder saves stay local and selected runs retain their exact dataset authority",async()=>{
+  const home=await mkdtemp(path.join(os.tmpdir(),"openpond-large-local-dataset-"));
+  const store=new SqliteStore(home);
+  try {
+    const service=createLocalDatasetService({store,home});
+    const first=await service.request({action:"create",operationId:"large-local-create",payload:{name:"Large local corpus"}}) as {record:LocalDatasetRecord};
+    const workspace=first.record.workspace;
+    const folder=path.join(home,"authored");await mkdir(path.join(folder,"inputs"),{recursive:true});
+    const files=[{name:"small.pdf",bytes:Buffer.from("small source")},{name:"large.pdf",bytes:Buffer.alloc(50*1024*1024,65)}];
+    const inventory=files.map(file=>({asset:{id:file.name,path:`inputs/${file.name}`,contentHash:sha256(file.bytes),sizeBytes:file.bytes.length,mediaType:"application/pdf",visibility:"policy"},sourcePath:`inputs/${file.name}`}));
+    const tasks=inventory.map(({asset})=>({schemaVersion:"openpond.taskData.v1",id:asset.id,clusterKey:asset.id,split:"validation",input:{prompt:"Read the attached source."},expectedOutput:{text:"pond"},policyVisibleContext:{},privilegedContextRef:null,sourceRefs:[],tags:[],metadata:{},
+      assets:[{id:asset.id,sourceRefId:"source",artifactRef:asset.path,fileName:asset.id,mediaType:asset.mediaType,sha256:asset.contentHash,sizeBytes:asset.sizeBytes,split:"validation",metadata:{portableAsset:asset}}]}));
+    await writeFile(path.join(folder,"taskset.json"),JSON.stringify({...workspace.draft,objective:"Read PDF inputs",tasks,
+      graders:[{id:"exact",version:"1",label:"Exact",kind:"state",weight:1,hardGate:true,rewardEligible:false,privileged:true,config:{fields:["text"]},metadata:{}}],
+      metadata:{...workspace.draft.metadata,portableFileInventory:inventory}}));
+    for(const file of files)await writeFile(path.join(folder,"inputs",file.name),file.bytes);
+    const request={action:"save",id:workspace.draft.id,expectedRevision:1,operationId:"large-local-save",payload:{path:folder}};
+    const saved=(await service.request(request) as {record:LocalDatasetRecord}).record;
+    expect(saved.workspace.draft.revision).toBe(2);
+    expect(saved.workspace.files.find(file=>file.path==="inputs/large.pdf")?.contentHash).toBe(inventory[1]!.asset.contentHash);
+    expect((await service.request(request) as {record:LocalDatasetRecord}).record.workspace.contentHash).toBe(saved.workspace.contentHash);
+    expect((await service.read(workspace.draft.id,1)).workspace.contentHash).toBe(workspace.contentHash);
+    const [listing]=await store.listLocalDatasetListings();
+    expect(listing?.workspace).not.toHaveProperty("files");
+    expect(listing?.workspace.contentHash).toBe(saved.workspace.contentHash);
+    expect(await store.listLocalDatasets(true)).toEqual([]);
+    // Metadata CAS keeps the authored revision fixed; cached catalog polls must
+    // still reflect its checks and must not expose mutable cached objects.
+    listing!.workspace.draft.name="Mutated caller copy";
+    expect((await store.listLocalDatasetListings())[0]!.workspace.draft.name).toBe(saved.workspace.draft.name);
+    const checked=await store.updateLocalDatasetMetadata(workspace.draft.id,contentHash(saved),record=>({...record,packageHash:"a".repeat(64)}));
+    expect((await store.listLocalDatasetListings())[0]!.packageHash).toBe(checked.packageHash);
+    expect(()=>compileTasksetDraftWorkspace({workspace:saved.workspace,preparation:null,adapterId:"openpond-desktop-taskset-authoring-v1",now:saved.workspace.draft.updatedAt})).toThrow("task_json_size_exceeded");
+    const selected=service.compile(saved,["small.pdf"]);
+    expect(selected.taskset.metadata.sourcePackageHash).toBe(saved.workspace.contentHash);
+    expect(selected.taskset.tasks.map(task=>task.id)).toEqual(["small.pdf"]);
+    expect(selected.files.some(file=>file.asset.id==="large.pdf")).toBe(false);
+    expect(selected.files.find(file=>file.asset.id==="small.pdf")?.asset.contentHash).toBe(inventory[0]!.asset.contentHash);
+    const hydrated=await service.packageDataset(workspace.draft.id,2,["small.pdf"]);
+    expect(hydrated.package.contentHash).toBe(selected.contentHash);
+    expect(hydrated.record.workspace.files.some(file=>file.path==="inputs/large.pdf")).toBe(false);
+    await expect(service.request({...request,operationId:"stale-folder"})).rejects.toThrow(/changed/);
+  }finally {await store.close();await rm(home,{recursive:true,force:true});}
+},120_000);
 
 // Failure story: an uncertain write must recover the exact saved revision,
 // edits must preserve older bytes, and settling a cloud receipt must not block

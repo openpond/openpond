@@ -56,6 +56,7 @@ import { useOpenPondCommandAccessActions } from "../hooks/useOpenPondCommandAcce
 import { useSidebarData } from "../hooks/useSidebarData";
 import { useSidebarRuntimeState } from "../hooks/useSidebarRuntimeState";
 import { useCommandShortcuts } from "../hooks/useAppEffects";
+import { useTrainingNavigation } from "../hooks/useTrainingNavigation";
 import { useAppBootstrap } from "../hooks/useAppBootstrap";
 import { useAppErrorReporter } from "../hooks/useAppErrorReporter";
 import { useAppState } from "../hooks/useAppState";
@@ -321,9 +322,12 @@ export function useAppPrimaryRuntime() {
     [connection, setError, sidebarFileBookmarks]
   );
   const connectedAppRows = useConnectedAppStatusRows(connection);
+  const trainingProfileId = bootstrap?.profile?.activeProfile ?? "default";
+  const trainingNavigation = useTrainingNavigation(bootstrap ? connection : null, trainingProfileId);
   const training = useTraining({
-    connection,
-    profileId: bootstrap?.profile?.activeProfile ?? "default",
+    connection: bootstrap ? connection : null,
+    profileId: trainingProfileId,
+    enabled: view === "labs" || Boolean(selectedSessionId && trainingNavigation.data?.creationSessionIds.includes(selectedSessionId)),
   });
   const {
     projectsCollapsed,
@@ -582,6 +586,9 @@ export function useAppPrimaryRuntime() {
   const requestMainComposerFocus = useCallback(() => {
     setMainComposerFocusRequestId((current) => current + 1);
   }, []);
+  useEffect(() => {
+    if (view === "chat") requestMainComposerFocus();
+  }, [view, selectedSessionId, selectedProjectId, selectedAppId, requestMainComposerFocus]);
   const beginNewChat = useBeginNewChat({
     appDispatch,
     expandProject,
@@ -1033,6 +1040,7 @@ export function useAppPrimaryRuntime() {
     setEvents,
     setSessions,
     training,
+    trainingNavigation,
     projectsCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,

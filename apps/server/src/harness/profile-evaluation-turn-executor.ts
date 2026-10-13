@@ -65,7 +65,7 @@ export function createProfileWorkflowEvaluationExecutor(input: {
     member.signal?.throwIfAborted();
     await (input.assertSpendAuthority??assertProfileEvaluationSpendAuthority)(input.manifest, member.signal);
     const workCase = Boolean(input.attachments?.length || input.requiredOutputs?.length);
-    const managedNativeWork = workCase && input.profileRef.source === "local"
+    const managedNativeWork = workCase && !input.ownedSessionMetadata?.localProfileExperiment && input.profileRef.source === "local"
       && (input.modelRef.providerId === "codex" || isNativeAgentId(input.modelRef.providerId));
     const session = await input.createSession({
       ...(workCase ? { experience: "work" } : {}),

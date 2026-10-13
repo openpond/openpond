@@ -1,6 +1,12 @@
 import { z } from "zod";
+import { ChatProviderSchema } from "./settings.js";
 
 export const ClientChoicesSchema = z.strictObject({
+  chatSelection: z.strictObject({
+    provider: ChatProviderSchema,
+    // Native providers may use an empty selection for their runtime default.
+    model: z.string().max(500),
+  }).optional(),
   chatMode: z.enum(["chat", "work"]).optional(),
   sidebarWorkflowCollapsedIds: z.array(z.string().min(1).max(200)).max(200).optional(),
   sidebarPresentation: z.enum(["grouped", "inbox"]).optional(),
@@ -14,6 +20,7 @@ export const ClientChoicesSchema = z.strictObject({
 });
 export type ClientChoices = z.infer<typeof ClientChoicesSchema>;
 export const CLIENT_CHOICE_KEYS = {
+  "openpond:last-chat-selection": "chatSelection",
   "openpond:last-chat-task-mode": "chatMode",
   "openpond.sidebar.workflow-collapse.v1": "sidebarWorkflowCollapsedIds",
   "openpond.sidebar.presentation.v1": "sidebarPresentation",

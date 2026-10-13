@@ -43,8 +43,8 @@ export function resolveTasksetPackageInstructions(value: Pick<TasksetPackage, "t
 
 /** Admission verifies the complete declared dependency graph, not readiness or
  * permission to execute it. Hosts separately authorize the workspace/project. */
-export function validateTasksetPackage(value: unknown): TasksetPackage {
-  assertBoundedTaskJson(value, MAX_TASKSET_PACKAGE_BYTES);
+export function validateTasksetPackage(value: unknown, maximumBytes = MAX_TASKSET_PACKAGE_BYTES): TasksetPackage {
+  assertBoundedTaskJson(value, maximumBytes);
   const result = TasksetPackageSchema.parse(value);
   const { contentHash: hash, ...content } = result;
   if (contentHash(content) !== hash) throw new Error("Taskset package content hash differs from its bytes.");
@@ -115,10 +115,10 @@ export function validateTasksetPackage(value: unknown): TasksetPackage {
   return result;
 }
 
-export function createTasksetPackage(value: z.input<typeof TasksetPackageContentSchema>): TasksetPackage {
-  assertBoundedTaskJson(value, MAX_TASKSET_PACKAGE_BYTES);
+export function createTasksetPackage(value: z.input<typeof TasksetPackageContentSchema>, maximumBytes = MAX_TASKSET_PACKAGE_BYTES): TasksetPackage {
+  assertBoundedTaskJson(value, maximumBytes);
   const content = TasksetPackageContentSchema.parse(value);
-  return validateTasksetPackage({ ...content, contentHash: contentHash(content) });
+  return validateTasksetPackage({ ...content, contentHash: contentHash(content) }, maximumBytes);
 }
 
 function same(left: unknown, right: unknown): boolean {

@@ -41,6 +41,12 @@ export function createWorkspaceApi(
     teamId: scope.teamId,
     projectId: scope.projectId,
     location: scope.executionLocation ?? "hosted",
+    accountKey: scope.accountKey,
+    localDatasets<T>(action: string, payload: unknown = {}, id?: string, signal?: AbortSignal) {
+      return apiFetch<T>(connection, "/v1/local-datasets", {
+        method: "POST", body: JSON.stringify({ action, payload, ...(id ? { id } : {}) }), signal,
+      });
+    },
     humanContext: scope.actorId ? { connection, scope: scope.teamId, actorId: scope.actorId, location: scope.executionLocation ?? "hosted" } satisfies HumanInboxContext : null,
     local<T>(action: string, payload: unknown = {}, signal?: AbortSignal) {
       return apiFetch<T>(connection, "/v1/local-experiments", {
@@ -113,4 +119,9 @@ export function createWorkspaceApi(
       },
     };
   }
+}
+
+export function workspaceApiForLocation(api: WorkspaceApi, executionLocation: "local" | "hosted") {
+  return createWorkspaceApi(api.connection, { teamId: api.teamId, projectId: api.projectId,
+    actorId: api.actorId, accountKey: api.accountKey, executionLocation });
 }

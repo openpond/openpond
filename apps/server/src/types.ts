@@ -1,3 +1,4 @@
+import type { StorageStartupProgress } from "@openpond/runtime/ready-line-parser";
 import type { AgentRuntimeHost } from "@openpond/agent-runtime";
 import type {
   AccountState,
@@ -49,6 +50,7 @@ export type PendingApproval = {
 };
 
 export type OpenPondServerOptions = {
+  onStorageProgress?: (progress: StorageStartupProgress) => void;
   host?: string;
   port?: number;
   storeDir?: string;

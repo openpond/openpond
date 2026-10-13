@@ -1,3 +1,4 @@
+import { STORAGE_STARTUP_PROGRESS_PREFIX } from "@openpond/runtime/ready-line-parser";
 import { isRecoverableStartupError, startRecoveryServer } from "./api/startup-recovery.js";
 import { resolveOpenPondHome } from "@openpond/persistence";
 import { getBundledRuntimeVersion, openUrlWithSystemBrowser } from "@openpond/runtime";
@@ -311,7 +312,8 @@ export async function runOpenPondServerCli(factories: ServerCliFactories): Promi
   while (true) {
     try {
       instance = await factories.createOpenPondServer({ host: args.host, port, webRoot, sourceBrowserState: args.sourceBrowserState,
-        ...(args.storeDir ? { storeDir: args.storeDir } : {}), httpEnabled: true });
+        ...(args.storeDir ? { storeDir: args.storeDir } : {}), httpEnabled: true,
+        onStorageProgress: progress => console.log(`${STORAGE_STARTUP_PROGRESS_PREFIX}${JSON.stringify(progress)}`) });
       break;
     } catch (error) {
       if (!isRecoverableStartupError(error)) throw error;

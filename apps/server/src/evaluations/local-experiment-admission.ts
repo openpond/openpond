@@ -7,6 +7,7 @@ import { validateTasksetPackage, tasksetPackageRewardBinding, resolveTasksetPack
   resolveTasksetPackageInstructions, type TasksetPackage } from "openpond-sdk/taskset-packages";
 import { LocalExperimentError, type LocalExperimentDefinition, type LocalExperimentAdmission } from "./local-experiment-contract.js";
 import { ExperimentModelCaseSchema } from "./experiment-case-contract.js";
+import { supportsLocalProfileEnvironment } from "./local-profile-work.js";
 
 /** Package-local Reward closure is authoritative; no selected Profile or
  * unrelated mutable grader catalog participates in local admission. */
@@ -39,7 +40,8 @@ export function localExperimentAdmissions(definition:LocalExperimentDefinition,r
   if(value.contentHash!==definition.packageHash || contentHash(request.taskset)!==contentHash({id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash}))
     throw new LocalExperimentError("local_dataset_pin_conflict","Local execution requires the exact retained Dataset package.",422);
   if(request.policy.kind!=="hosted_chat"&&!(request.policy.kind==="hosted_harness"&&profileAdmitted))throw new LocalExperimentError("local_target_not_qualified","This local execution path requires a qualified exact target owner.",422);
-  if(["claude-code","codex"].includes(definition.model.providerId)&&(executionForClaude(value)||value.taskset.environment.kind!=="text"||value.taskset.tools.length))throw new LocalExperimentError("native_text_environment_not_admitted","This native model adapter requires a text Dataset with no environment tools. Additional tool owners require explicit admission.",422);
+  const profileWork = profileAdmitted && request.policy.kind === "hosted_harness" && supportsLocalProfileEnvironment(value);
+  if(["claude-code","codex"].includes(definition.model.providerId)&&!profileWork&&(executionForClaude(value)||value.taskset.environment.kind!=="text"||value.taskset.tools.length))throw new LocalExperimentError("native_text_environment_not_admitted","This native model adapter requires a text Dataset with no environment tools. Additional tool owners require explicit admission.",422);
   const harness=request.policy.kind==="hosted_chat"?request.policy.harness:undefined;
   if(harness&&!nativeHarnessAdmitted)throw new LocalExperimentError("local_harness_not_qualified","A released Harness must execute through its native turn owner.",422);
   const execution=resolveTasksetPackageExecution(value);
@@ -57,7 +59,7 @@ export function localExperimentAdmissions(definition:LocalExperimentDefinition,r
   }
   if(!execution&&value.taskset.tools.length&&!profileAdmitted)throw new LocalExperimentError("local_tool_target_not_qualified","This Dataset's tools require a released native target executor.",422);
   if(execution?.execution.javascript.executionServices?.length&&!localEnvironmentAdmitted)throw new LocalExperimentError("local_prepared_environment_not_qualified","This Dataset requires prepared compute services that are not yet bound to the local execution owner.",422);
-  if(value.taskset.environment.kind!=="text" && !execution)throw new LocalExperimentError("local_environment_unavailable","The released Dataset has no supported local environment executor.",422);
+  if(value.taskset.environment.kind!=="text" && !execution && !profileWork)throw new LocalExperimentError("local_environment_unavailable","The released Dataset has no supported local environment executor.",422);
   if(harness&&(execution||value.taskset.environment.kind!=="text"))throw new LocalExperimentError("local_harness_environment_not_qualified","This native Harness requires a compatible text Dataset.",422);
   return request.population.map(member=> {
     const task=value.taskset.tasks.find(task=>task.id===member.taskId);

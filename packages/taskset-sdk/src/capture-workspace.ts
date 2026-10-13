@@ -7,7 +7,7 @@ import { readTasksetDraftPackage } from "./drafts.js";
 
 /** Capture before parsing: the admitted document and uploaded assets come from
  * one bounded byte snapshot, rather than subsequent reads of a mutable folder. */
-export async function captureTasksetDraftWorkspace(input: { directory: string; teamId: string; expectedRevision: number; datasetId?: string }) {
+export async function captureTasksetDraftWorkspace(input: { directory: string; teamId: string; expectedRevision: number; datasetId?: string; maximumBytes?: number }) {
   const directory = path.resolve(input.directory);
   if (!(await lstat(directory)).isDirectory()) throw new Error("Dataset upload requires a regular authored folder.");
   const files = new Map<string, Uint8Array>(); let byteCount = 0;
@@ -22,7 +22,7 @@ export async function captureTasksetDraftWorkspace(input: { directory: string; t
       const file = await open(full, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
         const stat = await file.stat();
-        if (!stat.isFile() || stat.size > MAX_TASKSET_DRAFT_WORKSPACE_BYTES - byteCount) throw new Error("Dataset folder exceeds the 64 MiB capture limit.");
+        if (!stat.isFile() || stat.size > (input.maximumBytes ?? MAX_TASKSET_DRAFT_WORKSPACE_BYTES) - byteCount) throw new Error("Dataset folder exceeds its capture byte limit.");
         const bytes = new Uint8Array(stat.size); let offset = 0;
         while (offset < bytes.length) { const read = await file.read(bytes, offset, bytes.length - offset, offset); if (!read.bytesRead) throw new Error("Dataset file changed during capture."); offset += read.bytesRead; }
         const after = await file.stat();
@@ -39,6 +39,6 @@ export async function captureTasksetDraftWorkspace(input: { directory: string; t
     revision: input.expectedRevision + 1, modelScope: null, status: "draft", publishedTasksetRef: null,
     metadata: { ...authored.metadata, importedTasksetPackage: { packageHash: sourceHash } } });
   const workspace = createTasksetDraftWorkspace({ schemaVersion: "openpond.tasksetDraftWorkspace.v1", draft,
-    files: [...files].filter(([file]) => !isManagedTasksetDraftFilePath(file)).map(([path, bytes]) => ({ path, base64: Buffer.from(bytes).toString("base64"), contentHash: sha256(bytes), sizeBytes: bytes.byteLength })) });
+    files: [...files].filter(([file]) => !isManagedTasksetDraftFilePath(file)).map(([path, bytes]) => ({ path, base64: Buffer.from(bytes).toString("base64"), contentHash: sha256(bytes), sizeBytes: bytes.byteLength })) }, input.maximumBytes);
   return { workspace, sourceHash, sourceFiles: inventory, capturedBytes: byteCount };
 }

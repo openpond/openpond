@@ -4,6 +4,7 @@ import { loadConfig } from "../config";
 import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl, parseBooleanOption } from "./common";
 import { DATASET_PREPARATION_USAGE, runDatasetPreparationCommand } from "./datasets-preparation";
 import { runLocalDatasetsCommand } from "./datasets-local";
+import { readFile } from "node:fs/promises";
 
 export async function runDatasetsCommand(options: Record<string, string | boolean>, rest: string[]) {
   if (parseBooleanOption(options.local)) return runLocalDatasetsCommand(options,rest);
@@ -15,13 +16,17 @@ export async function runDatasetsCommand(options: Record<string, string | boolea
     const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
     return runDatasetPreparationCommand(client.preparations, options, rest.slice(1));
   }
-  if (!teamId || !baseUrl || !action || rest.length > 2 || !["upload", "read", "list", "validate", "publish"].includes(action))
-    throw new Error("usage: datasets <upload|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>]");
+  if (!teamId || !baseUrl || !action || rest.length > 2 || !["upload", "save", "read", "list", "validate", "publish"].includes(action))
+    throw new Error("usage: datasets <upload|save|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>]");
   const config = await loadConfig();
   const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
   const operationId = optionString(options, "operationId");
   let result: unknown;
-  if (action === "list") {
+  if (action === "save") {
+    const file = optionString(options, "inputFile");
+    if (id || !file) throw new Error("Save requires --input-file containing the complete Dataset workspace write request, including its operationId and expectedRevision.");
+    result = await client.save(JSON.parse(await readFile(file, "utf8")));
+  } else if (action === "list") {
     if (id) throw new Error("List does not accept a dataset id.");
     result = await client.list({ cursor: optionString(options, "cursor") || undefined });
   } else {

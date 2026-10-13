@@ -4,7 +4,7 @@ export {
   ROOT_QUALIFICATION_TESTS,
   ROOT_SYSTEM_TESTS,
   ROOT_UI_TESTS,
-} from "./test-suite-manifest";
+} from "./test-suite-manifest.ts";
 
 export const CLI_INTEGRATION_TESTS = [
   "test/cli-headless-chat.test.ts",

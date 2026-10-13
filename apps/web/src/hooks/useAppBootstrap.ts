@@ -1,4 +1,5 @@
-import { connectClientChoices, useHydratedClientChoice, clientChoiceSaveIssue } from "../lib/client-choice-storage";
+import { CHAT_SELECTION_KEY, readChatSelectionPreference } from "../lib/chat-selection-preference";
+import { connectClientChoices, useHydratedClientChoice, clientChoiceSaveIssue, clientChoiceStorage, subscribeClientChoices } from "../lib/client-choice-storage";
 import {
   useCallback,
   useEffect,
@@ -56,13 +57,12 @@ import {
   type AppStartupStageId,
 } from "../startup/app-startup";
 import { useRuntimeEvents } from "./useAppEffects";
+import { useStartupRecovery } from "./useStartupRecovery";
 import { useAccountScopeRefresh } from "./useAccountScopeRefresh";
 import type { AccountScopeRefresh } from "../lib/account-scope-refresh";
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
-const STARTUP_SPLASH_FAST_MINIMUM_MS = 650;
-const STARTUP_SPLASH_SLOW_THRESHOLD_MS = 1200;
 const ORGANIZATION_REFRESH_INTERVAL_MS = 60_000;
 
 export function useAppBootstrap(params: {
@@ -124,8 +124,7 @@ export function useAppBootstrap(params: {
   const bootstrapServerIdRef = useRef<string | null>(null);
   const defaultTeamSyncKeyRef = useRef<string | null>(null);
   const startupReadyRef = useRef(false);
-  const startupStartedAtRef = useRef(Date.now());
-  const startupCompleteTimerRef = useRef<number | null>(null);
+  const clientChoiceAccountKeyRef = useRef<string | null>(null);
   const profileRefreshCreatePipelineKeyRef = useRef<string | null>(null);
   const accountScopeRefreshRef = useRef<AccountScopeRefresh | null>(null);
 
@@ -165,28 +164,9 @@ export function useAppBootstrap(params: {
   }, []);
 
   const completeStartup = useCallback(() => {
-    if (startupReadyRef.current || startupCompleteTimerRef.current !== null) return;
-    const finishStartup = () => {
-      startupCompleteTimerRef.current = null;
-      if (startupReadyRef.current) return;
-      startupReadyRef.current = true;
-      setStartupStage("ready");
-    };
-    const elapsed = Date.now() - startupStartedAtRef.current;
-    const remaining = startupSplashRemainingMs(elapsed);
-    if (remaining === 0) {
-      finishStartup();
-      return;
-    }
-    startupCompleteTimerRef.current = window.setTimeout(finishStartup, remaining);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (startupCompleteTimerRef.current !== null) {
-        window.clearTimeout(startupCompleteTimerRef.current);
-      }
-    };
+    if (startupReadyRef.current) return;
+    startupReadyRef.current = true;
+    setStartupStage("ready");
   }, []);
 
   const applyBootstrapPayload = useCallback(
@@ -287,15 +267,22 @@ export function useAppBootstrap(params: {
 
   useAccountScopeRefresh({ connection, events, refreshRef: accountScopeRefreshRef, setBootstrap, setError });
 
+  const rememberedChatSelection = useSyncExternalStore(
+    subscribeClientChoices,
+    () => clientChoiceStorage.getItem(CHAT_SELECTION_KEY),
+    () => null,
+  );
   useEffect(() => {
     if (selectedSessionId) return;
     const preferences = normalizePreferences(bootstrap?.preferences);
-    setDraftProvider(preferences.defaultChatProvider);
-    setDraftModel(preferences.defaultChatModel);
+    const remembered = readChatSelectionPreference();
+    setDraftProvider(remembered?.provider ?? preferences.defaultChatProvider);
+    setDraftModel(remembered?.model ?? preferences.defaultChatModel);
   }, [
     selectedSessionId,
     bootstrap?.preferences.defaultChatProvider,
     bootstrap?.preferences.defaultChatModel,
+    rememberedChatSelection,
     setDraftModel,
     setDraftProvider,
   ]);
@@ -331,18 +318,14 @@ export function useAppBootstrap(params: {
 
     if (bootstrap.account.state !== "signed_in") {
       defaultTeamSyncKeyRef.current = null;
-      completeStartup();
       return;
     }
 
     const accountKey = openPondOrganizationCacheKey(bootstrap.account);
     if (!accountKey) {
       defaultTeamSyncKeyRef.current = null;
-      completeStartup();
       return;
     }
-    completeStartup();
-    setBlockingStartupStage("team");
 
     const currentDefaultTeamId = bootstrap.preferences.defaultTeamId?.trim() ?? "";
     const syncKey = defaultTeamPreferenceSyncKey(
@@ -375,51 +358,37 @@ export function useAppBootstrap(params: {
     })
       .then(async (activeOrganizations) => {
         if (cancelled) return;
-        if (activeOrganizations.length === 0) {
-          completeStartup();
-          return;
-        }
+        if (activeOrganizations.length === 0) return;
 
         const currentDefaultStillActive =
           Boolean(currentDefaultTeamId) &&
           activeOrganizations.some((organization) => organization.teamId === currentDefaultTeamId);
         if (currentDefaultStillActive) {
           await preloadTeamAgents(currentDefaultTeamId);
-          completeStartup();
           return;
         }
 
         const fallbackTeamId = resolveDefaultOpenPondOrganization(activeOrganizations)?.teamId;
-        if (!fallbackTeamId) {
-          completeStartup();
-          return;
-        }
+        if (!fallbackTeamId) return;
         if (currentDefaultTeamId) {
           setError("The configured default team is unavailable for this account. Select an available team in account settings.");
-          completeStartup();
           return;
         }
         await preloadTeamAgents(fallbackTeamId);
-        if (!cancelled) completeStartup();
       })
       .catch((defaultTeamError) => {
         if (cancelled) return;
         defaultTeamSyncKeyRef.current = null;
         setError(defaultTeamError instanceof Error ? defaultTeamError.message : String(defaultTeamError));
-        completeStartup();
       });
     return () => {
       cancelled = true;
     };
   }, [
-    applyBootstrapPayload,
-    applyPreferencesPayload,
     bootstrap?.account,
     bootstrap?.accountMeta.asOf,
     bootstrap?.preferences.defaultTeamId,
-    completeStartup,
     connection,
-    setBlockingStartupStage,
     setError,
   ]);
 
@@ -461,50 +430,33 @@ export function useAppBootstrap(params: {
     else setError((current) => current?.startsWith("Preference changes have not been saved.") ? null : current);
   });
   useEffect(() => {
-    if (!connection) return;
-    void connectClientChoices(connection).catch((error) => setError(String(error)));
+    if (!connection || organizationRefreshAccountKey === clientChoiceAccountKeyRef.current) return;
+    clientChoiceAccountKeyRef.current = organizationRefreshAccountKey;
+    // An account switch keeps the local server token, but changes the owner of
+    // these choices. It must supersede any hydration for the previous account.
+    void connectClientChoices(connection, { force: true }).catch((error) => setError(String(error)));
   }, [connection, organizationRefreshAccountKey, setError]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal: AbortSignal) => {
     setBlockingStartupStage("connecting");
     setRuntimeEventStreamStart(null);
     const nextConnection = await resolveConnection();
+    signal.throwIfAborted();
     setConnection((current) => (isSameConnection(current, nextConnection) ? current : nextConnection));
     setBlockingStartupStage("account");
-    const payload = await api.bootstrap(nextConnection);
-    await connectClientChoices(nextConnection);
+    const [payload] = await Promise.all([
+      api.bootstrap(nextConnection, signal),
+      connectClientChoices(nextConnection, { signal }),
+    ]);
+    signal.throwIfAborted();
+    clientChoiceAccountKeyRef.current = openPondOrganizationCacheKey(payload.account);
     applyBootstrapPayload(payload);
     completeStartup();
     setError((current) =>
-      current && (isConnectionErrorMessage(current) || current === "Event stream disconnected")
-        ? null
-        : current
+      current && (isConnectionErrorMessage(current) || current === "Event stream disconnected") ? null : current
     );
   }, [applyBootstrapPayload, completeStartup, setBlockingStartupStage, setError]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let retryId: number | null = null;
-    const run = async (attempt: number) => {
-      try {
-        await load();
-      } catch (loadError) {
-        if (cancelled) return;
-        setError(loadError instanceof Error ? loadError.message : String(loadError));
-        const delay = Math.min(5000, 750 + attempt * 750);
-        retryId = window.setTimeout(() => void run(attempt + 1), delay);
-      }
-    };
-    void run(0);
-    return () => {
-      cancelled = true;
-      if (retryId !== null) window.clearTimeout(retryId);
-    };
-  }, [load, setError]);
-
-  const recoverConnection = useCallback(() => {
-    void load().catch(() => undefined);
-  }, [load]);
+  const recovery = useStartupRecovery(load);
 
   useRuntimeEvents({
     afterSequence: runtimeEventStreamStart?.afterSequence ?? null,
@@ -513,7 +465,7 @@ export function useAppBootstrap(params: {
     setApprovals,
     setSessions,
     setError,
-    onDisconnected: recoverConnection,
+    onDisconnected: recovery.recover,
   });
 
   useEffect(() => {
@@ -558,7 +510,7 @@ export function useAppBootstrap(params: {
     notificationAfterSequence: runtimeEventStreamStart?.afterSequence ?? null,
     refreshOpenPondAccount,
     sessions,
-    startup: appStartupState(startupStage),
+    startup: { ...appStartupState(startupStage), error: recovery.error, retrying: recovery.retrying, retry: recovery.retry },
     setAppPreferences,
     setBootstrap,
     setCodexHistorySessions,
@@ -575,11 +527,6 @@ async function fetchActiveOpenPondOrganizations(
     .map(normalizeOpenPondOrganization)
     .filter((organization): organization is OpenPondOrganization => Boolean(organization))
     .filter((organization) => organization.status === "active");
-}
-
-export function startupSplashRemainingMs(elapsedMs: number): number {
-  if (elapsedMs >= STARTUP_SPLASH_SLOW_THRESHOLD_MS) return 0;
-  return Math.max(0, STARTUP_SPLASH_FAST_MINIMUM_MS - elapsedMs);
 }
 
 function defaultTeamPreferenceSyncKey(

@@ -71,12 +71,12 @@ const PROFILE_SDK_OPTION_SCHEMA = {
 } as const satisfies Record<string, CliCommandOptionKind>;
 
 export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
-  { name: "import", usage: "openpond import <connect|reconnect|discover|status|coverage|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--until <ISO-cutoff>] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]",
-    optionSchema: { source: "string", sourcePath: "string", range: "string", until: "string", team: "string", project: "string", session: "string", leaf: "string", revision: "string", continual: "boolean", daily: "boolean", weekly: "boolean", hourly: "boolean", cron: "string", at: "string", on: "string", off: "boolean", scheduled: "boolean", yes: "boolean", connection: "string", collectorDir: "string", json: "boolean" },
+  { name: "import", usage: "openpond import <connect|reconnect|discover|status|conversations|coverage|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--upload] [--selection-file <path>] [--query <text>] [--offset <number>] [--until <ISO-cutoff>] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]",
+    optionSchema: { source: "string", sourcePath: "string", range: "string", upload: "boolean", selectionFile: "string", query: "string", offset: "string", until: "string", team: "string", project: "string", session: "string", leaf: "string", revision: "string", continual: "boolean", daily: "boolean", weekly: "boolean", hourly: "boolean", cron: "string", at: "string", on: "string", off: "boolean", scheduled: "boolean", yes: "boolean", connection: "string", collectorDir: "string", json: "boolean" },
     handler: async ({options,rest}) => (await import("./import")).runImportCommand(options,rest) },
   {
     name: "datasets",
-    usage: "openpond datasets <schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]\n  openpond datasets <upload|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]\n  openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]",
+    usage: "openpond datasets <schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]\n  openpond datasets <upload|save|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]\n  openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]",
     optionSchema: { team: "string", operationId: "string", expectedRevision: "integer", publish: "boolean", project: "string", datasetId: "string", cursor: "string", workspaceHash: "string", packageHash: "string", inputFile: "string", json: "boolean",local:"boolean",serverUrl:"string" },
     handler: async ({ options, rest }) => (await import("./datasets")).runDatasetsCommand(options, rest),
   },
@@ -112,8 +112,8 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "experiments",
-    usage: "openpond experiments <models|run|run-cloud|list|read|status|cancel|result|compare|case> [id] [candidate-id] --local [--server-url <loopback-origin>] [--input-file <path>] [--receipt-id <id>] [--json]\n  openpond experiments <profile-catalog|prepare-profile|run-profile|inspect-profile> --local [--server-url <loopback-origin>] [--input-file <path>] [--json]\n  openpond experiments <prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]",
-    optionSchema: { team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", status: "string", afterId: "string", limit: "integer", json: "boolean",local:"boolean",serverUrl:"string",receiptId:"string",afterSequence:"integer",revision:"integer",contentHash:"string" },
+    usage: "openpond experiments <signal-plan|signal-report> --input-file <path> [--json]\n  openpond experiments <models|run|run-cloud|list|read|status|cancel|result|compare|case> [id] [candidate-id] --local [--server-url <loopback-origin>] [--input-file <path>] [--receipt-id <id>] [--json]\n  openpond experiments <profile-catalog|prepare-profile|run-profile|inspect-profile> --local [--server-url <loopback-origin>] [--input-file <path>] [--json]\n  openpond experiments <prepare-harness|run|read|list|status|diagnostics|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]",
+    optionSchema: { team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", status: "string", afterId: "string", afterCallId: "string", limit: "integer", json: "boolean",local:"boolean",serverUrl:"string",receiptId:"string",afterSequence:"integer",revision:"integer",contentHash:"string" },
     handler: async ({ options, rest }) => (await import("./experiments")).runExperimentsCommand(options, rest),
   },
   {
@@ -470,6 +470,13 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     usages: [
       "openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]",
       "openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]",
+      "openpond training hosted-models|hosted-batches|hosted-preparations|hosted-capabilities --team-id <id> [--api-base-url <url>] [--json]",
+      "openpond training hosted-model <model-project-id> --team-id <id> [--api-base-url <url>] [--json]",
+      "openpond training hosted-sync-model <input.json> --team-id <id> [--api-base-url <url>] [--json]",
+      "openpond training hosted-prepare|hosted-start|hosted-stage|hosted-submit <input.json> --team-id <id> [--api-base-url <url>] [--yes] [--json]",
+      "openpond training hosted-qualify <input.json> --team-id <id> [--api-base-url <url>] --yes [--json]",
+      "openpond training hosted-status|hosted-watch|hosted-cancel|hosted-artifacts|hosted-logs|hosted-events <job-id> --team-id <id> [--api-base-url <url>] [--interval-ms <ms>] [--json]",
+      "openpond training hosted-watch <job-id> --team-id <id> [--deadline-at <ISO-time>] [--cleanup-reserve-ms <ms>] [--wait-for-cleanup] [--cleanup-timeout-ms <ms>] [--interval-ms <ms>] [--json]",
       "openpond training status <run-id> [--json]",
       "openpond training watch <run-id> [--interval-ms <ms>] [--json]",
       "openpond training logs <run-id> [--json]",
@@ -481,11 +488,17 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     optionSchema: {
       apiBaseUrl: "string",
       comparisonSeriesEntry: "string",
+      teamId: "string",
+      account: "string",
       detach: "boolean",
       destination: "string",
       exportApproved: "boolean",
       gpuPlacementObjective: "string",
       intervalMs: "integer",
+      deadlineAt: "string",
+      cleanupReserveMs: "integer",
+      waitForCleanup: "boolean",
+      cleanupTimeoutMs: "integer",
       json: "boolean",
       manifest: "string",
       maxSpend: "number",
