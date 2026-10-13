@@ -61,6 +61,12 @@ test("chat authoring, grader checks and bounded multi-model runs retain exact ev
     // every label/output exhausts its text allowance. These are not UI labels.
     for(const run of largeRuns){expect(largeReport).toContain(run.summary.id);expect(largeReport).toContain(run.view.contentHash);}
     const changedScope=chatExperimentReport([results[0]!,{...results[1]!,summary:{...results[1]!.summary,datasetRevision:2,score:null,costUsd:null}}]);expect(changedScope).toContain("does not establish a winner");expect(changedScope).toContain("Unavailable");
+    // Incomplete retained measurements must not advertise zero failures or
+    // invented grading coverage. Measured zero remains a real value.
+    const incompleteReport=chatExperimentReport([{...results[0]!,summary:{...results[0]!.summary,
+      evaluatedCount:undefined,qualityFailureCount:undefined,executionFailureCount:0,ungradedCount:undefined,costUsd:null}}]);
+    const measurementCells=[...incompleteReport.split("<tbody>")[1]!.split("</tbody>")[0]!.matchAll(/<td>(.*?)<\/td>/g)].map(match=>match[1]);
+    expect(measurementCells.slice(2)).toEqual(["Unavailable","Unavailable","0","Unavailable","Unavailable"]);
     switchDuringRun=true;const before=dispatches;
     const fenced=await experiments.run({...input,operationId:"new-after-account-switch"});await Promise.all(fenced.runs.map(run=>experiments.service.wait(run.id)));
     expect(dispatches-before).toBe(1);
