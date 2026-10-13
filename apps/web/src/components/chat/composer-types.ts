@@ -77,7 +77,7 @@ export type ComposerProps = {
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
-  onProviderChange: (value: ChatProvider) => void;
+  onProviderChange: (value: ChatProvider, model?: string) => void;
   onProviderSetupOpen?: () => void;
   onProjectTargetChange: (value: string) => void;
   onProfileTargetChange?: (value: string) => void;

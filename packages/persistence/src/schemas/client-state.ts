@@ -6,6 +6,7 @@ export const ClientChoicesSchema = z.strictObject({
     provider: ChatProviderSchema,
     // Native providers may use an empty selection for their runtime default.
     model: z.string().max(500),
+    modelsByProvider: z.record(ChatProviderSchema, z.string().max(500)).optional(),
   }).optional(),
   chatMode: z.enum(["chat", "work"]).optional(),
   sidebarWorkflowCollapsedIds: z.array(z.string().min(1).max(200)).max(200).optional(),

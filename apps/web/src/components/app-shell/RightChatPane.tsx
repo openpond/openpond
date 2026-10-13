@@ -128,7 +128,7 @@ export function RightChatPane({
   onOpenProfileSettings: () => void;
   onOpenSession?: (sessionId: string) => void;
   onOpenPonder?: () => void;
-  onProviderChange: (provider: ChatProvider) => void;
+  onProviderChange: (provider: ChatProvider, model?: string) => void;
   onProviderSetupOpen: () => void;
   onPromptChange: (prompt: string) => void;
   onProfileTargetChange: (value: string) => void;
