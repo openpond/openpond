@@ -8,7 +8,7 @@ export function assemblePreparedTaskWorkspaces(input: {
   preparationId: string; revision: number; now: string;
 }): TasksetDraftWorkspace {
   const base = validateTasksetDraftWorkspace(input.base);
-  const candidates = input.candidates.map(validateTasksetDraftWorkspace);
+  const candidates = input.candidates.map(workspace => validateTasksetDraftWorkspace(workspace));
   if (!candidates.length || base.draft.status !== "draft" || candidates.some(workspace => workspace.draft.profileId !== base.draft.profileId || workspace.draft.tasks.length !== 1))
     throw new Error("Prepared assembly requires owned individual task workspaces and an editable destination.");
   const environment = base.draft.tasks.length ? base.draft.environment : candidates[0]!.draft.environment;
