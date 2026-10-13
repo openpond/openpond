@@ -72,7 +72,10 @@ export function parseTerminalArgs(
     const arg = rest[i]!;
     if (arg === "--server") options.server = rest[++i] ?? options.server;
     else if (arg === "--provider") {
-      options.provider = normalizeTerminalProvider(rest[++i] ?? null) ?? options.provider;
+      const requested = rest[++i] ?? null;
+      const provider = normalizeTerminalProvider(requested);
+      if (!provider) throw new Error(`Unsupported chat provider: ${requested ?? "(missing)"}.`);
+      options.provider = provider;
     } else if (arg === "--model") {
       const selection = parseProviderModelSelection(rest[++i] ?? null, options.provider);
       if (selection.provider) options.provider = selection.provider;

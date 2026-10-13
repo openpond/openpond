@@ -107,6 +107,16 @@ describe("terminal argument parser", () => {
     });
   });
 
+  // A native-provider request must never silently run on the default hosted
+  // account, which changes both execution ownership and potential charges.
+  test("retains explicit native providers and rejects unknown providers", () => {
+    for (const provider of ["claude-code", "opencode", "grok-build"]) {
+      expect(parseTerminalArgs(["chat", "--provider", provider], "/repo").options.provider).toBe(provider);
+    }
+    expect(() => parseTerminalArgs(["chat", "--provider", "unrecognized"], "/repo")).toThrow("Unsupported chat provider");
+    expect(() => parseTerminalArgs(["chat", "--provider"], "/repo")).toThrow("Unsupported chat provider");
+  });
+
   test("parses provider/model shorthand plus project and resume flags", () => {
     expect(
       parseTerminalArgs(
