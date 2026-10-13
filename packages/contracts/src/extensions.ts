@@ -21,7 +21,7 @@ export const BUILT_IN_OPENPOND_PROFILE_SKILLS = [
     sourceHash: "bundled",
     validationStatus: "valid" as const,
     validationMessages: [],
-    resourceFiles: ["references/experiments-and-training.md"],
+    resourceFiles: ["references/experiments-and-training.md", "references/compact-resource-tables.md"],
   },
   {
     name: "openpond-taskset-authoring",

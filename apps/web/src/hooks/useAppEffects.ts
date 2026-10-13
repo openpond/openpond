@@ -98,6 +98,9 @@ export function useRuntimeEvents({
 
       lastFlushMs = Date.now();
       appendEvents(nextEvents);
+      for (const sessionId of new Set(nextEvents.filter(event => event.name === "workspace_action_result" && event.action === "chat_resource").map(event => event.sessionId).filter(Boolean))) {
+        window.dispatchEvent(new CustomEvent("openpond-resource-focus-changed", { detail: { sessionId } }));
+      }
       const liveSessions = liveSessionsFromRuntimeEvents(nextEvents);
       if (liveSessions.length > 0) {
         setSessions((current) =>

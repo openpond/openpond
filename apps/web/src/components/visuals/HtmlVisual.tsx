@@ -41,6 +41,7 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
   const serverUrl = connection?.serverUrl;
   const token = connection?.token;
   const platform = connection?.platform;
+  const inlineResource = Boolean(html && /data-openpond-resource-(?:id|table)/.test(html));
   useEffect(() => {
     const element = container.current;
     if (!element || visited || expanded) return;
@@ -124,12 +125,12 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return <div className="html-visual" ref={container} data-visual-id={visual.visualId} data-publication-id={visual.publicationId}>
-    <div className="html-visual-toolbar">
+    {!inlineResource ? <div className="html-visual-toolbar">
       <span>{visual.output.title}{visual.output.revision > 1 ? ` · Revision ${visual.output.revision}` : ""}</span>
       <button type="button" disabled={html === null} onClick={() => setSource(value => !value)} aria-pressed={source}>{source ? "Visual" : "Source"}</button>
       <button type="button" disabled={html === null} onClick={download}>Download</button>
       {!expanded && open ? <button type="button" onClick={() => open(visual)}>Expand</button> : null}
-    </div>
+    </div> : null}
     {source ? <pre className="html-visual-source" tabIndex={0}>{html}</pre> : null}
     {receipt && !source ? <div className="html-visual-selection-receipt"><span>{receipt}</span><button type="button" onClick={()=>{setReceipt(null);setSelectionError(null);operation.current=null;}}>Change</button></div> : null}
     {selectionBusy ? <p role="status" className="html-visual-status">Selecting resource…</p> : null}

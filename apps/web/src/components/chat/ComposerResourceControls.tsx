@@ -1,6 +1,7 @@
 import { chatTrainingAttachmentKey, type ChatTrainingAttachment } from "@openpond/contracts";
 import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
+import { ComposerExperimentSetup } from "./ComposerExperimentSetup";
 import { DropdownSelect } from "../DropdownSelect";
 import { ChevronDown, MoreVertical, Plus } from "../icons";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
@@ -10,24 +11,27 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
   resources: ReturnType<typeof useChatResourceFocus>; busy: boolean; onDraft: (text: string, training?: ChatTrainingAttachment) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
+  const [setup, setSetup] = useState(false);
   const [name, setName] = useState("");
   const { scope, focus } = resources;
-  useEffect(() => setRenaming(false), [scope?.id]);
+  useEffect(() => { setRenaming(false); setSetup(false); }, [scope?.id]);
   if (!scope) return null;
   const ordinal = scope.ordinal;
+  const isExperiment = ordinal !== null;
   const disabled = busy || resources.selecting;
   const dataset = focus.dataset;
   const datasets = dataset ? [dataset, ...resources.datasets.filter(candidate => candidate.id !== dataset.id || candidate.revision !== dataset.revision)] : resources.datasets;
   const grader = resources.graders.find(candidate => candidate.id === scope.selectedGraderId);
-  const context = dataset ? `${dataset.name} V${dataset.revision}` : `experiment ${scope.ordinal}`;
+  const context = dataset ? `${dataset.name} V${dataset.revision}` : isExperiment ? `experiment ${scope.ordinal}` : "this dataset";
   const run = focus.experiment;
   const running = run && /running|queued|pending|starting/i.test(run.state);
   const completed = run && /completed|complete|succeeded/i.test(run.state);
-  const primary = !dataset ? "Add data" : !resources.graders.length ? "Add grader" : running ? "View run" : completed ? "Improve" : "Run";
+  const primary = !isExperiment ? "New experiment" : !dataset ? "Add data" : !resources.graders.length ? "Add grader" : running ? "View run" : completed ? "Improve" : "Run";
   function draft(action: string) {
+    if (action === "New experiment") { setSetup(true); return; }
     const prompts: Record<string, string> = {
       "Add data": `Help me choose a dataset for ${context}.`,
-      "Create dataset": `Create a dataset for experiment ${ordinal}.`,
+      "Create dataset": isExperiment ? `Create a dataset for experiment ${ordinal}.` : "Create a dataset.",
       "Add grader": `Add a grader to ${context}.`,
       "Test grader": `Test ${grader ? grader.name : "the graders"} on ${context}.`,
       "Run on saved outputs": `Grade this experiment's saved answers with ${grader ? grader.name : "the attached graders"}.`,
@@ -41,12 +45,13 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
     if (prompts[action]) onDraft(prompts[action]!);
   }
   return <div className="composer-resource-area">
-    <div className="composer-resource-bar" aria-label="Current experiment">
-      <DropdownSelect compact floating placement="top" floatingMenuWidth={280} label="Experiment scope" value={scope.id}
+    {setup ? <ComposerExperimentSetup resources={resources} busy={busy} onClose={() => setSetup(false)} onAddGrader={() => { draft("Add grader"); setSetup(false); }} /> : null}
+    <div className="composer-resource-bar" aria-label={isExperiment ? "Current experiment" : "Current dataset"}>
+      {isExperiment ? <DropdownSelect compact floating placement="top" floatingMenuWidth={280} label="Experiment scope" value={scope.id}
         tooltip={`${scope.ordinal}: ${scope.name}`} className="composer-resource-number"
         triggerContent={<><span>{scope.ordinal}</span><ChevronDown size={12} /></>}
         options={[...(focus.scopeContext?.scopes ?? []).map(candidate => ({ value: candidate.id, label: `${candidate.ordinal}  ${candidate.name}` })), { value: "new", label: "New experiment", icon: "plus" }]}
-        onChange={value => { if (value === "new") void resources.createScope(); else void resources.selectScope(value); setRenaming(false); }} disabled={disabled} />
+        onChange={value => { if (value === "new") setSetup(true); else void resources.selectScope(value); setRenaming(false); }} disabled={disabled} /> : null}
       <DropdownSelect compact floating searchable floatingMenuWidth={320} placement="top" label="Dataset focus" className="composer-resource-dataset"
         value={dataset ? `${dataset.id}@${dataset.revision}` : ""}
         triggerContent={<><span className="composer-resource-dataset-name">{dataset?.name ?? "Dataset"}</span>{dataset ? <span className="composer-resource-version">V{dataset.revision}</span> : null}<ChevronDown size={12} /></>}
@@ -67,7 +72,7 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
         options={[{ value: primary, label: `${primary}…` }, ...(dataset ? [{ value: "Improve dataset", label: "Improve dataset…" }, { value: "Train model", label: "Train model…" }] : []),
           ...(completed ? [{ value: "Run", label: "Run again…" }, { value: "Compare results", label: "Compare results…" }] : []),
           ...(scope.training ?? []).map((training,index)=>({value:`training:${chatTrainingAttachmentKey(training)}`,label:`View training ${index+1}…`,description:training.location === "cloud" ? "Hosted" : "Local",separatorBefore:index===0})),
-          { value: "rename", label: "Rename experiment…", separatorBefore: true }]}
+          ...(isExperiment ? [{ value: "New experiment", label: "New experiment…", separatorBefore: true }, { value: "rename", label: "Rename experiment…" }] : [])]}
         onChange={value => { if (value.startsWith("training:")) {
           const training = scope.training?.find(candidate=>`training:${chatTrainingAttachmentKey(candidate)}`===value);
           if (training) onDraft("Check this training job and show its results and any model it produced.",training);

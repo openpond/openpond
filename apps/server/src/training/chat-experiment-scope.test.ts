@@ -18,6 +18,29 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
       id, provider: "codex", title: id, appId: null, appName: null, cwd: null, codexThreadId: null, pinned: false, archived: false, order: 0, createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", status: "idle",
     }));
     let scopes = createChatExperimentScopes(store);
+    // Concurrent discovery must open dataset focus without allocating experiments,
+    // and subsequent discovery must preserve the user's selection.
+    await Promise.all([scopes.ensure("chat-b"), scopes.ensure("chat-b")]);
+    const discovered = chatExperimentContext((await store.getSession("chat-b"))?.metadata);
+    expect(discovered.scopes).toHaveLength(0);
+    expect(discovered.datasetFocus?.dataset).toBeNull();
+    expect(discovered.activeScopeId).toBe(discovered.datasetFocus!.id);
+    const focused = await scopes.select("chat-b", { dataset: dataset(1) });
+    expect(await scopes.ensure("chat-b")).toEqual(focused);
+    expect(focused.scopes).toHaveLength(0);
+    store.close();
+    store = new SqliteStore(home);
+    scopes = createChatExperimentScopes(store);
+    expect(chatExperimentContext((await store.getSession("chat-b"))?.metadata).datasetFocus?.dataset?.id).toBe("examples");
+    await expect(scopes.create("chat-b", "invalid-grader", focused.selectionVersion, "missing")).rejects.toThrow("Grader does not belong");
+    const setupGrader: ChatResourceSummary = {kind:"grader", id:"setup-grader", revision:1, name:"Exact", state:"Ready", datasetId:"examples", datasetRevision:1, rows:[]};
+    await expect(scopes.create("chat-b", "stale-grader", focused.selectionVersion, setupGrader.id, [{...setupGrader,datasetRevision:2}])).rejects.toThrow("Dataset changed");
+    const promoted = await scopes.create("chat-b", "explicit-experiment", focused.selectionVersion, setupGrader.id, [setupGrader]);
+    expect(promoted.scopes[0]?.selectedGraderId).toBe(setupGrader.id);
+    expect(promoted.scopes[0]?.ordinal).toBe(1);
+    expect(promoted.scopes[0]?.dataset?.id).toBe("examples");
+    expect(promoted.datasetFocus).toBeUndefined();
+    expect(promoted.selectionVersion).toBe(focused.selectionVersion + 1);
     await Promise.all([scopes.create("chat-a", "create-a"), scopes.create("chat-a", "create-b")]);
     let state = chatExperimentContext((await store.getSession("chat-a"))?.metadata);
     expect(state.scopes.map(scope => scope.ordinal)).toEqual([1, 2]);
