@@ -428,6 +428,24 @@ describe("terminal one-shot chat runner", () => {
     }
   });
 
+  // Replayed history must not make a resumed CLI call report an earlier
+  // failure/completion or concatenate an earlier assistant's final answer.
+  test("one-shot output belongs only to the admitted turn and counts scoped native commands", async () => {
+    const fake=await startOneShotFakeServer([
+      runtimeEvent({id:"old-answer",name:"assistant.delta",sessionId:"session-one-shot",turnId:"old-turn",output:"Old result."}),
+      runtimeEvent({id:"old-terminal",name:"turn.failed",sessionId:"session-one-shot",turnId:"old-turn",output:"Old failure."}),
+      runtimeEvent({id:"new-answer",name:"assistant.delta",sessionId:"session-one-shot",turnId:"turn-one-shot",output:"Selected current dataset."}),
+      runtimeEvent({id:"native-command",name:"tool.completed",sessionId:"session-one-shot",turnId:"turn-one-shot",action:"mcpToolCall",data:{tool:"openpond_exec_command"}}),
+      runtimeEvent({id:"new-terminal",name:"turn.completed",sessionId:"session-one-shot",turnId:"turn-one-shot"}),
+    ]);
+    const output=createStringWritable();const previous=process.exitCode;process.exitCode=undefined;
+    try {
+      const options=parseTerminalArgs(["chat","--message","Select a dataset","--non-interactive","--json","--server",fake.url,"--yes"],"/repo").options;
+      const result=await runOneShotChat(options,{output:output.stream, connection:{server:fake.url,token:"test-token"}});
+      expect(result.status).toBe("completed");expect(result.turnId).toBe("turn-one-shot");expect(result.finalMessage).toBe("Selected current dataset.");expect(result.events.commands).toBe(1);
+    } finally {process.exitCode=previous;fake.stop();}
+  });
+
   test("submits one turn, waits for terminal completion, and emits structured JSON", async () => {
     const fake = await startOneShotFakeServer([
       runtimeEvent({
