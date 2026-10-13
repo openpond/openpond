@@ -7,6 +7,7 @@ import { type OpenPondProfileSkill } from "@openpond/contracts/profile";
 import type { ProfileSkillReadResult } from "../openpond/model-tool-registry.js";
 
 export const BUNDLED_AUTHORING_SKILL_NAMES = [
+  "openpond-cli",
   "openpond-skill-authoring",
   "openpond-agent-authoring",
   "openpond-refiner-authoring",
@@ -15,6 +16,7 @@ export const BUNDLED_AUTHORING_SKILL_NAMES = [
 export type BundledAuthoringSkillName = typeof BUNDLED_AUTHORING_SKILL_NAMES[number];
 
 const REFERENCE_FILES: Record<BundledAuthoringSkillName, readonly string[]> = {
+  "openpond-cli": ["references/experiments-and-training.md"],
   "openpond-skill-authoring": [
     "references/skill-package-layout.md",
     "references/copying-and-adaptation.md",

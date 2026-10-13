@@ -11,6 +11,19 @@ export const SHIPPED_OPENPOND_SKILL_NAMES = [
 
 export const BUILT_IN_OPENPOND_PROFILE_SKILLS = [
   {
+    name: "openpond-cli",
+    description: "Use the OpenPond CLI for datasets, graders, experiments, model training, repos, deployments, and tools.",
+    path: "skills/openpond-cli/SKILL.md",
+    scope: "profile" as const,
+    enabled: true,
+    sourcePath: "bundled://openpond",
+    charCount: 0,
+    sourceHash: "bundled",
+    validationStatus: "valid" as const,
+    validationMessages: [],
+    resourceFiles: ["references/experiments-and-training.md"],
+  },
+  {
     name: "openpond-taskset-authoring",
     description:
       "Create, improve, inspect, test, or prepare an OpenPond Taskset from a capability, Profile Agent, consented evidence, or imported data.",
