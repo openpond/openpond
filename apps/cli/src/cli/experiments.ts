@@ -6,11 +6,12 @@ import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl } f
 import { runLocalExperimentsCommand } from "./experiments-local";
 
 export async function runExperimentsCommand(options: Record<string, string | boolean>, rest: string[]) {
+  if(rest[0] === "signal-plan" || rest[0] === "signal-report") return (await import("./experiments-signal")).runExperimentsSignalCommand(options, rest);
   if(options.local===true||options.local==="true")return runLocalExperimentsCommand(options,rest);
   if(options.revision!==undefined||options.contentHash!==undefined)throw new Error("Experiments retain their immutable configuration on the run; definition revisions are not selectable.");
   const [action, id] = rest;
   const teamId = optionString(options, "team");
-  if (!teamId || !action || rest.length > (action === "compare" ? 3 : 2)) throw new Error("usage: experiments <defaults|create-comparison|comparison-budget|prepare-harness|run|read|list|status|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>]");
+  if (!teamId || !action || rest.length > (action === "compare" ? 3 : 2)) throw new Error("usage: experiments <defaults|create-comparison|comparison-budget|prepare-harness|run|read|list|status|diagnostics|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>]");
   const config = await loadConfig();
   const credentials = { teamId, apiKey: await ensureApiKey(config, resolveBaseUrl(config)),
     baseUrl: resolveApiBaseUrlOption(options) ?? config.apiBaseUrl ?? DEFAULT_OPENPOND_API_BASE_URL };
@@ -45,6 +46,15 @@ export async function runExperimentsCommand(options: Record<string, string | boo
     if (!id) throw new Error(`${action} requires an id.`);
     if (action === "read") result = await experiments.get(id);
     else if (action === "status") result = await experiments.get(id);
+    else if (action === "diagnostics") {
+      const run = await experiments.get(id);
+      const afterSequence = optionString(options, "afterSequence");
+      result = await experiments.diagnostics(id, {
+        manifestHash: run.manifest.contentHash,
+        ...(afterSequence ? { afterSequence: Number(afterSequence) } : {}),
+        afterCallId: optionString(options, "afterCallId") || undefined,
+      });
+    }
     else if (action === "cancel") result = await experiments.cancel(id);
     else if (action === "duplicate") {
       const operationId = optionString(options, "operationId");

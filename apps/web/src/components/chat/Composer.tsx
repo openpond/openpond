@@ -789,10 +789,12 @@ export function Composer({
       inputDisabled
     )
       return;
-    focusRequestAppliedRef.current = focusRequestId;
-    window.requestAnimationFrame(() => {
-      inputRef.current?.focusAtPromptIndex(prompt.length);
+    const frame = window.requestAnimationFrame(() => {
+      if (!inputRef.current?.element?.isConnected) return;
+      inputRef.current.focusAtPromptIndex(prompt.length);
+      focusRequestAppliedRef.current = focusRequestId;
     });
+    return () => window.cancelAnimationFrame(frame);
   }, [focusRequestId, inputDisabled, prompt.length]);
 
   useEffect(() => {

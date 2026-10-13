@@ -161,6 +161,7 @@ export async function setCollectorSchedule(input: CollectorServiceSetup, connect
   try {
     const connection = store.connections().find(item => item.id === connectionId);
     if (!connection || (schedule && connection.state === "disconnected")) throw new Error("Select a connected source before scheduling imports.");
+    if (schedule && connection.selectedSessionKeys?.length === 0) throw new Error("Choose conversations to upload before enabling continual imports.");
     const owner = store.setting("scheduleOwner");
     if (owner) {
       const { pid } = JSON.parse(owner) as { pid: number };

@@ -73,6 +73,7 @@ function ImportCard({ item, status, disabled, onAction, onSchedule }: {
       <div><dt>Project</dt><dd>{item.projectId}</dd></div>
       <div><dt>Source</dt><dd>{item.sourceRoot}</dd></div>
       <div><dt>Initial history</dt><dd>{item.since ? `Since ${dateTime(item.since, status.timezone)}` : "All history"}</dd></div>
+      <div><dt>Upload selection</dt><dd>{item.selectedConversations === null ? "All history" : `${item.selectedConversations} approved conversations`}</dd></div>
       <div><dt>Last successful sync</dt><dd>{dateTime(item.lastSuccessfulSyncAt, status.timezone)}</dd></div>
       <div><dt>Next sync</dt><dd>{item.nextRunAt ? dateTime(item.nextRunAt, status.timezone) : item.schedule ? "Source paused or disconnected" : "Manual only"}</dd></div>
     </dl>
@@ -83,9 +84,10 @@ function ImportCard({ item, status, disabled, onAction, onSchedule }: {
     </div> : <p>{item.admitted} turns imported · {item.queued} updates queued{run?.state === "cancelled" ? " · Last run cancelled" : ""}</p>}
     {item.error || run?.state === "failed" ? <p role="alert">{item.error ?? run?.error}</p> : null}
     <ConversationImportSchedule schedule={item.schedule} name={source?.name ?? item.source} disabled={disabled}
-      disconnected={item.state === "disconnected"} onSave={onSchedule} />
+      disconnected={item.state === "disconnected" || item.selectedConversations === 0} onSave={onSchedule} />
     <div className="settings-button-row">
-      <button className="settings-secondary" type="button" disabled={disabled || status.running || item.state !== "active"} onClick={() => onAction("sync", item.id)}>Sync now</button>
+      <button className="settings-secondary" type="button" disabled={disabled || status.running || item.state !== "active" || item.selectedConversations === 0} onClick={() => onAction("sync", item.id)}>Sync now</button>
+      <button className="settings-secondary" type="button" onClick={() => navigateDesktopRoute({ kind: "view", view: "apps" })}>Choose conversations in Connections</button>
       {item.state === "disconnected" ? <button className="settings-secondary" type="button" disabled={disabled} onClick={() => onAction("reconnect", item.id)}>Reconnect</button> : <>
         <button className="settings-secondary" type="button" disabled={disabled} onClick={() => onAction(item.state === "paused" ? "resume" : "pause", item.id)}>{item.state === "paused" ? "Resume source" : "Pause source"}</button>
         <button className="settings-secondary" type="button" disabled={disabled} onClick={() => onAction("disconnect", item.id)}>Disconnect</button>

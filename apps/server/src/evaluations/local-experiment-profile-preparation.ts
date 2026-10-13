@@ -1,7 +1,7 @@
 import { OpenPondProfileRefSchema } from "@openpond/contracts";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
-import { PrepareHarnessExperimentSchema,PreparedHarnessExperimentSchema } from "openpond-sdk/experiments";
+import { PrepareHarnessExperimentSchema,PreparedHarnessExperimentSchema,resolveHarnessExperimentSampling } from "openpond-sdk/experiments";
 import type { createProfileEvaluationRunPreparationService } from "../harness/profile-evaluation-run-preparation.js";
 import type { TasksetPackage } from "openpond-sdk/taskset-packages";
 import { localPackageGraders } from "./local-experiment-admission.js";
@@ -19,12 +19,16 @@ export async function prepareLocalProfileExperiment(input:{raw:unknown;teamId:st
   const request=PrepareHarnessExperimentSchema.extend({profileRef:OpenPondProfileRefSchema,profileSource:z.object({sourceRevision:z.string().min(1).max(500),harnessRelease:z.object({id:z.string().min(1),contentHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict()}).strict().optional()}).parse(input.raw);
   if(request.profileRef.repositoryId!==request.profileRepositoryId)throw new LocalExperimentError("local_profile_origin_not_qualified","Choose an accepted device-local Profile repository.",403);
   if(request.reasoningEffort)throw new LocalExperimentError("local_profile_sampling_not_qualified","This local Profile owner does not admit reasoning overrides.",422);
+  if(request.localRuntime&&(request.maxOutputTokens!==undefined||request.temperature!==undefined||request.topP!==undefined))
+    throw new LocalExperimentError("local_profile_sampling_not_qualified","This native provider runtime does not admit output or sampling overrides.",422);
+  const sampling=request.localRuntime?undefined:resolveHarnessExperimentSampling(request);
   const prepared=await input.prepare({id:`local-profile-review-${contentHash([input.teamId,request.operationId]).slice(0,40)}`,
-    createdAt:"1970-01-01T00:00:00.000Z",profileRef:request.profileRef,...(request.profileSource?{profileSource:request.profileSource}:{}),definitionId:request.definitionId,externalDatasetBinding:request.externalDatasetBinding,modelRef:{providerId:"openpond",modelId:request.modelId},maximumSpendUsd:request.maximumCostUsd});
+    createdAt:"1970-01-01T00:00:00.000Z",profileRef:request.profileRef,...(request.profileSource?{profileSource:request.profileSource}:{}),definitionId:request.definitionId,externalDatasetBinding:request.externalDatasetBinding,modelRef:{providerId:request.localRuntime?.providerId??"openpond",modelId:request.modelId},maximumSpendUsd:request.maximumCostUsd},{modelSampling:sampling});
   const source=prepared.manifest.profileEvaluation!;
   const value=await input.loadPackage(prepared);
   const policy={kind:"hosted_harness" as const,modelId:request.modelId,profileRepositoryId:request.profileRepositoryId,
-    source,modelConfigurationHash:prepared.modelConfigurationHash,packageHash:value.contentHash};
+    ...sampling,
+    source,modelConfigurationHash:prepared.modelConfigurationHash,packageHash:value.contentHash,...(source.externalDatasetBinding?{externalDatasetBinding:source.externalDatasetBinding}:{}),...(request.localRuntime?{localRuntime:request.localRuntime}:{})};
   const runRequest={schemaVersion:"openpond.modelTasksetRunRequest.v1" as const,operationId:request.operationId,teamId:input.teamId,
     modelProjectId:null,name:source.definitionId,taskset:{id:prepared.taskset.id,revision:prepared.taskset.revision,contentHash:prepared.taskset.contentHash},
     policy,population:prepared.manifest.population};

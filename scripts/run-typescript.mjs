@@ -12,8 +12,9 @@ if (compiler !== "tsc" && compiler !== "tsgo") {
   process.exit(1);
 }
 
-const packagePath = require.resolve(`${compiler === "tsc" ? "typescript" : "@typescript/native-preview"}/package.json`);
-const entry = path.join(path.dirname(packagePath), require(packagePath).bin[compiler]);
+// Keep the TypeScript JS API dependency separate from the native compiler.
+const packagePath = require.resolve(`${compiler === "tsgo" ? "typescript-native" : "typescript"}/package.json`);
+const entry = path.join(path.dirname(packagePath), require(packagePath).bin.tsc);
 const ci = process.env.CI && !["0", "false"].includes(process.env.CI.toLowerCase());
 const gentle = !ci && process.env.TYPECHECK_UNRESTRICTED !== "1";
 const env = { ...process.env };

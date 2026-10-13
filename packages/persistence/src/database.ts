@@ -1,7 +1,6 @@
-import { protectPrivateDirectory } from "./private-permissions.js";
-import { assertStorageAncestors } from "./path-safety.js";
-import { mkdirSync, chmodSync, existsSync, lstatSync } from "node:fs";
-import path from "node:path";
+import { openStorageDatabase } from "./storage-database.js";
+import { readStorageDatabase } from "./readonly-database.js";
+export { openStorageDatabase } from "./storage-database.js";
 import { DatabaseSync } from "node:sqlite";
 import { storagePaths } from "./home.js";
 import { PersistenceError } from "./errors.js";
@@ -26,37 +25,54 @@ CREATE TABLE IF NOT EXISTS provider_connection_state (id TEXT PRIMARY KEY, paylo
 export type LocalRecordTable = "scaffold_registrations" | "account_sessions" | "account_selection" | "profile_installations" | "extension_installations" | "client_preferences" | "saved_local_projects" | "codex_sidebar_state" | "browser_tab_state" | "project_trust" | "refiner_bindings" | "refiner_transitions" | "config_run_snapshots" | "provider_connection_state";
 type RecordRow = { payload: string; revision: number };
 
-export function openStorageDatabase(filePath: string, readOnly = false): DatabaseSync {
-  assertStorageAncestors(path.dirname(filePath));
-  if (!readOnly) { mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 }); protectPrivateDirectory(path.dirname(filePath)); }
-  if (existsSync(filePath) && lstatSync(filePath).isSymbolicLink()) throw new PersistenceError({ code: "UNSAFE_STORAGE_PATH", path: filePath, message: "Storage database cannot be a symbolic link.", action: "Choose a regular local database file." });
-  const db = new DatabaseSync(filePath, { readOnly });
-  try {
-    db.exec("PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
-    if (!readOnly) {
-      db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
-      if (process.platform !== "win32") chmodSync(filePath, 0o600);
-    }
-    return db;
-  } catch (error) { db.close(); throw error; }
-}
 
 export function withLocalDatabase<T>(home: string, action: (db: DatabaseSync) => T): T {
   const db = openStorageDatabase(storagePaths(home).database);
   try { db.exec(PERSISTENCE_TABLES_SQL); return action(db); } finally { db.close(); }
 }
 
+/** Reads do not change journal mode, create schemas, or take a writer lock. */
+function readLocalTable<T>(home: string, table: LocalRecordTable, empty: T, read: (db: DatabaseSync) => T): T {
+  return readStorageDatabase(storagePaths(home).database, empty, db => {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)) return empty;
+    return read(db);
+  });
+}
+
+/** Read a related set of records from one consistent SQLite snapshot, without
+ * retaining account data or transactions across calls. */
+export function getLocalRecords(
+  home: string,
+  requests: readonly { table: LocalRecordTable; id: string }[],
+): ({ value: unknown; revision: number } | null)[] {
+  return readStorageDatabase(storagePaths(home).database, requests.map(() => null), db => {
+    db.exec("BEGIN");
+    const tables = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(row => row.name));
+    const statements = new Map<LocalRecordTable, ReturnType<DatabaseSync["prepare"]>>();
+    const result = requests.map(({ table, id }) => {
+      if (!tables.has(table)) return null;
+      let statement = statements.get(table);
+      if (!statement) {
+        statement = db.prepare(`SELECT payload, revision FROM ${table} WHERE id = ?`);
+        statements.set(table, statement);
+      }
+      const row = statement.get(id) as RecordRow | undefined;
+      return row ? { value: JSON.parse(row.payload) as unknown, revision: row.revision } : null;
+    });
+    db.exec("COMMIT");
+    return result;
+  });
+}
+
 export function getLocalRecord<T>(home: string, table: LocalRecordTable, id: string): { value: T; revision: number } | null {
-  if (!existsSync(storagePaths(home).database)) return null;
-  return withLocalDatabase(home, (db) => {
+  return readLocalTable(home, table, null, db => {
     const row = db.prepare(`SELECT payload, revision FROM ${table} WHERE id = ?`).get(id) as RecordRow | undefined;
     return row ? { value: JSON.parse(row.payload) as T, revision: row.revision } : null;
   });
 }
 
 export function listLocalRecords<T>(home: string, table: LocalRecordTable): Record<string, { value: T; revision: number }> {
-  if (!existsSync(storagePaths(home).database)) return {};
-  return withLocalDatabase(home, (db) => Object.fromEntries((db.prepare(`SELECT id, payload, revision FROM ${table} ORDER BY id`).all() as (RecordRow & { id: string })[]).map((row) => [row.id, { value: JSON.parse(row.payload) as T, revision: row.revision }])));
+  return readLocalTable(home, table, {}, db => Object.fromEntries((db.prepare(`SELECT id, payload, revision FROM ${table} ORDER BY id`).all() as (RecordRow & { id: string })[]).map(row => [row.id, { value: JSON.parse(row.payload) as T, revision: row.revision }])));
 }
 
 export function putLocalRecord<T>(home: string, table: LocalRecordTable, id: string, value: T, expectedRevision?: number | null): number {

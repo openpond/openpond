@@ -89,3 +89,13 @@
     font-size: 29px;
   }
 }
+
+.app-splash-recovery {
+  position: absolute;
+  top: calc(50% + 70px);
+  max-width: min(440px, calc(100% - 48px));
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+}

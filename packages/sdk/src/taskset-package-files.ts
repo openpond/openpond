@@ -5,7 +5,7 @@ import { ImmutableAssetRefSchema, sha256 } from "@openpond/harness";
 export const MAX_TASKSET_PACKAGE_BYTES = 64 * 1024 * 1024;
 export const TasksetPackageFileSchema = z.object({
   asset: ImmutableAssetRefSchema,
-  base64: z.string().max(Math.ceil(MAX_TASKSET_PACKAGE_BYTES / 3) * 4),
+  base64: z.string(),
 }).strict();
 export type TasksetPackageFile = z.infer<typeof TasksetPackageFileSchema>;
 

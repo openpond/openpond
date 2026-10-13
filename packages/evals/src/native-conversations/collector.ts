@@ -36,7 +36,7 @@ export async function runCollector(input: {
       }
     }
     const now = new Date();
-    selected = store.connections().filter(connection => connection.state !== "disconnected" &&
+    selected = store.connections().filter(connection => connection.state !== "disconnected" && connection.selectedSessionKeys?.length !== 0 &&
       (!input.connectionIds || input.connectionIds.includes(connection.id)) &&
       (input.trigger !== "scheduled" || (connection.state === "active" && scheduledSyncDue(store.schedule(connection.id), store.setting(`scheduledMinute:${connection.id}`), now))));
     if (input.trigger === "scheduled")
@@ -149,12 +149,13 @@ export async function runCollector(input: {
         for (let pass = 0; pass < 3; pass++) {
           await check();
           const revision = connection.revision, requested = connection.requestedSyncRevision ?? 0;
+          const selection = JSON.stringify(connection.selectedSessionKeys);
           phase = "source";
           new CollectorSourceCache(store).seed(connection, until, store.coverage.manifest(connection.id));
           store.coverage.begin(connection, `${nonce}-${pass}`, run.startedAt, until);
           const checkAcquisition = async () => {
             await check(); phase = "source";
-            if (connection.revision !== revision) throw new CollectorScopeChangedError("Source settings changed during acquisition.");
+            if (connection.revision !== revision || JSON.stringify(connection.selectedSessionKeys) !== selection) throw new CollectorScopeChangedError("Source settings changed during acquisition.");
           };
           try {
             await acquireCollectorSource({ store, connection, until, check: checkAcquisition,
@@ -165,7 +166,7 @@ export async function runCollector(input: {
           }
           errors.set(connection.id, "source", null);
           await drain();
-          await input.transport.publishCoverage(connection, store.coverage.finish(connection.id, true), signal);
+          await input.transport.publishCoverage(connection, store.coverage.finish(connection.id, connection.selectedSessionKeys === undefined), signal);
           connection = retained(connection);
           if (connection.revision !== revision) {
             if (pass === 2) throw new Error("Source settings changed repeatedly during import. Run Sync now again.");

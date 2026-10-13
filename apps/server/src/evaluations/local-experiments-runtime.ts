@@ -1,6 +1,9 @@
+import {createInstallationLocalProfileDatasets} from "../harness/installation-local-profile-datasets.js";
 import {createLocalRewardGradingResolver} from "./local-reward-grading.js";
 import {createLocalExternalDatasetPreparation} from "../harness/local-external-dataset-preparation.js";
 import {createClaudeCodeOwner} from "./claude-code-owner.js";
+import {createCodexExperimentOwner} from "./codex-experiment-owner.js";
+import {prepareLocalExperimentModel} from "./local-experiment-model.js";
 import {resolveLocalHumanPublishedPackage} from "../human-review/published-package.js";
 import {createLocalInferenceOwner,type LocalInferenceState} from "./local-experiment-local-inference.js";
 import {OpenPondTasksetPackageClient} from "openpond-sdk/taskset-packages";
@@ -26,6 +29,7 @@ type SourceDeps=Parameters<typeof createLocalExperimentSourceChoices>[0];
  * native inference. Session dispatch remains lazy until the turn runner exists. */
 export function createLocalExperimentsRuntime(deps: {
   store:SqliteStore;storeDir:string;ownerId:string;localInferenceState?:LocalInferenceState;candidateOrigins?:LocalExperimentCandidateOriginAdapter;
+  codexStatus?:()=>Promise<import("@openpond/contracts").CodexStatus>;
   actorId:ProfileDeps["actorId"];teamId:ProfileDeps["teamId"];
   createSession:ProfileDeps["createSession"];sendTurn:ProfileDeps["sendTurn"];interruptSessionTurn:ProfileDeps["interruptSessionTurn"];
   saveOutput:ProfileDeps["saveOutput"];recordOutput:ProfileDeps["recordOutput"];
@@ -33,6 +37,12 @@ export function createLocalExperimentsRuntime(deps: {
   resolveAccess:()=>Promise<{apiBaseUrl:string;token:string}>;
 }) {
   const {store,storeDir}=deps;
+  const codex=deps.localInferenceState?createCodexExperimentOwner({state:deps.localInferenceState,status:deps.codexStatus}):undefined;
+  const prepareNativeModel:NonNullable<ProfileDeps["prepareNativeModel"]>=configuration=>{
+    const policy=configuration.request.policy;
+    if(policy.kind!=="hosted_harness"||!policy.localRuntime||!codex)throw new Error("The native Profile model owner is unavailable.");
+    return codex.prepare(configuration);
+  };
   const sourceAccess=async()=>({...await deps.resolveAccess(),teamId:await deps.teamId(),actorId:await deps.actorId()});
   const origins=createLocalProfileOriginAdapter({store,storeDir,resolveAccess:sourceAccess});
   const candidate = deps.candidateOrigins;
@@ -50,8 +60,8 @@ export function createLocalExperimentsRuntime(deps: {
     return deps.prepare(raw,{...options,selectedWorkflows:await origins.workflows(ref,source)});
   };
   const localNativeOwner=createLocalNativeExperimentOwner({...deps,authorizeRemote:createLocalExperimentRemoteSourceAuthority({resolveAccess:sourceAccess})});
-  const resolveExternalDataset=createLocalExternalDatasetPreparation({store,storeDir,resolveAccess:deps.resolveAccess,identity:async()=>({actorId:await deps.actorId(),teamId:await deps.teamId()})});
-  const localProfileOwner=createLocalProfileExperimentOwner({...deps,prepare,authorizeOrigin,resolveProfileRef,resolveExternalDataset,loadPackage:async prepared=> {
+  const resolveExternalDataset=createInstallationLocalProfileDatasets({store,storeDir,remote:createLocalExternalDatasetPreparation({store,storeDir,resolveAccess:deps.resolveAccess,identity:async()=>({actorId:await deps.actorId(),teamId:await deps.teamId()})})}).resolveExternalDataset;
+  const localProfileOwner=createLocalProfileExperimentOwner({...deps,prepare,prepareNativeModel,authorizeOrigin,resolveProfileRef,resolveExternalDataset,loadPackage:async prepared=> {
     const source=prepared.manifest.profileEvaluation!;
     if(source.externalDatasetBinding){
       const admitted=await resolveExternalDataset(source.externalDatasetBinding,{profileRef:prepared.profileRef,sourceRevision:prepared.binding.sourceRevision,harnessRelease:prepared.binding.harnessRelease});
@@ -73,6 +83,11 @@ export function createLocalExperimentsRuntime(deps: {
   const inference=loopback&&claude?{choices:loopback.choices,claudeReadiness:claude.readiness,claudeControl:claude.control,prepare:(configuration:Parameters<typeof loopback.prepare>[0])=>configuration.request.policy.kind==="hosted_chat"&&configuration.request.policy.localRuntime?.providerId==="claude-code"?claude.prepare(configuration):loopback.prepare(configuration)}:undefined;
   const resolveSelectedRewards=createLocalRewardGradingResolver({resolveAccess:deps.resolveAccess,identity:async()=>({actorId:await deps.actorId(),teamId:await deps.teamId()})});
   const localExperiments=createLocalExperimentService({resolveSelectedRewards,localInference:inference,store,storeDir,runtimeEventsForTurn:id=>store.runtimeEventsForTurn(id),ownerId:deps.ownerId,stream:streamOpenPondHostedChatTurn,
+    prepareModel:configuration=>configuration.request.policy.kind==="hosted_harness"&&configuration.request.policy.localRuntime
+      ? prepareNativeModel(configuration)
+      : configuration.request.policy.kind==="hosted_chat"&&configuration.request.policy.localRuntime
+        ? inference!.prepare(configuration)
+        : prepareLocalExperimentModel(configuration.request.policy),
     actorId:deps.actorId,teamId:deps.teamId,nativeHarness:localNativeOwner.native,profile:localProfileOwner.profile,
     sourceChoices:localSourceChoices.list,sourceDataset:localSourceChoices.population,
     environment:createLocalExperimentEnvironment(),authorizeProject:createLocalExperimentProjectAuthorizer({resolveAccess:deps.resolveAccess}),

@@ -12,7 +12,14 @@ export function expandLocalHomePath(value: string): string {
 export async function loadLocalOutputFile(repoPath: string, filePath: string) {
   const target = expandLocalHomePath(filePath.trim());
   if (!isOutsideWorkspace(repoPath, target)) {
-    try { return await loadWorkspaceFileAtPath(repoPath, target); }
+    try {
+      const file = await loadWorkspaceFileAtPath(repoPath, target);
+      // An explicit local output keeps its identity even when the standalone
+      // workspace root is its parent directory. Returning only its basename
+      // would turn the completed read into a different sidebar tab and route
+      // later reloads through the chat's currently selected workspace.
+      return path.isAbsolute(target) ? { ...file, path: filePath.trim() } : file;
+    }
     catch (error) {
       // Generated outputs may be gitignored, but an explicit local link still
       // names a readable file. Keep the normal containment and size limits.

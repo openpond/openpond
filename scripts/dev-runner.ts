@@ -1,3 +1,4 @@
+import { createServerStartupDeadline, isStorageStartupProgress, STORAGE_STARTUP_PROGRESS_PREFIX } from "../packages/runtime/src/ready-line-parser.ts";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -302,9 +303,7 @@ export function buildDevRunnerPlan(
   };
 }
 
-async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
-  for (const setup of plan.setupCommands) runSetupCommand(setup);
-
+export async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
   const running: RunningProcess[] = [];
   const serverProcess = plan.processes.find((processPlan) => processPlan.id === "server");
   const rendererProcess = plan.processes.find((processPlan) => processPlan.id === "renderer");
@@ -331,6 +330,7 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
           if (reusable === "incompatible") {
             throw new Error(`${plan.urls.server} is already occupied by a different service.`);
           }
+          for (const setup of plan.setupCommands.filter((command) => command.id !== "build-desktop")) runSetupCommand(setup);
           const server = startProcess(serverProcess, { captureReady: true });
           running.push({ id: serverProcess.id, child: server.child });
           serverReady = await server.ready;
@@ -360,6 +360,7 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
     }
 
     if (desktopProcess) {
+      for (const setup of plan.setupCommands.filter((command) => command.id === "build-desktop")) runSetupCommand(setup);
       const desktop = startProcess(desktopProcess);
       running.push({ id: desktopProcess.id, child: desktop.child });
     }
@@ -535,13 +536,12 @@ function waitForReady(
       reject(error);
     };
     const cleanup = () => {
-      clearTimeout(timer);
+      deadline.stop();
       child.stdout.off("data", onStdout);
       child.off("exit", onExit);
     };
-    const timer = setTimeout(
+    const deadline = createServerStartupDeadline(timeoutMs,
       () => fail(new Error(`${processId} did not print ${READY_PREFIX.trim()} in time`)),
-      timeoutMs,
     );
     const onStdout = (chunk: Buffer) => {
       buffer += chunk.toString("utf8");
@@ -549,6 +549,12 @@ function waitForReady(
       while (newline !== -1) {
         const line = buffer.slice(0, newline).replace(/\r$/, "");
         buffer = buffer.slice(newline + 1);
+        if (line.startsWith(STORAGE_STARTUP_PROGRESS_PREFIX)) {
+          try {
+            const progress: unknown = JSON.parse(line.slice(STORAGE_STARTUP_PROGRESS_PREFIX.length));
+            if (isStorageStartupProgress(progress)) deadline.progress(progress);
+          } catch { /* Unrecognized output cannot extend startup. */ }
+        }
         if (line.startsWith(READY_PREFIX)) {
           finish(JSON.parse(line.slice(READY_PREFIX.length)) as ReadyPayload);
           return;

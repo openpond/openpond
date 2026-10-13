@@ -1,3 +1,5 @@
+import type { StorageStartupProgress } from "@openpond/runtime/ready-line-parser";
+import { startupProgressHtml } from "./desktop-startup-progress-page.js";
 import { UI_THEME_CSS } from "@openpond/contracts/ui-theme.generated";
 import { resolvedDesktopTheme } from "./desktop-appearance.js";
 import type { BrowserWindow } from "electron";
@@ -73,4 +75,24 @@ export async function showLoadError(window: BrowserWindow, error: unknown, onPag
   `)}`;
   onPageUrl(pageUrl);
   await window.loadURL(pageUrl);
+}
+
+export async function showStartupProgressPage(window: BrowserWindow, onPageUrl: (url: string) => void): Promise<void> {
+  const url = `data:text/html;charset=utf-8,${encodeURIComponent(startupProgressHtml(UI_THEME_CSS, resolvedDesktopTheme(), appDisplayName()))}`;
+  onPageUrl(url);
+  await window.loadURL(url);
+}
+
+export function updateStartupProgress(window: BrowserWindow, progress: StorageStartupProgress): void {
+  if (window.isDestroyed()) return;
+  window.setProgressBar(progress.percent === undefined ? -1 : progress.percent / 100);
+  // Data is inserted as a JS string and assigned through textContent, never HTML.
+  void window.webContents.executeJavaScript(`(() => {
+    const label = document.getElementById("openpond-startup-message");
+    const bar = document.getElementById("openpond-startup-progress");
+    if (!label || !bar) return;
+    label.textContent = ${JSON.stringify(progress.message + (progress.percent === undefined ? "" : ` (${progress.percent}%)`))};
+    bar.hidden = ${progress.percent === undefined};
+    bar.value = ${progress.percent ?? 0};
+  })()`).catch(() => undefined); // Navigation to the ready app may already be underway.
 }

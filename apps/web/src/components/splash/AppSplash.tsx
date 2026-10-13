@@ -34,9 +34,15 @@ export function AppSplash({ startup }: { startup: AppStartupState }) {
   }, []);
 
   return (
-    <main className="app-splash" aria-busy="true" aria-label={startup.label} role="status">
+    <main className="app-splash" aria-busy={!startup.error || startup.retrying} aria-label={startup.label} role="status">
       <OpenPondLockup visibleLetterCount={visibleLetterCount} />
-      <span className="app-splash-status">{startup.label}</span>
+      <span className="app-splash-status">{startup.error ? "Unable to load OpenPond" : startup.label}</span>
+      {startup.error ? <div className="app-splash-recovery">
+        <p role="alert">{startup.error}</p>
+        <button className="app-splash-retry" type="button" onClick={startup.retry} disabled={startup.retrying}>
+          {startup.retrying ? "Retrying…" : "Try again"}
+        </button>
+      </div> : null}
     </main>
   );
 }

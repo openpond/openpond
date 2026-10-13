@@ -112,15 +112,21 @@ export type PreferenceDatasetReleaseView = {
 const ACTIVE_TRAINING_POLL_INTERVAL_MS = 10_000;
 const IDLE_TRAINING_POLL_INTERVAL_MS = 30_000;
 
-export function useTraining(input: { connection: ClientConnection | null; profileId: string }) {
-  const { connection, profileId } = input;
+export function useTraining(input: { connection: ClientConnection | null; profileId: string; enabled?: boolean }) {
+  const { connection, profileId, enabled = true } = input;
   const queries = useQueryClient();
   const connectionScope = connectionQueryScope(connection);
   const queryKey = useMemo(() => ["training", connectionScope, profileId] as const, [connectionScope, profileId]);
-  const queryFn = useCallback(async () => TrainingStateResponseSchema.parse(await api.trainingState(connection!, profileId)), [connection, profileId]);
-  const stateQuery = useQuery({ queryKey, queryFn, enabled: Boolean(connection) });
+  const queryFn = useCallback(async ({ signal }: { signal: AbortSignal }) => TrainingStateResponseSchema.parse(await api.trainingState(connection!, profileId, signal)), [connection, profileId]);
+  const stateQuery = useQuery({
+    queryKey: enabled ? queryKey : ["training-inactive", connectionScope, profileId],
+    queryFn,
+    enabled: Boolean(connection) && enabled,
+    // Release large histories after navigating away; navigation has its own compact query.
+    gcTime: 60_000,
+  });
   const payload = stateQuery.data ?? null;
-  const loading = Boolean(connection) && stateQuery.isPending;
+  const loading = Boolean(connection) && enabled && stateQuery.isPending;
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activityRevisionRef = useRef<string | null>(null);
@@ -140,6 +146,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     await queries.cancelQueries({ queryKey, exact: true });
     await queries.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
     await queries.invalidateQueries({ queryKey: ["task-inventory", connectionScope, profileId] });
+    await queries.invalidateQueries({ queryKey: ["training-navigation", connectionScope, profileId] });
     return refresh();
   }, [queries, queryKey, connectionScope, profileId, refresh]);
 
@@ -167,9 +174,10 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       ].some(Boolean)
     : false;
   useEffect(() => {
-    if (!connection) return undefined;
+    if (!connection || !enabled) return undefined;
     let active = true;
     let timer: number | null = null;
+    const controller = new AbortController();
     // The state projection includes immutable training and evaluation history and
     // can become large. Poll the compact activity projection frequently enough
     // for run monitoring, but do not force the renderer to parse a full state
@@ -179,8 +187,13 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       : IDLE_TRAINING_POLL_INTERVAL_MS;
     const poll = async () => {
       let nextDelay = initialDelay;
+      if (document.visibilityState === "hidden") {
+        if (active) timer = window.setTimeout(() => void poll(), IDLE_TRAINING_POLL_INTERVAL_MS);
+        return;
+      }
       try {
-        const activity = await api.trainingActivity(connection, profileId);
+        const activity = await api.trainingActivity(connection, profileId, controller.signal);
+        if (!active) return;
         nextDelay = activity.active
           ? ACTIVE_TRAINING_POLL_INTERVAL_MS
           : IDLE_TRAINING_POLL_INTERVAL_MS;
@@ -191,16 +204,17 @@ export function useTraining(input: { connection: ClientConnection | null; profil
           await refresh();
         }
       } catch (caught) {
-        setError(message(caught));
+        if (active) setError(message(caught));
       }
       if (active) timer = window.setTimeout(() => void poll(), nextDelay);
     };
     timer = window.setTimeout(() => void poll(), initialDelay);
     return () => {
       active = false;
+      controller.abort();
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [connection, hasActiveWork, profileId, refresh]);
+  }, [connection, enabled, hasActiveWork, profileId, refresh]);
 
   const actions = useMemo(() => ({
     ...createModelStarterActions(connection, mutate),

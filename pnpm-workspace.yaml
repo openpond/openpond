@@ -7,6 +7,11 @@ strictPeerDependencies: true
 # Public SDK dependencies retain registry ranges while development uses matching local packages.
 linkWorkspacePackages: true
 
+# Declaration bundling uses the JavaScript compiler API; native TypeScript 7
+# supplies a CLI instead. Keep that consumer on the compatible API package.
+overrides:
+  'dts-bundle-generator>typescript': '5.9.3'
+
 # Trusted first-party release required by the SDK publish chain. Keep this
 # exact; do not exempt future Harness versions from the release-age policy.
 minimumReleaseAgeExclude:

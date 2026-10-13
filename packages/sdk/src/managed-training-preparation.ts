@@ -28,13 +28,14 @@ export type TrainingPreparationFile = TrainingEvaluationSource["assets"][number]
 
 export interface ManagedTrainingPreparationInput {
   origin?: TrainingHandoffOrigin;
+  executionMode?: "qualification";
   project: ModelProject;
   manifest: HarnessRunManifest;
   recipe: PolicyJob["recipe"];
   taskset: TrainingJobSubmission["source"]["taskset"];
   bundleManifest: ResolvedTrainingBundleManifest;
   files: TrainingPreparationFile[];
-  evaluationSource: TrainingEvaluationSource;
+  evaluationSource?: TrainingEvaluationSource;
   rewardSource: PolicyJob["rewardSource"];
   resumeFrom: PolicyJob["resumeFrom"];
   approval: Pick<
@@ -55,6 +56,13 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
   const { project, recipe, taskset, approval } = input;
   const manifest = HarnessRunManifestSchema.parse(input.manifest);
   const bundle = ResolvedTrainingBundleManifestSchema.parse(input.bundleManifest);
+  const qualification = input.executionMode === "qualification";
+  if (manifest.executionMode !== input.executionMode || bundle.executionMode !== input.executionMode) {
+    throw new Error("Managed submission execution mode differs from its immutable bundle.");
+  }
+  if (qualification && (input.evaluationSource || input.resumeFrom || input.rewardSource.kind !== "deterministic")) {
+    throw new Error("Qualification requires the original learner, deterministic rewards, and no evaluation source.");
+  }
   const { contentHash: manifestHash, ...manifestContent } = manifest;
   const { contentHash: bundleHash, ...bundleContent } = bundle;
   if (
@@ -96,18 +104,25 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
   if (input.idempotencyKey !== undefined)
     z.string().trim().min(16).max(191).parse(input.idempotencyKey);
   const files = verifyFiles(bundle, input.files);
-  const evaluationSource = TrainingEvaluationSourceSchema.parse(input.evaluationSource);
+  const evaluationSource = qualification ? null : TrainingEvaluationSourceSchema.parse(input.evaluationSource);
   const evaluationFile = files.find((file) => file.path === TRAINING_EVALUATION_SOURCE_PATH);
   if (
-    !evaluationFile ||
+    evaluationSource && (!evaluationFile ||
     contentHash(JSON.parse(Buffer.from(evaluationFile.content, "base64").toString("utf8"))) !==
-      contentHash(evaluationSource)
+      contentHash(evaluationSource))
   ) {
     throw new Error("The evaluation source differs from the immutable training bundle.");
   }
-  const evaluation = await trainingEvaluationSourceRef(evaluationSource);
+  if (qualification && (evaluationFile || files.some(file => file.path === "dataset/train.json") || !files.some(file => file.path === "dataset/qualification.json") || !files.some(file => file.path === "qualification-source.json"))) {
+    throw new Error("Qualification requires its dedicated dataset and no training/evaluation datasets.");
+  }
+  if (!qualification && files.some(file => file.path === "dataset/qualification.json" || file.path === "qualification-source.json")) {
+    throw new Error("Qualification datasets cannot be prepared as training.");
+  }
+  const evaluation = evaluationSource ? await trainingEvaluationSourceRef(evaluationSource) : null;
   const payload = {
     schemaVersion: "openpond.managedRlPortableSubmission.v1" as const,
+    ...(qualification ? { executionMode: "qualification" as const } : {}),
     ...(input.origin ? { origin: TrainingHandoffOriginSchema.parse(input.origin) } : {}),
     sourceRunRef: `openpond:model-run:${manifest.id}`,
     name: `OpenPond Managed · ${project.id}`.slice(0, 191),
@@ -121,8 +136,8 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
     modelImprovementQualification: input.modelImprovementQualification ?? null,
     recipe,
     resolvedBundle: { manifest: bundle, files },
-    validationTasks: evaluationSource.tasks,
-    validationAssets: evaluationSource.assets,
+    validationTasks: evaluationSource?.tasks ?? [],
+    validationAssets: evaluationSource?.assets ?? [],
   };
   const artifactContent = {
     schemaVersion: "openpond.trainingInputArtifactUpload.v2" as const,
@@ -152,18 +167,19 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
       taskset,
       tasksetRelease: { id: taskset.id, contentHash: taskset.contentHash },
       dataset: bundle.datasetRelease,
-      evaluation,
+      ...(evaluation ? { evaluation } : {}),
       evidenceSets: bundle.evidenceSetRelease ? [bundle.evidenceSetRelease] : [],
     },
     job: {
       kind: "policy_optimize",
+      ...(qualification ? { executionMode: "qualification" as const } : {}),
       baseModel,
       recipe,
       rewardSource: input.rewardSource,
       resumeFrom: input.resumeFrom,
     },
     requestedCapabilities: [
-      { id: "managed_rl.policy.grpo", version: "1", required: true },
+      { id: qualification ? "managed_rl.policy.qualification" : "managed_rl.policy.grpo", version: "1", required: true },
       {
         id: `managed_rl.rollouts.${manifest.runtimeTarget.placement}`,
         version: "1",

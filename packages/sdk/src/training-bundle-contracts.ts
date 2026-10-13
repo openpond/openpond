@@ -78,6 +78,7 @@ export const TrainingEngineBindingSchema = z
 export const HarnessRunManifestContentSchema = z
   .object({
     schemaVersion: z.literal("openpond.harnessRunManifest.v1"),
+    executionMode: z.literal("qualification").optional(),
     id: ReleaseIdSchema,
     harnessRelease: ImmutableReleaseRefSchema,
     datasetRelease: ImmutableReleaseRefSchema,
@@ -121,6 +122,7 @@ export const HarnessRunManifestSchema = HarnessRunManifestContentSchema.extend({
 export const ResolvedTrainingBundleContentSchema = z
   .object({
     schemaVersion: z.literal("openpond.resolvedTrainingBundle.v1"),
+    executionMode: z.literal("qualification").optional(),
     projection: z.literal("trainer"),
     harnessRelease: ImmutableReleaseRefSchema,
     datasetRelease: ImmutableReleaseRefSchema,

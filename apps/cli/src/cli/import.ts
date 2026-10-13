@@ -15,6 +15,7 @@ import {
   NATIVE_SOURCE_NAMES,
   type ExternalAgentSource,
   type CollectorConnection,
+  validateNativeUploadSelection,
 } from "@openpond/evals/native-conversations";
 import { ConnectedSyncClient } from "openpond-sdk/connected-evidence";
 import { optionString, promptConfirm, parseBooleanOption } from "./common";
@@ -25,6 +26,7 @@ import { runImportJob } from "../importer/run";
 import { collectorSetup, runImporterControl } from "../importer/commands";
 import { retainedReconnect, assertReconnectSource, assertReconnectUnchanged } from "../importer/reconnect";
 import { runImporterBranchCommand } from "../importer/branches";
+import { readUploadSelection } from "../importer/selection";
 
 export async function runImportCommand(
   options: Record<string, string | boolean>,
@@ -37,6 +39,12 @@ export async function runImportCommand(
   const json = parseBooleanOption(options.json),
     print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
   const schedule = importSchedule(options);
+  const upload = parseBooleanOption(options.upload);
+  const selectionFile = optionString(options, "selectionFile");
+  if (upload && !["connect", "reconnect"].includes(action)) throw new Error("Use --upload with import connect or reconnect; import sync is already an explicit upload.");
+  if (selectionFile && !["connect", "reconnect", "sync"].includes(action)) throw new Error("Use --selection-file with connect, reconnect, or sync.");
+  if (selectionFile && action !== "sync" && !upload) throw new Error("Use --upload to confirm the selected initial upload.");
+  if (schedule && !upload && action === "connect") throw new Error("Select an initial upload with --upload before enabling continual imports.");
   if (options.until && action !== "sync") throw new Error("Use --until with import sync to select a fixed event-time cutoff.");
   if (schedule && !["connect", "reconnect", "schedule"].includes(action))
     throw new Error("Use --continual with import connect, reconnect, or schedule.");
@@ -102,7 +110,7 @@ export async function runImportCommand(
   }
   if (action !== "connect" && action !== "reconnect")
     throw new Error(
-      "usage: openpond import <connect|reconnect|discover|status|coverage|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service>",
+      "usage: openpond import <connect|reconnect|discover|status|conversations|coverage|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service>",
     );
   // An unavailable selected/default profile is still an authority choice.
   // Filtering it out could silently connect the sole remaining sibling.
@@ -137,7 +145,7 @@ export async function runImportCommand(
           : "Select --source and optionally --source-path."),
     );
   let range = optionString(options, "range") || "week";
-  if (!reconnect && interactive && !options.range) {
+  if (upload && !reconnect && interactive && !options.range) {
     const prompt = createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -152,13 +160,15 @@ export async function runImportCommand(
   }
   if (!["day", "week", "all"].includes(range))
     throw new Error("--range must be day, week or all.");
-  const since = reconnect ? reconnect.since :
+  const since = selectionFile ? null : reconnect ? reconnect.since :
     range === "all"
       ? null
       : new Date(
           Date.now() - (range === "day" ? 1 : 7) * 86400000,
         ).toISOString();
   const historyLabel = reconnect ? since ? `since ${since}` : "all" : range === "week" ? `last week${options.range ? "" : " (default)"}` : range === "day" ? "last day" : "all";
+  const selection = selectionFile ? await validateNativeUploadSelection(source, await readUploadSelection(selectionFile)) : null;
+  const selectedSessionKeys = selection ? selection.sessionKeys : reconnect ? reconnect.selectedSessionKeys : upload ? undefined : [];
   const preview = await listSessions(source, {
     since: since ?? undefined,
     limit: 100,
@@ -167,7 +177,7 @@ export async function runImportCommand(
     console.log(
       `Found ${preview.items.length}${preview.nextCursor ? "+" : ""} sessions in ${source.root}. Initial history: ${historyLabel}.`,
     );
-  if (!json) console.log(schedule
+  if (!json) console.log(!upload ? "Connect only. No conversations will be uploaded. Choose conversations with import sync --selection-file when ready." : schedule
     ? `Continual imports: ${scheduleDescription(schedule)} local time. Continual learning is unchanged.`
     : "One-time import. Continual imports default to off; existing schedules are unchanged.");
   const projectId = optionString(options, "project");
@@ -175,7 +185,7 @@ export async function runImportCommand(
     !parseBooleanOption(options.yes) &&
     (!interactive ||
       !(await promptConfirm(
-        `Sync this source to ${projectId || "your personal Imported conversations Project"} and ${schedule ? `enable continual imports ${scheduleDescription(schedule)} local time` : "import once (no new schedule)"}?`,
+        `Connect this source to ${projectId || "your personal Imported conversations Project"}${upload ? ` and upload ${selection ? `${selection.sessionKeys.length} selected conversations` : "the selected history window"}` : " without uploading history"}${schedule ? ` and enable continual imports ${scheduleDescription(schedule)} local time` : ""}?`,
         true,
       )))
   )
@@ -217,9 +227,12 @@ export async function runImportCommand(
     requestedSyncRevision: retained.requestedSyncRevision,
     completedSyncRevision: retained.completedSyncRevision,
     since,
+    selectedSessionKeys,
     keepSyncing: false,
     state: retained.state,
   });
   if (schedule) await setCollectorSchedule(collectorSetup(directory), retained.id, schedule);
-  await runImportJob({ directory, connectionId: retained.id, json });
+  if (upload) await runImportJob({ directory, connectionId: retained.id, json });
+  else if (json) print({ connectionId: retained.id, uploaded: false });
+  else console.log(`Connected ${retained.id}. Choose conversations to upload when ready.`);
 }

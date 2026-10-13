@@ -1,3 +1,4 @@
+import { rememberChatSelection } from "../lib/chat-selection-preference";
 import { useRef, type Dispatch, type SetStateAction } from "react";
 import type {
   BootstrapPayload,
@@ -385,10 +386,10 @@ export function useChatActions({
   }
 
   function changeDraftProvider(provider: ChatProvider) {
+    const model = normalizeChatModel(provider, draftModel, providerSettings);
+    rememberChatSelection(provider, model);
     setDraftProvider(provider);
-    setDraftModel((current) =>
-      normalizeChatModel(provider, current, providerSettings)
-    );
+    setDraftModel(model);
     setView("chat");
   }
 

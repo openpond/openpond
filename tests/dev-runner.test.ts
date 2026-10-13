@@ -1,7 +1,9 @@
-import { spawnSync } from "node:child_process";
+import { createServer } from "node:http";
+import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
 import { promises as fs } from "node:fs";
+import { buildProject } from "../scripts/build/project.ts";
 import { ensureDevBuild } from "../scripts/build/dev-sdk";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
@@ -270,3 +272,109 @@ test("dev build cache invalidates changed inputs, damaged outputs, and failed bu
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+// Reusing a live server must not rebuild its files; a failed fresh setup must
+// never fall through to launching old artifacts.
+test("server reuse skips setup while fresh setup failures prevent launch", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-dev-reuse-"));
+  const server = createServer((_request, response) => {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ ok: true, server: "openpond-app-server" }));
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing listener");
+  const options = parseDevRunnerArgs(["desktop", `--server-port=${address.port}`]);
+  const plan = buildDevRunnerPlan(options, { OPENPOND_HOME: directory }, root);
+  const marker = path.join(directory, "desktop-built");
+  const launched = path.join(directory, "server-launched");
+  const command = (id: string, source: string) => ({ id, command: process.execPath, args: ["-e", source], cwd: root, env: {} });
+  plan.setupCommands = [
+    command("build-dev-server", 'throw new Error("setup must not run for reuse")'),
+    command("build-desktop", `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "built")`),
+  ];
+  plan.processes = [
+    command("server", `require("node:fs").writeFileSync(${JSON.stringify(launched)}, "launched")`),
+    command("desktop", 'if (process.env.OPENPOND_REUSE_SERVER !== "1") process.exit(2)'),
+  ];
+  async function run() {
+    return await new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
+      const child = spawn(process.execPath, ["--input-type=module", "-e", `import { runDevPlan } from ${JSON.stringify(path.join(root, "scripts/dev-runner.ts"))}; await runDevPlan(${JSON.stringify(plan)});`], { cwd: root });
+      let stderr = "";
+      child.stdout.resume();
+      child.stderr.on("data", chunk => { stderr += chunk; });
+      child.once("error", reject);
+      child.once("close", code => resolve({ code, stderr }));
+    });
+  }
+  try {
+    await fs.mkdir(path.join(directory, "secrets"));
+    await fs.writeFile(path.join(directory, "secrets/server-token"), "test-token");
+    expect((await run()).code).toBe(0);
+    expect(await fs.readFile(marker, "utf8")).toBe("built");
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    const failed = await run();
+    expect(failed.code).not.toBe(0);
+    expect(failed.stderr).toContain("setup must not run for reuse");
+    await expect(fs.stat(launched)).rejects.toThrow();
+  } finally {
+    server.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+// A stale/deleted emit or failed build must never leave consumers with partial
+// artifacts. Exercise the real compiler and publication boundary together.
+test("incremental builds reuse emits, recover damage, remove stale files, and preserve the last good build", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-compiler-"));
+  try {
+    await fs.mkdir(path.join(root, "src"));
+    await fs.writeFile(
+      path.join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          composite: true,
+          declaration: true,
+          declarationMap: true,
+          sourceMap: true,
+          strict: true,
+          types: [],
+          target: "ES2022",
+          module: "ESNext",
+          rootDir: "src",
+          outDir: "dist",
+        },
+        include: ["src/**/*.ts"],
+      }),
+    );
+    const source = path.join(root, "src/index.ts");
+    const output = path.join(root, "dist/index.js");
+    const cached = path.join(root, "node_modules/.cache/compiler/emit/index.js");
+    await fs.writeFile(source, 'export const value: string = "first";');
+    await fs.writeFile(path.join(root, "src/removed.ts"), "export const removed = 1;");
+    await buildProject(root);
+    const first = await fs.readFile(output, "utf8");
+    const timestamp = (await fs.stat(cached)).mtimeMs;
+    await Promise.all([buildProject(root), buildProject(root)]);
+    expect((await fs.stat(cached)).mtimeMs).toBe(timestamp);
+    await fs.rm(output);
+    await fs.writeFile(cached, "corrupt");
+    await buildProject(root);
+    expect(await fs.readFile(output, "utf8")).toBe(first);
+    await fs.rm(path.join(root, "src/removed.ts"));
+    await fs.writeFile(source, 'export const value: string = "second";');
+    await buildProject(root);
+    expect(await fs.readFile(output, "utf8")).toContain("second");
+    await expect(fs.stat(path.join(root, "dist/removed.js"))).rejects.toThrow();
+    const map = JSON.parse(await fs.readFile(`${output}.map`, "utf8"));
+    expect(path.resolve(path.dirname(output), map.sources[0])).toBe(source);
+    await fs.writeFile(source, "export const value: string = 123;");
+    await expect(buildProject(root)).rejects.toThrow("TypeScript exited");
+    expect(await fs.readFile(output, "utf8")).toContain("second");
+    await fs.writeFile(source, 'export const value: string = "recovered";');
+    await buildProject(root);
+    expect(await fs.readFile(output, "utf8")).toContain("recovered");
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}, 180_000);

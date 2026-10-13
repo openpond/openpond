@@ -188,11 +188,11 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   const services = options.services ?? {};
   const webSearch = await selectService(services.webSearch, embedded, async () => (await import("./openpond/web-search.js")).createWebSearchExecutorFromEnv());
   const scheduling = await selectService(services.scheduling, embedded, async () => (await import("./openpond/saved-work.js")).createHostedSavedWork);
-  const connectedApps = await selectService(services.connectedApps, embedded, async () => {
+  const connectedApps = await selectService<Exclude<AppServerServiceOptions["connectedApps"], false | undefined>>(services.connectedApps, embedded, async () => {
     const [executor, connections] = await Promise.all([import("./openpond/connected-app-executor.js"), import("./openpond/app-server-connected-apps.js")]);
     return { execute: executor.createCloudConnectedAppToolExecutor(), list: connections.listAppServerIntegrationConnections };
   });
-  const tasksets = await selectService(services.tasksets, embedded, async () => (await import("./openpond/hosted-tasksets.js")).executeHostedTasksetAction);
+  const tasksets = await selectService<Exclude<AppServerServiceOptions["tasksets"], false | undefined>>(services.tasksets, embedded, async () => (await import("./openpond/hosted-tasksets.js")).executeHostedTasksetAction);
   const backgroundReview = services.backgroundReview ?? !embedded;
   // A model-tool adapter does not configure the separate local evaluation workflow.
   const harnessEvaluationEnabled = !embedded && Boolean(tasksets);

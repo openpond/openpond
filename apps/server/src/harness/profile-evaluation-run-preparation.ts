@@ -11,6 +11,7 @@ import {
   ProfileExternalDatasetBindingSchema, verifyProfileExternalDatasetBinding,
 } from "@openpond/evals";
 import { validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
+import { HarnessExperimentSamplingSchema } from "openpond-sdk/experiments";
 
 import { type ProfileEvaluationCatalogSource } from "./local-profile-evaluation-runtime.js";
 import {externalProfileEvaluationDefinition,type ProfileExternalDatasetResolver} from "./profile-external-dataset-admission.js";
@@ -70,9 +71,12 @@ export function createProfileEvaluationRunPreparationService(input: {
   modelConfigurationHash: (modelRef: ChatModelRef, request: z.infer<typeof PrepareRequestSchema>) => Promise<string>;
   placement: "local" | "remote" | "colocated";
   /** Trusted host's case VM owner reserves compute against the run ledger. */
-  boundedWorkComputeAvailable?: boolean;
+  boundedWorkComputeAvailable?: boolean | (() => Promise<void>);
 }) {
-  return async (request: unknown, options?: { requireExpectedManifestHash?: boolean; selectedWorkflows?: SelectedWorkflows }) => {
+  return async (request: unknown, options?: { requireExpectedManifestHash?: boolean; selectedWorkflows?: SelectedWorkflows;
+    /** Trusted local Experiment owner applies these values at model dispatch. */
+    modelSampling?: z.infer<typeof HarnessExperimentSamplingSchema>;
+  }) => {
     const parsed = PrepareRequestSchema.parse(request);
     if (options?.requireExpectedManifestHash && !parsed.expectedManifestHash) {
       throw new Error("Profile evaluation execution requires the reviewed manifest hash.");
@@ -118,8 +122,9 @@ export function createProfileEvaluationRunPreparationService(input: {
     if (!textCase && !workCase) {
       throw new Error("Profile evaluation supports text cases or Work cases with the built-in execution and output tools.");
     }
-    if (parsed.maximumSpendUsd !== undefined && workCase && !input.boundedWorkComputeAvailable) {
-      throw new Error("This host has not admitted budgeted Work compute.");
+    if (parsed.maximumSpendUsd !== undefined && workCase) {
+      if (typeof input.boundedWorkComputeAvailable === "function") await input.boundedWorkComputeAvailable();
+      else if (!input.boundedWorkComputeAvailable) throw new Error("This host has not admitted budgeted Work compute.");
     }
     if (taskset.tasks.some((task) => task.artifactRefs.length > CHAT_ATTACHMENT_LIMITS.maxAttachments
       || task.artifactRefs.some((asset) => asset.visibility !== "policy"
@@ -157,7 +162,10 @@ export function createProfileEvaluationRunPreparationService(input: {
       model: parsed.modelRef.modelId,
       revision: null, artifactHash: parsed.hostArtifactHash??null, tokenizerRevision: null, chatTemplateHash: null,
     });
-    const modelConfigurationHash = await input.modelConfigurationHash(parsed.modelRef, parsed);
+    const ownerModelConfigurationHash = await input.modelConfigurationHash(parsed.modelRef, parsed);
+    const modelConfigurationHash = options?.modelSampling
+      ? contentHash({ ownerModelConfigurationHash, sampling: HarnessExperimentSamplingSchema.parse(options.modelSampling) })
+      : ownerModelConfigurationHash;
     const manifest = createTasksetRunManifest({
       schemaVersion: "openpond.tasksetRunManifest.v1",
       id: parsed.id,

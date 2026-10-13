@@ -7,6 +7,7 @@ import {
   TrainingApiErrorSchema,
   TrainingInputArtifactSchema,
   TrainingJobSubmissionSchema,
+  type TrainingJobOutput,
   canonicalJson,
   createTrainingClient,
   parseAndVerifyTrainingJobSubmission,
@@ -208,6 +209,93 @@ describe("Training SDK contracts", () => {
         approval: { ...submission().approval, maximumSpendUsd: 11 },
       }),
     ).toThrow("Approved spend must equal");
+  });
+
+  it("requires explicit qualification support and forbids a resumed learner", async () => {
+    // A no-update request must never silently become ordinary training or resume an adapter.
+    const base = submission();
+    const qualification = {
+      ...base,
+      job: { ...base.job, executionMode: "qualification" as const, baseModel: {
+        ...base.job.baseModel, revision: "a".repeat(40), tokenizerRevision: "b".repeat(40), chatTemplateHash: HASH,
+      } },
+      requestedCapabilities: [{ id: "managed_rl.policy.qualification", version: "1", required: true }],
+    };
+    const parsed = TrainingJobSubmissionSchema.parse(qualification);
+    expect(parsed.job).toHaveProperty("executionMode", "qualification");
+    expect(await trainingJobSubmissionHash(parsed)).not.toBe(await trainingJobSubmissionHash(base));
+    expect(TrainingJobSubmissionSchema.parse(base).job).not.toHaveProperty("executionMode");
+    expect(() => TrainingJobSubmissionSchema.parse({ ...qualification, requestedCapabilities: [] })).toThrow("must require");
+    expect(() => TrainingJobSubmissionSchema.parse({
+      ...qualification, job: { ...qualification.job, baseModel: base.job.baseModel },
+    })).toThrow("immutable model and tokenizer revisions");
+    expect(() => TrainingJobSubmissionSchema.parse({
+      ...qualification, requestedCapabilities: [{ id: "managed_rl.policy.qualification", version: "1", required: false }],
+    })).toThrow("must require");
+    expect(() => TrainingJobSubmissionSchema.parse({
+      ...qualification,
+      job: { ...qualification.job, resumeFrom: { id: "checkpoint-1", contentHash: HASH } },
+    })).toThrow("original GRPO learner");
+    expect(() => TrainingJobSubmissionSchema.parse({
+      ...qualification,
+      job: { ...qualification.job, recipe: { ...qualification.job.recipe, method: "ppo" } },
+    })).toThrow("original GRPO learner");
+  });
+
+  // A valid receipt hash alone cannot prove that the original learner performed
+  // one no-update group: bind that evidence to the exact submitted learner and
+  // reject retained training outputs or internally inconsistent accounting.
+  it("verifies qualification receipts against the exact no-update submission", async () => {
+    const base = submission();
+    const unsigned = TrainingJobSubmissionSchema.parse({
+      ...base,
+      job: { ...base.job, executionMode: "qualification", baseModel: {
+        ...base.job.baseModel, revision: "a".repeat(40), tokenizerRevision: "b".repeat(40), chatTemplateHash: HASH,
+      } },
+      requestedCapabilities: [{ id: "managed_rl.policy.qualification", version: "1", required: true }],
+    });
+    const qualificationSubmission = { ...unsigned, contentHash: await trainingJobSubmissionHash(unsigned) };
+    if (qualificationSubmission.job.kind !== "policy_optimize") throw new Error("Expected policy qualification.");
+    const qualification = {
+      schemaVersion: "openpond.trainingQualificationEvidence.v1" as const,
+      baseModel: qualificationSubmission.job.baseModel,
+      group: { id: "group-1", contentHash: HASH },
+      rolloutReceipts: [{ id: "rollout-1", contentHash: HASH }, { id: "rollout-2", contentHash: "c".repeat(64) }],
+      rewardEvidenceHash: HASH, groupsCompleted: 1, optimizerUpdatesApplied: 0,
+      optimizerUpdatesSkipped: 0, trainingStepsCreated: 0, checkpointsCreated: 0, artifactsCreated: 0,
+    };
+    const receipt = {
+      schemaVersion: "openpond.trainingExecutionReceipt.v2" as const,
+      id: "qualification-receipt", teamId: "team-1", jobId: "job-1", submissionHash: qualificationSubmission.contentHash,
+      manifestHash: HASH, recipeHash: HASH, capabilityHash: HASH,
+      runtimeRelease: { id: "runtime-1", contentHash: HASH }, inputs: [], outputs: [],
+      spendUsd: 0.5, durationSeconds: 60, cleanupComplete: true, qualification,
+      issuer: "sandbox-managed-training", issuedAt: NOW, signature: null,
+    };
+    const verify = async (value: unknown, outputs: TrainingJobOutput[] = []) => parseAndVerifyTrainingExecutionReceipt(value, {
+      id: receipt.id, contentHash: await canonicalSha256(value), teamId: receipt.teamId, jobId: receipt.jobId,
+      qualificationSubmission, outputs,
+    });
+    await expect(verify(receipt)).resolves.toMatchObject({ qualification });
+    await expect(verify({ ...receipt, qualification: undefined })).rejects.toThrow();
+    await expect(verify({ ...receipt, submissionHash: HASH })).rejects.toMatchObject({ code: "qualification_receipt_mismatch" });
+    await expect(verify({ ...receipt, qualification: { ...qualification, baseModel: {
+      ...qualification.baseModel, tokenizerRevision: "c".repeat(40),
+    } } })).rejects.toMatchObject({ code: "qualification_learner_mismatch" });
+    await expect(verify({ ...receipt, qualification: { ...qualification, optimizerUpdatesApplied: 1 } })).rejects.toThrow();
+    await expect(verify({ ...receipt, qualification: { ...qualification, rolloutReceipts: [qualification.rolloutReceipts[0], qualification.rolloutReceipts[0]] } })).rejects.toThrow();
+    const output = {
+      schemaVersion: "openpond.trainingJobOutput.v2" as const, id: "checkpoint-1", jobId: receipt.jobId,
+      kind: "checkpoint" as const, artifactRef: "r2://team/checkpoints/1", contentHash: HASH,
+      sizeBytes: 10, metadata: {}, createdAt: NOW,
+    };
+    await expect(verify(receipt, [output])).rejects.toMatchObject({ code: "qualification_updated_artifact" });
+    await expect(verify({ ...receipt, cleanupComplete: false })).rejects.toMatchObject({ code: "execution_cleanup_incomplete" });
+    const ordinary = TrainingJobSubmissionSchema.parse(base);
+    await expect(parseAndVerifyTrainingExecutionReceipt(receipt, {
+      id: receipt.id, contentHash: await canonicalSha256(receipt),
+      qualificationSubmission: { ...ordinary, contentHash: await trainingJobSubmissionHash(ordinary) },
+    })).rejects.toMatchObject({ code: "qualification_submission_required" });
   });
 
   it("accepts an immutable learned scorer without qualification evidence", () => {

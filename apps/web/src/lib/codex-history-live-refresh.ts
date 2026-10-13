@@ -17,15 +17,16 @@ export function codexHistoryRefreshDelayMs(input: {
   active: boolean;
   surface: CodexHistoryRefreshSurface;
 }): number {
-  if (input.active) return ACTIVE_REFRESH_INTERVAL_MS;
+  if (input.active) return input.surface === "thread" ? ACTIVE_REFRESH_INTERVAL_MS : 2_000;
   return input.surface === "thread"
     ? IDLE_THREAD_REFRESH_INTERVAL_MS
     : IDLE_SIDEBAR_REFRESH_INTERVAL_MS;
 }
 
-export function codexHistoryPayloadWithLiveStatus<
-  Payload extends { session: Session },
->(payload: Payload, live: boolean): Payload {
+export function codexHistoryPayloadWithLiveStatus<Payload extends { session: Session }>(
+  payload: Payload,
+  live: boolean,
+): Payload {
   if (!live || payload.session.status === "active") return payload;
   return {
     ...payload,
@@ -57,6 +58,8 @@ type RefreshEntry = {
 };
 
 type CodexHistoryLiveRefreshDependencies = {
+  isVisible: () => boolean;
+  onVisibilityChange: (callback: () => void) => () => void;
   cachedPayload: typeof cachedCodexHistoryThreadPayload;
   clearTimer: (timer: RefreshTimer) => void;
   loadPayload: typeof loadCodexHistoryThreadPayload;
@@ -68,18 +71,35 @@ export function createCodexHistoryLiveRefreshCoordinator(
   dependencies: Partial<CodexHistoryLiveRefreshDependencies> = {},
 ) {
   const deps: CodexHistoryLiveRefreshDependencies = {
+    isVisible:
+      dependencies.isVisible ??
+      (() => typeof document === "undefined" || document.visibilityState !== "hidden"),
+    onVisibilityChange:
+      dependencies.onVisibilityChange ??
+      ((callback) => {
+        if (typeof document === "undefined") return () => {};
+        document.addEventListener("visibilitychange", callback);
+        return () => document.removeEventListener("visibilitychange", callback);
+      }),
     cachedPayload: dependencies.cachedPayload ?? cachedCodexHistoryThreadPayload,
     clearTimer: dependencies.clearTimer ?? ((timer) => globalThis.clearTimeout(timer)),
     loadPayload: dependencies.loadPayload ?? loadCodexHistoryThreadPayload,
     now: dependencies.now ?? Date.now,
     setTimer:
-      dependencies.setTimer ??
-      ((callback, delayMs) => globalThis.setTimeout(callback, delayMs)),
+      dependencies.setTimer ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs)),
   };
   const entries = new Map<string, RefreshEntry>();
   let nextSubscriberId = 1;
+  let removeVisibilityListener: (() => void) | null = null;
+  function visibilityChanged() {
+    for (const entry of entries.values()) {
+      clearScheduledRefresh(entry);
+      if (deps.isVisible()) schedule(entry, 0);
+    }
+  }
 
   function subscribe(input: CodexHistoryLiveRefreshSubscription): () => void {
+    removeVisibilityListener ??= deps.onVisibilityChange(visibilityChanged);
     const key = refreshKey(input.connection, input.sessionId);
     let entry = entries.get(key);
     if (!entry) {
@@ -112,24 +132,33 @@ export function createCodexHistoryLiveRefreshCoordinator(
       current.disposed = true;
       clearScheduledRefresh(current);
       entries.delete(key);
+      if (entries.size === 0) {
+        removeVisibilityListener?.();
+        removeVisibilityListener = null;
+      }
     };
   }
 
   function schedule(entry: RefreshEntry, delayMs: number): void {
-    if (entry.disposed || entry.subscribers.size === 0 || entry.inFlight) return;
+    if (!deps.isVisible() || entry.disposed || entry.subscribers.size === 0 || entry.inFlight)
+      return;
     const nextRefreshAt = deps.now() + Math.max(0, delayMs);
     if (entry.timer && entry.nextRefreshAt !== null && entry.nextRefreshAt <= nextRefreshAt) return;
     clearScheduledRefresh(entry);
     entry.nextRefreshAt = nextRefreshAt;
-    entry.timer = deps.setTimer(() => {
-      entry.timer = null;
-      entry.nextRefreshAt = null;
-      void refresh(entry);
-    }, Math.max(0, delayMs));
+    entry.timer = deps.setTimer(
+      () => {
+        entry.timer = null;
+        entry.nextRefreshAt = null;
+        void refresh(entry);
+      },
+      Math.max(0, delayMs),
+    );
   }
 
   async function refresh(entry: RefreshEntry): Promise<void> {
-    if (entry.disposed || entry.subscribers.size === 0 || entry.inFlight) return;
+    if (!deps.isVisible() || entry.disposed || entry.subscribers.size === 0 || entry.inFlight)
+      return;
     const request = deps.loadPayload(entry.connection, entry.sessionId, {
       force: Boolean(entry.latestPayload),
     });

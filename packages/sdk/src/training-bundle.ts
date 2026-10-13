@@ -1,3 +1,5 @@
+import { validateTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
+import { projectPortableTaskRecord } from "./taskset-authored-portable-release.js";
 import { canonicalJson, contentHash, sha256, ImmutableReleaseRefSchema, HarnessSourceSelectionSchema, validateHarnessPolicySourcePackage, validateHarnessSourcePackage, type HarnessPolicySourcePackage, type HarnessSourcePackage, type ImmutableReleaseRef, type VersionedReleaseRef } from "@openpond/harness";
 import { compileBoundGraders } from "@openpond/evals/rewards";
 import { verifyLearningTextAsset, type LearningTextAsset } from "@openpond/evals/learning";
@@ -31,6 +33,8 @@ export type TasksetTrainingBundle = {
  */
 export function buildTasksetTrainingBundle(input: {
   taskset: Taskset;
+  executionMode?: "qualification";
+  qualificationSource?: TasksetPackage;
   modelProject: ModelProject;
   modelRunId: string;
   runtime: HarnessRuntimeTargetBinding;
@@ -54,6 +58,15 @@ export function buildTasksetTrainingBundle(input: {
 }): TasksetTrainingBundle {
   const { taskset, modelProject, harnessRelease, tasksetRelease } = input;
   const setup = modelProject.trainingSetup;
+  const qualification = input.executionMode === "qualification";
+  if (qualification && input.evaluationSource) throw new Error("Qualification does not consume an independent evaluation source.");
+  const qualificationSource = qualification ? validateTasksetPackage(input.qualificationSource) : null;
+  if (!qualification && input.qualificationSource) throw new Error("Qualification sources cannot be used for training.");
+  if (qualificationSource && (qualificationSource.modelResources || qualificationSource.learningResources
+    || contentHash(taskset.tasks.map(projectPortableTaskRecord)) !== contentHash(qualificationSource.taskset.tasks)
+    || releasedRefHash(input.tasksetRelease) !== releasedRefHash(qualificationSource.taskset))) {
+    throw new Error("Qualification must preserve its ordinary source release and complete task population.");
+  }
   const releasedHarness = ImmutableReleaseRefSchema.parse(harnessRelease);
   const releasedTaskset = ImmutableReleaseRefSchema.parse(tasksetRelease);
   // These remain part of the preparation API for adapter compatibility; the
@@ -73,8 +86,8 @@ export function buildTasksetTrainingBundle(input: {
     !setup.baseModel.chatTemplateHash ||
     !setup.recipe ||
     !setup.tasksetRef ||
-    setup.tasksetRef.id !== taskset.id ||
-    setup.tasksetRef.contentHash !== taskset.contentHash
+    setup.tasksetRef.id !== (qualification ? tasksetRelease.id : taskset.id) ||
+    setup.tasksetRef.contentHash !== (qualification ? tasksetRelease.contentHash : taskset.contentHash)
   ) {
     throw new Error(
       "Model Run must bind an exact Taskset, Model revision, tokenizer, chat template, and Recipe.",
@@ -91,6 +104,7 @@ export function buildTasksetTrainingBundle(input: {
     }),
   };
   const assets = new Map<string, Uint8Array>();
+  if (qualificationSource) addJsonAsset(assets, "qualification-source.json", qualificationSource);
   if (input.evaluationSource) {
     const evaluation = TrainingEvaluationSourceSchema.parse(input.evaluationSource);
     if (contentHash(evaluation.taskset) !== contentHash(setup.evaluationTasksetRef)) {
@@ -98,7 +112,7 @@ export function buildTasksetTrainingBundle(input: {
     }
     assertTrainingEvaluationIsolation(taskset.tasks.filter(task => task.split === "train"), evaluation.tasks);
     assets.set(TRAINING_EVALUATION_SOURCE_PATH, new TextEncoder().encode(canonicalJson(evaluation)));
-  } else if (setup.evaluationTasksetRef) {
+  } else if (!qualification && setup.evaluationTasksetRef) {
     throw new Error("The prepared Model requires its pinned evaluation source bytes.");
   }
   const harnessSource = input.harnessSource
@@ -130,6 +144,11 @@ export function buildTasksetTrainingBundle(input: {
     sourcePackageHash: harnessSource?.contentHash ?? null,
   }));
   const rewardExecution = resolvePortableTasksetRewardExecution(taskset, input.rewardExecution);
+  if (qualificationSource && (!rewardExecution
+    || contentHash(compileBoundGraders(rewardExecution.binding, rewardExecution.rewards)) !== contentHash(qualificationSource.taskset.graders)
+    || qualificationSource.taskset.graders.some(grader => grader.kind === "model_judge" || grader.kind === "human"))) {
+    throw new Error("Qualification requires the source package's exact deterministic graders.");
+  }
   if (rewardExecution) {
     const verifierAssets = input.verifierAssets ?? [];
     const references = [...rewardExecution.rewards.flatMap(reward => reward.assets),
@@ -151,7 +170,7 @@ export function buildTasksetTrainingBundle(input: {
   }
   addJsonAsset(assets, "environment.json", {
     schemaVersion: "openpond.harnessEnvironment.v1",
-    environment: taskset.environment,
+    environment: qualification ? { ...taskset.environment, metadata: { ...taskset.environment.metadata, policySystemPrompt: taskset.objective } } : taskset.environment,
     capabilities: taskset.capabilities,
     policy: taskset.policy,
     outputContract:
@@ -172,11 +191,11 @@ export function buildTasksetTrainingBundle(input: {
     capabilities: taskset.capabilities,
     connectedAppScopes: taskset.policy.connectedAppScopes,
   });
-  const trainTasks = taskset.tasks.filter((task) => task.split === "train");
+  const trainTasks = qualification ? taskset.tasks : taskset.tasks.filter((task) => task.split === "train");
   if (trainTasks.length > 0) {
-    addJsonAsset(assets, "dataset/train.json", {
-      schemaVersion: "openpond.datasetSplit.v1",
-      split: "train",
+    addJsonAsset(assets, qualification ? "dataset/qualification.json" : "dataset/train.json", {
+      schemaVersion: qualification ? "openpond.qualificationDataset.v1" : "openpond.datasetSplit.v1",
+      ...(qualification ? {} : { split: "train" }),
       tasks: trainTasks,
     });
     addTasksetAssets({
@@ -204,7 +223,7 @@ export function buildTasksetTrainingBundle(input: {
       taskset: releasedTaskset,
       sourceRefs: taskset.sourceRefs,
       datasetArtifact: taskset.datasetArtifact ?? null,
-      trainTasks,
+      ...(qualification ? { executionMode: "qualification", tasks: trainTasks } : { trainTasks }),
     }),
   };
   const evidenceSetRelease =
@@ -223,6 +242,7 @@ export function buildTasksetTrainingBundle(input: {
 
   const bundleContent = ResolvedTrainingBundleContentSchema.parse({
     schemaVersion: "openpond.resolvedTrainingBundle.v1",
+    ...(qualification ? { executionMode: "qualification" } : {}),
     projection: "trainer",
     harnessRelease: releasedHarness,
     datasetRelease,
@@ -241,6 +261,7 @@ export function buildTasksetTrainingBundle(input: {
   });
   const manifestContent = HarnessRunManifestContentSchema.parse({
     schemaVersion: "openpond.harnessRunManifest.v1",
+    ...(qualification ? { executionMode: "qualification" } : {}),
     id: `manifest_${input.modelRunId}_${input.approval.approvalHash.slice(0, 16)}`,
     harnessRelease,
     datasetRelease,
@@ -328,3 +349,7 @@ function bytes(value: unknown): Uint8Array {
 export { withAuthoritativeRecipeHashes, AdamwOptimizerConfigSchema } from "./training-recipe-binding.js";
 
 export { createPolicyHarnessContext } from "./training-policy-harness.js";
+
+export { prepareOrdinaryTasksetQualification, type OrdinaryTasksetQualificationInput } from "./training-qualification-preparation.js";
+
+function releasedRefHash(value: { id: string; contentHash: string }) { return contentHash({ id: value.id, contentHash: value.contentHash }); }

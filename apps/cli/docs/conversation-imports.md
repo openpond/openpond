@@ -1,28 +1,39 @@
 # Conversation imports
 
-An import runs once, shows progress in the terminal, and exits. Initial history defaults to the **last week**; interactive setup shows `Initial history: day, week, or all [default: week]`. Press Enter to accept it, or specify `--range day|week|all`.
+Connecting authorizes a destination and exits without uploading history. In **Apps → Connections → Manage → Conversation sync**, connect the source, choose **Choose conversations…**, search by title, folder or session ID, select records, and confirm **Upload N conversations**. Nothing is preselected. Selections survive search and pagination. Activity filters help find conversations; uploading includes their complete eligible turn history. Each confirmed selection replaces the scope of later syncs. Previously uploaded project data is retained.
+
+For an explicit bulk initial upload, use `--upload`. Its history window defaults to the **last week**; choose `--range day|week|all`. A sync with `--selection-file` instead uses exact conversation identities and removes an earlier date cutoff through the registered connection.
 
 **Continual imports default to off.** `--continual` explicitly enables recurring imports. `--daily`, `--weekly`, `--hourly`, and `--cron` select the cadence and require `--continual`; they do not select how much history to import. Continual imports do not enable continual learning or change model training schedules.
 
 ```sh
-# Import the last week once; no recurring schedule is created.
-openpond import --source codex
+# Connect without uploading.
+openpond import --source claude_code
+
+# Search local records and obtain selection keys without uploading.
+openpond import conversations <connection-id> --query "invoice" --range all --json
+
+# Upload exactly the keys saved in selection.json.
+openpond import sync <connection-id> --selection-file selection.json
+
+# Explicitly import the last week once; no recurring schedule is created.
+openpond import --source codex --upload
 
 # Import once and enable daily imports at midnight local time.
-openpond import --source codex --continual --daily
+openpond import --source codex --upload --continual --daily
 
 # Weekly imports default to Monday at midnight.
-openpond import --source codex --continual --weekly
+openpond import --source codex --upload --continual --weekly
 
 # Import hourly, at minute 00.
-openpond import --source codex --continual --hourly
+openpond import --source codex --upload --continual --hourly
 
 
 # Cron: hourly on weekdays from 9 a.m. through 5 p.m.
-openpond import --source codex --continual --cron "0 9-17 * * mon-fri"
+openpond import --source codex --upload --continual --cron "0 9-17 * * mon-fri"
 
 # Choose a weekday and time explicitly.
-openpond import --source codex --range week --continual --weekly --on fri --at 01:00
+openpond import --source codex --upload --range week --continual --weekly --on fri --at 01:00
 
 # Set recurrence for an existing connection without starting an import.
 openpond import schedule <connection-id> --continual --daily --at 00:00
@@ -45,6 +56,8 @@ openpond import sync <connection-id> --until 2026-10-10T03:18:22.485Z --json
 # Cancel the current job, keeping queued work and its schedule.
 openpond import cancel
 ```
+
+`selection.json` contains `{ "sourceInstanceId": "<installation-id>", "sessionKeys": ["<key>"] }`, copied from `import conversations`. Keys include the native session identity and source path; selections from another installation or missing records are rejected. `--offset` pages through search results. An empty connected selection cannot run or enable recurring imports. Chosen conversation uploads retain coverage evidence without certifying that the entire original source was reconciled.
 
 `--continual` alone defaults to daily at `00:00`. `--weekly` defaults to `--on mon`; supported weekdays are `sun|mon|tue|wed|thu|fri|sat`. Use `--at HH:MM` for the local start time. Choose only one cadence. `--at` applies to daily/weekly schedules, and `--on` applies to weekly schedules. For a custom hourly minute, use cron (for example, `15 * * * *`). Existing schedules stay unchanged when running a one-time import; use `schedule --off` to turn them off.
 
