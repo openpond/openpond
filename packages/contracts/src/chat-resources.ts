@@ -54,6 +54,7 @@ export type ChatExperimentScope = z.infer<typeof ChatExperimentScopeSchema>;
 export const ChatExperimentContextSchema = z.object({
   scopes: z.array(ChatExperimentScopeSchema), activeScopeId: Id.nullable(),
   selectionVersion: z.number().int().nonnegative(), selectedAt: z.iso.datetime().nullable(),
+  selectionOperations: z.record(z.string(),z.object({hash:Hash,version:z.number().int().nonnegative(),visualPublicationId:z.string().optional(),resource:ChatResourceSummarySchema.optional()}).strict()).default({}),
 }).strict();
 export type ChatExperimentContext = z.infer<typeof ChatExperimentContextSchema>;
 

@@ -867,8 +867,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     if (deps.executionHost === "embedded" && (requestedProvider !== "openpond" || input.createImproveRun)) {
       throw new Error("Embedded Work requires the configured model adapter and native tool loop.");
     }
-    if (requestedProvider === "codex" && !sessionUsesRepositoryWork(session)) {
-      throw new Error("The Codex provider requires repository-aware Work.");
+    const localResourceChat = (session.experience === "chat" || session.experience === "work") && !session.systemKind && executeChatResourceAction
+      && !["sandbox","sandbox_template","sandbox_app"].includes(session.workspaceKind ?? "");
+    if (requestedProvider === "codex" && !sessionUsesRepositoryWork(session) && !localResourceChat) {
+      throw new Error("The Codex provider requires repository-aware Work or a local resource chat.");
     }
     if (
       /^\/goal(?:\s|$)/i.test(input.prompt.trimStart()) &&

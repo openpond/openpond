@@ -16,7 +16,7 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
   const dataset = focus.dataset;
   const datasets = dataset ? [dataset, ...resources.datasets.filter(candidate => candidate.id !== dataset.id || candidate.revision !== dataset.revision)] : resources.datasets;
   const grader = resources.graders.find(candidate => candidate.id === scope.selectedGraderId);
-  const context = `Experiment ${scope.ordinal} (${scope.name})${dataset ? ` using ${dataset.name} V${dataset.revision} (dataset ${dataset.id})` : ""}`;
+  const context = `Experiment ${scope.ordinal}${scope.name === `Experiment ${scope.ordinal}` ? "" : ` (${scope.name})`}${dataset ? ` using ${dataset.name} V${dataset.revision} (dataset ${dataset.id})` : ""}`;
   const run = focus.experiment;
   const running = run && /running|queued|pending|starting/i.test(run.state);
   const completed = run && /completed|complete|succeeded/i.test(run.state);
@@ -46,6 +46,7 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
         onChange={value => { if (value === "new") void resources.createScope(); else void resources.selectScope(value); setRenaming(false); }} disabled={disabled} />
       <DropdownSelect compact floating searchable floatingMenuWidth={320} placement="top" label="Dataset focus" className="composer-resource-dataset"
         value={dataset ? `${dataset.id}@${dataset.revision}` : ""}
+        triggerContent={<><span className="composer-resource-dataset-name">{dataset?.name ?? "Dataset"}</span>{dataset ? <span className="composer-resource-version">V{dataset.revision}</span> : null}<ChevronDown size={12} /></>}
         tooltip={dataset ? `${dataset.name} V${dataset.revision}` : "Choose a dataset"}
         options={[{ value: "", label: "Choose dataset" }, ...datasets.map(candidate => ({ value: `${candidate.id}@${candidate.revision}`, label: `${candidate.name} V${candidate.revision}`, description: `${candidate.taskCount ?? 0} tasks` })), { value: "create", label: "Create dataset…", icon: "plus" }]}
         onChange={value => { if (value === "create") return draft("Create dataset"); const split = value.lastIndexOf("@"); void resources.select("dataset", split < 0 ? value : value.slice(0, split), split < 0 ? undefined : Number(value.slice(split + 1))); }} disabled={disabled} />

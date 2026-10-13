@@ -1,10 +1,12 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { htmlVisualDocument } from "@openpond/contracts/html-visual-document";
-import { HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, HTML_VISUAL_THEME_TOKENS, type HtmlVisualReference, type HtmlVisualTheme } from "@openpond/contracts/html-visuals";
+import { HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, HTML_VISUAL_THEME_TOKENS, HtmlVisualResourceSelectionSchema, type HtmlVisualReference, type HtmlVisualTheme, type HtmlVisualResourceSelection } from "@openpond/contracts/html-visuals";
+import type { ChatResourceFocus } from "../../hooks/useChatResourceFocus";
+import { chatResourceRequest } from "../../api/chat-resource-api";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import "./html-visual.css";
 
-import { OpenHtmlVisualContext } from "./html-visual-context";
+import { OpenHtmlVisualContext, SelectHtmlResourceContext } from "./html-visual-context";
 function theme(): HtmlVisualTheme {
   const styles = getComputedStyle(document.querySelector(".app-shell") ?? document.documentElement);
   return Object.fromEntries(Object.entries(HTML_VISUAL_THEME).map(([key, fallback]) => [key, key === "--color-scheme" ? document.documentElement.dataset.theme ?? "dark" : styles.getPropertyValue(HTML_VISUAL_THEME_TOKENS[key as keyof typeof HTML_VISUAL_THEME_TOKENS] ?? key).trim() || fallback])) as HtmlVisualTheme;
@@ -16,6 +18,13 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
   visual: HtmlVisualReference; connection: ClientConnection | null; expanded?: boolean;
 }) {
   const open = useContext(OpenHtmlVisualContext);
+  const selectResource = useContext(SelectHtmlResourceContext);
+  const selecting = useRef(false);
+  const chooseRef = useRef<((resource:HtmlVisualResourceSelection)=>Promise<void>)|null>(null);
+  const operation = useRef<{key:string;id:string}|null>(null);
+  const [selectionBusy,setSelectionBusy] = useState(false);
+  const [selectionError,setSelectionError] = useState<string|null>(null);
+  const [receipt,setReceipt] = useState<string|null>(null);
   const container = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [html, setHtml] = useState<string | null>(null);
@@ -57,6 +66,26 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
     }).catch(err => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Visual unavailable"); });
     return () => { controller.abort(); if (previewUrl) URL.revokeObjectURL(previewUrl); };
   }, [serverUrl, token, platform, path, retry, visited, expanded]);
+  useEffect(()=>{
+    if(!connection || !(visited || expanded) || !html?.includes("data-openpond-resource-id"))return;
+    const controller=new AbortController();
+    void chatResourceRequest<{focus:ChatResourceFocus}>(connection,"dataset",{action:"context",payload:{sessionId:visual.sessionId}},controller.signal).then(context=>{
+      const saved=Object.entries(context.focus.scopeContext?.selectionOperations ?? {}).filter(([,value])=>value.visualPublicationId===visual.publicationId && value.resource)
+        .sort((a,b)=>b[1].version-a[1].version)[0];
+      if(!controller.signal.aborted && saved && !selecting.current){const resource=saved[1].resource!;operation.current={key:`${resource.kind}:${resource.id}:${resource.revision}`,id:saved[0]};setReceipt(`Selected ${resource.kind}: ${resource.name}${resource.kind==='dataset' ? ` V${resource.revision}` : ''}.`);}
+    }).catch(()=>{});
+    return ()=>controller.abort();
+  },[connection,visual.sessionId,visual.publicationId,visited,expanded,html]);
+  async function choose(resource:HtmlVisualResourceSelection) {
+    if(!selectResource || selecting.current)return;
+    selecting.current=true;setSelectionBusy(true);setSelectionError(null);
+    const key=`${resource.kind}:${resource.id}:${resource.revision}`;
+    if(operation.current?.key!==key)operation.current={key,id:`visual-select-${crypto.randomUUID()}`};
+    try {setReceipt(await selectResource(visual,resource,operation.current.id));}
+    catch(cause){setSelectionError(cause instanceof Error ? cause.message : "Resource selection failed.");}
+    finally{selecting.current=false;setSelectionBusy(false);}
+  }
+  chooseRef.current=choose;
   const documentSource = useMemo(() => html === null ? undefined : htmlVisualDocument(html, identity, theme()), [html, identity]);
   useEffect(() => {
     setReady(false);
@@ -65,6 +94,11 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
     const receive = (event: MessageEvent) => {
       const data = event.data;
       if (event.source !== frame.current?.contentWindow || data?.identity !== identity) return;
+      if(data.type === "openpond-visual-resource-select") {
+        const resource=HtmlVisualResourceSelectionSchema.safeParse(data.resource);
+        if(resource.success)void chooseRef.current?.(resource.data);
+        return;
+      }
       if (data.type === "openpond-visual-interaction") {
         container.current?.dispatchEvent(new Event("openpond-visual-interaction", { bubbles: true }));
         return;
@@ -96,7 +130,10 @@ export function HtmlVisual({ visual, connection, expanded = false }: {
       {!expanded && open ? <button type="button" onClick={() => open(visual)}>Expand</button> : null}
     </div>
     {source ? <pre className="html-visual-source" tabIndex={0}>{html}</pre> : null}
-      <div className="html-visual-content" style={{ minHeight: height }} hidden={source}>
+    {receipt && !source ? <div className="html-visual-selection-receipt"><span>{receipt}</span><button type="button" onClick={()=>{setReceipt(null);setSelectionError(null);operation.current=null;}}>Change</button></div> : null}
+    {selectionBusy ? <p role="status" className="html-visual-status">Selecting resource…</p> : null}
+    {selectionError ? <p role="status" className="html-visual-status">{selectionError} Select the resource again to retry.</p> : null}
+      <div className="html-visual-content" style={{ minHeight: height }} hidden={source || receipt!==null}>
         {!connection ? <p className="html-visual-status">Connect to view this visual.</p> : error ? <p className="html-visual-status" role="status">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : <>
           {documentSource ? <iframe ref={frame} title={visual.output.title} sandbox="allow-scripts" referrerPolicy="no-referrer"
             allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"
