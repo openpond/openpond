@@ -45,6 +45,23 @@ describe("OpenPond command access service", () => {
     expect(result.blockedReason).toBe(SELECT_PROJECT_MESSAGE);
   });
 
+  // A projectless CLI chat must use managed storage without changing session
+  // ownership or bypassing the existing command-access policy.
+  test("uses managed chat storage for projectless commands and retains disabled policy", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "openpond-chat-command-"));
+    try {
+      const service = createOpenPondCommandAccessService({managedChatCwd:root,upsertApproval:async()=>undefined,appendRuntimeEvent:async()=>undefined});
+      const owner = session({workspaceKind:undefined,workspaceId:null,localProjectId:null,cwd:null,openPondCommandAccessMode:"full-access"});
+      const result = await service.executeCommand({session:owner,command:"pwd",source:"model_tool"});
+      expect(result.ok).toBe(true);
+      expect(result.stdout.trim()).toBe(await realpath(path.join(root,owner.id)));
+      expect(owner.cwd).toBeNull();
+      const denied = await service.executeCommand({session:{...owner,openPondCommandAccessMode:"disabled"},command:"pwd",source:"model_tool"});
+      expect(denied.ok).toBe(false);
+      expect(denied.blockedReason).toContain("disabled");
+    } finally { await rm(root,{recursive:true,force:true}); }
+  });
+
   test("runs full-access commands in the selected project cwd", async () => {
     const cwd = await mkdtemp(path.join(os.tmpdir(), "openpond-command-access-"));
     const service = createOpenPondCommandAccessService({

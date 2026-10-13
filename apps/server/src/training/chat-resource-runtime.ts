@@ -6,7 +6,7 @@ import { contentHash } from "@openpond/harness";
 import { ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import type { LocalInferenceState } from "../evaluations/local-experiment-local-inference.js";
-import type { ChatResourceAction } from "../openpond/chat-resource-tool-definitions.js";
+import type { ChatResourceAction } from "../openpond/chat-resource-action.js";
 import {createChatDatasetSourceAction} from "./chat-dataset-sources.js";
 import { createLocalDatasetService, localDatasetSummary } from "./local-dataset-service.js";
 import { createLocalDatasetSync } from "./local-dataset-sync.js";
