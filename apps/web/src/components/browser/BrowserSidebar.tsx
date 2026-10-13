@@ -54,7 +54,7 @@ export function BrowserSidebar({
   }, [browser]);
 
   return (
-    <aside className={`workspace-diff-panel browser-sidebar-panel ${expanded ? "expanded" : ""}`} aria-label="Browser">
+    <aside className={`workspace-diff-panel browser-sidebar-panel ${expanded ? "expanded" : ""} ${snapshot.busy === "node" || snapshot.error ? "has-capture-status" : ""}`} aria-label="Browser">
       {!expanded && (
         <div
           className="workspace-diff-resize-handle"
@@ -94,9 +94,9 @@ export function BrowserSidebar({
         }}
         onStop={() => void browser.stop()}
       />
+      {snapshot.busy === "node" ? <p className="browser-snapshot-status" role="status">Hover to highlight an element, then click to capture it. Press Esc to cancel.</p> : null}
+      {snapshot.error ? <p className="browser-snapshot-status" role="alert">{snapshot.error}</p> : null}
       <div className="browser-content">
-        {snapshot.busy === "node" ? <p className="browser-snapshot-status" role="status">Hover to highlight an element, then click to capture it. Press Esc to cancel.</p> : null}
-        {snapshot.error ? <p className="browser-snapshot-status" role="alert">{snapshot.error}</p> : null}
         {snapshot.image ? <BrowserSnapshotPreview image={snapshot.image} onClose={snapshot.close} /> : null}
         {visualTabs?.tabs.map(visual => (
           <div key={visual.publicationId} className="browser-visual-document" role="tabpanel" aria-label={visual.output.title} hidden={Boolean(snapshot.image) || visual.publicationId !== activeVisual?.publicationId}>
