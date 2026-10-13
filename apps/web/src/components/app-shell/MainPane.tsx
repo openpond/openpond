@@ -1811,6 +1811,7 @@ export function MainPane({
                 taskSessionId={liveSessionId}
                 taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
+                composerDraftStore={composerDraftStore}
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey
                 }
@@ -1901,6 +1902,7 @@ export function MainPane({
                 taskSessionId={liveSessionId}
                 taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
+                composerDraftStore={composerDraftStore}
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey
                 }

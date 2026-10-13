@@ -1,9 +1,10 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useContext, useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { htmlVisualDocument } from "@openpond/contracts/html-visual-document";
 import { HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, HTML_VISUAL_THEME_TOKENS, HtmlVisualResourceSelectionSchema, type HtmlVisualReference, type HtmlVisualTheme, type HtmlVisualResourceSelection } from "@openpond/contracts/html-visuals";
 import type { ChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { chatResourceRequest } from "../../api/chat-resource-api";
-import { apiFetch, type ClientConnection } from "../../api/api-client";
+import { apiFetch, fetchApiResponse, type ClientConnection } from "../../api/api-client";
 import { Download, Maximize2 } from "../icons";
 import { useHtmlVisualSnapshot, type HtmlVisualSnapshotHandle } from "./useHtmlVisualSnapshot";
 import "./html-visual.css";
@@ -62,7 +63,7 @@ export function HtmlVisual({ visual, connection, expanded = false, snapshotRef }
     setHtml(null); setError(null); setPreview(null);
     void Promise.all([
       apiFetch<{ html: string }>({ serverUrl, token, platform: platform ?? "web" }, `${path}/document`, { signal: controller.signal }),
-      fetch(`${serverUrl}${path}/preview`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
+      fetchApiResponse({ serverUrl, token }, `${path}/preview`, { signal: controller.signal })
         .then(response => { if (!response.ok) throw new Error("Preview unavailable"); return response.blob(); }),
     ]).then(([document, png]) => {
       if (controller.signal.aborted) return;
@@ -135,9 +136,9 @@ export function HtmlVisual({ visual, connection, expanded = false, snapshotRef }
     </div>
     {receipt ? <div className="html-visual-selection-receipt"><span>{receipt}</span><button type="button" onClick={()=>{setReceipt(null);setSelectionError(null);operation.current=null;}}>Change</button></div> : null}
     {selectionBusy ? <p role="status" className="html-visual-status">Selecting resource…</p> : null}
-    {selectionError ? <p role="status" className="html-visual-status">{selectionError} Select the resource again to retry.</p> : null}
+    {selectionError && inlineErrorMessage(selectionError) ? <p role="status" className="html-visual-status">{selectionError} Select the resource again to retry.</p> : null}
       <div className="html-visual-content" style={clickablePreview ? undefined : { minHeight: height }} hidden={receipt!==null}>
-        {!connection ? <p className="html-visual-status">Connect to view this visual.</p> : error ? <p className="html-visual-status" role="status">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : <>
+        {!connection ? <p className="html-visual-status">Connect to view this visual.</p> : error && inlineErrorMessage(error) ? <p className="html-visual-status" role="status">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : <>
           {clickablePreview ? <button type="button" className="html-visual-preview" onClick={() => open?.(visual)} aria-label={`Open ${visual.output.title} in browser panel`}>
             {preview ? <img src={preview} alt={`Preview of ${visual.output.title}`} /> : <span className="html-visual-status">Loading visual…</span>}
           </button> : <>

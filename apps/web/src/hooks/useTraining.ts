@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { connectionQueryScope } from "../lib/query-scope";
+import { fetchApiResponse } from "../api/api-client";
 import { modelBatchReviewActions } from "./model-batch-review-actions";
 import { tasksetDraftActions } from "./taskset-draft-actions";
 import type {
@@ -800,10 +801,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     ),
     preferenceArtifactUrl: async (artifactId: string) => {
       if (!connection) return null;
-      const response = await fetch(
-        `${connection.serverUrl}/v1/training/artifacts/${encodeURIComponent(artifactId)}/download`,
-        { headers: { Authorization: `Bearer ${connection.token}` } },
-      );
+      const response = await fetchApiResponse(connection, `/v1/training/artifacts/${encodeURIComponent(artifactId)}/download`);
       if (!response.ok) throw new Error(await response.text());
       return URL.createObjectURL(await response.blob());
     },
@@ -913,7 +911,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       if (!connection) return false;
       setBusyAction("download-artifact");
       try {
-        const response = await fetch(`${connection.serverUrl}/v1/training/artifacts/${encodeURIComponent(artifactId)}/download`, { headers: { Authorization: `Bearer ${connection.token}` } });
+        const response = await fetchApiResponse(connection, `/v1/training/artifacts/${encodeURIComponent(artifactId)}/download`);
         if (!response.ok) throw new Error(await response.text());
         const disposition = response.headers.get("content-disposition") ?? "";
         const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "openpond-model-artifact";
@@ -941,7 +939,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     if (!connection) return false;
     setBusyAction("download-bundle");
     try {
-      const response = await fetch(`${connection.serverUrl}/v1/training${path}`, { headers: { Authorization: `Bearer ${connection.token}` } });
+      const response = await fetchApiResponse(connection, `/v1/training${path}`);
       if (!response.ok) throw new Error(await response.text());
       const disposition = response.headers.get("content-disposition") ?? "";
       const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName;

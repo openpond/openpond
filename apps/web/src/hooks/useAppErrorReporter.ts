@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import type { AppAction, ShowAppToast } from "../app/app-state";
 import { api, type ClientConnection } from "../api";
-import { errorMessageForToast } from "../lib/error-messages";
+import { errorMessageForToast, isConnectionErrorMessage } from "../lib/error-messages";
 
 export function useAppErrorReporter({
   appDispatch,
@@ -24,6 +24,9 @@ export function useAppErrorReporter({
       options = {},
     ) => {
       const id = Date.now() + ++toastSequenceRef.current;
+      if (tone === "error" && isConnectionErrorMessage(message) && options.dedupeKey !== "openpond-connection") {
+        return id;
+      }
       appDispatch({ type: "showToast", toast: { id, createdAt: Date.now(), message, tone, ...options } });
       return id;
     },
@@ -33,6 +36,9 @@ export function useAppErrorReporter({
     (value) => {
       const current = latestErrorRef.current;
       const next = typeof value === "function" ? value(current) : value;
+      if (next && isConnectionErrorMessage(next) && connectionRef.current) {
+        return;
+      }
       if (Object.is(current, next)) return;
 
       latestErrorRef.current = next;

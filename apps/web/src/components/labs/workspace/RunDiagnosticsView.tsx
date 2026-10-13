@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { useRef, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import {
@@ -194,7 +195,7 @@ export function RunDiagnosticsView({
           ) : null}
         </div>
       </header>
-      {error ? (
+      {error && inlineErrorMessage(error) ? (
         <p className="diagnostic-callout diagnostic-callout-error" role="alert">
           Diagnostics read failed: {error}
         </p>
@@ -256,7 +257,7 @@ export function RunDiagnosticsView({
       ) : null}
       {value ? (
         <>
-          {value.error ? (
+          {value.error && inlineErrorMessage(value.error) ? (
             <div className="diagnostic-callout diagnostic-callout-error">
               <strong>Failure reason</strong>
               <code>{value.error}</code>

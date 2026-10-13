@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import {useEffect,useRef,useState} from "react";
 import type {HumanReviewView} from "@openpond/evals/human-review";
 import {WorkspacePanel,useWorkspaceActions,useWorkspaceResourceName} from "../labs/workspace/WorkspacePanel";
@@ -28,7 +29,7 @@ export function InboxWorkspace({context,projects=[],selectedId,onSelection,proje
       </select></label>
       <label className="human-inbox-history"><input type="checkbox" checked={history} onChange={e=>setHistory(e.target.checked)}/>Completion history</label>
     </div>
-    {error?<p role="alert">{error}</p>:null}
+    {error && inlineErrorMessage(error)?<p role="alert">{error}</p>:null}
     <table><thead><tr><th>Assignment</th><th>Kind</th><th>Status</th><th>Updated</th></tr></thead><tbody>
       {items.map(record=><tr key={record.id}><td><button className="training-button secondary" type="button" onClick={()=>{setSelected(record);onSelection?.(record.id);}}>{record.title}</button></td><td>{record.kind}</td><td>{record.status.replaceAll("_"," ")}</td><td>{record.updatedAt}</td></tr>)}
     </tbody></table>

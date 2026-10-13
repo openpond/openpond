@@ -1,5 +1,8 @@
+import { TaskResourceContextsSchema, type TaskResourceContext } from "@openpond/contracts";
 import { useSyncExternalStore, type SetStateAction } from "react";
 import type { AppAction, AppState } from "../app/app-state";
+
+export type StoredComposerDraft = string | { prompt: string; resourceContexts: TaskResourceContext[] };
 
 type PromptSelection = Pick<AppState, "selectedAppId" | "selectedProjectId" | "selectedSessionId">;
 
@@ -7,7 +10,8 @@ export type ComposerDraftStore = {
   applyAppAction: (action: AppAction) => void;
   getScopeKey: () => string;
   getSnapshot: () => string;
-  getDrafts: () => Record<string, string>;
+  getDrafts: () => Record<string, StoredComposerDraft>;
+  resourceContexts: Map<string, TaskResourceContext[]>;
   set: (value: SetStateAction<string>) => void;
   setForScope: (scopeKey: string, value: SetStateAction<string>) => void;
   subscribe: (listener: () => void) => () => void;
@@ -26,10 +30,16 @@ export function createComposerDraftStore(
     selectedProjectId: null,
     selectedSessionId: null,
   },
-  initialDrafts: Record<string, string> = {},
+  initialDrafts: Record<string, StoredComposerDraft> = {},
 ): ComposerDraftStore {
   let selection = initialSelection;
-  const drafts = new Map(Object.entries(initialDrafts));
+  const resourceContexts = new Map<string, TaskResourceContext[]>();
+  const drafts = new Map(Object.entries(initialDrafts).map(([key, entry]) => {
+    if (typeof entry === "string") return [key, entry] as const;
+    const parsed = TaskResourceContextsSchema.safeParse(entry.resourceContexts);
+    if (parsed.success) resourceContexts.set(key, parsed.data);
+    return [key, entry.prompt] as const;
+  }));
   let value = drafts.get(draftKey(selection)) ?? "";
   const listeners = new Set<() => void>();
 
@@ -51,7 +61,7 @@ export function createComposerDraftStore(
     saveCurrent();
     selection = { ...selection, ...patch };
     const key = draftKey(selection);
-    if (options.clear) drafts.delete(key);
+    if (options.clear) { drafts.delete(key); resourceContexts.delete(key); }
     if (options.preserveCurrentDraft) {
       if (currentValue) drafts.set(key, currentValue);
       else drafts.delete(key);
@@ -64,7 +74,13 @@ export function createComposerDraftStore(
   const store: ComposerDraftStore = {
     getScopeKey: () => draftKey(selection),
     getSnapshot: () => value,
-    getDrafts: () => { saveCurrent(); return Object.fromEntries(drafts); },
+    resourceContexts,
+    getDrafts: () => {
+      saveCurrent();
+      return Object.fromEntries([...drafts].map(([key, prompt]) => [key,
+        resourceContexts.has(key) ? {prompt, resourceContexts: structuredClone(resourceContexts.get(key)!)} : prompt,
+      ]));
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -75,6 +91,7 @@ export function createComposerDraftStore(
       const current =
         scopeKey === activeScopeKey ? value : (drafts.get(scopeKey) ?? "");
       const resolved = typeof next === "function" ? next(current) : next;
+      if (!resolved.trim()) resourceContexts.delete(scopeKey);
       if (Object.is(current, resolved)) return;
       if (resolved) drafts.set(scopeKey, resolved);
       else drafts.delete(scopeKey);

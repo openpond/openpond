@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../../lib/error-messages";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { AgentImportPreviewSchema, AgentImportReceiptSchema, AgentImportCommitRequestSchema } from "openpond-sdk/connected-evidence";
@@ -73,7 +74,7 @@ export function AgentImportPanel({ api, ownerUserId, projectId, projects, onClos
       {destination === "new" ? <Input aria-label="New Project name" value={name} disabled={busy} onChange={event => { setName(event.target.value); invalidatePreview(); }} /> : null}
       {source === "claude_code" ? <details><summary>Select a transcript branch</summary><Input className="mt-2" aria-label="Branch leaf UUID" placeholder="Leaf UUID, if the preview reports several branches" value={branchLeaf} onChange={event => { setBranchLeaf(event.target.value); invalidatePreview(); }} /></details> : null}
       <Button variant="outline" disabled={busy || !files.length || destination === "new" && !name.trim()} onClick={previewFiles}>Preview selected files</Button>
-      {progress ? <p role="status">{progress}</p> : null}{error ? <p role="alert" className="text-destructive">{error}</p> : null}
+      {progress ? <p role="status">{progress}</p> : null}{error && inlineErrorMessage(error) ? <p role="alert" className="text-destructive">{error}</p> : null}
       {preview ? <section><h3 className="font-medium">Preview: {preview.sessions.length} sessions, {selectedCount} boundaries selected</h3>
         {preview.issues.length ? <ul className="mt-2 list-disc pl-5 text-destructive">{preview.issues.map(issue => <li key={`${issue.file}:${issue.message}`}>{issue.file}: {issue.message}</li>)}</ul> : null}
         <ul className="divide-y divide-border">{preview.sessions.map(session => <li key={session.sessionHash} className="py-3"><p>{session.sessionId}</p><p className="text-xs text-muted-foreground">{session.exporterVersion ?? "Exporter version unavailable"}; {session.eventCount} retained events</p>

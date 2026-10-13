@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import type { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { LocalExperimentRecordPageSchema } from "@openpond/contracts";
@@ -18,7 +19,7 @@ export function LocalExperimentCollection({ api, route, navigate, datasetHash }:
       ...(route.query ? { search: route.query } : {}), ...(route.after ? { afterId: route.after } : {}),
     }, signal),
   });
-  return <>{query.error ? <p role="alert">{query.error.message} <button className="training-text-button" onClick={() => void query.refetch()}>Retry Desktop</button></p> : null}
+  return <>{query.error && inlineErrorMessage(query.error) ? <p role="alert">{query.error.message} <button className="training-text-button" onClick={() => void query.refetch()}>Retry Desktop</button></p> : null}
     <ExperimentCollectionTable rows={(query.data?.items ?? []).map(item => localExperimentRecord(api, item))} loading={query.isPending} route={route} navigate={navigate} />
     {query.data?.nextCursor ? <button className="training-button secondary evaluation-more" onClick={() => navigate({ ...route, after: query.data!.nextCursor })}>More experiments</button> : null}</>;
 }

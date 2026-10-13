@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import type { z } from "zod";
 import { useEffect, useMemo } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -42,8 +43,8 @@ export function UnifiedExperimentCollection({ api, route, navigate, datasetHash,
     if (hosted.hasNextPage && !hosted.isFetchingNextPage && !hosted.isFetchNextPageError) void hosted.fetchNextPage();
   }, [datasetId, local.hasNextPage, local.isFetchingNextPage, local.fetchNextPage, local.isFetchNextPageError, hosted.hasNextPage, hosted.isFetchingNextPage, hosted.fetchNextPage, hosted.isFetchNextPageError]);
   return <>
-    {local.error ? <p role="alert">Desktop experiments: {local.error.message} <button className="training-text-button" onClick={() => void local.refetch()}>Retry</button></p> : null}
-    {hosted.error ? <p role="alert">Hosted experiments: {hosted.error.message} <button className="training-text-button" onClick={() => void hosted.refetch()}>Retry</button></p> : null}
+    {local.error && inlineErrorMessage(local.error) ? <p role="alert">Desktop experiments: {local.error.message} <button className="training-text-button" onClick={() => void local.refetch()}>Retry</button></p> : null}
+    {hosted.error && inlineErrorMessage(hosted.error) ? <p role="alert">Hosted experiments: {hosted.error.message} <button className="training-text-button" onClick={() => void hosted.refetch()}>Retry</button></p> : null}
     <ExperimentCollectionTable rows={visible} loading={!visible.length && (local.isPending || hosted.isPending || Boolean(datasetId && ((local.hasNextPage && !local.isFetchNextPageError) || (hosted.hasNextPage && !hosted.isFetchNextPageError))))} route={route} navigate={navigate} />
     {local.hasNextPage ? <button className="training-button secondary evaluation-more" disabled={local.isFetchingNextPage} onClick={() => void local.fetchNextPage()}>More Desktop experiments</button> : null}
     {hosted.hasNextPage ? <button className="training-button secondary evaluation-more" disabled={hosted.isFetchingNextPage} onClick={() => void hosted.fetchNextPage()}>More Hosted experiments</button> : null}

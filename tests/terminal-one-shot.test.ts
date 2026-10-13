@@ -107,6 +107,16 @@ describe("terminal argument parser", () => {
     });
   });
 
+  // A native-provider request must never silently run on the default hosted
+  // account, which changes both execution ownership and potential charges.
+  test("retains explicit native providers and rejects unknown providers", () => {
+    for (const provider of ["claude-code", "opencode", "grok-build"]) {
+      expect(parseTerminalArgs(["chat", "--provider", provider], "/repo").options.provider).toBe(provider);
+    }
+    expect(() => parseTerminalArgs(["chat", "--provider", "unrecognized"], "/repo")).toThrow("Unsupported chat provider");
+    expect(() => parseTerminalArgs(["chat", "--provider"], "/repo")).toThrow("Unsupported chat provider");
+  });
+
   test("parses provider/model shorthand plus project and resume flags", () => {
     expect(
       parseTerminalArgs(
@@ -304,6 +314,19 @@ describe("terminal one-shot chat result accumulator", () => {
       expect(result.status).toBe(expectedStatus);
       expect(result.events.terminal).toBe(terminal);
       if (terminal === "error") expect(result.sessionId).toBeNull();
+    }
+  });
+
+  // Native result snapshots repeat streamed text. Appending them duplicates the
+  // final answer; a previously truncated stream must not suppress the snapshot.
+  test("replaces streamed native output with its authoritative final snapshot", () => {
+    for (const maxOutputBytes of [null, 5]) {
+      const accumulator = createOneShotAccumulator({maxOutputBytes});
+      accumulator.apply(runtimeEvent({id:"chunk",name:"assistant.delta",output:"Long partial answer"}));
+      accumulator.apply(runtimeEvent({id:"final",name:"assistant.delta",output:"Done",data:{nativeMessageSnapshot:true}}));
+      const result = accumulator.result({terminal:"turn.completed",sessionId:"session-1",provider:"claude-code",model:"default",cwd:"/repo",startedAt:"2026-10-13T00:00:00Z",startedAtMs:Date.now(),error:null});
+      expect(result.finalMessage).toBe("Done");
+      expect(result.output).toEqual({finalMessageBytes:4,truncated:false,maxOutputBytes});
     }
   });
 

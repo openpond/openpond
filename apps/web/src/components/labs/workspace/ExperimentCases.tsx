@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import {useHumanGraderChoices} from "../../human-review/useHumanGraderChoices";
 import {HumanReviewLaunch} from "../../human-review/HumanReviewLaunch";
 import {HumanResultControls} from "../../human-review/HumanResultControls";
@@ -326,7 +327,7 @@ export function ExperimentCases({
           <p>
             <EvaluationStatus status={item.status} />
           </p>
-          {inspection.error ? <p role="alert">{inspection.error.message}</p> : null}
+          {inspection.error && inlineErrorMessage(inspection.error) ? <p role="alert">{inspection.error.message}</p> : null}
           <EvaluationCard title="Retained input">
             {inspection.data?.input ? (
               <pre>{JSON.stringify(inspection.data.input, null, 2)}</pre>
@@ -417,7 +418,7 @@ export function ExperimentCases({
           </EvaluationCard>
         </WorkspacePanel>
       ) : null}
-      {humanError?<p role="alert">{humanError}</p>:null}
+      {humanError && inlineErrorMessage(humanError)?<p role="alert">{humanError}</p>:null}
       {humanContext && execution ? <HumanResultControls context={humanContext} executionId={execution!.summary.id} onOpenReview={id=>void openHuman(id)}/>:null}
       {humanContext&&humanReview?<WorkspacePanel action="human-review" label={humanReview.title} onRequestClose={()=>setHumanReview(null)}><HumanReviewInspector context={humanContext} record={humanReview} onChanged={setHumanReview} onClose={()=>setHumanReview(null)}/></WorkspacePanel>:null}
     </>

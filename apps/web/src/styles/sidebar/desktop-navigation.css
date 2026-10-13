@@ -35,6 +35,7 @@
 .desktop-navigation-rail [data-rail-tooltip]:hover::after,
 .desktop-navigation-rail [data-rail-tooltip]:focus-visible::after { opacity: 1; visibility: visible; }
 .desktop-rail-account { margin-top: auto; width: 36px; }
+.desktop-rail-button.desktop-connection-error { color: var(--status-danger); margin-bottom: 7px; }
 .desktop-rail-account .user-auth-trigger { width: 36px; height: 36px; padding: 0; grid-template-columns: 1fr; gap: 0; place-items: center; }
 .desktop-rail-account .user-auth-name { display: none; }
 .desktop-rail-account .user-auth-menu { position: fixed; left: 52px; bottom: 12px; max-width: calc(100vw - 64px); }

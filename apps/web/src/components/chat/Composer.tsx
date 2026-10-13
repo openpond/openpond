@@ -1,5 +1,6 @@
 import { captureComposerResourceContext, composerResourceMetadata, mergeComposerResourceContexts } from "./composer-resource-context";
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ComposerResourceControls } from "./ComposerResourceControls";
@@ -178,7 +179,7 @@ export function Composer({
   taskSessionId = null,
   taskEvents = EMPTY_TASK_EVENTS,
   steerActiveResponses = false,
-  submissionScopeKey = "default",
+  submissionScopeKey = "default", composerDraftStore,
   getCurrentSubmissionScopeKey,
   voiceInputChannelKey = submissionScopeKey,
   initialSteerDrafts = EMPTY_STEER_DRAFTS,
@@ -226,7 +227,7 @@ export function Composer({
   const useActiveSteering = steerActiveResponses;
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
   const chatResources = useChatResourceFocus(surface === "chat" ? connection : null,taskSessionId ?? null);
-  const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources);
+  const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources, composerDraftStore);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
@@ -1652,7 +1653,7 @@ export function Composer({
           onToggleDetails={() => setGoalDetailsOpen((open) => !open)}
         />
       )}
-      {composeNotice && (
+      {composeNotice && inlineErrorMessage(composeNotice.message) && (
         <div className={`composer-notice ${composeNotice.tone}`} role="status">
           {composeNotice.message}
         </div>
@@ -1698,7 +1699,7 @@ export function Composer({
             ))}
           </div>
         )}
-        {attachmentError && (
+        {attachmentError && inlineErrorMessage(attachmentError) && (
           <div className="composer-attachment-error" role="status">
             {attachmentError}
           </div>

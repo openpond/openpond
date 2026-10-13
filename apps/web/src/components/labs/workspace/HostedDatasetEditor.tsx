@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { publishTasksetDraft } from "openpond-sdk/taskset-drafts";
 import { useMemo, useRef, useState } from "react";
 import type { DatasetWorkspaceReceipt } from "openpond-sdk/dataset-workspaces";
@@ -39,5 +40,5 @@ export function HostedDatasetEditor({ api, existing, onClose, onSaved }: { api: 
   const writing = busy && ["createDraft", "saveDraft", "saveDraftFile", "publishDraft", "connectedPublishDataset"].includes(busy);
   const authoring: TasksetDraftAuthoringClient = { payload: { tasksetDrafts: draft ? [draft] : [], modelProjects: [] }, busyAction: writing ? `taskset-draft:${busy}` : null, actions, refresh: async () => { if (!receipt.current) return null; const value = await api.request<DatasetWorkspaceReceipt>("dataset", { id: receipt.current.datasetId }); receipt.current = value; setDraft(value.workspace.draft); return { tasksetDrafts: [value.workspace.draft], modelProjects: [] }; } };
   const defaultModel: ChatModelRef = { providerId: "openpond", modelId: "openpond-chat" };
-  return <WorkspacePanel action="dataset" label="Dataset editor" onRequestClose={() => editor.current?.requestClose()}><header><h2>{existing ? "Edit dataset draft" : "Create dataset"}</h2></header>{error ? <p role="alert">{error}</p> : null}<TasksetDraftEditor closeRef={editor} owner="hosted" draftId={existing?.datasetId} defaultModel={defaultModel} training={authoring} onBack={() => onClose(receipt.current?.datasetId)} onPublished={() => { if (receipt.current) onSaved(receipt.current.datasetId); }} /></WorkspacePanel>;
+  return <WorkspacePanel action="dataset" label="Dataset editor" onRequestClose={() => editor.current?.requestClose()}><header><h2>{existing ? "Edit dataset draft" : "Create dataset"}</h2></header>{error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}<TasksetDraftEditor closeRef={editor} owner="hosted" draftId={existing?.datasetId} defaultModel={defaultModel} training={authoring} onBack={() => onClose(receipt.current?.datasetId)} onPublished={() => { if (receipt.current) onSaved(receipt.current.datasetId); }} /></WorkspacePanel>;
 }
