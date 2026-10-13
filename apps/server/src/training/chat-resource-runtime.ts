@@ -1,3 +1,4 @@
+import { readChatTrainingAttachment } from "./chat-training-attachment.js";
 import type { createChatProfileExperiments } from "../evaluations/chat-profile-experiments.js";
 import { createChatTeamExperiments } from "../evaluations/chat-team-experiments.js";
 import { randomUUID } from "node:crypto";
@@ -109,6 +110,15 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
     const {context:requestedContext,invocationToken,...input} = envelope;
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
+    if (kind === "experiment" && ["attach_training", "read_training"].includes(String(input.action))) {
+      const ref = z.object({jobId:z.string().min(1).optional(),modelRunId:z.string().min(1).optional()}).strict()
+        .refine(value=>Boolean(value.jobId || value.modelRunId),"Provide a training job or Model Run ID.").parse(input.payload);
+      if (input.action === "attach_training" && !context) throw new Error("Training attachment requires the originating chat invocation.");
+      const access = await deps.access();
+      const training = await readChatTrainingAttachment(deps.store,ref,{teamId:access.teamId,actorId:access.actorId});
+      if (context && input.action === "attach_training") await scopes.attachTraining(context.sessionId,context.turnId,training);
+      return {training};
+    }
     if(kind==="dataset" && input.action==="resource_index") {
       const links=await deps.store.chatResourceLinks({});
       const unique=new Map<string,ChatResourceSummary>();
@@ -140,6 +150,24 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       }
       const experimentChoices=[...localChoices,...ownedChoices,...profileChoices,...await cloud.list()];
       let scopeContext = chatExperimentContext(session.metadata);
+      // Rehydrate saved training references from their owner and hide records
+      // admitted by a different account. Persisted scope snapshots are not
+      // authorization and are not a live status source.
+      async function refreshTraining(state:typeof scopeContext) {
+        if (!state.scopes.some(scope=>scope.training?.length)) return;
+        const access = await deps.access().catch(()=>null);
+        for (const scope of state.scopes) {
+          const visible = [];
+          for (const reference of scope.training ?? []) {
+            if (!access || reference.owner.teamId !== access.teamId || reference.owner.actorId !== access.actorId) continue;
+            try { visible.push(await readChatTrainingAttachment(deps.store,{jobId:reference.jobId},{teamId:access.teamId,actorId:access.actorId})); }
+            catch { /* Missing or no longer authorized executions are not exposed. */ }
+          }
+          scope.training = visible;
+          if (!visible.some(reference=>reference.jobId===scope.selectedTrainingJobId)) scope.selectedTrainingJobId = null;
+        }
+      }
+      await refreshTraining(scopeContext);
       const sourceTurn=context ? await deps.store.getTurn(context.turnId) : null;
       if(context && input.action!=="context") {
         const version=sourceTurn?.metadata.chatExperimentSelectionVersion;
@@ -172,6 +200,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         return localGraderSummaries(await datasets.readListing(dataset.id,dataset.revision)).map(grader=>({...grader,rows:[]}));
       }
       async function selectedFocus(state:typeof scopeContext) {
+        await refreshTraining(state);
         if(context)await deps.store.updateTurn(context.turnId,current=>({...current,metadata:{...current.metadata,
           chatExperimentScopeId:state.activeScopeId,chatExperimentSelectionVersion:state.selectionVersion}}));
         return {...focusFor(state),scopeContext:state};
