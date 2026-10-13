@@ -15,18 +15,19 @@ export async function captureBrowserPage(contents: WebContents, mode: BrowserCap
   contents.on("did-start-navigation", onNavigation);
   contents.once("destroyed", onNavigation);
   contents.debugger.on("detach", onNavigation);
+  const send = (method: string, params?: Record<string, unknown>) => captureCommand(contents, controller.signal, method, params);
   try {
     if (!contents.debugger.isAttached()) { contents.debugger.attach("1.3"); attached = true; }
-    await contents.debugger.sendCommand("DOM.enable");
-    await contents.debugger.sendCommand("Page.enable");
+    await send("DOM.enable");
+    await send("Page.enable");
     let capture: BrowserDomCapture;
     if (mode === "node") capture = await selectNode(contents, controller.signal);
     else {
-      const metrics = await contents.debugger.sendCommand("Page.getLayoutMetrics");
+      const metrics = await send("Page.getLayoutMetrics");
       capture = { rect: BrowserCaptureRectSchema.parse(metrics.cssContentSize), selector: "Full page" };
     }
     controller.signal.throwIfAborted();
-    const screenshot = await contents.debugger.sendCommand("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { ...capture.rect, scale: 1 } });
+    const screenshot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { ...capture.rect, scale: 1 } });
     controller.signal.throwIfAborted();
     if (screenshot.data.length > 28_000_000) throw new Error("The snapshot is too large to save.");
     return { ok: true, image: snapshotImage(`data:image/png;base64,${screenshot.data}`, { selector: capture.selector, source: capture.source }) };
@@ -34,20 +35,27 @@ export async function captureBrowserPage(contents: WebContents, mode: BrowserCap
     return controller.signal.aborted || (error instanceof Error && error.name === "AbortError") ? { ok: false, canceled: true, error: "Snapshot canceled." }
       : { ok: false, error: error instanceof Error ? error.message : String(error) };
   } finally {
-    clearTimeout(timeout); pending.delete(contents.id);
+    clearTimeout(timeout);
     contents.removeListener("did-start-navigation", onNavigation); contents.removeListener("destroyed", onNavigation);
     contents.debugger.removeListener("detach", onNavigation);
     if (!contents.isDestroyed() && contents.debugger.isAttached()) {
-      await contents.debugger.sendCommand("Overlay.setInspectMode", { mode: "none", highlightConfig: {} }).catch(() => {});
-      if (attached) contents.debugger.detach();
+      let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        contents.debugger.sendCommand("Overlay.setInspectMode", { mode: "none", highlightConfig: {} }).catch(() => {}),
+        new Promise(resolve => { cleanupTimer = setTimeout(resolve, 1_000); }),
+      ]);
+      clearTimeout(cleanupTimer);
+      if (attached && !contents.isDestroyed() && contents.debugger.isAttached()) contents.debugger.detach();
     }
+    pending.delete(contents.id);
   }
 }
 
 async function selectNode(contents: WebContents, signal: AbortSignal): Promise<BrowserDomCapture> {
   contents.focus();
   const debuggerApi = contents.debugger;
-  await debuggerApi.sendCommand("Overlay.enable");
+  const send = (method: string, params?: Record<string, unknown>) => captureCommand(contents, signal, method, params);
+  await send("Overlay.enable");
   const hex = HTML_VISUAL_THEME["--blue"].replace("#", "");
   const color = { r: parseInt(hex.slice(0, 2), 16), g: parseInt(hex.slice(2, 4), 16), b: parseInt(hex.slice(4, 6), 16), a: 0.25 };
   const backendNodeId = await new Promise<number>((resolve, reject) => {
@@ -62,22 +70,31 @@ async function selectNode(contents: WebContents, signal: AbortSignal): Promise<B
     };
     debuggerApi.on("message", message); signal.addEventListener("abort", abort, { once: true });
     if (signal.aborted) { abort(); return; }
-    void debuggerApi.sendCommand("Overlay.setInspectMode", { mode: "searchForNode", highlightConfig: { showInfo: true, showStyles: true, contentColor: color, borderColor: { ...color, a: 1 } } })
+    void send("Overlay.setInspectMode", { mode: "searchForNode", highlightConfig: { showInfo: true, showStyles: true, contentColor: color, borderColor: { ...color, a: 1 } } })
       .catch(error => finish(undefined, error instanceof Error ? error : new Error(String(error))));
   });
-  await debuggerApi.sendCommand("Overlay.setInspectMode", { mode: "none", highlightConfig: {} });
-  await debuggerApi.sendCommand("Overlay.hideHighlight");
-  const box = await debuggerApi.sendCommand("DOM.getBoxModel", { backendNodeId });
+  await send("Overlay.setInspectMode", { mode: "none", highlightConfig: {} });
+  await send("Overlay.hideHighlight");
+  const box = await send("DOM.getBoxModel", { backendNodeId });
   const points = box.model.border as number[];
   const xs = points.filter((_value, index) => index % 2 === 0), ys = points.filter((_value, index) => index % 2 === 1);
-  const metrics = await debuggerApi.sendCommand("Page.getLayoutMetrics");
+  const metrics = await send("Page.getLayoutMetrics");
   const { pageX, pageY } = metrics.cssVisualViewport;
   // DOM quads use viewport coordinates; screenshot clips use page coordinates.
   const x = Math.max(0, Math.min(...xs) + pageX), y = Math.max(0, Math.min(...ys) + pageY);
-  const node = (await debuggerApi.sendCommand("DOM.describeNode", { backendNodeId })).node;
+  const node = (await send("DOM.describeNode", { backendNodeId })).node;
   const attributes = node.attributes as string[] | undefined;
   const idIndex = attributes?.indexOf("id") ?? -1;
-  const source = (await debuggerApi.sendCommand("DOM.getOuterHTML", { backendNodeId })).outerHTML as string;
+  const source = (await send("DOM.getOuterHTML", { backendNodeId })).outerHTML as string;
   return { rect: BrowserCaptureRectSchema.parse({ x, y, width: Math.ceil(Math.max(...xs) + pageX - x), height: Math.ceil(Math.max(...ys) + pageY - y) }),
     selector: `${node.localName || node.nodeName}${idIndex >= 0 ? `#${attributes![idIndex + 1]}` : ""}`.slice(0, 500), source: source.slice(0, 64_000) };
+}
+
+function captureCommand(contents: WebContents, signal: AbortSignal, method: string, params?: Record<string, unknown>): ReturnType<WebContents["debugger"]["sendCommand"]> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(new DOMException("Snapshot canceled.", "AbortError"));
+    signal.addEventListener("abort", abort, { once: true });
+    contents.debugger.sendCommand(method, params).then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
 }
