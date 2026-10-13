@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { once } from "node:events";
+import { EventEmitter, once } from "node:events";
+import type { WebContents } from "electron";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -7,6 +8,7 @@ import { expect, it } from "vitest";
 import { CdpClient } from "../scripts/desktop-harness/cdp";
 import { htmlVisualDocument } from "../packages/contracts/src/html-visual-document";
 import { PNG } from "pngjs";
+import { captureBrowserPage } from "../apps/desktop/src/desktop-native-snapshot";
 
 const chromePath = process.env.OPENPOND_TEST_CHROME ?? "/usr/bin/google-chrome";
 const hasChrome = await access(chromePath).then(() => true, () => false);
@@ -133,6 +135,35 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     const screenshot = await cdp.send<{ data: string }>("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 60, height: 40, scale: 1 } });
     const pixels = PNG.sync.read(Buffer.from(screenshot.data, "base64"));
     expect([...pixels.data.subarray((20 * pixels.width + 30) * 4, (20 * pixels.width + 30) * 4 + 4)]).toEqual([0, 170, 119, 255]);
+
+    // Exercise the native capture protocol against real Chromium: a mock-only
+    // check cannot detect a viewport/page coordinate mismatch or invalid CDP.
+    await cdp.send("Page.navigate", { url: `data:text/html,${encodeURIComponent('<body style="margin:0;height:2200px"><div id="native-target" style="position:absolute;left:30px;top:1200px;width:160px;height:60px;background:rgb(0,170,119)"></div>')}` });
+    for (let i = 0; i < 30 && !await evaluate("!!document.getElementById('native-target')"); i++) await delay(100);
+    await evaluate("scrollTo(0,1000);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+    await cdp.send("DOM.enable");
+    const document = await cdp.send<{ root: { nodeId: number } }>("DOM.getDocument");
+    const node = await cdp.send<{ nodeId: number }>("DOM.querySelector", { nodeId: document.root.nodeId, selector: "#native-target" });
+    const described = await cdp.send<{ node: { backendNodeId: number } }>("DOM.describeNode", { nodeId: node.nodeId });
+    let inspecting = false;
+    const debuggerApi = Object.assign(new EventEmitter(), {
+      isAttached: () => true,
+      sendCommand: async (method: string, params?: Record<string, unknown>) => {
+        const result = await cdp!.send(method, params);
+        if (method === "Overlay.setInspectMode" && params?.mode === "searchForNode") inspecting = true;
+        return result;
+      },
+    });
+    const contents = Object.assign(new EventEmitter(), { id: 4242, isDestroyed: () => false, focus() {}, debugger: debuggerApi }) as unknown as WebContents;
+    const nativeCapture = captureBrowserPage(contents, "node");
+    for (let i = 0; i < 30 && !inspecting; i++) await delay(100);
+    expect(inspecting).toBe(true);
+    debuggerApi.emit("message", {}, "Overlay.inspectNodeRequested", { backendNodeId: described.node.backendNodeId });
+    const native = await nativeCapture;
+    if (!native.ok) throw new Error(native.error);
+    expect(native).toMatchObject({ ok: true, image: { selector: "div#native-target", width: 160, height: 60 } });
+    const nativePixels = PNG.sync.read(Buffer.from(native.image.dataUrl.split(",")[1]!, "base64"));
+    expect([...nativePixels.data.subarray((30 * nativePixels.width + 80) * 4, (30 * nativePixels.width + 80) * 4 + 4)]).toEqual([0, 170, 119, 255]);
   } finally {
     await cdp?.send("Browser.close").catch(() => undefined);
     cdp?.close();
