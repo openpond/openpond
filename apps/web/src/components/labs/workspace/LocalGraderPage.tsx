@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { useQuery } from "@tanstack/react-query";
 import { useWorkspaceResourceName } from "./WorkspacePanel";
 import { EvaluationCard } from "./EvaluationPresentation";
@@ -13,9 +14,11 @@ export function LocalGraderPage({ api, route, navigate }: { api: WorkspaceApi; r
   });
   useWorkspaceResourceName(found?.grader.name ?? null);
   if (query.isPending) return <p role="status">Loading grader…</p>;
+  if (query.error && !inlineErrorMessage(query.error)) return null;
   if (query.error) return <p role="alert">{query.error.message} <button className="training-text-button" onClick={() => void query.refetch()}>Retry</button></p>;
   if (!found) return <p role="alert">This saved local grader is unavailable.</p>;
   if (route.revision && route.revision !== found.dataset.summary.revision && historical.isPending) return <p role="status">Loading saved grader revision…</p>;
+  if (historical.error && !inlineErrorMessage(historical.error)) return null;
   if (historical.error) return <p role="alert">{historical.error.message}</p>;
   const dataset = historical.data ? {...found.dataset,summary:historical.data.summary} : found.dataset;
   const grader = historical.data ? localMetadataGraders(historical.data.record).find(grader=>grader.graderId===found.grader.graderId) : found.grader;

@@ -1,7 +1,6 @@
 import { runSteeredNativeTurn } from "./native-agents/steered-turn.js";
 import { HTML_VISUAL_INSTRUCTIONS } from "@openpond/contracts/html-visuals";
 import { visualTools } from "../visuals/visual-tools.js";
-import { chatResourceToolDefinitions } from "../openpond/chat-resource-tool-definitions.js";
 import { nativeToolMcpResult } from "../openpond/native-tool-calls.js";
 import { createCommandModelToolDefinition, createOpenPondProfileSkillModelToolDefinitions } from "../openpond/model-tool-registry.js";
 import { materializeNativeEvaluationSkills } from "../harness/native-evaluation-skill-runtime.js";
@@ -733,7 +732,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeProfileAction,
     executeProjectAction,
     loadOpenPondProfileStateForRef,
-    executeChatResourceAction,
     resolveCandidateProfile: deps.resolveCandidateProfile,
     executeCandidateAgentCommand: deps.executeCandidateAgentCommand,
     executeCandidateCommand: deps.executeCandidateCommand,
@@ -1693,7 +1691,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
         const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : coordinationTools;
         const visualToolsEnabled = !nativeEvaluation && peerInput?.payload.taskReportingOnly !== true && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
-        const definitions = [...coordinationDefinitions, ...nativeEvaluationSkills, ...nativeCliSkillTools, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : []), ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
+        const definitions = [...coordinationDefinitions, ...nativeEvaluationSkills, ...nativeCliSkillTools, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : [])];
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
         const providerTurnId = await runSteeredNativeTurn({ runtime: nativeAgents, inbox: taskInbox, store: inboxStore, getSession,
           taskToolInstructions: [coordinationDefinitions.length ? TASK_COORDINATION_INSTRUCTIONS : "", visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : ""].filter(Boolean).join("\n\n"),
@@ -1733,7 +1731,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (turnCwd && turnCwd !== session.cwd)
         session = await updateSession(session.id, { cwd: turnCwd });
       activeTurn.session = session;
-      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...nativeEvaluationSkills, ...nativeCliSkillTools, ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : []), ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && session.workspaceKind !== "sandbox" ? chatResourceToolDefinitions(executeChatResourceAction) : [])];
+      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...nativeEvaluationSkills, ...nativeCliSkillTools, ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : [])];
       const runtime = await ensureCodexRuntime(session, {
         ...input,
         coordination: coordinationDefinitions.length ? {

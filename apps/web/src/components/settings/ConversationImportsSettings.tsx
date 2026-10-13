@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useState } from "react";
 import type { CollectorStatus, CollectorSchedule } from "@openpond/evals/native-conversations";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
@@ -38,7 +39,7 @@ export function ConversationImportsSettings({ connection }: { connection: Client
     </div><button className="settings-secondary" type="button" disabled={loading} onClick={() => void refresh()}>Refresh</button></div>
     <p>Continual imports use this computer’s local time{inventory ? ` (${inventory.collector.timezone})` : ""}. If it is off or asleep, that run is skipped. The next scheduled run picks up changes from missed days.</p>
     <p>Imports do not enable continual learning or change model training schedules.</p>
-    {error || actionError ? <p role="alert">{actionError ?? error}</p> : null}
+    {inlineErrorMessage(actionError ?? error) ? <p role="alert">{actionError ?? error}</p> : null}
     {!connection ? <p>Connect to a desktop runtime to manage imports.</p> : null}
     {loading && !inventory ? <p role="status">Loading conversation imports…</p> : null}
     {inventory ? <>

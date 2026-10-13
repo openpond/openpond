@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { UnifiedExperimentsPage } from "./UnifiedExperimentsPage";
 import { LocalGraderPage } from "./LocalGraderPage";
 import { LocalSavedDatasetPage } from "./LocalSavedDatasetPage";
@@ -143,7 +144,7 @@ function HostedEvaluationWorkspaceContent({
               />
 
             </div>
-            {inventory.error ? (
+            {inventory.error && inlineErrorMessage(inventory.error) ? (
               <div role="alert">
                 <p>{inventory.error.message}</p>
                 <button className="training-button secondary" onClick={() => void inventory.refetch()}>Retry workspace</button>

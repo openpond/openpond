@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { useLocalLearningCatalog, useProjectLocalProfiles, localDatasetsForProject, profileDisplayName } from "./local-learning-catalog";
 import { EvaluationStatus, EvaluationTime } from "./EvaluationPresentation";
 import { EvaluationTableState } from "./EvaluationTableState";
@@ -28,9 +29,9 @@ export function DatasetCollectionTable({ api, inventory, route, navigate, loadin
   const open = (row: typeof rows[number]) => navigate({ ...route, resourceId: row.id, executionLocation: row.location,
     datasetKind: row.release ? "release" : undefined, detailTab: "tasks", revision: undefined, contentHash: undefined, after: null });
   return <>
-    {associations.error ? <p role="alert">Desktop Profile associations: {associations.error.message} <button className="training-text-button" onClick={() => void associations.refetch()}>Retry</button></p> : null}
-    {error ? <p role="alert">Hosted datasets: {error} <button className="training-text-button" onClick={retry}>Retry</button></p> : null}
-    {local.error ? <p role="alert">Desktop datasets: {local.error.message} <button className="training-text-button" onClick={() => void local.refetch()}>Retry</button></p> : null}
+    {associations.error && inlineErrorMessage(associations.error) ? <p role="alert">Desktop Profile associations: {associations.error.message} <button className="training-text-button" onClick={() => void associations.refetch()}>Retry</button></p> : null}
+    {error && inlineErrorMessage(error) ? <p role="alert">Hosted datasets: {error} <button className="training-text-button" onClick={retry}>Retry</button></p> : null}
+    {local.error && inlineErrorMessage(local.error) ? <p role="alert">Desktop datasets: {local.error.message} <button className="training-text-button" onClick={() => void local.refetch()}>Retry</button></p> : null}
     <div className="evaluation-table-scroll evaluation-table-frame"><table className="training-data-table evaluation-workspace-table evaluation-resource-table">
       <thead><tr><th>Dataset</th><th>Profile</th><th>Workflow</th><th>Status</th><th>Revision</th><th>Updated</th><th>Location</th></tr></thead>
       <tbody>{rows.map(row => <tr key={row.key} tabIndex={0} onClick={() => open(row)} onKeyDown={event => { if (event.key === "Enter") open(row); }}>

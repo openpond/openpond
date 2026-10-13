@@ -6,8 +6,8 @@ import type {
 import type { ModelToolDefinition } from "../openpond/model-tool-registry.js";
 
 const CHAT_MODEL_TOOLS = new Set([
-  "openpond_dataset",
-  "openpond_experiment",
+  "exec_command",
+  "profile_skill_read",
   "html_preview",
   "html_render",
   "schedule_work",
@@ -17,8 +17,7 @@ const CHAT_MODEL_TOOLS = new Set([
 ]);
 
 const WORK_MODEL_TOOLS = new Set([
-  "openpond_dataset",
-  "openpond_experiment",
+  "exec_command",
   "html_preview",
   "html_render",
   "openpond_declare_task_work",

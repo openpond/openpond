@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
 import type { ChatResourceSummary as Resource, ChatExperimentView } from "@openpond/contracts";
 import type { ClientConnection } from "../../api/api-client";
@@ -138,7 +139,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
       <button type="button" className="training-button" disabled={busy || !selectedModels.length && !model || !subscriptionOnly && !budget} onClick={()=>void perform(run)}>{location === "cloud" ? "Run in cloud" : "Run experiment"}</button><button type="button" className="training-button secondary" disabled={busy} onClick={()=>setSetup(false)}>Close</button>
     </div>}
     {expanded && details && "record" in details && <div className="chat-resource-checks">{details.record.checks.map(check=><div key={check.kind}><strong>{check.kind}: {check.workspaceHash === details.record.workspace.contentHash ? check.status : "Stale"}</strong><p>{check.checked}/{check.total} checked</p>{check.issues.map((issue,index)=><p key={index}>{issue.message}</p>)}</div>)}</div>}
-    {error && <p role="alert" className="chat-resource-error">{error}</p>}
+    {error && inlineErrorMessage(error) && <p role="alert" className="chat-resource-error">{error}</p>}
     {launched.map(resource=><ChatResourceSummary key={resource.id} initial={resource} connection={connection} />)}
   </section>;
 }

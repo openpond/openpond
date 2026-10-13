@@ -6,6 +6,8 @@ import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { acquireNativeAgentCatalog, cachedNativeAgentCatalog, nativeAgentCatalogKey, saveNativeAgentCatalog, type NativeAgentCatalog } from "./native-agent-catalog";
 import { DropdownSelect } from "../DropdownSelect";
 import { Shield } from "../icons";
+import { inlineErrorMessage } from "../../lib/error-messages";
+import { useConnectionStatus } from "../../hooks/useConnectionStatus";
 
 /** Vendor-advertised controls are defaults for this configured installation. */
 export function NativeAgentControls({ connection, provider, providerSettings, disabled, placement = "top", onSettings, onSetup }: { connection: ClientConnection | null; provider: string; providerSettings?: ProviderSettings | null; disabled: boolean; placement?: "top" | "bottom"; onSettings(value: { provider: string; settings: ProviderSettings }): void; onSetup?(): void }) {
@@ -16,6 +18,8 @@ export function NativeAgentControls({ connection, provider, providerSettings, di
   const setup = loaded?.connection === connection && loaded.provider === provider && loaded.instance === instance ? loaded.value : retained;
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const { recovery } = useConnectionStatus(connection);
+  const attention = inlineErrorMessage(error ?? setup?.error);
   const supported = (isRegisteredAcpProvider(provider) || ["opencode", "grok-build", "claude-code"].includes(provider));
   useEffect(() => {
     setError(null);
@@ -32,7 +36,7 @@ export function NativeAgentControls({ connection, provider, providerSettings, di
       } })
       .catch((error: Error) => { if (active) setError(error.message); });
     return () => { active = false; catalog.release(); };
-  }, [connection, provider, supported, onSettings, instance]);
+  }, [connection, provider, supported, onSettings, instance, recovery]);
   if (!supported || !connection) return null;
   const nativeMode = config?.nativeMode ?? setup?.session?.modes?.currentModeId ?? "";
   async function save(patch: ProviderConfigPatch) {
@@ -71,6 +75,6 @@ export function NativeAgentControls({ connection, provider, providerSettings, di
       onChange={(value) => void save({ nativeMode: value })}
     /> : null}
     {setup?.session?.configOptions?.filter((option) => option.type === "select" && option.category !== "model" && option.category !== "mode").map((option) => <label className="composer-native-option" key={option.id}><span>{option.name}</span><select title={`Default ${option.name.toLowerCase()} for this agent installation`} disabled={disabled || saving} value={config?.nativeOptions?.[option.id] ?? option.currentValue} onChange={(event) => void save({ nativeOptions: { ...config?.nativeOptions, [option.id]: event.target.value } })}>{option.options?.flatMap((item) => "options" in item ? item.options : [item]).map((item) => <option key={item.value} value={item.value}>{item.name}</option>)}</select></label>)}
-    {error || setup?.error ? <span role="status" title={error ?? setup?.error ?? undefined}>Agent needs attention{onSetup ? <button type="button" onClick={onSetup}>Open setup</button> : null}</span> : null}
+    {attention ? <span role="status" title={attention}>Agent needs attention{onSetup ? <button type="button" onClick={onSetup}>Open setup</button> : null}</span> : null}
   </>;
 }

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { OpenPondLearningClient, type LearningCommand, type LearningResourceKind, type LearningResourceQuery, type LearningRevisionRef } from "openpond-sdk/learning";
 import type { ClientConnection } from "../../../api";
+import { fetchApiResponse } from "../../../api/api-client";
 import { connectionQueryScope, learningQueryScope, scopeLearningClient } from "../../../lib/query-scope";
 
 export function useLearningInspection(client: OpenPondLearningClient | null, evidence: LearningRevisionRef) {
@@ -11,7 +12,12 @@ export function useLearningInspection(client: OpenPondLearningClient | null, evi
 }
 
 export function useLearningClient(connection: ClientConnection | null, scope: string) {
-  return useMemo(() => connection ? scopeLearningClient(new OpenPondLearningClient({ baseUrl: connection.serverUrl, apiKey: connection.token, scope }),
+  return useMemo(() => connection ? scopeLearningClient(new OpenPondLearningClient({ baseUrl: connection.serverUrl, apiKey: connection.token, scope,
+    fetch: (url, init) => {
+      const target = new URL(String(url));
+      return fetchApiResponse(connection, `${target.pathname}${target.search}`, init);
+    },
+  }),
     ["learning", connectionQueryScope(connection), scope]) : null, [connection, scope]);
 }
 

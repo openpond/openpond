@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useRef, useState } from "react";
 import { AppDialog } from "../dialogs/AppDialog";
 import { registerDesktopNavigationGuard } from "./lab-primary-tab-state";
@@ -44,7 +45,7 @@ export function useDraftNavigation(input: { dirty: boolean; busy?: boolean; name
   const dialog = open ? <AppDialog ariaLabel={input.save ? `Save ${input.name} before leaving` : `Discard ${input.name}`} className="labs-rename-dialog labs-draft-exit-dialog" backdropClassName="labs-rename-backdrop" dismissDisabled={saving} onClose={() => resolve(false)}>
     <h2>{input.save ? `Save ${input.name} before leaving?` : `Discard ${input.name}?`}</h2>
     <p>{input.save ? "Your changes can be saved before opening the next page." : "This setup has not been saved. Keep editing or discard it to leave."}</p>
-    {error ? <p role="alert">{error}</p> : null}
+    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
     <div className="model-build-actions">
       <button className="training-button secondary" type="button" disabled={saving} onClick={() => resolve(false)}>Keep editing</button>
       <button className="training-button secondary" type="button" disabled={saving} onClick={() => resolve(true)}>Discard changes</button>

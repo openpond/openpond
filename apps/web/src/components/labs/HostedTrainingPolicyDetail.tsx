@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { contentHash } from "@openpond/harness";
 import { HostedTrainingPolicyControlSchema } from "openpond-sdk/post-training";
 import { useEffect, useRef, useState } from "react";
@@ -172,7 +173,7 @@ export function HostedTrainingPolicyDetail({
   return (
     <section className="labs-resource-page">
       <h2>Continual learning policy</h2>
-      {error ? <p role="alert">{error}</p> : null}
+      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
       {!value ? (
         <p role="status">Loading exact policy…</p>
       ) : (

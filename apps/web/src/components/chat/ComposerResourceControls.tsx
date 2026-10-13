@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
 import { DropdownSelect } from "../DropdownSelect";
 import { ChevronDown, MoreVertical, Plus } from "../icons";
@@ -71,6 +72,6 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
       <input autoFocus aria-label="Experiment name" value={name} onChange={event => setName(event.target.value)} maxLength={500} disabled={disabled} />
       <button type="submit" disabled={disabled || !name.trim()}>Save</button><button type="button" onClick={() => setRenaming(false)}>Cancel</button>
     </form> : null}
-    {resources.error ? <div role="status" className="chat-resource-error">{resources.error}</div> : null}
+    {resources.error && inlineErrorMessage(resources.error) ? <div role="status" className="chat-resource-error">{resources.error}</div> : null}
   </div>;
 }

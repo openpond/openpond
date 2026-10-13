@@ -46,6 +46,7 @@ import { useAppDerivedRows } from "../hooks/useAppDerivedRows";
 import { useBeginNewChat } from "../hooks/useBeginNewChat";
 import { navigateDesktopRoute } from "../components/labs/lab-primary-tab-state";
 import { connectionQueryScope } from "../lib/query-scope";
+import { useConnectionNotification } from "../hooks/useConnectionNotification";
 import { useAppConversationContext } from "../hooks/useAppConversationContext";
 import { useCodexPreferenceActions } from "../hooks/useCodexPreferenceActions";
 import { useCodexHistoryEvents } from "../hooks/useCodexHistoryEvents";
@@ -251,6 +252,7 @@ export function useAppPrimaryRuntime() {
     setSelectedSessionId,
   });
   connectionRef.current = connection;
+  useConnectionNotification(connection, showToast, appDispatch);
   useEffect(() => {
     if (bootstrap)
       setSidebarFileBookmarks(bootstrap.sidebarFileBookmarks ?? []);

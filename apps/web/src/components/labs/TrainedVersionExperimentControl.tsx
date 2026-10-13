@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState, useMemo, useRef } from "react";
 import "./hosted-training-run.css";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
@@ -239,7 +240,7 @@ export function TrainedVersionExperimentControl({
             : null}
         </select>
       </label>
-      {error ? <p role="alert">{error}</p> : null}
+      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
       {value ? (
         <>
           <p role="status">

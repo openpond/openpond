@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useRef, useState, type FormEvent } from "react";
 import type { BootstrapPayload, ProviderSettings } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
@@ -74,7 +75,7 @@ export function GettingStartedDialog({ connection, payload, onPayload, onClose }
       <a href={API_KEYS_URL} target="_blank" rel="noreferrer" className="getting-started-key-link" onClick={event => { event.preventDefault(); void openApiKeys(); }}>Create an API key <ExternalLink size={12} /></a>
       <form onSubmit={event => void connectAccount(event)}>
         <label className="git-dialog-field"><span>OpenPond API key</span><input data-autofocus type="password" autoComplete="off" spellCheck={false} placeholder="opk_…" value={apiKey} disabled={accountSettings.saving} onChange={event => { setApiKey(event.target.value); setError(null); }} /></label>
-        {error ? <p className="getting-started-error" role="alert">{error}</p> : null}
+        {error && inlineErrorMessage(error) ? <p className="getting-started-error" role="alert">{error}</p> : null}
         <button className="git-dialog-primary" type="submit" disabled={accountSettings.saving || !apiKey.trim()}>{accountSettings.saving ? "Connecting…" : "Connect account"}</button>
       </form>
     </AppDialog> : null}
