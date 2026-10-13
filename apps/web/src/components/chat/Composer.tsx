@@ -1584,7 +1584,7 @@ export function Composer({
         onClose={closeSubmitIssueDialog}
         onSubmit={submitIssueForm}
       />
-      {(showProjectFooter || surface === "chat" && taskSessionId) && (
+      {!(surface === "chat" && chatResources.scope) && (showProjectFooter || surface === "chat" && taskSessionId) && (
         <div className="composer-footer">
           {showProjectFooter ? (
             <ComposerProjectTargetControl

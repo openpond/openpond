@@ -12,6 +12,7 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
   const { scope, focus } = resources;
   useEffect(() => setRenaming(false), [scope?.id]);
   if (!scope) return null;
+  const ordinal = scope.ordinal;
   const disabled = busy || resources.selecting;
   const dataset = focus.dataset;
   const datasets = dataset ? [dataset, ...resources.datasets.filter(candidate => candidate.id !== dataset.id || candidate.revision !== dataset.revision)] : resources.datasets;
@@ -24,7 +25,7 @@ export function ComposerResourceControls({ resources, busy, onDraft }: {
   function draft(action: string) {
     const prompts: Record<string, string> = {
       "Add data": `Help me choose a dataset for ${context}.`,
-      "Create dataset": `Create a dataset for experiment ${scope.ordinal}.`,
+      "Create dataset": `Create a dataset for experiment ${ordinal}.`,
       "Add grader": `Add a grader to ${context}.`,
       "Test grader": `Test ${grader ? grader.name : "the graders"} on ${context}.`,
       "Run on saved outputs": `Grade this experiment's saved answers with ${grader ? grader.name : "the attached graders"}.`,
