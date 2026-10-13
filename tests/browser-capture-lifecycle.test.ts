@@ -8,6 +8,7 @@ import { captureBrowserPage, cancelBrowserCapture } from "../apps/desktop/src/de
 // user can retry, without detaching an existing debugger owned by another tool.
 test("browser snapshots own their capture lifecycle and cancel on navigation", async () => {
   let attached = false, inspect = false;
+  let lastClip: unknown;
   const pngHeader = Buffer.alloc(24);
   pngHeader.writeUInt32BE(1360, 16); pngHeader.writeUInt32BE(6000, 20);
   const png = pngHeader.toString("base64");
@@ -17,8 +18,11 @@ test("browser snapshots own their capture lifecycle and cancel on navigation", a
     detach: () => { attached = false; },
     sendCommand: async (method: string, input?: Record<string, unknown>) => {
       if (method === "Overlay.setInspectMode") inspect = input?.mode === "searchForNode";
-      if (method === "Page.getLayoutMetrics") return { cssContentSize: { x: 0, y: 0, width: 680, height: 3000 } };
-      if (method === "Page.captureScreenshot") return { data: png };
+      if (method === "Page.getLayoutMetrics") return { cssContentSize: { x: 0, y: 0, width: 680, height: 3000 }, cssVisualViewport: { pageX: 10, pageY: 900 } };
+      if (method === "DOM.getBoxModel") return { model: { border: [20, 30, 180, 30, 180, 90, 20, 90] } };
+      if (method === "DOM.describeNode") return { node: { localName: "button", attributes: ["id", "target"] } };
+      if (method === "DOM.getOuterHTML") return { outerHTML: '<button id="target">Capture me</button>' };
+      if (method === "Page.captureScreenshot") { lastClip = input?.clip; return { data: png }; }
       return {};
     },
   });
@@ -44,4 +48,13 @@ test("browser snapshots own their capture lifecycle and cancel on navigation", a
   expect(inspect).toBe(false);
   expect(contents.listenerCount("did-start-navigation")).toBe(0);
   expect(debuggerApi.listenerCount("message")).toBe(0);
+
+  // Scrolled pages must capture the selected node, rather than unrelated pixels
+  // at the same viewport coordinates near the top of the document.
+  const selected = captureBrowserPage(contents, "node");
+  for (let i = 0; i < 20 && !inspect; i++) await new Promise(resolve => setTimeout(resolve, 0));
+  debuggerApi.emit("message", {}, "Overlay.inspectNodeRequested", { backendNodeId: 4 });
+  expect(await selected).toMatchObject({ ok: true, image: { selector: "button#target", source: '<button id="target">Capture me</button>' } });
+  expect(lastClip).toEqual({ x: 30, y: 930, width: 160, height: 60, scale: 1 });
+  expect(inspect).toBe(false);
 });
