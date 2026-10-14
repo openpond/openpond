@@ -1,4 +1,5 @@
 import { HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, type HtmlVisualTheme } from "./html-visuals.js";
+import { browserSnapshotInspectorSource } from "./browser-snapshots.js";
 
 // The trusted outer document contains no author markup. Its frame-src policy
 // prevents the author frame navigating itself to a network URL; the inner CSP
@@ -16,6 +17,33 @@ export function htmlVisualDocument(html: string, identity: string, initialTheme:
     theme(${json(initialTheme)});
     addEventListener('message', e => { if(e.source === parent && e.data?.type === 'openpond-theme') theme(e.data.theme); });
     const send = data => parent.postMessage({ ...data, identity: ${json(identity)} }, '*');
+    const resourceToken=Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');
+    send({type:'openpond-resource-ready',resourceToken});
+    let snapshotRequest=null;
+    const inspector=${browserSnapshotInspectorSource()}(result=>{
+      if(!snapshotRequest)return;
+      send({type:'openpond-snapshot-result',resourceToken,requestId:snapshotRequest,...result});
+      snapshotRequest=null;
+    },true);
+    addEventListener('message',e=>{
+      const data=e.data;
+      if(e.source!==parent || data?.type!=='openpond-snapshot-command' || typeof data.requestId!=='string')return;
+      if(data.action==='cancel'){inspector.cancel();return;}
+      snapshotRequest=data.requestId;
+      if(data.action==='page')inspector.page();
+      else if(data.action==='node'){inspector.start();send({type:'openpond-snapshot-ready',resourceToken,requestId:snapshotRequest});}
+    });
+    // Declarative resource buttons use a trusted user click. Author scripts
+    // receive no API transport, credentials, or arbitrary host command bridge.
+    document.addEventListener('click',e=>{
+      if(!e.isTrusted || snapshotRequest)return;
+      const button=e.target?.closest?.('button[data-openpond-resource-id]');
+      if(!button || button.disabled)return;
+      const kind=button.dataset.openpondResourceKind,id=button.dataset.openpondResourceId;
+      const revision=Number(button.dataset.openpondResourceRevision);
+      if(!['dataset','experiment'].includes(kind) || !id || id.length>240 || (kind==='dataset' && (!Number.isSafeInteger(revision) || revision<1)))return;
+      send({type:'openpond-resource-select',resourceToken,resource:{kind,id,...Number.isSafeInteger(revision)&&revision>0?{revision}:{}}});
+    },true);
     let interactionPending=false;
     for(const type of ['wheel','touchmove','pointerdown','keydown']) addEventListener(type,e=>{
       if(!e.isTrusted || interactionPending)return; interactionPending=true;
@@ -44,12 +72,18 @@ export function htmlVisualDocument(html: string, identity: string, initialTheme:
   const inner = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${attr(POLICY)}"><meta name="viewport" content="width=device-width,initial-scale=1"><style id="openpond-theme"></style><style>html,body{color-scheme:var(--color-scheme);margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--font-web)}body{display:flow-root;overflow-wrap:anywhere}*{box-sizing:border-box}img,svg,canvas{max-width:100%}button,input,select{font:inherit}button{cursor:pointer}html{scrollbar-width:none}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}</style><script>${innerBootstrap}</script></head><body>${html}</body></html>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${attr(POLICY)}"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;background:transparent}iframe{display:block;border:0;width:100%;height:80px;color-scheme:normal}</style></head><body><iframe title="Interactive visual" sandbox="allow-scripts" referrerpolicy="no-referrer" allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"></iframe><script>(()=>{
     const frame=document.querySelector('iframe'); const identity=${json(identity)};
+    let resourceToken=null;
     const state=window.__openpondVisual={height:80,console:[],ready:false};
     addEventListener('message', e=>{
       const d=e.data;if(!d||typeof d!=='object')return;
       if(e.source===parent && parent!==window && d.type==='openpond-theme' && d.identity===identity){frame.contentWindow.postMessage({type:'openpond-theme',theme:d.theme},'*');return;}
+      if(e.source===parent && parent!==window && d.type==='openpond-snapshot-command' && d.identity===identity){if(d.action==='node')frame.focus();frame.contentWindow.postMessage(d,'*');return;}
       if(e.source!==frame.contentWindow || d.identity!==identity)return;
       if(d.type==='openpond-interaction' && parent!==window)parent.postMessage({type:'openpond-visual-interaction',identity},'*');
+      if(d.type==='openpond-resource-ready' && resourceToken===null && typeof d.resourceToken==='string' && d.resourceToken.length<100)resourceToken=d.resourceToken;
+      if(d.type==='openpond-resource-select' && resourceToken!==null && d.resourceToken===resourceToken && parent!==window)parent.postMessage({type:'openpond-visual-resource-select',identity,resource:d.resource},'*');
+      if(d.type==='openpond-snapshot-result' && resourceToken!==null && d.resourceToken===resourceToken && parent!==window)parent.postMessage({type:'openpond-visual-snapshot',identity,requestId:d.requestId,capture:d.capture,canceled:d.canceled,error:d.error},'*');
+      if(d.type==='openpond-snapshot-ready' && resourceToken!==null && d.resourceToken===resourceToken && parent!==window)parent.postMessage({type:'openpond-visual-snapshot-ready',identity,requestId:d.requestId},'*');
       if(d.type==='openpond-console' && state.console.length<40 && ['log','warn','error'].includes(d.level) && typeof d.text==='string')state.console.push({level:d.level,text:d.text.slice(0,2000)});
       if(d.type==='openpond-size' && Number.isFinite(d.height)){
         const height=Math.max(80,Math.min(${HTML_VISUAL_MAX_HEIGHT},Math.ceil(d.height)));state.height=height;if(d.ready===true)state.ready=true;

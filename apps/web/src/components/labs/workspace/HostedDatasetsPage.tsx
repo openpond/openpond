@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { DatasetCollectionTable } from "./DatasetCollectionTable";
 import {WorkflowEvaluationDiscovery} from "./WorkflowEvaluationDiscovery";
 import { ConnectedRecordedSetup } from "./connected-evidence/ConnectedRecordedSetup";
@@ -121,7 +122,7 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
       <button className="training-button" disabled={busy || selected.isFetching || Boolean(versionRevision)} onClick={() => selectSidebarAction("dataset")}>{published ? "Create editable version" : dataset ? "Edit Dataset" : "New Dataset"}</button>
       <WorkspaceActionMenu label="More dataset actions" actions={moreActions} />
     </header>
-    {visibilityMenu.error ? <p role="alert">{visibilityMenu.error}</p> : null}
+    {visibilityMenu.error && inlineErrorMessage(visibilityMenu.error) ? <p role="alert">{visibilityMenu.error}</p> : null}
     {!window.openpond?.selectFolder ? <label>Authored folder path <input value={importPath ?? ""} onChange={event => setImportPath(event.target.value)} /></label> : null}
     {selected.error || version.error || error ? <p role="alert">{selected.error?.message ?? version.error?.message ?? error}</p> : null}
     {versionRevision ? <p className="evaluation-version-banner" role="status">Viewing immutable published version. <button className="evaluation-link-button" onClick={() => { navigate({ ...route, revision: undefined, contentHash: undefined }); setTaskId(null); }}>Return to current workspace</button></p> : null}

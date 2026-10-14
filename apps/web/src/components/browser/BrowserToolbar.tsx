@@ -1,8 +1,10 @@
 import { ArrowLeft, ArrowRight, ExternalLink, MoreHorizontal, RefreshCw, Square } from "../icons";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 export function BrowserToolbar({
   activeTab,
+  documentName,
+  snapshotActions,
   available,
   onBack,
   onClearData,
@@ -13,6 +15,8 @@ export function BrowserToolbar({
   onStop,
 }: {
   activeTab: BrowserTabState | null;
+  documentName?: string;
+  snapshotActions?: ReactNode;
   available: boolean;
   onBack: () => void;
   onClearData: () => void;
@@ -26,11 +30,12 @@ export function BrowserToolbar({
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    setDraftUrl(activeTab?.url ?? "");
-  }, [activeTab?.url]);
+    setDraftUrl(documentName ?? activeTab?.url ?? "");
+  }, [activeTab?.url, documentName]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (documentName) return;
     onNavigate(draftUrl);
   }
 
@@ -56,7 +61,8 @@ export function BrowserToolbar({
       <form className="browser-address-form" onSubmit={submit}>
         <input
           aria-label="Browser address"
-          disabled={!available}
+          disabled={!available && !documentName}
+          readOnly={Boolean(documentName)}
           placeholder="Search or enter address"
           spellCheck={false}
           value={draftUrl}
@@ -64,7 +70,8 @@ export function BrowserToolbar({
         />
       </form>
       <div className="browser-panel-actions">
-        <button type="button" title="Open external" aria-label="Open external" disabled={!activeTab} onClick={onOpenExternal}>
+        {snapshotActions}
+        <button type="button" title="Open external" aria-label="Open external" disabled={!activeTab || Boolean(documentName)} onClick={onOpenExternal}>
           <ExternalLink size={14} />
         </button>
         <div className="browser-menu-anchor">

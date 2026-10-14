@@ -1,8 +1,9 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
 import type { ChatResourceSummary as Resource, ChatExperimentView } from "@openpond/contracts";
 import type { ClientConnection } from "../../api/api-client";
 import { chatResourceRequest, type DatasetResponse } from "../../api/chat-resource-api";
-import { RelatedResourceChats } from "./RelatedResourceChats";
+import { ChatResourceToolbar, type ResourceAction } from "./ChatResourceToolbar";
 import { ChatGraderSummary } from "./ChatGraderSummary";
 import { DropdownSelect } from "../DropdownSelect";
 import "../../styles/training/training.css";
@@ -15,6 +16,7 @@ export function ChatResourceSummary(props:{initial:Resource;connection:ClientCon
 function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Resource;connection:ClientConnection|null;context?:{sessionId:string;turnId:string}}) {
   const [current,setCurrent] = useState(initial);
   const [expanded,setExpanded] = useState(false);
+  const [rowPage,setRowPage] = useState(0);
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState<string|null>(null);
   const [details,setDetails] = useState<DatasetResponse|ChatExperimentView|null>(null);
@@ -63,7 +65,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
     } else {
       const response = await chatResourceRequest<{view:ChatExperimentView}>(connection!,"experiment",{action:"result",payload:{id:current.id}});setDetails(response.view);
     }
-    setExpanded(true);
+    setRowPage(0);setExpanded(true);
   }
   async function prepareRun() {
     const datasetId=current.kind === "dataset" ? current.id : current.datasetId;
@@ -87,24 +89,47 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
     const response = await chatResourceRequest<{summaries:Resource[]}>(connection!,"experiment",{action:location === "cloud" ? "run_cloud" : "run",context,payload:{datasetId,revision,operationId:operation,...subscriptionOnly ? {} : {maximumCostUsd},taskLimit:limit,models:selected.map(model=>({providerId:model!.providerId,modelId:model!.id}))}});
     if (!context) setLaunched(response.summaries);setSetup(false);setOperationId(null);
   }
-  const rows = expanded && details ? "record" in details ? details.record.workspace.draft.tasks.map(t=>({id:t.id,label:typeof t.input.prompt === "string" ? t.input.prompt : JSON.stringify(t.input),detail:details.record.workspace.draft.graders.map(g=>g.label).join(", "),score:undefined})) : details.cases.map(c=>({id:c.id,label:c.taskId,detail:c.error ?? c.output ?? c.status,score:c.score})) : current.rows;
-  return <section className="chat-resource-summary" aria-label={`${current.kind}: ${current.name}`}>
-    <header><div><strong>{current.name}</strong><span>Version {current.revision} · {current.state}</span></div>
-      {current.kind === "dataset" && !unsaved && current.syncState !== "Synced" && current.syncState !== "Paused" && <button type="button" className="training-button secondary" disabled={!connection || busy || unsaved} onClick={()=>void perform(()=>datasetAction(current.syncState === "Local" ? "upload" : "sync"))}>{current.syncState === "Local" ? "Upload to cloud" : "Retry sync"}</button>}
-    </header>
-    <p className="chat-resource-meta">{current.kind === "dataset" ? `${current.taskCount ?? 0} saved tasks · ${current.graderCount ?? 0} graders · ${current.syncState ?? "Local"} · ${current.checkState ?? "Not checked"}` : `${current.location ?? "local"} · ${current.model ?? ""} · ${current.evaluatedCount ?? 0}/${current.taskCount ?? 0} graded · ${current.scoreLabel ?? "Mean task score"} ${current.score == null ? "Unavailable" : `${(current.score*100).toFixed(1)}%`} · Cost ${current.costUsd == null ? "Unavailable" : `$${current.costUsd.toFixed(4)}`}`}</p>
-    {current.kind === "experiment" && <p className="chat-resource-meta">{current.qualityFailureCount ?? 0} quality failures · {current.executionFailureCount ?? 0} execution failures · {current.ungradedCount ?? current.taskCount ?? 0} ungraded</p>}
-    <div className={`training-table-wrap chat-resource-table ${expanded ? "expanded" : ""}`} tabIndex={0} aria-label="Resource rows">
+  const rows = expanded && details ? "record" in details ? details.record.workspace.draft.tasks.map(t=>({id:t.id,label:typeof t.input.prompt === "string" ? t.input.prompt : typeof t.input.request === "string" ? t.input.request : JSON.stringify(t.input),detail:details.record.workspace.draft.graders.map(g=>g.label).join(", "),score:undefined})) : details.cases.map(c=>({id:c.id,label:c.taskId,detail:c.error ?? c.output ?? c.status,score:c.score})) : current.rows;
+  const primary:ResourceAction = {label:expanded ? "Collapse" : current.kind === "dataset" ? "View rows" : "View results",disabled:busy || !connection || unsaved,run:()=>void perform(view)};
+  const actions:ResourceAction[]=[];
+  const action=(label:string,run:()=>Promise<void>,disabled=false)=>actions.push({label,run:()=>void perform(run),disabled:busy || !connection || disabled});
+  if(current.kind === "dataset") {
+    action("Run experiment",prepareRun,unsaved);
+    action("Check graders",()=>datasetAction("check_graders"),unsaved);
+    if(!unsaved && current.syncState !== "Synced" && current.syncState !== "Paused") action(current.syncState === "Local" ? "Upload to cloud" : "Retry sync",()=>datasetAction(current.syncState === "Local" ? "upload" : "sync"));
+    if(expanded && !unsaved && current.syncState !== "Local") {
+      action(current.syncState === "Paused" ? "Resume sync" : "Pause sync",()=>datasetAction("pause_sync",{paused:current.syncState !== "Paused"}));
+      action("Disconnect cloud",()=>datasetAction("disconnect_sync"));
+    }
+  } else if(["queued","running","cancelling"].includes(current.state)) {
+    action("Cancel experiment",async()=>{const response=await chatResourceRequest<{summary:Resource}>(connection!,"experiment",{action:"cancel",payload:{id:current.id}});setCurrent(previous=>({...response.summary,datasetId:previous.datasetId,datasetRevision:previous.datasetRevision}));});
+  } else {
+    if(!current.owner && !current.profileRef) action("Run again",prepareRun,!current.datasetId);
+    action("HTML charts",async()=>{await chatResourceRequest(connection!,"experiment",{action:"charts",context,payload:{ids:[current.id],operationId:chartOperationId}});},!context);
+  }
+  const metric=current.score == null ? "" : `${Number((current.score*100).toFixed(1))}%`;
+  const summary=current.kind === "dataset" ? `${current.taskCount ?? 0} examples · ${current.graderCount ?? 0} graders`
+    : `${current.evaluatedCount ?? 0}/${current.taskCount ?? 0} graded${metric ? ` · ${metric}` : ""}`;
+  return <section className={`chat-resource-summary ${expanded ? "" : "compact"}`} aria-label={`${current.kind}: ${current.name}`}>
+    <ChatResourceToolbar name={current.name} version={current.revision} summary={summary} primary={primary} actions={actions}>
+      <dl>
+        <dt>Status</dt><dd>{current.state}</dd>
+        {current.kind === "dataset" ? <><dt>Storage</dt><dd>{current.syncState ?? "Local"}</dd><dt>Grader checks</dt><dd>{current.checkState ?? "Not checked"}</dd></> : <>
+          <dt>Model</dt><dd>{current.model ?? "Unavailable"}</dd><dt>Location</dt><dd>{current.location ?? "local"}</dd>
+          <dt>{current.scoreLabel ?? "Mean task score"}</dt><dd>{metric || "Unavailable"}</dd>
+          <dt>Cost</dt><dd>{current.costUsd == null ? "Unavailable" : `$${current.costUsd.toFixed(4)}`}</dd>
+          <dt>Quality failures</dt><dd>{current.qualityFailureCount ?? "Unavailable"}</dd>
+          <dt>Execution failures</dt><dd>{current.executionFailureCount ?? "Unavailable"}</dd>
+          <dt>Ungraded</dt><dd>{current.ungradedCount ?? "Unavailable"}</dd>
+        </>}
+      </dl>
+    </ChatResourceToolbar>
+    {expanded && <div className={`training-table-wrap chat-resource-table ${expanded ? "expanded" : ""}`} tabIndex={0} aria-label="Resource rows">
       <table className="training-data-table evaluation-workspace-table"><thead><tr><th>{current.kind === "dataset" ? "Task" : "Case"}</th><th>{current.kind === "dataset" ? "Graders" : "Outcome"}</th>{current.kind === "experiment" && <th>Score</th>}</tr></thead>
-        <tbody>{rows.length ? rows.map(row=><tr key={row.id}><td>{row.label}</td><td>{row.detail}</td>{current.kind === "experiment" && <td>{row.score == null ? "Unavailable" : `${(row.score*100).toFixed(1)}%`}</td>}</tr>) : <tr><td colSpan={current.kind === "experiment" ? 3 : 2}>{["Creating","Importing"].includes(current.state) ? "Waiting for saved tasks…" : "No saved rows to show."}</td></tr>}</tbody>
+        <tbody>{rows.length ? rows.slice(rowPage * 5, rowPage * 5 + 5).map(row=><tr key={row.id}><td title={row.label}>{row.label}</td><td title={row.detail}>{row.detail}</td>{current.kind === "experiment" && <td>{row.score == null ? "Unavailable" : `${(row.score*100).toFixed(1)}%`}</td>}</tr>) : <tr><td colSpan={current.kind === "experiment" ? 3 : 2}>{["Creating","Importing"].includes(current.state) ? "Waiting for saved tasks…" : "No saved rows to show."}</td></tr>}</tbody>
       </table>
-    </div>
-    <div className="chat-resource-actions">
-      {current.kind === "dataset" ? <><button type="button" className="training-button secondary" disabled={busy || !connection || unsaved} onClick={()=>void perform(prepareRun)}>Run experiment</button><button type="button" className="training-button secondary" disabled={busy || !connection || unsaved} onClick={()=>void perform(()=>datasetAction("check_graders"))}>Check graders</button></> : ["queued","running","cancelling"].includes(current.state) ? <button type="button" className="training-button secondary" disabled={busy || !connection} onClick={()=>void perform(async()=>{const response=await chatResourceRequest<{summary:Resource}>(connection!,"experiment",{action:"cancel",payload:{id:current.id}});setCurrent(previous=>({...response.summary,datasetId:previous.datasetId,datasetRevision:previous.datasetRevision}));})}>Cancel experiment</button> : null}
-      <button type="button" className="training-button secondary" disabled={busy || !connection || unsaved} onClick={()=>void perform(view)}>{expanded ? "Collapse" : current.kind === "dataset" ? "View all" : "View results"}</button>
-      {current.kind === "experiment" && !["queued","running","cancelling"].includes(current.state) && <><button type="button" className="training-button secondary" disabled={busy || !connection || !current.datasetId} onClick={()=>void perform(prepareRun)}>Run again</button><button type="button" className="training-button secondary" disabled={busy || !connection || !context} onClick={()=>void perform(async()=>{await chatResourceRequest(connection!,"experiment",{action:"charts",context,payload:{ids:[current.id],operationId:chartOperationId}});})}>HTML charts</button></>}
-      {expanded && current.kind === "dataset" && !unsaved && current.syncState !== "Local" && <><button type="button" className="training-button secondary" disabled={busy || !connection} onClick={()=>void perform(()=>datasetAction("pause_sync",{paused:current.syncState !== "Paused"}))}>{current.syncState === "Paused" ? "Resume sync" : "Pause sync"}</button><button type="button" className="training-button secondary" disabled={busy || !connection} onClick={()=>void perform(()=>datasetAction("disconnect_sync"))}>Disconnect cloud</button></>}
-    </div>
+    </div>}
+    {expanded && rows.length > 5 && <div className="chat-resource-pagination"><button type="button" disabled={rowPage === 0} onClick={()=>setRowPage(value=>value-1)}>Previous</button><span>{rowPage+1}/{Math.ceil(rows.length/5)}</span><button type="button" disabled={(rowPage+1)*5 >= rows.length} onClick={()=>setRowPage(value=>value+1)}>Show more</button></div>}
     {setup && <div className="chat-resource-run-setup"><p>Run the saved Dataset, version {current.kind === "dataset" ? current.revision : current.datasetRevision}. The total budget includes model calls and grading.{location === "cloud" ? " Cloud execution publishes this exact revision and enables Dataset sync." : ""}</p>
       <DropdownSelect label="Execution location" value={location} options={[{value:"local",label:"Local"},{value:"cloud",label:"Cloud",description:"Publish this saved version and run in the linked workspace"}]} onChange={value=>{setLocation(value as "local"|"cloud");setSelectedModels([]);setModel("");setOperationId(null);}} disabled={busy}/>
       <DropdownSelect label="Evaluated model" value={model} options={[{value:"",label:"Select model"},...models.filter(model=>location === "local" || model.providerId === "openpond").map(m=>({value:`${m.providerId}/${m.id}`,label:m.name,description:m.providerId}))]} onChange={value=>{setModel(value);setOperationId(null);}} disabled={busy} />
@@ -115,9 +140,8 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
       <label>Maximum tasks<input type="number" min="1" max="100" value={taskLimit} onChange={event=>{setTaskLimit(event.target.value);setOperationId(null);}} disabled={busy} /></label>
       <button type="button" className="training-button" disabled={busy || !selectedModels.length && !model || !subscriptionOnly && !budget} onClick={()=>void perform(run)}>{location === "cloud" ? "Run in cloud" : "Run experiment"}</button><button type="button" className="training-button secondary" disabled={busy} onClick={()=>setSetup(false)}>Close</button>
     </div>}
-    {expanded && details && "record" in details && <div className="chat-resource-checks">{details.record.checks.map(check=><div key={check.kind}><strong>{check.kind}: {check.workspaceHash === details.record.workspace.contentHash ? check.status : "Stale"}</strong><p>{check.checked}/{check.total} checked</p>{check.issues.map((issue,index)=><p key={index}>{issue.message}</p>)}</div>)}</div>}
-    <RelatedResourceChats resource={current} connection={connection}/>
-    {error && <p role="alert" className="chat-resource-error">{error}</p>}
+
+    {error && inlineErrorMessage(error) && <p role="alert" className="chat-resource-error">{error}</p>}
     {launched.map(resource=><ChatResourceSummary key={resource.id} initial={resource} connection={connection} />)}
   </section>;
 }

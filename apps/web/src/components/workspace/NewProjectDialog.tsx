@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import type { NewProjectMode } from "../../app/app-state";
 import { useEffect, useRef, useState } from "react";
 import { Cloud, Folder, FolderOpen, FolderPlus, Monitor, X } from "../icons";
@@ -160,7 +161,7 @@ export function NewProjectDialog({
             </div>
           </>
         )}
-        {formError ? <p className="new-project-error" role="alert">{formError}</p> : null}
+        {formError && inlineErrorMessage(formError) ? <p className="new-project-error" role="alert">{formError}</p> : null}
         <div className="new-project-footer">
           <button className="new-project-cancel" type="button" disabled={busy} onClick={onClose}>Cancel</button>
           <button className="git-dialog-primary" disabled={primaryDisabled} type="submit">{primaryLabel}</button>

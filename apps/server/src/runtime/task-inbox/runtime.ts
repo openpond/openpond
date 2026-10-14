@@ -91,7 +91,8 @@ export function createTaskInboxRuntime(deps: {
   async function steer(sessionId: string, payload: unknown): Promise<TaskInput> {
     const input = SteerTurnRequestSchema.parse(payload);
     return admit({ id: randomUUID(), sessionId, senderSessionId: null, senderKind: "user", kind: "steer",
-      body: input.prompt, payload: {}, idempotencyKey: input.idempotencyKey, replyTo: null, expectedTurnId: input.expectedTurnId });
+      body: input.prompt, payload: input.resourceContexts ? { metadata: { chatResourceContexts: input.resourceContexts } } : {},
+      idempotencyKey: input.idempotencyKey, replyTo: null, expectedTurnId: input.expectedTurnId });
   }
 
   async function queue(sessionId: string, payload: unknown, idempotencyKey: string): Promise<TaskInput> {

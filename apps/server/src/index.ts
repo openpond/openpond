@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createLocalAgentSchedulePayloads } from "./api/local-agent-schedule-payloads.js";
 import { createDesktopVisualRuntime } from "./visuals/visual-runtime.js";
 import { withUrlModels } from "./enclave/provider.js";
 import { createLocalByokChatStream } from "./openpond/local-byok-chat-stream.js";
@@ -14,6 +15,8 @@ import { createManagedTrainingComposition } from "./training/managed-training-co
 import {closeCoordinatedEvaluations,createCoordinatedQualificationRuntime} from "./evaluations/coordinated-qualification-runtime.js";
 import { createCoordinatedEvaluationRuntime } from "./evaluations/coordinated-evaluation-runtime.js";
 import {createCurrentWorkspaceIdentity} from "./human-review/current-workspace-identity.js";
+import { loadChatProfilePackage } from "./evaluations/chat-profile-package.js";
+import { createChatProfileExperiments } from "./evaluations/chat-profile-experiments.js";
 import { createProfileEvaluationRuntime } from "./harness/profile-evaluation-runtime.js";
 import { createConfigurationPayloads } from "./api/configuration-payloads.js";
 import { reconcileInterruptedScheduledWork } from "./runtime/scheduled-work-recovery.js";
@@ -120,6 +123,8 @@ import {
 } from "./openpond/model-tool-registry.js";
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
+import { createChatCliInvocation } from "./training/chat-cli-invocation.js";
+import { bundledChatCliEnvironment } from "./training/chat-cli-environment.js";
 import { runOpenPondDirectCommand } from "./openpond/direct-command.js";
 import {
   isCodexHistorySessionId,
@@ -558,9 +563,13 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     saveWorkAgentPackage: workAgentPackageService.saveWorkAgentPackage,
     saveWorkOutput: workOutputService.saveWorkOutput,
   });
+  const cliInvocations = createChatCliInvocation(store);
   const openPondCommandAccess = createOpenPondCommandAccessService({
     upsertApproval,
     appendRuntimeEvent,
+    managedChatCwd:path.join(storeDir,"workspace","chat-cli"),
+    executionEnvironment:async input=>input.session.systemKind ? {} : ({...await bundledChatCliEnvironment(),OPENPOND_HOME:storeDir,OPENPOND_LOCAL_API_URL:`http://127.0.0.1:${actualPort}`,
+      ...input.turnId ? {OPENPOND_CHAT_INVOCATION:await cliInvocations.issue(input.session.id,input.turnId)} : {OPENPOND_CHAT_INVOCATION:undefined}}),
   });
   const workSandboxLifecycle = createWorkSandboxLifecycleService({
     storeDir,
@@ -815,7 +824,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   onStartupFailure(()=>improvements.close());
   onStartupFailure(()=>schedules.stop());
   await localExperiments.recover();
-  const chatResources = await createChatResourceRuntime({store,home:storeDir,ownerId:serverId,state:localByokRuntimeState,codexStatus:()=>refreshCodexStatus(true),imports:datasetImportService,visuals:htmlVisuals,improve:experimentImprovementPayload,append:appendRuntimeEvent,
+  const chatResources = await createChatResourceRuntime({store,home:storeDir,ownerId:serverId,state:localByokRuntimeState,codexStatus:()=>refreshCodexStatus(true),imports:datasetImportService,visuals:htmlVisuals,improve:experimentImprovementPayload,append:appendRuntimeEvent,resolveInvocation:cliInvocations.resolve,teamExperiments:localExperiments,
     access:async()=>({...await resolveHostedApiAccess(),actorId:await reviewIdentity.actorId(),teamId:await reviewIdentity.teamId()})});
   onStartupFailure(()=>chatResources.close());
   trainingApi.learning.start();
@@ -858,7 +867,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     createLocalHarnessImprovementRuntime({
       store,
       storeDir,
-      queue: workQueues.turnFollowUp,
+      queue: workQueues.harnessRefiner,
       streamOpenPondHostedChatTurn,
       appendRuntimeEvent,
       upsertModelUsageRecord: safeUpsertModelUsageRecord,
@@ -1487,66 +1496,13 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     return usageTurnCachePayload({ requestUrl, store });
   }
 
-  async function listLocalAgentSchedulesPayload(
-    payload?: unknown
-  ): Promise<unknown> {
-    const input =
-      payload && typeof payload === "object" && !Array.isArray(payload)
-        ? (payload as { localProjectId?: unknown })
-        : {};
-    return localAgentScheduleLoop.list({
-      localProjectId:
-        typeof input.localProjectId === "string" ? input.localProjectId : null,
-    });
-  }
-
-  async function syncLocalAgentSchedulesPayload(): Promise<unknown> {
-    return localAgentScheduleLoop.syncNow();
-  }
-
-  async function patchLocalAgentSchedulePayload(
-    scheduleId: string,
-    payload: unknown
-  ): Promise<unknown> {
-    const updated = await localAgentScheduleLoop.patchSchedule(
-      scheduleId,
-      payload && typeof payload === "object" && !Array.isArray(payload)
-        ? (payload as { enabled?: boolean })
-        : {}
-    );
-    if (!updated) throw new Error("Local agent schedule not found");
-    return { schedule: updated };
-  }
-
-  async function runLocalAgentSchedulePayload(
-    scheduleId: string,
-    payload: unknown
-  ): Promise<unknown> {
-    const input =
-      payload && typeof payload === "object" && !Array.isArray(payload)
-        ? (payload as { input?: unknown })
-        : {};
-    return localAgentScheduleLoop.runNow(
-      scheduleId,
-      input.input &&
-        typeof input.input === "object" &&
-        !Array.isArray(input.input)
-        ? (input.input as Record<string, unknown>)
-        : undefined
-    );
-  }
-
-  async function listLocalAgentScheduleRunsPayload(
-    scheduleId: string,
-    payload?: unknown
-  ): Promise<unknown> {
-    const input =
-      payload && typeof payload === "object" && !Array.isArray(payload)
-        ? (payload as { limit?: unknown })
-        : {};
-    const limit = typeof input.limit === "number" ? input.limit : undefined;
-    return { runs: await localAgentScheduleLoop.listRuns(scheduleId, limit) };
-  }
+  const {
+    listLocalAgentSchedulesPayload,
+    syncLocalAgentSchedulesPayload,
+    patchLocalAgentSchedulePayload,
+    runLocalAgentSchedulePayload,
+    listLocalAgentScheduleRunsPayload,
+  } = createLocalAgentSchedulePayloads(localAgentScheduleLoop);
 
   async function patchSessionPayload(
     sessionId: string,
@@ -1611,6 +1567,11 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     sendTurn:(sessionId,payload,executionLimits)=>turnRunner.sendTurn(sessionId,payload,undefined,undefined,executionLimits),
     interruptSessionTurn:turnRunner.interruptSessionTurn,
   });
+
+  const chatProfileExperiments=createChatProfileExperiments({store,loadPackage:run=>loadChatProfilePackage({store,home:storeDir,resolveExternalDataset:resolveProfileExternalDataset},run),selectedProfile:selectedEvaluationProfile,
+    selectedProfileRef:async()=>(await loadOpenPondProfileLibrary()).lastUsed,
+    execute:profileEvaluationRunPayload,discover:profileEvaluationsPayload,prepare:profileEvaluationPreparePayload,resolveInvocation:cliInvocations.resolve,attach:chatResources.associate});
+  chatResources.setProfileOwner(chatProfileExperiments);
 
   const sessionFilesPayload = createSessionFileIndex({
     getSession,
@@ -1755,7 +1716,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       usageRecordsPayload: usageRecordsRoutePayload,
       usageTurnCachePayload: usageTurnCacheRoutePayload,
       trainingPayload,
-      localExperimentPayload:localExperiments.request,
+      localExperimentPayload:chatResources.teamRequest,
       chatResourcePayload:chatResources.request,
       experimentImprovementPayload,experimentEvaluationSchedulePayload,advancedRefinerEvaluationPayload,
       learningProducerPayload: (endpoint, apiKey, payload) => trainingApi.learning.producerRequest(endpoint, apiKey, payload),
@@ -1779,9 +1740,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       profileCurrentPayload,
       profileCatalogPayload,
       profileWorkflowsPayload,
-      profileEvaluationsPayload,
-      profileEvaluationPreparePayload,
-      profileEvaluationRunPayload,
+      profileEvaluationsPayload:chatProfileExperiments.discover,
+      profileEvaluationPreparePayload:chatProfileExperiments.prepare,
+      profileEvaluationRunPayload:chatProfileExperiments.request,
       profileEvaluationRunSuitePayload,
       profileEvaluationComparePayload,
       profileEvaluationSaveReportPayload,

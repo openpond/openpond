@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import type {
   OpenPondProfileCatalogEntry,
@@ -151,7 +152,7 @@ export function ProfilePublicationDialog({
           <PublicationPreview preview={preview} />
         )}
 
-        {error ? <div className="profile-dialog-warning">{error}</div> : null}
+        {error && inlineErrorMessage(error) ? <div className="profile-dialog-warning">{error}</div> : null}
         <div className="git-dialog-footer">
           <button className="git-dialog-secondary" disabled={Boolean(busy)} type="button" onClick={preview ? () => setPreview(null) : onClose}>{preview ? "Back" : "Cancel"}</button>
           {preview ? (

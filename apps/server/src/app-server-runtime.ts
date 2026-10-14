@@ -231,6 +231,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
     queueId: "turn-follow-up",
     logger,
   });
+  const refinerQueue = createBackgroundWorkerQueue({ queueId: "harness-refiner", logger });
   const subagentQueue = createBackgroundWorkerQueue({
     queueId: "subagent",
     logger,
@@ -383,7 +384,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
   const harnessImprovement = backgroundReview ? (await import("./harness/local-harness-improvement-runtime.js")).createLocalHarnessImprovementRuntime({
     store,
     storeDir,
-    queue: turnFollowUpQueue,
+    queue: refinerQueue,
     streamOpenPondHostedChatTurn,
     appendRuntimeEvent,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
@@ -611,6 +612,7 @@ async function createOwnedAppServer(options: OpenPondAppServerOptions): Promise<
       isolatedProfileTools?.close();
       await Promise.all([
         turnFollowUpQueue.drain(),
+        refinerQueue.drain(),
         subagentQueue.drain(),
       ]);
       await closeEventSubscribers();

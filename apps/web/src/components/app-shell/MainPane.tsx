@@ -1,7 +1,12 @@
 import { rememberChatSelection } from "../../lib/chat-selection-preference";
 import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
-import { OpenHtmlVisualContext } from "../visuals/html-visual-context";
-import { HtmlVisualPanel } from "../visuals/HtmlVisualPanel";
+import { OpenHtmlVisualContext, SelectHtmlResourceContext } from "../visuals/html-visual-context";
+import { chatResourceRequest } from "../../api/chat-resource-api";
+import { sessionApi } from "../../api/session-api";
+import type { ChatResourceFocus } from "../../hooks/useChatResourceFocus";
+import type { HtmlVisualResourceSelection } from "@openpond/contracts/html-visuals";
+import { SendTurnRequestSchema } from "@openpond/contracts/requests";
+import { useHtmlVisualTabs } from "../../hooks/useHtmlVisualTabs";
 import { htmlContentPreviewUrl, isHtmlFilePath } from "../../lib/html-preview";
 import {
   lazy,
@@ -319,6 +324,7 @@ export function MainPane({
   );
   const [openDiffFileRequest, setOpenDiffFileRequest] =
     useState<WorkspaceDiffOpenFileRequest | null>(null);
+  const htmlVisualTabs = useHtmlVisualTabs(browserConversationId);
   const [rightSidebarSourceOverride, setRightSidebarSourceOverride] =
     useState<RightSidebarFileSource | null>(null);
   const [labSkillSource, setLabSkillSource] =
@@ -1041,14 +1047,14 @@ export function MainPane({
     ]
   );
   const changeMainComposerProvider = useCallback(
-    (provider: ChatProvider) => {
+    (provider: ChatProvider, model?: string) => {
       if (
         trainingChatHandoff &&
         provider !== trainingChatHandoff.model.providerId
       ) {
         onTrainingChatHandoffDismiss();
       }
-      changeDraftProvider(provider);
+      changeDraftProvider(provider, model);
     },
     [changeDraftProvider, onTrainingChatHandoffDismiss, trainingChatHandoff]
   );
@@ -1084,10 +1090,13 @@ export function MainPane({
         explicitFile: options?.explicitFile,
         newTab: options?.newTab,
       }).then((opened) => {
-        if (opened && window.openpond?.browser) onShowBrowserPanel();
+        if (opened && window.openpond?.browser) {
+          htmlVisualTabs.showBrowser();
+          onShowBrowserPanel();
+        }
       }).catch((error) => showToast(error instanceof Error ? error.message : "Could not open browser.", "error"));
     },
-    [browserConversationId, onShowBrowserPanel, showToast]
+    [browserConversationId, htmlVisualTabs.showBrowser, onShowBrowserPanel, showToast]
   );
   const workspaceRootPath = resolveChatWorkspaceRootPath({
     projectTargetDetail: projectTarget.detail,
@@ -1307,20 +1316,29 @@ export function MainPane({
       trainingSummary={trainingSidebarSummary}
     />
   ) : null;
-  const [expandedVisual, setExpandedVisual] = useState<HtmlVisualReference | null>(null);
-  useEffect(() => { setExpandedVisual(null); }, [selectedSessionId]);
-  useEffect(() => { if (rightPanelMode !== "browser") setExpandedVisual(null); }, [rightPanelMode]);
   const openHtmlVisual = useCallback((visual: HtmlVisualReference) => {
-    setExpandedVisual(visual);
+    htmlVisualTabs.open(visual);
     onShowBrowserPanel();
-  }, [onShowBrowserPanel]);
-  const browserPanel = showBrowserPanel && expandedVisual ? (
-    <HtmlVisualPanel visual={expandedVisual} connection={connection} expanded={diffPanelExpanded}
-      onResizeStart={onDiffPanelResizeStart} onToggleExpanded={onToggleDiffPanelExpanded}
-      onClose={() => { setExpandedVisual(null); if (diffPanelExpanded) onToggleDiffPanelExpanded(); }} />
-  ) : showBrowserPanel ? (
+  }, [htmlVisualTabs.open, onShowBrowserPanel]);
+  const selectHtmlResource = useCallback(async (visual:HtmlVisualReference,resource:HtmlVisualResourceSelection,operationId:string) => {
+    if(!connection || visual.sessionId!==selectedSessionId)throw new Error("Open the originating conversation to select this resource.");
+    const context=await chatResourceRequest<{focus:ChatResourceFocus}>(connection,"dataset",{action:"context",payload:{sessionId:visual.sessionId}});
+    const focus=await chatResourceRequest<ChatResourceFocus>(connection,"dataset",{action:"set_focus",payload:{sessionId:visual.sessionId,kind:resource.kind,id:resource.id,
+      ...resource.revision ? {revision:resource.revision} : {},operationId,visualPublicationId:visual.publicationId,
+      expectedSelectionVersion:context.focus.scopeContext?.selectionVersion}});
+    const selected=resource.kind==="dataset" ? focus.dataset : focus.experiment;
+    if(!selected)throw new Error("Selected resource is unavailable.");
+    const message=`Selected ${resource.kind}: ${selected.name}${resource.kind==="dataset" ? ` V${selected.revision}` : ""}.`;
+    await sessionApi.queueTaskInput(connection,visual.sessionId,SendTurnRequestSchema.parse({prompt:message,
+      metadata:{chatExperimentScopeId:focus.scopeContext?.activeScopeId,chatExperimentSelectionVersion:focus.scopeContext?.selectionVersion,chatResourceFocus:{dataset:focus.dataset,experiment:focus.experiment},resourceSelection:{kind:resource.kind,id:selected.id,revision:selected.revision,visualPublicationId:visual.publicationId}}}),operationId);
+    window.dispatchEvent(new CustomEvent("openpond-resource-focus-changed",{detail:{sessionId:visual.sessionId}}));
+    return message;
+  },[connection,selectedSessionId]);
+  const browserPanel = showBrowserPanel ? (
     <BrowserSidebar
       conversationId={browserConversationId}
+      connection={connection}
+      visualTabs={htmlVisualTabs}
       expanded={diffPanelExpanded}
       onResizeStart={onDiffPanelResizeStart}
     />
@@ -1483,7 +1501,7 @@ export function MainPane({
     </Suspense>
   );
   return (
-    <OpenHtmlVisualContext.Provider value={openHtmlVisual}>
+    <OpenHtmlVisualContext.Provider value={openHtmlVisual}><SelectHtmlResourceContext.Provider value={selectHtmlResource}>
     <main tabIndex={-1} data-thread-session={view === "chat" && !ponderMode ? selectedSessionId ?? undefined : undefined}
       className={`main-pane ${viewClass} ${
         terminalOpen ? "terminal-open" : ""
@@ -1793,6 +1811,7 @@ export function MainPane({
                 taskSessionId={liveSessionId}
                 taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
+                composerDraftStore={composerDraftStore}
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey
                 }
@@ -1883,6 +1902,7 @@ export function MainPane({
                 taskSessionId={liveSessionId}
                 taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
+                composerDraftStore={composerDraftStore}
                 getCurrentSubmissionScopeKey={
                   getCurrentComposerSubmissionScopeKey
                 }
@@ -1928,7 +1948,7 @@ export function MainPane({
         </>
       )}
     </main>
-    </OpenHtmlVisualContext.Provider>
+    </SelectHtmlResourceContext.Provider></OpenHtmlVisualContext.Provider>
   );
 }
 

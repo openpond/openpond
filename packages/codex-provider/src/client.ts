@@ -342,7 +342,7 @@ export class CodexAppServerClient {
     if (params.turn?.status === "completed") {
       waiter.resolve(notification.params);
     } else {
-      waiter.reject(new Error(String(params.turn?.error ?? "codex turn failed")));
+      waiter.reject(new Error(errorMessage(params.turn?.error)));
     }
   }
 
@@ -377,5 +377,10 @@ function sandboxPolicyForMode(mode?: "read-only" | "workspace-write" | "danger-f
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (typeof error === "string" && error.trim()) return error;
+  if (error && typeof error === "object") {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return "Codex request failed without an error message.";
 }

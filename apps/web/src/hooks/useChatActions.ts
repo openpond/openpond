@@ -1,4 +1,4 @@
-import { rememberChatSelection } from "../lib/chat-selection-preference";
+import { preferredChatModel, rememberChatSelection } from "../lib/chat-selection-preference";
 import { useRef, type Dispatch, type SetStateAction } from "react";
 import type {
   BootstrapPayload,
@@ -28,7 +28,6 @@ import {
   effectiveReasoningEffortForModel,
   modelForTurn,
   modelRefForTurn,
-  normalizeChatModel,
   providerModelSupportsReasoning,
   projectSelectionKey,
   type ChatMessage,
@@ -385,8 +384,8 @@ export function useChatActions({
     );
   }
 
-  function changeDraftProvider(provider: ChatProvider) {
-    const model = normalizeChatModel(provider, draftModel, providerSettings);
+  function changeDraftProvider(provider: ChatProvider, selectedModel?: string) {
+    const model = selectedModel ?? preferredChatModel(provider, providerSettings);
     rememberChatSelection(provider, model);
     setDraftProvider(provider);
     setDraftModel(model);

@@ -23,4 +23,4 @@ Regression boundary:
 python3 -m unittest discover -s scripts/datasets -p test_pdf_visual_evidence.py
 ```
 
-The Storage Scholars r6 evidence fix is recorded in [the working doc](../../docs/working-docs/training/2026-10-12-storage-scholars-local-experiments-and-training-path.md). Existing immutable Profile releases are unchanged: this is a fix to the prepared policy inputs and their authoring qualification, not a new model-visible OCR capability.
+Existing immutable Profile releases are unchanged: this is a fix to the prepared policy inputs and their authoring qualification, not a new model-visible OCR capability.

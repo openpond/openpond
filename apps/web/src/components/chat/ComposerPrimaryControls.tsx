@@ -129,7 +129,7 @@ export function ComposerPrimaryControls({
   onProfileTargetChange?: (value: string) => void;
   onModelChange: (value: string) => void;
   onOpenFilePicker: () => void;
-  onProviderChange: (value: ChatProvider) => void;
+  onProviderChange: (value: ChatProvider, model?: string) => void;
   onProviderSetupOpen?: () => void;
   onSend: () => void;
   onStop: (reason?: string) => Promise<boolean | void> | boolean | void;
@@ -195,8 +195,7 @@ export function ComposerPrimaryControls({
       onModelChange(nextModel);
       return;
     }
-    onModelChange(nextModel);
-    onProviderChange(nextProvider);
+    onProviderChange(nextProvider, nextModel);
   };
   if (surface === "team") {
     return (

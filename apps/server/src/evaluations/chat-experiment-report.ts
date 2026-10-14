@@ -6,6 +6,7 @@ import type { ChatResourceSummary, LocalExperimentResult } from "@openpond/contr
 const escape = (value:string) => value.replace(/[&<>"']/g,character => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[character]!));
 const percent = (value:number|null|undefined) => value == null ? "Unavailable" : (value*100).toFixed(1)+"%";
 const cost = (value:number|null|undefined) => value == null ? "Unavailable" : "$"+value.toFixed(4);
+const count = (value:number|null|undefined) => value == null ? "Unavailable" : String(value);
 
 /** A report is a view of exact retained evidence. Text is escaped, missing
  * measurements stay missing, and the document has no executable app actions. */
@@ -19,38 +20,35 @@ export function chatExperimentReport(runs:{summary:ChatResourceSummary;evidence?
   // Reserve the text allowance for exact retained identifiers before shortening
   // model labels and representative output. Large cases must not hide the pins.
   const pins = retained.map(({summary,view})=>'<li>'+display(summary.id,200)+' · Dataset '+display(summary.datasetId ?? "",200)+' version '+(summary.datasetRevision ?? "")+' · retained result '+display(view.contentHash,200)+'</li>').join("");
-  const runLabel = (summary:ChatResourceSummary)=>'<span class="run-label">'+display(summary.name,160)+'<small>'+display(summary.model ?? "Selected model")+' · Dataset version '+(summary.datasetRevision ?? "Unavailable")+' · run '+display(summary.id.slice(-8),8)+'</small></span>';
+  const runLabel = (summary:ChatResourceSummary)=>'<span class="run-label">'+display(summary.name,160)+'</span>';
   const rows = retained.map(({summary})=>{
-    const quality = summary.qualityFailureCount ?? 0;
-    const infrastructure = summary.executionFailureCount ?? 0;
-    const unavailable = summary.ungradedCount ?? summary.taskCount ?? 0;
-    return '<tr><th scope="row">'+runLabel(summary)+'</th><td>'+escape(summary.state)+'</td><td>'+percent(summary.score)+'<small> · '+display(summary.scoreLabel ?? "Mean task score")+'</small>'+'</td><td>'+(summary.evaluatedCount ?? 0)+'/'+(summary.taskCount ?? 0)+'</td><td>'+quality+'</td><td>'+infrastructure+'</td><td>'+unavailable+'</td><td>'+cost(summary.costUsd)+'</td></tr>';
+    const coverage = summary.evaluatedCount == null || summary.taskCount == null
+      ? "Unavailable" : `${summary.evaluatedCount}/${summary.taskCount}`;
+    return '<tr><th scope="row">'+runLabel(summary)+'</th><td>'+escape(summary.state)+'</td><td title="'+escape(summary.scoreLabel ?? "Mean task score")+'">'+percent(summary.score)+'</td><td>'+coverage+'</td></tr>';
   }).join("");
-  const bars = retained.map(({summary})=>'<div class="bar-row">'+runLabel(summary)+'<div class="track">'+(summary.score==null ? '<span>Unavailable</span>' : '<div class="bar" style="width:'+Math.max(0,Math.min(100,summary.score*100))+'%"></div>')+'</div><strong>'+percent(summary.score)+'</strong></div>').join("");
-  const cases = retained.flatMap(({summary,view})=>view.cases.slice(0,3).map(row=>'<tr><td>'+runLabel(summary)+'</td><td>'+display(row.taskId)+'</td><td>'+display(row.error ?? row.output ?? row.status,300)+'</td><td>'+percent(row.score)+'</td></tr>')).join("");
+  const metrics = retained.map(({summary})=>'<tr><th>'+runLabel(summary)+'</th><td>'+count(summary.qualityFailureCount)+'</td><td>'+count(summary.executionFailureCount)+'</td><td>'+count(summary.ungradedCount)+'</td><td>'+cost(summary.costUsd)+'</td></tr>').join("");
+  const cases = retained.flatMap(({summary,view})=>view.cases.map(row=>'<tr><td>'+runLabel(summary)+'</td><td>'+display(row.taskId)+'</td><td>'+display(row.error ?? row.output ?? row.status,300)+'</td><td>'+percent(row.score)+'</td></tr>')).join("");
   const comparison = comparable
     ? 'The selected runs share Dataset version, tasks, seeds and grader selection. Incomplete runs show a partial snapshot and cannot establish a final ranking.'
     : 'These runs have different inputs or grading selections; the table is descriptive and does not establish a winner.';
   return `<style>${REPORT_STYLE}</style>
-<section class="experiment-report" aria-labelledby="report-heading">
-  <h2 id="report-heading">Experiment results</h2>
-  <div class="report-tabs" role="tablist" aria-label="Experiment results">
+<section data-openpond-resource-table class="experiment-report" aria-label="Experiment results">
+
+  <table class="report-header"><thead><tr><th><div class="report-tabs" role="tablist" aria-label="Experiment results">
     <button type="button" role="tab" id="report-tab-overview" aria-controls="report-overview" aria-selected="true" tabindex="0">Overview</button>
     <button type="button" role="tab" id="report-tab-cases" aria-controls="report-cases" aria-selected="false" tabindex="-1">Cases</button>
-    <button type="button" role="tab" id="report-tab-inputs" aria-controls="report-inputs" aria-selected="false" tabindex="-1">Saved inputs</button>
-  </div>
+    <button type="button" role="tab" id="report-tab-inputs" aria-controls="report-inputs" aria-selected="false" tabindex="-1">Details</button>
+  </div></th></tr></thead></table>
   <div id="report-overview" role="tabpanel" aria-labelledby="report-tab-overview" tabindex="0">
-    <p>Saved score (0–100%). Each run uses the metric named below; local runs show mean graded task score. Scores require complete grading; costs require measured usage. Quality failures are separate from execution failures. ${comparison}</p>
-    <div class="chart" role="img" aria-label="Saved score by retained experiment">${bars}</div>
-    <div class="table-wrap"><table class="summary"><thead><tr><th>Experiment</th><th>Status</th><th>Score</th><th>Graded / tasks</th><th>Quality failures</th><th>Execution failures</th><th>Ungraded</th><th>Cost</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="table-wrap"><table class="summary"><thead><tr><th>Experiment</th><th>Status</th><th>Score</th><th>Graded</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>
   <div id="report-cases" role="tabpanel" aria-labelledby="report-tab-cases" tabindex="0" hidden>
-    <p>At most three retained outcomes per run. Long labels and outcomes are shortened; full evidence remains in View results.</p>
     <div class="table-wrap"><table class="cases"><thead><tr><th>Experiment</th><th>Task</th><th>Outcome</th><th>Task score</th></tr></thead><tbody>${cases}</tbody></table></div>
   </div>
   <div id="report-inputs" role="tabpanel" aria-labelledby="report-tab-inputs" tabindex="0" hidden>
-    <p>Exact Dataset versions and retained result identities used in this report.</p>
-    <ul>${pins}</ul>
+    <p>${comparison}</p>
+    <div class="table-wrap"><table><thead><tr><th>Experiment</th><th>Quality failures</th><th>Execution failures</th><th>Ungraded</th><th>Cost</th></tr></thead><tbody>${metrics}</tbody></table></div>
+    <details><summary>Technical references</summary><ul>${pins}</ul></details>
   </div>
 </section>
 <script>${REPORT_TABS_SCRIPT}</script>`;

@@ -1,3 +1,4 @@
+import { ConnectionRequestError } from "../api/connection-status";
 import { afterEach, expect, test, vi } from "vitest";
 import { clientChoiceStorage, connectClientChoices } from "./client-choice-storage";
 
@@ -47,7 +48,7 @@ test("a failed hydration can be retried", async () => {
     .mockResolvedValueOnce(Response.json({ clientState: { owner: "retry", revision: 1, value: { chatMode: "work" } } }));
   vi.stubGlobal("fetch", fetch);
   const connection = { serverUrl: "http://retry.invalid", token: "retry", platform: "linux" };
-  await expect(connectClientChoices(connection)).rejects.toThrow("offline");
+  await expect(connectClientChoices(connection)).rejects.toBeInstanceOf(ConnectionRequestError);
   await connectClientChoices(connection);
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(clientChoiceStorage.getItem("openpond:last-chat-task-mode")).toBe("work");

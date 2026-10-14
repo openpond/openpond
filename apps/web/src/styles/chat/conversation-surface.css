@@ -23,6 +23,10 @@
   width: 100%;
 }
 
+:root[data-theme="light"] .conversation-composer-shell {
+  background: var(--surface-page);
+}
+
 @media (max-width: 620px) {
   .conversation-message-scroll,
   .conversation-composer-shell {

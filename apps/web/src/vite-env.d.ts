@@ -265,6 +265,9 @@ interface Window {
     getDesktopRuntimeInfo?: () => Promise<OpenPondDesktopRuntimeInfo>;
     reloadDesktopApp?: () => Promise<{ ok: boolean; error?: string }>;
     browser?: {
+      capturePage: (input: BrowserTabInput & { mode: import("@openpond/contracts/browser-snapshots").BrowserCaptureMode }) => Promise<import("@openpond/contracts/browser-snapshots").BrowserCaptureResult>;
+      cancelCapture: (input: BrowserTabInput) => Promise<BrowserCommandResult>;
+      captureHtml: (input: import("@openpond/contracts/browser-snapshots").BrowserDomCapture) => Promise<import("@openpond/contracts/browser-snapshots").BrowserCaptureResult>;
       open: (input: BrowserOpenInput) => Promise<BrowserCommandResult>;
       newTab: (input: BrowserNewTabInput) => Promise<BrowserCommandResult>;
       selectTab: (input: BrowserTabInput) => Promise<BrowserCommandResult>;

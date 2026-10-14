@@ -243,14 +243,14 @@ describe("codex bridge", () => {
     );
   });
 
-  test("clears stale active Codex goals when a live turn completes", async () => {
+  test("retains completion identity and clears goals after the turn is no longer active", async () => {
     const events = [];
-    const turn = { id: "turn_local", sessionId: "session_1", providerTurnId: "turn_provider", status: "in_progress" };
+    const turn = { id: "turn_local", sessionId: "session_1", providerTurnId: "turn_provider", status: "completed" };
     const store = {
       async turnByProviderTurnId(providerTurnId) {
         return providerTurnId === turn.providerTurnId ? turn : null;
       },
-      async latestTurnForSession() { return turn; },
+      async latestTurnForSession() { return null; },
       async getSession() { return { id: "session_1", appId: "app_1" }; },
       async runtimeEventsForSession() { return events; },
     };
@@ -282,7 +282,6 @@ describe("codex bridge", () => {
       method: "turn/completed",
       params: {
         threadId: "thread_1",
-        turnId: "turn_provider",
         turn: { id: "turn_provider", status: "completed" },
       },
     });
@@ -295,6 +294,8 @@ describe("codex bridge", () => {
         ["diagnostic", "thread_goal_cleared"],
       ]
     );
+    // The terminal event must retain its owner or headless clients wait forever.
+    assert.equal(events.find((event) => event.name === "turn.completed").turnId, "turn_local");
     const clearEvent = events.at(-1);
     assert.equal(clearEvent.turnId, "turn_local");
     assert.equal(clearEvent.data.provider, "codex");

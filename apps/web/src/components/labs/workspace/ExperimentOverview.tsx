@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import { EvaluationCard } from "./EvaluationPresentation";
 export type OverviewExecution = {
   id: string;
@@ -103,7 +104,7 @@ export function ExperimentOverview({
   return (
     <section className="evaluation-experiment-overview">
       {loading ? <p role="status">Loading retained measurements…</p> : null}
-      {error ? (
+      {error && inlineErrorMessage(error) ? (
         <p role="alert">
           {error} <button onClick={retry}>Retry measurements</button>
         </p>

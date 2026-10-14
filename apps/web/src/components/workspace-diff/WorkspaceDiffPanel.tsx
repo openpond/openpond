@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { htmlContentPreviewUrl, htmlPreviewUrl, isHtmlFilePath } from "../../lib/html-preview";
 import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
@@ -1703,7 +1704,7 @@ function WorkspaceDiffPanelInner({
         onToggleExpanded={onToggleExpanded}
       />
 
-      {htmlPreviewError && <div className="workspace-diff-empty" role="alert">{htmlPreviewError}</div>}
+      {htmlPreviewError && inlineErrorMessage(htmlPreviewError) && <div className="workspace-diff-empty" role="alert">{htmlPreviewError}</div>}
       {visibleTab === "outputs" && renderOutputs ? renderOutputs(() => { setSearchOpen(true); setAddMenuOpen(false); }) : visibleTab === "goal" && hasGoalDetails ? (
         <GoalDetailsView
           createRuntime={goalDetails?.createRuntime ?? null}

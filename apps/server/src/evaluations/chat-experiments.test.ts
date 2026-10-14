@@ -44,6 +44,7 @@ test("chat authoring, grader checks and bounded multi-model runs retain exact ev
     expect(admitted.runs.reduce((sum,run)=>sum+run.configuration.maximumCostUsd,0)).toBeLessThanOrEqual(input.maximumCostUsd);
     await Promise.all(admitted.runs.map(run=>experiments.service.wait(run.id)));
     const results=await Promise.all(admitted.runs.map(async run=>{const evidence=await experiments.service.result({teamId:experiments.scope,id:run.id});const reply=await experiments.request({action:"result",payload:{id:run.id}}) as {summary:ChatResourceSummary};return {evidence,summary:{...reply.summary,datasetId:id,datasetRevision:1}};}));
+    expect(results.map(result=>result.summary.evaluationHash)).toEqual([created.record.workspace.contentHash,created.record.workspace.contentHash]);
     expect(results.map(result=>result.summary.score)).toEqual([1,0]);expect(results.map(result=>result.summary.qualityFailureCount)).toEqual([0,2]);
     expect(results.map(result=>result.evidence.cases.map(row=>[row.taskId,row.seed]))[0]).toEqual(results[1]!.evidence.cases.map(row=>[row.taskId,row.seed]));
     expect(JSON.stringify(wire)).not.toContain("GOLD_CANARY");expect(dispatches).toBe(4);
@@ -61,6 +62,13 @@ test("chat authoring, grader checks and bounded multi-model runs retain exact ev
     // every label/output exhausts its text allowance. These are not UI labels.
     for(const run of largeRuns){expect(largeReport).toContain(run.summary.id);expect(largeReport).toContain(run.view.contentHash);}
     const changedScope=chatExperimentReport([results[0]!,{...results[1]!,summary:{...results[1]!.summary,datasetRevision:2,score:null,costUsd:null}}]);expect(changedScope).toContain("does not establish a winner");expect(changedScope).toContain("Unavailable");
+    // Incomplete retained measurements must not advertise zero failures or
+    // invented grading coverage. Measured zero remains a real value.
+    const incompleteReport=chatExperimentReport([{...results[0]!,summary:{...results[0]!.summary,
+      evaluatedCount:undefined,qualityFailureCount:undefined,executionFailureCount:0,ungradedCount:undefined,costUsd:null}}]);
+    const measurementCells=[...incompleteReport.split("<tbody>")[3]!.split("</tbody>")[0]!.matchAll(/<td>(.*?)<\/td>/g)].map(match=>match[1]);
+    expect(measurementCells).toEqual(["Unavailable","0","Unavailable","Unavailable"]);
+    expect(incompleteReport.split("<tbody>")[1]!.split("</tbody>")[0]).toContain("<td>Unavailable</td>");
     switchDuringRun=true;const before=dispatches;
     const fenced=await experiments.run({...input,operationId:"new-after-account-switch"});await Promise.all(fenced.runs.map(run=>experiments.service.wait(run.id)));
     expect(dispatches-before).toBe(1);
@@ -100,8 +108,19 @@ test("retained report tabs support clicks, keyboard wrap and roving focus",()=>{
     focus(){focused=index;},
   }));
   const panels=tabs.map((_,index)=>({hidden:index!==0}));
-  const root={querySelectorAll:(selector:string)=>selector==='[role="tab"]' ? tabs : panels};
-  runInNewContext(REPORT_TABS_SCRIPT,{document:{currentScript:{previousElementSibling:root}}});
+  const rows=Array.from({length:12},()=>({hidden:false}));
+  const elements:{textContent:string;disabled:boolean;click?:()=>void}[]=[];
+  const wrapper={querySelectorAll:()=>rows,append:()=>{}};
+  const root={querySelectorAll:(selector:string)=>selector==='[role="tab"]' ? tabs : selector==='[role="tabpanel"]' ? panels : [wrapper]};
+  runInNewContext(REPORT_TABS_SCRIPT,{document:{currentScript:{previousElementSibling:root},createElement:()=>{
+    const element={textContent:"",disabled:false,append:()=>{},addEventListener(_event:string,handler:()=>void){Object.assign(this,{click:handler});}};
+    elements.push(element);return element;
+  }}});
+  // Pagination keeps every retained row reachable without displaying more than five.
+  expect(rows.filter(row=>!row.hidden)).toHaveLength(5);
+  elements[2]!.click!();expect(rows.map(row=>row.hidden)).toEqual(rows.map((_,i)=>i<5||i>=10));
+  elements[2]!.click!();expect(rows.filter(row=>!row.hidden)).toHaveLength(2);expect(elements[2]!.disabled).toBe(true);
+  elements[1]!.click!();expect(rows.filter(row=>!row.hidden)).toHaveLength(5);
   const selected=(index:number)=>{
     expect(tabs.map(tab=>tab.selected)).toEqual(tabs.map((_,i)=>String(i===index)));
     expect(tabs.map(tab=>tab.tabIndex)).toEqual(tabs.map((_,i)=>i===index ? 0 : -1));

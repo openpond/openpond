@@ -388,7 +388,7 @@ export type TurnRunnerDependencies = {
   ) => Promise<OpenPondCommandRunResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
   executeProjectAction?: (payload: unknown) => Promise<unknown>;
-  executeChatResourceAction?: import("../../openpond/chat-resource-tool-definitions.js").ChatResourceAction;
+  executeChatResourceAction?: import("../../openpond/chat-resource-action.js").ChatResourceAction;
   executeDatasetBuilderAction?: (input: {
     session: Session;
     turnId: string;

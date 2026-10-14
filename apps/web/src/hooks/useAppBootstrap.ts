@@ -29,6 +29,8 @@ import {
 } from "../lib/cloud-project-utils";
 import { isSameConnection } from "../lib/layout";
 import { isConnectionErrorMessage } from "../lib/error-messages";
+import { reportConnectionRestored } from "../api/connection-status";
+import { useConnectionRecovery } from "./useConnectionRecovery";
 import type { OpenPondOrganization } from "../lib/organization-types";
 import {
   openPondOrganizationCacheKey,
@@ -452,11 +454,13 @@ export function useAppBootstrap(params: {
     clientChoiceAccountKeyRef.current = openPondOrganizationCacheKey(payload.account);
     applyBootstrapPayload(payload);
     completeStartup();
+    reportConnectionRestored(nextConnection);
     setError((current) =>
       current && (isConnectionErrorMessage(current) || current === "Event stream disconnected") ? null : current
     );
   }, [applyBootstrapPayload, completeStartup, setBlockingStartupStage, setError]);
   const recovery = useStartupRecovery(load);
+  useConnectionRecovery(connection, recovery.recover);
 
   useRuntimeEvents({
     afterSequence: runtimeEventStreamStart?.afterSequence ?? null,

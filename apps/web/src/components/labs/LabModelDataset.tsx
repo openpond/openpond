@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useMemo, useState } from "react";
 import {
   isTrainingSourceRef,
@@ -309,7 +310,7 @@ export function LabModelDataset({
               </button>
             </nav>
           ) : null}
-          {rowsError ? (
+          {rowsError && inlineErrorMessage(rowsError) ? (
             <div className="training-banner error" role="alert">{rowsError}</div>
           ) : null}
         </div>

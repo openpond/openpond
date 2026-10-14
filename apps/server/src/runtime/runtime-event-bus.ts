@@ -141,17 +141,22 @@ export function createRuntimeEventBus({
         for (const entry of page.entries) {
           if (!writeSubscriberEvent(subscriber, entry.event)) break;
           cursor = Math.max(cursor, entry.sequence);
+          await waitForSubscriberDrain(subscriber);
         }
         if (page.entries.length < EVENT_CATCHUP_PAGE_SIZE) break;
       }
-      const pending = subscriber.pending
-        .filter((event) => (event.sequence ?? 0) > cursor)
-        .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
-      subscriber.pending = [];
-      subscriber.ready = true;
-      for (const event of pending) {
-        if (!writeSubscriberEvent(subscriber, event)) break;
+      while (!input.response.destroyed && subscriber.pending.length) {
+        const pending = subscriber.pending
+          .filter((event) => (event.sequence ?? 0) > cursor)
+          .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
+        subscriber.pending = [];
+        for (const event of pending) {
+          if (!writeSubscriberEvent(subscriber, event)) break;
+          cursor = Math.max(cursor, event.sequence ?? 0);
+          await waitForSubscriberDrain(subscriber);
+        }
       }
+      subscriber.ready = true;
       return () => disconnectSubscriber(subscriber, false);
     } catch (error) {
       disconnectSubscriber(subscriber);
@@ -284,7 +289,7 @@ export function createRuntimeEventBus({
         const onDrain = () => {
           subscriber.drainListener = null;
           subscriber.backpressured = false;
-          flushSubscriberQueue(subscriber);
+          if (subscriber.ready) flushSubscriberQueue(subscriber);
         };
         subscriber.drainListener = onDrain;
         subscriber.response.once("drain", onDrain);
@@ -294,6 +299,19 @@ export function createRuntimeEventBus({
       disconnectSubscriber(subscriber);
       return false;
     }
+  }
+
+  async function waitForSubscriberDrain(subscriber: RuntimeEventSubscriber): Promise<void> {
+    if (!subscriber.backpressured || subscriber.response.destroyed) return;
+    await new Promise<void>((resolve) => {
+      const settled = () => {
+        subscriber.response.off("drain", settled);
+        subscriber.response.off("close", settled);
+        resolve();
+      };
+      subscriber.response.once("drain", settled);
+      subscriber.response.once("close", settled);
+    });
   }
 
   function disconnectSubscriber(subscriber: RuntimeEventSubscriber, destroy = true): void {

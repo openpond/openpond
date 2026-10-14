@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useCallback, useState, type FormEvent } from "react";
 import type {
   OpenPondExtension,
@@ -208,7 +209,7 @@ export function GithubExtensionsSettings({
         </button>
       </form>
 
-      {localError || catalog.error ? (
+      {inlineErrorMessage(localError ?? catalog.error) ? (
         <div className="github-extension-message error" role="alert">{localError ?? catalog.error}</div>
       ) : null}
 

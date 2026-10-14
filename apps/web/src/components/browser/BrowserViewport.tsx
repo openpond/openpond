@@ -73,5 +73,5 @@ export function BrowserViewport({
     };
   }, [active, emitBounds, reportBounds, scheduleReportBounds]);
 
-  return <div className="browser-viewport" ref={viewportRef} />;
+  return <div className="browser-viewport" ref={viewportRef} hidden={!active} />;
 }

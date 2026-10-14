@@ -1,3 +1,5 @@
+import { ConnectionRequestError, connectionStatus, reportConnectionFailure } from "./connection-status";
+
 export class ApiRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); this.name = "ApiRequestError"; }
 }
@@ -16,6 +18,20 @@ export type SandboxScopeInput = {
   projectId?: string;
   agentId?: string;
 };
+
+/** Shared transport boundary for JSON APIs, downloads, and SDK adapters. */
+export async function fetchApiResponse(connection: ConnectionBase, path: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${connection.token}`);
+  const recovery = connectionStatus(connection).recovery;
+  try {
+    return await fetch(`${connection.serverUrl}${path}`, { ...init, headers });
+  } catch (error) {
+    if (init?.signal?.aborted || (error instanceof Error && error.name === "AbortError")) throw error;
+    reportConnectionFailure(connection, recovery);
+    throw new ConnectionRequestError(error);
+  }
+}
 
 export function sandboxScopeQuery(input: SandboxScopeInput = {}): URLSearchParams {
   const query = new URLSearchParams();
@@ -54,21 +70,27 @@ async function performFetch<T>(connection: ClientConnection, path: string, init?
   }
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
-  headers.set("Authorization", `Bearer ${connection.token}`);
-  const response = await fetch(`${connection.serverUrl}${path}`, {
-    ...init,
-    headers,
-  });
+  const recovery = connectionStatus(connection).recovery;
+  const response = await fetchApiResponse(connection, path, { ...init, headers });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    const error =
-      payload && typeof payload === "object" && "error" in payload
-        ? String(payload.error)
-        : response.statusText;
+    const detail = payload && typeof payload === "object" ? payload.error : undefined;
+    const message = typeof detail === "string" ? detail : detail?.message;
+    const error = typeof message === "string" && message.trim()
+      ? message
+      : response.statusText || `Request failed (${response.status}).`;
     throw new ApiRequestError(error, response.status);
   }
   if (response.status === 204) return undefined as T;
-  const payload = await response.json();
+  let payload;
+  try { payload = await response.json(); }
+  catch (error) {
+    if (!init?.signal?.aborted && error instanceof TypeError) {
+      reportConnectionFailure(connection, recovery);
+      throw new ConnectionRequestError(error);
+    }
+    throw error;
+  }
   const revision = payload?.configuration?.rawRevision ?? (path === "/v1/preferences" ? payload?.rawRevision : undefined);
   if (typeof revision === "string" && order >= (responseOrders.get(connection) ?? 0)) {
     preferenceRevisions.set(connection, revision); responseOrders.set(connection, order);

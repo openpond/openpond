@@ -254,13 +254,19 @@ button.user-message-attachment {
   border: 0;
   border-radius: 16px;
   background: linear-gradient(145deg, var(--surface-raised), var(--surface-panel));
-  box-shadow: 0 12px 32px var(--shadow-color);
+  box-shadow: 0 12px 32px var(--shadow-panel-color);
 }
 
 .user-question-header {
   display: flex;
   align-items: flex-start;
   gap: 11px;
+}
+
+:root[data-theme="light"] .user-question-card {
+  background: var(--surface-panel);
+  outline: 1px solid var(--border-default);
+  outline-offset: -1px;
 }
 
 .user-question-icon {

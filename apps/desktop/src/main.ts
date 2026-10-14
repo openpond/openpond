@@ -192,7 +192,8 @@ async function startServer(): Promise<ServerConnection> {
     await backendManager.stopServer();
     connection = null;
     serverProcess = null;
-    stopBrowserControlWorker();
+    // The preview worker reconnects independently while the backend restarts.
+    // Stop it only when replacing its connection or closing the desktop.
     serverProcessSampler.stop();
   }
   const serverPort = defaultServerPort();
@@ -319,7 +320,6 @@ async function startServer(): Promise<ServerConnection> {
     serverProcess = null;
     backendManager.releaseServer(ownedServerProcess);
     connection = null;
-    stopBrowserControlWorker();
     serverProcessSampler.stop();
   });
   let serverUrl: string;
@@ -491,7 +491,13 @@ function registerIpcHandlers(): void {
     }
     return desktopUpdater!.restart((payload as { hasRunningWork: boolean }).hasRunningWork);
   });
-  handleTrackedIpc("openpond:connection", () => ensureServer());
+  handleTrackedIpc("openpond:connection", async () => {
+    const server=await ensureServer();
+    // Server recovery can stop the worker without reloading the window.
+    // Restore the same preview executor whenever the renderer reconnects.
+    if(mainWindow && !mainWindow.isDestroyed())ensureBrowserControlWorker(server);
+    return server;
+  });
   handleTrackedIpc("openpond:desktop:runtimeInfo", () => {
     const devMode =
       !app.isPackaged && process.env.OPENPOND_DESKTOP_DEV_MODE === "1";

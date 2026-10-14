@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { NativeSetupTerminal } from "../terminal/NativeSetupTerminal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@openpond/contracts";
@@ -143,6 +144,6 @@ export function NativeConversationControls({ history: state }: { history: Return
       {history?.warnings.map((warning) => <p key={warning}><CircleAlert size={12} aria-hidden="true" /> {warning}</p>)}
       {history?.collector.connections.length ? <NativeImporterStatus status={history.collector} busy={busy !== null} onControl={(command) => void control(command)} onConnectionControl={(command, id) => void connectionControl(command, id)} onReconnect={(id) => void connect(id)} /> : <p>Connect an import source to upload conversations. Local history remains available without cloud sync.</p>}
     </> : null}
-    {error ? <p role="status"><CircleAlert size={12} aria-hidden="true" /> {error}</p> : null}
+    {error && inlineErrorMessage(error) ? <p role="status"><CircleAlert size={12} aria-hidden="true" /> {error}</p> : null}
   </section>;
 }

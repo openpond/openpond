@@ -35,6 +35,7 @@ export { default as ClipboardCopy } from "lucide-react/dist/esm/icons/clipboard-
 export { default as Cloud } from "lucide-react/dist/esm/icons/cloud.js";
 export { default as CloudUpload } from "lucide-react/dist/esm/icons/cloud-upload.js";
 export { default as Code2 } from "lucide-react/dist/esm/icons/code-xml.js";
+export { default as Camera } from "lucide-react/dist/esm/icons/camera.js";
 export { default as Columns2 } from "lucide-react/dist/esm/icons/columns-2.js";
 export { default as Copy } from "lucide-react/dist/esm/icons/copy.js";
 export { default as CreditCard } from "lucide-react/dist/esm/icons/credit-card.js";
@@ -73,6 +74,7 @@ export { default as MessageSquare } from "lucide-react/dist/esm/icons/message-sq
 export { default as Mic } from "lucide-react/dist/esm/icons/mic.js";
 export { default as Minimize2 } from "lucide-react/dist/esm/icons/minimize-2.js";
 export { default as Monitor } from "lucide-react/dist/esm/icons/monitor.js";
+export { default as MoreVertical } from "lucide-react/dist/esm/icons/ellipsis-vertical.js";
 export { default as MoreHorizontal } from "lucide-react/dist/esm/icons/ellipsis.js";
 export { default as PackageCheck } from "lucide-react/dist/esm/icons/package-check.js";
 export { default as PanelLeft } from "lucide-react/dist/esm/icons/panel-left.js";
