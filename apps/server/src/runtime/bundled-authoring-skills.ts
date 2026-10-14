@@ -16,7 +16,7 @@ export const BUNDLED_AUTHORING_SKILL_NAMES = [
 export type BundledAuthoringSkillName = typeof BUNDLED_AUTHORING_SKILL_NAMES[number];
 
 const REFERENCE_FILES: Record<BundledAuthoringSkillName, readonly string[]> = {
-  "openpond-cli": ["references/experiments-and-training.md"],
+  "openpond-cli": ["references/experiments-and-training.md", "references/compact-resource-tables.md", "references/diagnose-and-improve.md"],
   "openpond-skill-authoring": [
     "references/skill-package-layout.md",
     "references/copying-and-adaptation.md",

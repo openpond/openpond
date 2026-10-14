@@ -16,6 +16,7 @@ export function ChatResourceSummary(props:{initial:Resource;connection:ClientCon
 function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Resource;connection:ClientConnection|null;context?:{sessionId:string;turnId:string}}) {
   const [current,setCurrent] = useState(initial);
   const [expanded,setExpanded] = useState(false);
+  const [rowPage,setRowPage] = useState(0);
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState<string|null>(null);
   const [details,setDetails] = useState<DatasetResponse|ChatExperimentView|null>(null);
@@ -64,7 +65,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
     } else {
       const response = await chatResourceRequest<{view:ChatExperimentView}>(connection!,"experiment",{action:"result",payload:{id:current.id}});setDetails(response.view);
     }
-    setExpanded(true);
+    setRowPage(0);setExpanded(true);
   }
   async function prepareRun() {
     const datasetId=current.kind === "dataset" ? current.id : current.datasetId;
@@ -88,8 +89,8 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
     const response = await chatResourceRequest<{summaries:Resource[]}>(connection!,"experiment",{action:location === "cloud" ? "run_cloud" : "run",context,payload:{datasetId,revision,operationId:operation,...subscriptionOnly ? {} : {maximumCostUsd},taskLimit:limit,models:selected.map(model=>({providerId:model!.providerId,modelId:model!.id}))}});
     if (!context) setLaunched(response.summaries);setSetup(false);setOperationId(null);
   }
-  const rows = expanded && details ? "record" in details ? details.record.workspace.draft.tasks.map(t=>({id:t.id,label:typeof t.input.prompt === "string" ? t.input.prompt : JSON.stringify(t.input),detail:details.record.workspace.draft.graders.map(g=>g.label).join(", "),score:undefined})) : details.cases.map(c=>({id:c.id,label:c.taskId,detail:c.error ?? c.output ?? c.status,score:c.score})) : current.rows;
-  const primary:ResourceAction = {label:expanded ? "Collapse" : current.kind === "dataset" ? "View all" : "View results",disabled:busy || !connection || unsaved,run:()=>void perform(view)};
+  const rows = expanded && details ? "record" in details ? details.record.workspace.draft.tasks.map(t=>({id:t.id,label:typeof t.input.prompt === "string" ? t.input.prompt : typeof t.input.request === "string" ? t.input.request : JSON.stringify(t.input),detail:details.record.workspace.draft.graders.map(g=>g.label).join(", "),score:undefined})) : details.cases.map(c=>({id:c.id,label:c.taskId,detail:c.error ?? c.output ?? c.status,score:c.score})) : current.rows;
+  const primary:ResourceAction = {label:expanded ? "Collapse" : current.kind === "dataset" ? "View rows" : "View results",disabled:busy || !connection || unsaved,run:()=>void perform(view)};
   const actions:ResourceAction[]=[];
   const action=(label:string,run:()=>Promise<void>,disabled=false)=>actions.push({label,run:()=>void perform(run),disabled:busy || !connection || disabled});
   if(current.kind === "dataset") {
@@ -109,7 +110,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
   const metric=current.score == null ? "" : `${Number((current.score*100).toFixed(1))}%`;
   const summary=current.kind === "dataset" ? `${current.taskCount ?? 0} examples · ${current.graderCount ?? 0} graders`
     : `${current.evaluatedCount ?? 0}/${current.taskCount ?? 0} graded${metric ? ` · ${metric}` : ""}`;
-  return <section className="chat-resource-summary" aria-label={`${current.kind}: ${current.name}`}>
+  return <section className={`chat-resource-summary ${expanded ? "" : "compact"}`} aria-label={`${current.kind}: ${current.name}`}>
     <ChatResourceToolbar name={current.name} version={current.revision} summary={summary} primary={primary} actions={actions}>
       <dl>
         <dt>Status</dt><dd>{current.state}</dd>
@@ -123,11 +124,12 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
         </>}
       </dl>
     </ChatResourceToolbar>
-    <div className={`training-table-wrap chat-resource-table ${expanded ? "expanded" : ""}`} tabIndex={0} aria-label="Resource rows">
+    {expanded && <div className={`training-table-wrap chat-resource-table ${expanded ? "expanded" : ""}`} tabIndex={0} aria-label="Resource rows">
       <table className="training-data-table evaluation-workspace-table"><thead><tr><th>{current.kind === "dataset" ? "Task" : "Case"}</th><th>{current.kind === "dataset" ? "Graders" : "Outcome"}</th>{current.kind === "experiment" && <th>Score</th>}</tr></thead>
-        <tbody>{rows.length ? rows.map(row=><tr key={row.id}><td>{row.label}</td><td>{row.detail}</td>{current.kind === "experiment" && <td>{row.score == null ? "Unavailable" : `${(row.score*100).toFixed(1)}%`}</td>}</tr>) : <tr><td colSpan={current.kind === "experiment" ? 3 : 2}>{["Creating","Importing"].includes(current.state) ? "Waiting for saved tasks…" : "No saved rows to show."}</td></tr>}</tbody>
+        <tbody>{rows.length ? rows.slice(rowPage * 5, rowPage * 5 + 5).map(row=><tr key={row.id}><td title={row.label}>{row.label}</td><td title={row.detail}>{row.detail}</td>{current.kind === "experiment" && <td>{row.score == null ? "Unavailable" : `${(row.score*100).toFixed(1)}%`}</td>}</tr>) : <tr><td colSpan={current.kind === "experiment" ? 3 : 2}>{["Creating","Importing"].includes(current.state) ? "Waiting for saved tasks…" : "No saved rows to show."}</td></tr>}</tbody>
       </table>
-    </div>
+    </div>}
+    {expanded && rows.length > 5 && <div className="chat-resource-pagination"><button type="button" disabled={rowPage === 0} onClick={()=>setRowPage(value=>value-1)}>Previous</button><span>{rowPage+1}/{Math.ceil(rows.length/5)}</span><button type="button" disabled={(rowPage+1)*5 >= rows.length} onClick={()=>setRowPage(value=>value+1)}>Show more</button></div>}
     {setup && <div className="chat-resource-run-setup"><p>Run the saved Dataset, version {current.kind === "dataset" ? current.revision : current.datasetRevision}. The total budget includes model calls and grading.{location === "cloud" ? " Cloud execution publishes this exact revision and enables Dataset sync." : ""}</p>
       <DropdownSelect label="Execution location" value={location} options={[{value:"local",label:"Local"},{value:"cloud",label:"Cloud",description:"Publish this saved version and run in the linked workspace"}]} onChange={value=>{setLocation(value as "local"|"cloud");setSelectedModels([]);setModel("");setOperationId(null);}} disabled={busy}/>
       <DropdownSelect label="Evaluated model" value={model} options={[{value:"",label:"Select model"},...models.filter(model=>location === "local" || model.providerId === "openpond").map(m=>({value:`${m.providerId}/${m.id}`,label:m.name,description:m.providerId}))]} onChange={value=>{setModel(value);setOperationId(null);}} disabled={busy} />
@@ -138,7 +140,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
       <label>Maximum tasks<input type="number" min="1" max="100" value={taskLimit} onChange={event=>{setTaskLimit(event.target.value);setOperationId(null);}} disabled={busy} /></label>
       <button type="button" className="training-button" disabled={busy || !selectedModels.length && !model || !subscriptionOnly && !budget} onClick={()=>void perform(run)}>{location === "cloud" ? "Run in cloud" : "Run experiment"}</button><button type="button" className="training-button secondary" disabled={busy} onClick={()=>setSetup(false)}>Close</button>
     </div>}
-    {expanded && details && "record" in details && <div className="chat-resource-checks">{details.record.checks.map(check=><div key={check.kind}><strong>{check.kind}: {check.workspaceHash === details.record.workspace.contentHash ? check.status : "Stale"}</strong><p>{check.checked}/{check.total} checked</p>{check.issues.map((issue,index)=><p key={index}>{issue.message}</p>)}</div>)}</div>}
+
     {error && inlineErrorMessage(error) && <p role="alert" className="chat-resource-error">{error}</p>}
     {launched.map(resource=><ChatResourceSummary key={resource.id} initial={resource} connection={connection} />)}
   </section>;

@@ -1,3 +1,5 @@
+import { ModelTrainingJourney } from "./ModelTrainingJourney";
+import type { ClientConnection } from "../../api/api-client";
 import type { ReactNode } from "react";
 import type {
   ModelProject,
@@ -18,6 +20,7 @@ import type { ModelOverviewRun } from "./model-overview-runs";
 
 export function LabModelProjectOverview({
   actions,
+  connection,
   modelProject,
   modelRuns,
   onOpenRun,
@@ -27,6 +30,7 @@ export function LabModelProjectOverview({
   versions,
 }: {
   actions?: ReactNode;
+  connection?: ClientConnection | null;
   modelProject: ModelProject | null;
   modelRuns: ModelOverviewRun[];
   onOpenRun: (runId: string) => void;
@@ -97,6 +101,11 @@ export function LabModelProjectOverview({
         status={status}
         title={modelProject?.name ?? "Model Project"}
       />
+      {connection && modelProject?.hosted && currentRun?.hostedJobId ? <ModelTrainingJourney
+        key={`${modelProject.hosted.projectId}:${currentRun.hostedJobId}`}
+        connection={connection} teamId={modelProject.hosted.teamId} projectId={modelProject.hosted.projectId}
+        jobId={currentRun.hostedJobId} onOpenRun={() => onOpenRun(currentRun.key)}
+      /> : null}
       <LabProjectMetricCharts runs={modelRuns} />
       <LabContinualLearningSeries
         modelProjectId={modelProject?.id ?? null}

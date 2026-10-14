@@ -18,6 +18,7 @@ export function localDatasetSummary(record: LocalDatasetRecord | LocalDatasetLis
   const {draft} = record.workspace;
   const checks = record.checks.filter(c => c.workspaceHash === record.workspace.contentHash);
   return {kind:"dataset",id:draft.id,revision:draft.revision,name:draft.name || "Untitled dataset",state:record.packageHash ? "Runnable" : "Saved draft",
+    evaluationHash:record.workspace.contentHash,
     taskCount:draft.datasetArtifact?.rowCount ?? draft.tasks.length,graderCount:draft.graders.length,
     checkState:checks.length ? checks.map(c => `${c.kind}: ${c.status} (${c.checked}/${c.total})`).join(" · ") : record.checks.length ? "Checks stale" : "Not checked",
     syncState:record.sync ? record.sync.paused ? "Paused" : record.sync.acknowledgedHash === record.workspace.contentHash && record.sync.status === "synced" ? "Synced" : record.sync.status === "synced" ? "Sync pending" : record.sync.status : "Local",

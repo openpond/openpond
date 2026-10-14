@@ -1,3 +1,4 @@
+import {loadTasksetAuthoringProfileSkill,readTasksetAuthoringProfileSkill} from "../apps/server/src/training/task-authoring-skill";
 import { expect, test, vi } from "vitest";
 import { createTurnRunnerTestHarness, turnRunnerTestSession } from "./helpers/turn-runner-test-harness";
 import { loadBundledAuthoringSkills, readBundledAuthoringProfileSkill } from "../apps/server/src/runtime/bundled-authoring-skills";
@@ -8,7 +9,7 @@ test.each(["chat", "work"] as const)("ordinary local Codex %s sessions can read 
   const session=turnRunnerTestSession({provider:"codex",modelRef:{providerId:"codex",modelId:"gpt-6.1-sol"},experience,cwd:"/tmp/openpond",workspaceKind:undefined});
   let read=false;
   const harness=createTurnRunnerTestHarness({sessions:[session],dependencies:{
-    executeChatResourceAction:async()=>({}),loadBuiltInOpenPondSkills:loadBundledAuthoringSkills,readBuiltInOpenPondSkill:readBundledAuthoringProfileSkill,
+    executeChatResourceAction:async()=>({}),loadBuiltInOpenPondSkills:async()=>[await loadTasksetAuthoringProfileSkill(),...await loadBundledAuthoringSkills()],readBuiltInOpenPondSkill:async name=>name==="openpond-taskset-authoring"?readTasksetAuthoringProfileSkill():readBundledAuthoringProfileSkill(name),
     executeOpenPondCommand:async()=>{throw new Error("No shell command expected during skill read.");},
     ensureCodexRuntime:async (_session,input)=>({threadId:"native-thread",cwd:session.cwd,permissionMode:"default",reasoningEffort:null,
       client:{startTurn:async()=>{
@@ -16,7 +17,9 @@ test.each(["chat", "work"] as const)("ordinary local Codex %s sessions can read 
         const result=await input.coordination!.execute("profile_skill_read",{name:"openpond-cli"},"read-cli",new AbortController().signal) as {content:{text:string}[]};
         const skill=JSON.parse(result.content[0]!.text).data.skill;
         expect(skill.name).toBe("openpond-cli");expect(skill.sourceHash).toMatch(/^[a-f0-9]{64}$/);
-        expect(skill.resourceFiles).toContain("references/experiments-and-training.md");read=true;
+        expect(skill.resourceFiles).toContain("references/diagnose-and-improve.md");
+        const authoring=await input.coordination!.execute("profile_skill_read",{name:"openpond-taskset-authoring"},"read-authoring",new AbortController().signal) as {content:{text:string}[]};
+        expect(JSON.parse(authoring.content[0]!.text).data.skill.resourceFiles).toContain("references/graders-and-rewards.md");read=true;
         return {turnId:"native-turn"};
       },waitForTurn:async()=>{},stopAndWait:async()=>{}} as never}),
   }});

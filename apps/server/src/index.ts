@@ -867,7 +867,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     createLocalHarnessImprovementRuntime({
       store,
       storeDir,
-      queue: workQueues.turnFollowUp,
+      queue: workQueues.harnessRefiner,
       streamOpenPondHostedChatTurn,
       appendRuntimeEvent,
       upsertModelUsageRecord: safeUpsertModelUsageRecord,
