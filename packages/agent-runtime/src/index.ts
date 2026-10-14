@@ -19,3 +19,5 @@ export * from "./task-signals.js";
 export * from "./acp/types.js";
 export * from "./acp/client.js";
 export * from "./acp/claude-cli-client.js";
+
+export { ClaudeTaskProgress } from "./acp/claude-task-progress.js";

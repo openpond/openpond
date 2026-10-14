@@ -1,3 +1,4 @@
+import { parseNativeTaskNotification } from "./native-task-notification";
 import { HtmlVisualReferenceSchema } from "@openpond/contracts/html-visuals";
 import { attachChatResources } from "./chat-resources";
 import {
@@ -95,6 +96,13 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
           // This turn was created by the inbox; render its original message once,
           // rather than exposing the provider coordination wrapper as a user chat.
           peer.turnId = item.turnId;
+          continue;
+        }
+        const nativeData = asRecord(item.data);
+        const notification = item.source === "provider" && nativeData?.retainedHistory === true && nativeData.nativeProvider === "claude-code"
+          ? parseNativeTaskNotification(prompt) : null;
+        if (notification) {
+          messages.push({ id: item.id, role: "assistant", nativeTaskNotification: notification, timestamp: item.timestamp, turnId: item.turnId });
           continue;
         }
         const marker = codexControlMessage(prompt);

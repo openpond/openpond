@@ -25,7 +25,7 @@ export function parseClaudeSession(file: ConnectedFile, rows: Record<string, unk
       if (block.type === "text" || block.type === "thinking" || block.type === "redacted_thinking") continue;
       const id = `${row.uuid}:${index}`;
       if (block.type === "tool_use") events.push(event({ ...base, id, kind: "tool_call", callId: typeof block.id === "string" ? block.id : null, content: json(block) }));
-      else if (block.type === "tool_result") events.push(event({ ...base, id, kind: "tool_result", role: "tool", callId: typeof block.tool_use_id === "string" ? block.tool_use_id : null, content: json(block) }));
+      else if (block.type === "tool_result") events.push(event({ ...base, id, kind: "tool_result", role: "tool", callId: typeof block.tool_use_id === "string" ? block.tool_use_id : null, content: json({ ...block, ...(row.tool_use_result !== undefined ? { nativeToolResult: row.tool_use_result } : {}) }) }));
       else events.push(event({ ...base, id, kind: "unknown", content: json(block) }));
     }
     if (message.stop_reason === "end_turn") events.push(event({ ...base, id: `${row.uuid}:terminal`, kind: "terminal", content: { status: "completed" } }));

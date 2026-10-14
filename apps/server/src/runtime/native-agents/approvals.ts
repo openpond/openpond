@@ -6,7 +6,7 @@ import type { AcpPermissionRequest, AcpPermissionResult } from "@openpond/agent-
 import { event, now } from "../../utils.js";
 import { z } from "zod";
 
-const Questions = z.array(z.object({ question: z.string().min(1).max(2000), header: z.string().max(200).optional(), multiSelect: z.boolean().optional(), options: z.array(z.object({ label: z.string().min(1).max(1000), description: z.string().max(4000).optional() })).max(30) })).min(1).max(10);
+const Questions = z.array(z.object({ question: z.string().min(1).max(2000), header: z.string().max(200).optional(), multiSelect: z.boolean().optional(), options: z.array(z.object({ label: z.string().min(1).max(1000), description: z.string().max(4000).optional(), preview: z.string().max(100_000).optional() })).max(30) })).min(1).max(10);
 
 export function createNativeAgentApprovals(deps: {
   upsertApproval(approval: Approval): Promise<void>;
@@ -56,7 +56,7 @@ export function createNativeAgentApprovals(deps: {
       const { decision, answers } = ResolveApprovalRequestSchema.parse(payload);
       if (decision === "accept" && entry.request.questions) {
         const expected = entry.request.questions.map((question) => question.question);
-        if (!answers || expected.some((key) => !answers[key]) || Object.keys(answers).some((key) => !expected.includes(key))) throw new Error("Answer each requested native question before continuing.");
+        if (!answers || expected.some((key) => !answers[key]?.trim()) || Object.keys(answers).some((key) => !expected.includes(key))) throw new Error("Answer each requested native question before continuing.");
       } else if (answers) throw new Error("This permission request does not accept question answers.");
       const kind = decision === "accept" ? "allow_once" : decision === "acceptForSession" ? "allow_always" : "reject_once";
       const option = entry.request.options.find((candidate) => candidate.kind === kind);

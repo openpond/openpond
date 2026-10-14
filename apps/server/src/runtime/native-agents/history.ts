@@ -1,3 +1,4 @@
+import { ClaudeTaskProgress } from "@openpond/agent-runtime";
 import { createHash } from "node:crypto";
 import { handleNativeImporter } from "./importer.js";
 import { join } from "node:path";
@@ -194,15 +195,36 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       const ownedBoundaries = ownedNativeBoundaryIds(native, ownedTurns);
       const ownedIndexes = new Set(native.boundaries.filter((boundary) => ownedBoundaries.has(boundary.id)).flatMap((boundary) => Array.from({ length: boundary.end - boundary.start }, (_, index) => boundary.start + index)));
       let turnId: string | undefined;
+      const nativeCalls = new Map<string, Record<string, unknown>>();
+      const progressUpdates: Record<string, unknown>[] = [];
+      const progress = new ClaudeTaskProgress(update => progressUpdates.push(update));
       for (const [index, sourceEvent] of native.events.entries()) {
         if (ownedIndexes.has(index)) continue;
         const eventId = `native-${hash([projectionId, sourceEvent.id, sourceEvent.kind === "message" && sourceEvent.role === "assistant" ? sourceEvent.content : null])}`;
         const common = { id: eventId, sessionId, timestamp: sourceEvent.occurredAt ?? timestamp, source: "provider" as const };
         let normalized: RuntimeEvent | null = null;
-        if (sourceEvent.kind === "message" && sourceEvent.role === "user") { turnId = `native-turn-${hash([projectionId, sourceEvent.id])}`; normalized = { ...common, turnId, name: "turn.started", args: { prompt: text(sourceEvent.content) }, data: { retainedHistory: true, sourceEventId: sourceEvent.id } }; }
+        if (sourceEvent.kind === "message" && sourceEvent.role === "user") { turnId = `native-turn-${hash([projectionId, sourceEvent.id])}`; normalized = { ...common, turnId, name: "turn.started", args: { prompt: text(sourceEvent.content) }, data: { retainedHistory: true, nativeProvider: session.provider, sourceEventId: sourceEvent.id } }; }
         else if (sourceEvent.kind === "message" && sourceEvent.role === "assistant") normalized = { ...common, turnId, name: "assistant.delta", output: text(sourceEvent.content), data: { retainedHistory: true, nativeMessageId: `native-message-${hash([projectionId, sourceEvent.id])}`, delta: text(sourceEvent.content) } };
-        else if (sourceEvent.kind === "tool_call" || sourceEvent.kind === "tool_result") normalized = { ...common, turnId, name: sourceEvent.kind === "tool_call" ? "tool.started" : "tool.completed", action: "native_tool", status: sourceEvent.kind === "tool_call" ? "started" : "completed", data: { retainedHistory: true, callId: sourceEvent.callId, content: sourceEvent.content } };
+        else if (sourceEvent.kind === "tool_call" || sourceEvent.kind === "tool_result") {
+          const block = sourceEvent.content && typeof sourceEvent.content === "object" && !Array.isArray(sourceEvent.content) ? sourceEvent.content as Record<string, unknown> : {};
+          const callId = sourceEvent.callId ?? sourceEvent.id;
+          if (sourceEvent.kind === "tool_call") nativeCalls.set(callId, block);
+          const call = nativeCalls.get(callId) ?? block;
+          const action = typeof call.name === "string" ? call.name : "native_tool";
+          const input = call.input && typeof call.input === "object" && !Array.isArray(call.input) ? call.input as Record<string, unknown> : {};
+          const done = sourceEvent.kind === "tool_result";
+          normalized = { ...common, turnId, name: done ? "tool.completed" : "tool.started", action: "native_tool",
+            status: done ? "completed" : "started", data: { retainedHistory: true, callId: sourceEvent.callId, content: sourceEvent.content } };
+          if (session.provider === "claude-code") {
+            if (!done) progress.tool({ toolCallId: callId, title: action, rawInput: input });
+            else progress.result({ ...block, tool_use_id: callId }, block.nativeToolResult);
+          }
+        }
         if (normalized && !existingIds.has(eventId)) await deps.appendRuntimeEvent(normalized);
+        for (const update of progressUpdates.splice(0)) {
+          const progressId = `${eventId}:progress`;
+          if (!existingIds.has(progressId)) await deps.appendRuntimeEvent({ ...common, id: progressId, turnId, name: "tool.completed", action: "update_plan", status: "completed", data: { ...update, plan: update.entries, retainedHistory: true } });
+        }
       }
       for (const boundary of native.boundaries.filter((entry) => entry.projection === "turn")) {
         if (ownedBoundaries.has(boundary.id)) continue;

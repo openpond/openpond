@@ -258,8 +258,46 @@
     transform: translate(-50%, 0) scale(1);
   }
 }
-.native-question-fields { display: grid; gap: 12px; margin-top: 12px; }
-.native-question-fields fieldset { display: grid; gap: 8px; border: 1px solid var(--border-default); border-radius: 8px; padding: 12px; }
-.native-question-fields label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.native-question-fields small { display: block; width: 100%; opacity: 0.7; }
-.native-question-fields input[type="text"] { flex: 1; min-width: 160px; }
+/* Pinned requests retain visible actions while long questions/plans scroll. */
+.native-input-shell { width: min(620px, 100%); }
+.native-input-shell .approval-request-copy { max-height: min(50vh, 480px); overflow-y: auto; overscroll-behavior: contain; }
+.native-input-shell .approval-request-actions { display: flex; flex-wrap: wrap; }
+.native-input-shell .approval-action.primary { flex: 1; }
+.native-question-fields { display: grid; gap: 14px; }
+.native-question-fields fieldset { display: grid; gap: 8px; min-width: 0; margin: 0; border: 0; padding: 0; }
+.native-question-fields legend { padding: 0; margin-bottom: 8px; font-size: 13px; line-height: 1.5; font-weight: 500; }
+.native-question-fields legend small { display: block; margin-bottom: 3px; }
+.native-question-fields small, .native-question-selection p { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.native-question-fields .dropdown-trigger { width: 100%; justify-content: space-between; }
+.native-question-fields .dropdown-trigger span { white-space: normal; text-align: left; }
+.native-question-selection p { margin: 0 0 6px; }
+.native-question-custom { display: grid; gap: 6px; font-size: 12px; }
+.native-question-custom textarea { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid var(--border-default); border-radius: 7px; background: var(--surface-panel); color: var(--text-primary); padding: 8px; font: inherit; }
+.native-question-preview { display: block; width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid var(--border-default); border-radius: 7px; background: var(--surface-panel); }
+iframe.native-question-preview { height: 220px; }
+.native-question-preview .markdown-message { padding: 10px; }
+.native-plan-review { font-size: 13px; line-height: 1.5; }
+.native-plan-review > p { margin: 0; }
+
+.native-task-notification, .activity-plan-card { border: 1px solid var(--border-default); border-radius: 8px; padding: 12px; color: var(--text-primary); font-size: 13px; }
+.native-task-notification header { display: flex; align-items: center; gap: 8px; }
+.native-task-notification.completed header svg, .activity-plan-card li[data-state="completed"] svg { color: var(--status-success); }
+.native-task-notification.failed header svg { color: var(--status-danger); }
+.native-task-notification p { margin: 8px 0; line-height: 1.5; white-space: pre-wrap; }
+.native-task-notification details { color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.native-task-notification summary { cursor: pointer; }
+.native-task-notification details code { display: block; margin-top: 6px; }
+.native-task-notification details button { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; border: 1px solid var(--border-default); border-radius: 6px; padding: 5px 8px; background: var(--surface-panel); color: var(--text-primary); }
+.activity-plan-card { margin: 8px 0; }
+.activity-plan-heading { display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+.activity-plan-heading span { color: var(--text-secondary); font-size: 12px; }
+.activity-plan-card ol { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.activity-plan-card li { display: flex; align-items: baseline; gap: 8px; line-height: 1.5; }
+.activity-plan-card li svg { flex-shrink: 0; }
+.activity-plan-card li[data-state="pending"] { color: var(--text-secondary); }
+
+.chat-plan-dock { position: absolute; z-index: 26; bottom: calc(var(--chat-composer-reserve, 132px) + 12px); left: 50%; width: min(620px, calc(100% - 80px)); transform: translateX(-50%); background: var(--surface-raised); border-radius: 8px; box-shadow: 0 12px 32px var(--shadow-color); }
+.chat-plan-dock .activity-plan-card { margin: 0; }
+.chat-plan-dock .activity-plan-card ol { max-height: min(30vh, 240px); overflow-y: auto; overscroll-behavior: contain; }
+.activity-plan-current { margin: 7px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 12px; }
+.chat-column.has-approval .chat-plan-dock { display: none; }

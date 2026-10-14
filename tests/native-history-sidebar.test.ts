@@ -75,6 +75,38 @@ test("native source import renders retained text and tool activity without rewri
   }
 });
 
+// A reopened native chat must show the same task IDs/status as its live
+// session; losing structured tool results strands the planner on pending.
+test("retained Claude task results rebuild progress and keep notifications out of user bubbles", async () => {
+  const f = await fixture();
+  const notification = "<task-notification><task-id>background-1</task-id><status>completed</status><summary>Checks finished</summary></task-notification>";
+  const rows = [
+    { uuid: "request", parentUuid: null, type: "user", message: { content: "Implement the plan" } },
+    { uuid: "create", parentUuid: "request", type: "assistant", message: { content: [{ type: "tool_use", id: "create-call", name: "TaskCreate", input: { subject: "Verify" } }] } },
+    { uuid: "created", parentUuid: "create", type: "user", tool_use_result: { task: { id: "5", subject: "Verify" } }, message: { content: [{ type: "tool_result", tool_use_id: "create-call", content: "Created task 5" }] } },
+    { uuid: "update", parentUuid: "created", type: "assistant", message: { content: [{ type: "tool_use", id: "update-call", name: "TaskUpdate", input: { taskId: "5", status: "completed" } }] } },
+    { uuid: "updated", parentUuid: "update", type: "user", tool_use_result: { success: true, taskId: "5" }, message: { content: [{ type: "tool_result", tool_use_id: "update-call", content: "Updated task 5" }] } },
+    { uuid: "notification", parentUuid: "updated", type: "user", message: { content: notification } },
+    { uuid: "answer", parentUuid: "notification", type: "assistant", message: { content: "Done", stop_reason: "end_turn" } },
+  ].map((row, index) => ({ ...row, sessionId: "vendor-id", timestamp: new Date(1000 + index * 1000).toISOString() }));
+  const preview = previewAgentImport({ source: "claude_code", files: [{ path: "history.jsonl", text: rows.map(row => JSON.stringify(row)).join("\n") }] });
+  expect(preview.issues).toEqual([]);
+  const selectedSource = { ...source("claude-progress-instance", false), source: "claude_code" };
+  acquisition.discover.mockResolvedValue([selectedSource]);
+  acquisition.list.mockResolvedValue({ items: [native(selectedSource.instanceId)], nextCursor: null });
+  acquisition.read.mockResolvedValue({ preview });
+  const handle = f.api(); await handle("list");
+  const opened = await handle("open", { id: selectionId(selectedSource.instanceId) }) as Session;
+  const messages = buildChatMessages(await f.store.runtimeEventsForSession(opened.id));
+  const snapshots = messages.flatMap(message => message.activities ?? []).flatMap(activity => activity.plan ? [activity.plan] : []);
+  expect(snapshots.at(-1)).toEqual([{ id: "5", content: "Verify", status: "completed" }]);
+  expect(messages.filter(message => message.role === "user").map(message => message.content)).toEqual(["Implement the plan"]);
+  expect(messages.find(message => message.nativeTaskNotification)?.nativeTaskNotification).toMatchObject({ taskId: "background-1", status: "completed", summary: "Checks finished" });
+  // A typed user request with the same syntax stays a user request.
+  const typed = buildChatMessages([{ id: "typed", name: "turn.started", source: "user", timestamp: "2026-10-14T00:00:00Z", sessionId: "chat", args: { prompt: notification } }]);
+  expect(typed[0]?.role).toBe("user");
+});
+
 async function fixture() {
   const home = await mkdtemp(join(tmpdir(), "native-sidebar-"));
   let store = new SqliteStore(home);
