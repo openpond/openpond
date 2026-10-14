@@ -68,6 +68,10 @@ export async function createTaskCoordinationMcp(bridge: TaskCoordinationBridge) 
     }
   });
   server.requestTimeout = 0;
+  // Native clients retain this connection while the model reasons between
+  // tool calls. Avoid closing their pooled socket at Node's five-second idle
+  // default; runtime shutdown still closes every connection explicitly.
+  server.keepAliveTimeout = 3_605_000;
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", () => { server.off("error", reject); resolve(); });

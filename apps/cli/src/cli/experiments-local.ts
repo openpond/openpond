@@ -22,7 +22,7 @@ export async function runLocalExperimentsCommand(options:Record<string,string|bo
   // Preparation/admission can load a released Work closure before returning an ID.
   const request=await createLocalAuthenticatedRequest(base.origin,{timeoutMs:["prepare-harness","run"].includes(action)?1_200_000:60_000});
   async function command(action:string,payload:unknown):Promise<Record<string,unknown>> {
-    const response=await request(new URL(teamId ? "/v1/local-experiments" : "/v1/chat-experiments",base),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...teamId ? {teamId} : {},action,payload})});
+    const response=await request(new URL(teamId ? "/v1/local-experiments" : "/v1/chat-experiments",base),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...teamId ? {teamId} : {},...process.env.OPENPOND_CHAT_INVOCATION ? {invocationToken:process.env.OPENPOND_CHAT_INVOCATION} : {},action,payload})});
     const reply=await response.json() as Record<string,unknown>;
     if(!response.ok)throw new Error(typeof reply.error==="string"?reply.error:`Local Experiment request failed (${response.status}).`);
     return reply;

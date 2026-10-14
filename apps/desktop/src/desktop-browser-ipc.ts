@@ -13,6 +13,8 @@ import {
   parseBrowserUrlInput,
 } from "./desktop-browser-ipc-validation.js";
 import { parseBrowserHarnessRequest } from "./desktop-browser-harness-validation.js";
+import { BrowserCaptureModeSchema } from "@openpond/contracts/browser-snapshots";
+import { captureHtmlSnapshot } from "./desktop-browser-capture.js";
 import type {
   BrowserHarnessOperation,
   BrowserHarnessResult,
@@ -52,6 +54,20 @@ export function registerBrowserSidebarIpc(
     browserManager(event, getWindow).state(parseBrowserConversationInput(input).conversationId),
   );
   handleIpc("openpond:browser:diagnostics", (event) => browserManager(event, getWindow).diagnostics());
+  handleIpc("openpond:browser:capturePage", async (event, input) => {
+    try {
+      const tab = parseBrowserTabInput(input);
+      const mode = BrowserCaptureModeSchema.parse((input as Record<string, unknown>).mode);
+      return await browserManager(event, getWindow).capturePage({ ...tab, mode });
+    } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+  });
+  handleIpc("openpond:browser:cancelCapture", (event, input) => command(event, getWindow, manager => manager.cancelCapture(parseBrowserTabInput(input))));
+  handleIpc("openpond:browser:captureHtml", async (event, input) => {
+    try {
+      trustedSenderWindow(event, getWindow);
+      return await captureHtmlSnapshot(input, event.sender.id);
+    } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+  });
   handleIpc("openpond:browser:snapshot", (event, input) =>
     harnessCommand(event, getWindow, "snapshot", "openpond_browser_snapshot", input),
   );

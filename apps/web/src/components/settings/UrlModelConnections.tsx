@@ -1,9 +1,11 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { UrlModel, UrlModelInspection } from "@openpond/contracts/enclave";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { useAgentDialogFocus } from "../apps/useAgentDialogFocus";
 import { X } from "../icons";
 import { DropdownSelect } from "../DropdownSelect";
+import { useConnectionReadRetry } from "../../hooks/useConnectionReadRetry";
 
 type ModelList = { models: UrlModel[] };
 export function UrlModelConnections({ connection, onChanged }: { connection: ClientConnection | null; onChanged: () => Promise<void> }) {
@@ -12,11 +14,12 @@ export function UrlModelConnections({ connection, onChanged }: { connection: Cli
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  useConnectionReadRetry(connection, error, () => setReload(value => value + 1));
   useEffect(() => {
     const controller = new AbortController(); setModels([]); setError(null);
     if (connection) void apiFetch<ModelList>(connection, "/v1/url-models/list", { signal: controller.signal })
       .then((value) => { if (!controller.signal.aborted) setModels(value.models); })
-      .catch(() => { if (!controller.signal.aborted) setError("Could not load your model connections."); });
+      .catch((cause) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Could not load your model connections."); });
     return () => controller.abort();
   }, [connection, reload]);
   async function remove(model: UrlModel) {
@@ -30,7 +33,7 @@ export function UrlModelConnections({ connection, onChanged }: { connection: Cli
   }
   return <section aria-label="Models from URL" className="url-model-connections">
     <div className="provider-connections-intro"><div><h2>Models from URL</h2><p>Connect a model endpoint and select it in your chats. </p></div><button type="button" className="settings-primary" disabled={!connection} onClick={() => setOpen(true)}>Add model</button></div>
-    {error ? <p role="alert">{error} <button type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></p> : null}
+    {error && inlineErrorMessage(error) ? <p role="alert">{error} <button type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></p> : null}
     <div className="provider-connections-grid">{models.map((model) => <div className="provider-connection-card" key={model.id}>
       <strong>{model.name}</strong><p className="url-model-endpoint">{model.endpoint}</p><p>{model.providerName} · {model.model} · {model.hasToken ? "Key saved securely" : "No API key"}</p>
       <button type="button" className="settings-secondary" disabled={Boolean(removing)} onClick={() => void remove(model)}>{removing === model.id ? "Removing…" : "Remove model"}</button>
@@ -87,7 +90,7 @@ function AddUrlModelDialog({ connection, providerNames, onClose, onSaved }: {
             onChange={(value) => { setModel(value); setName(value); }} /></div>
           <label>Display name<input required maxLength={100} value={name} disabled={busy} onChange={(event) => setName(event.target.value)} /></label>
         </> : <p className="settings-footnote">Use the model service’s API base URL. Keys are encrypted on this machine.</p>}
-        {error ? <p role="alert">{error}</p> : null}
+        {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
         <div className="url-model-connection-actions"><button className="settings-primary" type="submit" disabled={busy || !providerName || (Boolean(inspection) && (!model || !name.trim()))}>{busy ? "Connecting…" : inspection ? "Add model" : "Fetch models"}</button><button type="button" className="settings-secondary" onClick={onClose}>Cancel</button></div>
       </form>
     </section>

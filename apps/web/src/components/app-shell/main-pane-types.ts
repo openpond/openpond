@@ -177,7 +177,7 @@ export type MainPaneProps = {
   onOpenProviderSettings: () => void;
   onOpenTrainingSettings: () => void;
   onOpenDatasetStorageSettings: () => void;
-  changeDraftProvider: (provider: ChatProvider) => void;
+  changeDraftProvider: (provider: ChatProvider, model?: string) => void;
   changeProjectTarget: (target: string) => void;
   changeWorkspaceTarget: (target: WorkspaceTargetValue) => Promise<void>;
   setDraftProvider: (provider: ChatProvider) => void;
@@ -271,7 +271,7 @@ export type MainPaneProps = {
     panelId: string,
     state: { scrollTop: number; stickyToBottom: boolean }
   ) => void;
-  onRightChatProviderChange: (panelId: string, provider: ChatProvider) => void;
+  onRightChatProviderChange: (panelId: string, provider: ChatProvider, model?: string) => void;
   onSubmitRightChat: (
     panelId: string,
     attachments?: ChatAttachment[],

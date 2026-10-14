@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useContext, useMemo, type ReactNode } from "react";
 import type { RuntimeEvent, SessionFileArtifact } from "@openpond/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { connectionQueryScope } from "../../lib/query-scope";
@@ -8,6 +8,10 @@ import { WorkspaceFileThumbnail } from "../workspace-diff/WorkspaceFileThumbnail
 import type { ChatMessage } from "../../lib/app-models";
 import { ActivityFileArtifact } from "../chat/ActivityFileArtifact";
 import { visibleChatFileArtifacts, workOutputsFromEvents } from "./WorkSidebarPanel";
+import { OpenHtmlVisualContext } from "../visuals/html-visual-context";
+import { Code2 } from "../icons";
+import { apiFetch } from "../../api/api-client";
+import { HtmlVisualReferenceSchema, type HtmlVisualReference } from "@openpond/contracts/html-visuals";
 
 export function RightSidebarOverview({ messages, events, actions, onOpenFile, connection, workspaceId, sandboxId, sessionId, conversationId, onOpenBrowser }: {
   conversationId: string;
@@ -21,9 +25,26 @@ export function RightSidebarOverview({ messages, events, actions, onOpenFile, co
   actions: ReactNode;
   onOpenFile: (path: string, options?: { sandboxId?: string | null; local?: boolean }) => void;
 }) {
-  const published = useMemo(() => workOutputsFromEvents(events), [events]);
-  const outputVersion = events.filter(event => event.name === "workspace_action_result" || event.name === "tool.completed" || event.name === "turn.completed").at(-1)?.id ?? "";
+  const openVisual = useContext(OpenHtmlVisualContext);
   const connectionScope = connectionQueryScope(connection);
+  const outputVersion = events.filter(event => event.name === "visual.published" || event.name === "workspace_action_result" || event.name === "tool.completed" || event.name === "turn.completed").at(-1)?.id ?? "";
+  const savedVisuals = useQuery({
+    queryKey: ["thread-html-visuals", connectionScope, sessionId, outputVersion],
+    enabled: Boolean(connection && sessionId),
+    queryFn: async () => HtmlVisualReferenceSchema.array().parse((await apiFetch<{ visuals: HtmlVisualReference[] }>(connection!, `/v1/sessions/${encodeURIComponent(sessionId!)}/visuals`)).visuals),
+    staleTime: 15_000,
+    refetchInterval: 5_000,
+  });
+  const visuals = useMemo(() => {
+    const latest = new Map<string, NonNullable<ChatMessage["visual"]>>();
+    for (const visual of savedVisuals.data ?? []) latest.set(visual.visualId, visual);
+    for (const message of messages) if (message.visual) {
+      const previous = latest.get(message.visual.visualId);
+      if (!previous || previous.output.revision < message.visual.output.revision) latest.set(message.visual.visualId, message.visual);
+    }
+    return [...latest.values()];
+  }, [messages, savedVisuals.data]);
+  const published = useMemo(() => workOutputsFromEvents(events), [events]);
   const saved = useQuery({
     queryKey: ["thread-output-files", connectionScope, sessionId, outputVersion],
     placeholderData: (previous, query) => query?.queryKey[1] === connectionScope && query.queryKey[2] === sessionId ? previous : undefined,
@@ -52,9 +73,15 @@ export function RightSidebarOverview({ messages, events, actions, onOpenFile, co
     <div className="right-sidebar-new-tab">
       <NewTabBrowserToolbar conversationId={conversationId} onOpenBrowser={onOpenBrowser} />
       <div className="right-sidebar-overview">
-      {files.length ? (
+      {files.length || visuals.length ? (
         <section className="right-sidebar-overview-files" aria-label="Thread files">
           <h3>Files</h3>
+          {visuals.map(visual => <div key={visual.publicationId} className="activity-artifact">
+            <button type="button" className="activity-artifact-name" onClick={() => openVisual?.(visual)} aria-label={`Open ${visual.output.title} in browser panel`}>
+              <Code2 size={14} aria-hidden /><strong>{visual.output.title}</strong>
+            </button>
+            <span className="activity-artifact-actions">HTML{visual.output.revision > 1 ? ` · Revision ${visual.output.revision}` : ""}</span>
+          </div>)}
           {files.map(file => <ActivityFileArtifact key={`${file.sandboxId ?? "local"}:${file.path}`} artifact={file}
             onOpenFileInSidebar={path => onOpenFile(path, { sandboxId: file.sandboxId, local: !file.sandboxId })}
             preview={<WorkspaceFileThumbnail revision={file.revision} path={file.path} connection={connection} workspaceId={workspaceId} sandboxId={file.sandboxId} />} />)}

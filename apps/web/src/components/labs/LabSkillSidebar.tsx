@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { SkillSourceFile } from "@openpond/contracts";
 
@@ -141,7 +142,7 @@ export function LabSkillSidebar({
           </header>
           {loading ? (
             <div className="lab-skill-source-state"><Loader2 className="spin" size={16} /> Loading source…</div>
-          ) : error ? (
+          ) : error && inlineErrorMessage(error) ? (
             <div className="lab-skill-source-state error">{error}</div>
           ) : source?.isBinary ? (
             <div className="lab-skill-source-state">

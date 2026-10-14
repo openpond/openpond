@@ -6,6 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = path.join(root, "apps", "cli", "skills");
 const target = path.join(root, "apps", "server", "dist", "skills");
 const required = [
+  "openpond-cli",
   "openpond-taskset-authoring",
   "openpond-skill-authoring",
   "openpond-agent-authoring",
@@ -21,5 +22,6 @@ for (const name of required) {
   await access(path.join(target, name, "SKILL.md"));
 }
 await access(path.join(target, "openpond-taskset-authoring", "artifact.json"));
+await access(path.join(target, "openpond-cli", "references", "experiments-and-training.md"));
 
 console.log(`Staged OpenPond server skills at ${path.relative(root, target)}.`);

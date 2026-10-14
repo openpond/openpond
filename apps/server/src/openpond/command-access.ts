@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { mkdir } from "node:fs/promises";
 import { parse as parseShellCommand } from "shell-quote";
 import { DEFAULT_OPENPOND_COMMAND_ACCESS_MODE } from "@openpond/contracts/settings";
 import { ResolveApprovalRequestSchema, type ResolveApprovalRequest } from "@openpond/contracts/requests";
@@ -60,6 +61,8 @@ type CommandFamily = {
 export function createOpenPondCommandAccessService(deps: {
   upsertApproval: (approval: Approval) => Promise<void>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
+  managedChatCwd?: string;
+  executionEnvironment?: (input: OpenPondCommandExecutionInput) => Promise<NodeJS.ProcessEnv>;
 }) {
   const { upsertApproval, appendRuntimeEvent } = deps;
   const pendingApprovals = new Map<string, PendingCommandApproval>();
@@ -72,9 +75,11 @@ export function createOpenPondCommandAccessService(deps: {
     }
     const timeoutSeconds = normalizedTimeout(input.timeoutSeconds);
     const target = resolveWorkspaceExecutionTarget({ session: input.session });
-    const cwd = resolveCommandCwd({ requestedCwd: input.cwd, session: input.session });
+    let cwd = resolveCommandCwd({ requestedCwd: input.cwd, session: input.session });
+    const managed = !cwd && !input.session.workspaceKind && !input.session.systemKind && deps.managedChatCwd;
+    if (managed) { cwd = path.join(managed, input.session.id.replace(/[^a-zA-Z0-9_-]/g,"_")); await mkdir(cwd,{recursive:true}); }
     const explicitCwd = Boolean(input.cwd?.trim() && path.isAbsolute(input.cwd.trim()));
-    if (target.target === "sandbox" || !cwd || (target.target !== "local" && !explicitCwd)) {
+    if (target.target === "sandbox" || !cwd || (target.target !== "local" && !explicitCwd && !managed)) {
       return blockedCommandResult(command, cwd, SELECT_PROJECT_MESSAGE, timeoutSeconds);
     }
 
@@ -105,7 +110,8 @@ export function createOpenPondCommandAccessService(deps: {
       }
     }
 
-    return runShellCommand({ command, cwd, timeoutSeconds, signal: input.signal });
+    const env = deps.executionEnvironment ? await deps.executionEnvironment(input) : {};
+    return runShellCommand({ command, cwd, timeoutSeconds, signal: input.signal, env });
   }
 
   async function resolveApproval(approvalId: string, payload: unknown): Promise<Approval | null> {
@@ -357,6 +363,7 @@ function runShellCommand(input: {
   cwd: string;
   timeoutSeconds: number;
   signal?: AbortSignal;
+  env?: NodeJS.ProcessEnv;
 }): Promise<OpenPondCommandRunResult> {
   return new Promise((resolve) => {
     let settled = false;
@@ -372,6 +379,7 @@ function runShellCommand(input: {
       env: {
         ...process.env,
         PATH: executableSearchPath(),
+        ...input.env,
       },
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",

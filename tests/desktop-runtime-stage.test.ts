@@ -143,6 +143,8 @@ describe("desktop runtime staging", () => {
           "apps/web/dist/index.html",
           "<main>OpenPond</main>\n"
         ),
+        writeFixture(root, "apps/cli/skills/openpond-cli/SKILL.md", "# Skill\n"),
+        writeFixture(root, "apps/cli/skills/openpond-refiner-authoring/SKILL.md", "# Skill\n"),
         writeFixture(
           root,
           "apps/cli/skills/openpond-taskset-authoring/SKILL.md",
@@ -202,6 +204,8 @@ describe("desktop runtime staging", () => {
       expect(await readFile(path.join(result.stageRoot, "runtime/cli/chunks/collector.js"), "utf8"))
         .toBe('console.log("collector");\n');
       expect(stagedPaths).not.toContain("cli/chunks/retired-poll-executor.js");
+      expect(stagedPaths).toContain("server/skills/openpond-cli/SKILL.md");
+      expect(stagedPaths).toContain("server/skills/openpond-refiner-authoring/SKILL.md");
 
       expect(stagedPaths).toContain(
         "server/node_modules/node-pty/package.json"

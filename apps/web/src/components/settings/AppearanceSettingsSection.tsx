@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useState } from "react";
 import { DropdownSelect } from "../DropdownSelect";
 import { setAppearancePreference, useAppearancePreference } from "../../theme/appearance";
@@ -33,7 +34,7 @@ export function AppearanceSettingsSection() {
               }}
             />
             <small>System follows your device’s appearance. Your choice is saved on this device.</small>
-            {error && <p role="alert">{error}</p>}
+            {error && inlineErrorMessage(error) && <p role="alert">{error}</p>}
           </div>
         </div>
       </div>

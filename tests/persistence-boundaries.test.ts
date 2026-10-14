@@ -38,7 +38,9 @@ describe("persistence data and concurrency boundaries", () => {
   test("persists chat selection separately for each client preference owner", async () => {
     await initializeHome(home);
     const original = await readClientChoices(home);
-    const selection = { provider: "codex" as const, model: "gpt-6.1-sol" };
+    const selection = { provider: "codex" as const, model: "gpt-6.1-sol", modelsByProvider: {
+      codex: "gpt-6.1-sol", "claude-code": "haiku", openpond: "accounts/fireworks/models/deepseek-v4-pro",
+    } };
     await updateClientChoices(home, original.owner, { chatSelection: selection });
     await updateClientChoices(home, original.owner, { sidebarPresentation: "inbox" });
     expect((await readClientChoices(home)).value).toMatchObject({ chatSelection: selection, sidebarPresentation: "inbox" });

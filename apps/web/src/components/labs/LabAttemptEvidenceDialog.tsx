@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
 
 import { AppDialog } from "../dialogs/AppDialog";
@@ -49,7 +50,7 @@ export function LabAttemptEvidenceDialog({
         <div><dt>Artifact</dt><dd className="labs-mono-value">{payload.artifactPath}</dd></div>
       </dl>
       <pre className="labs-attempt-evidence-json">{JSON.stringify(payload.value, null, 2)}</pre>
-    </> : error ? <div className="labs-rename-error" role="alert">{error}</div> : <div className="training-run-placeholder">Loading authorized receipt evidence…</div>}
+    </> : error && inlineErrorMessage(error) ? <div className="labs-rename-error" role="alert">{error}</div> : <div className="training-run-placeholder">Loading authorized receipt evidence…</div>}
     <footer><button type="button" onClick={onClose}>Close</button></footer>
   </AppDialog>;
 }

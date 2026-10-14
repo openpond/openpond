@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import type { ReactNode } from "react";
 import { LearningJsonObjectSchema } from "openpond-sdk/learning";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
@@ -11,7 +12,7 @@ export function parseLearningObject(text: string) {
 export function LearningJsonField({ label, value, onChange, hint, disabled = false }: { label: string; value: string; onChange: (value: string) => void; hint?: string; disabled?: boolean }) {
   return <label className="learning-json-field"><span>{label}</span>{hint ? <small>{hint}</small> : null}<textarea spellCheck={false} rows={8} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} /></label>;
 }
-export function LearningError({ error }: { error: string | null }) { return error ? <p role="alert" className="training-error">{error}</p> : null; }
+export function LearningError({ error }: { error: string | null }) { return error && inlineErrorMessage(error) ? <p role="alert" className="training-error">{error}</p> : null; }
 export function LearningPager({ after, next, onPage }: { after?: string | null; next?: string | null; onPage: (cursor: string | null) => void }) {
   return after || next ? <div className="model-build-actions">{after ? <button type="button" className="training-button secondary" onClick={() => onPage(null)}>First page</button> : null}{next ? <button type="button" className="training-button secondary" onClick={() => onPage(next)}>Next page</button> : null}</div> : null;
 }

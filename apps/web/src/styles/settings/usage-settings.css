@@ -48,13 +48,17 @@
   color: var(--accent-info);
   font-size: 24px;
   font-weight: 620;
-  box-shadow: 0 12px 36px var(--shadow-color);
+  box-shadow: 0 12px 36px var(--shadow-panel-color);
 }
 
 .usage-profile-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+:root[data-theme="light"] .usage-profile-avatar {
+  background: color-mix(in srgb, var(--accent-info) 12%, var(--surface-panel));
 }
 
 .usage-profile-copy {

@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../../lib/error-messages";
 import {useState} from "react";
 import {useQuery} from "@tanstack/react-query";
 import {contentHash} from "@openpond/harness";
@@ -71,7 +72,7 @@ export function WorkflowEvaluationDiscovery({api,inventory,route,navigate,onClos
     <label className="training-taskset-selector"><span>Released Profile</span><select value={sourceId} onChange={event=>setSourceId(event.target.value)}>
       <option value="">Choose an authorized source</option>{sources.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}
     </select></label>
-    {library.error?<p role="alert">{library.error.message}</p>:null}
+    {library.error && inlineErrorMessage(library.error)?<p role="alert">{library.error.message}</p>:null}
     {!sources.length&&!library.isPending?<p>No authorized released Profile sources are associated with this view.</p>:null}
     {value?<><p>Source revision {value.sourceRevision}</p><p>Catalog {value.catalogHash??"No released catalog"}</p>
       <table className="training-data-table"><thead><tr><th>Evaluation</th><th>Dataset</th><th>Selection</th></tr></thead><tbody>
@@ -99,6 +100,6 @@ export function WorkflowEvaluationDiscovery({api,inventory,route,navigate,onClos
         <pre>{JSON.stringify(run,null,2)}</pre></details>)}
       {value.comparisons.map(comparison=><details key={comparison.id}><summary>Comparison {comparison.id}</summary><pre>{JSON.stringify(comparison,null,2)}</pre></details>)}
       {value.reports.map(report=><details key={report.id}><summary>Report {report.id}</summary><pre>{JSON.stringify(report,null,2)}</pre></details>)}
-    </>:selected?<>{discovery.isPending?<p role="status">Loading exact evaluations…</p>:null}{discovery.error?<p role="alert">{discovery.error.message} <button type="button" className="training-button" onClick={()=>void discovery.refetch()}>Retry</button></p>:null}</>:null}
+    </>:selected?<>{discovery.isPending?<p role="status">Loading exact evaluations…</p>:null}{discovery.error && inlineErrorMessage(discovery.error)?<p role="alert">{discovery.error.message} <button type="button" className="training-button" onClick={()=>void discovery.refetch()}>Retry</button></p>:null}</>:null}
   </WorkspacePanel>;
 }

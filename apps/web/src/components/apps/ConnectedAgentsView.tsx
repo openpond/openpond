@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BootstrapPayload, ProviderSettings } from "@openpond/contracts";
 import { type ClientConnection } from "../../api";
@@ -223,9 +224,9 @@ export function ConnectedAgentsView({
           options={[{ value: "", label: projectLoading && !projects.length ? "Fetching projects…" : "Select project" },
             ...projects.map(item => ({ value: item.id, label: item.content.name }))]} />
       </label>
-      {projectError ? <p role="alert">{projectError}</p> : null}
-      {error ? <p role="alert">{error}</p> : null}
-      {actionError ? <p role="alert">{actionError}</p> : null}
+      {projectError && inlineErrorMessage(projectError) ? <p role="alert">{projectError}</p> : null}
+      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+      {actionError && inlineErrorMessage(actionError) ? <p role="alert">{actionError}</p> : null}
       <div className="agent-connections-grid">
         {AGENT_SOURCES.filter((item) => !hidden.includes(item.id)).map((agent) => (
           <AgentConnectionCard

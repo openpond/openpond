@@ -1,3 +1,4 @@
+import { attachHostedTrainingToChat } from "./training-chat-attachment";
 import { readFile } from "node:fs/promises";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import { createTrainingClient, parseAndVerifyTrainingJobSubmission, parseAndVerifyTrainingPreparationReceipt, TrainingPreparationRequestSchema, type TrainingInputArtifactUpload } from "openpond-sdk/training";
@@ -11,7 +12,8 @@ type Options = Record<string, string | boolean>;
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
 
 /** Hosted operations use the public SDK and account credential store directly.
- * They never start, contact, or depend on the local app server. */
+ * They never start or depend on the local app server. App-scoped chat invocations
+ * additionally attempt a recoverable attachment after successful operations. */
 export async function runHostedTrainingCommand(options: Options, rest: string[]): Promise<void> {
   const action = rest[0], target = rest[1];
   const watchOptions = action === "hosted-watch" ? parseHostedWatchOptions(options) : null;
@@ -37,6 +39,8 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     });
   };
   const client = createTrainingClient({ baseUrl, headers, fetch: request });
+  const attach = (jobId:string)=>attachHostedTrainingToChat({jobId,teamId,apiOrigin:new URL(baseUrl).origin});
+  const printAttached = async (value:unknown,jobId:string) => { print(value); await attach(jobId); };
   const readInput = async () => {
     if (!target) throw new Error(`${action} requires an input JSON file.`);
     const bytes = await readFile(target);
@@ -71,7 +75,10 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     const receipt = await parseAndVerifyTrainingPreparationReceipt(await readInput());
     if (receipt.plan.request.teamId !== teamId) throw new Error("Preparation belongs to a different workspace.");
     if (!parseBooleanOption(options.yes)) throw new Error("Starting paid hosted training requires --yes.");
-    print(await client.startPreparation(receipt.plan.id, { teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision })); return;
+    const submitted = await client.startPreparation(receipt.plan.id, { teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision });
+    print(submitted);
+    if (submitted.jobId) await attach(submitted.jobId);
+    return;
   }
   if (action === "hosted-stage") {
     print(await client.stageArtifact(await readInput() as TrainingInputArtifactUpload)); return;
@@ -93,17 +100,18 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
       input.job.kind === "policy_optimize" && job.executionMode !== input.job.executionMode) {
       throw new Error(`Hosted submission response identity or execution mode mismatch; inspect hosted-status ${job.id} before attempting another submission.`);
     }
-    print(job); return;
+    await printAttached(job,job.id); return;
   }
   if (!target) throw new Error(`${action} requires a hosted job ID.`);
-  if (action === "hosted-status") { print(await client.getJob(target)); return; }
+  if (action === "hosted-status") { await printAttached(await client.getJob(target),target); return; }
   if (action === "hosted-cancel") {
-    print(await cancelHostedTrainingJob(client, target, teamId)); return;
+    await printAttached(await cancelHostedTrainingJob(client, target, teamId),target); return;
   }
-  if (action === "hosted-artifacts") { print(await client.outputs(target)); return; }
-  if (action === "hosted-logs") { print(await client.logs(target)); return; }
-  if (action === "hosted-events") { print(await client.events(target)); return; }
+  if (action === "hosted-artifacts") { await printAttached(await client.outputs(target),target); return; }
+  if (action === "hosted-logs") { await printAttached(await client.logs(target),target); return; }
+  if (action === "hosted-events") { await printAttached(await client.events(target),target); return; }
   if (action === "hosted-watch" && watchOptions) {
+    await attach(target);
     await watchHostedTrainingJob({ client, jobId: target, teamId, options: watchOptions, print, requestBound });
     return;
   }

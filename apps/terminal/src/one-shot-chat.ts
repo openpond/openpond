@@ -134,14 +134,21 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
     const terminalEventPromise = new Promise<TerminalTurnRuntimeEvent>((resolve) => {
       resolveTerminalEvent = resolve;
     });
+    let submittedTurnId: string | null = null;
+    const pendingEvents: RuntimeEvent[] = [];
+    const consumeTurnEvent = (event: RuntimeEvent) => {
+      if (event.turnId !== submittedTurnId) return;
+      activeAccumulator.apply(event);
+      if (!options.json) output.write(humanOneShotEventText(event));
+      if (isTerminalTurnEvent(event)) resolveTerminalEvent(event);
+    };
     eventStream = openOneShotTerminalEvents({
       server: connection.server,
       token: connection.token,
       activeSessionId,
       onEvent: (event) => {
-        activeAccumulator.apply(event);
-        if (!options.json) output.write(humanOneShotEventText(event));
-        if (isTerminalTurnEvent(event)) resolveTerminalEvent(event);
+        if (submittedTurnId === null) pendingEvents.push(event);
+        else consumeTurnEvent(event);
       },
       onStatus: (message) => {
         if (!options.json) output.write(message);
@@ -178,7 +185,7 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
         )
       : [];
     const openPondActionCatalog = [...profileActionCatalog, ...projectActionCatalog];
-    await deadline.run("turn submission", apiFetch(connection.server, connection.token, `/v1/sessions/${activeSessionId}/turns`, {
+    const submitted = await deadline.run("turn submission", apiFetch<{id:string}>(connection.server, connection.token, `/v1/sessions/${activeSessionId}/turns`, {
       method: "POST",
       body: JSON.stringify({
         prompt,
@@ -202,6 +209,9 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
       }),
       signal: deadline.signal,
     }));
+    if (!submitted?.id) throw new Error("Turn submission returned no retained turn identity.");
+    submittedTurnId = submitted.id;
+    for (const event of pendingEvents.splice(0)) consumeTurnEvent(event);
     turnSubmitted = true;
 
     const terminal = await deadline.run("turn completion", terminalEventPromise);
@@ -345,13 +355,18 @@ export function createOneShotAccumulator(options: { maxOutputBytes?: number | nu
     apply(event) {
       total += 1;
       if (event.turnId) turnId = event.turnId;
-      if (event.name === "assistant.delta" && event.output && !finalMessageTruncated) {
-        const next = appendWithinByteLimit(finalMessage, finalMessageBytes, event.output, maxOutputBytes);
+      const finalSnapshot = event.name === "assistant.delta" && event.data !== null && typeof event.data === "object"
+        && "nativeMessageSnapshot" in event.data && event.data.nativeMessageSnapshot === true;
+      if (event.name === "assistant.delta" && event.output && (finalSnapshot || !finalMessageTruncated)) {
+        // Native providers send an authoritative final snapshot after streamed
+        // chunks. It replaces the partial answer, including a truncated one.
+        const next = appendWithinByteLimit(finalSnapshot ? "" : finalMessage, finalSnapshot ? 0 : finalMessageBytes, event.output, maxOutputBytes);
         finalMessage = next.text;
         finalMessageBytes = next.bytes;
         finalMessageTruncated = next.truncated;
       }
-      if (event.name === "command.output" || (event.name === "tool.completed" && event.action === "exec_command")) {
+      if (event.name === "command.output" || (event.name === "tool.completed" && (event.action === "exec_command" ||
+        event.action === "mcpToolCall" && (event.data as {tool?:unknown}|undefined)?.tool === "openpond_exec_command"))) {
         commands += 1;
       }
       if (event.name === "workspace_action" || event.name === "workspace_action_result") workspaceActions += 1;

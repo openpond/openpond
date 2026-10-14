@@ -1,5 +1,6 @@
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import type { ChatProvider, ProviderSettings } from "@openpond/contracts";
+import { readChatSelectionPreference } from "../../lib/chat-selection-preference";
 import { defaultModelForProvider, modelOptionsForProvider, type DropdownOption } from "../../lib/app-models";
 
 const nativeProviders = new Set(["claude-code", "opencode", "grok-build"]);
@@ -40,9 +41,12 @@ export function composerModelGroups({ currentModelOptions, currentProvider, prov
 }
 
 export function modelSelectionForGroup(group: ComposerModelGroup): { provider: ChatProvider; model: string } | null {
-  const selected = group.options.find((option) => option.value === group.defaultModel) ?? group.options[0];
+  const saved = readChatSelectionPreference();
+  const preferred = saved?.modelsByProvider?.[group.provider] ?? (saved?.provider === group.provider ? saved.model : undefined);
+  const selected = group.options.find((option) => option.value === preferred)
+    ?? group.options.find((option) => option.value === group.defaultModel) ?? group.options[0];
   if (!selected && !(isRegisteredAcpProvider(group.provider) || nativeProviders.has(group.provider))) return null;
-  // An empty selection asks the native agent to use its advertised current model.
-  // It does not manufacture a model alias or persist a provider default.
-  return { provider: group.provider, model: selected?.value ?? "" };
+  // Keep a native provider's own explicit choice while its catalog loads;
+  // otherwise an empty selection asks the agent to use its current model.
+  return { provider: group.provider, model: selected?.value ?? preferred ?? "" };
 }

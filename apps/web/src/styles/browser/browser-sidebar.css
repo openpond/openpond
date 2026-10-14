@@ -1,4 +1,4 @@
-.browser-sidebar-panel {
+.workspace-diff-panel.browser-sidebar-panel {
   grid-template-rows: 41px 42px minmax(0, 1fr);
 }
 
@@ -15,6 +15,8 @@
   gap: 6px;
   border-bottom: 1px solid var(--border-default);
   padding: 0 10px 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .browser-tab {
@@ -29,6 +31,7 @@
   border-radius: 7px;
   color: var(--text-muted);
   font-size: 11px;
+  flex-shrink: 0;
 }
 
 .browser-tab.active,
@@ -135,6 +138,12 @@
   background: var(--surface-page);
 }
 
+.browser-visual-document {
+  height: 100%;
+  overflow: auto;
+  padding: 12px;
+}
+
 .browser-viewport {
   position: absolute;
   inset: 0;
@@ -180,3 +189,11 @@
   padding: 0 8px;
   font-size: 12px;
 }
+
+.browser-snapshot-menu { top: 32px; bottom: auto; width: 200px; }
+.workspace-diff-panel.browser-sidebar-panel.has-capture-status { grid-template-rows: 41px 42px auto minmax(0, 1fr); }
+.browser-snapshot-status { margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--border-default); background: var(--surface-floating); color: var(--text-primary); font-size: 12px; }
+.browser-snapshot-preview { height: 100%; overflow: auto; padding: 12px; }
+.browser-snapshot-image img { display: block; width: 100%; height: auto; }
+.browser-snapshot-preview details { margin-top: 12px; color: var(--text-muted); font-size: 12px; }
+.browser-snapshot-preview pre { overflow: auto; max-height: 240px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-primary); }

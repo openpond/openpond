@@ -18,9 +18,9 @@ test("a team/account switch discards the in-flight snapshot and a detached rende
   await Promise.resolve();
   expect(apply).not.toHaveBeenCalled();
   expect(replies).toHaveLength(2);
-  replies[1]!("production / Example Customer");
+  replies[1]!("production / Example Team");
   await Promise.all([first, second]);
-  expect(apply.mock.calls).toEqual([["production / Example Customer"]]);
+  expect(apply.mock.calls).toEqual([["production / Example Team"]]);
 
   const detached = refresh.refresh();
   refresh.dispose();

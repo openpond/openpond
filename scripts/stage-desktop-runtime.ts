@@ -67,6 +67,8 @@ export async function stageDesktopRuntime(
     path.join(runtimeRoot, "server", "skills", "openpond-taskset-authoring")
   );
   for (const skillName of [
+    "openpond-cli",
+    "openpond-refiner-authoring",
     "openpond-skill-authoring",
     "openpond-agent-authoring",
   ]) {

@@ -46,6 +46,8 @@ import type {
   StoredBrowserConversation,
   StoredBrowserTab,
 } from "./desktop-browser-types.js";
+import { captureBrowserPage, cancelBrowserCapture } from "./desktop-browser-capture.js";
+import type { BrowserCaptureMode } from "@openpond/contracts/browser-snapshots";
 
 const GLOBAL_WARM_VIEW_LIMIT = 8;
 const CONVERSATION_INACTIVE_VIEW_LIMIT = 3;
@@ -298,6 +300,20 @@ export class BrowserSidebarManager {
         tabId: runtime.tabId,
       }),
     };
+  }
+
+  async capturePage(input: BrowserTabInput & { mode: BrowserCaptureMode }) {
+    const runtime = this.runtime(input);
+    if (this.activeConversationId !== input.conversationId || !this.bounds || !runtime?.view.getVisible()) {
+      throw new Error("Open the browser page before taking a snapshot.");
+    }
+    if (runtime.loading) throw new Error("Wait for the page to finish loading.");
+    return captureBrowserPage(runtime.view.webContents, input.mode);
+  }
+
+  async cancelCapture(input: BrowserTabInput) {
+    const runtime = this.runtime(input);
+    if (runtime) cancelBrowserCapture(runtime.view.webContents);
   }
 
   async harnessMoveCursor(input: BrowserHarnessMoveCursorInput): Promise<BrowserHarnessResult> {

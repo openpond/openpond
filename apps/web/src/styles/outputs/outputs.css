@@ -221,7 +221,7 @@
   border-left: 1px solid var(--border-default);
   background: var(--surface-page);
   padding: 22px;
-  box-shadow: -18px 0 42px var(--shadow-color);
+  box-shadow: -18px 0 42px var(--shadow-panel-color);
 }
 
 .output-detail-header {

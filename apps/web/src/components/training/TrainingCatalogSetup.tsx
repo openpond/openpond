@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import type {
   BaseModelCandidate,
   TrainingCatalog,
@@ -67,7 +68,7 @@ export function TrainingCatalogSetup({
                 "The backend selects the available provider, device, runtime, and engine."}
             </small>
           </div>
-          {catalogError ? (
+          {catalogError && inlineErrorMessage(catalogError) ? (
             <p className="training-catalog-error">{catalogError}</p>
           ) : null}
           <label className="training-catalog-field">

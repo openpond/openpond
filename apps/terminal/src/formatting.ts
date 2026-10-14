@@ -52,6 +52,9 @@ const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
 const RUNNABLE_CHAT_PROVIDER_IDS = [
   "openpond",
   "codex",
+  "claude-code",
+  "opencode",
+  "grok-build",
   ...OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS,
 ] as const satisfies readonly ChatProvider[];
 

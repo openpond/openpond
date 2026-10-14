@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useMemo, useState, type FormEvent } from "react";
 import type {
   ChatModelRef,
@@ -194,7 +195,7 @@ export function LabScorerCreateDialog({
           <label className="labs-scorer-checkbox"><input checked={rewardEligible} type="checkbox" onChange={(event) => setRewardEligible(event.currentTarget.checked)} /><span>Request reward eligibility</span></label>
         </div>
         {!tasksets.length ? <div className="labs-rename-error" role="alert">Create or attach a Taskset before adding a scorer.</div> : null}
-        {error ? <div className="labs-rename-error" role="alert">{error}</div> : null}
+        {error && inlineErrorMessage(error) ? <div className="labs-rename-error" role="alert">{error}</div> : null}
         <footer>
           <button disabled={busy} type="button" onClick={onClose}>Cancel</button>
           <button disabled={!valid || busy} type="submit">{busy ? "Publishing…" : "Create scorer"}</button>

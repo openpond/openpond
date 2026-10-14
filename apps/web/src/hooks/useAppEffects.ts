@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { SessionSchema, type Approval, type RuntimeEvent, type Session } from "@openpond/contracts";
 import { api, openEventStream, type ClientConnection } from "../api";
+import { connectionStatus, reportConnectionFailure } from "../api/connection-status";
 import type { SidebarSectionMenuId } from "../app/app-state";
 import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 
@@ -97,6 +98,9 @@ export function useRuntimeEvents({
 
       lastFlushMs = Date.now();
       appendEvents(nextEvents);
+      for (const sessionId of new Set(nextEvents.filter(event => event.name === "workspace_action_result" && event.action === "chat_resource").map(event => event.sessionId).filter(Boolean))) {
+        window.dispatchEvent(new CustomEvent("openpond-resource-focus-changed", { detail: { sessionId } }));
+      }
       const liveSessions = liveSessionsFromRuntimeEvents(nextEvents);
       if (liveSessions.length > 0) {
         setSessions((current) =>
@@ -223,7 +227,7 @@ export function useRuntimeEvents({
         clearDisconnectTimer();
         disconnectTimer = window.setTimeout(() => {
           if (!source.isOpen()) {
-            setError("Event stream disconnected");
+            reportConnectionFailure(eventConnection);
             onDisconnected?.();
           }
         }, 2000);
@@ -233,6 +237,7 @@ export function useRuntimeEvents({
         clearDisconnectTimer();
         clearEventStreamError();
         window.dispatchEvent(new Event("openpond-runtime-connected"));
+        if (connectionStatus(eventConnection).error) onDisconnected?.();
       },
       { afterSequence },
     );

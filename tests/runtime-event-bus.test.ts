@@ -262,6 +262,40 @@ describe("runtime event bus assistant delta coalescing", () => {
     expect(writes[0]?.startsWith("id: 4\n")).toBe(true);
   });
 
+  // A long chat must finish replay before admitting a CLI turn, even when the
+  // socket pauses; otherwise reconnects repeatedly discard the same backlog.
+  test("replays a long chat through socket backpressure without losing live events", async () => {
+    const history = Array.from({ length: 1200 }, (_, index) => ({
+      sequence: index + 1,
+      event: { ...runtimeEvent(`history-${index + 1}`, { name: "turn.started" }), sequence: index + 1 },
+    }));
+    const store = {
+      async appendRuntimeEvent(event: RuntimeEvent) { return event; },
+      async runtimeEventPageRows(input: { afterSequence: number; limit: number }) {
+        return { entries: history.filter(entry => entry.sequence > input.afterSequence).slice(0, input.limit) };
+      },
+    } as unknown as SqliteStore;
+    const writes: string[] = [];
+    let released = false;
+    const response = Object.assign(new EventEmitter(), {
+      destroyed: false,
+      write(chunk: string) { writes.push(chunk); return released; },
+      destroy() { this.destroyed = true; this.emit("close"); return this; },
+    }) as unknown as ServerResponse;
+    const bus = createRuntimeEventBus({ logger: testLogger(), store });
+    const replay = bus.openEventSubscriber({ response, afterSequence: 0, sessionId: "session-1" });
+    await vi.waitFor(() => expect(writes.length).toBeGreaterThan(0));
+    await bus.appendRuntimeEvent({ ...runtimeEvent("live", { name: "turn.completed" }), sequence: 1201 });
+    released = true;
+    response.emit("drain");
+    const close = await replay;
+    expect(response.destroyed).toBe(false);
+    expect(writes.map(runtimeEventFromSseWrite).map(event => event.sequence)).toEqual(
+      Array.from({ length: 1201 }, (_, index) => index + 1),
+    );
+    close();
+  });
+
   test("queues subscriber events during stream backpressure and flushes them on drain", async () => {
     const events: RuntimeEvent[] = [];
     let destroyed = false;

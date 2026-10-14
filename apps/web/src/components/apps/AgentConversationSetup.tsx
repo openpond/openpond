@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useState } from "react";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import dayjs from "dayjs";
@@ -104,7 +105,7 @@ export function AgentConversationSetup({
       projectName={projects.find(project => project.id === selectedConnection.projectId && selectedConnection.teamId === teamId)?.content.name ?? selectedConnection.projectId}
       disabled={disabled || !!inventory?.collector.running} onClose={() => setUploadConnectionId(null)}
       onUpload={keys => action("upload", selectedConnection.id, keys)} />
-    {error ? <p role="alert">{error}</p> : null}
+    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
     {terminal}
   </div>;
   return (
@@ -293,7 +294,7 @@ export function AgentConversationSetup({
           <code>{inventory.statusCommand}</code>
         </details>
       ) : null}
-      {error ? <p role="alert">{error}</p> : null}
+      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
       {terminal}
     </div>
   );

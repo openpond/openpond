@@ -1,3 +1,4 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { connectionQueryScope } from "../../lib/query-scope";
@@ -31,7 +32,7 @@ export function LabTasksPage({ state, training, modelId, collectionId, query, af
       <label>Split<select value={split} onChange={event => { setSelected(null); setSplit(event.target.value as typeof split); onPage(null); }}><option value="">All splits</option><option value="train">Training</option><option value="validation">Validation</option><option value="test">Test</option><option value="frozen_eval">Held-out evaluation</option></select></label>
       {collectionId ? <button className="training-button secondary" type="button" onClick={() => onCollection(null)}>Clear collection filter</button> : null}
     </div>
-    {current?.error ? <p role="alert">{current.error}</p> : !current ? <p role="status">Loading tasks…</p> : <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Task</th><th>Collection</th><th>Split</th><th>How scored</th><th>Status</th></tr></thead><tbody>{current.page?.items.map(item => <tr key={`${item.draftId ? "draft" : "release"}:${item.tasksetId}:${item.taskId}`}>
+    {current?.error && inlineErrorMessage(current.error) ? <p role="alert">{current.error}</p> : !current ? <p role="status">Loading tasks…</p> : <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Task</th><th>Collection</th><th>Split</th><th>How scored</th><th>Status</th></tr></thead><tbody>{current.page?.items.map(item => <tr key={`${item.draftId ? "draft" : "release"}:${item.tasksetId}:${item.taskId}`}>
       <td><button className="labs-version-row-button" type="button" onClick={() => setSelected(item)}>{item.title}</button></td>
       <td><button className="labs-version-row-button" type="button" onClick={() => onCollection(item.tasksetId)}>{item.tasksetName || "Untitled tasks"}<small>{item.draftId ? "Draft" : "Published"} · revision {item.tasksetRevision}</small></button></td>
       <td>{item.split.replaceAll("_", " ")}</td><td>{[...new Set(item.scoring.map(score => methods[score.method]))].join(", ") || "Not configured"}</td><td>{status[item.configuration]}</td>
@@ -55,7 +56,7 @@ function TaskDetail({ item, modelId, state, training, onClose, onOpenDraft }: { 
   const model = state?.modelProjects.find(model => model.id === modelId);
   return <AppDialog ariaLabel="Task details" className="labs-rename-dialog labs-model-create-dialog" backdropClassName="labs-rename-backdrop" onClose={onClose}>
     <header><div><h2>{item.title}</h2><p>{item.tasksetName} · revision {item.tasksetRevision}</p></div><button className="training-button secondary" type="button" onClick={onClose}>Close</button></header>
-    {error ? <p role="alert">{error}</p> : !detail ? <p role="status">Loading task…</p> : <>
+    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : !detail ? <p role="status">Loading task…</p> : <>
       <section><h3>Input</h3><ReadableTaskValue value={detail.task.input} /></section>
       {Object.keys(detail.task.policyVisibleContext ?? {}).length ? <section><h3>Context</h3><ReadableTaskValue value={detail.task.policyVisibleContext} /></section> : null}
       {detail.task.assets?.length ? <section><h3>Files</h3><ReadableTaskValue value={detail.task.assets} /></section> : null}

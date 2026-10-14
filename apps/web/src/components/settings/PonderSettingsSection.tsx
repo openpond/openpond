@@ -1,6 +1,8 @@
+import { inlineErrorMessage } from "../../lib/error-messages";
 import { useEffect, useState } from "react";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { PonderDesktopAccessSettings } from "./PonderDesktopAccessSettings";
+import { useConnectionReadRetry } from "../../hooks/useConnectionReadRetry";
 
 type Selection = { providerId: string; modelId: string; reasoningEffort: string };
 type Settings = {
@@ -35,6 +37,7 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
   const [reload, setReload] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  useConnectionReadRetry(connection, !payload ? error : null, () => setReload(value => value + 1));
   const [notifications, setNotifications] = useState(
     () => localStorage.getItem("openpond:ponder-notifications") === "on",
   );
@@ -105,7 +108,7 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
         <p>Use your deployed model and keep track of your conversations and workflows.</p>
       </header>
       <PonderDesktopAccessSettings connection={connection} />
-      {error && <p role="alert">{error}</p>}
+      {error && inlineErrorMessage(error) && <p role="alert">{error}</p>}
       {error && !payload && (
         <button type="button" onClick={() => setReload((value) => value + 1)}>
           Retry
