@@ -48,6 +48,12 @@ Credentials are references to encrypted records or environment variable names. H
 openpond config export --file settings.json
 ```
 
+## Local voice dictation
+
+Voice dictation uses whisper.cpp locally with `small.en-q5_1` by default, a quantized English model with an approximately 181 MiB download. OpenPond downloads it once on first transcription and reuses the file in `voice-models/` inside the active home. Each transcription loads the model into a separate process that exits afterward; working memory exceeds the download size.
+
+Set `OPENPOND_WHISPER_MODEL_NAME` before starting OpenPond to select another model, for example `OPENPOND_WHISPER_MODEL_NAME=base.en pnpm dev` for the lighter development setup. Restart OpenPond after changing the environment. Each model name selects its own cached file, so an existing `base.en` download does not prevent the new default from downloading. Set `OPENPOND_WHISPER_MODEL` to use an existing GGML model at a custom path instead of downloading one.
+
 ## Upgrading the previous layout
 
 A normal upgrade automatically imports the unambiguous previous installation and opens the app without a success dialog. The source files remain preserved. The importer snapshots the database with SQLite's backup API, builds a candidate home, validates it and installs files using a resumable journal. It preserves history, saved choices, credential ownership, schedule enablement and source identities.
