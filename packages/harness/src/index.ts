@@ -17,3 +17,4 @@ export * from "./provider-loop.js";
 export * from "./profile-workflows.js";
 export * from "./profile-workflow-source.js";
 export * from "./source-execution.js";
+export * from "./structured-output.js";

@@ -46,12 +46,16 @@ test("prepares one immutable manual/hosted submission and rejects changed inputs
 });
 
 // Failure story: a validation-only qualification must retain its private grader
-// and task population, and its artifact cannot be replayed as optimizer work.
+// and exact selected source task, and cannot be replayed as optimizer work.
 test("qualifies an ordinary private package without inventing training or held-out data", async () => {
   const ordinary = await fixture();
   const text = "export function verify(input) { return {score: input.output === input.task.expectedOutput.answer ? 1 : 0, passed: true}; }";
   const asset = { id: "private-verifier", path: "verifiers/answer.mjs", mediaType: "text/javascript", visibility: "verifier" as const,
     sizeBytes: Buffer.byteLength(text), contentHash: sha256(text) };
+  const taskFiles = ["first", "second"].map(id => ({ asset: {
+    id: `${id}-input`, path: `inputs/${id}.txt`, mediaType: "text/plain", visibility: "policy" as const,
+    sizeBytes: Buffer.byteLength(id), contentHash: sha256(id),
+  }, base64: Buffer.from(id).toString("base64") }));
   const environment = createEnvironmentRelease({ schemaVersion: "openpond.environmentRelease.v1", id: "qualification-env", revision: 1,
     contract: { protocolVersion: "openpond.environment.v1", kind: "text", entrypoint: "text", stateful: false, deterministicSeeds: true,
       lifecycle: ["create", "reset", "step", "collect", "destroy"], networkPolicy: "none", defaultTimeoutMs: 1_000 },
@@ -63,13 +67,13 @@ test("qualifies an ordinary private package without inventing training or held-o
     policy: { policyVisibleFields: ["input"], privilegedFields: ["expectedOutput"], hiddenGraderRefs: ["answer"], connectedAppScopes: [] },
     environment: environment.contract, tools: [], capabilities: [], graders: verifierSet.graders,
     tasks: ["first", "second"].map(id => ({ id, clusterKey: "same-family", split: "validation", input: { prompt: id }, expectedOutput: { answer: "private retained answer" },
-      policyVisibleContext: {}, privilegedContextRef: null, artifactRefs: [], tags: [] })), metadata: { ordinaryAuthoring: { instructions: "Answer the supplied question." } } };
+      policyVisibleContext: {}, privilegedContextRef: null, artifactRefs: [taskFiles.find(file => file.asset.id === `${id}-input`)!.asset], tags: [] })), metadata: { ordinaryAuthoring: { instructions: "Answer the supplied question." } } };
   const taskset = bindTasksetExecutionReleases({ taskset: TasksetReleaseSchema.parse({ ...taskContent, contentHash: contentHash(taskContent) }), environment, verifierSet });
-  const source = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment, verifierSet, files: [{ asset, base64: Buffer.from(text).toString("base64") }] });
+  const source = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment, verifierSet, files: [{ asset, base64: Buffer.from(text).toString("base64") }, ...taskFiles] });
   const project = ModelProjectSchema.parse({ ...ordinary.project, trainingSetup: { ...ordinary.project.trainingSetup,
     baseModel: { ...ordinary.project.trainingSetup.baseModel, revision: "a".repeat(40), tokenizerRevision: "a".repeat(40) },
     tasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash }, evaluationTasksetRef: null } });
-  const prepared = await prepareOrdinaryTasksetQualification({ package: source, modelProject: project, modelRunId: "qualification",
+  const prepared = await prepareOrdinaryTasksetQualification({ package: source, qualificationTaskId: "second", modelProject: project, modelRunId: "qualification",
     runtime: ordinary.manifest.runtimeTarget, compute: ordinary.manifest.computeTarget, engine: ordinary.manifest.engine,
     harnessRelease: ordinary.manifest.harnessRelease, openpondRelease: "fixture", workerProtocol: "fixture",
     approval: { ...ordinary.approval, approvedAt: ordinary.manifest.approval.approvedAt } });
@@ -78,7 +82,11 @@ test("qualifies an ordinary private package without inventing training or held-o
   expect(prepared.submission.source.evaluation).toBeUndefined();
   expect(prepared.artifact.payload).toMatchObject({ executionMode: "qualification", validationTasks: [], validationAssets: [] });
   const dataset = JSON.parse(Buffer.from(prepared.bundle.assets.get("dataset/qualification.json")!).toString());
-  expect(dataset.tasks.map((task: { metadata: { portableTaskRecord: unknown } }) => task.metadata.portableTaskRecord)).toEqual(taskset.tasks);
+  expect(dataset.selectedTaskId).toBe("second");
+  expect(dataset.tasks.map((task: { metadata: { portableTaskRecord: unknown } }) => task.metadata.portableTaskRecord)).toEqual([taskset.tasks[1]]);
+  expect(JSON.parse(Buffer.from(prepared.bundle.assets.get("qualification-source.json")!).toString())).toEqual(source);
+  expect(prepared.bundle.assets.has("inputs/first.txt")).toBe(false);
+  expect(Buffer.from(prepared.bundle.assets.get("inputs/second.txt")!).toString()).toBe("second");
   expect(prepared.bundle.assets.has("dataset/train.json")).toBe(false);
   expect(prepared.bundle.assets.has("evaluation-source.json")).toBe(false);
   expect(JSON.stringify(prepared.submission)).not.toContain("private retained answer");

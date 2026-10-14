@@ -948,12 +948,18 @@ Usage:
   openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]
   openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
   openpond training hosted-models|hosted-batches|hosted-preparations|hosted-capabilities --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-workers --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-provider|hosted-quotes --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-worker <physical-worker-id> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-worker-stop|hosted-worker-resume|hosted-worker-retire <control.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-model <model-project-id> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-sync-model <input.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-prepare|hosted-start|hosted-stage|hosted-submit <input.json> --team-id <id> [--api-base-url <url>] [--yes] [--json]
   openpond training hosted-qualify <input.json> --team-id <id> [--api-base-url <url>] --yes [--json]
-  openpond training hosted-status|hosted-watch|hosted-cancel|hosted-artifacts|hosted-logs|hosted-events <job-id> --team-id <id> [--api-base-url <url>] [--interval-ms <ms>] [--json]
-  openpond training hosted-watch <job-id> --team-id <id> [--deadline-at <ISO-time>] [--cleanup-reserve-ms <ms>] [--wait-for-cleanup] [--cleanup-timeout-ms <ms>] [--interval-ms <ms>] [--json]
+  openpond training hosted-trajectory <job-id> --trajectory-id <receipt-id> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-status|hosted-inspect|hosted-report|hosted-watch|hosted-cancel|hosted-artifacts|hosted-logs|hosted-events <job-id> --team-id <id> [--api-base-url <url>] [--interval-ms <ms>] [--json]
+  openpond training hosted-evaluation-tasks <job-id> --evaluation-id <id> --team-id <id> [--cursor <cursor>] [--api-base-url <url>] [--json]
+  openpond training hosted-watch <job-id> --team-id <id> [--deadline-at <ISO-time>] [--cleanup-reserve-ms <ms>] [--wait-for-cleanup] [--cancel-on-infrastructure-error] [--cleanup-timeout-ms <ms>] [--interval-ms <ms>] [--json]
   openpond training status <run-id> [--json]
   openpond training watch <run-id> [--interval-ms <ms>] [--json]
   openpond training logs <run-id> [--json]
@@ -965,12 +971,15 @@ Usage:
 Options:
   --account <string>
   --api-base-url <string>
+  --cancel-on-infrastructure-error
   --cleanup-reserve-ms <integer>
   --cleanup-timeout-ms <integer>
   --comparison-series-entry <string>
+  --cursor <string>
   --deadline-at <string>
   --destination <string>
   --detach
+  --evaluation-id <string>
   --export-approved
   --gpu-placement-objective <string>
   --interval-ms <integer>
@@ -989,6 +998,7 @@ Options:
   --rollout-placement <string>
   --run-preset <string>
   --team-id <string>
+  --trajectory-id <string>
   --wait-for-cleanup
   --yes
 ```

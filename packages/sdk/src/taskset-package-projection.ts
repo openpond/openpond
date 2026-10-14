@@ -57,7 +57,7 @@ export function prepareImportedTasksetPackage(input: {
       rewardKinds: [...new Set(release.graders.map(grader => grader.kind === "human" ? "human" : grader.kind === "model_judge" ? "model_judge" : "deterministic"))],
     },
     tasks: release.tasks.map(task => ({ ...task, schemaVersion: "openpond.taskData.v1", sourceRefs: [source.id],
-      assets: task.artifactRefs.map(asset => ({ id: asset.id, sourceRefId: source.id, artifactRef: asset.path,
+      assets: [...new Map([...task.artifactRefs, ...(task.requiredOutputs ?? []).flatMap(output => output.submissionMode === "structured_json" && output.schemaRef ? [output.schemaRef] : [])].map(asset => [asset.id, asset])).values()].map(asset => ({ id: asset.id, sourceRefId: source.id, artifactRef: asset.path,
         fileName: asset.path.split("/").at(-1)!, ...(stagingPaths[task.id]?.[asset.id] ? { stagingPath: stagingPaths[task.id]![asset.id] } : {}),
         mediaType: asset.mediaType, sha256: asset.contentHash,
         sizeBytes: asset.sizeBytes, split: task.split, metadata: { portableAsset: asset } })),

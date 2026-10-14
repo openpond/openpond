@@ -368,6 +368,10 @@
             }
           ]
         },
+        "submissionMode": {
+          "type": "string",
+          "const": "structured_json"
+        },
         "maxBytes": {
           "default": null,
           "anyOf": [

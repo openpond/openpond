@@ -587,6 +587,15 @@ export const TrainingCapabilitiesSchema = z
     jobKinds: z.array(TrainingJobKindSchema),
     methods: z.array(z.string().trim().min(1).max(200)),
     executionModes: z.array(z.enum(["training", "qualification"])).optional(),
+    structuredOutputs: z.object({
+      capability: z.literal("work.structured-output.v1"),
+      harnessRuntimeHash: HashSchema,
+      workHarnessHash: HashSchema,
+      schemaHash: HashSchema,
+      artifactHash: HashSchema,
+      invalidDataRejected: z.literal(true),
+      invalidBytesRejected: z.literal(true),
+    }).strict().optional(),
     placements: z.array(z.enum(["local", "remote", "colocated", "provider_native"])),
     controls: z
       .object({
