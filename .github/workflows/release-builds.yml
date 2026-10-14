@@ -31,6 +31,8 @@ on:
     paths:
       - "apps/desktop/package.json"
       - "apps/cli/package.json"
+      - "scripts/release-build-target.mjs"
+      - ".github/workflows/release-builds.yml"
 
 permissions:
   contents: read
@@ -68,10 +70,16 @@ jobs:
           INPUT_CHANNEL: ${{ github.event.inputs.channel }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
           RELEASE_BEFORE: ${{ github.event.before }}
+          RELEASE_FORCED: ${{ github.event.forced }}
         run: |
           set -euo pipefail
 
           target="$(node scripts/release-build-target.mjs)"
+          if [[ "${target}" == "none" ]]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping automatic release after a forced push. Use a normal version bump or explicit workflow dispatch to publish."
+            exit 0
+          fi
           manifest="apps/${target}/package.json"
           short_sha="$(git rev-parse --short HEAD)"
           ref="${GITHUB_SHA}"

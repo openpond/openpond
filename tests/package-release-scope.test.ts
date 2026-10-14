@@ -1,7 +1,7 @@
 import { requireCurrentVersion, requirePublishedIdentity, requireReleaseIdentity, requireStableMaster } from "../scripts/cli-release-policy.mjs";
 import { resolveReleaseBuildTarget } from "../scripts/release-build-target.mjs";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -49,7 +49,7 @@ describe("package release eligibility", () => {
 // A package release must not allocate unrelated Desktop jobs, or silently drop
 // one artifact when both owners have changed versions.
 describe("release artifact ownership", () => {
-  test("selects a CLI bump anywhere in the complete push and rejects unrelated bases", () => {
+  test("selects complete normal pushes and skips forced pushes without reading removed history", () => {
     const directory = mkdtempSync(join(tmpdir(), "openpond-release-push-"));
     const script = resolve("scripts/release-build-target.mjs");
     const git = (...args: string[]) => execFileSync("git", args, { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -67,13 +67,18 @@ describe("release artifact ownership", () => {
       git("add", "."); git("commit", "--quiet", "-m", "CLI bump");
       writeFileSync(join(directory, "README.md"), "Additional change in the same push");
       git("add", "."); git("commit", "--quiet", "-m", "followup");
-      const run = (base: string) => execFileSync("node", [script], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GITHUB_EVENT_NAME: "push", RELEASE_BEFORE: base } }).trim();
+      const run = (base: string, forced = false) => execFileSync("node", [script], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GITHUB_EVENT_NAME: "push", RELEASE_BEFORE: base, RELEASE_FORCED: String(forced) } }).trim();
       expect(run(before)).toBe("cli");
+      expect(run(before, true)).toBe("none");
+      const removed = "f".repeat(40);
+      expect(() => run(removed)).toThrow();
+      expect(run(removed, true)).toBe("none");
       git("checkout", "--quiet", "--orphan", "unrelated");
       git("commit", "--quiet", "-m", "unrelated history");
       const unrelated = git("rev-parse", "HEAD");
       git("checkout", "--quiet", "master");
       expect(() => run(unrelated)).toThrow();
+      expect(run(unrelated, true)).toBe("none");
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
   test("separates CLI/Desktop pushes, schedules and explicit recovery", () => {
@@ -86,6 +91,31 @@ describe("release artifact ownership", () => {
     expect(() => resolveReleaseBuildTarget({ event: "workflow_dispatch", target: "cli", channel: "nightly" })).toThrow(/stable channel/);
     expect(() => resolveReleaseBuildTarget({ event: "workflow_dispatch", target: "other", channel: "stable", ref: "refs/heads/master" })).toThrow(/Unsupported release target/);
     expect(resolveReleaseBuildTarget({ event: "schedule" })).toBe("desktop");
+  });
+});
+
+// Dependency installation must not replace a privacy guard and allow removed
+// history to be pushed again.
+describe("Git push guard installation", () => {
+  test("installs the default hooks only when no configuration exists", () => {
+    const directory = mkdtempSync(join(tmpdir(), "openpond-git-hooks-"));
+    const loader = resolve("node_modules/tsx/dist/loader.mjs");
+    const env = { ...process.env, CI: "", GIT_CONFIG_GLOBAL: join(directory, "empty-global-config"), GIT_CONFIG_NOSYSTEM: "1" };
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: directory, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    try {
+      git("init", "--quiet", "--initial-branch=master");
+      mkdirSync(join(directory, "scripts"));
+      writeFileSync(join(directory, "package.json"), JSON.stringify({ type: "module" }));
+      const installer = join(directory, "scripts/install-git-hooks.ts");
+      writeFileSync(installer, readFileSync(resolve("scripts/install-git-hooks.ts")));
+      const install = () => execFileSync("node", ["--import", loader, installer], { cwd: directory, env, stdio: ["ignore", "pipe", "pipe"] });
+      install();
+      expect(git("config", "--get", "core.hooksPath")).toBe(".githooks");
+      const guard = join(directory, "privacy-guard");
+      git("config", "core.hooksPath", guard);
+      install(); install();
+      expect(git("config", "--get", "core.hooksPath")).toBe(guard);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
 
