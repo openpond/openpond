@@ -35,7 +35,7 @@
   background: var(--state-hover);
   color: var(--text-primary);
   padding: 5px 9px 5px 12px;
-  box-shadow: 0 8px 18px var(--shadow-color);
+  box-shadow: 0 8px 18px var(--shadow-panel-color);
 }
 
 .composer-steer-row:first-child {
@@ -135,12 +135,12 @@
   background: var(--state-hover);
   color: var(--text-primary);
   padding: 5px 8px 5px 10px;
-  box-shadow: 0 8px 18px var(--shadow-color);
+  box-shadow: 0 8px 18px var(--shadow-panel-color);
 }
 
 .composer-goal-strip.has-subagents {
   border-color: color-mix(in srgb, var(--chart-2) 32%, transparent);
-  box-shadow: 0 8px 18px var(--shadow-color), 0 0 0 1px color-mix(in srgb, var(--focus-ring) 8%, transparent);
+  box-shadow: 0 8px 18px var(--shadow-panel-color), 0 0 0 1px color-mix(in srgb, var(--focus-ring) 8%, transparent);
 }
 
 .composer-goal-heading {
@@ -564,6 +564,11 @@
   color: var(--text-primary);
   padding: 15px 14px 49px;
   cursor: text;
+}
+
+:root[data-theme="light"] .composer-textarea-frame {
+  outline: 1px solid var(--border-default);
+  outline-offset: -1px;
 }
 
 .composer-invocation-pill {

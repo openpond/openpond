@@ -33,7 +33,7 @@
 }
 
 .guake-terminal-overlay.open .guake-terminal-panel {
-  box-shadow: 0 -18px 48px var(--shadow-color);
+  box-shadow: 0 -18px 48px var(--shadow-panel-color);
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);

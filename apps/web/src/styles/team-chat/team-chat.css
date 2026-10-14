@@ -632,8 +632,13 @@
     z-index: 5;
     inset: 0 0 0 auto;
     width: min(430px, 100%);
-    box-shadow: -12px 0 30px var(--shadow-color);
+    box-shadow: -12px 0 30px var(--shadow-panel-color);
   }
+}
+
+:root[data-theme="light"] .team-chat-composer-shell,
+:root[data-theme="light"] .team-ai-thread-composer {
+  background: var(--surface-page);
 }
 
 @media (max-width: 620px) {

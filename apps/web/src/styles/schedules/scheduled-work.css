@@ -408,7 +408,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  box-shadow: -18px 0 42px var(--shadow-color);
+  box-shadow: -18px 0 42px var(--shadow-panel-color);
 }
 
 .scheduled-work-view.detail-open .scheduled-detail {
