@@ -1,5 +1,5 @@
 import type { TrainingJob, TrainingJobEvent, TrainingJobOutputs } from "openpond-sdk/training";
-import { code, counts, finite, nonnegative, populationStd, record, statistics, timingStatistics } from "./training-report-metrics";
+import { code, counts, distributionStatistics, finite, nonnegative, populationStd, record, statistics, timingStatistics } from "./training-report-metrics";
 
 const INFERENCE_TIMINGS = [
   "commandTotalSeconds", "requestPreparationSeconds", "vllmRequestSeconds",
@@ -169,10 +169,27 @@ export function buildHostedTrainingReport(input: {
       baseOrReferenceKl: statistics(optimizer.map(event => nonnegative(event.data.kl))),
     },
     timings: {
+      environmentSeconds: timingStatistics(trajectories.map(event => record(event.data.executionTiming)), [
+        "initializationSeconds", "policySeconds", "environmentSeconds", "cleanupSeconds", "totalRolloutSeconds",
+      ]),
+      toolCalls: statistics(trajectories.map(event => nonnegative(record(event.data.executionTiming).toolCalls))),
+      toolFailures: statistics(trajectories.map(event => nonnegative(record(event.data.executionTiming).toolFailures))),
       inferenceSeconds: timingStatistics(inferenceRows, INFERENCE_TIMINGS),
       optimizerSeconds: timingStatistics(optimizerRows, OPTIMIZER_TIMINGS),
       cachedPromptTokens: statistics(inferenceRows.map(row => nonnegative(row.vllmCachedPromptTokens))),
       note: "Totals are sums of recorded work. Nested timings and concurrent requests overlap; do not sum these into wall time or infer idle time from them.",
+    },
+    gpuActivity: {
+      inference: distributionStatistics(inferenceRows, [
+        "gpuActivitySampleCount", "gpuUtilizationMeanPercent", "gpuUtilizationMaxPercent",
+        "gpuMemoryBusUtilizationMeanPercent", "gpuActivityWindowSeconds", "gpuActivityObservedSpanSeconds",
+        "gpuInterRequestGapSeconds", "gpuInterRequestSampleCount", "gpuInterRequestUtilizationMeanPercent",
+      ]),
+      optimizer: distributionStatistics(optimizer.map(event => record(event.data.hardware)), [
+        "gpuActivitySampleCount", "gpuUtilizationMeanPercent", "gpuUtilizationMaxPercent",
+        "gpuMemoryBusUtilizationMeanPercent", "gpuActivityWindowSeconds", "gpuActivityObservedSpanSeconds",
+      ]),
+      note: "Device-wide one-second samples can include other co-resident work. Between-request activity is worker-wide, not attributed tool or idle time. Per-window statistics are not time-weighted whole-job utilization; short windows may have no samples.",
     },
     costs: {
       accountingBasis: "job_accrued_meter_not_final_provider_invoice",
