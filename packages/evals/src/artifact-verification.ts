@@ -184,6 +184,7 @@ function structuralFailures(
     failures.push(`Required output ${required.path} exceeds ${required.maxBytes} bytes.`);
   }
   if (entry.parseStatus === "failed") failures.push(`Required output ${required.path} could not be parsed.`);
+  if (required.submissionMode === "structured_json" && (entry.schemaStatus !== "passed" || entry.parseStatus !== "passed" || entry.metadata.structuredSchemaHash !== required.schemaRef?.contentHash || entry.metadata.structuredArtifactHash !== entry.artifact?.contentHash)) failures.push(`Required output ${required.path} lacks bound structured validation evidence.`);
   if (entry.schemaStatus === "failed") failures.push(`Required output ${required.path} failed schema validation.`);
   return failures;
 }

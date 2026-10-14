@@ -80,6 +80,8 @@ export function useMainPaneChatScroll({
     settled: boolean;
   } | null>(null);
   const remoteHistoryLoadPendingRef = useRef<object | null>(null);
+  const historyLoadFailedRef = useRef(false);
+  const [historyLoadVersion, setHistoryLoadVersion] = useState(0);
   const initialChatScrollPendingRef = useRef(false);
   const autoChatScrollPendingRef = useRef(false);
   const autoChatScrollFrameRef = useRef<number | null>(null);
@@ -445,9 +447,18 @@ export function useMainPaneChatScroll({
     cancelStreamFollow();
     cancelSmoothChatScroll();
     remoteHistoryLoadPendingRef.current = restore;
+    historyLoadFailedRef.current = false;
     try {
       const loaded = await onLoadMoreChatHistory();
+      if (remoteHistoryLoadPendingRef.current === restore) {
+        historyLoadFailedRef.current = !loaded;
+      }
       if (!loaded && pendingChatScrollRestoreRef.current === restore) {
+        pendingChatScrollRestoreRef.current = null;
+      }
+    } catch {
+      if (remoteHistoryLoadPendingRef.current === restore) {
+        historyLoadFailedRef.current = true;
         pendingChatScrollRestoreRef.current = null;
       }
     } finally {
@@ -455,6 +466,7 @@ export function useMainPaneChatScroll({
       // A request belonging to a previous conversation must not unlock this one.
       if (remoteHistoryLoadPendingRef.current === restore) {
         remoteHistoryLoadPendingRef.current = null;
+        setHistoryLoadVersion((current) => current + 1);
       }
     }
   }, [
@@ -647,6 +659,7 @@ export function useMainPaneChatScroll({
     chatThreadRef.current?.style.removeProperty("--chat-sent-message-space");
     pendingChatScrollRestoreRef.current = null;
     remoteHistoryLoadPendingRef.current = null;
+    historyLoadFailedRef.current = false;
     initialChatScrollPendingRef.current = true;
     stickyChatScrollRef.current = true;
     lastChatScrollTopRef.current = 0;
@@ -715,21 +728,22 @@ export function useMainPaneChatScroll({
       !element ||
       initialChatScrollPendingRef.current ||
       !canLoadOlderChatMessages ||
-      chatHistoryLoading
+      chatHistoryLoading ||
+      historyLoadFailedRef.current
     ) {
       return;
     }
-    if (
-      element.scrollTop <= CHAT_HISTORY_TOP_THRESHOLD_PX &&
-      element.scrollHeight <=
-        element.clientHeight + CHAT_HISTORY_TOP_THRESHOLD_PX
-    ) {
+    // Reaching the top while a page is in flight produces no new scroll event
+    // when it settles. Tool-only pages may also leave the visible rows unchanged.
+    // Keep paging at the top until older rows move the reader away from it.
+    if (element.scrollTop <= CHAT_HISTORY_TOP_THRESHOLD_PX) {
       void loadOlderChatMessages();
     }
   }, [
     canLoadOlderChatMessages,
     chatHistoryLoading,
     initialChatScrollVersion,
+    historyLoadVersion,
     chatTimelineRows.length,
     loadOlderChatMessages,
     view,

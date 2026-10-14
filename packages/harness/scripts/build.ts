@@ -20,7 +20,7 @@ await withBuildLock(path.join(root, "node_modules/.cache/build.lock"), async () 
     const runtime = await build({
       stdin: {
         contents:
-          'export * from "./source-runtime.js"; export * from "./source-execution.js"; export * from "./source-package.js";',
+          'export * from "./source-runtime.js"; export * from "./source-execution.js"; export * from "./source-package.js"; export * from "./structured-output.js";',
         resolveDir: path.join(root, "src"),
         sourcefile: "harness-runtime.ts",
         loader: "ts",

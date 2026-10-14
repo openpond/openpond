@@ -48,6 +48,20 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     return JSON.parse(bytes.toString("utf8"));
   };
   if (rest.length > 2) throw new Error(`${action} accepts at most one identifier or input file.`);
+  if (action === "hosted-provider" || action === "hosted-quotes") {
+    if (target) throw new Error(`${action} does not accept an identifier.`);
+    const path = action === "hosted-provider" ? "/v1/managed-rl/provider-inventory" : "/v1/managed-rl/quotes";
+    const response = await request(new URL(path, baseUrl), { headers });
+    const value: unknown = await response.json();
+    if (!response.ok) throw new Error(`Hosted capacity read failed (${response.status}).`);
+    print(value); return;
+  }
+  if (action === "hosted-workers" || action === "hosted-worker" || action?.startsWith("hosted-worker-")) {
+    print(await (await import("./training-hosted-workers")).runHostedWorkerCommand({
+      action, target, baseUrl, headers, request, readInput,
+      confirmed: parseBooleanOption(options.yes),
+    })); return;
+  }
   if (action === "hosted-models") {
     print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).list()); return;
   }
@@ -104,6 +118,42 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   }
   if (!target) throw new Error(`${action} requires a hosted job ID.`);
   if (action === "hosted-status") { await printAttached(await client.getJob(target),target); return; }
+  if (action === "hosted-report") {
+    const before = await client.getJob(target);
+    const [events, outputs] = await Promise.all([client.events(target), client.outputs(target)]);
+    const job = await client.getJob(target);
+    if (job.id !== target || job.teamId !== teamId || before.id !== target || before.teamId !== teamId) {
+      throw new Error("Hosted report status identity mismatch.");
+    }
+    const { buildHostedTrainingReport } = await import("./training-hosted-report");
+    await printAttached(buildHostedTrainingReport({
+      job, events, outputs, versionBeforeRead: before.version, generatedAt: new Date().toISOString(),
+    }), target);
+    return;
+  }
+  if (action === "hosted-evaluation-tasks") {
+    const evaluationId = optionString(options, "evaluationId");
+    if (!evaluationId) throw new Error("hosted-evaluation-tasks requires --evaluation-id from hosted-artifacts.");
+    const outputs = await client.outputs(target);
+    const evaluation = outputs.outputs.find(output => output.kind === "evaluation" && output.id === evaluationId);
+    if (!evaluation) throw new Error("Evaluation does not belong to this job's retained outputs.");
+    print(await client.evaluationTasks(target, { id: evaluation.id, contentHash: evaluation.contentHash }, {
+      cursor: optionString(options, "cursor") || undefined,
+    }));
+    return;
+  }
+  if (action === "hosted-trajectory") {
+    const trajectoryId = optionString(options, "trajectoryId");
+    if (!trajectoryId) throw new Error("hosted-trajectory requires --trajectory-id <receipt-id> from hosted-inspect.");
+    const response = await request(new URL(`/v1/managed-rl/jobs/${encodeURIComponent(target)}/trajectories/${encodeURIComponent(trajectoryId)}`, baseUrl), { headers });
+    if (!response.ok) throw new Error(`Hosted trajectory read failed (${response.status}).`);
+    print(await response.json()); return;
+  }
+  if (action === "hosted-inspect") {
+    const response = await request(new URL(`/v1/managed-rl/jobs/${encodeURIComponent(target)}`, baseUrl), { headers });
+    if (!response.ok) throw new Error(`Hosted job inspection failed (${response.status}).`);
+    print(await response.json()); return;
+  }
   if (action === "hosted-cancel") {
     await printAttached(await cancelHostedTrainingJob(client, target, teamId),target); return;
   }

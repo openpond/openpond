@@ -76,7 +76,7 @@ function Proof() {
   return <div className="app-shell" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(420px, 1fr)", height: "100vh" }}>
     <div style={{ padding: 24, overflow: "auto" }}>
       <h2>HTML visual browser proof</h2>
-      <p>Click a preview or Expand. Run a turn in the page, switch tabs, and return. The count should remain. Reload should reset it.</p>
+      <p>The inline visual renders live HTML. Use Expand or Files to open a browser tab. Run a turn there, switch tabs, and return. The count should remain. Reload should reset it.</p>
       <button onClick={() => reveals.forEach(callback => callback({ conversationId, reason: "model_tool" }))}>Reveal native browser</button>
       <button onClick={() => setConversationId(id => id === "visual-proof" ? "another-conversation" : "visual-proof")}>Switch conversation</button>
       <OpenHtmlVisualContext.Provider value={tabs.open}>

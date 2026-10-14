@@ -218,7 +218,7 @@ export function projectPortableTaskRecord(task: TaskDataRecord) {
       policyVisibleContext: task.policyVisibleContext,
       privilegedContextRef: task.privilegedContextRef,
       tags: task.tags,
-      artifactRefs: task.assets === undefined ? original.artifactRefs : task.assets.map((asset) => {
+      artifactRefs: task.assets === undefined ? original.artifactRefs : task.assets.filter(asset => original.artifactRefs.some(item => item.id === asset.id) || !(task.requiredOutputs ?? []).some(output => output.submissionMode === "structured_json" && output.schemaRef === asset.id)).map((asset) => {
         const previous = original.artifactRefs.find(item => item.id === asset.id);
         return {
           id: asset.id,
@@ -234,7 +234,8 @@ export function projectPortableTaskRecord(task: TaskDataRecord) {
         return {
           path: output.path,
           mediaType: output.mediaType,
-          schemaRef: previous?.schemaRef && previous.schemaRef.id === output.schemaRef ? previous.schemaRef : null,
+          ...(output.submissionMode ? { submissionMode: output.submissionMode } : {}),
+          schemaRef: previous?.schemaRef && previous.schemaRef.id === output.schemaRef ? previous.schemaRef : (task.metadata.outputSchemaRefs as Record<string, ImmutableAssetRef> | undefined)?.[output.schemaRef ?? ""] ?? null,
           maxBytes: output.maxBytes ?? null,
           metadata: {
             ...output.metadata,
@@ -267,7 +268,8 @@ export function projectPortableTaskRecord(task: TaskDataRecord) {
     requiredOutputs: (task.requiredOutputs ?? []).map((output) => ({
       path: output.path,
       mediaType: output.mediaType,
-      schemaRef: null,
+      ...(output.submissionMode ? { submissionMode: output.submissionMode } : {}),
+      schemaRef: (task.metadata.outputSchemaRefs as Record<string, ImmutableAssetRef> | undefined)?.[output.schemaRef ?? ""] ?? null,
       maxBytes: output.maxBytes ?? null,
       metadata: {
         ...output.metadata,

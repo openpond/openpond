@@ -45,7 +45,7 @@ export function HtmlVisual({ visual, connection, expanded = false, snapshotRef }
   const token = connection?.token;
   const platform = connection?.platform;
   const inlineResource = Boolean(html && /data-openpond-resource-(?:id|table)/.test(html));
-  const clickablePreview = !expanded && Boolean(open) && !inlineResource;
+
   useEffect(() => {
     const element = container.current;
     if (!element || visited || expanded) return;
@@ -92,7 +92,7 @@ export function HtmlVisual({ visual, connection, expanded = false, snapshotRef }
     finally{selecting.current=false;setSelectionBusy(false);}
   }
   chooseRef.current=choose;
-  const documentSource = useMemo(() => html === null || clickablePreview ? undefined : htmlVisualDocument(html, identity, theme()), [html, identity, clickablePreview]);
+  const documentSource = useMemo(() => html === null ? undefined : htmlVisualDocument(html, identity, theme()), [html, identity]);
   useEffect(() => {
     setReady(false);
     if (!documentSource) return;
@@ -138,20 +138,16 @@ export function HtmlVisual({ visual, connection, expanded = false, snapshotRef }
     {receipt ? <div className="html-visual-selection-receipt"><span>{receipt}</span><button type="button" onClick={()=>{setReceipt(null);setSelectionError(null);operation.current=null;}}>Change</button></div> : null}
     {selectionBusy ? <p role="status" className="html-visual-status">Selecting resource…</p> : null}
     {selectionError && inlineErrorMessage(selectionError) ? <p role="status" className="html-visual-status">{selectionError} Select the resource again to retry.</p> : null}
-      <div className="html-visual-content" style={clickablePreview ? undefined : { minHeight: height }} hidden={receipt!==null}>
+      <div className="html-visual-content" style={{ minHeight: height }} hidden={receipt!==null}>
         {!connection ? <p className="html-visual-status">Connect to view this visual.</p> : error && inlineErrorMessage(error) ? <p className="html-visual-status" role="status">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : <>
-          {clickablePreview ? <button type="button" className="html-visual-preview" onClick={() => open?.(visual)} aria-label={`Open ${visual.output.title} in browser panel`}>
-            {preview ? <img src={preview} alt={`Preview of ${visual.output.title}`} /> : <span className="html-visual-status">Loading visual…</span>}
-          </button> : <>
           {documentSource ? <iframe ref={frame} title={visual.output.title} sandbox="allow-scripts" referrerPolicy="no-referrer"
             allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"
             srcDoc={documentSource} style={{ height, opacity: ready ? 1 : 0 }} /> : null}
           {!ready ? <div className="html-visual-placeholder">
             {preview ? <img src={preview} alt={`Saved preview of ${visual.output.title}`} style={{ maxHeight: height }} /> : <p className="html-visual-status" role="status">Loading visual…</p>}
           </div> : null}
-          </>}
         </>}
       </div>
-    {height === HTML_VISUAL_MAX_HEIGHT && !clickablePreview ? <p className="html-visual-status">This visual reaches the height limit. Scroll inside it to see more.</p> : null}
+    {height === HTML_VISUAL_MAX_HEIGHT ? <p className="html-visual-status">This visual reaches the height limit. Scroll inside it to see more.</p> : null}
   </div>;
 }

@@ -41,6 +41,43 @@ function reply(response: ServerResponse, value: unknown, status = 200) {
 }
 
 describe("hosted training lifecycle over the public SDK", () => {
+  // An unscored infrastructure failure must release a paid allocation early;
+  // an eligible zero-reward policy response must not trigger that cancellation.
+  test("cancels on infrastructure failure and waits for cleanup, preserving zero-reward work", async () => {
+    let eventReads = 0, cancelled = false, outputReads = 0;
+    const printed: unknown[] = [];
+    await withApi((request, response) => {
+      if (request.method === "GET" && request.url === "/v1/training/jobs/job-1")
+        return reply(response, { job: job(cancelled ? "cancelled" : "running", 1) });
+      if (request.method === "GET" && request.url === "/v1/training/jobs/job-1/events") {
+        const infrastructure = ++eventReads >= 2;
+        return reply(response, { events: [{
+          schemaVersion: "openpond.trainingJobEvent.v2", id: "trajectory-1", jobId: "job-1", sequence: 1,
+          type: "rollout_metric", phase: infrastructure ? "ineligible" : "eligible", message: null,
+          data: { terminalClass: infrastructure ? "infrastructure" : "policy", rewardEligible: !infrastructure, reward: infrastructure ? null : 0 },
+          createdAt: timestamp,
+        }] });
+      }
+      if (request.method === "POST" && request.url === "/v1/training/jobs/job-1/cancel") {
+        expect(eventReads).toBe(2);
+        cancelled = true;
+        return reply(response, { job: job("cancelling", 2) });
+      }
+      if (request.method === "GET" && request.url === "/v1/training/jobs/job-1/outputs")
+        return reply(response, { schemaVersion: "openpond.trainingJobOutputs.v2", outputs: [], receipt: ++outputReads === 1 ? null : receipt });
+      reply(response, { unexpected: request.url }, 500);
+    }, async client => {
+      await watchHostedTrainingJob({ client, jobId: "job-1", teamId: "team-1", print: value => printed.push(value),
+        options: { intervalMs: 250, deadlineAt: Date.now() + 5000, cancelAt: Date.now() + 4000,
+          waitForCleanup: true, cleanupTimeoutMs: 2000, cancelOnInfrastructureError: true },
+        requestBound: { deadlineAt: null },
+      });
+    });
+    expect(cancelled).toBe(true);
+    expect(printed).toContainEqual(expect.objectContaining({ event: "hosted_watch_infrastructure_failure" }));
+    expect(printed.at(-1)).toMatchObject({ cleanup: { complete: true, receipt } });
+  });
+
   // A racing progress write must not defeat the watchdog, and a terminal Job
   // must not be mistaken for a completed cleanup receipt.
   test("reconciles cancellation versions and waits for matching cleanup evidence", async () => {
@@ -72,7 +109,7 @@ describe("hosted training lifecycle over the public SDK", () => {
       reply(response, { unexpected: request.url }, 500);
     }, async client => {
       await watchHostedTrainingJob({ client, jobId: "job-1", teamId: "team-1", print: value => printed.push(value),
-        options: { intervalMs: 250, deadlineAt: Date.now() + 5000, cancelAt: Date.now() - 1, waitForCleanup: true, cleanupTimeoutMs: 2000 },
+        options: { intervalMs: 250, deadlineAt: Date.now() + 5000, cancelAt: Date.now() - 1, waitForCleanup: true, cleanupTimeoutMs: 2000, cancelOnInfrastructureError: false },
         requestBound: { deadlineAt: null },
       });
     });
@@ -92,7 +129,7 @@ describe("hosted training lifecycle over the public SDK", () => {
       reply(response, { job: job("succeeded", 1) });
     }, async client => {
       await watchHostedTrainingJob({ client, jobId: "job-1", teamId: "team-1", print: () => {},
-        options: { intervalMs: 250, deadlineAt: null, cancelAt: null, waitForCleanup: false, cleanupTimeoutMs: 1000 },
+        options: { intervalMs: 250, deadlineAt: null, cancelAt: null, waitForCleanup: false, cleanupTimeoutMs: 1000, cancelOnInfrastructureError: false },
         requestBound: { deadlineAt: null },
       });
       await expect(cancelHostedTrainingJob(client, "job-1", "different-team")).rejects.toThrow("workspace");

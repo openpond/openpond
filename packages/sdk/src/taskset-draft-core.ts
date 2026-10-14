@@ -138,6 +138,7 @@ export const TaskRequiredOutputSchema = z.object({
     .refine(safeRelativeFilePath, "Required output paths must stay inside the Work output directory."),
   mediaType: z.string().trim().min(1).max(200),
   schemaRef: IdSchema.nullable().optional(),
+  submissionMode: z.literal("structured_json").optional(),
   maxBytes: z.number().int().positive().max(10_000_000).optional(),
   metadata: MetadataSchema,
 });
