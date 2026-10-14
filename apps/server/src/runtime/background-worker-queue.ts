@@ -33,6 +33,7 @@ export type BackgroundWorkerQueue = {
 
 export type ServerWorkQueueId =
   | "turn-follow-up"
+  | "harness-refiner"
   | "checkpoint-diff"
   | "provider-runtime-ingestion"
   | "chat-workflow"
@@ -42,6 +43,7 @@ export type ServerWorkQueueId =
 
 export type ServerWorkQueues = {
   turnFollowUp: BackgroundWorkerQueue;
+  harnessRefiner: BackgroundWorkerQueue;
   checkpointDiff: BackgroundWorkerQueue;
   providerRuntimeIngestion: BackgroundWorkerQueue;
   chatWorkflow: BackgroundWorkerQueue;
@@ -174,6 +176,8 @@ export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
     return typeof key === "string" ? key : null;
   } };
   const turnFollowUp = createBackgroundWorkerQueue({ queueId: "turn-follow-up", logger, ...taskQueueOptions });
+  // Background review must never hold the next user turn's session slot.
+  const harnessRefiner = createBackgroundWorkerQueue({ queueId: "harness-refiner", logger, ...taskQueueOptions });
   const checkpointDiff = createBackgroundWorkerQueue({ queueId: "checkpoint-diff", logger });
   const providerRuntimeIngestion = createBackgroundWorkerQueue({
     queueId: "provider-runtime-ingestion",
@@ -192,6 +196,7 @@ export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
   const subagentLifecycle = createBackgroundWorkerQueue({ queueId: "subagent-lifecycle", logger, ...taskQueueOptions });
   const byId: Record<ServerWorkQueueId, BackgroundWorkerQueue> = {
     "turn-follow-up": turnFollowUp,
+    "harness-refiner": harnessRefiner,
     "checkpoint-diff": checkpointDiff,
     "provider-runtime-ingestion": providerRuntimeIngestion,
     "chat-workflow": chatWorkflow,
@@ -202,6 +207,7 @@ export function createServerWorkQueues(logger: QueueLogger): ServerWorkQueues {
 
   return {
     turnFollowUp,
+    harnessRefiner,
     checkpointDiff,
     providerRuntimeIngestion,
     chatWorkflow,
