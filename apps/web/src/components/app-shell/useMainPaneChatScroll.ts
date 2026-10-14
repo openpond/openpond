@@ -269,7 +269,9 @@ export function useMainPaneChatScroll({
 
       const target = Math.max(0, element.scrollHeight - element.clientHeight);
       const distance = target - element.scrollTop;
-      if (Math.abs(distance) <= 0.75) {
+      // Some browsers round scrollTop to whole pixels. Snap the last pixel
+      // instead of easing by a fraction that never advances the viewport.
+      if (Math.abs(distance) <= 1) {
         element.scrollTop = target;
         streamFollowFrameRef.current = null;
         return;
@@ -283,7 +285,10 @@ export function useMainPaneChatScroll({
           Math.min(3, (frameTime - previousFrameTime) / (1000 / 60))
         );
         const easing = 1 - Math.pow(1 - 0.22, elapsedFrames);
-        element.scrollTop += Math.min(36 * elapsedFrames, distance * easing);
+        element.scrollTop += Math.min(
+          distance,
+          Math.max(1, Math.min(36 * elapsedFrames, distance * easing))
+        );
       }
       previousFrameTime = frameTime;
       streamFollowFrameRef.current = window.requestAnimationFrame(follow);
@@ -394,6 +399,14 @@ export function useMainPaneChatScroll({
     setUserMessageNavigationState,
     smoothScrollChatTo,
   ]);
+  const resumeChatBottomFollowing = useCallback((element: HTMLElement) => {
+    sentMessageAnchorRef.current = null;
+    element.style.removeProperty("--chat-sent-message-space");
+    cancelSmoothChatScroll();
+    stickyChatScrollRef.current = true;
+    scrollChatToBottom(element, { settle: true });
+    updateChatScrollControls(element, { nearBottom: true });
+  }, [cancelSmoothChatScroll, scrollChatToBottom, updateChatScrollControls]);
   const goToUserMessage = useCallback(
     (direction: "previous" | "next") => {
       const element = chatThreadRef.current;
@@ -488,12 +501,19 @@ export function useMainPaneChatScroll({
         Math.abs(element.clientHeight - lastChatClientHeightRef.current) > 1;
       const movedUp = element.scrollTop < lastChatScrollTopRef.current - 1;
       const movedDown = element.scrollTop > lastChatScrollTopRef.current + 1;
+      const reachedBottom = nearBottom && movedDown && (
+        !layoutChanged || element.scrollHeight - element.scrollTop - element.clientHeight <= 1
+      );
       lastChatScrollTopRef.current = element.scrollTop;
       lastChatScrollHeightRef.current = element.scrollHeight;
       lastChatClientHeightRef.current = element.clientHeight;
       if (sentMessageAnchorRef.current) {
-        stickyChatScrollRef.current = false;
-        updateChatScrollControls(element);
+        if (!sentMessageAnchorRef.current.following && reachedBottom) {
+          resumeChatBottomFollowing(element);
+        } else {
+          stickyChatScrollRef.current = false;
+          updateChatScrollControls(element);
+        }
       } else if (autoChatScrollPendingRef.current) {
         stickyChatScrollRef.current = true;
         setChatAwayFromBottom(false);
@@ -501,7 +521,7 @@ export function useMainPaneChatScroll({
         return;
       } else if (
         nearBottom &&
-        (stickyChatScrollRef.current || (movedDown && !layoutChanged))
+        (stickyChatScrollRef.current || reachedBottom)
       ) {
         stickyChatScrollRef.current = true;
         updateChatScrollControls(element, { nearBottom: true });
@@ -529,6 +549,7 @@ export function useMainPaneChatScroll({
       cancelStreamFollow,
       chatHistoryLoading,
       loadOlderChatMessages,
+      resumeChatBottomFollowing,
       setChatAwayFromBottom,
       setUserMessageNavigationState,
       updateChatScrollControls,
@@ -555,9 +576,15 @@ export function useMainPaneChatScroll({
   useEffect(() => {
     const element = chatThreadElement;
     if (!element) return;
+    let resumeFrame: number | null = null;
+    const cancelResume = () => {
+      if (resumeFrame !== null) window.cancelAnimationFrame(resumeFrame);
+      resumeFrame = null;
+    };
     // Read user intent before the scroll event: streaming layout changes and
     // our settling frames can otherwise hide an upward movement or undo it.
     const stopFollowing = () => {
+      cancelResume();
       if (sentMessageAnchorRef.current) sentMessageAnchorRef.current.following = false;
       stickyChatScrollRef.current = false;
       lastChatScrollTopRef.current = element.scrollTop;
@@ -573,19 +600,35 @@ export function useMainPaneChatScroll({
     const onKeyDown = (event: KeyboardEvent) => {
       if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) stopSentMessageFollowing();
     };
-    const dispose = observeChatScrollIntent(element, stopFollowing);
+    const scrollTowardBottom = () => {
+      cancelResume();
+      const nearBottomAtInput = isNearChatBottom(element);
+      const inputConversation = previousConversationKeyRef.current;
+      // Check after the browser applies the gesture. Streaming can change
+      // height before its scroll event, or no event fires at the bottom.
+      resumeFrame = window.requestAnimationFrame(() => {
+        resumeFrame = null;
+        if (chatThreadRef.current === element && previousConversationKeyRef.current === inputConversation &&
+            (nearBottomAtInput || isNearChatBottom(element)) &&
+            (!stickyChatScrollRef.current || sentMessageAnchorRef.current)) {
+          resumeChatBottomFollowing(element);
+        }
+      });
+    };
     element.addEventListener("wheel", stopSentMessageFollowing, { passive: true });
     element.addEventListener("touchmove", stopSentMessageFollowing, { passive: true });
     element.addEventListener("pointerdown", stopSentMessageFollowing);
     element.addEventListener("keydown", onKeyDown);
+    const dispose = observeChatScrollIntent(element, stopFollowing, scrollTowardBottom);
     return () => {
+      cancelResume();
       dispose();
       element.removeEventListener("wheel", stopSentMessageFollowing);
       element.removeEventListener("touchmove", stopSentMessageFollowing);
       element.removeEventListener("pointerdown", stopSentMessageFollowing);
       element.removeEventListener("keydown", onKeyDown);
     };
-  }, [chatThreadElement, cancelScheduledChatBottomScroll, cancelStreamFollow, cancelSmoothChatScroll]);
+  }, [chatThreadElement, cancelScheduledChatBottomScroll, cancelStreamFollow, cancelSmoothChatScroll, resumeChatBottomFollowing]);
   useEffect(() => {
     if (!chatThreadElement || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {

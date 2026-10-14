@@ -35,7 +35,7 @@ type VoiceTranscriptionRequest = {
   language?: string;
 };
 
-const DEFAULT_MODEL_NAME = "base.en";
+const DEFAULT_MODEL_NAME = "small.en-q5_1";
 const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
 const TRANSCRIPTION_TIMEOUT_MS = 120_000;
 const MODEL_MIN_BYTES = 10 * 1024 * 1024;

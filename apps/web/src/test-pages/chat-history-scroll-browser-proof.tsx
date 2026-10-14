@@ -21,18 +21,22 @@ let inFlight = 0;
 let maxInFlight = 0;
 let finish: (loaded: boolean) => void = () => {};
 let scroll: ReturnType<typeof useMainPaneChatScroll>;
+let submission = 0;
+let running = false;
+let streamingFixture = false;
+let answerHeight = 40;
 
 function Harness() {
   scroll = useMainPaneChatScroll({
     browserConversationId: conversation,
-    chatSubmissionVersion: 0,
+    chatSubmissionVersion: submission,
     chatHistoryHasMore: hasMore,
     chatHistoryLoading: loading,
     chatMessages: messages,
     pendingApproval: null,
     showChatThread: true,
     showThinkingIndicator: false,
-    turnRunning: false,
+    turnRunning: running,
     view: "chat",
     onLoadMoreChatHistory: () => {
       calls++;
@@ -44,9 +48,12 @@ function Harness() {
   });
   return <section aria-label="Conversation" ref={scroll.chatThreadRef}
     onScroll={(event) => scroll.handleChatScroll(event.currentTarget)}
-    style={{ height: 300, overflowY: "auto", overflowAnchor: "none" }}>
-    {scroll.chatTimelineRows.map((row) => <article key={row.id} data-chat-user-message="true"
-      style={{ height: 400 }}>{row.type === "message" ? row.message.content : row.id}</article>)}
+    style={{ height: 300, boxSizing: "border-box", overflowY: "auto", overflowAnchor: "auto",
+      paddingBottom: "calc(40px + var(--chat-sent-message-space, 0px))" }}>
+    {scroll.chatTimelineRows.map((row) => <article key={row.id}
+      data-chat-user-message={row.type === "message" && row.message.role === "user" ? "true" : undefined}
+      style={{ height: streamingFixture && row.id === "message:request" ? 40 : streamingFixture && row.id === "message:answer" ? answerHeight : 400 }}>
+      {row.type === "message" ? row.message.content : row.id}</article>)}
   </section>;
 }
 
@@ -109,6 +116,86 @@ async function run() {
   finish(true);
   await frames();
   check(thread().scrollTop === otherTop && calls === 4, "An old chat request changed the new chat viewport.");
-  result.textContent = "PASS: loading resumes at the top, crosses tool-only pages, preserves the visible row, pauses after failure, allows retry, and ignores old chat completions.";
+
+  // Real layout and native scroll events are needed to catch the sent-message
+  // spacer trapping a reader who returns to a response while it still streams.
+  streamingFixture = true;
+  conversation = "streaming";
+  messages = [message("history")];
+  render();
+  await frames();
+  messages = [...messages, message("request"), {
+    ...message("answer"), role: "assistant", content: "Streaming response",
+  }];
+  submission++;
+  running = true;
+  render();
+  await frames(40);
+  check(Number.parseFloat(thread().style.getPropertyValue("--chat-sent-message-space")) > 0,
+    "Fixture must reserve space beneath the sent message.");
+  const requestTop = thread().scrollTop;
+  answerHeight += 20;
+  render();
+  await frames();
+  check(Math.abs(thread().scrollTop - requestTop) < 1,
+    "Streaming moved the sent request before the reader took control.");
+  thread().dispatchEvent(new WheelEvent("wheel", { deltaY: -150 }));
+  thread().scrollTop -= 150;
+  await frames(2);
+  const readingTop = thread().scrollTop;
+  answerHeight += 20;
+  render();
+  await frames();
+  check(Math.abs(thread().scrollTop - readingTop) < 1, "Streaming interrupted reading older messages.");
+  thread().dispatchEvent(new WheelEvent("wheel", { deltaY: 1000 }));
+  thread().scrollTop = thread().scrollHeight;
+  await frames();
+  check(!thread().style.getPropertyValue("--chat-sent-message-space"),
+    "Returning to the bottom left empty sent-message space beneath the response.");
+  check(!scroll.showScrollToBottomButton, "Returning to the bottom did not resume following.");
+  answerHeight += 350;
+  render();
+  await frames(40);
+  check(thread().scrollHeight - thread().clientHeight - thread().scrollTop < 1,
+    "Returning to the bottom did not follow subsequent streamed content.");
+
+  // Downward intent must survive content growing before the native scroll
+  // event, including a gesture at the bottom that produces no scroll event.
+  for (const growth of [20, 250, 0]) {
+    thread().dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+    thread().scrollTop -= 100;
+    await frames(2);
+    thread().scrollTop = thread().scrollHeight;
+    thread().dispatchEvent(new WheelEvent("wheel", { deltaY: 1000 }));
+    answerHeight += growth;
+    render();
+    await frames(40);
+    answerHeight += 100;
+    render();
+    await frames(40);
+    check(thread().scrollHeight - thread().clientHeight - thread().scrollTop < 1,
+      "Concurrent streaming layout stranded a reader returning to the bottom.");
+  }
+  thread().dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+  thread().scrollTop -= 100;
+  await frames(2);
+  thread().scrollTop = thread().scrollHeight;
+  thread().dispatchEvent(new WheelEvent("wheel", { deltaY: 1000 }));
+  thread().dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+  thread().scrollTop -= 100;
+  const reversedTop = thread().scrollTop;
+  answerHeight += 100;
+  render();
+  await frames(40);
+  check(Math.abs(thread().scrollTop - reversedTop) < 1,
+    "Reversing an unfinished downward gesture resumed following against the reader's intent.");
+  scroll.jumpToLatestChatMessage();
+  await frames(40);
+  answerHeight += 100;
+  render();
+  await frames(40);
+  check(thread().scrollHeight - thread().clientHeight - thread().scrollTop < 1,
+    "Jumping to latest did not keep following streamed content.");
+  result.textContent = "PASS: history pagination preserves reading position; returning to a streaming response releases reserved space and resumes following through concurrent layout changes.";
 }
 void run().catch((error) => { result.textContent = `FAIL: ${error instanceof Error ? error.message : String(error)}`; });

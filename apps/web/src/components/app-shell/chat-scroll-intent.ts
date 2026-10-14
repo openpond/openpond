@@ -1,7 +1,12 @@
 /** Cancel automatic following before browser scroll events race streaming layout. */
-export function observeChatScrollIntent(element: HTMLElement, stopFollowing: () => void): () => void {
+export function observeChatScrollIntent(
+  element: HTMLElement,
+  stopFollowing: () => void,
+  scrollTowardBottom?: () => void,
+): () => void {
   const onWheel = (event: WheelEvent) => {
     if (event.deltaY < 0) stopFollowing();
+    else if (event.deltaY > 0) scrollTowardBottom?.();
   };
   let touchY: number | null = null;
   const onTouchStart = (event: TouchEvent) => {
@@ -10,6 +15,7 @@ export function observeChatScrollIntent(element: HTMLElement, stopFollowing: () 
   const onTouchMove = (event: TouchEvent) => {
     const nextY = event.touches[0]?.clientY ?? null;
     if (nextY !== null && touchY !== null && nextY > touchY) stopFollowing();
+    else if (nextY !== null && touchY !== null && nextY < touchY) scrollTowardBottom?.();
     touchY = nextY;
   };
   const onKeyDown = (event: KeyboardEvent) => {
@@ -17,6 +23,8 @@ export function observeChatScrollIntent(element: HTMLElement, stopFollowing: () 
     if (target?.closest?.("input, textarea, select, [contenteditable='true']")) return;
     if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) {
       stopFollowing();
+    } else if (["ArrowDown", "PageDown", "End"].includes(event.key) || (event.key === " " && !event.shiftKey)) {
+      scrollTowardBottom?.();
     }
   };
   const onPointerDown = (event: PointerEvent) => {
