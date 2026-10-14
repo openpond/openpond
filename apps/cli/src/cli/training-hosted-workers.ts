@@ -6,6 +6,8 @@ const WorkerControlSchema = z.object({
   idempotencyKey: z.string().min(1).max(191),
   jobId: z.string().min(1).max(191).optional(),
   maximumStorageUsd: z.number().positive().max(10).optional(),
+  warmIdleDeadlineAt: z.iso.datetime({ offset: true }).optional(),
+  maximumIdleUsd: z.number().positive().max(10).optional(),
 }).strict();
 
 /** Uses the hosted command's existing account headers and bounded transport. */
@@ -27,11 +29,13 @@ export async function runHostedWorkerCommand(input: {
     path += `/${encodeURIComponent(input.target)}`;
   } else {
     const action = input.action.replace("hosted-worker-", "");
-    if (!["stop", "resume", "retire"].includes(action)) throw new Error(`Unknown physical worker action: ${action}`);
+    if (!["stop", "resume", "retire", "warm-idle"].includes(action)) throw new Error(`Unknown physical worker action: ${action}`);
     if (!input.confirmed) throw new Error("Worker lifecycle changes require --yes.");
     const { workerId, ...control } = WorkerControlSchema.parse(await input.readInput());
     if (action === "stop" && !control.maximumStorageUsd) throw new Error("Stopping requires maximumStorageUsd for bounded retained storage.");
     if (action === "resume" && !control.jobId) throw new Error("Resuming requires an admitted queued jobId with its own compute budget.");
+    if (action === "warm-idle" && (!control.warmIdleDeadlineAt || !control.maximumIdleUsd))
+      throw new Error("Warm idle requires warmIdleDeadlineAt and maximumIdleUsd; the server caps retention at ten minutes.");
     path += `/${encodeURIComponent(workerId)}/control`;
     body = JSON.stringify({ ...control, action });
   }
