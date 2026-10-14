@@ -59,6 +59,7 @@ import { pruneMigrationBackups } from "./store-backup-retention.js";
 import { ensureMigrationBackup } from "./store-migration-backup.js";
 import { TASK_INBOX_SCHEMA_SQL } from "./store-task-inbox-schema.js";
 import { CHAT_RESOURCE_TABLES_SQL } from "./store-chat-resource-schema.js";
+import { migrateLocalDatasetStorage } from "./store-local-dataset-storage.js";
 import type { SqliteDomainContext } from "./store-domain.js";
 
 type UserVersionRow = { user_version: number };
@@ -74,6 +75,9 @@ export type SqliteStoreCoreOptions = {
 
 export class SqliteStoreCore {
   async createChatResourceTables(): Promise<void> { await this.exec(CHAT_RESOURCE_TABLES_SQL); }
+  async deduplicateLocalDatasetStorage(): Promise<void> {
+    this.compactDatasetMigration = migrateLocalDatasetStorage(this.database);
+  }
   async createTaskInboxTables(): Promise<void> {
     await this.exec(TASK_INBOX_SCHEMA_SQL);
   }
@@ -91,6 +95,7 @@ export class SqliteStoreCore {
   protected ready: Promise<void>;
   protected db: OpenPondSqliteConnection | null = null;
   protected writeQueue: Promise<void> = Promise.resolve();
+  private compactDatasetMigration = false;
   protected readonly logger?: Logger;
   protected readonly onMigrationProgress?: (progress: StorageStartupProgress) => void;
 
@@ -143,6 +148,12 @@ export class SqliteStoreCore {
           if (removed.length) this.logger?.info("sqlite migration backups pruned", { removed, retained, storePath: this.storePath });
         })
         .catch(error => this.logger?.warn("sqlite migration backup pruning failed", { error, storePath: this.storePath }));
+      if (this.compactDatasetMigration) {
+        // VACUUM must follow COMMIT. Failure leaves the migrated data intact and
+        // its freed pages reusable; do not turn successful recovery into a failed startup.
+        try { await this.exec("VACUUM"); }
+        catch (error) { this.logger?.warn("sqlite dataset compaction deferred", { error, storePath: this.storePath }); }
+      }
     }, 300_000).catch(async error => {
       await this.closeDatabaseHandle();
       throw error;
