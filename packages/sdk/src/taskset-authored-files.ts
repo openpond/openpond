@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { contentHash, ImmutableAssetRefSchema, sha256, type ImmutableAssetRef } from "@openpond/harness";
+import { resolveStructuredOutput, contentHash, ImmutableAssetRefSchema, sha256, type ImmutableAssetRef } from "@openpond/harness";
 import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "./taskset-authored-contracts.js";
 import { computeTasksetHash } from "./taskset-authored-validation.js";
 import { projectPortableTaskRecord } from "./taskset-authored-portable-release.js";
@@ -47,6 +47,17 @@ export function prepareAuthoredTasksetSource(tasksetInput: Taskset, sourceFiles:
     declaredPaths.add(sourcePath);
   };
   for (const task of taskset.tasks) {
+    const outputSchemaRefs: Record<string, ImmutableAssetRef> = {};
+    for (const output of task.requiredOutputs ?? []) if (output.submissionMode === "structured_json") {
+      if (!output.schemaRef || output.mediaType !== "application/json") throw new Error("Structured outputs require a JSON schemaRef and application/json.");
+      const prior = (task.metadata.portableTaskRecord as { requiredOutputs?: { path: string; schemaRef?: ImmutableAssetRef | null }[] } | undefined)?.requiredOutputs?.find(item => item.path === output.path)?.schemaRef;
+      const sourcePath = prior?.id === output.schemaRef ? prior.path : output.schemaRef;
+      const schema = ref(output.schemaRef, sourcePath, "application/schema+json", "policy");
+      if (prior && prior.id === output.schemaRef && prior.visibility !== "policy") throw new Error("Structured output schema must be policy-visible.");
+      resolveStructuredOutput(bytes.get(sourcePath)!, schema.contentHash);
+      outputSchemaRefs[output.schemaRef] = schema;
+    }
+    if (Object.keys(outputSchemaRefs).length) task.metadata = { ...task.metadata, outputSchemaRefs };
     const portable = projectPortableTaskRecord(task);
     for (const asset of portable.artifactRefs) add(asset, task.assets?.find(candidate => candidate.id === asset.id)?.artifactRef ?? asset.path);
     for (const output of portable.requiredOutputs ?? []) if (output.schemaRef) add(output.schemaRef);

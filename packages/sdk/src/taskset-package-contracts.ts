@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { contentHash, type ImmutableAssetRef } from "@openpond/harness";
+import { resolveStructuredOutput, contentHash, type ImmutableAssetRef } from "@openpond/harness";
 import { EnvironmentReleaseSchema, VerifierSetReleaseSchema, verifyEnvironmentRelease, verifyVerifierSetRelease } from "@openpond/evals";
 import { assertTasksetRelease, TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
@@ -70,7 +70,13 @@ export function validateTasksetPackage(value: unknown, maximumBytes = MAX_TASKSE
   }
   for (const task of taskset.tasks) {
     for (const asset of task.artifactRefs) requireAsset(asset);
-    for (const output of task.requiredOutputs ?? []) if (output.schemaRef) requireAsset(output.schemaRef);
+    for (const output of task.requiredOutputs ?? []) {
+      if (output.schemaRef) requireAsset(output.schemaRef);
+      if (output.submissionMode === "structured_json") {
+        if (!output.schemaRef || output.schemaRef.visibility !== "policy" || output.mediaType !== "application/json" || environment.contract.kind !== "work") throw new Error("Structured output requires a policy-visible JSON schema in Work.");
+        resolveStructuredOutput(decodeTasksetPackageFile(files.get(output.schemaRef.id)!), output.schemaRef.contentHash);
+      }
+    }
     if (task.privilegedContextRef && files.get(task.privilegedContextRef)?.asset.visibility !== "host_private") {
       throw new Error(`Taskset package private context is missing: ${task.id}.`);
     }
@@ -123,4 +129,14 @@ export function createTasksetPackage(value: z.input<typeof TasksetPackageContent
 
 function same(left: unknown, right: unknown): boolean {
   return contentHash({ value: left }) === contentHash({ value: right });
+}
+
+/** Resolve the same public output contracts consumed by local and hosted Work. */
+export function resolveTasksetWorkOutputs(input: unknown, taskId: string) {
+  const value = validateTasksetPackage(input);
+  const task = value.taskset.tasks.find(task => task.id === taskId);
+  if (!task || value.environment.contract.kind !== "work") throw new Error("Work Taskset task not found.");
+  return (task.requiredOutputs ?? []).map(output => ({ path: output.path, mediaType: output.mediaType, maxBytes: output.maxBytes,
+    ...(output.submissionMode === "structured_json" ? { submissionMode: "structured_json" as const,
+      structuredOutput: resolveStructuredOutput(decodeTasksetPackageFile(value.files.find(file => file.asset.id === output.schemaRef!.id)!), output.schemaRef!.contentHash) } : {}) }));
 }

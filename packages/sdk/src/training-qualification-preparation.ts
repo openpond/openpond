@@ -6,19 +6,29 @@ import { prepareImportedTasksetPackage } from "./taskset-package-projection.js";
 import { buildTasksetTrainingBundle } from "./training-bundle.js";
 import { prepareManagedTrainingSubmission, type ManagedTrainingPreparationInput } from "./managed-training-preparation.js";
 import { deterministicTrainingRewardSource } from "./training-grading-plan.js";
+import { TrainingCapabilitiesSchema, type TrainingCapabilities } from "./training.js";
 
 export type OrdinaryTasksetQualificationInput = Omit<Parameters<typeof buildTasksetTrainingBundle>[0],
   "taskset" | "executionMode" | "qualificationSource" | "tasksetRelease" | "rewardExecution" | "verifierAssets" | "tasksetAssetBytes" | "evaluationSource" | "approval"> & {
   package: TasksetPackage;
+  qualificationTaskId: string;
   approval: ManagedTrainingPreparationInput["approval"] & { approvedAt: string };
   idempotencyKey?: string;
+  runtimeCapabilities?: TrainingCapabilities;
 };
 
 /** Prepare a no-update original-learner run from the exact published ordinary
- * package. Splits, families, task IDs and private grader bytes are preserved;
+ * package, with one explicit source task selected for its rollout group.
+ * Splits, families, task IDs and private grader bytes are preserved;
  * this function does not create train/held-out data or approve any source. */
 export async function prepareOrdinaryTasksetQualification(input: OrdinaryTasksetQualificationInput) {
   const source = validateTasksetPackage(input.package);
+  if (source.taskset.tasks.some(task => task.requiredOutputs?.some(output => output.submissionMode === "structured_json"))) {
+    const capabilities = input.runtimeCapabilities && TrainingCapabilitiesSchema.parse(input.runtimeCapabilities);
+    if (!capabilities?.structuredOutputs || Date.parse(capabilities.expiresAt) <= Date.now()) {
+      throw new Error("Structured qualification requires a current work.structured-output.v1 runtime capability receipt.");
+    }
+  }
   if (source.modelResources || source.learningResources || !source.taskset.tasks.length) {
     throw new Error("Qualification requires a nonempty ordinary Taskset package.");
   }
@@ -53,7 +63,8 @@ export async function prepareOrdinaryTasksetQualification(input: OrdinaryTaskset
   })));
   const { taskset } = prepareImportedTasksetPackage({ package: source, profileId: input.modelProject.id,
     name: source.taskset.id, createdAt: input.modelProject.updatedAt });
-  const taskAssets = new Set(taskset.tasks.flatMap(task => (task.assets ?? []).map(asset => asset.artifactRef)));
+  const taskAssets = new Set(taskset.tasks.filter(task => task.id === input.qualificationTaskId)
+    .flatMap(task => (task.assets ?? []).map(asset => asset.artifactRef)));
   const tasksetAssetBytes = new Map(source.files.filter(file => taskAssets.has(file.asset.path)).map(file => [file.asset.path, decodeTasksetPackageFile(file)]));
   const tasksetRef = { id: source.taskset.id, revision: source.taskset.revision, contentHash: source.taskset.contentHash };
   const rewardExecution = { binding, rewards };

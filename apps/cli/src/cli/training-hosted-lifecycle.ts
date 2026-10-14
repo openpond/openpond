@@ -16,6 +16,7 @@ export type HostedWatchOptions = {
   cancelAt: number | null;
   waitForCleanup: boolean;
   cleanupTimeoutMs: number;
+  cancelOnInfrastructureError: boolean;
 };
 
 export function parseHostedWatchOptions(options: Options): HostedWatchOptions {
@@ -38,8 +39,9 @@ export function parseHostedWatchOptions(options: Options): HostedWatchOptions {
   return {
     intervalMs, deadlineAt,
     cancelAt: deadlineAt === null ? null : deadlineAt - cleanupReserveMs,
-    waitForCleanup: deadlineAt !== null || parseBooleanOption(options.waitForCleanup),
+    waitForCleanup: deadlineAt !== null || parseBooleanOption(options.waitForCleanup) || parseBooleanOption(options.cancelOnInfrastructureError),
     cleanupTimeoutMs,
+    cancelOnInfrastructureError: parseBooleanOption(options.cancelOnInfrastructureError),
   };
 }
 
@@ -81,11 +83,23 @@ export async function watchHostedTrainingJob(input: {
     input.requestBound.deadlineAt = Number.isFinite(bound) ? bound : null;
     if (Date.now() >= bound) throw cleanupDeadlineError(jobId);
     try {
-      const job: TrainingJob = options.cancelAt !== null && Date.now() >= options.cancelAt && !cancellationAcknowledged
+      let job: TrainingJob = options.cancelAt !== null && Date.now() >= options.cancelAt && !cancellationAcknowledged
         ? await cancelHostedTrainingJob(client, jobId, teamId)
         : await client.getJob(jobId);
       assertJobIdentity(job, jobId, teamId, submissionHash);
       submissionHash = job.submissionHash;
+      if (options.cancelOnInfrastructureError && !cancellationAcknowledged && !terminal.has(job.state) && job.state !== "cancelling") {
+        const events = await client.events(jobId);
+        if (events.some(event => event.jobId !== jobId)) throw new Error("Hosted event does not match the watched Job.");
+        const failure = events.find(event => event.type === "rollout_metric"
+          && event.data.terminalClass === "infrastructure" && event.data.rewardEligible === false);
+        if (failure) {
+          input.print({ jobId, event: "hosted_watch_infrastructure_failure", trajectoryEventId: failure.id, data: failure.data });
+          job = await cancelHostedTrainingJob(client, jobId, teamId);
+          assertJobIdentity(job, jobId, teamId, submissionHash);
+          cleanupDeadline ??= Date.now() + options.cleanupTimeoutMs;
+        }
+      }
       cancellationAcknowledged ||= job.state === "cancelling" || terminal.has(job.state);
       input.print(job);
       if (terminal.has(job.state)) {

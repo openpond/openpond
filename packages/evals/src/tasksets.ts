@@ -18,6 +18,7 @@ export const RequiredOutputContractSchema = z.object({
   path: z.string().trim().min(1).max(2_000).refine(safeRelativePath),
   mediaType: z.string().trim().min(1).max(200),
   schemaRef: ImmutableAssetRefSchema.nullable().default(null),
+  submissionMode: z.literal("structured_json").optional(),
   maxBytes: z.number().int().positive().max(250_000_000).nullable().default(null),
   metadata: MetadataSchema,
 }).strict();

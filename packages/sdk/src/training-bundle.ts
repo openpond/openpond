@@ -35,6 +35,7 @@ export function buildTasksetTrainingBundle(input: {
   taskset: Taskset;
   executionMode?: "qualification";
   qualificationSource?: TasksetPackage;
+  qualificationTaskId?: string;
   modelProject: ModelProject;
   modelRunId: string;
   runtime: HarnessRuntimeTargetBinding;
@@ -62,6 +63,10 @@ export function buildTasksetTrainingBundle(input: {
   if (qualification && input.evaluationSource) throw new Error("Qualification does not consume an independent evaluation source.");
   const qualificationSource = qualification ? validateTasksetPackage(input.qualificationSource) : null;
   if (!qualification && input.qualificationSource) throw new Error("Qualification sources cannot be used for training.");
+  if (!qualification && input.qualificationTaskId !== undefined) throw new Error("Qualification selection cannot be used for training.");
+  if (qualification && (!input.qualificationTaskId || !taskset.tasks.some(task => task.id === input.qualificationTaskId))) {
+    throw new Error("Qualification requires one explicit task ID from its published source.");
+  }
   if (qualificationSource && (qualificationSource.modelResources || qualificationSource.learningResources
     || contentHash(taskset.tasks.map(projectPortableTaskRecord)) !== contentHash(qualificationSource.taskset.tasks)
     || releasedRefHash(input.tasksetRelease) !== releasedRefHash(qualificationSource.taskset))) {
@@ -191,11 +196,13 @@ export function buildTasksetTrainingBundle(input: {
     capabilities: taskset.capabilities,
     connectedAppScopes: taskset.policy.connectedAppScopes,
   });
-  const trainTasks = qualification ? taskset.tasks : taskset.tasks.filter((task) => task.split === "train");
+  const trainTasks = qualification
+    ? taskset.tasks.filter(task => task.id === input.qualificationTaskId)
+    : taskset.tasks.filter((task) => task.split === "train");
   if (trainTasks.length > 0) {
     addJsonAsset(assets, qualification ? "dataset/qualification.json" : "dataset/train.json", {
       schemaVersion: qualification ? "openpond.qualificationDataset.v1" : "openpond.datasetSplit.v1",
-      ...(qualification ? {} : { split: "train" }),
+      ...(qualification ? { selectedTaskId: input.qualificationTaskId } : { split: "train" }),
       tasks: trainTasks,
     });
     addTasksetAssets({

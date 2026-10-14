@@ -1,3 +1,5 @@
+import { structuredOutputTools, structuredToolOutput, serializeStructuredOutput, validateOutputBytes, type WorkRequiredOutput } from "@openpond/harness";
+import { randomUUID } from "node:crypto";
 import { OpenPondApiError } from "@openpond/cloud/api/core";
 import {
   type HostedChatMessage,
@@ -40,6 +42,7 @@ export type OpenPondWorkOutput = {
   updatedAt: string;
   isBinary: boolean | null;
   previewable: boolean;
+  validation?: ReturnType<typeof validateOutputBytes>;
 };
 
 export type OpenPondWorkInputFile = {
@@ -114,6 +117,8 @@ export type OpenPondWorkEvent =
 
 export type OpenPondWorkRunInput = {
   prompt: string;
+  /** Prepared required outputs, resolved from the immutable Taskset package. */
+  requiredOutputs?: WorkRequiredOutput[];
   /** Durable caller-generated UUID for recovering a BYOC create after an app restart. */
   requestId?: string;
   /** Reuse this sandbox to continue work in an existing conversation. */
@@ -179,6 +184,7 @@ export class OpenPondWorkClient {
     const prompt = input.prompt.trim();
     if (!prompt) throw new Error("Work prompt is required");
     input.signal?.throwIfAborted();
+    const submissionTools = structuredOutputTools(input.requiredOutputs ?? []);
 
     const emit = async (event: OpenPondWorkEvent) => input.onEvent?.(event);
     const cleanupPolicy = input.cleanup ?? "keep";
@@ -204,7 +210,7 @@ export class OpenPondWorkClient {
           content: systemPrompt(sandbox.id, (input.inputs?.length ?? 0) > 0),
         },
         ...(input.history ?? []).map((message) => ({ ...message })),
-        { role: "user", content: prompt },
+        { role: "user", content: prompt + (input.requiredOutputs?.length ? "\nRequired outputs under outputs/: " + JSON.stringify(input.requiredOutputs) : "") },
       ];
 
       for (let step = 1; step <= maxSteps; step += 1) {
@@ -215,7 +221,7 @@ export class OpenPondWorkClient {
           token: this.#apiKey,
           model: input.model?.trim() || this.#defaultModel,
           messages,
-          tools: WORK_TOOLS,
+          tools: [...WORK_TOOLS, ...submissionTools],
           toolChoice: "auto",
           signal: input.signal,
           metadata: {
@@ -239,7 +245,12 @@ export class OpenPondWorkClient {
           await emit({ type: "assistant", text: assistantText });
         }
         if (toolCalls.length === 0) {
-          const outputs = await this.#collectOutputs(sandbox.id, outputBaseline);
+          let outputs: OpenPondWorkOutput[];
+          try { outputs = await this.#collectOutputs(sandbox.id, outputBaseline, input.requiredOutputs); }
+          catch (error) {
+            messages.push({ role: "user", content: "Output acceptance failed. Correct the required outputs and submit again: " + errorMessage(error) });
+            continue;
+          }
           for (const output of outputs) await emit({ type: "output", output });
           finalizationAttempted = true;
           await this.#finalizeSandbox(sandbox.id, outputs, input, lifecycle, emit);
@@ -262,6 +273,7 @@ export class OpenPondWorkClient {
             index,
             input.timeoutSeconds,
             emit,
+            input.requiredOutputs,
           );
           messages.push(result);
         }
@@ -271,7 +283,7 @@ export class OpenPondWorkClient {
     } catch (error) {
       if (sandbox && outputBaseline && !finalizationAttempted) {
         try {
-          const outputs = await this.#collectOutputs(sandbox.id, outputBaseline);
+          const outputs = await this.#collectOutputs(sandbox.id, outputBaseline, input.requiredOutputs);
           for (const output of outputs) await emit({ type: "output", output });
           await this.#finalizeSandbox(sandbox.id, outputs, input, lifecycle, emit);
         } catch (finalizationError) {
@@ -357,7 +369,16 @@ export class OpenPondWorkClient {
       for (const output of outputs) {
         await emit({ type: "persistence", output, status: "started" });
         try {
-          const download = lazyOutputDownload(this.#sandboxes, sandboxId, output);
+          const originalDownload = lazyOutputDownload(this.#sandboxes, sandboxId, output);
+          const download = async () => {
+            const result = await originalDownload();
+            const required = input.requiredOutputs?.find(item => normalizedOutputPath(output.path) === `${WORK_OUTPUT_DIRECTORY}/${item.path}`);
+            if (required) {
+              const validation = validateOutputBytes(required, Buffer.from(result.file.contentsBase64, "base64"));
+              if (output.validation && validation?.artifactHash !== output.validation.artifactHash) throw new Error("work_saved_output_changed");
+            }
+            return result;
+          };
           await input.persistOutput({ output, download });
           lifecycle.persistence.persistedCount += 1;
           await emit({ type: "persistence", output, status: "succeeded" });
@@ -469,13 +490,22 @@ export class OpenPondWorkClient {
   async #collectOutputs(
     sandboxId: string,
     baseline: Map<string, string>,
+    requiredOutputs?: WorkRequiredOutput[],
   ): Promise<OpenPondWorkOutput[]> {
     const files = await this.#listOutputFiles(sandboxId);
-    return files
+    const outputs = files
       .filter((file) => baseline.get(file.path) !== outputSignature(file))
       .sort((left, right) => left.path.localeCompare(right.path))
       .slice(0, MAX_WORK_OUTPUTS)
       .map(workOutputFromFile);
+    for (const required of requiredOutputs ?? []) {
+      const output = outputs.find(item => normalizedOutputPath(item.path) === `${WORK_OUTPUT_DIRECTORY}/${required.path}`);
+      if (!output) throw new Error("work_required_output_missing:" + required.path);
+      const downloaded = await this.#sandboxes.downloadFileResponse(sandboxId, output.path);
+      if (downloaded.file.truncated) throw new Error("work_output_download_truncated");
+      output.validation = validateOutputBytes(required, Buffer.from(downloaded.file.contentsBase64, "base64"));
+    }
+    return outputs;
   }
 
   async #listOutputFiles(sandboxId: string): Promise<SandboxFileEntry[]> {
@@ -530,9 +560,23 @@ export class OpenPondWorkClient {
     index: number,
     timeoutSeconds: number | undefined,
     emit: (event: OpenPondWorkEvent) => void | Promise<void>,
+    requiredOutputs?: WorkRequiredOutput[],
   ): Promise<HostedChatMessage> {
     const toolCallId = toolCall.id || `work_tool_${index}`;
     const name = toolCall.function?.name;
+    const structured = structuredToolOutput(requiredOutputs ?? [], name ?? "");
+    if (structured) {
+      try {
+        const bytes = serializeStructuredOutput(structured, JSON.parse(toolCall.function?.arguments || "{}"));
+        const path = `${WORK_OUTPUT_DIRECTORY}/${structured.path}`;
+        const temporary = `${WORK_OUTPUT_DIRECTORY}/.openpond-${randomUUID()}`;
+        await this.#sandboxes.uploadFileBase64(sandboxId, temporary, Buffer.from(bytes).toString("base64"));
+        const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+        const moved = await this.#sandboxes.exec(sandboxId, { command: `mkdir -p -- ${quote(path.slice(0, path.lastIndexOf("/")))} && mv -f -- ${quote(temporary)} ${quote(path)}`, timeoutSeconds: 30 });
+        if (moved.command.exitCode !== 0) throw new Error("work_output_registration_failed");
+        return toolMessage(toolCallId, { ok: true, path, validation: validateOutputBytes(structured, bytes) });
+      } catch (error) { return toolMessage(toolCallId, { ok: false, error: errorMessage(error) }); }
+    }
     if (name !== "run_command") {
       return toolMessage(toolCallId, { error: `Unknown tool: ${name ?? "missing"}` });
     }
