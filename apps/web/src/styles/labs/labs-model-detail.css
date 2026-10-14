@@ -698,6 +698,10 @@
   align-items: flex-start;
 }
 
+:root[data-theme="light"] .labs-evaluation-chart {
+  background: var(--surface-panel);
+}
+
 .labs-evaluation-chart > header > div:first-child {
   min-width: 0;
 }
