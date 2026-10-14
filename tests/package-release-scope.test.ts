@@ -49,7 +49,7 @@ describe("package release eligibility", () => {
 // A package release must not allocate unrelated Desktop jobs, or silently drop
 // one artifact when both owners have changed versions.
 describe("release artifact ownership", () => {
-  test("selects a CLI bump anywhere in the complete push and rejects unrelated bases", () => {
+  test("selects complete normal pushes and skips forced pushes without reading removed history", () => {
     const directory = mkdtempSync(join(tmpdir(), "openpond-release-push-"));
     const script = resolve("scripts/release-build-target.mjs");
     const git = (...args: string[]) => execFileSync("git", args, { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -67,13 +67,18 @@ describe("release artifact ownership", () => {
       git("add", "."); git("commit", "--quiet", "-m", "CLI bump");
       writeFileSync(join(directory, "README.md"), "Additional change in the same push");
       git("add", "."); git("commit", "--quiet", "-m", "followup");
-      const run = (base: string) => execFileSync("node", [script], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GITHUB_EVENT_NAME: "push", RELEASE_BEFORE: base } }).trim();
+      const run = (base: string, forced = false) => execFileSync("node", [script], { cwd: directory, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, GITHUB_EVENT_NAME: "push", RELEASE_BEFORE: base, RELEASE_FORCED: String(forced) } }).trim();
       expect(run(before)).toBe("cli");
+      expect(run(before, true)).toBe("none");
+      const removed = "f".repeat(40);
+      expect(() => run(removed)).toThrow();
+      expect(run(removed, true)).toBe("none");
       git("checkout", "--quiet", "--orphan", "unrelated");
       git("commit", "--quiet", "-m", "unrelated history");
       const unrelated = git("rev-parse", "HEAD");
       git("checkout", "--quiet", "master");
       expect(() => run(unrelated)).toThrow();
+      expect(run(unrelated, true)).toBe("none");
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
   test("separates CLI/Desktop pushes, schedules and explicit recovery", () => {

@@ -14,6 +14,9 @@ export function resolveReleaseBuildTarget(input) {
     return target;
   }
   if (input.event !== "push") throw new Error(`Unsupported release event: ${input.event}`);
+  // History rewrites are not publication events. The previous commit may no
+  // longer exist, so skip before reading manifests or resolving ancestry.
+  if (input.forced === true) return "none";
   if (!input.previousCliVersion || !input.previousDesktopVersion) throw new Error("Previous release versions are required.");
   const cliChanged = input.cliVersion !== input.previousCliVersion;
   const desktopChanged = input.desktopVersion !== input.previousDesktopVersion;
@@ -30,9 +33,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     return JSON.parse(execFileSync("git", ["show", `${before}:apps/${target}/package.json`], { encoding: "utf8" })).version;
   };
   const event = process.env.GITHUB_EVENT_NAME;
+  const forced = process.env.RELEASE_FORCED === "true";
   console.log(resolveReleaseBuildTarget({
-    event, target: process.env.INPUT_TARGET, channel: process.env.INPUT_CHANNEL, ref: process.env.GITHUB_REF,
-    cliVersion: version("cli"), desktopVersion: version("desktop"),
-    ...(event === "push" ? { previousCliVersion: previous("cli"), previousDesktopVersion: previous("desktop") } : {}),
+    event, forced, target: process.env.INPUT_TARGET, channel: process.env.INPUT_CHANNEL, ref: process.env.GITHUB_REF,
+    ...(event === "push" && !forced ? {
+      cliVersion: version("cli"), desktopVersion: version("desktop"),
+      previousCliVersion: previous("cli"), previousDesktopVersion: previous("desktop"),
+    } : {}),
   }));
 }
