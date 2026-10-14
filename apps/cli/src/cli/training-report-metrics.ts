@@ -33,6 +33,13 @@ export function timingStatistics(rows: Record<string, unknown>[], keys: readonly
   return Object.fromEntries(keys.map(key => [key, statistics(rows.map(row => nonnegative(row[key])))]));
 }
 
+export function distributionStatistics(rows: Record<string, unknown>[], keys: readonly string[]) {
+  return Object.fromEntries(keys.map(key => {
+    const { total: _total, ...distribution } = statistics(rows.map(row => nonnegative(row[key])));
+    return [key, distribution];
+  }));
+}
+
 export function populationStd(values: number[]): number | null {
   if (!values.length) return null;
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
