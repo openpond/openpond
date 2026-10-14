@@ -18,7 +18,7 @@ export function TaskInboxPanel({ inbox, onRestore, canRestore }: {
       {queued.map((input) => {
         const activeTurnId = snapshot?.activeTurnId;
         const starting = Boolean(input.turnId);
-        const actionLabel = starting ? "Starting" : !activeTurnId ? "Resume" : "Steer";
+        const actionLabel = starting ? "Starting" : activeTurnId ? "Steer" : snapshot?.paused ? "Resume" : "Send";
         const actionDisabledReason = starting
           ? "This message is starting its turn."
           : activeTurnId && !snapshot?.acceptingInput

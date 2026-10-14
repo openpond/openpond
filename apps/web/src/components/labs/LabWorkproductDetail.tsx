@@ -593,6 +593,7 @@ export function LabWorkproductDetail({
           <>
             {modelSection === "overview" ? (
               <LabModelProjectOverview
+                connection={connection}
                 actions={modelProject ? (
                   <button
                     className="training-button secondary"

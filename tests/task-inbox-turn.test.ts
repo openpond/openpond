@@ -7,6 +7,7 @@ import { writeProvidersFile, normalizeProvidersFile } from "../apps/server/src/o
 import { hostedCompactionPriorEvents, openRouterProviderSettingsWithContextWindow } from "./helpers/byok-turn-runner-harness";
 import { createTurnRunnerTestHarness, turnRunnerTestSession } from "./helpers/turn-runner-test-harness";
 import { qualifyLocalManagedMessaging } from "./helpers/local-managed-live-qualification";
+import { createServerWorkQueues } from "../apps/server/src/runtime/background-worker-queue";
 
 // Failure story: an installed adapter acknowledges transport but never consumes
 // a queued follow-up, loses original-session context, or duplicates it on restart.
@@ -16,6 +17,50 @@ test.runIf(process.env.OPENPOND_QUALIFY_LOCAL_MESSAGING === "1").each(["claude-c
 );
 
 function gate() { let resolve!: () => void; const promise = new Promise<void>((done) => { resolve = done; }); return { promise, resolve }; }
+
+// Failure story: a background Harness review holds the same session's queue
+// slot, so successful completion leaves user follow-ups waiting for its timeout.
+test("queued messages start in order after completion while Harness review is still running", async () => {
+  const generating = gate(), finishFirst = gate(), finishReview = gate();
+  const queues = createServerWorkQueues({ warn() {} });
+  let request = 0;
+  const harness = createTurnRunnerTestHarness({
+    dependencies: {
+      turnFollowUpQueue: queues.turnFollowUp,
+      streamLocalByokChatTurn: async function* () {
+        if (++request === 1) {
+          generating.resolve();
+          await finishFirst.promise;
+          queues.harnessRefiner.enqueue({ label: "Harness review", metadata: { sessionId: "session_test" } }, () => finishReview.promise);
+        }
+        yield { text: "Done" };
+      },
+    },
+  });
+  try {
+    const first = harness.runner.sendTurn("session_test", { prompt: "Original assignment", modelRef: { providerId: "openrouter", modelId: "test/model" } });
+    await generating.promise;
+    const second = await harness.runner.queueTaskInput("session_test", { prompt: "Second assignment" }, "second");
+    const third = await harness.runner.queueTaskInput("session_test", { prompt: "Third assignment" }, "third");
+    expect(harness.state.turns).toHaveLength(1);
+    finishFirst.resolve();
+    expect(await first).toMatchObject({ status: "completed" });
+    await vi.waitFor(() => expect(harness.state.turns.filter(turn => turn.status === "completed")).toHaveLength(3), { timeout: 5_000 });
+    await queues.drain("turn-follow-up");
+    expect(harness.state.turns.map(turn => [turn.prompt, turn.status])).toEqual([
+      ["Original assignment", "completed"], ["Second assignment", "completed"], ["Third assignment", "completed"],
+    ]);
+    expect(queues.harnessRefiner.pendingReceipts()).toEqual([expect.objectContaining({ status: "running" })]);
+    expect((await harness.runner.readTaskInbox("session_test")).inputs).toEqual([
+      expect.objectContaining({ id: second.id, state: "resolved", turnId: harness.state.turns[1]!.id }),
+      expect.objectContaining({ id: third.id, state: "resolved", turnId: harness.state.turns[2]!.id }),
+    ]);
+  } finally {
+    finishFirst.resolve(); finishReview.resolve();
+    await harness.runner.close();
+    await queues.drain();
+  }
+});
 
 // Failure story: steering cancels completed/running work, executes stale proposed actions, or loses the original assignment.
 test("steering preserves an admitted tool and the assignment across request replacement and compaction", async () => {

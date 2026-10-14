@@ -18,6 +18,31 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
       id, provider: "codex", title: id, appId: null, appName: null, cwd: null, codexThreadId: null, pinned: false, archived: false, order: 0, createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", status: "idle",
     }));
     let scopes = createChatExperimentScopes(store);
+    // Concurrent discovery must open dataset focus without allocating experiments,
+    // and subsequent discovery must preserve the user's selection.
+    await Promise.all([scopes.ensure("chat-b"), scopes.ensure("chat-b")]);
+    const discovered = chatExperimentContext((await store.getSession("chat-b"))?.metadata);
+    expect(discovered.scopes).toHaveLength(0);
+    expect(discovered.datasetFocus?.dataset).toBeNull();
+    expect(discovered.activeScopeId).toBe(discovered.datasetFocus!.id);
+    const focused = await scopes.select("chat-b", { dataset: dataset(1), evaluationModel:"codex/model-a", executionLocation:"cloud" });
+    expect(await scopes.ensure("chat-b")).toEqual(focused);
+    expect(focused.scopes).toHaveLength(0);
+    store.close();
+    store = new SqliteStore(home);
+    scopes = createChatExperimentScopes(store);
+    expect(chatExperimentContext((await store.getSession("chat-b"))?.metadata).datasetFocus?.dataset?.id).toBe("examples");
+    await expect(scopes.create("chat-b", "invalid-grader", focused.selectionVersion, "missing")).rejects.toThrow("Grader does not belong");
+    const setupGrader: ChatResourceSummary = {kind:"grader", id:"setup-grader", revision:1, name:"Exact", state:"Ready", datasetId:"examples", datasetRevision:1, rows:[]};
+    await expect(scopes.create("chat-b", "stale-grader", focused.selectionVersion, setupGrader.id, [{...setupGrader,datasetRevision:2}])).rejects.toThrow("Dataset changed");
+    const promoted = await scopes.create("chat-b", "explicit-experiment", focused.selectionVersion, setupGrader.id, [setupGrader]);
+    expect(promoted.scopes[0]?.selectedGraderId).toBe(setupGrader.id);
+    expect(promoted.scopes[0]?.evaluationModel).toBe("codex/model-a");
+    expect(promoted.scopes[0]?.executionLocation).toBe("cloud");
+    expect(promoted.scopes[0]?.ordinal).toBe(1);
+    expect(promoted.scopes[0]?.dataset?.id).toBe("examples");
+    expect(promoted.datasetFocus).toBeUndefined();
+    expect(promoted.selectionVersion).toBe(focused.selectionVersion + 1);
     await Promise.all([scopes.create("chat-a", "create-a"), scopes.create("chat-a", "create-b")]);
     let state = chatExperimentContext((await store.getSession("chat-a"))?.metadata);
     expect(state.scopes.map(scope => scope.ordinal)).toEqual([1, 2]);
@@ -29,7 +54,7 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     await store.insertTurn(TurnSchema.parse({ id: "run-turn", sessionId: "chat-a", prompt: "Run", providerTurnId: null,
       startedAt: "2026-10-01T00:01:00.000Z", completedAt: null, status: "in_progress", error: null,
       metadata: { chatExperimentScopeId: first.id, chatExperimentSelectionVersion: selected.selectionVersion } }));
-    const run: ChatResourceSummary = { kind: "experiment", id: "run-one", revision: 1, name: "Saved run", state: "Running", datasetId: "examples", datasetRevision: 1, rows: [] };
+    const run: ChatResourceSummary = { kind: "experiment", id: "run-one", revision: 1, name: "Saved run", state: "Running", model:"codex/model-a", datasetId: "examples", datasetRevision: 1, rows: [] };
     await scopes.attach("chat-a", "run-turn", run);
     expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).scopes[0]!.selectedRunId).toBe(run.id);
     // A same-turn dataset update and delayed result must not label the old run
@@ -37,13 +62,14 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     await scopes.attach("chat-a", "run-turn", dataset(2));
     await scopes.attach("chat-a", "run-turn", { ...run, state: "Completed" });
     expect(chatExperimentContext((await store.getSession("chat-a"))?.metadata).scopes[0]!.selectedRunId).toBeNull();
-    await scopes.select("chat-a", { scopeId: first.id, dataset: dataset(2) });
+    await scopes.select("chat-a", { scopeId: first.id, dataset: dataset(2), evaluationModel:"codex/model-b" });
     await scopes.attach("chat-a", "run-turn", dataset(1));
     await scopes.attach("chat-a", "run-turn", { ...run, state: "Completed" });
     await scopes.attach("chat-a", "run-turn", { kind: "grader", id: "grader-one", revision: 2, name: "Exact", state: "Checked", datasetId: "examples", datasetRevision: 2,
       rows: [{ id: "private-fixture", label: "Known good", detail: "private expected answer" }] });
     state = chatExperimentContext((await store.getSession("chat-a"))?.metadata);
     expect(state.scopes[0]!.dataset?.revision).toBe(2);
+    expect(state.scopes[0]!.evaluationModel).toBe("codex/model-b");
     expect(state.scopes[0]!.selectedRunId).toBeNull();
     expect(state.scopes[0]!.runs).toEqual([{ ...run, state: "Completed" }]);
     expect(state.scopes[0]!.graders[0]!.rows).toEqual([]);
@@ -98,6 +124,7 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     expect(state.scopes).toHaveLength(2);
     expect(state.scopes[0]!.training).toEqual([training]);
     expect(state.scopes[0]!.dataset?.revision).toBe(2);
+    expect(state.scopes[0]!.evaluationModel).toBe("codex/model-b");
     expect(state.scopes[0]!.selectedTrainingKey).toBeUndefined();
     expect(state.activeScopeId).toBe(second.id);
     expect(state.scopes[0]!.runs[0]!.datasetRevision).toBe(1);

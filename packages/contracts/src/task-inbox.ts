@@ -41,6 +41,8 @@ export type TaskInputAdmission = Pick<TaskInput,
 export const TaskResourceContextSchema = z.object({
   scopeId: z.string().trim().min(1).max(240),
   selectionVersion: z.number().int().nonnegative(),
+  evaluationModel: z.string().min(1).max(500).optional(),
+  executionLocation: z.enum(["local", "cloud"]).optional(),
   training: z.array(ChatTrainingReferenceSchema).max(16).optional(),
   resources: z.array(z.object({
     kind: z.enum(["dataset", "grader", "experiment"]),

@@ -1,3 +1,4 @@
+import { localDatasetSummary } from "../training/local-dataset-service.js";
 import type { ChatExperimentView } from "./chat-cloud-experiments.js";
 import { compareExperiments } from "@openpond/evals/experiments";
 import { z } from "zod";
@@ -72,7 +73,7 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     const dataset=await deps.store.readLocalDatasetByWorkspaceHash(source.sourceTasksetId,source.sourcePackageHash);
     if(!dataset || dataset.ownerId!==scope)throw new Error("The Experiment's exact authored Dataset source is unavailable.");
     const retained=evidence ?? await service.result({teamId:scope,id:record.id});
-    return {...chatExperimentSummary(record,retained),datasetId:dataset.workspace.draft.id,datasetRevision:dataset.workspace.draft.revision};
+    return {...chatExperimentSummary(record,retained),evaluationHash:localDatasetSummary(dataset).evaluationHash,datasetId:dataset.workspace.draft.id,datasetRevision:dataset.workspace.draft.revision};
   }
   async function hostedChoices() {
     try {

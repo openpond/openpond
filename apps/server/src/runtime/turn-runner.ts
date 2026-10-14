@@ -1343,7 +1343,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const nativeCliSkills = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
         && (session.provider === "codex" || isNativeAgentId(session.provider))
         && deps.loadBuiltInOpenPondSkills && deps.readBuiltInOpenPondSkill
-        ? (await deps.loadBuiltInOpenPondSkills()).filter(skill => skill.name === "openpond-cli" && skill.enabled && skill.validationStatus === "valid")
+        ? (await deps.loadBuiltInOpenPondSkills()).filter(skill => ["openpond-cli","openpond-taskset-authoring"].includes(skill.name) && skill.enabled && skill.validationStatus === "valid")
         : [];
       const nativeCliSkillTools = nativeCliSkills.length && deps.readBuiltInOpenPondSkill
         ? createOpenPondProfileSkillModelToolDefinitions({ skills: nativeCliSkills, readProfileSkill: deps.readBuiltInOpenPondSkill })

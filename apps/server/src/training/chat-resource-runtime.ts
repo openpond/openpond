@@ -5,7 +5,7 @@ import { createChatTeamExperiments } from "../evaluations/chat-team-experiments.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
-import { chatTrainingAttachmentKey, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
+import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import type { LocalInferenceState } from "../evaluations/local-experiment-local-inference.js";
 import type { ChatResourceAction } from "../openpond/chat-resource-action.js";
@@ -132,12 +132,14 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       for(const record of await deps.store.listLocalDatasetListings())unique.set("dataset:"+record.workspace.draft.id,localDatasetSummary(record));
       return {resources:[...unique.values()],links:visible.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
-    if (kind === "dataset" && ["context","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
-      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),name:z.string().optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
+    if (kind === "dataset" && ["context","set_destination","set_model","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
+      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),graderId:z.string().min(1).nullable().optional(),name:z.string().optional(),evaluationModel:z.string().min(1).max(500).optional(),executionLocation:z.enum(["local","cloud"]).optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
       if(query.visualPublicationId)await deps.visuals.read(session.id,query.visualPublicationId);
-      const datasetChoices = (await deps.store.listLocalDatasetListings()).map(localDatasetSummary);
+      const datasetChoices = input.action === "context" ? (await deps.store.listLocalDatasetListings()).map(localDatasetSummary) : [];
+      const experimentChoices:ChatResourceSummary[] = [];
+      if (input.action === "context" || query.kind === "experiment") {
       const page = await experiments.service.list({teamId:experiments.scope}) as {items:import("@openpond/contracts").LocalExperimentRecord[]};
       const localChoices = await Promise.all(page.items.map(record=>experiments.summary(record)));
       const linkedTeam = team ? (await deps.store.chatResourceLinks({sessionId:session.id,kind:"experiment"})).filter(link=>link.summary.owner) : [];
@@ -152,15 +154,16 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if(profile)for(const link of new Map(linkedProfiles.map(link=>[link.summary.id,link])).values()) {
         try {profileChoices.push((await profile.inspect(link.summary.id,link.summary.profileRef)).summary);}catch {/* The selected Profile owns these choices. */}
       }
-      const experimentChoices=[...localChoices,...ownedChoices,...profileChoices,...await cloud.list()];
+      experimentChoices.push(...localChoices,...ownedChoices,...profileChoices,...await cloud.list());
+      }
       let scopeContext = chatExperimentContext(session.metadata);
       // Rehydrate saved training references from their owner and hide records
       // admitted by a different account. Persisted scope snapshots are not
       // authorization and are not a live status source.
       async function refreshTraining(state:typeof scopeContext) {
-        if (!state.scopes.some(scope=>scope.training?.length)) return;
+        if (!chatResourceWorkspaces(state).some(scope=>scope.training?.length)) return;
         const access = await deps.access().catch(()=>null);
-        for (const scope of state.scopes) {
+        for (const scope of chatResourceWorkspaces(state)) {
           const visible = [];
           for (const reference of scope.training ?? []) {
             if (!access || reference.owner.teamId !== access.teamId || reference.owner.actorId !== access.actorId) continue;
@@ -187,7 +190,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         else query.expectedSelectionVersion=scopeContext.selectionVersion;
       }
       const focusFor = (state:typeof scopeContext) => {
-        const scope = state.scopes.find(candidate=>candidate.id===state.activeScopeId);
+        const scope = chatResourceWorkspaces(state).find(candidate=>candidate.id===state.activeScopeId);
         return {dataset:scope?.dataset ?? null,experiment:scope?.runs.find(run=>run.id===scope.selectedRunId) ?? null};
       };
       let focus = focusFor(scopeContext);
@@ -206,7 +209,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
           await verifyOwner(dataset);
           if(focus.experiment?.profileRef && profile)return (await profile.inspect(focus.experiment.id,focus.experiment.profileRef)).inputs.filter(resource=>resource.kind==="grader");
           if(focus.experiment?.owner && team)return (await team.inspect(focus.experiment.owner,focus.experiment.id)).inputs.filter(resource=>resource.kind==="grader");
-          return scopeContext.scopes.find(scope=>scope.id===scopeContext.activeScopeId)?.graders.filter(grader=>grader.datasetId===dataset.id && grader.datasetRevision===dataset.revision) ?? [];
+          return chatResourceWorkspaces(scopeContext).find(scope=>scope.id===scopeContext.activeScopeId)?.graders.filter(grader=>grader.datasetId===dataset.id && grader.datasetRevision===dataset.revision) ?? [];
         }
         return localGraderSummaries(await datasets.readListing(dataset.id,dataset.revision)).map(grader=>({...grader,rows:[]}));
       }
@@ -216,9 +219,21 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
           chatExperimentScopeId:state.activeScopeId,chatExperimentSelectionVersion:state.selectionVersion}}));
         return {...focusFor(state),scopeContext:state};
       }
+      if (input.action === "set_destination") {
+        if (!query.executionLocation) throw new Error("Choose Local or Hosted execution.");
+        if (query.executionLocation === "cloud" && (focus.dataset?.owner || focus.dataset?.profileRef)) throw new Error("Hosted execution for this resource owner is not available in these controls.");
+        scopeContext = await scopes.select(session.id,{executionLocation:query.executionLocation,expectedSelectionVersion:query.expectedSelectionVersion});
+        return selectedFocus(scopeContext);
+      }
+      if (input.action === "set_model") {
+        const catalog = await experiments.request({action:"models"}) as {models:{providerId:string;id:string}[]};
+        if (!query.evaluationModel || !catalog.models.some(model=>`${model.providerId}/${model.id}`===query.evaluationModel)) throw new Error("The selected evaluation model is unavailable. Refresh the model choices.");
+        scopeContext = await scopes.select(session.id,{evaluationModel:query.evaluationModel,expectedSelectionVersion:query.expectedSelectionVersion});
+        return selectedFocus(scopeContext);
+      }
       if (input.action === "create_scope") {
         if (!query.operationId) throw new Error("Creating an experiment scope requires a stable operationId.");
-        scopeContext = await scopes.create(session.id,query.operationId,query.expectedSelectionVersion);
+        scopeContext = await scopes.create(session.id,query.operationId,query.expectedSelectionVersion,query.graderId,await gradersFor(focus.dataset));
         return selectedFocus(scopeContext);
       }
       if (input.action === "select_scope" || input.action === "rename_scope") {
@@ -273,6 +288,19 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return charts(context,input.payload);
     }
     const result = await dispatch(kind,input);
+    // Discovery opens dataset browsing without allocating an experiment or selecting a record.
+    if (context && input.action === "list") {
+      const before = chatExperimentContext((await deps.store.getSession(context.sessionId))?.metadata);
+      const state = await scopes.ensure(context.sessionId);
+      await deps.store.updateTurn(context.turnId, turn => {
+        const opened = !before.activeScopeId && state.selectionVersion === before.selectionVersion + 1;
+        const unchanged = state.selectionVersion === before.selectionVersion && (!state.selectedAt || state.selectedAt <= turn.startedAt);
+        if (turn.metadata.chatExperimentScopeId || (!opened && !unchanged)) return turn;
+        return {...turn, metadata:{...turn.metadata, chatExperimentScopeId:state.activeScopeId, chatExperimentSelectionVersion:state.selectionVersion}};
+      });
+      await deps.append({id:randomUUID(),name:"workspace_action_result",source:"server",sessionId:context.sessionId,
+        turnId:context.turnId,timestamp:new Date().toISOString(),action:"chat_resource",status:"completed",data:{discovery:true}});
+    }
     if (context && result && typeof result === "object") {
       const object = result as Record<string,unknown>;
       const summaries = attachedSummaries(input.action,object);

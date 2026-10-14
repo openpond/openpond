@@ -29,3 +29,13 @@
 
 .chat-resource-grader-editor { padding: 12px; margin-top: 12px; background: var(--surface-panel); border-radius: 8px; }
 .chat-resource-grader-editor textarea { width: 100%; min-height: 140px; }
+
+.chat-resource-summary.compact .chat-resource-toolbar { border-bottom: 1px solid var(--border-default); border-radius: 8px; }
+
+.chat-resource-table .training-data-table :is(th,td) { padding: 5px 8px; font-size: 12px; line-height: 1.4; }
+.chat-resource-table td { max-height: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-resource-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 4px; font-size: 12px; color: var(--text-muted); }
+.chat-resource-pagination button { border: 0; background: transparent; color: var(--text-primary); font: inherit; padding: 4px; }
+.chat-resource-pagination button:disabled { opacity: .4; }
+
+.composer-experiment-create { display: inline-flex; align-items: center; gap: 5px; }
