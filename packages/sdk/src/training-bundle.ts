@@ -1,4 +1,5 @@
 import { validateTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
+import { z } from "zod";
 import { projectPortableTaskRecord } from "./taskset-authored-portable-release.js";
 import { canonicalJson, contentHash, sha256, ImmutableReleaseRefSchema, HarnessSourceSelectionSchema, validateHarnessPolicySourcePackage, validateHarnessSourcePackage, type HarnessPolicySourcePackage, type HarnessSourcePackage, type ImmutableReleaseRef, type VersionedReleaseRef } from "@openpond/harness";
 import { compileBoundGraders } from "@openpond/evals/rewards";
@@ -36,6 +37,7 @@ export function buildTasksetTrainingBundle(input: {
   executionMode?: "qualification";
   qualificationSource?: TasksetPackage;
   qualificationTaskId?: string;
+  qualificationSamples?: number;
   modelProject: ModelProject;
   modelRunId: string;
   runtime: HarnessRuntimeTargetBinding;
@@ -60,6 +62,12 @@ export function buildTasksetTrainingBundle(input: {
   const { taskset, modelProject, harnessRelease, tasksetRelease } = input;
   const setup = modelProject.trainingSetup;
   const qualification = input.executionMode === "qualification";
+  const qualificationGroupSize = input.qualificationSamples === undefined ? null
+    : z.object({ rollout: z.object({ groupSize: z.number().int().min(2).max(32) }).passthrough() }).passthrough().parse(input.modelProject.trainingSetup.recipe).rollout.groupSize;
+  if (input.qualificationSamples !== undefined && (!qualification || !Number.isInteger(input.qualificationSamples)
+    || input.qualificationSamples < 1 || input.qualificationSamples > qualificationGroupSize!)) {
+    throw new Error("Qualification samples must be within the pinned rollout group and cannot be used for training.");
+  }
   if (qualification && input.evaluationSource) throw new Error("Qualification does not consume an independent evaluation source.");
   const qualificationSource = qualification ? validateTasksetPackage(input.qualificationSource) : null;
   if (!qualification && input.qualificationSource) throw new Error("Qualification sources cannot be used for training.");
@@ -250,6 +258,7 @@ export function buildTasksetTrainingBundle(input: {
   const bundleContent = ResolvedTrainingBundleContentSchema.parse({
     schemaVersion: "openpond.resolvedTrainingBundle.v1",
     ...(qualification ? { executionMode: "qualification" } : {}),
+    ...(input.qualificationSamples !== undefined ? { qualificationSamples: input.qualificationSamples } : {}),
     projection: "trainer",
     harnessRelease: releasedHarness,
     datasetRelease,
@@ -269,6 +278,7 @@ export function buildTasksetTrainingBundle(input: {
   const manifestContent = HarnessRunManifestContentSchema.parse({
     schemaVersion: "openpond.harnessRunManifest.v1",
     ...(qualification ? { executionMode: "qualification" } : {}),
+    ...(input.qualificationSamples !== undefined ? { qualificationSamples: input.qualificationSamples } : {}),
     id: `manifest_${input.modelRunId}_${input.approval.approvalHash.slice(0, 16)}`,
     harnessRelease,
     datasetRelease,
