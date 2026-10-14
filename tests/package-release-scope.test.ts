@@ -1,7 +1,7 @@
 import { requireCurrentVersion, requirePublishedIdentity, requireReleaseIdentity, requireStableMaster } from "../scripts/cli-release-policy.mjs";
 import { resolveReleaseBuildTarget } from "../scripts/release-build-target.mjs";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -91,6 +91,31 @@ describe("release artifact ownership", () => {
     expect(() => resolveReleaseBuildTarget({ event: "workflow_dispatch", target: "cli", channel: "nightly" })).toThrow(/stable channel/);
     expect(() => resolveReleaseBuildTarget({ event: "workflow_dispatch", target: "other", channel: "stable", ref: "refs/heads/master" })).toThrow(/Unsupported release target/);
     expect(resolveReleaseBuildTarget({ event: "schedule" })).toBe("desktop");
+  });
+});
+
+// Dependency installation must not replace a privacy guard and allow removed
+// history to be pushed again.
+describe("Git push guard installation", () => {
+  test("installs the default hooks only when no configuration exists", () => {
+    const directory = mkdtempSync(join(tmpdir(), "openpond-git-hooks-"));
+    const loader = resolve("node_modules/tsx/dist/loader.mjs");
+    const env = { ...process.env, CI: "", GIT_CONFIG_GLOBAL: join(directory, "empty-global-config"), GIT_CONFIG_NOSYSTEM: "1" };
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: directory, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    try {
+      git("init", "--quiet", "--initial-branch=master");
+      mkdirSync(join(directory, "scripts"));
+      writeFileSync(join(directory, "package.json"), JSON.stringify({ type: "module" }));
+      const installer = join(directory, "scripts/install-git-hooks.ts");
+      writeFileSync(installer, readFileSync(resolve("scripts/install-git-hooks.ts")));
+      const install = () => execFileSync("node", ["--import", loader, installer], { cwd: directory, env, stdio: ["ignore", "pipe", "pipe"] });
+      install();
+      expect(git("config", "--get", "core.hooksPath")).toBe(".githooks");
+      const guard = join(directory, "privacy-guard");
+      git("config", "core.hooksPath", guard);
+      install(); install();
+      expect(git("config", "--get", "core.hooksPath")).toBe(guard);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
 

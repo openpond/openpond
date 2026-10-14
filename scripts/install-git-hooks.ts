@@ -5,9 +5,16 @@ import { fileURLToPath } from "node:url";
 if (process.env.CI !== "1" && process.env.CI !== "true") {
   const insideWorktree = await run(["rev-parse", "--is-inside-work-tree"], true);
   if (insideWorktree === 0) {
-    const configured = await run(["config", "core.hooksPath", ".githooks"]);
-    if (configured !== 0) process.exit(configured);
-    console.log("Configured Git hooks from .githooks.");
+    const existing = await run(["config", "--get", "core.hooksPath"], true);
+    if (existing === 0) {
+      console.log("Preserved existing Git hooks configuration.");
+    } else if (existing === 1) {
+      const configured = await run(["config", "core.hooksPath", ".githooks"]);
+      if (configured !== 0) process.exit(configured);
+      console.log("Configured Git hooks from .githooks.");
+    } else {
+      process.exit(existing);
+    }
   }
 }
 
