@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useCallback, useState, type FormEvent } from "react";
 import type {
   OpenPondExtension,
@@ -209,8 +209,8 @@ export function GithubExtensionsSettings({
         </button>
       </form>
 
-      {inlineErrorMessage(localError ?? catalog.error) ? (
-        <div className="github-extension-message error" role="alert">{localError ?? catalog.error}</div>
+      {(localError ?? catalog.error) ? (
+        <ErrorToast error={localError ?? catalog.error} />
       ) : null}
 
       {preview ? (

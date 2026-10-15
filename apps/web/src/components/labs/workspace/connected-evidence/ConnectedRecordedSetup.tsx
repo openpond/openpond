@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../../lib/error-messages";
+import { ErrorToast } from "../../../common/ErrorToast";
 import { useState } from "react";
 import { verifyConnectedRecordedExecution, type ConnectedRecordedExecution } from "openpond-sdk/connected-evidence";
 import type { DatasetWorkspaceReceipt } from "openpond-sdk/dataset-workspaces";
@@ -24,7 +24,7 @@ export function RecordedGrading({ api, execution, onStarted }: { api: WorkspaceA
   return <section><h3>Score recorded outputs</h3><p>{execution.sources.length} frozen cases. This applies the selected grader to retained evidence and dispatches no target model. A model judge may incur grading cost within the admitted ceiling.</p>
     <fieldset disabled={busy || pending}><GraderReleasePicker api={api} value={grader} onChange={setGrader} /><GraderFieldMappings value={mappings} onChange={setMappings} />
       <label>Maximum grading cost (USD)<input type="number" min={0.01} max={1000} step={0.01} value={budget} onChange={event => setBudget(Number(event.target.value))} /></label></fieldset>
-    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}<button className="training-button" disabled={busy || !grader || !Number.isFinite(budget) || budget <= 0 || !ExperimentFieldMappingsSchema.safeParse(mappings).success} onClick={() => void score()}>{busy ? "Applying grader…" : pending ? "Retry same scoring operation" : "Apply grader"}</button>
+    {error ? <ErrorToast error={error} /> : null}<button className="training-button" disabled={busy || !grader || !Number.isFinite(budget) || budget <= 0 || !ExperimentFieldMappingsSchema.safeParse(mappings).success} onClick={() => void score()}>{busy ? "Applying grader…" : pending ? "Retry same scoring operation" : "Apply grader"}</button>
   </section>;
 }
 
@@ -44,6 +44,6 @@ export function ConnectedRecordedSetup({ api, dataset, caseIds, onClose, onStart
   }
   return <WorkspacePanel action="recorded-score" label="Score recorded outputs" onRequestClose={() => { if (!busy) onClose(); }}><h2>Score recorded outputs</h2>
     {!execution ? <><p>{caseIds.length} exact published cases. Freeze the selected source evidence before choosing the grader. Preparing this manifest starts no model, evaluation or training job.</p><button className="training-button secondary" disabled={busy || !caseIds.length} onClick={() => void prepare()}>{busy ? "Preparing…" : "Prepare retained evidence"}</button></> : <RecordedGrading api={api} execution={execution} onStarted={pass => onStarted(execution, pass)} />}
-    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+    {error ? <ErrorToast error={error} /> : null}
   </WorkspacePanel>;
 }

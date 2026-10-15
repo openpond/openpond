@@ -1,5 +1,6 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { TrainingRunDiagnostics } from "./workspace/TrainingRunDiagnostics";
+import { RunStageEvidenceSchema } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import { PostTrainingControlSchema } from "openpond-sdk/post-training";
 import { useEffect, useRef, useState } from "react";
@@ -20,6 +21,8 @@ const Detail = z
     events: z.array(TrainingJobEventSchema).max(10_000),
     outputs: TrainingJobOutputsSchema,
     evals: PostTrainingSummarySchema.nullable(),
+    flow:RunStageEvidenceSchema.nullable(),
+    flowError:z.string().nullable(),
   })
   .strict();
 type Value = z.infer<typeof Detail>;
@@ -184,7 +187,7 @@ export function LabHostedTrainingRunDetail({
     <div className="labs-flat-body labs-resource-page">
       <ModelProjectPageHeader title="Training run" description={jobId} />
       <nav className="evaluation-workspace-tabs" aria-label="Training sections"><button aria-selected={!diagnostics} onClick={()=>onDiagnostics?.(false)}>Overview</button><button aria-selected={diagnostics} onClick={()=>onDiagnostics?.(true)}>Diagnostics</button></nav>
-      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+      {error ? <ErrorToast error={error} /> : null}
       {pending.current ? (
         <button type="button" disabled={busy} onClick={() => void control(pending.current!.action)}>
           Retry retained {pending.current.action} action

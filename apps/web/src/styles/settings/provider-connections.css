@@ -21,13 +21,14 @@
 .provider-connections-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 12px;
 }
 .provider-connection-card {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   padding: 18px;
   border: 1px solid var(--border-default);
   border-radius: 10px;
@@ -46,6 +47,7 @@
 .provider-connection-identity .provider-toggle {
   flex-shrink: 0;
 }
+.provider-connection-controls { display: flex; align-items: center; gap: 10px; }
 .provider-connection-status {
   display: flex;
   align-items: center;
@@ -194,6 +196,7 @@
   margin: 0;
 }
 .provider-details-dialog .settings-secondary:hover:not(:disabled) { background: var(--state-hover); }
+.provider-connection-card > .settings-secondary { margin-top: auto; }
 .provider-details-dialog .native-agent-setup > details {
   padding-top: 16px;
   border-top: 1px solid var(--border-strong);

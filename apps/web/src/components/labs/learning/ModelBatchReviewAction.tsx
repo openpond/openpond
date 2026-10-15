@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import { useState } from "react";
 import type { ModelProject } from "@openpond/contracts";
 import type { ModelBatchReviewInspection } from "openpond-sdk/model-batch-review";
@@ -20,7 +20,7 @@ export function ModelBatchReviewAction({ model, training, onReview }: {
       setValue(value);
     } catch (error) { setError(error instanceof Error ? error.message : "The batch could not be opened."); }
     finally { setBusy(false); }
-  }}>{busy ? "Opening…" : "Revise batch"}</button>{error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+  }}>{busy ? "Opening…" : "Revise batch"}</button>{error ? <ErrorToast error={error} /> : null}
     {value ? <ModelBatchReviewDialog key={value.packageHash} model={model} value={value} client={client} onSave={training.actions.beginModelBatchReview} onClose={() => setValue(null)} onReview={onReview} /> : null}
   </>;
 }

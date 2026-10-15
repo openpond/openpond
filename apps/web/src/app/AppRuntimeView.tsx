@@ -1337,6 +1337,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           onShowFilePreview: () => showRightPanelDiffTab("file"),
           onShowBrowserPanel: showBrowserPanel,
           onShowFilesPanel: () => showRightPanelDiffTab("files"),
+          onShowExperimentsPanel: () => showRightPanelDiffTab("outputs", "experiments"),
           onShowGoalSidebarTab: showGoalSidebarTab,
           onShowTrainingDraftPanel: () => {
             setRightPanelMode("training");

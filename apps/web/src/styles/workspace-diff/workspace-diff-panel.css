@@ -197,7 +197,10 @@
   padding-left: 8px;
 }
 
-.workspace-diff-tab-bookmark-actions {
+.workspace-diff-tab.file .workspace-diff-tab-bookmark-actions {
+  display:inline-flex;
+  width:39px;
+  overflow:visible;
   position: absolute;
   top: 50%;
   right: 5px;
@@ -232,10 +235,6 @@
   color: var(--text-primary);
 }
 
-.workspace-diff-tab.file:hover .workspace-diff-tab-main,
-.workspace-diff-tab.file:focus-within .workspace-diff-tab-main {
-  padding-right: 39px;
-}
 
 .workspace-diff-tab.active,
 .workspace-diff-tab:hover,
@@ -263,7 +262,7 @@
   place-items: center;
   width: 16px;
   height: 16px;
-  border: 0;
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
   background: var(--state-hover);
   color: var(--text-secondary);
@@ -831,3 +830,12 @@
 .file-page-preview.thumbnail .file-page-preview-content { display: flex; justify-content: center; pointer-events: none; }
 .file-page-preview-content canvas { display: block; }
 .file-page-preview.document section { margin-bottom: 16px; }
+
+/* New tabs sit next to the existing tools; the expand control stays at the edge. */
+.workspace-diff-topbar { justify-content: flex-start; }
+.workspace-diff-topbar > .diff-icon-button:last-child { margin-left: auto; }
+.workspace-diff-tool-view { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
+.workspace-diff-tool-view[hidden] { display:none; }
+.workspace-diff-tool-view > .right-sidebar-new-tab { flex:1; }
+
+.workspace-diff-tab.file:has(.workspace-diff-tab-bookmark-actions) { min-width:80px; }

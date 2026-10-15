@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useContext, useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { htmlVisualDocument } from "@openpond/contracts/html-visual-document";
 import { HTML_VISUAL_MAX_HEIGHT, HTML_VISUAL_THEME, HTML_VISUAL_THEME_TOKENS, HtmlVisualResourceSelectionSchema, type HtmlVisualReference, type HtmlVisualTheme, type HtmlVisualResourceSelection } from "@openpond/contracts/html-visuals";
@@ -137,9 +137,9 @@ export function HtmlVisual({ visual, connection, expanded = false, snapshotRef }
     </div> : null}
     {receipt ? <div className="html-visual-selection-receipt"><span>{receipt}</span><button type="button" onClick={()=>{setReceipt(null);setSelectionError(null);operation.current=null;}}>Change</button></div> : null}
     {selectionBusy ? <p role="status" className="html-visual-status">Selecting resource…</p> : null}
-    {selectionError && inlineErrorMessage(selectionError) ? <p role="status" className="html-visual-status">{selectionError} Select the resource again to retry.</p> : null}
+    {selectionError ? <ErrorToast error={selectionError} /> : null}
       <div className="html-visual-content" style={{ minHeight: height }} hidden={receipt!==null}>
-        {!connection ? <p className="html-visual-status">Connect to view this visual.</p> : error && inlineErrorMessage(error) ? <p className="html-visual-status" role="status">{error} <button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></p> : <>
+        {!connection ? <p className="html-visual-status">Connect to view this visual.</p> : error ? <ErrorToast error={error}><button type="button" onClick={() => setRetry(value => value + 1)}>Retry</button></ErrorToast> : <>
           {documentSource ? <iframe ref={frame} title={visual.output.title} sandbox="allow-scripts" referrerPolicy="no-referrer"
             allow="camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'"
             srcDoc={documentSource} style={{ height, opacity: ready ? 1 : 0 }} /> : null}

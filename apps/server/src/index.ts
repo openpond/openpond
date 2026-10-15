@@ -599,7 +599,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     const [file, secrets, managedAdapterModels] = await Promise.all([
       readProvidersFile(providersFilePath),
       readProviderSecrets(providerSecretPaths),
-      listManagedAdapterProviderModels(store),
+      loadAppPreferences().then((preferences) => listManagedAdapterProviderModels(store, preferences.defaultTeamId)),
     ]);
     return {
       secrets,

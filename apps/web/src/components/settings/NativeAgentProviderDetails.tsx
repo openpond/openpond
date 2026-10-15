@@ -1,7 +1,7 @@
+import { ErrorToast } from "../common/ErrorToast";
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { modelDisplayLabel } from "../../lib/model-display";
-import { inlineErrorMessage } from "../../lib/error-messages";
 import { NativeSetupTerminal } from "../terminal/NativeSetupTerminal";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, CircleAlert, Loader2, RefreshCw } from "../icons";
@@ -109,14 +109,14 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
   }
   const models = result?.settings.modelCaches[providerId]?.models ?? cachedModels;
   const modelNames = [...new Set(models.map(model => modelDisplayLabel(model.displayName || model.id)))];
-  const message = inlineErrorMessage(error ?? result?.error);
+  const message = error ?? result?.error;
   return <div className="provider-dialog-body native-agent-setup">
     <p>{registered ? `Uses the configured ${status.displayName} ACP command and its own login.` : `Uses your existing ${status.displayName} installation and login.`}</p>
     <div className="native-connection-status">
       <div role="status" aria-live="polite">{working ? <><Loader2 size={16} className="settings-spin" /><span>Checking connection…</span></> : result?.status === "ready" ? <><CheckCircle2 size={16} /><span>{config.enabled ? "Connected" : "Connected, disabled for chat"}</span></> : <><CircleAlert size={16} /><span>{result?.status === "missing" ? "Installation not found" : result?.status === "needs_login" ? "Sign in required" : "Connection needs attention"}</span></>}</div>
       <button type="button" className="settings-secondary" disabled={disabled || !connection} onClick={() => void check()} title="Refresh connection" aria-label="Refresh connection"><RefreshCw size={14} /> Refresh</button>
     </div>
-    {message ? <p role="alert">{message}</p> : null}
+    {message ? <ErrorToast error={message} /> : null}
     {modelNames.length ? <section className="native-model-section" aria-label="Available models"><div className="native-model-heading"><h3>Models</h3><small>{modelNames.length} available</small></div><div className="native-model-list" tabIndex={0} aria-label="Models" role="list">{modelNames.map(name => <span key={name} role="listitem">{name}</span>)}</div><small>Choose a model when starting a chat.</small></section> : null}
     {result?.version ? <small className="native-agent-version">{result.version}</small> : null}
     {!registered && result?.status === "needs_login" ? <button type="button" className="settings-secondary" disabled={disabled || dirty || !connection} title={dirty ? "Save changes before signing in to a different installation" : undefined} onClick={() => void login()}>Sign in</button> : null}

@@ -18,6 +18,7 @@ import {
 
 export type ManagedRegistryArtifact = {
   id: string;
+  label?: string | null;
   source: string;
   sourceRef: string;
   state: string;

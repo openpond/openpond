@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { CircleAlert, Home, PanelsTopLeft } from "lucide-react";
 import { useConnectionStatus } from "../../hooks/useConnectionStatus";
 import { CalendarClock, FileOutput, FolderGit2, Globe2, MessageSquare, Shapes } from "../icons";
@@ -13,6 +14,7 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
   const connectionStatus = useConnectionStatus(sidebar.connection);
   const destinations = [
     { view: "chat", label: "Home", Icon: Home },
+    { view: "training", label: "Training", Icon: PanelsTopLeft },
     { view: "scheduled", label: "Workflows", Icon: CalendarClock },
     { view: "outputs", label: "Outputs", Icon: FileOutput },
     { view: "apps", label: "Apps", Icon: Shapes },
@@ -44,13 +46,17 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
 
   return <nav className="desktop-navigation-rail" aria-label="Desktop destinations">
     <div className="desktop-rail-destinations">
-      <button type="button" data-rail-tooltip="Training" aria-label="Training"
-        className={`desktop-rail-button desktop-training-entry${sidebar.productArea === "console" ? " active" : ""}`}
-        aria-expanded={sidebar.productArea === "console" && open} onClick={() => {
-          if (sidebar.productArea === "console") sidebar.setSidebarOpen(!open);
-          else { sidebar.onProductAreaChange("console"); sidebar.setSidebarOpen(true); }
-        }}><PanelsTopLeft size={19} /></button>
+      <button type="button" className="desktop-rail-button desktop-rail-brand" aria-label="OpenPond" data-rail-tooltip="OpenPond"
+        onClick={() => void select("chat")}><img src={OPENPOND_ICON_URL} alt="" /></button>
       {destinations.map(({ view, label, Icon }) => {
+        if (view === "training") return <button key={view} type="button" data-rail-tooltip={label} aria-label={label}
+          className={`desktop-rail-button desktop-training-entry${sidebar.productArea === "console" ? " active" : ""}`}
+          aria-current={sidebar.productArea === "console" ? "page" : undefined}
+          aria-expanded={sidebar.productArea === "console" && open} onClick={() => {
+            setAccountOpen(false);
+            if (sidebar.productArea === "console") sidebar.setSidebarOpen(!open);
+            else { sidebar.onProductAreaChange("console"); sidebar.setSidebarOpen(true); }
+          }}><Icon size={19} /></button>;
         const active = sidebar.productArea === "chat" && sidebar.view === view;
         return <button key={view} type="button" data-rail-tooltip={label} aria-label={label}
           aria-current={active ? "page" : undefined} aria-expanded={view === "chat" ? active && open : undefined}

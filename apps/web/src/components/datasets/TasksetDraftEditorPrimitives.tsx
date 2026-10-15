@@ -1,3 +1,4 @@
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useState, type ReactNode } from "react";
 
 export function EditorSection({
@@ -66,7 +67,7 @@ export function JsonObjectFileImport({
           }}
         />
       </label>
-      {error ? <small className="taskset-draft-json-error">{error}</small> : null}
+      {error ? <ErrorToast error={error} /> : null}
     </span>
   );
 }
@@ -145,7 +146,7 @@ function JsonField({
     <Field label={label}>
       <textarea disabled={disabled} rows={7} value={text} onChange={(event) => setText(event.target.value)} />
       <span className="taskset-draft-json-actions">
-        {error ? <small className="taskset-draft-json-error">{error}</small> : <small>JSON is applied explicitly.</small>}
+        {error ? <ErrorToast error={error} /> : <small>JSON is applied explicitly.</small>}
         <button
           className="training-text-button"
           disabled={disabled || text === serialized}

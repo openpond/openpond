@@ -129,5 +129,19 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     expect(state.activeScopeId).toBe(second.id);
     expect(state.scopes[0]!.runs[0]!.datasetRevision).toBe(1);
     expect(chatExperimentContext((await store.getSession("chat-b"))?.metadata).scopes[0]!.dataset?.owner).toEqual(ownerA);
+    // Inspecting a training job without a dataset, then browsing a dataset,
+    // must not present that job as a run of the newly selected dataset.
+    await store.insertSessionAtFront(SessionSchema.parse({ id:"chat-c",provider:"codex",title:"Context switch",appId:null,appName:null,cwd:null,codexThreadId:null,pinned:false,archived:false,order:0,
+      createdAt:"2026-10-01T00:00:00.000Z",updatedAt:"2026-10-01T00:00:00.000Z",status:"idle" }));
+    await store.insertTurn(TurnSchema.parse({ id:"training-view",sessionId:"chat-c",prompt:"Status",providerTurnId:null,
+      startedAt:"2026-10-13T00:00:00.000Z",completedAt:null,status:"in_progress",error:null,metadata:{} }));
+    await scopes.attachTraining("chat-c","training-view",training);
+    const switched = await scopes.select("chat-c",{dataset:dataset(1)});
+    expect(switched.scopes[0]!.dataset).toBeNull();
+    expect(switched.scopes[0]!.training).toEqual([training]);
+    expect(switched.activeScopeId).toBe(switched.datasetFocus!.id);
+    expect(switched.datasetFocus?.dataset?.id).toBe("examples");
+    expect(switched.datasetFocus?.training ?? []).toEqual([]);
+
   } finally { await store.close(); await rm(home, { recursive: true, force: true }); }
 });

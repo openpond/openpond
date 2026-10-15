@@ -97,7 +97,8 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       if ((await nativeCapabilityProbeKeys(launch.sourceHome)).has(nativeCapabilityProbeKey(item.provider, item.session.nativeSessionId)))
         throw new Error("Capability discovery sessions cannot be opened as user conversations.");
       if (branch && item.provider !== "claude-code") throw new Error("Explicit branch selection is only supported for Claude Code.");
-      const retained = await readSession(item.source, item.session, branch ? { branchLeafId: branch.leafId, expectedBranchRevision: branch.revision } : {});
+      const retained = await readSession(item.source, item.session, branch ? { branchLeafId: branch.leafId, expectedBranchRevision: branch.revision }
+        : item.provider === "claude-code" ? { latestBranch: true } : {});
       const native = retained.preview.sessions.find((session) => session.sessionId === item.session.nativeSessionId);
       if (!native) throw new Error("Source history does not match the selected native session.");
       const instance = launch.instanceId;
@@ -246,7 +247,19 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       }
       return session;
     })();
-    opening.set(openingKey, operation); try { return await operation; } finally { opening.delete(openingKey); }
+    opening.set(openingKey, operation);
+    try { return await operation; }
+    catch (error) {
+      if (!branch) {
+        const retained = (await deps.store.sessionShells()).find(session => session.metadata?.nativeHistoryId === id && !session.metadata.nativeBranch);
+        if (retained?.metadata?.nativeHistoryLoaded === false) {
+          const reason = `Could not open this conversation: ${error instanceof Error ? error.message : "History is unavailable. Try again."}`;
+          const updated = await deps.store.updateSession(retained.id, current => ({ ...current, metadata: { ...current.metadata, nativeReadOnlyReason: reason } }));
+          if (updated) await deps.appendRuntimeEvent(event({ sessionId: updated.id, name: "session.updated", source: "server", data: { session: updated } }));
+        }
+      }
+      throw error;
+    } finally { opening.delete(openingKey); }
   }
   const handle = async (action: string, payload: unknown) => {
     if (action === "list") { const input = z.object({ cursors: z.record(z.string().max(200), z.string().max(4096)).optional(), retain: z.boolean().optional() }).parse(payload ?? {}); return list(input.cursors, input.retain); }

@@ -283,7 +283,7 @@ export async function inspectSessionBranches(source: NativeSource, session: Nati
 export async function readSession(
   source: NativeSource,
   session: NativeSession,
-  input: { branchLeafId?: string; expectedBranchRevision?: string; branchAnchor?: NativeBranchAnchor } = {},
+  input: { branchLeafId?: string; expectedBranchRevision?: string; branchAnchor?: NativeBranchAnchor; latestBranch?: boolean } = {},
 ) {
   if (session.issue) throw new Error(session.issue);
   if (session.sourceInstanceId !== source.instanceId)
@@ -313,6 +313,12 @@ export async function readSession(
     const file = files[0]!;
     const graph = claudeGraph(connectedJsonLines(file));
     if (graph.sessionId !== session.nativeSessionId) throw new Error("Native session changed identity.");
+    if (input.latestBranch) {
+      if (input.branchLeafId || input.expectedBranchRevision || input.branchAnchor) throw new Error("Choose either the latest conversation or an explicit branch.");
+      // Desktop inspection follows the native conversation. Imports keep their
+      // existing explicit branch authority and never enable this option.
+      files = [{ ...file, text: graph.select(graph.latestLeafId()).chain.map(row => JSON.stringify(row)).join("\n") + "\n" }];
+    }
     if (input.branchAnchor) {
       if (input.branchLeafId || input.expectedBranchRevision) throw new Error("Choose either a frozen branch snapshot or a followed branch anchor.");
       const anchor = graph.select(input.branchAnchor.leafId);

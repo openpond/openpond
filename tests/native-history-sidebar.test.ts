@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -13,6 +13,7 @@ import { nativeHistoryWorkspaceAvailable } from "../apps/server/src/runtime/nati
 import { createNativeCapabilityProbe } from "../apps/server/src/runtime/native-agents/capability-probes.js";
 import { previewAgentImport } from "@openpond/evals/connected-evidence";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages.js";
+import { readSession } from "../packages/evals/src/native-conversations/history.js";
 
 const acquisition = vi.hoisted(() => ({
   discover: vi.fn(), list: vi.fn(), read: vi.fn(), sourceHome: "/fixture-account",
@@ -105,6 +106,41 @@ test("retained Claude task results rebuild progress and keep notifications out o
   // A typed user request with the same syntax stays a user request.
   const typed = buildChatMessages([{ id: "typed", name: "turn.started", source: "user", timestamp: "2026-10-14T00:00:00Z", sessionId: "chat", args: { prompt: notification } }]);
   expect(typed[0]?.role).toBe("user");
+});
+
+// The actual saved Claude graph must open the canonical chat, preserve its
+// resume identity and load messages after a restart, without a UUID selection.
+test("opens a branched Claude transcript into its resumable sidebar conversation", async () => {
+  const f = await fixture();
+  const sessionId = "a635de7e-1111-4222-8333-444444444444";
+  const path = join(f.home, `${sessionId}.jsonl`);
+  const selectedSource: NativeSource = { ...source("claude-latest", false), source: "claude_code", root: path, acquisition: "files" };
+  const saved = { ...native(selectedSource.instanceId, sessionId), path, cwd: f.home };
+  const rows = [
+    { uuid: "request", parentUuid: null, type: "user", message: { content: "Hello" } },
+    { uuid: "old-reply", parentUuid: "request", type: "assistant", message: { content: "Earlier attempt", stop_reason: "end_turn" } },
+    { uuid: "reply", parentUuid: "request", type: "assistant", message: { content: "Current answer", stop_reason: "end_turn" } },
+  ].map((row, index) => ({ ...row, sessionId, cwd: f.home, timestamp: new Date(1000 + index * 1000).toISOString() }));
+  await writeFile(path, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+  acquisition.discover.mockResolvedValue([selectedSource]);
+  acquisition.list.mockResolvedValue({ items: [saved], nextCursor: null });
+  acquisition.read.mockImplementation(readSession);
+  const handle = f.api(async () => true);
+  await handle("list", { retain: true });
+  const id = selectionId(selectedSource.instanceId, sessionId);
+  acquisition.read.mockRejectedValueOnce(new Error("Source temporarily unavailable"));
+  await expect(handle("open", { id })).rejects.toThrow("Source temporarily unavailable");
+  expect((await f.store.getSession(`native-${id}`))?.metadata).toMatchObject({ nativeHistoryLoaded: false,
+    nativeReadOnlyReason: expect.stringContaining("Source temporarily unavailable") });
+  const opened = await handle("open", { id }) as Session;
+  expect(opened).toMatchObject({ id: `native-${id}`, nativeAgent: { provider: "claude-code", sessionId, cwd: f.home }, metadata: { nativeHistoryLoaded: true, nativeReadOnlyReason: null } });
+  expect(opened.metadata?.nativeBranch).toBeUndefined();
+  const messages = buildChatMessages(await f.store.runtimeEventsForSession(opened.id));
+  expect(messages.map(message => message.content)).toEqual(["Hello", "Current answer"]);
+  await f.reopen();
+  const reopened = await f.api(async () => true)("open", { id }) as Session;
+  expect(reopened.nativeAgent).toEqual(opened.nativeAgent);
+  expect(buildChatMessages(await f.store.runtimeEventsForSession(opened.id)).map(message => message.content)).toEqual(["Hello", "Current answer"]);
 });
 
 async function fixture() {

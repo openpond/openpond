@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { AcpAgentBrowser } from "./AcpAgentBrowser";
 import { apiFetch } from "../../api/api-client";
 import { UrlModelConnections } from "./UrlModelConnections";
@@ -30,9 +30,8 @@ import { isRegisteredAcpProvider, PROVIDER_IDS } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
 import type { CheckNativeProvider } from "./native-provider-check";
 import { DESKTOP_AGENT_PROVIDERS, isAcpProvider, NativeAgentProviderDetails } from "./NativeAgentProviderDetails";
-import { ProviderPlanUsage } from "./ProviderPlanUsage";
+import { ProviderPlanUsage, ProviderPlanUsageRefresh } from "./ProviderPlanUsage";
 import {
-  chatModelLabel,
   isRunnableChatProvider,
   modelOptionsForProvider,
   type DropdownOption,
@@ -121,22 +120,6 @@ export function providerCredentialLabel(status: ProviderStatus, settings: Provid
   if (status.credential.source === "chatgpt_subscription") return "Subscription";
   if (usesZaiCodingPlan(status, settings)) return "Coding Plan key";
   return "API key";
-}
-
-function providerMeta(status: ProviderStatus, settings: ProviderSettings): string {
-  const cache = settings.modelCaches[status.id];
-  if (status.routing.localByok && status.enabled && !status.credential.connected) return "";
-  if (!status.enabled && status.id !== "openpond") return "";
-  const modelCount = Math.max(cache?.models.length ?? 0, status.modelIds.length);
-  const modelLabel = status.defaultModel ? chatModelLabel(status.defaultModel, settings, status.id) : "";
-  const modelCountLabel = modelCount === 1 ? "1 model" : `${modelCount} models`;
-  const credentialLabel = providerCredentialLabel(status, settings);
-  const parts = [
-    credentialLabel,
-    cache ? modelCountLabel : "",
-    modelLabel,
-  ].filter(Boolean);
-  return parts.join(" · ");
 }
 
 function canToggleProvider(providerId: ChatProvider): boolean {
@@ -231,7 +214,7 @@ export function ProviderSettingsSection({
   return (
     <section className="account-settings provider-connections-settings">
       <div className="provider-connections-heading"><h1>Providers</h1><AcpAgentBrowser connection={connection} onChanged={onProvidersChanged} onAdded={id => setDetailsProviderId(id)} /></div>
-      <div className="provider-connections-intro"><p>Manage your installed agents and login. Sync their conversations from Connections.</p><button type="button" className="settings-secondary" onClick={() => void navigateDesktopRoute({ kind: "view", view: "apps" })}>Connections & apps</button></div>
+      <div className="provider-connections-intro"><p>Manage your installed agents and login. Sync conversations from Continuous learning.</p><button type="button" className="settings-secondary" onClick={() => void navigateDesktopRoute({ kind: "view", view: "apps" })}>Apps & learning</button></div>
 
       {providers ? (
         <div className="provider-connections-panel">
@@ -248,6 +231,8 @@ export function ProviderSettingsSection({
                 return (
                   <div className="provider-connection-card" role="listitem" key={providerId}>
                     <div className="provider-connection-identity"><strong>{status.displayName}</strong>
+                    <div className="provider-connection-controls">
+                    {providerId === "codex" || providerId === "claude-code" ? <ProviderPlanUsageRefresh connection={connection} provider={providerId} /> : null}
                     <label className="provider-toggle" aria-label={`Enable ${status.displayName}`}>
                       <input
                         type="checkbox"
@@ -260,11 +245,11 @@ export function ProviderSettingsSection({
                       <span />
                     </label>
                     </div>
+                    </div>
                     <div className={`provider-connection-status ${providerStateTone(status)}`}>
                       {rowBusy ? <Loader2 size={13} className="settings-spin" /> : null}
                       <span>{providerStateLabel(status)}</span>
                     </div>
-                    <p>{providerMeta(status, providers) || (status.enabled ? "Check your installation and sign in to use this agent." : "Enable this agent to use it in chats.")}</p>
                     {providerId === "codex" || providerId === "claude-code" ? <ProviderPlanUsage connection={connection} provider={providerId} /> : null}
                     <button
                       type="button"
@@ -293,7 +278,7 @@ export function ProviderSettingsSection({
         </div>
       ) : null}
 
-      {removalError && inlineErrorMessage(removalError) ? <p role="alert">{removalError}</p> : null}
+      {removalError ? <ErrorToast error={removalError} /> : null}
 
       <UrlModelConnections connection={connection} onChanged={async () => { if (connection) onProvidersChanged(await api.providerSettings(connection)); }} />
 

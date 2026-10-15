@@ -1,3 +1,4 @@
+import { ErrorToast } from "../common/ErrorToast";
 import type { ReactNode } from "react";
 import type { AccountState, ProviderStatus } from "@openpond/contracts";
 import type { TrainingProject } from "openpond-sdk/training-projects";
@@ -102,7 +103,7 @@ export function AgentConnectionCard({
                   {item.lastAdmissionAt ? (
                     <small>Last sync: {new Date(item.lastAdmissionAt).toLocaleString()}</small>
                   ) : null}
-                  {item.error ? <small role="alert">{item.error}</small> : null}
+                  {item.error ? <ErrorToast error={item.error} /> : null}
                 </div>
               ))
             ) : (

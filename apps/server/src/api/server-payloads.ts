@@ -12,6 +12,7 @@ import { nativeTerminalCommand } from "../runtime/native-agents/terminal-command
 import { NATIVE_AGENTS, nativeAgentLaunch } from "../runtime/native-agents/config.js";
 import { applyNativeAgentStatus, probeNativeAgent } from "../runtime/native-agents/setup.js";
 import { withCodexModelCatalog } from "../providers/codex-model-catalog.js";
+import { withOpenAiSubscriptionCatalog } from "../providers/openai-subscription-catalog.js";
 import { isNativeAgentId } from "../runtime/native-agents/config.js";
 import { createNativeHistory } from "../runtime/native-agents/history.js";
 import { createNativeHistoryWorkspace } from "../runtime/native-agents/history-workspace.js";
@@ -302,9 +303,9 @@ export function createServerPayloads(deps: {
     const [providerState, secrets, managedAdapterModels] = await Promise.all([
       loadProvidersFileWithCatalog({ refresh: input.refreshCatalog ?? true }),
       readProviderSecrets(providerSecretPaths),
-      listManagedAdapterProviderModels(store),
+      loadAppPreferences().then((preferences) => listManagedAdapterProviderModels(store, preferences.defaultTeamId)),
     ]);
-    return withUrlModels(store.home, await withCodexModelCatalog(await applyNativeAgentStatus(withManagedAdapterProviderModels(
+    return withUrlModels(store.home, await providerModelCatalogs(await applyNativeAgentStatus(withManagedAdapterProviderModels(
       buildProviderSettings({
         file: providerState.file,
         secrets,
@@ -313,7 +314,20 @@ export function createServerPayloads(deps: {
         catalog: providerState.catalog,
       }),
       managedAdapterModels
-    )), input.codex ?? getCodexStatus()));
+    )), secrets, input.codex ?? getCodexStatus()));
+  }
+
+  async function providerModelCatalogs(settings: ProviderSettings, secrets: Awaited<ReturnType<typeof readProviderSecrets>>, codex: CodexStatus, force = false) {
+    await Promise.all([
+      withCodexModelCatalog(settings, codex, force),
+      withOpenAiSubscriptionCatalog(settings, { secrets, force, clientVersion: codex.version?.match(/\d+\.\d+\.\d+/)?.[0],
+        saveCredential: async credential => {
+          const original = secrets.providers.openai;
+          await writeProviderChatGptSubscriptionCredential({ paths: providerSecretPaths, providerId: "openai", credential,
+            timestamp: now(), expected: { credentialId: original?.credentialId, revision: original?.revision } });
+        } }),
+    ]);
+    return settings;
   }
 
   async function updateAppPreferencesPayload(
@@ -361,9 +375,9 @@ export function createServerPayloads(deps: {
           loadOpenPondData({ force: false }),
           loadProvidersFileWithCatalog({ refresh: options.refreshCatalog ?? true }),
           readProviderSecrets(providerSecretPaths),
-          listManagedAdapterProviderModels(store),
+          loadAppPreferences().then((preferences) => listManagedAdapterProviderModels(store, preferences.defaultTeamId)),
         ]);
-      return withUrlModels(store.home, await withCodexModelCatalog(await applyNativeAgentStatus(withManagedAdapterProviderModels(
+      return withUrlModels(store.home, await providerModelCatalogs(await applyNativeAgentStatus(withManagedAdapterProviderModels(
         buildProviderSettings({
           file: providerState.file,
           secrets,
@@ -372,7 +386,7 @@ export function createServerPayloads(deps: {
           catalog: providerState.catalog,
         }),
         managedAdapterModels
-      )), getCodexStatus(), options.refreshCodexModels));
+      )), secrets, getCodexStatus(), options.refreshCodexModels));
     });
   }
 
@@ -385,7 +399,7 @@ export function createServerPayloads(deps: {
     const [file, secrets, managedAdapterModels] = await Promise.all([
       loadProvidersFile(),
       readProviderSecrets(providerSecretPaths),
-      listManagedAdapterProviderModels(store),
+      loadAppPreferences().then((preferences) => listManagedAdapterProviderModels(store, preferences.defaultTeamId)),
     ]);
     const catalog = cachedProviderCatalog(file);
     return {
@@ -434,7 +448,7 @@ export function createServerPayloads(deps: {
       async () => {
         const request = parseProviderModelsRefreshRequest(payload);
         const state = await localProviderRuntimeState();
-        if (providerId === "codex") {
+        if (providerId === "codex" || providerId === "openai" && state.secrets.providers.openai?.source === "chatgpt_subscription") {
           const providers = await providerSettingsPayload({ refreshCodexModels: true });
           return { ...listProviderModels(providers, providerId, { query: request.query, refresh: false, limit: 100 }), providers };
         }
@@ -475,7 +489,7 @@ export function createServerPayloads(deps: {
           normalizeProvidersFile({
             ...current,
             modelCaches: {
-              ...(current.modelCaches ?? {}),
+              ...current.modelCaches,
               [providerId]: cache,
             },
           })
@@ -713,9 +727,10 @@ export function createServerPayloads(deps: {
     for (const [providerId, cache] of Object.entries(settings.modelCaches)) {
       modelCaches[providerId] = {
         ...cache,
-        // Saved native catalogs are small and needed before a selected agent's
-        // capability refresh completes. Broad BYOK catalogs stay lazy.
-        models: providerId === "openpond" || providerId === "codex" || providerId === "tvc" || providerId === "custom-openai-compatible" || isNativeAgentId(providerId) ? cache.models : [],
+        // Native and subscription catalogs are small and needed by the chat
+        // picker immediately. Broad BYOK catalogs stay lazy.
+        models: providerId === "openpond" || providerId === "codex" || providerId === "tvc" || providerId === "custom-openai-compatible" || isNativeAgentId(providerId)
+          || settings.statuses[providerId]?.credential.source === "chatgpt_subscription" ? cache.models : [],
       };
     }
     return {

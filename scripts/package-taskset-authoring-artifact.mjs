@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ARTIFACT_VERSION = "openpond.taskset-authoring.2026-10-13.1";
+const ARTIFACT_VERSION = "openpond.taskset-authoring.2026-10-14.1";
 const SOURCE_COMMIT = "1792857590d7093e1aaae1191fdf9364fc74a974";
 const SKILL_NAME = "openpond-taskset-authoring";
 const FILES = [
@@ -13,6 +13,8 @@ const FILES = [
   "references/method-selection.md",
   "references/privacy-and-provenance.md",
   "references/benchmarking.md",
+  "references/data-quality.md",
+  "references/failure-diagnosis.md",
 ];
 
 const repositoryRoot = path.resolve(

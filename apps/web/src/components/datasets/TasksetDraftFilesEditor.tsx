@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { lazy, Suspense, useRef, useState } from "react";
 import type { TasksetDraft } from "@openpond/contracts";
 import type { TasksetDraftFile, TasksetDraftFileInfo } from "openpond-sdk/model-taskset-authoring";
@@ -88,7 +88,7 @@ export function TasksetDraftFilesEditor({ draft, initialFiles, training, onSaved
 
   return <><AppDialog ariaLabel="Taskset draft files" className="taskset-draft-files-dialog" dismissDisabled={busy} onClose={() => { void guard.requestLeave(onClose); }}>
     <header><div><h2>Taskset files</h2><p>Edit code and dependencies. Generated manifests are managed by the draft forms.</p></div><button className="training-button secondary" type="button" disabled={busy} onClick={() => { void guard.requestLeave(onClose); }}>Done</button></header>
-    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+    {error ? <ErrorToast error={error} /> : null}
     {needsReload ? <button className="training-button secondary" type="button" disabled={busy} onClick={() => { void reload(); }}>Reload latest draft</button> : null}
     {recovery ? <section aria-label="Resolve file changes">
       <p>{recovery.draft.status === "published" ? "This draft has been published and is now read only." : `Loaded draft revision ${recovery.draft.revision}. Choose which file content to keep; your edits remain in the editor below.`}</p>

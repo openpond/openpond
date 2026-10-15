@@ -243,6 +243,8 @@ export type MainPaneProps = {
       displayPrompt?: string;
       usageAttribution?: UsageRequestAttribution;
       turnMetadata?: Record<string, unknown>;
+      sessionMetadata?: Record<string, unknown>;
+      onSessionCreated?: (session: Session) => void;
     }
   ) => Promise<boolean>;
   stopTurn: (reason?: string) => Promise<boolean>;
@@ -255,6 +257,7 @@ export type MainPaneProps = {
   onShowGoalSidebarTab: () => void;
   onShowTrainingDraftPanel: () => void;
   onShowFilesPanel: () => void;
+  onShowExperimentsPanel: () => void;
   onShowRightChatPanel: () => void;
   onAddRightChat: () => void;
   onOpenRightChatForSession: (sessionId: string, session?: Session) => void;

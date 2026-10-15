@@ -113,7 +113,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
             source: "provider",
             output: marker.text,
             data: {
-              ...(asRecord(item.data) ?? {}),
+              ...asRecord(item.data),
               kind: marker.kind,
             },
           });

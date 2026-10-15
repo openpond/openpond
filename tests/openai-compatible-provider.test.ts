@@ -11,6 +11,8 @@ import {
 } from "../apps/server/src/openpond/openai-compatible-provider";
 import type { ProvidersFile } from "../apps/server/src/types";
 import type { ProviderSecrets } from "../apps/server/src/openpond/provider-secrets";
+import { modelOptionsForProvider, defaultModelForProvider } from "../apps/web/src/lib/app-models";
+import { withOpenAiSubscriptionCatalog } from "../apps/server/src/providers/openai-subscription-catalog";
 
 const originalFetch = globalThis.fetch;
 
@@ -19,6 +21,70 @@ afterEach(() => {
 });
 
 describe("OpenAI-compatible provider adapter", () => {
+  // Failure story: subscription discovery used to return the old saved catalog;
+  // the server and picker then reintroduced unavailable models from presets.
+  test("discovers account-scoped subscription models and keeps them authoritative through the picker", async () => {
+    const state = subscriptionProviderState();
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      expect(url.origin + url.pathname).toBe("https://chatgpt.com/backend-api/codex/models");
+      expect(url.searchParams.get("client_version")).toBe("0.159.1");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("authorization")).toBe("Bearer access-token");
+      expect(headers.get("ChatGPT-Account-Id")).toBe("acct_123456");
+      expect(headers.get("accept")).toBe("application/json");
+      return Response.json({ models: [
+        { slug: "hidden-model", display_name: "Hidden", visibility: "hide", priority: 0 },
+        { slug: "gpt-6.1-sol", display_name: "GPT-6.1-Sol", visibility: "list", priority: 1,
+          context_window: 272000, input_modalities: ["text", "image"],
+          supported_reasoning_levels: [{ effort: "high" }, { effort: "max" }] },
+      ] });
+    };
+    const models = await listOpenAiCompatibleProviderModels({ ...state, providerId: "openai", subscriptionClientVersion: "0.159.1" });
+    expect(models).toMatchObject([{ id: "gpt-6.1-sol", providerId: "openai", source: "provider",
+      capabilities: { vision: true, reasoningEfforts: ["high", "max"] } }]);
+    const settings = buildProviderSettings({ secrets: state.secrets, file: { version: 1,
+      providers: state.settings.providers, modelCaches: { openai: {
+        providerId: "openai", models, source: "provider", fetchedAt: new Date().toISOString(), lastError: null,
+      } } } });
+    expect(settings.statuses.openai?.modelIds).toEqual(["gpt-6.1-sol"]);
+    expect(modelOptionsForProvider("openai", settings).map(option => option.value)).toEqual(["gpt-6.1-sol"]);
+    expect(defaultModelForProvider("openai", settings)).toBe("gpt-6.1-sol");
+    settings.modelCaches.openai!.models = [];
+    expect(modelOptionsForProvider("openai", settings)).toEqual([]);
+    expect(defaultModelForProvider("openai", settings)).toBe("");
+  });
+
+  // Failure story: a catalog fetched under one login must never be reused for
+  // another account, and failed discovery must not advertise fabricated models.
+  test("subscription catalog coalesces reads without crossing credential boundaries", async () => {
+    let calls = 0;
+    globalThis.fetch = async (_input, init) => {
+      calls++;
+      const account = new Headers(init?.headers).get("ChatGPT-Account-Id");
+      if (account === "unavailable-account") return Response.json({ error: "unavailable" }, { status: 503 });
+      return Response.json({ models: [{ slug: `model-${account}`, display_name: `Model ${account}`, visibility: "list" }] });
+    };
+    const state = subscriptionProviderState();
+    const inputs = { secrets: state.secrets, clientVersion: "catalog-boundary-test", saveCredential: async () => {} };
+    const [first, simultaneous] = await Promise.all([
+      withOpenAiSubscriptionCatalog(structuredClone(state.settings), inputs),
+      withOpenAiSubscriptionCatalog(structuredClone(state.settings), inputs),
+    ]);
+    expect(calls).toBe(1);
+    expect(first.modelCaches.openai?.models).toEqual(simultaneous.modelCaches.openai?.models);
+    const other = structuredClone(state.secrets);
+    other.providers.openai!.oauth!.accountId = "other-account";
+    const next = await withOpenAiSubscriptionCatalog(structuredClone(state.settings), { ...inputs, secrets: other });
+    expect(next.statuses.openai?.modelIds).toEqual(["model-other-account"]);
+    other.providers.openai!.oauth!.accountId = "unavailable-account";
+    const unavailable = await withOpenAiSubscriptionCatalog(structuredClone(state.settings), { ...inputs, secrets: other });
+    expect(unavailable.statuses.openai?.available).toBe(false);
+    expect(unavailable.modelCaches.openai?.lastError).toBeTruthy();
+    expect(modelOptionsForProvider("openai", unavailable)).toEqual([]);
+    expect(calls).toBe(3);
+  });
+
   test("streams chat completions with local BYOK credentials", async () => {
     const requests: Array<{
       url: string;

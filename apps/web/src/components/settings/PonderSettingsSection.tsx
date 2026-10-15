@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useState } from "react";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { PonderDesktopAccessSettings } from "./PonderDesktopAccessSettings";
@@ -108,7 +108,7 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
         <p>Use your deployed model and keep track of your conversations and workflows.</p>
       </header>
       <PonderDesktopAccessSettings connection={connection} />
-      {error && inlineErrorMessage(error) && <p role="alert">{error}</p>}
+      {error && <ErrorToast error={error} />}
       {error && !payload && (
         <button type="button" onClick={() => setReload((value) => value + 1)}>
           Retry

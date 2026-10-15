@@ -50,9 +50,12 @@ Options:
   --cursor <string>
   --dataset-id <string>
   --expected-revision <integer>
+  --grader-id <string>
   --input-file <string>
   --json
+  --limit <integer>
   --local
+  --offset <integer>
   --operation-id <string>
   --package-hash <string>
   --project <string>

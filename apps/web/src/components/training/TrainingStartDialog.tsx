@@ -1,4 +1,7 @@
-import { useEffect, useRef } from "react";
+import { ErrorToast } from "../common/ErrorToast";
+import { TrainingRunSizeControl } from "./TrainingRunSizeControl";
+import { trainingRunDefaults, trainingSmokeLimits } from "./training-run-presets";
+import { useEffect, useRef, useState } from "react";
 import type { TrainingDestinationId } from "@openpond/contracts";
 import { X } from "../icons";
 import { TrainingCatalogSetup } from "./TrainingCatalogSetup";
@@ -62,6 +65,7 @@ export function TrainingStartDialog({
   onReadinessChange,
   onConfigurationChange,
   runPreset = "custom",
+  onRunPresetChange,
   hideMethodTabs = false,
   approvalPresentation = "inline",
   configurationContent,
@@ -84,6 +88,7 @@ export function TrainingStartDialog({
     setMaxSteps,
     trainingExamples,
     setTrainingExamples,
+    optimizerIterations, setOptimizerIterations,
     sequenceLength,
     setSequenceLength,
     rank,
@@ -136,6 +141,8 @@ export function TrainingStartDialog({
     initialDestination,
     method,
   });
+  const [sizingEdited, setSizingEdited] = useState(false);
+  const smokeLimits = trainingSmokeLimits(method);
   const destination = destinations.find((item) => item.destinationId === destinationId) ?? null;
   const isBootstrap = method === "sft" && primaryMethod !== "sft" && bootstrap?.method === "sft";
   const approvedExamples =
@@ -183,11 +190,16 @@ export function TrainingStartDialog({
     if (initializedTargetDefaultsRef.current === key) return;
     initializedTargetDefaultsRef.current = key;
     if (!savedRecipe) {
+      const defaults = trainingRunDefaults(runPreset, method, {
+        maxSteps: selectedComputeTarget.defaults.maxSteps,
+        rolloutGroupSize: selectedComputeTarget.defaults.rolloutGroupSize,
+        rolloutConcurrency: selectedComputeTarget.defaults.rolloutConcurrency,
+      });
       setRank(selectedComputeTarget.defaults.loraRank);
-      setRolloutGroupSize(selectedComputeTarget.defaults.rolloutGroupSize);
-      setRolloutConcurrency(selectedComputeTarget.defaults.rolloutConcurrency);
+      setRolloutGroupSize(defaults.rolloutGroupSize);
+      setRolloutConcurrency(defaults.rolloutConcurrency);
       setRolloutMaxOutputTokens(selectedComputeTarget.defaults.rolloutOutputTokens);
-      setMaxSteps(selectedComputeTarget.defaults.maxSteps);
+      setMaxSteps(defaults.maxSteps);
     }
     if (initialApproval?.maximumCostUsd == null) {
       setMaximumCostUsd(selectedComputeTarget.approvalPolicy?.defaultMaximumSpendUsd ?? null);
@@ -201,6 +213,8 @@ export function TrainingStartDialog({
     }
   }, [
     catalog,
+    runPreset,
+    method,
     savedRecipe,
     initialApproval?.maximumCostUsd,
     initialApproval?.retentionDays,
@@ -256,8 +270,10 @@ export function TrainingStartDialog({
         concurrency: rolloutConcurrency,
       })
     : null;
+  const sizingProblem = [maxSteps, trainingExamples, optimizerIterations].some(value => !Number.isInteger(value) || value < 1) || (method === "grpo" && (optimizerIterations < 2 || optimizerIterations > 16))
+    ? "Enter positive whole numbers for prompts, rollout groups, and optimizer iterations." : null;
   const configurationCompatible = Boolean(
-    catalog && !savedRecipeError && !evaluationSourceError &&
+    catalog && !savedRecipeError && !evaluationSourceError && !sizingProblem &&
     taskset.readiness?.ready &&
     executableMethod &&
     destination?.available &&
@@ -270,7 +286,7 @@ export function TrainingStartDialog({
     rolloutIncompatibility === null,
   );
   const compatible = configurationCompatible && approvalReady;
-  const configurationIncompatibility = savedRecipeError ?? evaluationSourceError ?? (!catalog
+  const configurationIncompatibility = savedRecipeError ?? evaluationSourceError ?? sizingProblem ?? (!catalog
     ? catalogError ?? "Loading the training catalog."
     : !taskset.readiness?.ready
     ? "The Taskset must pass environment, grader, and data readiness before training."
@@ -311,6 +327,8 @@ export function TrainingStartDialog({
     destinationId,
     baseModelId,
     maxSteps,
+    optimizerIterations,
+    resizeRolloutBudget: sizingEdited,
     sequenceLength,
     rank,
     learningRate,
@@ -374,8 +392,8 @@ export function TrainingStartDialog({
       preserveBaseModelSelection(baseModelCandidates, current, next, method),
     );
     setRank(target?.defaults.loraRank ?? 2);
-    setRolloutGroupSize(target?.defaults.rolloutGroupSize ?? 4);
-    setRolloutConcurrency(target?.defaults.rolloutConcurrency ?? 1);
+    setRolloutGroupSize(quickTest ? smokeLimits.rolloutGroupSize : target?.defaults.rolloutGroupSize ?? 4);
+    setRolloutConcurrency(quickTest ? smokeLimits.rolloutConcurrency : target?.defaults.rolloutConcurrency ?? 1);
     setRolloutMaxOutputTokens(
       target?.defaults.rolloutOutputTokens ?? DEFAULT_ROLLOUT_OUTPUT_TOKENS,
     );
@@ -388,12 +406,12 @@ export function TrainingStartDialog({
     setRetentionDays(target?.approvalPolicy?.defaultRetentionDays ?? 7);
     setExportApproved(false);
     if (method === "grpo") {
-      setMaxSteps(target?.defaults.maxSteps ?? 8);
+      setMaxSteps(quickTest ? smokeLimits.maxSteps : target?.defaults.maxSteps ?? 8);
       if (taskset.datasetArtifact && target?.executionMode === "provider_native") {
         setTrainingExamples(
           Math.max(
             1,
-            Math.min(availableTrainExamples, target.limits.maximumTrainingExamples ?? 16),
+            Math.min(availableTrainExamples, quickTest ? smokeLimits.trainingExamples : target.limits.maximumTrainingExamples ?? 16),
           ),
         );
       }
@@ -415,12 +433,12 @@ export function TrainingStartDialog({
       preserveBaseModelSelection(baseModelCandidates, current, destinationId, next),
     );
     if (next === "grpo") {
-      setMaxSteps(8);
+      setMaxSteps(quickTest ? trainingSmokeLimits(next).maxSteps : 8);
       if (providerManaged && taskset.datasetArtifact) {
         setSequenceLength((current) => Math.max(512, current));
       }
       setTrainingExamples(
-        Math.max(1, Math.min(availableTrainExamples, taskset.datasetArtifact ? 16 : 1_000)),
+        Math.max(1, Math.min(availableTrainExamples, quickTest ? trainingSmokeLimits(next).trainingExamples : taskset.datasetArtifact ? 16 : 1_000)),
       );
       return;
     }
@@ -508,6 +526,7 @@ export function TrainingStartDialog({
       busy={busy}
       exportApproved={exportApproved}
       maximumCostUsd={maximumCostUsd}
+      estimatedCostUsd={preparedQuote}
       retentionDays={retentionDays}
       onManageProvider={
         onOpenProviderSettings
@@ -546,7 +565,7 @@ export function TrainingStartDialog({
           </button>
         </div>
       ) : null}
-      {!hideMethodTabs ? (
+      {!hideMethodTabs && !onRunPresetChange ? (
         <TrainingMethodTabs
           busy={busy}
           method={method}
@@ -554,6 +573,9 @@ export function TrainingStartDialog({
           onSelect={selectMethod}
         />
       ) : null}
+      {onRunPresetChange ? <TrainingRunSizeControl method={method} methods={methodOptions} onMethodChange={selectMethod} value={runPreset} onChange={onRunPresetChange} disabled={busy}
+        sizing={{ prompts: trainingExamples, rollouts: rolloutGroupSize, groups: maxSteps, iterations: optimizerIterations, concurrency: rolloutConcurrency }}
+        onSizingChange={value => { setSizingEdited(true); setTrainingExamples(value.prompts); setRolloutGroupSize(value.rollouts); setMaxSteps(value.groups); setOptimizerIterations(value.iterations); setRolloutConcurrency(value.concurrency); }} /> : null}
       <TrainingCatalogSetup
         busy={busy}
         catalog={catalog}
@@ -610,7 +632,8 @@ export function TrainingStartDialog({
           </ul>
         </div>
       ) : null}
-      <TrainingAdvancedSettings
+      {!onRunPresetChange ? <TrainingAdvancedSettings
+        hideSizing={Boolean(onRunPresetChange)}
         method={method}
         trainingExamples={trainingExamples}
         maximumTrainingExamples={maximumTrainingExamples}
@@ -638,13 +661,11 @@ export function TrainingStartDialog({
         onRftLossMethodChange={setRftLossMethod}
         onRolloutGroupSizeChange={setRolloutGroupSize}
         onRolloutConcurrencyChange={setRolloutConcurrency}
-      />
+      /> : null}
       {!readinessCompatible ? (
-        <div className="training-banner error training-dialog-error">
-          {approvalPresentation === "dialog" && approvalPolicy
+        <ErrorToast error={approvalPresentation === "dialog" && approvalPolicy
             ? (configurationIncompatibility ?? "This setup is unavailable.")
-            : (launchIncompatibility ?? "This setup is unavailable.")}
-        </div>
+            : (launchIncompatibility ?? "This setup is unavailable.")} />
       ) : destination?.nonProduction ? (
         <p className="training-start-note">
           This training destination is experimental. Evaluate the resulting version before relying on its quality.

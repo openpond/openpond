@@ -17,6 +17,7 @@ export type CommunityViewProps = {
 
 export function CommunityView({ communities, chat, currentUserId }: CommunityViewProps) {
   useErrorToast(communities.discoveryError);
+  useErrorToast(chat.lostMembership ? "Your membership changed. Refresh the community before continuing." : null);
   useErrorToast(communities.previewError);
   useErrorToast(communities.membershipError?.message);
   useErrorToast(chat.channelsError, { prefix: "Channels" });
@@ -128,7 +129,6 @@ export function CommunityView({ communities, chat, currentUserId }: CommunityVie
           {chat.realtimeError && memberActive && !requiresAcceptance ? (
             <div className="community-realtime-state"><WifiOff size={14} /><span>Live updates are reconnecting. Loaded messages are still available.</span></div>
           ) : null}
-          {chat.lostMembership ? <div className="community-state error">Your membership changed. Refresh the community before continuing.</div> : null}
           {chat.channelsError ? <button type="button" className="community-state" onClick={() => void chat.loadChannels()}>Retry loading channels</button> : null}
         </div>
 

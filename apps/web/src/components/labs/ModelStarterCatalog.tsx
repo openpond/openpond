@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
@@ -49,7 +49,7 @@ export function ModelStarterCatalog({ actions, cacheScope, onSelect, onImport, o
       <article><h3>Import from Hermes</h3><p>Review sessions and turn useful attempts into tasks and feedback.</p><button className="training-button secondary" type="button" disabled={selectedId !== null} onClick={() => onImport("hermes")}>Import sessions</button></article>
       <article><h3>Import from OpenClaw</h3><p>Bring trajectory exports into the same task and labeling workspace.</p><button className="training-button secondary" type="button" disabled={selectedId !== null} onClick={() => onImport("openclaw")}>Import trajectories</button></article>
     </div>
-    {inlineErrorMessage(error ?? catalog.error) ? <div role="alert"><p>{error ?? catalog.error?.message}</p><button type="button" onClick={() => { setError(null); void catalog.refetch(); }}>Retry</button></div> : !page && catalog.isPending ? <p role="status">Loading starters…</p> : null}
+    {(error ?? catalog.error) ? <ErrorToast error={error ?? catalog.error}><button type="button" onClick={() => { setError(null); void catalog.refetch(); }}>Retry</button></ErrorToast> : !page && catalog.isPending ? <p role="status">Loading starters…</p> : null}
     {categories.map(category => <section className="model-starter-category" key={category} aria-label={CATEGORY_LABELS[category]}>
       <h3>{CATEGORY_LABELS[category]}</h3>
       <div className="model-starter-cards">{page?.items.filter(starter => starter.category === category).map(starter => <article key={`${starter.id}:${starter.contentHash}`}>

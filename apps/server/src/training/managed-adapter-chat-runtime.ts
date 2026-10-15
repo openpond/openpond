@@ -1,18 +1,11 @@
-import type {
-  HostedChatMessage,
-  HostedChatTool,
-  HostedChatToolChoice,
-} from "@openpond/cloud";
-import type {
-  ManagedAdapterServingProjection,
-  ModelBinding,
-} from "@openpond/contracts";
+import type { HostedChatMessage, HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
+import type { ManagedAdapterServingProjection, ModelBinding } from "@openpond/contracts";
 import { managedAdapterProjectionReady } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import type { ManagedAdapterRegistryClient } from "./managed-adapter-registry-client.js";
-import {
-  managedBindingLogicalModelName,
-} from "./managed-adapter-sync-service.js";
+import { managedBindingLogicalModelName } from "./managed-adapter-sync-service.js";
+
+import { managedCatalogSelection, readManagedModelCatalog } from "./managed-adapter-catalog.js";
 
 type ManagedBindingContext = {
   binding: ModelBinding;
@@ -23,6 +16,7 @@ type ManagedBindingContext = {
 export function createManagedAdapterChatRuntime(dependencies: {
   store: SqliteStore;
   client: ManagedAdapterRegistryClient;
+  resolveSelectedTeamId?: () => Promise<string | null>;
 }) {
   async function context(
     modelId: string | null | undefined,
@@ -39,10 +33,10 @@ export function createManagedAdapterChatRuntime(dependencies: {
             modelId: lineage.modelId,
           })
         : [];
-    const version = versions.find(
-      (candidate) => candidate.artifactLineageId === lineage.id,
-    );
-    const artifact = version ? null : await dependencies.store.getTrainingArtifact(lineage.artifactId);
+    const version = versions.find((candidate) => candidate.artifactLineageId === lineage.id);
+    const artifact = version
+      ? null
+      : await dependencies.store.getTrainingArtifact(lineage.artifactId);
     return {
       binding,
       projection: lineage.managedServing,
@@ -55,7 +49,7 @@ export function createManagedAdapterChatRuntime(dependencies: {
     // degraded, or failed. Returning false here would silently route a
     // retired remote route through local inference, bypassing the production
     // gateway, billing, and kill switch.
-    return Boolean(await context(modelId));
+    return modelId?.startsWith("managed:") === true || Boolean(await context(modelId));
   }
 
   async function* stream(input: {
@@ -73,17 +67,38 @@ export function createManagedAdapterChatRuntime(dependencies: {
         "The selected trained Model does not support native image review. Use a vision-capable reviewer; the comparison will remain unscorable otherwise.",
       );
     }
+    const selection = managedCatalogSelection(input.modelId);
+    if (selection) {
+      const selectedTeamId = await dependencies.resolveSelectedTeamId?.();
+      if (selectedTeamId !== selection.teamId)
+        throw new Error("Select this model's workspace before sending a message.");
+      const catalog = await readManagedModelCatalog(selection.teamId, { fresh: true });
+      const model = catalog.find((entry) => entry.id === selection.artifactId);
+      if (!model) throw new Error("This managed model is no longer available in this workspace.");
+      if (!model.logicalModelName)
+        throw new Error("Enable serving for this model in Training before sending a message.");
+      // Do not hide cold models or route their requests to an unrelated hosted model.
+      // The personalized gateway enforces serving readiness and billing.
+      yield* dependencies.client.streamChat({
+        teamId: selection.teamId,
+        logicalModelName: model.logicalModelName,
+        messages: managedAdapterMessages(input.messages, model.metadata.base_profile_id),
+        requestId: input.requestId,
+        signal: input.signal,
+        maxNewTokens: input.maxNewTokens,
+        temperature: input.temperature,
+        tools: input.tools,
+        toolChoice: input.toolChoice,
+      });
+      return;
+    }
     const resolved = await context(input.modelId);
     if (!resolved || !managedAdapterProjectionReady(resolved.projection)) {
-      throw new Error(
-        "The selected trained Model is not ready on managed serving.",
-      );
+      throw new Error("The selected trained Model is not ready on managed serving.");
     }
     const teamId = resolved.projection.teamId;
     if (!teamId) {
-      throw new Error(
-        "The selected trained Model is not ready on managed serving.",
-      );
+      throw new Error("The selected trained Model is not ready on managed serving.");
     }
     yield* dependencies.client.streamChat({
       teamId,
@@ -120,9 +135,7 @@ function managedAdapterMessages(
     return messages;
   }
   return messages.map((message, index) =>
-    index === lastUserIndex
-      ? { ...message, content: `${content}\n\n/no_think` }
-      : message,
+    index === lastUserIndex ? { ...message, content: `${content}\n\n/no_think` } : message,
   );
 }
 

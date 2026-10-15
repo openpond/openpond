@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import {useReviewedOperationRecovery} from "./useReviewedOperationRecovery";
 import {ReviewedOperationRecoveryList} from "./ReviewedOperationRecoveryList";
 import type {EvaluationOperationRecovery} from "@openpond/contracts";
@@ -279,9 +280,7 @@ function ScheduleEditor({
         releases are shown for review and never selected automatically.
       </p>
       {(error ?? history.error?.message ?? poll.error?.message) ? (
-        <p role="alert">
-          {error ?? history.error?.message ?? poll.error?.message}
-        </p>
+        <ErrorToast error={error ?? history.error?.message ?? poll.error?.message} />
       ) : null}
       <label>
         Existing schedule

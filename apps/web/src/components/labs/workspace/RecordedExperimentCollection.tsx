@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import {useInfiniteQuery} from "@tanstack/react-query";
 import type {z} from "zod";
 import type {ConnectedRecordedListSchema} from "openpond-sdk/connected-evidence";
@@ -19,7 +19,7 @@ export function RecordedExperimentCollection({api,route,navigate}:{api:Workspace
   const visible=items.filter(item=>!route.query||item.name.toLocaleLowerCase().includes(route.query.toLocaleLowerCase()));
   return <section><h2>Recorded evidence</h2><table className="training-data-table"><thead><tr><th>Experiment</th><th>Dataset</th><th>Frozen cases</th><th>Created</th></tr></thead>
     <tbody>{visible.map(item=><tr key={item.id}><td><button className="training-text-button" onClick={()=>navigate({...route,resourceId:item.id,executionLocation:"hosted",executionKind:"recorded_evidence",passId:null,projectId:item.projectId,detailTab:"overview",after:null})}>{item.name}</button></td><td>{item.dataset.id} / revision {item.dataset.revision}</td><td>{item.caseCount}</td><td><EvaluationTime value={item.createdAt}/></td></tr>)}</tbody></table>
-    {query.error && inlineErrorMessage(query.error)?<p role="alert">{query.error.message}<button onClick={()=>void query.refetch()}>Retry</button></p>:null}
+    {query.error?<ErrorToast error={query.error}><button onClick={()=>void query.refetch()}>Retry</button></ErrorToast>:null}
     {!items.length?<p role="status">{query.isPending?"Reading frozen recorded Experiments…":"No frozen recorded Experiments in this workspace."}</p>:null}
     {query.hasNextPage?<button disabled={query.isFetchingNextPage} onClick={()=>void query.fetchNextPage()}>More recorded Experiments</button>:null}
   </section>;

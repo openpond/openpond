@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from "react";
+import { DropdownSelect } from "../DropdownSelect";
 import {
   CartesianGrid,
   Line,
@@ -15,6 +16,7 @@ export type TrainingMetricSeries = {
   points: Array<{ step: number; value: number }>;
   format?: "number" | "percent" | "scientific";
   xLabel?: string;
+  bounds?: [number,number];
 };
 
 type MetricDisplay = "raw" | "smoothed";
@@ -65,17 +67,9 @@ export function TrainingMetricWorkbench({
     <section className="training-metric-workbench" aria-label="Training metrics">
       {canSmooth ? (
         <div className="training-metric-workbench-controls">
-          <label>
-            <span>Display</span>
-            <select
-              aria-label="Metric display"
-              onChange={(event) => setDisplay(event.currentTarget.value as MetricDisplay)}
-              value={display}
-            >
-              <option value="raw">Raw values</option>
-              <option value="smoothed">Smoothed trend</option>
-            </select>
-          </label>
+          <DropdownSelect compact floating label="Metric display" value={display}
+            options={[{value:"raw",label:"Raw values"},{value:"smoothed",label:"Smoothed trend"}]}
+            onChange={value=>setDisplay(value as MetricDisplay)} />
         </div>
       ) : null}
       <div className="training-metric-chart-grid">
@@ -155,7 +149,7 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
               <YAxis
                 axisLine={false}
                 dataKey="value"
-                domain={metric.format === "percent" ? [0, 1] : ["auto", "auto"]}
+                domain={metric.bounds ?? (metric.format === "percent" ? [0, 1] : ["auto", "auto"])}
                 fontSize={10}
                 stroke="var(--text-muted)"
                 tickFormatter={format}

@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import { DropdownSelect } from "../../DropdownSelect";
 import { modelDisplayLabel } from "../../../lib/model-display";
 import { AdvancedRefinerExperimentSetup } from "./AdvancedRefinerExperimentSetup";
@@ -927,19 +928,17 @@ function OrdinaryExperimentSetupPanel({
           whole Experiment budget before starting.
         </p>
         {reviewIssue ? <p role="status">{reviewIssue}</p> : null}
-        {graderConflict ? <p role="alert">{graderConflict}</p> : null}
+        {graderConflict ? <ErrorToast error={graderConflict} /> : null}
         {error ||
         population.error ||
         models.error ||
         sampling.error ||
         summary.error ? (
-          <p role="alert">
-            {error ??
+          <ErrorToast error={error ??
               population.error?.message ??
               models.error?.message ??
               sampling.error?.message ??
-              summary.error?.message}
-          </p>
+              summary.error?.message} />
         ) : null}
         <ReviewedExperimentScheduleControl
           api={api}

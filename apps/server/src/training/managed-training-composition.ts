@@ -72,7 +72,7 @@ export function createManagedTrainingComposition(deps: CompositionDependencies) 
     activateManagedBinding: managedAdapterSyncService.activateBinding,
   });
   deps.onStartupFailure(() => trainingService.close());
-  const managedAdapterChatRuntime = createManagedAdapterChatRuntime({store, client: registry});
+  const managedAdapterChatRuntime = createManagedAdapterChatRuntime({store, client: registry, resolveSelectedTeamId: async () => await deps.defaultTeam() ?? null});
   const streamSelectedOpenPondChatTurn = createManagedAdapterHostedChatStream({
     managed: managedAdapterChatRuntime, hosted: deps.streamHosted,
   });

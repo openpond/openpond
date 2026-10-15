@@ -26,7 +26,7 @@ export const BUILT_IN_OPENPOND_PROFILE_SKILLS = [
   {
     name: "openpond-taskset-authoring",
     description:
-      "Create, improve, inspect, test, or prepare an OpenPond Taskset from a capability, Profile Agent, consented evidence, or imported data.",
+      "Create, organize, review, improve, or test OpenPond Tasksets and source data; inspect coverage, data quality, graders, and failed evals.",
     path: "skills/openpond-taskset-authoring/SKILL.md",
     scope: "profile" as const,
     enabled: true,
@@ -40,6 +40,9 @@ export const BUILT_IN_OPENPOND_PROFILE_SKILLS = [
       "references/graders-and-rewards.md",
       "references/method-selection.md",
       "references/privacy-and-provenance.md",
+      "references/benchmarking.md",
+      "references/data-quality.md",
+      "references/failure-diagnosis.md",
     ],
   },
   {

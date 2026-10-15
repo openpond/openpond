@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../../common/ErrorToast";
 import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
@@ -40,7 +41,7 @@ export function ConnectedSources({ api, ownerUserId, projects, onClose, onDatase
     <div className="evaluation-workspace-scope"><button className="training-button secondary" disabled={busy} onClick={() => void collect()}>Recover committed activity</button><button className="training-button secondary" onClick={() => setImporting(true)}>Import agent runs</button>
       {collection.data ? <><span>Collection {collection.data.status}</span>{collection.data.status !== "archived" ? <button disabled={busy} onClick={() => void changeCollection()}>{collection.data.status === "paused" ? "Resume" : "Pause"}</button> : null}</> : null}</div>
     <label>Evaluation unit<select value={projection} onChange={event => setProjection(event.target.value as typeof projection)}><option value="turn">Turns</option><option value="conversation">Conversations</option></select></label>
-    {error || sources.error || collection.error ? <p role="alert">{error ?? sources.error?.message ?? collection.error?.message}</p> : null}{recovery ? <p role="status">{recovery}</p> : null}
+    {error || sources.error || collection.error ? <ErrorToast error={error ?? sources.error?.message ?? collection.error?.message} /> : null}{recovery ? <p role="status">{recovery}</p> : null}
     <ul>{sources.data?.pages.flatMap(page => page.items).map(source => <li key={source.sourceId}><h3>{source.title}</h3><p>{source.source.replaceAll("_", " ")}</p><ul>{source.boundaries.filter(boundary => boundary.projection === projection).map(boundary => {
       const ref = { id: source.sourceId, snapshotHash: source.snapshotHash, boundaryId: boundary.id, boundaryRevisionHash: boundary.revisionHash }, key = JSON.stringify(ref);
       return <li key={key}><label><input type="checkbox" disabled={busy || Boolean(pending)} checked={selected.has(key)} onChange={() => setSelected(previous => { const next = new Map(previous); if (next.has(key)) next.delete(key); else next.set(key, ref); return next; })} />{boundary.id}: {boundary.coverage.answer ? "answer retained" : "answer unavailable"}; process {boundary.coverage.process}; {boundary.terminal}</label><button onClick={() => setInspected(ref)}>Inspect input and trace</button></li>;

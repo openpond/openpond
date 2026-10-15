@@ -5,12 +5,12 @@ import {
 import type {
   BaseModelCandidate,
   LearnedPreferenceRewardBinding,
-  ModelRunPreset,
   Taskset,
   TrainingDestinationCapabilities,
   TrainingDestinationId,
   TrainingRecipe,
 } from "@openpond/contracts";
+import { RftRecipeSchema } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { DropdownSelect } from "../DropdownSelect";
 import { ModelRunEvaluationSource } from "./ModelRunEvaluationSource";
@@ -27,10 +27,11 @@ import {
 import {
   methodAvailability,
   presetFor,
-  presetsFor,
   setupStepComplete,
   type ModelProjectEditorState,
 } from "./model-run-editor-helpers";
+
+import { isTrainingSmoke, trainingSmokeRecipe } from "../training/training-run-presets";
 
 const RUN_CONTROL_ID = "model-build-run-control";
 
@@ -246,121 +247,106 @@ export function ModelRunSetupContent({
             || setup.method === "grpo"
             || setup.method === "ppo"
           ) ? (
-            <TrainingStartDialog
-              environmentPlacement={setup.destinationId === "openpond_managed" ? setup.managedRolloutPlacement : undefined}
-              key={`${selectedTaskset.id}:${selectedTaskset.revision}:${setup.method}:${setup.runPreset}`}
-              baseModelCandidates={baseModelCandidates}
-              connection={connection}
-              taskset={selectedTaskset}
-              evaluationTaskset={evaluationTasksets.find(taskset => taskset.id === setup.evaluationTasksetRef?.id
-                && taskset.profileId === selectedTaskset.profileId && taskset.revision === setup.evaluationTasksetRef.revision
-                && taskset.contentHash === setup.evaluationTasksetRef.contentHash) ?? null}
-              evaluationTasksetSelected={Boolean(setup.evaluationTasksetRef)}
-              initialRecipe={setup.recipe}
-              initialApproval={{ maximumCostUsd: setup.preferredMaximumSpendUsd, retentionDays: setup.preferredRetentionDays }}
-              learnedPreferenceReward={learnedPreferenceReward}
-              modelId={setup.projectId}
-              destinations={destinations}
-              initialMethod={setup.method}
-              preferredBaseModel={setup.baseModel}
-              busy={[
-                "prepare-training",
-                "prepare-model-run",
-                "start-prepared-training",
-                "start-training",
-                "start-model-run",
-              ].includes(training.busyAction ?? "")}
-              busyAction={training.busyAction}
-              presentation="embedded"
-              hideActions
-              runControlId={RUN_CONTROL_ID}
-              runPreset={setup.runPreset ?? "standard"}
-              hideMethodTabs
-              approvalPresentation="dialog"
-              configurationContent={
-                <details className="model-run-options">
-                  <summary>
-                    <span>Training configuration</span>
-                    <strong>
-                      {presetFor(setup.method, setup.runPreset)?.label
-                        ?? "Recommended"}
-                    </strong>
-                  </summary>
-                  <div className="model-build-field">
-                    <span>Training budget</span>
-                    <DropdownSelect
-                      label="Training budget"
-                      value={setup.runPreset ?? "standard"}
-                      options={presetsFor(setup.method).map((preset) => ({
-                        value: preset.id,
-                        label: preset.label,
-                      }))}
-                      onChange={(value) =>
-                        setSetup((current) => ({
-                          ...current,
-                          runPreset: value as ModelRunPreset,
-                          recipe: null,
-                          updatedAt: new Date().toISOString(),
-                        }))}
-                    />
-                    <small>
-                      {presetFor(setup.method, setup.runPreset)
-                        ?.description
-                        ?? "Use Taskset-aware recommended limits."}
-                    </small>
-                  </div>
-                  {setup.destinationId === "openpond_managed" ? (
-                    <>
-                      <div className="model-build-field">
-                        <span>Rollout execution</span>
-                        <DropdownSelect
-                          label="Rollout execution"
-                          value={setup.managedRolloutPlacement}
-                          options={[
-                            { value: "local", label: "This desktop" },
-                            { value: "remote", label: "Hosted Sandboxes" },
-                          ]}
-                          onChange={(value) =>
-                            setSetup((current) => ({
-                              ...current,
-                              managedRolloutPlacement:
-                                value === "remote"
-                                  ? "remote"
-                                  : "local",
-                              updatedAt: new Date().toISOString(),
-                            }))}
-                        />
-                        <small>
-                          This desktop keeps local integrations and provider
-                          credentials on this device. Hosted Sandboxes can run
-                          unattended.
-                        </small>
-                      </div>
-                      <div className="model-build-field">
-                        <span>GPU placement objective</span>
-                        <DropdownSelect
-                          label="GPU placement objective"
-                          value={setup.managedGpuPlacementObjective}
-                          options={[
-                            { value: "balanced", label: "Balanced" },
-                            { value: "fast", label: "Fastest supported" },
-                            { value: "economical", label: "Most economical" },
-                          ]}
-                          onChange={(value) =>
-                            setSetup((current) => ({
-                              ...current,
-                              managedGpuPlacementObjective:
-                                value === "fast" || value === "economical"
-                                  ? value
-                                  : "balanced",
-                              updatedAt: new Date().toISOString(),
-                            }))}
-                        />
-                        <small>
-                          Sandbox returns supported quotes and applies this
-                          preference within the approved hard cost cap.
-                        </small>
-                      </div>
+            <>
+              <TrainingStartDialog
+                environmentPlacement={setup.destinationId === "openpond_managed" ? setup.managedRolloutPlacement : undefined}
+                key={`${selectedTaskset.id}:${selectedTaskset.revision}:${setup.method}:${setup.runPreset}`}
+                baseModelCandidates={baseModelCandidates}
+                connection={connection}
+                taskset={selectedTaskset}
+                evaluationTaskset={evaluationTasksets.find(taskset => taskset.id === setup.evaluationTasksetRef?.id
+                  && taskset.profileId === selectedTaskset.profileId && taskset.revision === setup.evaluationTasksetRef.revision
+                  && taskset.contentHash === setup.evaluationTasksetRef.contentHash) ?? null}
+                evaluationTasksetSelected={Boolean(setup.evaluationTasksetRef)}
+                initialRecipe={setup.recipe}
+                initialApproval={{ maximumCostUsd: setup.preferredMaximumSpendUsd, retentionDays: setup.preferredRetentionDays }}
+                learnedPreferenceReward={learnedPreferenceReward}
+                modelId={setup.projectId}
+                destinations={destinations}
+                initialMethod={setup.method}
+                preferredBaseModel={setup.baseModel}
+                busy={[
+                  "prepare-training",
+                  "prepare-model-run",
+                  "start-prepared-training",
+                  "start-training",
+                  "start-model-run",
+                ].includes(training.busyAction ?? "")}
+                busyAction={training.busyAction}
+                presentation="embedded"
+                hideActions
+                runControlId={RUN_CONTROL_ID}
+                runPreset={setup.runPreset ?? "standard"}
+                onRunPresetChange={runPreset => setSetup(current => {
+                  const parsed = RftRecipeSchema.safeParse(current.recipe);
+                  const recipe = isTrainingSmoke(runPreset)
+                    ? parsed.success ? trainingSmokeRecipe(parsed.data) : current.recipe
+                    : runPreset === "custom" ? current.recipe : null;
+                  return { ...current, runPreset, recipe, updatedAt: new Date().toISOString() };
+                })}
+                hideMethodTabs
+                approvalPresentation="dialog"
+                configurationContent={
+                  <details className="model-run-options">
+                    <summary>
+                      <span>Training configuration</span>
+                      <strong>
+                        {presetFor(setup.method, setup.runPreset)?.label
+                          ?? "Recommended"}
+                      </strong>
+                    </summary>
+                    {setup.destinationId === "openpond_managed" ? (
+                      <>
+                        <div className="model-build-field">
+                          <span>Rollout execution</span>
+                          <DropdownSelect
+                            label="Rollout execution"
+                            value={setup.managedRolloutPlacement}
+                            options={[
+                              { value: "local", label: "This desktop" },
+                              { value: "remote", label: "Hosted Sandboxes" },
+                            ]}
+                            onChange={(value) =>
+                              setSetup((current) => ({
+                                ...current,
+                                managedRolloutPlacement:
+                                  value === "remote"
+                                    ? "remote"
+                                    : "local",
+                                updatedAt: new Date().toISOString(),
+                              }))}
+                          />
+                          <small>
+                            This desktop keeps local integrations and provider
+                            credentials on this device. Hosted Sandboxes can run
+                            unattended.
+                          </small>
+                        </div>
+                        <div className="model-build-field">
+                          <span>GPU placement objective</span>
+                          <DropdownSelect
+                            label="GPU placement objective"
+                            value={setup.managedGpuPlacementObjective}
+                            options={[
+                              { value: "balanced", label: "Balanced" },
+                              { value: "fast", label: "Fastest supported" },
+                              { value: "economical", label: "Most economical" },
+                            ]}
+                            onChange={(value) =>
+                              setSetup((current) => ({
+                                ...current,
+                                managedGpuPlacementObjective:
+                                  value === "fast" || value === "economical"
+                                    ? value
+                                    : "balanced",
+                                updatedAt: new Date().toISOString(),
+                              }))}
+                          />
+                          <small>
+                            Sandbox returns supported quotes and applies this
+                            preference within the approved hard cost cap.
+                          </small>
+                        </div>
                     </>
                   ) : null}
                 </details>
@@ -409,6 +395,7 @@ export function ModelRunSetupContent({
                 return true;
               }}
             />
+            </>
           ) : (
             <div className="model-build-empty">
               Choose a Taskset and training method to select a model.

@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import {useReviewedOperationRecovery} from "./useReviewedOperationRecovery";
 import {ReviewedOperationRecoveryList} from "./ReviewedOperationRecoveryList";
 import type {EvaluationOperationRecovery} from "@openpond/contracts";
@@ -334,7 +335,7 @@ export function AdvancedEditor({
         private holdout. Both retain the original source and current owner
         boundaries.
       </p>
-      {failure ? <p role="alert">{failure}</p> : null}
+      {failure ? <ErrorToast error={failure} /> : null}
       <fieldset disabled={busy || Boolean(pending.current)}>
         <label>
           Profile

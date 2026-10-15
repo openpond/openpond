@@ -57,3 +57,5 @@
 .desktop-rail-button.desktop-training-entry,
 .desktop-rail-button.desktop-training-entry:hover,
 .desktop-rail-button.desktop-training-entry.active { color: var(--accent-primary); }
+
+.desktop-rail-brand img { width: 25px; height: 25px; object-fit: contain; }

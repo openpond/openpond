@@ -31,6 +31,7 @@
 .chat-resource-grader-editor textarea { width: 100%; min-height: 140px; }
 
 .chat-resource-summary.compact .chat-resource-toolbar { border-bottom: 1px solid var(--border-default); border-radius: 8px; }
+.chat-resource-group-details { padding-inline: 8px; border-left: 1px solid var(--border-default); }
 
 .chat-resource-table .training-data-table :is(th,td) { padding: 5px 8px; font-size: 12px; line-height: 1.4; }
 .chat-resource-table td { max-height: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

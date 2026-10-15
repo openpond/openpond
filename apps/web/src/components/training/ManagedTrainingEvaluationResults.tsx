@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useState } from "react";
 import type { ManagedTrainingRunEvidence } from "@openpond/contracts";
 import type { TrainingEvaluationTaskPage } from "openpond-sdk/training";
@@ -95,17 +95,14 @@ function EvaluationPage({
       {loading ? (
         <p className="training-muted">Loading recorded answers…</p>
       ) : null}
-      {error && inlineErrorMessage(error) ? (
-        <div role="alert">
-          <p>{error}</p>
-          <button
+      {error ? (
+        <ErrorToast error={error}><button
             className="training-button secondary"
             type="button"
             onClick={() => setRefresh((value) => value + 1)}
           >
             Retry answers
-          </button>
-        </div>
+          </button></ErrorToast>
       ) : null}
       {page ? (
         <>

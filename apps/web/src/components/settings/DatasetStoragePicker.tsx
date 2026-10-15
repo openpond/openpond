@@ -1,3 +1,4 @@
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { DatasetStorageRoot } from "@openpond/contracts";
@@ -121,7 +122,7 @@ export function ManualModelStorageDialog({
         <div className="model-storage-dialog-note">
           For SMB, connect the share in Files or Finder first, then paste its mounted folder path. OpenPond uses your operating system’s existing connection and credentials.
         </div>
-        {manualPath.trim() && error ? <div className="profile-dialog-warning">{error}</div> : null}
+        {manualPath.trim() && error ? <ErrorToast error={error} /> : null}
         <div className="git-dialog-footer">
           <button className="git-dialog-secondary" type="button" onClick={onClose}>Cancel</button>
           <button className="git-dialog-primary" disabled={Boolean(error)} type="submit">Use location</button>

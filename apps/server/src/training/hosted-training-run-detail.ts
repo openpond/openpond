@@ -6,6 +6,8 @@ import {
 } from "openpond-sdk/training";
 import { PostTrainingSummarySchema, PostTrainingControlSchema } from "openpond-sdk/post-training";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
+import { RunStageEvidenceSchema } from "@openpond/contracts";
+import { hostedRunStageEvidence } from "./hosted-run-stage-evidence.js";
 
 const Id = z.string().trim().min(1).max(200);
 export const HostedTrainingRunDetailSchema = z
@@ -14,6 +16,8 @@ export const HostedTrainingRunDetailSchema = z
     events: z.array(TrainingJobEventSchema).max(10_000),
     outputs: TrainingJobOutputsSchema,
     evals: PostTrainingSummarySchema.nullable(),
+    flow: RunStageEvidenceSchema.nullable(),
+    flowError: z.string().nullable(),
   })
   .strict();
 /** Scope is supplied by the authenticated desktop session, never a URL token.
@@ -29,7 +33,7 @@ export function createHostedTrainingRunDetail(input: {
     if (current?.teamId !== input.teamId || current.actorId !== input.actorId)
       throw new Error("The active account changed. Reload this training run.");
   }
-  async function request(path: string, init?: RequestInit) {
+  async function request(path: string, init?: RequestInit, maxBytes = 4_194_304) {
     await fence();
     const headers = hostedApiAuthHeaders(input.access.token);
     headers.set("x-openpond-team-id", input.teamId);
@@ -50,7 +54,7 @@ export function createHostedTrainingRunDetail(input: {
         const chunk = await reader.read();
         if (chunk.done) break;
         bytes += chunk.value.byteLength;
-        if (bytes > 4_194_304) throw new Error("Training evidence exceeded its bounded response.");
+        if (bytes > maxBytes) throw new Error("Training evidence exceeded its bounded response.");
         chunks.push(chunk.value);
       }
     } finally {
@@ -70,20 +74,41 @@ export function createHostedTrainingRunDetail(input: {
         request(`${base}/outputs`),
         request(`${base}/post-training`),
       ]);
-      const detail = HostedTrainingRunDetailSchema.parse({
+      const core = HostedTrainingRunDetailSchema.omit({ flow: true, flowError: true }).parse({
         job: job.job,
         events: events.events,
         outputs,
         evals,
       });
       if (
-        detail.job.id !== id ||
-        detail.job.teamId !== input.teamId ||
-        detail.events.some((event) => event.jobId !== id) ||
-        (detail.evals && (detail.evals.teamId !== input.teamId || detail.evals.jobId !== id))
+        core.job.id !== id ||
+        core.job.teamId !== input.teamId ||
+        core.events.some((event) => event.jobId !== id) ||
+        (core.evals && (core.evals.teamId !== input.teamId || core.evals.jobId !== id))
       )
         throw new Error("Training evidence belongs to another run.");
-      return detail;
+      let flow = null,
+        flowError = null;
+      try {
+        const [raw, logs] = await Promise.all([
+          request(`/v1/managed-rl/jobs/${encodeURIComponent(id)}`, undefined, 67_108_864),
+          request(`/v1/managed-rl/jobs/${encodeURIComponent(id)}/logs`),
+        ]);
+        flow = hostedRunStageEvidence(raw.job, logs, {
+          jobId: id,
+          teamId: input.teamId,
+          modelProjectId: core.job.modelProjectId,
+        });
+      } catch (error) {
+        flowError =
+          error instanceof z.ZodError
+            ? "The hosted run returned invalid graph evidence."
+            : error instanceof Error
+              ? error.message
+              : "Run graph is unavailable.";
+      }
+      await fence();
+      return HostedTrainingRunDetailSchema.parse({ ...core, flow, flowError });
     },
     async control(id: string, action: "start" | "retry" | "cancel", raw: unknown) {
       const body = PostTrainingControlSchema.parse(raw);

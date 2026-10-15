@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { CHAT_ATTACHMENT_LIMITS } from "@openpond/contracts";
 import type { ClientConnection, ProfileWorkflowDiscovery } from "../../api";
@@ -111,7 +111,7 @@ export function ProfileWorkflowDetail({
               <textarea id="scheduled-profile-workflow-input" onChange={(event) => setInputText(event.target.value)} value={inputText} />
             </>
           ) : null}
-          {error && inlineErrorMessage(error) ? <p className="scheduled-detail-error" role="alert">{error}</p> : null}
+          {error ? <ErrorToast error={error} /> : null}
           <div className="scheduled-detail-actions">
             <button disabled={pending} type="submit"><RotateCcw size={15} /><span>{pending ? "Starting…" : "Run now"}</span></button>
           </div>

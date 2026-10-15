@@ -9,6 +9,7 @@ export type WorkspaceDiffPanelViewState = {
 };
 
 export type WorkspaceDiffTabRequest = {
+  overview?: "new" | "experiments";
   id: number;
   tab: Extract<DiffTab, "files" | "summary" | "file" | "outputs">;
 };

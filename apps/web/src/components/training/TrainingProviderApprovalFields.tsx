@@ -13,6 +13,7 @@ export function TrainingProviderApprovalFields({
   busy,
   exportApproved,
   maximumCostUsd,
+  estimatedCostUsd = null,
   retentionDays,
   onManageProvider,
   onExportApprovedChange,
@@ -25,6 +26,7 @@ export function TrainingProviderApprovalFields({
   busy: boolean;
   exportApproved: boolean;
   maximumCostUsd: number | null;
+  estimatedCostUsd?: number | null;
   retentionDays: number;
   onManageProvider?: () => void;
   onExportApprovedChange: (approved: boolean) => void;
@@ -61,7 +63,7 @@ export function TrainingProviderApprovalFields({
       <div className="training-start-fields">
         <label>
           <span>Maximum provider spend (USD)</span>
-          <input
+          <div className="training-spend-estimate"><input
             aria-label="Maximum provider spend (USD)"
             type="number"
             min={approvalPolicy.minimumSpendUsd}
@@ -72,7 +74,9 @@ export function TrainingProviderApprovalFields({
             onChange={(event) =>
               onMaximumCostChange(event.target.valueAsNumber)
             }
-          />
+          /><button type="button" disabled={busy || estimatedCostUsd === null} onClick={() => { if (estimatedCostUsd !== null) onMaximumCostChange(Math.min(approvalPolicy.maximumSpendUsd, Math.max(approvalPolicy.minimumSpendUsd, Math.ceil(estimatedCostUsd * 100) / 100))); }}>
+            {estimatedCostUsd === null ? "Estimate after review" : `Use estimate $${estimatedCostUsd.toFixed(2)}`}
+          </button></div>
         </label>
         <label>
           <span>Retention record (days)</span>

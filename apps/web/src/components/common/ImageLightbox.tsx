@@ -1,3 +1,4 @@
+import { ErrorToast } from "./ErrorToast";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Download, X } from "../icons";
@@ -88,10 +89,10 @@ export function ImageLightbox({
             </button>
           </div>
         </header>
-        {saveError && <div className="image-lightbox-error" role="alert">{saveError}</div>}
+        {saveError && <ErrorToast error={saveError} />}
         <div className="image-lightbox-frame">
           {failed ? (
-            <div className="image-lightbox-error">Image preview unavailable</div>
+            <ErrorToast error="Image preview unavailable" />
           ) : (
             <img
               alt={title || "Image preview"}

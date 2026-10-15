@@ -1,3 +1,4 @@
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PptxViewer, RECOMMENDED_ZIP_LIMITS } from "@aiden0z/pptx-renderer";
 import { Download } from "../icons";
@@ -72,7 +73,7 @@ export default function WorkspacePresentationPreview({ path, contentBase64 }: { 
       </div>
     </div>
     <div className="workspace-presentation-preview-body">
-      {!bytes || current?.error ? <div className="workspace-diff-code-empty" role="alert">{current?.error ?? "Presentation preview unavailable."}</div>
+      {!bytes || current?.error ? <ErrorToast error={current?.error ?? "Presentation preview unavailable."} />
         : !current?.count ? <div className="workspace-diff-code-empty" role="status">Loading slides…</div> : null}
       <div className="workspace-presentation-slides" ref={hostRef} role="region" aria-label="Presentation slides" tabIndex={0} />
     </div>

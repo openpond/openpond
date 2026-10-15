@@ -1,12 +1,8 @@
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { ComposerSubmissionControls } from "./ComposerSubmissionControls";
 import { NativeAgentControls } from "./NativeAgentControls";
-import { useCallback, useMemo, useState, type CSSProperties, type RefObject } from "react";
-import {
-  Plus,
-  Shield,
-  SquareTerminal,
-} from "../icons";
+import { useCallback, useMemo, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { Plus, Shield, SquareTerminal } from "../icons";
 import type {
   ChatProvider,
   CodexPermissionMode,
@@ -31,10 +27,7 @@ import { VoiceInputButton } from "../voice/VoiceInputButton";
 import { ComposerModelMenu } from "./ComposerControls";
 import { composerModelGroups } from "./composer-model-options";
 import { cachedNativeAgentCatalog, nativeAgentCatalogKey } from "./native-agent-catalog";
-import {
-  ComposerProfileTargetControl,
-  type ComposerProfileTargetState,
-} from "./ComposerControls";
+import { ComposerProfileTargetControl, type ComposerProfileTargetState } from "./ComposerControls";
 
 const TEAM_CHAT_LOCAL_PROVIDER_IDS = new Set([
   "codex",
@@ -72,6 +65,7 @@ export function ComposerPrimaryControls({
   modelValue,
   modelOptions = [],
   hideModelControls = false,
+  trainingControl,
   openPondCommandAccessMode,
   showCommandAccess = true,
   profileTarget,
@@ -120,6 +114,7 @@ export function ComposerPrimaryControls({
   modelValue: string;
   modelOptions?: DropdownOption[];
   hideModelControls?: boolean;
+  trainingControl?: ReactNode;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
   showCommandAccess?: boolean;
   profileTarget?: ComposerProfileTargetState | null;
@@ -134,10 +129,7 @@ export function ComposerPrimaryControls({
   onSend: () => void;
   onStop: (reason?: string) => Promise<boolean | void> | boolean | void;
   onToggleAddMenu: () => void;
-  onTranscript: (
-    text: string,
-    options: { submit: boolean },
-  ) => Promise<void> | void;
+  onTranscript: (text: string, options: { submit: boolean }) => Promise<void> | void;
   voiceInputChannelKey: string;
   provider: ChatProvider;
   providerSettings?: ProviderSettings | null;
@@ -151,34 +143,71 @@ export function ComposerPrimaryControls({
   stopLabel?: string;
 }) {
   const instance = nativeAgentCatalogKey(provider, initialProviderSettings?.providers[provider]);
-  const [nativeSettings, setNativeSettings] = useState<{ connection: ClientConnection; provider: string; instance: string; settings: ProviderSettings } | null>(null);
-  const cached = connection ? cachedNativeAgentCatalog(connection, provider, initialProviderSettings?.providers[provider]) : null;
-  const refreshedSettings = nativeSettings?.connection === connection && nativeSettings.provider === provider && nativeSettings.instance === instance
-    ? nativeSettings.settings : cached?.settings ?? null;
+  const [nativeSettings, setNativeSettings] = useState<{
+    connection: ClientConnection;
+    provider: string;
+    instance: string;
+    settings: ProviderSettings;
+  } | null>(null);
+  const cached = connection
+    ? cachedNativeAgentCatalog(connection, provider, initialProviderSettings?.providers[provider])
+    : null;
+  const refreshedSettings =
+    nativeSettings?.connection === connection &&
+    nativeSettings.provider === provider &&
+    nativeSettings.instance === instance
+      ? nativeSettings.settings
+      : (cached?.settings ?? null);
   const providerSettings = useMemo(() => {
     if (!refreshedSettings) return initialProviderSettings;
     if (!initialProviderSettings) return refreshedSettings;
-    return { ...initialProviderSettings,
-      providers: { ...initialProviderSettings.providers, [provider]: refreshedSettings.providers[provider] },
-      statuses: { ...initialProviderSettings.statuses, [provider]: refreshedSettings.statuses[provider] },
-      modelCaches: { ...initialProviderSettings.modelCaches, [provider]: refreshedSettings.modelCaches[provider] },
+    return {
+      ...initialProviderSettings,
+      providers: {
+        ...initialProviderSettings.providers,
+        [provider]: refreshedSettings.providers[provider],
+      },
+      statuses: {
+        ...initialProviderSettings.statuses,
+        [provider]: refreshedSettings.statuses[provider],
+      },
+      modelCaches: {
+        ...initialProviderSettings.modelCaches,
+        [provider]: refreshedSettings.modelCaches[provider],
+      },
     };
   }, [initialProviderSettings, refreshedSettings, provider]);
-  const receiveNativeSettings = useCallback((value: { provider: string; settings: ProviderSettings }) => {
-    if (connection) setNativeSettings({ connection, provider: value.provider, instance, settings: value.settings });
-  }, [connection, instance]);
-  const nativeProvider = isRegisteredAcpProvider(provider) || ["claude-code", "opencode", "grok-build"].includes(provider);
-  const displayedModel = modelValue || defaultModelForProvider(provider, providerSettings);
+  const receiveNativeSettings = useCallback(
+    (value: { provider: string; settings: ProviderSettings }) => {
+      if (connection)
+        setNativeSettings({
+          connection,
+          provider: value.provider,
+          instance,
+          settings: value.settings,
+        });
+    },
+    [connection, instance],
+  );
+  const nativeProvider =
+    isRegisteredAcpProvider(provider) ||
+    ["claude-code", "opencode", "grok-build"].includes(provider);
+  const displayedModel =
+    provider === "openpond"
+      ? modelValue
+      : modelValue || defaultModelForProvider(provider, providerSettings);
   const [voiceInputActive, setVoiceInputActive] = useState(false);
   const showModelReasoningMenu = providerModelSupportsReasoning(
     provider,
     displayedModel,
-    providerSettings
+    providerSettings,
   );
   const modelGroups = useMemo(
     () =>
       composerModelGroups({
-        currentModelOptions: refreshedSettings ? modelOptionsForProvider(provider, providerSettings) : modelOptions,
+        currentModelOptions: refreshedSettings
+          ? modelOptionsForProvider(provider, providerSettings)
+          : modelOptions,
         currentProvider: provider,
         providerOptions,
         providerSettings,
@@ -190,7 +219,9 @@ export function ComposerPrimaryControls({
     [modelGroups],
   );
   const changeModelSelection = (nextProvider: ChatProvider, nextModel: string) => {
-    onCodexReasoningEffortChange(defaultReasoningEffortForModel(nextProvider, nextModel, providerSettings));
+    onCodexReasoningEffortChange(
+      defaultReasoningEffortForModel(nextProvider, nextModel, providerSettings),
+    );
     if (nextProvider === provider) {
       onModelChange(nextModel);
       return;
@@ -229,9 +260,7 @@ export function ComposerPrimaryControls({
             type="checkbox"
             checked={teamUseModel}
             disabled={busy || teamUseModelLocked}
-            onChange={(event) =>
-              onTeamUseModelChange?.(event.currentTarget.checked)
-            }
+            onChange={(event) => onTeamUseModelChange?.(event.currentTarget.checked)}
           />
           <span>Use model</span>
         </label>
@@ -247,7 +276,7 @@ export function ComposerPrimaryControls({
             reasoningEffort={codexReasoningEffort}
             showReasoning={showModelReasoningMenu}
             onModelSelectionChange={changeModelSelection}
-                onReasoningEffortChange={onCodexReasoningEffortChange}
+            onReasoningEffortChange={onCodexReasoningEffortChange}
           />
         ) : null}
         <VoiceInputButton
@@ -263,7 +292,7 @@ export function ComposerPrimaryControls({
         />
         <ComposerSubmissionControls
           running={running}
-          sendDisabled={sendDisabled}
+          sendDisabled={sendDisabled || (provider === "openpond" && !modelValue)}
           hasComposerInput={hasComposerInput}
           sendTooltip={sendTooltip}
           stopIcon={stopIcon}
@@ -276,11 +305,7 @@ export function ComposerPrimaryControls({
     );
   }
   return (
-    <div
-      className={`composer-primary-controls ${
-        running ? "has-running-turn" : ""
-      }`.trim()}
-    >
+    <div className={`composer-primary-controls ${running ? "has-running-turn" : ""}`.trim()}>
       <div className="composer-add-control open-up" ref={addMenuRef}>
         <button
           type="button"
@@ -307,7 +332,17 @@ export function ComposerPrimaryControls({
           }}
         />
       </div>
-      {!hideModelControls && nativeProvider ? <NativeAgentControls connection={connection} provider={provider} providerSettings={providerSettings} placement={dropdownPlacement} onSettings={receiveNativeSettings} onSetup={onProviderSetupOpen} disabled={busy || disabled} /> : null}
+      {!hideModelControls && nativeProvider ? (
+        <NativeAgentControls
+          connection={connection}
+          provider={provider}
+          providerSettings={providerSettings}
+          placement={dropdownPlacement}
+          onSettings={receiveNativeSettings}
+          onSetup={onProviderSetupOpen}
+          disabled={busy || disabled}
+        />
+      ) : null}
       {showCommandAccess && provider === "codex" ? (
         <DropdownSelect
           compact
@@ -316,16 +351,13 @@ export function ComposerPrimaryControls({
           placement={dropdownPlacement}
           label="Codex permissions"
           tooltip={
-            CODEX_PERMISSION_MODE_OPTIONS.find(
-              (option) => option.value === codexPermissionMode
-            )?.label
+            CODEX_PERMISSION_MODE_OPTIONS.find((option) => option.value === codexPermissionMode)
+              ?.label
           }
           value={codexPermissionMode}
           options={CODEX_PERMISSION_MODE_OPTIONS}
           disabled={busy}
-          onChange={(value) =>
-            onCodexPermissionModeChange(value as CodexPermissionMode)
-          }
+          onChange={(value) => onCodexPermissionModeChange(value as CodexPermissionMode)}
         />
       ) : showCommandAccess && !nativeProvider ? (
         <DropdownSelect
@@ -338,22 +370,14 @@ export function ComposerPrimaryControls({
             OPENPOND_COMMAND_ACCESS_MODE_OPTIONS.find(
               (option) =>
                 option.value ===
-                (openPondCommandAccessMode === "disabled"
-                  ? "ask"
-                  : openPondCommandAccessMode)
+                (openPondCommandAccessMode === "disabled" ? "ask" : openPondCommandAccessMode),
             )?.label
           }
-          value={
-            openPondCommandAccessMode === "disabled"
-              ? "ask"
-              : openPondCommandAccessMode
-          }
+          value={openPondCommandAccessMode === "disabled" ? "ask" : openPondCommandAccessMode}
           options={OPENPOND_COMMAND_ACCESS_MODE_OPTIONS}
           disabled={busy}
           onChange={(value) =>
-            onOpenPondCommandAccessModeChange(
-              value as OpenPondCommandAccessMode
-            )
+            onOpenPondCommandAccessModeChange(value as OpenPondCommandAccessMode)
           }
         />
       ) : null}
@@ -366,58 +390,55 @@ export function ComposerPrimaryControls({
         />
       ) : null}
       <div className="composer-spacer" />
-      {!hideModelControls && <span
-        className={`context-status-shell ${contextWindowStatus.tone}`}
-        style={contextStatusStyle}
-      >
+      {!hideModelControls && (
         <span
-          className={`composer-status ${contextWindowStatus.tone}`}
-          role={contextWindowStatus.maxTokens === null ? "img" : "meter"}
-          aria-label={contextWindowStatus.tooltip}
-          aria-describedby={contextStatusTooltipId}
-          aria-valuemin={contextWindowStatus.maxTokens === null ? undefined : 0}
-          aria-valuemax={contextWindowStatus.maxTokens ?? undefined}
-          aria-valuenow={
-            contextWindowStatus.maxTokens === null
-              ? undefined
-              : contextWindowStatus.usedTokens
-          }
-          tabIndex={0}
-        />
-        <span
-          className="context-status-tooltip"
-          id={contextStatusTooltipId}
-          role="tooltip"
+          className={`context-status-shell ${contextWindowStatus.tone}`}
+          style={contextStatusStyle}
         >
-          <span className="context-status-tooltip-title">Context window</span>
-          <span className="context-status-tooltip-main">
-            <span>{contextWindowStatus.summary}</span>
-            <span>{contextWindowStatus.tokensLabel}</span>
+          <span
+            className={`composer-status ${contextWindowStatus.tone}`}
+            role={contextWindowStatus.maxTokens === null ? "img" : "meter"}
+            aria-label={contextWindowStatus.tooltip}
+            aria-describedby={contextStatusTooltipId}
+            aria-valuemin={contextWindowStatus.maxTokens === null ? undefined : 0}
+            aria-valuemax={contextWindowStatus.maxTokens ?? undefined}
+            aria-valuenow={
+              contextWindowStatus.maxTokens === null ? undefined : contextWindowStatus.usedTokens
+            }
+            tabIndex={0}
+          />
+          <span className="context-status-tooltip" id={contextStatusTooltipId} role="tooltip">
+            <span className="context-status-tooltip-title">Context window</span>
+            <span className="context-status-tooltip-main">
+              <span>{contextWindowStatus.summary}</span>
+              <span>{contextWindowStatus.tokensLabel}</span>
+            </span>
+            {contextWindowStatus.maxTokens !== null && (
+              <span className="context-status-tooltip-bar" aria-hidden="true">
+                <span />
+              </span>
+            )}
+            {contextWindowStatus.detail ? (
+              <span className="context-status-tooltip-detail">{contextWindowStatus.detail}</span>
+            ) : null}
           </span>
-          {contextWindowStatus.maxTokens !== null && (
-            <span className="context-status-tooltip-bar" aria-hidden="true">
-              <span />
-            </span>
-          )}
-          {contextWindowStatus.detail ? (
-            <span className="context-status-tooltip-detail">
-              {contextWindowStatus.detail}
-            </span>
-          ) : null}
         </span>
-      </span>}
-      {!hideModelControls && <ComposerModelMenu
-        disabled={busy}
-        model={displayedModel}
-        modelGroups={modelGroups}
-        placement={dropdownPlacement}
-        provider={provider}
-        providerSettings={providerSettings}
-        reasoningEffort={codexReasoningEffort}
-        showReasoning={showModelReasoningMenu}
-        onModelSelectionChange={changeModelSelection}
-        onReasoningEffortChange={onCodexReasoningEffortChange}
-      />}
+      )}
+      {trainingControl}
+      {!hideModelControls && (
+        <ComposerModelMenu
+          disabled={busy}
+          model={displayedModel}
+          modelGroups={modelGroups}
+          placement={dropdownPlacement}
+          provider={provider}
+          providerSettings={providerSettings}
+          reasoningEffort={codexReasoningEffort}
+          showReasoning={showModelReasoningMenu}
+          onModelSelectionChange={changeModelSelection}
+          onReasoningEffortChange={onCodexReasoningEffortChange}
+        />
+      )}
       <VoiceInputButton
         buttonClassName="composer-icon"
         connection={connection}
@@ -431,7 +452,7 @@ export function ComposerPrimaryControls({
       />
       <ComposerSubmissionControls
         running={running}
-        sendDisabled={sendDisabled}
+        sendDisabled={sendDisabled || (provider === "openpond" && !modelValue)}
         hasComposerInput={hasComposerInput}
         sendTooltip={sendTooltip}
         stopIcon={stopIcon}

@@ -1,3 +1,5 @@
+import { useTrainingSidebarContext } from "../../hooks/useTrainingSidebarContext";
+import { ChatContextAccountScope } from "../../hooks/useChatContextSelection";
 import { rememberChatSelection } from "../../lib/chat-selection-preference";
 import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
 import { OpenHtmlVisualContext, SelectHtmlResourceContext } from "../visuals/html-visual-context";
@@ -106,6 +108,10 @@ import { MainPanePonder } from "./MainPanePonder";
 import { mainPaneAccountScopeKey } from "./main-pane-account-scope";
 import { RightSidebarHomeActions } from "./RightSidebarHomePanel";
 import { RightSidebarOverview } from "./RightSidebarOverview";
+import { ChatDatasetSidebar } from "../chat/ChatDatasetSidebar";
+import { activeRun } from "../chat/dataset-workspace-data";
+import { useBrowserSidebar } from "../../hooks/useBrowserSidebar";
+import { BrowserTabButtons } from "../browser/BrowserTabs";
 
 import {
   AppsView,
@@ -273,6 +279,7 @@ export function MainPane({
   onShowBrowserPanel,
   onShowTrainingDraftPanel,
   onShowFilesPanel,
+  onShowExperimentsPanel,
   onShowRightChatPanel,
   onAddRightChat,
   onOpenRightChatForSession,
@@ -294,7 +301,9 @@ export function MainPane({
   onCloseTerminal,
   onLoadMoreChatHistory,
 }: MainPaneProps) {
+  const sidebarBrowser = useBrowserSidebar(browserConversationId);
   const [chatProjector] = useState(() => new IncrementalChatProjector());
+  const seenWorkspaceRun = useRef<{sessionId:string|null;eventId:string|null}|null>(null);
   const liveSessionId = selectedSessionId && !isCodexHistorySessionId(selectedSessionId)
     ? selectedSessionId
     : null;
@@ -357,6 +366,8 @@ export function MainPane({
     bootstrap?.profileLibrary?.lastUsed ??
     null;
   const accountTeamScopeKey = mainPaneAccountScopeKey(bootstrap);
+  const trainingLabel = useTrainingSidebarContext({ connection, sessionId: selectedSessionId, accountScope: accountTeamScopeKey,
+    active: view === "chat", onOpen: onShowExperimentsPanel });
   const selectedProfileState =
     profileStateForRef(
       bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
@@ -1010,6 +1021,8 @@ export function MainPane({
         clearPrompt: options.preservePrompt ? () => undefined : undefined,
         displayPrompt: options.displayPrompt,
         turnMetadata: options.turnMetadata,
+        sessionMetadata: options.sessionMetadata,
+        onSessionCreated: options.onSessionCreated,
       });
     },
     [
@@ -1178,20 +1191,32 @@ export function MainPane({
   );
   const workspaceStatusLoading =
     workspaceBusy && Boolean(activeWorkspaceAppId) && !workspaceState;
+  useEffect(()=>{
+    const event=runtimeEvents.filter(item=>item.sessionId===selectedSessionId&&item.source==="server"&&item.name==="workspace_action_result").at(-1);
+    const id=event?`${selectedSessionId}:${event.id}`:null;
+    if(!seenWorkspaceRun.current||seenWorkspaceRun.current.sessionId!==selectedSessionId){seenWorkspaceRun.current={sessionId:selectedSessionId,eventId:id};return;}
+    if(id===seenWorkspaceRun.current.eventId)return;
+    seenWorkspaceRun.current={sessionId:selectedSessionId,eventId:id};
+    const data=event?.data as {chatResource?:{kind?:string;state?:string};chatResourcePresentation?:string}|undefined;
+    if(view==="chat"&&data?.chatResourcePresentation!=="context"&&data?.chatResource?.kind==="experiment"&&activeRun(data.chatResource.state??"")){
+      onShowExperimentsPanel();
+    }
+  },[runtimeEvents,selectedSessionId,view,onShowExperimentsPanel]);
   const candidateSidebarId = labCandidateReview.selection
     ? `candidate:${labCandidateReview.selection.runId}:${labCandidateReview.selection.candidateId}`
     : null;
-  const workPanel = view === "chat" ? (openFile: () => void) => (
-    <RightSidebarOverview conversationId={browserConversationId} onOpenBrowser={onShowBrowserPanel} sessionId={selectedSessionId} connection={connection} workspaceId={activeWorkspaceAppId} sandboxId={rightSidebarUsesSandbox ? rightSidebarSandboxId : null} messages={chatMessages} events={runtimeEvents} onOpenFile={handleOpenFileInSidebar}
+  const workPanel = view === "chat" ? (openFile: () => void, tabId: number) => {
+    const Overview = tabId === -1 ? ChatDatasetSidebar : RightSidebarOverview;
+    return <Overview conversationId={browserConversationId} onOpenBrowser={onShowBrowserPanel} sessionId={selectedSessionId} connection={connection} workspaceId={activeWorkspaceAppId} sandboxId={rightSidebarUsesSandbox ? rightSidebarSandboxId : null} messages={chatMessages} events={runtimeEvents} onOpenFile={handleOpenFileInSidebar}
       actions={<RightSidebarHomeActions terminalOpen={terminalOpen} sideChatAvailable
-        onOpenFile={openFile} onOpenFiles={onShowFilesPanel}
+        onOpenFile={openFile} onOpenFiles={onShowFilesPanel} onOpenExperiments={onShowExperimentsPanel}
         onOpenReview={onShowDiffPanel} onOpenSideChat={onAddRightChat}
         onOpenTrainingDraft={onShowTrainingDraftPanel} trainingDraftAvailable={Boolean(selectedSessionId)}
         onToggleTerminal={onToggleTerminal} />}
-    />
-  ) : null;
+    />;
+  } : null;
   const workOutputsTabRequest = useMemo(() =>
-    rightPanelMode === "home" && view === "chat" ? { id: -1, tab: "outputs" as const } : rightPanelTabRequest,
+    rightPanelMode === "home" && view === "chat" ? { id: -1, tab: "outputs" as const, overview: "new" as const } : rightPanelTabRequest,
     [view, rightPanelMode, rightPanelTabRequest]);
   const diffPanel = showDiffPanel ? (
     <WorkspaceDiffPanel
@@ -1259,7 +1284,9 @@ export function MainPane({
         showLabCandidateDiffPanel ? null : rightSidebarSourceSwitcher
       }
       tabRequest={workOutputsTabRequest}
+      additionalTabs={view === "chat" ? <BrowserTabButtons tabs={sidebarBrowser.state.tabs} activeTabId={null} onSelectTab={id=>{void sidebarBrowser.selectTab(id);htmlVisualTabs.showBrowser();onShowBrowserPanel();}} onCloseTab={id=>void sidebarBrowser.closeTab(id)}/> : undefined}
       renderOutputs={workPanel ?? undefined}
+      outputsLabel={trainingLabel}
       viewState={workspaceDiffPanelViewState}
       workspaceName={
         showLabCandidateDiffPanel
@@ -1339,6 +1366,7 @@ export function MainPane({
       conversationId={browserConversationId}
       connection={connection}
       visualTabs={htmlVisualTabs}
+      leadingTabs={view==="chat"?<button type="button" className="browser-tab-main sidebar-tool-tab" role="tab" aria-selected={false} onClick={onShowExperimentsPanel}>{trainingLabel}</button>:undefined}
       expanded={diffPanelExpanded}
       onResizeStart={onDiffPanelResizeStart}
     />
@@ -1501,7 +1529,7 @@ export function MainPane({
     </Suspense>
   );
   return (
-    <OpenHtmlVisualContext.Provider value={openHtmlVisual}><SelectHtmlResourceContext.Provider value={selectHtmlResource}>
+    <ChatContextAccountScope.Provider value={accountTeamScopeKey}><OpenHtmlVisualContext.Provider value={openHtmlVisual}><SelectHtmlResourceContext.Provider value={selectHtmlResource}>
     <main tabIndex={-1} data-thread-session={view === "chat" && !ponderMode ? selectedSessionId ?? undefined : undefined}
       className={`main-pane ${viewClass} ${
         terminalOpen ? "terminal-open" : ""
@@ -1948,7 +1976,7 @@ export function MainPane({
         </>
       )}
     </main>
-    </SelectHtmlResourceContext.Provider></OpenHtmlVisualContext.Provider>
+    </SelectHtmlResourceContext.Provider></OpenHtmlVisualContext.Provider></ChatContextAccountScope.Provider>
   );
 }
 

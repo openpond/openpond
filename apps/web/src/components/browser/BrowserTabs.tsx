@@ -1,12 +1,15 @@
+import type { ReactNode } from "react";
 import { Globe2, Plus, X } from "../icons";
 
 export function BrowserTabs({
+  leadingTabs,
   activeTabId,
   tabs,
   onCloseTab,
   onNewTab,
   onSelectTab,
 }: {
+  leadingTabs?: ReactNode;
   activeTabId: string | null;
   tabs: BrowserTabState[];
   onCloseTab: (tabId: string) => void;
@@ -15,7 +18,47 @@ export function BrowserTabs({
 }) {
   return (
     <div className="browser-tabs" role="tablist" aria-label="Browser tabs">
-      {!tabs.length ? <div className="browser-tab active"><Globe2 size={13} aria-hidden /><button type="button" className="browser-tab-main" role="tab" aria-selected>New tab</button></div> : null}
+      {leadingTabs}
+      {!tabs.length ? (
+        <div className="browser-tab active">
+          <Globe2 size={13} aria-hidden />
+          <button type="button" className="browser-tab-main" role="tab" aria-selected>
+            New tab
+          </button>
+        </div>
+      ) : null}
+      <BrowserTabButtons
+        activeTabId={activeTabId}
+        tabs={tabs}
+        onSelectTab={onSelectTab}
+        onCloseTab={onCloseTab}
+      />
+      <button
+        type="button"
+        className="browser-tab-add"
+        title="New tab"
+        aria-label="New tab"
+        onClick={onNewTab}
+      >
+        <Plus size={14} />
+      </button>
+    </div>
+  );
+}
+
+export function BrowserTabButtons({
+  activeTabId,
+  tabs,
+  onCloseTab,
+  onSelectTab,
+}: {
+  activeTabId: string | null;
+  tabs: BrowserTabState[];
+  onCloseTab: (id: string) => void;
+  onSelectTab: (id: string) => void;
+}) {
+  return (
+    <>
       {tabs.map((tab) => (
         <div className={`browser-tab ${tab.id === activeTabId ? "active" : ""}`} key={tab.id}>
           <span className="browser-tab-favicon" aria-hidden="true">
@@ -46,10 +89,7 @@ export function BrowserTabs({
           </button>
         </div>
       ))}
-      <button type="button" className="browser-tab-add" title="New tab" aria-label="New tab" onClick={onNewTab}>
-        <Plus size={14} />
-      </button>
-    </div>
+    </>
   );
 }
 

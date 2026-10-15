@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useMemo, useState } from "react";
 import {
   isTrainingSourceRef,
@@ -310,8 +310,8 @@ export function LabModelDataset({
               </button>
             </nav>
           ) : null}
-          {rowsError && inlineErrorMessage(rowsError) ? (
-            <div className="training-banner error" role="alert">{rowsError}</div>
+          {rowsError ? (
+            <ErrorToast error={rowsError} />
           ) : null}
         </div>
       </DetailSection>

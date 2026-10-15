@@ -1,4 +1,3 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { ChevronUp } from "../icons";
 import type { WorkspaceDiffFile, WorkspaceLspActionResponse, WorkspaceLspDiagnostic } from "@openpond/contracts";
@@ -166,7 +165,7 @@ export function FilePreview({
         </div>
       ) : null}
       {!hasContent ? (
-        <div className="workspace-diff-code-empty">{loading ? "Loading file content…" : inlineErrorMessage(error) ?? "No file content available."}</div>
+        <div className="workspace-diff-code-empty">{loading ? "Loading file content…" : "No file content available."}</div>
       ) : shouldRenderMarkdown ? (
         <div className="workspace-markdown-preview">
           <MarkdownText content={displayContent} />

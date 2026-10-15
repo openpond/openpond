@@ -112,6 +112,13 @@ export function summarizeShellCommand(
   const tokens = shellWords(command);
   if (tokens.length === 0) return null;
   const running = state === "running" || state === "pending";
+  if (tokens[0] === "$OPENPOND_CLI_NODE" && tokens[1] === "$OPENPOND_CLI_ENTRY") {
+    if (tokens.some(isShellOperator)) return running ? "Running OpenPond CLI commands" : "Ran OpenPond CLI commands";
+    const action = tokens[3];
+    const target = tokens[2] === "datasets" ? ({context:"selected dataset",read:"dataset", "list-graders":"graders", "read-grader":"grader"} as Record<string,string>)[action ?? ""]
+      : tokens[2] === "experiments" && action === "list" ? "experiments" : null;
+    return target ? `${running ? "Reading" : "Read"} ${target}` : running ? "Running OpenPond CLI" : "Ran OpenPond CLI";
+  }
   if (tokens.some(isShellOperator)) return running ? "Running shell command" : "Ran shell command";
   const executable = stripCommandWrapper(tokens);
   if (!executable) return null;

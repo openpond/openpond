@@ -1,6 +1,7 @@
 import type { ComposerDraftStore } from "../../lib/composer-draft-store";
 import type {
   ChatAttachment,
+  Session,
   ChatProvider,
   CodexPermissionMode,
   CodexReasoningEffort,
@@ -101,6 +102,8 @@ export type ComposerProps = {
 };
 
 export type ComposerSubmitOptions = {
+  sessionMetadata?: Record<string, unknown>;
+  onSessionCreated?: (session: Session) => void;
   displayPrompt?: string;
   preservePrompt?: boolean;
   promptOverride?: string;

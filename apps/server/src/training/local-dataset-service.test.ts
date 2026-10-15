@@ -10,6 +10,38 @@ import { createLocalDatasetService } from "./local-dataset-service.js";
 import { createLocalDatasetSync } from "./local-dataset-sync.js";
 import type { LocalDatasetRecord } from "@openpond/contracts";
 
+// Failure story: a grader's attached ID used to fail inspection, forcing a
+// whole-dataset export that leaked unrelated file bytes into the model context.
+test("grader inspection resolves attached IDs and bounds fixtures and verifier source", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "openpond-grader-inspection-"));
+  const store = new SqliteStore(home);
+  try {
+    const service = createLocalDatasetService({store,home});
+    const source = "export function verify() { return {score:1,passed:true,feedback:'ok',evidenceRefs:[]}; }" + " ".repeat(30_000);
+    const file = (path:string,content:string) => ({path,base64:Buffer.from(content).toString("base64"),sizeBytes:Buffer.byteLength(content),contentHash:sha256(Buffer.from(content))});
+    const created = await service.request({action:"create",operationId:"inspect-grader",payload:{name:"Evidence",draft:{
+      graders:[{id:"facts",version:"1",label:"Facts",kind:"custom_verifier",runtime:"isolated_javascript",module:"graders/facts.js",exportName:"verify",timeoutMs:1000,networkPolicy:"none",weight:1,hardGate:true,rewardEligible:false,privileged:true,metadata:{}}],
+      graderFixtures:Array.from({length:30},(_,index)=>({id:`case-${index}`,taskId:"one",label:"positive",output:{text:"answer"},infrastructureError:null,expectedPassed:true,expectedRewardEligible:false,metadata:{graderIds:["facts"]}})),
+      tasks:[{schemaVersion:"openpond.taskData.v1",id:"one",clusterKey:"one",split:"validation",input:{prompt:"Answer"},expectedOutput:{text:"answer"},policyVisibleContext:{},privilegedContextRef:null,sourceRefs:[],tags:[],metadata:{}}],
+    },files:[file("graders/facts.js",source),file("inputs/unrelated.txt","Unrelated private input bytes")]}}) as {record:LocalDatasetRecord};
+    const id=created.record.workspace.draft.id;
+    const listed=await service.request({action:"list_graders",id,expectedRevision:1}) as {summaries:import("@openpond/contracts").ChatResourceSummary[]};
+    const inspect=(graderId:string,offset=0,limit=20)=>service.request({action:"read_grader",id,expectedRevision:1,payload:{graderId,view:"inspection",offset,limit}});
+    const result=await inspect(listed.summaries[0]!.id) as {dataset:{id:string;revision:number};grader:{id:string};fixtures:{total:number;items:unknown[];hasMore:boolean};files:{path:string;content:string;truncated:boolean}[]};
+    expect(result.dataset).toMatchObject({id,revision:1});
+    expect(result.grader.id).toBe("facts");
+    expect(result).not.toHaveProperty("record");
+    expect(result.fixtures).toMatchObject({total:30,hasMore:true});
+    expect(result.fixtures.items).toHaveLength(20);
+    expect(result.files.map(file=>file.path)).toEqual(["graders/facts.js"]);
+    expect(result.files[0]!.content).toHaveLength(24_000);
+    expect(result.files[0]!.truncated).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("Unrelated private input bytes");
+    expect(await inspect("facts",25,5)).toMatchObject({fixtures:{total:30,hasMore:false}});
+    await expect(inspect("other-dataset-grader")).rejects.toThrow("saved grader");
+  } finally {await store.close();await rm(home,{recursive:true,force:true});}
+});
+
 // Failure story: a local PDF corpus larger than the hosted envelope must retain
 // all bytes and revisions, while a selected run excludes unrelated PDF inputs.
 // The same corpus must still fail the default hosted compilation boundary.

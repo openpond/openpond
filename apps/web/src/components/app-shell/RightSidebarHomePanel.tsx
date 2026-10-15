@@ -86,13 +86,13 @@ export function RightSidebarHomePanel({
 }
 
 export function RightSidebarHomeActions({
-  terminalOpen, sideChatAvailable, onOpenFiles, onOpenFile, onOpenReview,
+  terminalOpen, sideChatAvailable, onOpenFiles, onOpenFile, onOpenReview, onOpenExperiments,
   onOpenSideChat, onOpenTrainingDraft, trainingDraftAvailable, onToggleTerminal,
 }: Pick<ComponentProps<typeof RightSidebarHomePanel>,
   | "terminalOpen" | "sideChatAvailable" | "onOpenFiles"
   | "onOpenReview" | "onOpenSideChat" | "onOpenTrainingDraft"
   | "trainingDraftAvailable" | "onToggleTerminal"
-> & { onOpenFile?: () => void }) {
+> & { onOpenFile?: () => void; onOpenExperiments?: () => void }) {
   const actions: RightSidebarHomeAction[] = [
     { id: "review", label: "Review", meta: "Diffs", icon: Clipboard, onSelect: onOpenReview },
     { id: "files", label: "Files", meta: "Workspace", icon: FolderOpen, onSelect: onOpenFiles },
@@ -121,7 +121,8 @@ export function RightSidebarHomeActions({
     },
   ];
 
-  if (onOpenFile) actions.splice(2, 0, { id: "open-file", label: "Open file", icon: FolderOpen, onSelect: onOpenFile });
+  if (onOpenExperiments) actions.unshift({id:"experiments",label:"Training",meta:"Experiments and models",icon:ChartColumnStacked,onSelect:onOpenExperiments});
+  if (onOpenFile) actions.splice(onOpenExperiments?3:2, 0, { id: "open-file", label: "Open file", icon: FolderOpen, onSelect: onOpenFile });
   return (
     <div className="right-sidebar-home-actions" role="menu" aria-label="Workspace actions">
       {actions.map((action) => (

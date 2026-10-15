@@ -1,21 +1,11 @@
 import { latestChatPlan } from "../../lib/chat-task-progress";
 import { ActivityPlanCard } from "../chat/ActivityPlanCard";
-import {
-  lazy,
-  Suspense,
-  useMemo,
-  type ComponentProps,
-  type Ref,
-  type UIEvent,
-} from "react";
+import { lazy, Suspense, useMemo, type ComponentProps, type Ref, type UIEvent } from "react";
 import type { TaskCreationSnapshot } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { useNewMessageIds } from "../../hooks/useNewMessageIds";
 import { useSessionTurnCache } from "../../hooks/useSessionTurnCache";
-import {
-  buildChatTimelineRows,
-  chatTimelineMessages,
-} from "../../lib/chat-timeline-rows";
+import { buildChatTimelineRows, chatTimelineMessages } from "../../lib/chat-timeline-rows";
 import { ConversationFormalReview } from "../human-review/ConversationFormalReview";
 import { ChatTimelineEntry } from "../chat/ChatTimelineEntry";
 import { MessageRow } from "../chat/Messages";
@@ -81,10 +71,7 @@ export function MainChatThread({
   threadRef: Ref<HTMLElement>;
   workspaceRootPath: string | null;
 }) {
-  const messages = useMemo(
-    () => chatTimelineMessages(rows),
-    [rows]
-  );
+  const messages = useMemo(() => chatTimelineMessages(rows), [rows]);
   const currentPlan = useMemo(() => latestChatPlan(messages), [messages]);
   const newMessageIds = useNewMessageIds(messages, conversationKey);
   const latestTurnId = latestMessageTurnId(messages);
@@ -97,50 +84,75 @@ export function MainChatThread({
 
   return (
     <>
-    <section
-      className="chat-thread"
-      aria-label="Conversation"
-      ref={threadRef}
-      onScroll={onScroll}
-    >
-      {rows.map((row) => <ChatTimelineEntry key={row.id} row={row} renderMessage={(row) => (
-        <MessageRow
-          activeWorkspaceAppId={activeWorkspaceAppId}
-          accountBaseUrl={accountBaseUrl}
-          billingOrganizationSlug={billingOrganizationSlug}
-          billingTeamId={billingTeamId}
-          connection={connection}
-          animateInitialContent={
-            row.message.role === "assistant" &&
-            newMessageIds.has(row.message.id)
-          }
-          key={row.id}
-          kvCacheSummary={
-            row.showFooter && row.message.turnId
-              ? turnCache.get(row.message.turnId) ?? null
-              : null
-          }
-          message={row.message}
-          onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
-          onOpenFileInSidebar={onOpenFileInSidebar}
-          onOpenBrowserLink={onOpenBrowserLink}
-          onOpenProfileSettings={onOpenProfileSettings}
-          onResolveUserQuestion={onResolveUserQuestion}
-          onOpenSession={onOpenSession}
-          onOpenPonder={onOpenPonder}
-          userAttachmentDisplay={userAttachmentDisplay}
-          workspaceRootPath={workspaceRootPath}
-          showFooter={row.showFooter}
-        />
-      )} />)}
-      {connection && formalReviewTeamId && formalReviewActorId && formalReviewScopeKey && sessionId && onFormalReviewOpen ? <ConversationFormalReview key={formalReviewScopeKey + sessionId} connection={connection} teamId={formalReviewTeamId} actorId={formalReviewActorId} scopeKey={formalReviewScopeKey} sessionId={sessionId} running={turnRunning} onOpen={onFormalReviewOpen} /> : null}
-      {creation ? (
-        <Suspense fallback={null}>
-          <TrainingStatusReceipt creation={creation} />
-        </Suspense>
+      <section
+        className="chat-thread"
+        aria-label="Conversation"
+        ref={threadRef}
+        onScroll={onScroll}
+      >
+        {rows.map((row) => (
+          <ChatTimelineEntry
+            key={row.id}
+            row={row}
+            renderMessage={(row) => (
+              <MessageRow
+                activeWorkspaceAppId={activeWorkspaceAppId}
+                accountBaseUrl={accountBaseUrl}
+                billingOrganizationSlug={billingOrganizationSlug}
+                billingTeamId={billingTeamId}
+                connection={connection}
+                animateInitialContent={
+                  row.message.role === "assistant" && newMessageIds.has(row.message.id)
+                }
+                key={row.id}
+                kvCacheSummary={
+                  row.showFooter && row.message.turnId
+                    ? (turnCache.get(row.message.turnId) ?? null)
+                    : null
+                }
+                message={row.message}
+                onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
+                onOpenFileInSidebar={onOpenFileInSidebar}
+                onOpenBrowserLink={onOpenBrowserLink}
+                onOpenProfileSettings={onOpenProfileSettings}
+                onResolveUserQuestion={onResolveUserQuestion}
+                onOpenSession={onOpenSession}
+                onOpenPonder={onOpenPonder}
+                userAttachmentDisplay={userAttachmentDisplay}
+                workspaceRootPath={workspaceRootPath}
+                showFooter={row.showFooter}
+              />
+            )}
+          />
+        ))}
+        {connection &&
+        formalReviewTeamId &&
+        formalReviewActorId &&
+        formalReviewScopeKey &&
+        sessionId &&
+        onFormalReviewOpen ? (
+          <ConversationFormalReview
+            key={formalReviewScopeKey + sessionId}
+            connection={connection}
+            teamId={formalReviewTeamId}
+            actorId={formalReviewActorId}
+            scopeKey={formalReviewScopeKey}
+            sessionId={sessionId}
+            running={turnRunning}
+            onOpen={onFormalReviewOpen}
+          />
+        ) : null}
+        {creation ? (
+          <Suspense fallback={null}>
+            <TrainingStatusReceipt creation={creation} />
+          </Suspense>
+        ) : null}
+      </section>
+      {turnRunning && currentPlan?.length ? (
+        <aside className="chat-plan-dock" aria-label="Current task progress">
+          <ActivityPlanCard entries={currentPlan} initiallyExpanded={false} />
+        </aside>
       ) : null}
-    </section>
-    {turnRunning && currentPlan?.length ? <aside className="chat-plan-dock" aria-label="Current task progress"><ActivityPlanCard entries={currentPlan} initiallyExpanded={false} /></aside> : null}
     </>
   );
 }

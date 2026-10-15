@@ -57,6 +57,11 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
   const manifest = HarnessRunManifestSchema.parse(input.manifest);
   const bundle = ResolvedTrainingBundleManifestSchema.parse(input.bundleManifest);
   const qualification = input.executionMode === "qualification";
+  const qualificationGroupSize = manifest.qualificationSamples === undefined ? null
+    : z.object({ rollout: z.object({ groupSize: z.number().int().min(2).max(32) }).passthrough() }).passthrough().parse(recipe).rollout.groupSize;
+  if (manifest.qualificationSamples !== bundle.qualificationSamples || (manifest.qualificationSamples !== undefined && (!qualification || manifest.qualificationSamples > qualificationGroupSize!))) {
+    throw new Error("Qualification samples must be within the pinned rollout group and cannot be used for training.");
+  }
   if (manifest.executionMode !== input.executionMode || bundle.executionMode !== input.executionMode) {
     throw new Error("Managed submission execution mode differs from its immutable bundle.");
   }

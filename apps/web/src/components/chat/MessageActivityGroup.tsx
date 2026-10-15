@@ -848,7 +848,7 @@ function useActivityImageUrl(
 
 function isAbsoluteLocalImagePath(path: string): boolean {
   return (
-    /^file:\/\//i.test(path) || /^\//.test(path) || /^[A-Za-z]:[\\/]/.test(path)
+    /^file:\/\//i.test(path) || path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)
   );
 }
 

@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { ModelBindingSchema, type ModelProject } from "@openpond/contracts";
@@ -49,7 +49,7 @@ function ServingOwnerQuery({ connection, model, readOnly }: Parameters<typeof Co
   return <section className="training-detail-section" aria-label="Automatic serving authorization">
     <h3>Automatic serving</h3>
     <p>Register an existing OpenPond target, select it on the Project’s conversation policy and save that policy paused. Authorize its exact configuration here, then enable it on the Project. This serving owner must stay connected to apply qualified candidates.</p>
-    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+    {error ? <ErrorToast error={error} /> : null}
     {!state && !error ? <p>Loading serving authorization…</p> : null}
     {state ? <>
       <label>Conversation policy<select disabled={busy || readOnly} value={policyId} onChange={event => setPolicyId(event.target.value)}><option value="">Select policy</option>{state.policies.map(policy => <option key={policy.id} value={policy.id}>{policy.configuration.name} / {policy.status}</option>)}</select></label>

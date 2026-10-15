@@ -1,6 +1,6 @@
 import { NativeTaskNotificationCard } from "./NativeTaskNotificationCard";
 import { HtmlVisual } from "../visuals/HtmlVisual";
-import { ChatResourceSummary } from "./ChatResourceSummary";
+import { ChatResourceGroup } from "./ChatResourceGroup";
 import { memo, useState } from "react";
 import {
   CheckCircle2,
@@ -88,7 +88,7 @@ export const MessageRow = memo(function MessageRow({
   workspaceRootPath = null,
 }: MessageRowProps) {
   if (message.nativeTaskNotification) return <div className="message-row assistant"><NativeTaskNotificationCard notification={message.nativeTaskNotification} onOpenFile={onOpenFileInSidebar} /></div>;
-  if (message.role === "resources") return <article className="message-row assistant" data-resource-response={message.turnId}>{message.resources?.map(resource=><ChatResourceSummary key={`${resource.kind}:${resource.id}`} initial={resource} connection={connection} context={message.resourceSessionId && message.turnId ? {sessionId:message.resourceSessionId,turnId:message.turnId} : undefined} />)}</article>;
+  if (message.role === "resources") return <article className="message-row assistant" data-resource-response={message.turnId}><ChatResourceGroup resources={message.resources ?? []} connection={connection} context={message.resourceSessionId && message.turnId ? {sessionId:message.resourceSessionId,turnId:message.turnId} : undefined} /></article>;
   if (message.role === "visual" && message.visual) return <article className="message-row assistant" data-notification-turn={message.turnId} data-notification-final={message.finalAnswer ? "true" : undefined}><HtmlVisual key={message.visual.publicationId} visual={message.visual} connection={connection} /></article>;
   if (message.role === "task_message") return <TaskMessageRow message={message} onOpenSession={onOpenSession}
     onOpenPonder={onOpenPonder} connection={connection} />;

@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import type {
   BaseModelCandidate,
   TrainingCatalog,
@@ -68,8 +68,8 @@ export function TrainingCatalogSetup({
                 "The backend selects the available provider, device, runtime, and engine."}
             </small>
           </div>
-          {catalogError && inlineErrorMessage(catalogError) ? (
-            <p className="training-catalog-error">{catalogError}</p>
+          {catalogError ? (
+            <ErrorToast error={catalogError} />
           ) : null}
           <label className="training-catalog-field">
             <span>Base model</span>

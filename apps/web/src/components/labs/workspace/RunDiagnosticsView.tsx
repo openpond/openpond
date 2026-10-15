@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import { useRef, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import {
@@ -195,10 +195,8 @@ export function RunDiagnosticsView({
           ) : null}
         </div>
       </header>
-      {error && inlineErrorMessage(error) ? (
-        <p className="diagnostic-callout diagnostic-callout-error" role="alert">
-          Diagnostics read failed: {error}
-        </p>
+      {error ? (
+        <ErrorToast error={error} prefix="Diagnostics read failed" />
       ) : null}
       {loading && !value ? (
         <p className="diagnostic-note" role="status">
@@ -257,11 +255,8 @@ export function RunDiagnosticsView({
       ) : null}
       {value ? (
         <>
-          {value.error && inlineErrorMessage(value.error) ? (
-            <div className="diagnostic-callout diagnostic-callout-error">
-              <strong>Failure reason</strong>
-              <code>{value.error}</code>
-            </div>
+          {value.error ? (
+            <div className="diagnostic-callout diagnostic-callout-error"><strong>Failure reason</strong><code>{value.error}</code></div>
           ) : null}
           <dl className="diagnostic-stats">
             <div>

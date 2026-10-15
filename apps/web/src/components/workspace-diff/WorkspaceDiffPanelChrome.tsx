@@ -48,10 +48,12 @@ export function WorkspaceDiffTabs({
   sourceSwitcher,
   visibleTab,
   toolbarActions,
+  additionalTabs,
   tabOrder = [],
   filesTabOpen = true,
   onCloseFilesTab,
   overviewTabs = [],
+  outputsLabel = "Training",
   activeOverviewId,
   onNewOverview,
   onSelectOverview,
@@ -90,10 +92,12 @@ export function WorkspaceDiffTabs({
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   visibleTab: DiffTab;
   toolbarActions?: ReactNode;
+  additionalTabs?: ReactNode;
   tabOrder?: string[];
   filesTabOpen?: boolean;
   onCloseFilesTab?: () => void;
   overviewTabs?: number[];
+  outputsLabel?: string;
   activeOverviewId?: number;
   onNewOverview?: () => void;
   onSelectOverview?: (id: number) => void;
@@ -186,8 +190,8 @@ export function WorkspaceDiffTabs({
           <div className={`workspace-diff-tab file ${visibleTab === "outputs" && activeOverviewId === id ? "active" : ""}`} key={`overview-${id}`}>
             <button type="button" className="workspace-diff-tab-main" role="tab" aria-selected={visibleTab === "outputs" && activeOverviewId === id}
               tabIndex={visibleTab === "outputs" && activeOverviewId === id ? 0 : -1}
-              onClick={() => onSelectOverview?.(id)}><FileText className="workspace-diff-tab-icon" size={14} /><span>New tab</span></button>
-            <button type="button" className="workspace-diff-tab-close" aria-label="Close new tab"
+              onClick={() => onSelectOverview?.(id)}><FileText className="workspace-diff-tab-icon" size={14} /><span>{id===-1?outputsLabel:"New tab"}</span></button>
+            <button type="button" className="workspace-diff-tab-close" aria-label={id===-1?`Close ${outputsLabel}`:"Close new tab"}
               onClick={() => onCloseOverview?.(id)}><X size={12} /></button>
           </div>
     )),
@@ -307,6 +311,7 @@ export function WorkspaceDiffTabs({
         onKeyDown={handleTabListKeyDown}
       >
         {tabNodes}
+        {additionalTabs}
       </div>
         <div className="workspace-diff-add-anchor" ref={addAnchorRef}>
           <button
@@ -320,7 +325,7 @@ export function WorkspaceDiffTabs({
           </button>
           {addMenuOpen && (
             <div className="workspace-diff-add-menu" role="menu">
-              {onSelectOutputs ? <button type="button" role="menuitem" onClick={onSelectOutputs}><FileText size={14} /><span>Outputs</span><kbd /></button> : null}
+              {onSelectOutputs ? <button type="button" role="menuitem" onClick={onSelectOutputs}><FileText size={14} /><span>Training</span><kbd /></button> : null}
               {onOpenSideChat ? (
                 <button type="button" role="menuitem" onClick={onOpenSideChat}>
                   <MessageSquare size={14} />
@@ -378,7 +383,7 @@ export function WorkspaceDiffTabs({
             </div>
           )}
         </div>
-      {sourceSwitcher || sourceStatus ? (
+      {visibleTab!=="outputs"&&(sourceSwitcher || sourceStatus) ? (
         <div className="workspace-diff-source-bar" aria-label="Workspace source">
           {sourceSwitcher ? (
             <div className="workspace-diff-source-toggle" role="group" aria-label="File source">

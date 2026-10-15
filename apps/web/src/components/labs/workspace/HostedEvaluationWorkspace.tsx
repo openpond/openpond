@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import { UnifiedExperimentsPage } from "./UnifiedExperimentsPage";
 import { LocalGraderPage } from "./LocalGraderPage";
 import { LocalSavedDatasetPage } from "./LocalSavedDatasetPage";
@@ -144,16 +144,12 @@ function HostedEvaluationWorkspaceContent({
               />
 
             </div>
-            {inventory.error && inlineErrorMessage(inventory.error) ? (
-              <div role="alert">
-                <p>{inventory.error.message}</p>
-                <button className="training-button secondary" onClick={() => void inventory.refetch()}>Retry workspace</button>
-                {route.projectId ? (
+            {inventory.error ? (
+              <ErrorToast error={inventory.error}><button className="training-button secondary" onClick={() => void inventory.refetch()}>Retry workspace</button>{route.projectId ? (
                   <button className="training-button secondary" onClick={() => changeProject(null)}>
                     Return to All projects
                   </button>
-                ) : null}
-              </div>
+                ) : null}</ErrorToast>
             ) : null}
             {inventory.isPending ? <p role="status">Loading workspace…</p> : null}
             {route.page === "graders" ? (

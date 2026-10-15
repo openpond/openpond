@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { ConnectedHome } from "./workspace/ConnectedHome";
 import { HostedTrainingRunRoute } from "./HostedTrainingRunRoute";
 import { InboxRoute } from "../human-review/InboxRoute";
@@ -288,7 +288,7 @@ export function LabsRoute(props: LabsRouteProps) {
   }
   const tab: LabPrimaryTab = (route?.page === "home" || route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" || route?.page === "labeling" ? "evals" : route?.page === "tasks" ? "tasksets" : route?.page === "datasets" ? "tasksets" : route?.page === "graders" ? "rewards" : route?.page === "experiments" || route?.page === "inbox" ? "evals" : route?.page ?? "overview";
   return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }}>
-    {hostedRefreshError && inlineErrorMessage(hostedRefreshError) ? <p role="status">{hostedRefreshError}</p> : null}
+    {hostedRefreshError ? <ErrorToast error={hostedRefreshError} /> : null}
     {route && (route.page === "runs" || route.page === "evaluations") ? <ModelsRunViews route={route} /> : null}
     {page}
     {comparisonCreateOpen && scopedState ? <LabComparisonSeriesCreateDialog busy={Boolean(training.training.busyAction)} profileId={scopedState.profileId} state={scopedState} onClose={() => setComparisonCreateOpen(false)} onCreate={async (series) => { const saved = await training.training.actions.saveComparisonSeries(series); if (!saved) return false; setComparisonCreateOpen(false); open(modelsLocation("runs", route?.modelId ?? null, { collection: "series", resourceId: saved.id })); return true; }} /> : null}

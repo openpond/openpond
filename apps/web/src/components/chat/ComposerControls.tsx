@@ -10,7 +10,10 @@ import {
   Plus,
   UploadCloud,
 } from "../icons";
-import { effectiveReasoningEffortForModel, reasoningEffortOptionsForModel } from "../../lib/app-models";
+import {
+  effectiveReasoningEffortForModel,
+  reasoningEffortOptionsForModel,
+} from "../../lib/app-models";
 import { modelDisplayLabel } from "../../lib/model-display";
 import { modelSelectionForGroup, type ComposerModelGroup } from "./composer-model-options";
 import type {
@@ -19,11 +22,7 @@ import type {
   WorkspaceTargetValue,
 } from "../../lib/workspace-location";
 
-export type ComposerProjectTargetOptionKind =
-  | "local"
-  | "cloud"
-  | "none"
-  | "action";
+export type ComposerProjectTargetOptionKind = "local" | "cloud" | "none" | "action";
 
 export type ComposerProjectTargetOption = {
   value: string;
@@ -91,7 +90,10 @@ export function ComposerProfileTargetControl({
 
   if (state.options.length <= 1) return null;
   return (
-    <div className={`composer-profile-target ${placement === "top" ? "open-up" : ""}`} ref={menuRef}>
+    <div
+      className={`composer-profile-target ${placement === "top" ? "open-up" : ""}`}
+      ref={menuRef}
+    >
       <button
         type="button"
         className={`composer-profile-trigger ${open ? "active" : ""}`}
@@ -160,7 +162,7 @@ export function ComposerProjectTargetControl({
   const [query, setQuery] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
   const noProjectSelected = state.value === "none";
-  const triggerLabel = noProjectSelected ? "Select Project" : state.label;
+  const triggerLabel = noProjectSelected ? "Project" : state.label;
   const selectedIconKind =
     state.options.find((option) => option.value === state.value)?.kind ?? "local";
   const visibleOptions = useMemo(() => {
@@ -173,14 +175,10 @@ export function ComposerProjectTargetControl({
     );
   }, [query, state.options]);
   const visibleProjectOptions = visibleOptions.filter(
-    (option) => option.kind === "local" || option.kind === "cloud"
+    (option) => option.kind === "local" || option.kind === "cloud",
   );
-  const visibleCreationOptions = visibleOptions.filter(
-    (option) => option.kind === "action"
-  );
-  const visibleNoProjectOptions = visibleOptions.filter(
-    (option) => option.kind === "none"
-  );
+  const visibleCreationOptions = visibleOptions.filter((option) => option.kind === "action");
+  const visibleNoProjectOptions = visibleOptions.filter((option) => option.kind === "none");
 
   useEffect(() => {
     if (!open) {
@@ -214,9 +212,7 @@ export function ComposerProjectTargetControl({
         type="button"
         role={action ? "menuitem" : "menuitemradio"}
         aria-checked={action ? undefined : selected}
-        className={`composer-project-option ${
-          selected ? "selected" : ""
-        } ${option.kind}`}
+        className={`composer-project-option ${selected ? "selected" : ""} ${option.kind}`}
         disabled={disabled}
         onClick={() => {
           onChange(option.value);
@@ -272,8 +268,7 @@ export function ComposerProjectTargetControl({
               visibleProjectOptions.map(renderOption)
             )}
           </div>
-          {visibleCreationOptions.length > 0 ||
-          visibleNoProjectOptions.length > 0 ? (
+          {visibleCreationOptions.length > 0 || visibleNoProjectOptions.length > 0 ? (
             <div className="composer-project-actions">
               {visibleCreationOptions.length > 0 ? (
                 <button
@@ -300,11 +295,7 @@ export function ComposerProjectTargetControl({
         </div>
       )}
       {open && newMenuOpen ? (
-        <div
-          className="composer-project-new-menu"
-          role="menu"
-          aria-label="New project"
-        >
+        <div className="composer-project-new-menu" role="menu" aria-label="New project">
           <button
             type="button"
             role="menuitem"
@@ -347,11 +338,7 @@ export function WorkspaceActionControl({
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedIconKind =
-    state.value === "cloud"
-      ? "cloud"
-      : state.value === "hybrid"
-        ? "hybrid"
-        : "local";
+    state.value === "cloud" ? "cloud" : state.value === "hybrid" ? "hybrid" : "local";
   const tooltip = `${state.label}: ${state.detail}`;
   const uploadAction = state.uploadAction ?? null;
   const uploadStatusText = uploadAction ? workspaceTargetOptionStatusText(uploadAction) : null;
@@ -419,9 +406,10 @@ export function WorkspaceActionControl({
             const disabled = busy || state.busy || option.disabled;
             const statusText = workspaceTargetOptionStatusText(option);
             const secondaryText = statusText ?? option.detail;
-            const title = option.disabled && option.disabledReason
-              ? option.disabledReason
-              : `${option.label}: ${secondaryText}`;
+            const title =
+              option.disabled && option.disabledReason
+                ? option.disabledReason
+                : `${option.label}: ${secondaryText}`;
             return (
               <button
                 key={option.value}
@@ -458,13 +446,7 @@ export function workspaceTargetOptionStatusText(
   return option.stateNote ?? null;
 }
 
-function WorkspaceTargetIcon({
-  value,
-  size,
-}: {
-  value: WorkspaceTargetValue;
-  size: number;
-}) {
+function WorkspaceTargetIcon({ value, size }: { value: WorkspaceTargetValue; size: number }) {
   if (value === "cloud") return <Cloud size={size} />;
   if (value === "hybrid") {
     return (
@@ -504,17 +486,28 @@ export function ComposerModelMenu({
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<"root" | "provider" | "model" | "effort">("root");
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const selectedGroup = modelGroups.find((group) => group.provider === provider && group.options.some((option) => option.value === model))
-    ?? modelGroups.find((group) => group.provider === provider);
+  const selectedGroup =
+    (provider === "openpond" && (!model || model.startsWith("managed:"))
+      ? modelGroups.find((group) => group.managed)
+      : undefined) ??
+    modelGroups.find(
+      (group) =>
+        group.provider === provider && group.options.some((option) => option.value === model),
+    ) ??
+    modelGroups.find((group) => group.provider === provider);
   const selectedModel = selectedGroup?.options.find((option) => option.value === model);
   const reasoningOptions = reasoningEffortOptionsForModel(provider, model, providerSettings);
   const effectiveReasoningEffort = effectiveReasoningEffortForModel(
-    provider, model, reasoningEffort, providerSettings,
+    provider,
+    model,
+    reasoningEffort,
+    providerSettings,
   );
   const selectedReasoning =
     reasoningOptions.find((option) => option.value === effectiveReasoningEffort) ??
     reasoningOptions[0]!;
-  const modelLabel = compactModelLabel(selectedModel?.label ?? model) || selectedGroup?.label || provider;
+  const modelLabel =
+    compactModelLabel(selectedModel?.label ?? model) || selectedGroup?.label || provider;
   const triggerLabel = showReasoning
     ? `${modelLabel} ${selectedReasoning.shortLabel ?? selectedReasoning.label}`
     : modelLabel;
@@ -572,9 +565,7 @@ export function ComposerModelMenu({
                 onClick={() => setPanel("provider")}
               >
                 <span>Provider</span>
-                <span className="codex-model-menu-value">
-                  {selectedGroup?.label ?? provider}
-                </span>
+                <span className="codex-model-menu-value">{selectedGroup?.label ?? provider}</span>
                 <ChevronRight size={14} />
               </button>
               <button
@@ -584,7 +575,10 @@ export function ComposerModelMenu({
                 onClick={() => setPanel("model")}
               >
                 <span>Model</span>
-                <span className="codex-model-menu-value">{modelDisplayLabel(selectedModel?.label ?? model) || "Agent default"}</span>
+                <span className="codex-model-menu-value">
+                  {modelDisplayLabel(selectedModel?.label ?? model) ||
+                    (selectedGroup?.managed ? "Choose model" : "Agent default")}
+                </span>
                 <ChevronRight size={14} />
               </button>
               {showReasoning ? (
@@ -615,28 +609,51 @@ export function ComposerModelMenu({
               </button>
               <div className="codex-model-menu-divider" />
               <div className="codex-model-menu-options">
-                {modelGroups.map((group) => {
-                  const selected = group.key === selectedGroup?.key;
-                  return (
-                    <button
-                      key={group.key}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={selected}
-                      className={selected ? "selected" : ""}
-                      onClick={() => {
-                        const selection = modelSelectionForGroup(group);
-                        if (!selection) return;
+                {modelGroups
+                  .filter((group) => !group.managed)
+                  .map((group) => {
+                    const selected = group.key === selectedGroup?.key;
+                    return (
+                      <button
+                        key={group.key}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        className={selected ? "selected" : ""}
+                        onClick={() => {
+                          const selection = modelSelectionForGroup(group);
+                          if (!selection) return;
+                          onModelSelectionChange(selection.provider, selection.model);
+                          setPanel("root");
+                        }}
+                      >
+                        <span>{group.label}</span>
+                        {selected ? <Check size={14} /> : null}
+                      </button>
+                    );
+                  })}
+              </div>
+              {modelGroups
+                .filter((group) => group.managed)
+                .map((group) => (
+                  <button
+                    key={group.key}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={group.key === selectedGroup?.key}
+                    className="codex-model-managed-provider"
+                    onClick={() => {
+                      const selection = modelSelectionForGroup(group);
+                      if (selection) {
                         onModelSelectionChange(selection.provider, selection.model);
                         setPanel("root");
-                      }}
-                    >
-                      <span>{group.label}</span>
-                      {selected ? <Check size={14} /> : null}
-                    </button>
-                  );
-                })}
-              </div>
+                      }
+                    }}
+                  >
+                    <span>{group.label}</span>
+                    {group.key === selectedGroup?.key ? <Check size={14} /> : null}
+                  </button>
+                ))}
             </>
           ) : panel === "model" ? (
             <>
@@ -671,7 +688,11 @@ export function ComposerModelMenu({
                   );
                 })}
                 {!selectedGroup?.options.length ? (
-                  <div className="codex-model-menu-empty" role="status">No models available. Connect or check this provider in Settings.</div>
+                  <div className="codex-model-menu-empty" role="status">
+                    {selectedGroup?.managed
+                      ? "No trained models in this workspace."
+                      : "No models available. Connect or check this provider in Settings."}
+                  </div>
                 ) : null}
               </div>
             </>
@@ -712,5 +733,8 @@ export function ComposerModelMenu({
 }
 
 function compactModelLabel(label: string): string {
-  return modelDisplayLabel(label).replace(/^GPT-/, "").replace(/\s+Codex Spark$/, " Spark").replace(/\s+Codex$/, " Codex");
+  return modelDisplayLabel(label)
+    .replace(/^GPT-/, "")
+    .replace(/\s+Codex Spark$/, " Spark")
+    .replace(/\s+Codex$/, " Codex");
 }

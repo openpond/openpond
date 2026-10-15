@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import {useState} from "react";
 import {HumanReviewLaunch} from "../../human-review/HumanReviewLaunch";
 import {LocalPublishedHumanResults} from "../../human-review/LocalPublishedHumanResults";
@@ -141,12 +142,9 @@ export function ExperimentComparisonTables({
         </tbody>
       </table>
       {data && error ? (
-        <p role="alert">
-          {error}
-          <button type="button" onClick={retry}>
+        <ErrorToast error={error}><button type="button" onClick={retry}>
             Retry comparison
-          </button>
-        </p>
+          </button></ErrorToast>
       ) : null}
       {human?.context.location==="local"&&data?.cases[0]?human.selections(data.cases[0].identity).map(selection=><LocalPublishedHumanResults key={selection.executionId} context={human.context} executionId={selection.executionId} onOpenReview={setReview}/>):null}
       {human&&review?<WorkspacePanel action="human-review" label={review.title} onRequestClose={()=>setReview(null)}><HumanReviewInspector context={review.evidence?.publication&&review.evidence.attempts.some(attempt=>attempt.localSource)?{...human.context,location:"hosted"}:human.context} record={review} onChanged={setReview} onClose={()=>setReview(null)}/></WorkspacePanel>:null}

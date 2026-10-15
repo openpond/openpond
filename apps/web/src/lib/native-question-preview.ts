@@ -23,7 +23,9 @@ export function nativeQuestionPreviewDocument(preview: string): string {
       element.remove();
       continue;
     }
-    for (const attribute of [...element.attributes]) {
+    // Removing attributes mutates the live collection; walk backwards so none are skipped.
+    for (let index = element.attributes.length - 1; index >= 0; index--) {
+      const attribute = element.attributes[index]!;
       const imageData =
         element.localName === "img" &&
         attribute.name === "src" &&

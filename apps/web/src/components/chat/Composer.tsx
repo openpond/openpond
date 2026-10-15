@@ -1,9 +1,11 @@
-import { captureComposerResourceContext, composerResourceMetadata, mergeComposerResourceContexts } from "./composer-resource-context";
+import { ErrorToast } from "../common/ErrorToast";
+import { composerResourceMetadata, mergeComposerResourceContexts } from "./composer-resource-context";
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
-import { inlineErrorMessage } from "../../lib/error-messages";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
-import { ComposerResourceControls } from "./ComposerResourceControls";
+import { ChatContextPicker } from "./ChatContextPicker";
+import { useChatContextSelection } from "../../hooks/useChatContextSelection";
+import { useComposerResourceRequests } from "./useComposerResourceRequests";
 import {
   lazy,
   Suspense,
@@ -226,8 +228,10 @@ export function Composer({
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
   const useActiveSteering = steerActiveResponses;
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
-  const chatResources = useChatResourceFocus(surface === "chat" ? connection : null,taskSessionId ?? null);
+  const contextSelection = useChatContextSelection(surface === "chat" ? connection : null, taskSessionId ?? null);
+  const chatResources = useChatResourceFocus(surface === "chat" && !contextSelection.selection?.model && !contextSelection.selection?.training ? connection : null, taskSessionId ?? null);
   const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources, composerDraftStore);
+  useComposerResourceRequests({ surface, voiceInputChannelKey, taskSessionId, submissionScopeKey, prompt, onPromptChange, showToast, resourceDrafts, inputRef, composerDraftStore });
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
@@ -435,7 +439,7 @@ export function Composer({
       ? useActiveSteering ? "Steer" : "Queue"
       : "Send";
   const inputDisabled = serializingAttachments;
-  const controlsDisabled = serializingAttachments;
+  const controlsDisabled = serializingAttachments || contextSelection.selecting;
 
   function beginSubmissionForScope(scopeKey = submissionScopeKey): boolean {
     if (nativeReadOnlyReason) return false;
@@ -1341,11 +1345,12 @@ export function Composer({
     preservePrompt?: boolean;
     promptOverride?: string;
   } = {}): Promise<boolean> {
+    if (contextSelection.selecting) return false;
     const submissionScope = submissionScopeKey;
     if (!beginSubmissionForScope(submissionScope)) return false;
     setAddMenuOpen(false);
     setAttachmentError(null);
-    const submissionContexts = currentResourceContexts();
+    const submissionContexts = contextSelection.selection?.training || contextSelection.selection?.model ? [] : currentResourceContexts();
     const stagedAttachments = stageAttachmentsForSubmit();
     try {
       setSerializingAttachmentScopeKey(
@@ -1369,14 +1374,16 @@ export function Composer({
         payloads,
         selectedAction,
         selectedCommand,
-        selectedDisplayPrompt || promptOverride || options.preservePrompt || submissionContexts.length
+        selectedDisplayPrompt || promptOverride || options.preservePrompt || submissionContexts.length || contextSelection.selection
           ? {
               ...(selectedDisplayPrompt
                 ? { displayPrompt: selectedDisplayPrompt }
                 : {}),
               ...(promptOverride !== undefined ? { promptOverride } : {}),
               ...(options.preservePrompt ? { preservePrompt: true } : {}),
-              turnMetadata: composerResourceMetadata(submissionContexts),
+              turnMetadata: { ...composerResourceMetadata(submissionContexts), ...(contextSelection.selection ? { chatResourceFocus: contextSelection.selection } : {}) },
+              ...(contextSelection.selection ? { sessionMetadata: { chatContextSelection: contextSelection.selection.target } } : {}),
+              onSessionCreated: session => contextSelection.moveToSession(session.id),
             }
           : undefined,
       );
@@ -1439,6 +1446,7 @@ export function Composer({
     input: SubmitIssueFormInput
   ): Promise<boolean> {
     if (isSubmittingCurrentScope() || submitIssueSubmitting) return false;
+    if (contextSelection.selecting) return false;
     const submissionScope = submissionScopeKey;
     if (!beginSubmissionForScope(submissionScope)) return false;
     setSubmitIssueSubmitting(true);
@@ -1593,7 +1601,7 @@ export function Composer({
         onClose={closeSubmitIssueDialog}
         onSubmit={submitIssueForm}
       />
-      {!(surface === "chat" && chatResources.scope) && (showProjectFooter || surface === "chat" && taskSessionId) && (
+      {(showProjectFooter || surface === "chat") && (
         <div className="composer-footer">
           {showProjectFooter ? (
             <ComposerProjectTargetControl
@@ -1653,23 +1661,8 @@ export function Composer({
           onToggleDetails={() => setGoalDetailsOpen((open) => !open)}
         />
       )}
-      {composeNotice && inlineErrorMessage(composeNotice.message) && (
-        <div className={`composer-notice ${composeNotice.tone}`} role="status">
-          {composeNotice.message}
-        </div>
-      )}
-      {surface === "chat" && taskSessionId ? <ComposerResourceControls resources={chatResources} busy={busy} onDraft={(text, training) => {
-        const existing = inputRef.current?.getPrompt() ?? prompt;
-        try {
-          resourceDrafts.current.set(submissionScopeKey, mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], captureComposerResourceContext(chatResources, training)));
-        } catch {
-          showToast("Send or clear the current resource actions before adding more.", "info");
-          return;
-        }
-        const next = existing.trim() ? `${existing}\n\n${text}` : text;
-        onPromptChange(next);
-        requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(next.length));
-      }} /> : null}
+      {composeNotice?.tone === "warning" ? <ErrorToast error={composeNotice.message} />
+        : composeNotice ? <div className="composer-notice info" role="status">{composeNotice.message}</div> : null}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu
@@ -1699,10 +1692,8 @@ export function Composer({
             ))}
           </div>
         )}
-        {attachmentError && inlineErrorMessage(attachmentError) && (
-          <div className="composer-attachment-error" role="status">
-            {attachmentError}
-          </div>
+        {attachmentError && (
+          <ErrorToast error={attachmentError} />
         )}
         <div
           className="composer-textarea-frame"
@@ -1930,6 +1921,7 @@ export function Composer({
           />
         </div>
         <ComposerPrimaryControls
+          trainingControl={surface === "chat" ? <ChatContextPicker context={contextSelection} disabled={busy} placement={dropdownPlacement} /> : null}
           surface={surface}
           teamUseModel={teamUseModel}
           teamUseModelLocked={teamUseModelLocked}

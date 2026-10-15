@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import { AdmittedExperimentTasks } from "./AdmittedExperimentTasks";
 import { ExperimentDiagnostics } from "./ExperimentDiagnostics";
 import { ExperimentRunPins } from "./ExperimentRunPins";
@@ -130,7 +131,7 @@ export function HostedExperimentsPage({
           </button>
         ) : null}
       </header>
-      {failure ? <p role="alert">{failure}</p> : null}
+      {failure ? <ErrorToast error={failure} /> : null}
       {!route.resourceId ? (
         <>
           <HostedExperimentCollection

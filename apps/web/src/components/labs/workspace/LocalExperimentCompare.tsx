@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { compareExperiments } from "@openpond/evals/experiments";
@@ -94,7 +94,7 @@ export function LocalExperimentCompare({
           More experiments
         </button>
       ) : null}
-      {collection.error && inlineErrorMessage(collection.error) ? <p role="alert">{collection.error.message}</p> : null}
+      {collection.error ? <ErrorToast error={collection.error} /> : null}
       {candidate ? (
         <p>
           Started <EvaluationTime value={candidate.createdAt} />

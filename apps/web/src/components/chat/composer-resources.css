@@ -11,6 +11,8 @@
 .composer-resource-bar > button:hover { background: var(--surface-raised); }
 .composer-resource-bar > button:disabled { opacity: .5; }
 .composer-resource-bar .composer-resource-primary { display: inline-flex; align-items: center; gap: 4px; }
+.composer-resource-chat-actions .dropdown-trigger > span { display: inline-flex; align-items: center; gap: 3px; }
+.composer-resource-chat-actions .dropdown-menu button small { white-space: normal; line-height: 1.45; overflow-wrap: anywhere; }
 .composer-resource-bar .composer-resource-primary, .composer-resource-bar .composer-resource-primary:hover { background: var(--accent-primary-fill); color: var(--text-on-accent); }
 .composer-resource-area > .chat-resource-error { padding: 5px 0; }
 @container (max-width: 420px) {
@@ -63,6 +65,11 @@
 .composer-resource-secondary { border: 0; border-radius: 5px; padding: 6px 8px; font-size: 12px; background: var(--surface-raised); color: var(--text-primary); }
 .composer-resource-secondary:disabled { opacity: .5; }
 .composer-resource-request p { margin: 0; flex: 1 1 240px; font-size: 12px; line-height: 1.5; }
+
+.chat-grader-request { display: grid; gap: 12px; padding: 8px; min-width: 0; }
+.chat-grader-request .training-dialog-actions { flex-wrap: wrap; }
+.chat-grader-type-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.chat-grader-type-choices > button { min-height: 64px; display: flex; align-items: center; justify-content: center; white-space: normal; text-align: center; }
 .composer-experiment-setup .dropdown-trigger { overflow: hidden; }
 .composer-experiment-setup .dropdown-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer .composer-resource-area .composer-experiment-setup .dropdown-select.compact .dropdown-trigger { max-width: none; }

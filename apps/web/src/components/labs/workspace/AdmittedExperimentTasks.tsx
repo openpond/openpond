@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ExperimentRunDetails, ExperimentCaseInspection } from "openpond-sdk/experiments";
@@ -99,11 +99,8 @@ export function AdmittedExperimentTasks({
           <header>
             <h2>{member.taskId}</h2>
           </header>
-          {inspection.error && inlineErrorMessage(inspection.error) ? (
-            <p role="alert">
-              Task evidence unavailable: {inspection.error.message}
-              <button onClick={() => void inspection.refetch()}>Retry read</button>
-            </p>
+          {inspection.error ? (
+            <ErrorToast error={inspection.error} prefix="Task evidence unavailable"><button onClick={() => void inspection.refetch()}>Retry read</button></ErrorToast>
           ) : null}
           <EvaluationCard title="Retained input">
             <pre>

@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { SkillSourceFile } from "@openpond/contracts";
 
@@ -142,8 +142,8 @@ export function LabSkillSidebar({
           </header>
           {loading ? (
             <div className="lab-skill-source-state"><Loader2 className="spin" size={16} /> Loading source…</div>
-          ) : error && inlineErrorMessage(error) ? (
-            <div className="lab-skill-source-state error">{error}</div>
+          ) : error ? (
+            <ErrorToast error={error} />
           ) : source?.isBinary ? (
             <div className="lab-skill-source-state">
               <ImageIcon size={18} />

@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import {LocalPublishedHumanResults} from "../../human-review/LocalPublishedHumanResults";
 import {z} from "zod";
 import {ClaudeProcessControls} from "../../human-review/ClaudeProcessControls";
@@ -127,7 +127,7 @@ export function LocalExperimentCases({
           </EvaluationCard>
           <EvaluationCard title="Output">
             <pre>{member.output ?? "No completed output retained."}</pre>
-            {member.error && inlineErrorMessage(member.error) ? <p role="alert">{member.error}</p> : null}
+            {member.error ? <p>{member.error}</p> : null}
           </EvaluationCard>
           <EvaluationCard title="Grading">
             {graders.map((grader) => (
@@ -136,7 +136,7 @@ export function LocalExperimentCases({
             <pre>{JSON.stringify(member.grade, null, 2)}</pre>
           </EvaluationCard>
           <EvaluationCard title="Available trace">
-            {inspection.error && inlineErrorMessage(inspection.error) ? <p role="alert">{inspection.error.message}</p> : null}
+            {inspection.error ? <ErrorToast error={inspection.error} /> : null}
             {inspection.isPending ? (
               <p>Loading retained trace…</p>
             ) : inspection.data?.trace.items.length ? (
@@ -177,7 +177,7 @@ export function LocalExperimentCases({
           </EvaluationCard>
         </WorkspacePanel>
       ) : null}
-      {humanError && inlineErrorMessage(humanError)?<p role="alert">{humanError}</p>:null}
+      {humanError?<ErrorToast error={humanError} />:null}
       {humanContext?<LocalPublishedHumanResults context={humanContext} executionId={result.execution.id} onOpenReview={setHumanReview}/>:null}
       {humanContext ? <HumanResultControls context={humanContext} executionId={result.execution.id} onOpenReview={id=>void openHuman(id)}/>:null}
       {humanContext&&humanReview?<WorkspacePanel action="human-review" label={humanReview.title} onRequestClose={()=>setHumanReview(null)}><HumanReviewInspector context={humanReview.evidence?.publication&&humanReview.evidence.attempts.some(attempt=>attempt.localSource)?{...humanContext,location:"hosted"}:humanContext} record={humanReview} onChanged={setHumanReview} onClose={()=>setHumanReview(null)}/></WorkspacePanel>:null}

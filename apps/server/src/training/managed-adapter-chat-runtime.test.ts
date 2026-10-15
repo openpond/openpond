@@ -3,12 +3,59 @@ import type { ModelArtifactLineage, ModelBinding } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import { createManagedAdapterChatRuntime } from "./managed-adapter-chat-runtime.js";
 import { createManagedAdapterHostedChatStream } from "./managed-adapter-chat-stream.js";
+import * as managedCatalog from "./managed-adapter-catalog.js";
 import {
   managedBindingLogicalModelName,
   managedBindingProjectionVersion,
 } from "./managed-adapter-sync-service.js";
 
 describe("managed adapter chat runtime", () => {
+  test("keeps cold catalog selections on the authorized workspace gateway and rejects revoked access", async () => {
+    // A cold selection must never fall back to a different model or cross workspaces.
+    const catalog = vi.spyOn(managedCatalog, "readManagedModelCatalog").mockResolvedValue([
+      {
+        id: "artifact-1",
+        logicalModelName: "trained-model",
+        metadata: {
+          artifact_id: "artifact-1",
+          artifact_label: "My model",
+          base_profile_id: "qwen3-8b",
+          deployment_state: "unavailable",
+        },
+      },
+    ]);
+    const streamChat = vi.fn(async function* () {
+      yield { text: "managed" };
+    });
+    let selectedTeamId = "team_qa";
+    const runtime = createManagedAdapterChatRuntime({
+      store: {} as SqliteStore,
+      client: { streamChat } as never,
+      resolveSelectedTeamId: async () => selectedTeamId,
+    });
+    const input = {
+      modelId: managedCatalog.managedCatalogModelId("team_qa", "artifact-1"),
+      messages: [{ role: "user" as const, content: "hello" }],
+      requestId: "catalog-request",
+      signal: new AbortController().signal,
+    };
+    try {
+      expect(await runtime.appliesTo(input.modelId)).toBe(true);
+      expect(await collect(runtime.stream(input))).toEqual([{ text: "managed" }]);
+      expect(streamChat).toHaveBeenCalledWith(
+        expect.objectContaining({ teamId: "team_qa", logicalModelName: "trained-model" }),
+      );
+      selectedTeamId = "other_team";
+      await expect(collect(runtime.stream(input))).rejects.toThrow("workspace");
+      selectedTeamId = "team_qa";
+      catalog.mockResolvedValue([]);
+      await expect(collect(runtime.stream(input))).rejects.toThrow("no longer available");
+      expect(streamChat).toHaveBeenCalledTimes(1);
+    } finally {
+      catalog.mockRestore();
+    }
+  });
+
   test("routes only ready active bindings to the personalized gateway", async () => {
     const binding = modelBinding();
     const lineage = modelLineage();
@@ -41,7 +88,7 @@ describe("managed adapter chat runtime", () => {
         teamId: "team_qa",
         logicalModelName: managedBindingLogicalModelName(binding),
         messages: [{ role: "user", content: "hello\n\n/no_think" }],
-      })
+      }),
     );
   });
 
@@ -75,7 +122,7 @@ describe("managed adapter chat runtime", () => {
         ],
         requestId: "request-qwen-no-think",
         signal: new AbortController().signal,
-      })
+      }),
     );
 
     expect(streamChat).toHaveBeenCalledWith(
@@ -87,15 +134,13 @@ describe("managed adapter chat runtime", () => {
             content: "Inspect the portfolio.\n\n/no_think",
           },
         ],
-      })
+      }),
     );
   });
 
   test("uses persisted monotonic binding projection versions", () => {
     expect(managedBindingProjectionVersion(modelBinding())).toBe(3);
-    expect(managedBindingLogicalModelName(modelBinding())).toMatch(
-      /^trained-[a-f0-9]{32}$/
-    );
+    expect(managedBindingLogicalModelName(modelBinding())).toMatch(/^trained-[a-f0-9]{32}$/);
   });
 
   test("ordinary hosted chat preserves the selected managed lineage and fails closed when it degrades", async () => {
@@ -135,9 +180,7 @@ describe("managed adapter chat runtime", () => {
       maxTokens: 64,
       signal: new AbortController().signal,
     };
-    await expect(
-      collect(stream(input))
-    ).resolves.toEqual([
+    await expect(collect(stream(input))).resolves.toEqual([
       { type: "text_delta", text: "managed-lineage", raw: undefined },
       { type: "usage", usage: { total_tokens: 12 }, raw: undefined },
       { type: "finish", finishReason: "stop", raw: undefined },
@@ -149,7 +192,7 @@ describe("managed adapter chat runtime", () => {
         requestId: input.requestId,
         signal: input.signal,
         maxNewTokens: 64,
-      })
+      }),
     );
     expect(hosted).not.toHaveBeenCalled();
     lineage.managedServing = { ...lineage.managedServing!, customerBindingAllowed: false };
@@ -178,10 +221,7 @@ describe("managed adapter chat runtime", () => {
     });
     const runtime = createManagedAdapterChatRuntime({
       store: {
-        listModelBindings: vi.fn(async () => [
-          alternateBinding,
-          defaultBinding,
-        ]),
+        listModelBindings: vi.fn(async () => [alternateBinding, defaultBinding]),
         getModelArtifactLineage: vi.fn(async () => lineage),
         getTrainingArtifact: vi.fn(async () => ({ baseModelId: "Qwen/Qwen3-8B" })),
       } as unknown as SqliteStore,
@@ -194,12 +234,12 @@ describe("managed adapter chat runtime", () => {
         messages: [{ role: "user", content: "hello" }],
         requestId: "request-default-binding",
         signal: new AbortController().signal,
-      })
+      }),
     );
     expect(streamChat).toHaveBeenCalledWith(
       expect.objectContaining({
         logicalModelName: managedBindingLogicalModelName(defaultBinding),
-      })
+      }),
     );
   });
 
@@ -253,11 +293,11 @@ describe("managed adapter chat runtime", () => {
             messages: [{ role: "user", content: "hello" }],
             requestId: "request-not-ready",
             signal: new AbortController().signal,
-          })
-        )
+          }),
+        ),
       ).rejects.toThrow("not ready on managed serving");
       expect(streamChat).not.toHaveBeenCalled();
-    }
+    },
   );
 
   test("fails closed when Sandbox withdraws customer binding admission", async () => {
@@ -286,8 +326,8 @@ describe("managed adapter chat runtime", () => {
           messages: [{ role: "user", content: "hello" }],
           requestId: "request-withdrawn-admission",
           signal: new AbortController().signal,
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow("not ready on managed serving");
     expect(streamChat).not.toHaveBeenCalled();
   });
@@ -305,9 +345,7 @@ describe("managed adapter chat runtime", () => {
       client: { streamChat: vi.fn() } as never,
     });
 
-    expect(
-      await runtime.appliesTo("binding:profile-1:chat_manual:target-1")
-    ).toBe(false);
+    expect(await runtime.appliesTo("binding:profile-1:chat_manual:target-1")).toBe(false);
   });
 });
 
@@ -379,6 +417,7 @@ function modelLineage(): ModelArtifactLineage {
       source: "sandbox_managed_rl",
       sourceRef: "lineage-1",
       canonicalArtifactId: "artifact-1",
+      canonicalModelName: null,
       canonicalArtifactState: "promotable",
       canonicalDeploymentId: "deployment-1",
       canonicalDeploymentState: "ready",

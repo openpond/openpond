@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   ChatExperimentContextSchema,
+  ChatContextTargetSchema,
+  type ChatContextTarget,
   chatResourceWorkspaces,
   ChatTrainingAttachmentSchema,
   chatTrainingAttachmentKey,
@@ -19,13 +21,13 @@ export function chatExperimentContext(metadata: Record<string, unknown> | undefi
 }
 
 export function createChatExperimentScopes(store: SqliteStore) {
-  async function change(sessionId: string, apply: (state: ChatExperimentContext) => void) {
+  async function change(sessionId: string, apply: (state: ChatExperimentContext, metadata: Record<string, unknown>) => void) {
     // updateSession serializes this callback with all other session writes.
     // Read state inside the callback so concurrent selections cannot lose scopes.
     const session = await store.updateSession(sessionId, current => {
       if (current.systemKind || ["sandbox", "sandbox_template"].includes(current.workspaceKind ?? "")) throw new Error("This conversation cannot select local resources.");
       const state = chatExperimentContext(current.metadata);
-      apply(state);
+      apply(state, current.metadata ?? {});
       return { ...current, metadata: { ...current.metadata, chatExperimentContext: ChatExperimentContextSchema.parse(state) } };
     });
     if (!session) throw new Error("Conversation was not found.");
@@ -86,6 +88,31 @@ export function createChatExperimentScopes(store: SqliteStore) {
     });
   }
 
+  async function createForDataset(sessionId: string, input: {
+    dataset: ChatResourceSummary; graders: ChatResourceSummary[]; operationId: string;
+    expected?: { version: number; target: ChatContextTarget };
+  }) {
+    return change(sessionId, (state, metadata) => {
+      if (input.expected) {
+        const target = ChatContextTargetSchema.safeParse(metadata.chatContextSelection);
+        if (state.selectionVersion !== input.expected.version || !target.success ||
+          JSON.stringify(target.data) !== JSON.stringify(input.expected.target)) throw new Error("The chat context changed before the experiment was prepared.");
+      }
+      if (state.scopes.some(scope => scope.operationId === input.operationId)) return;
+      if (input.dataset.kind !== "dataset" || input.graders.some(grader => grader.datasetId !== input.dataset.id || grader.datasetRevision !== input.dataset.revision)) throw new Error("The graders do not match this dataset revision.");
+      const now = new Date().toISOString();
+      const source = chatResourceWorkspaces(state).find(scope => scope.id === state.activeScopeId);
+      const scope = make(state, input.operationId, now);
+      scope.dataset = input.dataset;
+      scope.graders = input.graders.map(grader => ({ ...grader, rows: [] }));
+      scope.evaluationModel = source?.evaluationModel;
+      scope.executionLocation = source?.executionLocation;
+      state.activeScopeId = scope.id;
+      state.selectionVersion++;
+      state.selectedAt = now;
+    });
+  }
+
   async function select(sessionId: string, input: { scopeId?: string; name?: string; evaluationModel?: string; executionLocation?: "local" | "cloud"; dataset?: ChatResourceSummary | null;
     graders?: ChatResourceSummary[]; graderId?: string | null; run?: ChatResourceSummary; expectedSelectionVersion?: number;operationId?:string;visualPublicationId?:string }) {
     return change(sessionId, state => {
@@ -100,6 +127,16 @@ export function createChatExperimentScopes(store: SqliteStore) {
       const now = new Date().toISOString();
       let scope = chatResourceWorkspaces(state).find(candidate => candidate.id === (input.scopeId ?? state.activeScopeId));
       if (input.scopeId && !scope) throw new Error("Experiment scope does not belong to this conversation.");
+      const changingDataset = input.dataset && scope && (scope.dataset?.id !== input.dataset.id
+        || scope.dataset?.revision !== input.dataset.revision
+        || JSON.stringify(scope.dataset?.owner) !== JSON.stringify(input.dataset.owner)
+        || JSON.stringify(scope.dataset?.profileRef) !== JSON.stringify(input.dataset.profileRef));
+      // Browsing another dataset must not relabel retained executions. Explicit
+      // edits to a named experiment still retain its immutable historical pins.
+      if (!input.scopeId && changingDataset && scope && (scope.runs.length || scope.training?.length)) {
+        if (scope.ordinal === null) promote(state, scope, `retained-${randomUUID()}`, now);
+        scope = undefined;
+      }
       if (!scope) scope = input.run ? make(state, `selection-${randomUUID()}`, now) : browsing(state, now);
       if (input.run && scope.ordinal === null) scope = promote(state, scope, `run-${input.run.id}`, now);
       if (input.executionLocation !== undefined) scope.executionLocation = input.executionLocation;
@@ -235,5 +272,5 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
-  return { ensure, create, select, attach, attachTraining };
+  return { ensure, create, createForDataset, select, attach, attachTraining };
 }

@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { htmlContentPreviewUrl, htmlPreviewUrl, isHtmlFilePath } from "../../lib/html-preview";
 import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
@@ -73,6 +73,8 @@ export function WorkspaceDiffPanel({
   sourceSwitcher,
   tabRequest,
   renderOutputs,
+  outputsLabel,
+  additionalTabs,
   viewState,
   onRefresh,
   onResizeStart,
@@ -109,7 +111,9 @@ export function WorkspaceDiffPanel({
   sideChatTabs?: WorkspaceDiffSideChatTab[];
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   tabRequest?: WorkspaceDiffTabRequest | null;
-  renderOutputs?: (onOpenFile: () => void) => ReactNode;
+  renderOutputs?: (onOpenFile: () => void, tabId: number) => ReactNode;
+  outputsLabel?: string;
+  additionalTabs?: ReactNode;
   viewState?: WorkspaceDiffPanelViewState | null;
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -151,7 +155,9 @@ export function WorkspaceDiffPanel({
       sideChatTabs={sideChatTabs ?? []}
       sourceSwitcher={sourceSwitcher ?? null}
       tabRequest={tabRequest ?? null}
+      additionalTabs={additionalTabs}
       renderOutputs={renderOutputs ?? null}
+      outputsLabel={outputsLabel}
       viewState={viewState ?? null}
       onRefresh={onRefresh}
       onResizeStart={onResizeStart}
@@ -283,6 +289,8 @@ function WorkspaceDiffPanelInner({
   sourceSwitcher,
   tabRequest,
   renderOutputs,
+  outputsLabel,
+  additionalTabs,
   viewState,
   onRefresh,
   onResizeStart,
@@ -319,7 +327,9 @@ function WorkspaceDiffPanelInner({
   sideChatTabs: WorkspaceDiffSideChatTab[];
   sourceSwitcher: WorkspaceFileSourceSwitcher | null;
   tabRequest: WorkspaceDiffTabRequest | null;
-  renderOutputs: ((onOpenFile: () => void) => ReactNode) | null;
+  renderOutputs: ((onOpenFile: () => void, tabId: number) => ReactNode) | null;
+  outputsLabel?: string;
+  additionalTabs?: ReactNode;
   viewState: WorkspaceDiffPanelViewState | null;
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -774,9 +784,16 @@ function WorkspaceDiffPanelInner({
     if (!tabRequest) return;
     if (tabRequest.tab === "files") openFilesTab();
     if (tabRequest.tab === "outputs") {
-      setOverviewTabs(current => current.includes(0) ? current : [0, ...current]);
-      setActiveOverviewId(0);
-      setTabOrder(current => current.includes("overview-0") ? current : [...current, "overview-0"]);
+      if (tabRequest.overview === "experiments") {
+        setOverviewTabs(current => current.includes(-1) ? current : [...current, -1]);
+        setActiveOverviewId(-1);
+        setTabOrder(current => current.includes("overview--1") ? current : [...current, "overview--1"]);
+      } else if (tabRequest.overview === "new") {
+        const id = overviewTabs.find(value => value !== -1) ?? nextOverviewId.current++;
+        setOverviewTabs(current => current.includes(id) ? current : [...current, id]);
+        setActiveOverviewId(id);
+        setTabOrder(current => current.includes(`overview-${id}`) ? current : [...current, `overview-${id}`]);
+      }
     }
     setActiveTab(tabRequest.tab);
   }, [tabRequest]);
@@ -885,8 +902,8 @@ function WorkspaceDiffPanelInner({
   }
 
   function ensureNewTab() {
-    if (overviewTabs.length) {
-      setActiveOverviewId(overviewTabs[overviewTabs.length - 1]!);
+    if (overviewTabs.some(id => id !== -1)) {
+      setActiveOverviewId(overviewTabs.filter(id => id !== -1).at(-1)!);
     } else {
       const id = nextOverviewId.current++;
       setOverviewTabs([id]);
@@ -1442,9 +1459,9 @@ function WorkspaceDiffPanelInner({
       : null;
   const sidebarFileBookmarksByPath = useMemo(() => {
     const items = new Map<string, SidebarFileBookmark>();
-    if (!sidebarFileWorkspaceKind || !workspaceId) return items;
+    if (!sidebarFileWorkspaceKind) return items;
     for (const item of sidebarFileBookmarks) {
-      if (item.workspaceKind !== sidebarFileWorkspaceKind || item.workspaceId !== workspaceId) continue;
+      if (item.workspaceKind !== sidebarFileWorkspaceKind || item.workspaceId !== (workspaceId ?? (sidebarFileWorkspaceKind==="local"?localFileWorkspaceId(item.path):null))) continue;
       items.set(item.path, item);
     }
     return items;
@@ -1460,12 +1477,8 @@ function WorkspaceDiffPanelInner({
     path: string,
     status: SidebarFileStatus | "none",
   ) => {
-    if (
-      !sidebarFileWorkspaceKind ||
-      !workspaceId ||
-      !workspaceName ||
-      !onSetSidebarFileStatus
-    ) return;
+    const bookmarkWorkspaceId=workspaceId??(sidebarFileWorkspaceKind==="local"?localFileWorkspaceId(path):null);
+    if (!sidebarFileWorkspaceKind || !bookmarkWorkspaceId || !onSetSidebarFileStatus) return;
     let filePath: string;
     try {
       filePath = normalizeSidebarFilePath(path);
@@ -1477,12 +1490,12 @@ function WorkspaceDiffPanelInner({
     const file = existing ?? {
       id: sidebarFileBookmarkId({
         workspaceKind: sidebarFileWorkspaceKind,
-        workspaceId,
+        workspaceId: bookmarkWorkspaceId,
         path: filePath,
       }),
       workspaceKind: sidebarFileWorkspaceKind,
-      workspaceId,
-      workspaceName,
+      workspaceId: bookmarkWorkspaceId,
+      workspaceName: workspaceName??"Local files",
       path: filePath,
       status: "pinned" as const,
       order: null,
@@ -1501,7 +1514,7 @@ function WorkspaceDiffPanelInner({
     workspaceName,
   ]);
   const canManageSidebarFiles = Boolean(
-    sidebarFileWorkspaceKind && workspaceId && workspaceName && onSetSidebarFileStatus,
+    sidebarFileWorkspaceKind && onSetSidebarFileStatus && (workspaceId || (sidebarFileWorkspaceKind==="local" && openFilePaths.some(path=>localFileWorkspaceId(path)))),
   );
   const sidebarFileHeaderActions = selectedPath && canManageSidebarFiles && !selectedFileReadOnly ? (
     <WorkspaceFileBookmarkActions
@@ -1620,10 +1633,11 @@ function WorkspaceDiffPanelInner({
         selectedPath={selectedPath}
         sideChatTabs={sideChatTabs}
         summaryAvailable={summaryAvailable}
-        onSelectOutputs={renderOutputs ? () => { setActiveTab("outputs"); setAddMenuOpen(false); setSearchOpen(false); } : undefined}
+        onSelectOutputs={renderOutputs ? () => { setOverviewTabs(current=>current.includes(-1)?current:[...current,-1]);setActiveOverviewId(-1);setTabOrder(current=>current.includes("overview--1")?current:[...current,"overview--1"]);setActiveTab("outputs"); setAddMenuOpen(false); setSearchOpen(false); } : undefined}
         sourceStatus={sourceStatus}
         sourceSwitcher={sourceSwitcher}
         visibleTab={visibleTab}
+        additionalTabs={additionalTabs}
         toolbarActions={fileToolbar}
         tabOrder={tabOrder}
         filesTabOpen={filesTabOpen}
@@ -1633,6 +1647,7 @@ function WorkspaceDiffPanelInner({
           if (activeTab === "files") ensureNewTab();
         } : undefined}
         overviewTabs={renderOutputs ? overviewTabs : []}
+        outputsLabel={outputsLabel}
         activeOverviewId={activeOverviewId}
         onNewOverview={renderOutputs ? () => {
           const id = nextOverviewId.current++;
@@ -1650,6 +1665,10 @@ function WorkspaceDiffPanelInner({
           setTabOrder(current => current.filter(key => key !== `overview-${id}`));
           if (id === activeOverviewId && activeTab === "outputs") {
             if (remaining.length) setActiveOverviewId(remaining[remaining.length - 1]!);
+            else if (renderOutputs) {
+              const nextId=nextOverviewId.current++;setOverviewTabs([nextId]);setActiveOverviewId(nextId);setActiveTab("outputs");
+              setTabOrder(current=>[...current,`overview-${nextId}`]);
+            }
             else if (openFiles.length && selectedPath) setActiveTab("file");
             else if (filesTabOpen) setActiveTab("files");
             else {
@@ -1704,8 +1723,11 @@ function WorkspaceDiffPanelInner({
         onToggleExpanded={onToggleExpanded}
       />
 
-      {htmlPreviewError && inlineErrorMessage(htmlPreviewError) && <div className="workspace-diff-empty" role="alert">{htmlPreviewError}</div>}
-      {visibleTab === "outputs" && renderOutputs ? renderOutputs(() => { setSearchOpen(true); setAddMenuOpen(false); }) : visibleTab === "goal" && hasGoalDetails ? (
+      {htmlPreviewError && <ErrorToast error={htmlPreviewError} />}
+      {renderOutputs ? overviewTabs.map(id=><div key={id} className="workspace-diff-tool-view" hidden={visibleTab!=="outputs"||activeOverviewId!==id} inert={visibleTab!=="outputs"||activeOverviewId!==id}>
+        {renderOutputs(()=>{setSearchOpen(true);setAddMenuOpen(false);},id)}
+      </div>) : null}
+      {visibleTab === "outputs" && renderOutputs ? null : visibleTab === "goal" && hasGoalDetails ? (
         <GoalDetailsView
           createRuntime={goalDetails?.createRuntime ?? null}
           goalRuntime={goalDetails?.goalRuntime ?? null}

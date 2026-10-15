@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useState } from "react";
 import type { HumanReviewView } from "@openpond/evals/human-review";
 import { AssignedExecutionSetup } from "./AssignedExecutionSetup";
@@ -26,7 +26,7 @@ export function InboxRoute({ connection, teamId, actorId, route, onNavigate, onS
   });
   if (!connection || !teamId || !actorId) return <p role="status">Sign in and select a workspace to open Inbox.</p>;
   return <WorkspacePanelControls onControl={onSidebarControl}><HumanInboxFrame>
-    {projects.error && inlineErrorMessage(projects.error) ? <p role="alert">{projects.error.message}</p> : null}
+    {projects.error ? <ErrorToast error={projects.error} /> : null}
     <InboxWorkspace context={{ connection, scope: teamId, actorId, location: route.executionLocation ?? "hosted" }}
       projects={projects.data?.pages.flatMap(page => page.projects).filter(project => !project.archived).map(project => ({ id: project.id, name: project.content.name }))}
       projectId={route.projectId} onProjectChange={projectId => onNavigate({ ...route, projectId, resourceId: null })}

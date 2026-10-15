@@ -1,3 +1,4 @@
+import { trainingRunPresets } from "../training/training-run-presets";
 import type {
   ModelProject,
   ModelProjectTrainingSetup,
@@ -366,60 +367,13 @@ export function datasetGuidance(
   return "Discover evidence first; OpenPond will recommend a concrete Taskset shape and method.";
 }
 
-export function presetsFor(
-  method: TrainingMethod | null,
-): Array<{
-  id: ModelRunPreset;
-  label: string;
-  description: string;
-}> {
-  if (method === "grpo" || method === "ppo") {
-    return [
-      {
-        id: "small_experiment",
-        label: "Quick test",
-        description:
-          "Bound prompts, rollouts, output tokens, steps, time, and spend.",
-      },
-      {
-        id: "standard",
-        label: "Recommended",
-        description: "Use the Taskset-aware recommended online budgets.",
-      },
-      {
-        id: "custom",
-        label: "Custom",
-        description: "Set each rollout and optimizer limit explicitly.",
-      },
-    ];
-  }
-  return [
-    {
-      id: "small",
-      label: "Quick test",
-      description:
-        "A bounded LoRA experiment with independent frozen evaluation.",
-    },
-    {
-      id: "standard",
-      label: "Recommended",
-      description:
-        "Use Taskset-aware recommended examples and optimizer limits.",
-    },
-    {
-      id: "custom",
-      label: "Custom",
-      description:
-        "Set examples, steps, sequence length, rank, time, and spend.",
-    },
-  ];
-}
+export { trainingRunPresets as presetsFor } from "../training/training-run-presets";
 
 export function presetFor(
   method: TrainingMethod | null,
   presetId: ModelRunPreset | null,
 ) {
-  return presetsFor(method).find(
+  return trainingRunPresets(method).find(
     (preset) => preset.id === (presetId ?? "standard"),
   );
 }
