@@ -252,7 +252,7 @@ export class CdpDesktopHarnessRenderer implements DesktopHarnessRenderer {
         const form = input?.closest('form.composer');
         const send = form?.querySelector('.send-button');
         if (!(form instanceof HTMLFormElement) || !(send instanceof HTMLButtonElement) || send.disabled) return false;
-        form.requestSubmit(send);
+        send.click();
         return true;
       })()`,
     );

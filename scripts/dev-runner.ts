@@ -19,6 +19,8 @@ export type DevRunnerOptions = {
   host: string;
   serverPort?: number;
   webPort?: number;
+  devtoolsPort?: number;
+  skipBuild?: boolean;
   watch?: boolean;
 };
 
@@ -81,9 +83,23 @@ export function parseDevRunnerArgs(
   let serverPort = numberFromEnv(env.OPENPOND_SERVER_PORT);
   let webPort = numberFromEnv(env.OPENPOND_WEB_PORT);
   let watch = true;
+  let devtoolsPort: number | undefined;
+  let skipBuild = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
+    if (arg === "--skip-build") {
+      skipBuild = true;
+      continue;
+    }
+    if (arg === "--devtools-port") {
+      devtoolsPort = parsePort(valueAfterFlag(argv, (index += 1), arg), arg);
+      continue;
+    }
+    if (arg.startsWith("--devtools-port=")) {
+      devtoolsPort = parsePort(arg.slice("--devtools-port=".length), "--devtools-port");
+      continue;
+    }
     if (arg === "--print-plan" || arg === "--dry-run") {
       printPlan = true;
       continue;
@@ -133,6 +149,9 @@ export function parseDevRunnerArgs(
     mode = parseMode(arg);
   }
 
+  if (devtoolsPort !== undefined && mode !== null && mode !== "desktop" && mode !== "stable-desktop") {
+    throw new Error("--devtools-port requires desktop mode.");
+  }
   return {
     mode: mode ?? "desktop",
     printPlan,
@@ -140,6 +159,8 @@ export function parseDevRunnerArgs(
     serverPort,
     webPort,
     watch,
+    devtoolsPort,
+    skipBuild,
   };
 }
 
@@ -189,6 +210,9 @@ export function buildDevRunnerPlan(
   };
   const setupCommands: DevRunnerCommand[] = [];
   const processes: DevRunnerCommand[] = [];
+  const desktopArgs = options.devtoolsPort === undefined
+    ? ["."]
+    : [".", `--remote-debugging-port=${options.devtoolsPort}`, "--remote-debugging-address=127.0.0.1"];
 
   if (
     options.mode === "desktop" ||
@@ -212,7 +236,7 @@ export function buildDevRunnerPlan(
     processes.push(command(
       "desktop",
       electronBinary(root),
-      ["."],
+      desktopArgs,
       path.join(root, "apps", "desktop"),
       { ...desktopEnv, OPENPOND_DESKTOP_DEV_MODE: "1", OPENPOND_DESKTOP_DEV_SUPERVISED: "1" },
     ));
@@ -255,7 +279,7 @@ export function buildDevRunnerPlan(
       command(
         "desktop",
         electronBinary(root),
-        ["."],
+        desktopArgs,
         path.join(root, "apps", "desktop"),
         {
           ...desktopEnv,
@@ -298,7 +322,7 @@ export function buildDevRunnerPlan(
       server: serverUrl,
       web: webUrl,
     },
-    setupCommands,
+    setupCommands: options.skipBuild ? [] : setupCommands,
     processes,
   };
 }

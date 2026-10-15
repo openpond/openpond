@@ -9,6 +9,14 @@ pnpm dev
 
 The root dev supervisor is the supported entrypoint. It builds Desktop, runs the server through Node/tsx watch mode, starts Vite, waits for both readiness contracts, and then starts Electron with the explicit reusable server URL and capability token. It owns all three process groups and drains them in `finally` on startup failure, child exit, SIGINT, or SIGTERM. `scripts/dev-web.ts` is intentionally retired.
 
+To restart an already-built checkout for desktop harness inspection without rerunning build setup:
+
+```bash
+pnpm dev --skip-build --devtools-port 9333
+```
+
+Stop the previous supervisor and let it finish shutting down before restarting. `--skip-build` reuses existing workspace and Desktop build artifacts; it does not validate or refresh them. Use it when those artifacts are current and only source-served app code changed. `--devtools-port` opts the desktop into a loopback debugging listener for the harness's `--attach --devtools-port` mode. Ordinary `pnpm dev` does not expose that listener.
+
 ## Frozen Desktop alongside development
 
 Run a production-built snapshot in its own Desktop window with:

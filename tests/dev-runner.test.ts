@@ -89,6 +89,20 @@ describe("dev runner", () => {
     });
   });
 
+  // Failure story: attaching UI tests must not unexpectedly compile the repository
+  // or enable a debugging listener in an ordinary development launch.
+  test("keeps debugger opt-in and permits restart with existing build artifacts", () => {
+    const ordinary = buildDevRunnerPlan(parseDevRunnerArgs(["desktop"], {}), {}, root);
+    expect(ordinary.processes.find(process => process.id === "desktop")?.args).toEqual(["."]);
+    const attached = buildDevRunnerPlan(parseDevRunnerArgs(["desktop", "--skip-build", "--devtools-port", "9333"], {}), {}, root);
+    expect(attached.setupCommands).toEqual([]);
+    expect(attached.processes.find(process => process.id === "desktop")?.args).toEqual([
+      ".", "--remote-debugging-port=9333", "--remote-debugging-address=127.0.0.1",
+    ]);
+    expect(() => parseDevRunnerArgs(["web", "--devtools-port", "9333"], {})).toThrow("requires desktop mode");
+    expect(() => parseDevRunnerArgs(["desktop", "--devtools-port", "70000"], {})).toThrow();
+  });
+
   test("plans web dev with only server and renderer processes using explicit ports", () => {
     const options = parseDevRunnerArgs([
       "web",
