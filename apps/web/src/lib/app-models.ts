@@ -83,6 +83,7 @@ export type ActivityItem = {
   controlKind?: "goal_context" | "turn_aborted";
   callId?: string;
   backgroundTaskId?: string;
+  plan?: Array<{ id?: string; content: string; status: "pending" | "in_progress" | "completed"; activeForm?: string }>;
   detail?: string;
   terminal?: {
     exitCode?: number | null;
@@ -228,6 +229,7 @@ export type ChatMessage = {
   id: string;
   /** The wrap-up response of a successfully completed turn. */
   finalAnswer?: boolean;
+  nativeTaskNotification?: import("./native-task-notification").NativeTaskNotification;
   turnStartedAt?: string;
   turnCompletedAt?: string;
   interactionKind?: "steer";

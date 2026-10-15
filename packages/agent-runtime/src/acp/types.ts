@@ -1,6 +1,6 @@
 export type AcpObject = Record<string, unknown>;
 export type AcpPermissionOption = { optionId: string; name: string; kind: "allow_once" | "allow_always" | "reject_once" | "reject_always" };
-export type NativeAgentQuestion = { question: string; header?: string; multiSelect?: boolean; options: Array<{ label: string; description?: string }> };
+export type NativeAgentQuestion = { question: string; header?: string; multiSelect?: boolean; options: Array<{ label: string; description?: string; preview?: string }> };
 export type AcpPermissionRequest = { sessionId: string; toolCall: AcpObject; options: AcpPermissionOption[]; questions?: NativeAgentQuestion[] };
 export type AcpPermissionResult = { outcome: { outcome: "selected"; optionId: string } | { outcome: "cancelled" }; answers?: Record<string, string> };
 export type AcpInitializeResult = {

@@ -1,3 +1,5 @@
+import { latestChatPlan } from "../../lib/chat-task-progress";
+import { ActivityPlanCard } from "../chat/ActivityPlanCard";
 import {
   lazy,
   Suspense,
@@ -83,6 +85,7 @@ export function MainChatThread({
     () => chatTimelineMessages(rows),
     [rows]
   );
+  const currentPlan = useMemo(() => latestChatPlan(messages), [messages]);
   const newMessageIds = useNewMessageIds(messages, conversationKey);
   const latestTurnId = latestMessageTurnId(messages);
   const turnCache = useSessionTurnCache({
@@ -93,6 +96,7 @@ export function MainChatThread({
   });
 
   return (
+    <>
     <section
       className="chat-thread"
       aria-label="Conversation"
@@ -136,6 +140,8 @@ export function MainChatThread({
         </Suspense>
       ) : null}
     </section>
+    {turnRunning && currentPlan?.length ? <aside className="chat-plan-dock" aria-label="Current task progress"><ActivityPlanCard entries={currentPlan} initiallyExpanded={false} /></aside> : null}
+    </>
   );
 }
 

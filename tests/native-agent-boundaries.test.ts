@@ -58,9 +58,11 @@ it("validates native question identity and rejects duplicate or late answers", a
   let published!: (approval: Approval) => void;
   const ready = new Promise<Approval>((resolve) => { published = resolve; });
   const approvals = createNativeAgentApprovals({ upsertApproval: async (approval) => { if (approval.status === "pending") published(approval); }, appendRuntimeEvent: async () => undefined });
-  const pending = approvals.request("chat", "turn", { sessionId: "native", toolCall: { toolCallId: "ask" }, questions: [{ question: "Which fixture?", options: [{ label: "Alpha" }, { label: "Beta" }] }], options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }] }, new AbortController().signal);
+  const pending = approvals.request("chat", "turn", { sessionId: "native", toolCall: { toolCallId: "ask" }, questions: [{ question: "Which fixture?", options: [{ label: "Alpha", preview: "<div>Alpha layout</div>" }, { label: "Beta" }] }], options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }] }, new AbortController().signal);
   const approval = await ready;
   expect(approval.kind).toBe("user_input");
+  expect(JSON.parse(approval.detail).questions[0].options[0].preview).toBe("<div>Alpha layout</div>");
+  await expect(approvals.resolve(approval.id, { decision: "accept", answers: { "Which fixture?": "   " } })).rejects.toThrow();
   await expect(approvals.resolve(approval.id, { decision: "accept", answers: { foreign: "Alpha" } })).rejects.toThrow("Answer each");
   await approvals.resolve(approval.id, { decision: "accept", answers: { "Which fixture?": "Alpha" } });
   expect(await pending).toEqual({ outcome: { outcome: "selected", optionId: "allow" }, answers: { "Which fixture?": "Alpha" } });
