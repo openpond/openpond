@@ -249,6 +249,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     return true;
   }
   const routes: Array<{ method: string; path: string; action: string; status?: number }> = [
+    { method: "GET", path: "/v1/training/model-projects", action: "inspect_local_model_projects" },
     { method: "POST", path: "/v1/training/sources", action: "add_source", status: 201 },
     { method: "POST", path: "/v1/training/sources/batch", action: "add_sources", status: 201 },
     { method: "POST", path: "/v1/training/sources/estimate", action: "estimate_sources" },
@@ -288,6 +289,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     return true;
   }
   const dynamic = [
+    { pattern: /^\/v1\/training\/model-projects\/([^/]+)$/, method: "GET", action: "inspect_local_model_projects", key: "modelProjectId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/graders$/, method: "GET", action: "taskset_grader_details", key: "tasksetId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/attempts\/([^/]+)\/evidence$/, method: "GET", action: "model_comparison_attempt_evidence", key: "runId", assignmentKey: "attemptId" },
     { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/seal$/, method: "POST", action: "seal_model_comparison_series", key: "seriesId" },

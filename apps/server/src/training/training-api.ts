@@ -93,6 +93,7 @@ import { handleModelComparisonAction } from "./training-api-model-comparison-act
 import { handleContinualLearningAction } from "./training-api-continual-learning-actions.js";
 import { readTasksetGraderDetails } from "./taskset-grader-details.js";
 import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.js";
+import { inspectLocalModelProjects } from "./model-project-inspection.js";
 import { initializeModelTasksetDraftSource, inspectModelTasksetDraftSource, tasksetDraftFileAction } from "./model-taskset-draft-api.js";
 import { createLocalLearningRuntime } from "./learning-runtime.js";
 import { parseModelProjectSaveRequest, ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
@@ -147,6 +148,7 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
     signal: AbortSignal = new AbortController().signal,
   ): Promise<unknown> {
     const input = record(payload);
+    if (action === "inspect_local_model_projects") return inspectLocalModelProjects(deps.store, string(input.modelProjectId), requestUrl?.searchParams.get("profileId") ?? undefined);
     if (action === "task_inventory" || action === "task_inventory_detail") {
       const { profileId, query } = taskInventoryRequest(requestUrl);
       return action === "task_inventory" ? taskInventory.list(profileId, query) : taskInventory.detail(profileId, query);

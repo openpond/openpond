@@ -139,6 +139,19 @@ warm: inspect actual readiness and current startup/idle/retention behavior,
 explain separate serving charges, and do not promise a latency or start serving
 merely because a model was inspected.
 
+Inspect saved canonical Models first with `training projects --json`, then
+`training inspect-project <local-model-project-id> --json`. These read-only local
+commands return the saved Profile, recipe presence, execution settings and exact training/evaluation Taskset
+references, whether each exact revision/hash exists, split counts and grader pins
+without exporting tasks or private verifier bytes. They do not reconcile or start
+background work. Optional `--profile` narrows the local Profile explicitly.
+Chat `datasets context` describes portable Dataset workspaces and experiments;
+it is not the canonical Model/Taskset inventory. A portable `datasets read` 404
+does not establish that an imported canonical Model Taskset is missing. If the
+canonical inspector confirms the exact pins available, preserve them and proceed
+with planning rather than repeating import or reporting that catalog error as a
+blocker. Hosted readback alone does not establish local package availability.
+
 To bring a hosted Model and its pinned Taskset packages into the local app, use
 `training pull-project <hosted-model-project-id> --profile <local-profile-id> --json`.
 This uses the local app API and its signed-in hosted account; do not pass the hosted

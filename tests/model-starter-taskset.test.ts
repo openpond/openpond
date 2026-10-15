@@ -303,6 +303,34 @@ it("recovers an explicitly pinned projected snapshot atomically and rejects alte
     expect(await target.getTaskset(projected.id)).toEqual(projected);
     await expect(service().pullProject({ hostedProjectId: hosted.id, profileId: "another-profile", snapshot })).rejects.toThrow();
     expect(await target.getModelProject(original.id)).toEqual(result.project);
+    const { inspectLocalModelProjects } = await import("../apps/server/src/training/model-project-inspection.js");
+    const listing = await inspectLocalModelProjects(target);
+    expect(listing.projects?.map(project => project.id)).toContain(original.id);
+    const inspected = await inspectLocalModelProjects(target, original.id, "snapshot-profile");
+    expect(inspected.tasksets?.every(binding => binding.available && binding.reference?.contentHash === projected.contentHash)).toBe(true);
+    expect(inspected.tasksets?.[0]?.taskset).toMatchObject({ id: projected.id, revision: projected.revision, contentHash: projected.contentHash, taskCount: projected.tasks.length, importedPackageHash: value.contentHash });
+    expect(inspected.tasksets?.[0]?.taskset).not.toHaveProperty("tasks");
+    expect(inspected.tasksets?.[0]?.taskset?.graders[0]).not.toHaveProperty("module");
+    expect(JSON.stringify(inspected)).not.toContain(value.files[0]!.base64);
+    const sensitiveReader = {
+      listModelProjects: target.listModelProjects.bind(target),
+      getModelProject: async () => ({ ...result.project, trainingSetup: {
+        ...result.project.trainingSetup, recipe: { ...result.project.trainingSetup.recipe, privateSentinel: "private-recipe-payload-must-not-leak" },
+      } }),
+      getTasksetRevision: target.getTasksetRevision.bind(target),
+    };
+    const privateInspection = await inspectLocalModelProjects(sensitiveReader, original.id);
+    expect(privateInspection.project?.trainingSetup.recipePresent).toBe(true);
+    expect(privateInspection.project?.trainingSetup).not.toHaveProperty("recipe");
+    expect(JSON.stringify(privateInspection)).not.toContain("private-recipe-payload-must-not-leak");
+    await expect(inspectLocalModelProjects(target, original.id, "another-profile")).rejects.toThrow();
+    const mismatched = await inspectLocalModelProjects({
+      listModelProjects: target.listModelProjects.bind(target), getModelProject: target.getModelProject.bind(target),
+      getTasksetRevision: async () => ({ ...projected, contentHash: "f".repeat(64) }),
+    }, original.id);
+    expect(mismatched.tasksets?.every(binding => !binding.available && binding.taskset === null)).toBe(true);
+    expect(await target.getModelProject(original.id)).toEqual(result.project);
+    expect(await target.getTaskset(projected.id)).toEqual(projected);
     await target.close(); target = new SqliteStore(path.join(home, "target"));
     expect(await exportLocalModelTasksetPackage({ store: target, storeDir: target.home, profileId: "snapshot-profile", modelId: original.id })).toEqual(value);
   } finally { await source.close(); await target.close(); }

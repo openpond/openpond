@@ -53,18 +53,21 @@ export async function runTrainingCommand(
       "benchmark",
       "create-project",
       "pull-project",
+      "projects",
+      "inspect-project",
     ].includes(
       subcommand,
     ) ||
-    !id
+    (!id && subcommand !== "projects")
   ) {
     throw new Error(
-      "usage: training <create-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-project-id|model-run-id|run-id|model-id>",
+      "usage: training <projects|inspect-project|create-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]",
     );
   }
   if (rest.length > 2) {
     throw new Error(`training ${subcommand} accepts exactly one identifier`);
   }
+  if (subcommand === "projects" && id) throw new Error("training projects does not accept an identifier; use inspect-project <id>.");
   const pullProfileId = subcommand === "pull-project" ? optionString(options, "profile") : null;
   if (subcommand === "pull-project" && !pullProfileId) throw new Error("training pull-project requires --profile <local-profile-id>.");
 
@@ -72,10 +75,10 @@ export async function runTrainingCommand(
     resolveApiBaseUrlOption(options) ??
     process.env.OPENPOND_LOCAL_API_URL?.replace(/\/$/, "") ??
     DEFAULT_LOCAL_TRAINING_API_URL;
-  if (subcommand === "pull-project") {
+  if (["pull-project", "projects", "inspect-project"].includes(subcommand)) {
     const origin = new URL(baseUrl);
     if (origin.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname) || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/") {
-      throw new Error("training pull-project uses the local app's HTTP loopback API; the app resolves its signed-in hosted account.");
+      throw new Error(`training ${subcommand} uses the local app's HTTP loopback API; the app resolves its signed-in hosted account.`);
     }
   }
   const client = new TrainingApiClient({
@@ -87,6 +90,12 @@ export async function runTrainingCommand(
       }),
   });
   const json = parseBooleanOption(options.json);
+
+  if (subcommand === "projects" || subcommand === "inspect-project") {
+    printResult(await client.inspectProjects(subcommand === "inspect-project" ? id : undefined, optionString(options, "profile") ?? undefined), json);
+    return;
+  }
+  if (!id) throw new Error(`training ${subcommand} requires an identifier.`);
 
   if (subcommand === "pull-project") {
     const snapshotFile = optionString(options, "snapshotFile");
@@ -337,6 +346,11 @@ export class TrainingApiClient {
   trainingState(profileId?: string): Promise<unknown> {
     const scope = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
     return this.json(`/v1/training${scope}`, "GET");
+  }
+
+  inspectProjects(modelId?: string, profileId?: string): Promise<unknown> {
+    const scope = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
+    return this.json(`/v1/training/model-projects${modelId ? `/${encodeURIComponent(modelId)}` : ""}${scope}`, "GET");
   }
 
   pullHostedProject(hostedProjectId: string, profileId: string, snapshot?: unknown): Promise<unknown> {
