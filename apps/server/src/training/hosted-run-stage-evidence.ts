@@ -127,6 +127,7 @@ export function hostedRunStageEvidence(
     throw new Error("Flow evidence belongs to a different training run.");
   const live = !["completed", "cancelled", "failed", "budget_exhausted"].includes(job.state);
   const qualification = job.inputBundle?.executionIntent?.purpose === "collection";
+  const candidateEvaluationStarted = !qualification && detail.evaluations.some((item) => item.kind === "candidate");
   const baseline = qualification ? undefined : detail.evaluations.find((item) => item.kind === "baseline");
   const baselineCount = baseline?.metrics?.taskCount;
   const baselineTarget = baseline?.metrics?.targetTaskCount;
@@ -166,6 +167,7 @@ export function hostedRunStageEvidence(
       label: "Rollouts",
       done: job.targetGroups > 0 && job.completedGroups >= job.targetGroups,
       active:
+        !candidateEvaluationStarted &&
         ["rollout_phase", "draining"].includes(job.state) &&
         !detail.rolloutGroups.some((group) => group.state === "scoring"),
       inLoop: true,

@@ -90,6 +90,25 @@ test("hosted flow keeps execution evidence and owner boundaries", () => {
   }, { entries: [] }, identity);
   expect(qualification.nodes.some(node => node.label === "Baseline evaluation")).toBe(false);
 
+  // Draining also owns final candidate evaluation and cleanup. A completed
+  // training loop must not stay active and hide that actual evaluation stage.
+  const draining = { ...raw, job: { ...raw.job, state: "draining" } };
+  expect(hostedRunStageEvidence(draining, { entries: [] }, identity).nodes.find(node => node.label === "Rollouts")?.state).toBe("active");
+  for (const state of ["running", "completed"]) {
+    const finalEvaluation = hostedRunStageEvidence({ ...draining,
+      evaluations: [{ kind: "candidate", state, score: state === "completed" ? "0.25" : null }],
+    }, { entries: [] }, identity);
+    expect(finalEvaluation.nodes.find(node => node.label === "Rollouts")?.state).toBe("done");
+    expect(finalEvaluation.nodes.some(node => node.inLoop && node.state === "active")).toBe(false);
+    expect(finalEvaluation.nodes.find(node => node.label === "Evaluate")?.state).toBe(state === "running" ? "active" : "done");
+    expect(finalEvaluation.nodes.find(node => node.state === "active")?.label).toBe(state === "running" ? "Evaluate" : undefined);
+  }
+  const drainingQualification = hostedRunStageEvidence({ ...draining,
+    job: { ...draining.job, inputBundle: { ...raw.job.inputBundle, executionIntent: { purpose: "collection" } } },
+  }, { entries: [] }, identity);
+  expect(drainingQualification.nodes.find(node => node.label === "Rollouts")?.state).toBe("active");
+  expect(drainingQualification.nodes.some(node => node.label === "Evaluate")).toBe(false);
+
   expect(() =>
     hostedRunStageEvidence(
       { ...raw, job: { ...raw.job, teamId: "other-team" } },
