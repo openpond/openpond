@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { runBoundedOpChat } from "../src/cli/opchat-bounded-chat";
 
 import {
   getOpChatModel,
@@ -111,42 +112,70 @@ describe("OpChat hosted chat client", () => {
     ]);
   });
 
-  test("sends non-streaming chat completions to /opchat/v1/chat/completions", async () => {
-    const requests: Array<{ url: string; body: unknown }> = [];
+  // Failure story: a CLI warm request must not dispatch outside its workspace,
+  // quoted cap or deadline, or call an aborted provider request free/safe to retry.
+  test("bounds a CLI call before dispatch and preserves uncertain cancellation", async () => {
+    const requests: Array<{ url: string; method: string; headers: Headers; body: unknown }> = [];
+    const receipts: Record<string, unknown>[] = [];
+    const options = {
+      model: "openpond/qwen3-8b-base", message: "Reply OK", teamId: "team_test",
+      maxOutputTokens: "8", requestId: "warm-proof", timeoutSec: "1", maxSpend: "0.05",
+    };
+    const dependencies = {
+      account: async () => ({ token: "session_test", chatApiBaseUrl: "https://api.example.test/opchat/v1" }),
+      emit: (receipt: Record<string, unknown>) => { receipts.push(receipt); },
+    };
     globalThis.fetch = async (input, init) => {
       requests.push({
-        url: String(input),
+        url: String(input), method: init?.method ?? "GET", headers: new Headers(init?.headers),
         body: JSON.parse(String(init?.body ?? "{}")) as unknown,
       });
+      if (init?.method === "GET") return jsonResponse({
+        id: options.model, context_window: 8192, output_limit: 2048,
+        metadata: { billing: { pricing: {
+          version: "base-rate-v1", source: "openpond-serving", effectiveAt: "2026-10-05T00:00:00Z",
+          inputUsdPerMillionTokens: 5, cachedInputUsdPerMillionTokens: 5, outputUsdPerMillionTokens: 20,
+        } } },
+      });
+      if (new Headers(init?.headers).get("x-request-id") === "cancel-proof") {
+        return await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+        });
+      }
       return jsonResponse({
-        id: "chatcmpl_test",
+        id: "chatcmpl_test", model: options.model, request_id: options.requestId, provider_request_id: "pool/job",
         choices: [{ message: { content: "hello" }, finish_reason: "stop" }],
         usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
       });
     };
-
-    await expect(
-      sendHostedChatTurn({
-        apiBaseUrl: "https://api.openpond.ai/opchat/v1",
-        token: "opk_test",
-        model: "openpond-chat",
-        messages: [{ role: "user", content: "hello" }],
-      })
-    ).resolves.toMatchObject({
-      id: "chatcmpl_test",
-      usage: { total_tokens: 5 },
+    await expect(runBoundedOpChat({ ...options, opchatApiBaseUrl: "https://other.test" }, dependencies)).rejects.toThrow("origin");
+    expect(requests).toHaveLength(0);
+    await expect(runBoundedOpChat({ ...options, maxSpend: "0.04" }, dependencies)).rejects.toThrow("exceeds --max-spend");
+    expect(requests.map(request => request.method)).toEqual(["GET"]);
+    await runBoundedOpChat(options, dependencies);
+    const posted = requests.filter(request => request.method === "POST");
+    expect(posted).toHaveLength(1);
+    expect(posted[0]?.url).toBe("https://api.example.test/opchat/v1/chat/completions");
+    expect(posted[0]?.body).toMatchObject({
+      model: options.model, max_tokens: 8, messages: [{ role: "user", content: "Reply OK" }], stream: false,
     });
-
-    expect(requests).toEqual([
-      {
-        url: "https://api.openpond.ai/opchat/v1/chat/completions",
-        body: {
-          model: "openpond-chat",
-          messages: [{ role: "user", content: "hello" }],
-          stream: false,
-        },
-      },
-    ]);
+    for (const request of requests) {
+      expect(request.headers.get("authorization")).toBe("Bearer session_test");
+      expect(request.headers.get("x-openpond-team-id")).toBe("team_test");
+    }
+    expect(posted[0]?.headers.get("x-request-id")).toBe("warm-proof");
+    expect(posted[0]?.headers.get("x-openpond-request-id")).toBe("warm-proof");
+    expect(receipts.at(-1)).toMatchObject({
+      status: "completed", quote: { maximumRequestCostUsd: 0.04112 },
+      completion: { id: "chatcmpl_test", request_id: "warm-proof", provider_request_id: "pool/job" },
+      usage: { total_tokens: 5 }, accounting: { chargedUsd: null, requiresLedgerReconciliation: true },
+    });
+    await expect(runBoundedOpChat({ ...options, requestId: "cancel-proof" }, dependencies)).rejects.toThrow("deadline");
+    expect(requests.filter(request => request.method === "POST")).toHaveLength(2);
+    expect(receipts.at(-1)).toMatchObject({
+      status: "timed_out", requestId: "cancel-proof", dispatchAttempted: true,
+      accounting: { state: "unknown", chargedUsd: null, cleanupConfirmed: false },
+    });
   });
 
   test("sends OpenAI chat tools and preserves assistant tool calls", async () => {

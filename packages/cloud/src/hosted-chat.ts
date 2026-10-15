@@ -170,6 +170,7 @@ export type HostedChatStreamDelta =
 export type HostedChatRequestOptions = {
   apiBaseUrl: string;
   token: string;
+  teamId?: string;
   model: string;
   messages: HostedChatMessage[];
   requestId?: string;
@@ -186,6 +187,7 @@ export type HostedChatRequestOptions = {
 export type HostedModelsRequestOptions = {
   apiBaseUrl: string;
   token: string;
+  teamId?: string;
   signal?: AbortSignal;
 };
 
@@ -272,14 +274,18 @@ function requireToken(value: string): string {
 function hostedHeaders(
   token: string,
   accept: string,
-  requestId?: string
+  requestId?: string,
+  teamId?: string,
 ): Headers {
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${requireToken(token)}`);
   headers.set("Content-Type", "application/json");
   headers.set("Accept", accept);
   headers.set("x-openpond-client", "openpond-code");
-  headers.set("x-openpond-request-id", requestId || randomUUID());
+  const operationId = requestId || randomUUID();
+  headers.set("x-openpond-request-id", operationId);
+  headers.set("x-request-id", operationId);
+  if (teamId) headers.set("x-openpond-team-id", teamId);
   return headers;
 }
 
@@ -366,7 +372,8 @@ export async function listOpChatModels(
   const requestUrl = `${apiBaseUrl}/models`;
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: hostedHeaders(options.token, "application/json"),
+    redirect: "error",
+    headers: hostedHeaders(options.token, "application/json", undefined, options.teamId),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -388,7 +395,8 @@ export async function getOpChatModel(
     requestUrl,
     {
       method: "GET",
-      headers: hostedHeaders(options.token, "application/json"),
+      redirect: "error",
+      headers: hostedHeaders(options.token, "application/json", undefined, options.teamId),
       signal: options.signal,
     }
   );
@@ -411,7 +419,8 @@ export async function listOpChatProviders(
   const requestUrl = `${apiBaseUrl}/providers`;
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: hostedHeaders(options.token, "application/json"),
+    redirect: "error",
+    headers: hostedHeaders(options.token, "application/json", undefined, options.teamId),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -433,7 +442,8 @@ export async function getOpChatProvider(
     requestUrl,
     {
       method: "GET",
-      headers: hostedHeaders(options.token, "application/json"),
+      redirect: "error",
+      headers: hostedHeaders(options.token, "application/json", undefined, options.teamId),
       signal: options.signal,
     }
   );
@@ -456,10 +466,12 @@ export async function sendHostedChatTurn(
   const requestUrl = `${apiBaseUrl}/chat/completions`;
   const response = await fetch(requestUrl, {
     method: "POST",
+    redirect: "error",
     headers: hostedHeaders(
       options.token,
       "application/json",
-      options.requestId
+      options.requestId,
+      options.teamId,
     ),
     body: JSON.stringify(buildHostedChatBody(options, false)),
     signal: options.signal,
@@ -534,10 +546,12 @@ export async function* streamHostedChatTurn(
   const requestUrl = `${apiBaseUrl}/chat/completions`;
   const response = await fetch(requestUrl, {
     method: "POST",
+    redirect: "error",
     headers: hostedHeaders(
       options.token,
       "text/event-stream",
-      options.requestId
+      options.requestId,
+      options.teamId,
     ),
     body: JSON.stringify(buildHostedChatBody(options, true)),
     signal: options.signal,

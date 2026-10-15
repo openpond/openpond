@@ -1032,7 +1032,8 @@ Options:
 
 ```text
 Usage:
-  openpond opchat <command> [args]
+  openpond opchat <provider-catalog|models|model|smoke> [args]
+  openpond opchat chat --model <id> --message <text> --team-id <id> --max-output-tokens <n> --request-id <id> --timeout-sec <1..600> --max-spend <usd> (non-streaming; omit --stream)
 
 Options:
   --compatibility-model <string>
@@ -1041,14 +1042,19 @@ Options:
   --env <string>
   --environment <string>
   --json
+  --max-output-tokens <integer>
+  --max-spend <number>
   --message <string>
   --model <string>
   --opchat-api-base-url <string>
   --opchat-api-url <string>
   --prompt <string>
+  --request-id <string>
   --skip-stream
   --skip-tool
   --stream
+  --team-id <string>
+  --timeout-sec <integer>
 ```
 ## teams-bot
 

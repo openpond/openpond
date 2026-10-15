@@ -555,7 +555,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "opchat",
-    usage: "openpond opchat <command> [args]",
+    usage: "openpond opchat <provider-catalog|models|model|smoke> [args]\n  openpond opchat chat --model <id> --message <text> --team-id <id> --max-output-tokens <n> --request-id <id> --timeout-sec <1..600> --max-spend <usd> (non-streaming; omit --stream)",
     optionSchema: {
       compatModel: "string",
       compatibilityModel: "string",
@@ -564,6 +564,11 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       effort: "string",
       json: "boolean",
       message: "string",
+      teamId: "string",
+      maxOutputTokens: "integer",
+      maxSpend: "number",
+      requestId: "string",
+      timeoutSec: "integer",
       model: "string",
       opchatApiBaseUrl: "string",
       opchatApiUrl: "string",
