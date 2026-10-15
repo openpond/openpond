@@ -1,3 +1,4 @@
+import { consumeComposerAddMenuKey, handleComposerMenuKey } from "./composer-menu-keyboard";
 import { useComposerNextStep } from "./useComposerNextStep";
 import { ComposerNextStep } from "./ComposerNextStep";
 import { ErrorToast } from "../common/ErrorToast";
@@ -1725,114 +1726,22 @@ export function Composer({
             onCursorChange={setCursorIndex}
             onKeyDown={(event) => {
               if (nextStep.onKeyDown(event)) return;
-              if (
-                addMenuOpen &&
-                [
-                  "ArrowDown",
-                  "ArrowUp",
-                  "Home",
-                  "End",
-                  "Enter",
-                  "Escape",
-                ].includes(event.key)
-              ) {
-                event.preventDefault();
-                return;
-              }
-              if (showMentionMenu) {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setMentionIndex(
-                    (current) => (current + 1) % mentionMatches.length
-                  );
-                  return;
-                }
-                if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setMentionIndex(
-                    (current) =>
-                      (current - 1 + mentionMatches.length) %
-                      mentionMatches.length
-                  );
-                  return;
-                }
-                if (event.key === "Enter" || event.key === "Tab") {
-                  event.preventDefault();
-                  selectMentionItem(
-                    mentionMatches[mentionIndex] ?? mentionMatches[0]!
-                  );
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setMentionMenuDismissedPrompt(activeMentionKey);
-                  return;
-                }
-              }
-              if (showSkillMenu) {
-                if (skillMatches.length > 0 && event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setSkillIndex(
-                    (current) => (current + 1) % skillMatches.length
-                  );
-                  return;
-                }
-                if (skillMatches.length > 0 && event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setSkillIndex(
-                    (current) =>
-                      (current - 1 + skillMatches.length) % skillMatches.length
-                  );
-                  return;
-                }
-                if (
-                  skillMatches.length > 0 &&
-                  (event.key === "Enter" || event.key === "Tab")
-                ) {
-                  event.preventDefault();
-                  selectProfileSkill(
-                    skillMatches[skillIndex] ?? skillMatches[0]!
-                  );
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setSkillMenuDismissedPrompt(activeSkillKey ?? prompt);
-                  return;
-                }
-              }
-              if (showActionMenu) {
-                if (slashMatches.length > 0 && event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setActionIndex(
-                    (current) => (current + 1) % slashMatches.length
-                  );
-                  return;
-                }
-                if (slashMatches.length > 0 && event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setActionIndex(
-                    (current) =>
-                      (current - 1 + slashMatches.length) % slashMatches.length
-                  );
-                  return;
-                }
-                if (
-                  slashMatches.length > 0 &&
-                  (event.key === "Enter" || event.key === "Tab")
-                ) {
-                  event.preventDefault();
-                  selectSlashMenuItem(
-                    slashMatches[actionIndex] ?? slashMatches[0]!
-                  );
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setActionMenuDismissedPrompt(activeSlashKey ?? prompt);
-                  return;
-                }
-              }
+              if (consumeComposerAddMenuKey(event, addMenuOpen)) return;
+              if (handleComposerMenuKey(event, {
+                open: showMentionMenu, matches: mentionMatches, index: mentionIndex,
+                setIndex: setMentionIndex, select: selectMentionItem,
+                dismiss: () => setMentionMenuDismissedPrompt(activeMentionKey),
+              })) return;
+              if (handleComposerMenuKey(event, {
+                open: showSkillMenu, matches: skillMatches, index: skillIndex,
+                setIndex: setSkillIndex, select: selectProfileSkill,
+                dismiss: () => setSkillMenuDismissedPrompt(activeSkillKey ?? prompt),
+              })) return;
+              if (handleComposerMenuKey(event, {
+                open: showActionMenu, matches: slashMatches, index: actionIndex,
+                setIndex: setActionIndex, select: selectSlashMenuItem,
+                dismiss: () => setActionMenuDismissedPrompt(activeSlashKey ?? prompt),
+              })) return;
               if (
                 (selectedAction || selectedCommand) &&
                 event.key === "Backspace" &&
