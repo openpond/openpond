@@ -1,5 +1,5 @@
 import { ErrorToast } from "../common/ErrorToast";
-import { composerResourceMetadata } from "./composer-resource-context";
+import { composerResourceMetadata, mergeComposerResourceContexts } from "./composer-resource-context";
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
