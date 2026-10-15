@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { NativeSetupTerminal } from "../terminal/NativeSetupTerminal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@openpond/contracts";
@@ -67,11 +67,6 @@ export function useNativeConversationHistory({ connection, selectedSessionId, se
     if (busy !== null) return;
     setBusy(id);
     try {
-      if (!branch) {
-        const inspection = await apiFetch<NativeBranchInspection>(connection, "/v1/native-history/branches", { method: "POST", body: JSON.stringify({ id }) });
-        if (currentGeneration !== generation.current) return;
-        if (inspection.branches.length > 1) { if (selectionRef.current.active && selectionRef.current.selectedSessionId === originSessionId) setBranchSelection({ id, inspection, originSessionId }); setError(null); return; }
-      }
       const session = await apiFetch<Session>(connection, "/v1/native-history/open", { method: "POST", body: JSON.stringify({ id, branch }) });
       if (currentGeneration !== generation.current) return;
       setFollowing(branch ? null : { id, sessionId: session.id }); setBranchSelection(null);
@@ -79,6 +74,18 @@ export function useNativeConversationHistory({ connection, selectedSessionId, se
       if (selectionRef.current.active && selectionRef.current.selectedSessionId === originSessionId) await onOpen(session);
     }
     catch (error) { if (currentGeneration === generation.current) setError(error instanceof Error ? error.message : "Could not read this conversation."); }
+    finally { if (currentGeneration === generation.current) setBusy(null); }
+  }
+  async function inspectBranches(id: string, originSessionId: string | null = selectionRef.current.selectedSessionId) {
+    if (!connection || busy !== null) return;
+    const currentGeneration = generation.current;
+    setBusy(id);
+    try {
+      const inspection = await apiFetch<NativeBranchInspection>(connection, "/v1/native-history/branches", { method: "POST", body: JSON.stringify({ id }) });
+      if (currentGeneration !== generation.current) return;
+      if (selectionRef.current.active && selectionRef.current.selectedSessionId === originSessionId) setBranchSelection({ id, inspection, originSessionId });
+      setError(null);
+    } catch (error) { if (currentGeneration === generation.current) setError(error instanceof Error ? error.message : "Could not read conversation branches."); }
     finally { if (currentGeneration === generation.current) setBusy(null); }
   }
   useEffect(() => {
@@ -125,25 +132,27 @@ export function useNativeConversationHistory({ connection, selectedSessionId, se
     if (!await onOpen(session)) return;
     if (session.metadata?.nativeHistoryProjection && !session.metadata.nativeBranch && typeof id === "string") void open(id, undefined, session.id);
   }
-  return { connection, history, error, busy, command, expanded, branchSelection,
-    setCommand, setExpanded, setBranchSelection, refresh, more, open, control, connectionControl, connect, select };
+  const branchHistoryId = selectedSession?.provider === "claude-code" && typeof selectedSession.metadata?.nativeHistoryId === "string" ? selectedSession.metadata.nativeHistoryId : null;
+  return { connection, history, error, busy, command, expanded, branchSelection, branchHistoryId,
+    setCommand, setExpanded, setBranchSelection, refresh, more, open, inspectBranches, control, connectionControl, connect, select };
 }
 
 export function NativeConversationControls({ history: state }: { history: ReturnType<typeof useNativeConversationHistory> }) {
-  const { connection, history, error, busy, command, expanded, branchSelection,
-    setCommand, setExpanded, setBranchSelection, refresh, more, open, control, connectionControl, connect } = state;
+  const { connection, history, error, busy, command, expanded, branchSelection, branchHistoryId,
+    setCommand, setExpanded, setBranchSelection, refresh, more, open, inspectBranches, control, connectionControl, connect } = state;
   if (!connection) return null;
   return <section className="sidebar-section native-conversations" aria-label="Conversation import controls">
     <div className="sidebar-section-heading"><button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>Import conversations</button><button type="button" className="sidebar-icon" aria-label="Refresh saved conversation history" disabled={busy !== null} onClick={() => void refresh()}>{busy === "refresh" ? <Loader2 size={14} /> : <RefreshCw size={14} />}</button></div>
     {command ? <NativeSetupTerminal connection={connection} command={command} onClose={() => { setCommand(null); void refresh(); }} /> : null}
-    {branchSelection ? <NativeBranchPicker title={history?.items.find(item => item.id === branchSelection.id)?.title ?? ""} inspection={branchSelection.inspection} busy={busy !== null} onSelect={branch => void open(branchSelection.id, branch, branchSelection.originSessionId ?? null)} onRefresh={() => void open(branchSelection.id, undefined, branchSelection.originSessionId ?? null)} onClose={() => setBranchSelection(null)} /> : null}
+    {branchSelection ? <NativeBranchPicker title={history?.items.find(item => item.id === branchSelection.id)?.title ?? ""} inspection={branchSelection.inspection} busy={busy !== null} onSelect={branch => void open(branchSelection.id, branch, branchSelection.originSessionId ?? null)} onRefresh={() => void inspectBranches(branchSelection.id, branchSelection.originSessionId ?? null)} onClose={() => setBranchSelection(null)} /> : null}
     {expanded ? <>
       <button type="button" disabled={busy !== null} onClick={() => void connect()}>Connect an import source</button>
+      {branchHistoryId ? <button type="button" disabled={busy !== null} onClick={() => void inspectBranches(branchHistoryId)}>View conversation branches</button> : null}
       {history && Object.keys(history.nextCursors).length ? <button type="button" disabled={busy !== null} onClick={() => void more()}>Load more saved conversations</button> : null}
       {history && history.items.length === 0 ? <p>No saved conversations found in configured source locations.</p> : null}
       {history?.warnings.map((warning) => <p key={warning}><CircleAlert size={12} aria-hidden="true" /> {warning}</p>)}
       {history?.collector.connections.length ? <NativeImporterStatus status={history.collector} busy={busy !== null} onControl={(command) => void control(command)} onConnectionControl={(command, id) => void connectionControl(command, id)} onReconnect={(id) => void connect(id)} /> : <p>Connect an import source to upload conversations. Local history remains available without cloud sync.</p>}
     </> : null}
-    {error && inlineErrorMessage(error) ? <p role="status"><CircleAlert size={12} aria-hidden="true" /> {error}</p> : null}
+    {error ? <ErrorToast error={error} /> : null}
   </section>;
 }

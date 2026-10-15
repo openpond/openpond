@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useMemo, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
 import type { BaseModelCandidate, BaseModelPreference, ModelProject, Taskset } from "@openpond/contracts";
 import type { OpenPondLearningClient } from "openpond-sdk/learning";
@@ -140,7 +140,7 @@ export function LabModelCreateDialog({ baseModelCandidates, tasksets, busy: savi
             </div> : null}
           </>}
         </fieldset>
-        {error && inlineErrorMessage(error) ? <div className="labs-rename-error" role="alert">{error}</div> : null}
+        {error ? <ErrorToast error={error} /> : null}
         <footer><button disabled={busy} type="button" onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button>{step > 0 ? <button disabled={fieldsLocked} type="button" onClick={() => { setStep(step - 1); setError(null); }}>Back</button> : null}<button disabled={busy || !normalizedName} type="submit">{checking ? "Checking…" : saving ? "Saving…" : pendingRequest ? "Retry creation" : step === 1 && !selectedTaskset && !activeStarter ? "Skip" : step < 2 ? "Continue" : project ? "Save changes" : "Create model"}</button></footer>
       </form>
       </>}

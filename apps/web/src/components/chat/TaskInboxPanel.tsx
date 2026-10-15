@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { TaskResourceContextsSchema, type TaskResourceContext, type TaskInput } from "@openpond/contracts";
 import type { TaskInboxController } from "../../hooks/useTaskInbox";
 import { ComposerSteerRow } from "./ComposerSteerRow";
@@ -13,7 +13,7 @@ export function TaskInboxPanel({ inbox, onRestore, canRestore }: {
   if (!queued.length && !inbox.error) return null;
 
   return <>
-    {inbox.error && inlineErrorMessage(inbox.error) && <p className="composer-notice warning" role="alert">{inbox.error}</p>}
+    {inbox.error && <ErrorToast error={inbox.error} />}
     {queued.length > 0 && <div className="composer-steer-stack" aria-label="Queued messages">
       {queued.map((input) => {
         const activeTurnId = snapshot?.activeTurnId;

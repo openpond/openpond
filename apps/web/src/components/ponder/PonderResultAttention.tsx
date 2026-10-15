@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import type { PonderLinkedLocalWork } from "./ponder-local-work";
@@ -150,7 +150,7 @@ export function PonderResultAttention({
           </button>
         </div>
       ))}
-      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+      {error ? <ErrorToast error={error} /> : null}
     </section>
   );
 }

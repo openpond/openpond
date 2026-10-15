@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useState, useMemo, useRef } from "react";
 import "./hosted-training-run.css";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
@@ -240,7 +240,7 @@ export function TrainedVersionExperimentControl({
             : null}
         </select>
       </label>
-      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+      {error ? <ErrorToast error={error} /> : null}
       {value ? (
         <>
           <p role="status">

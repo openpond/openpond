@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import { useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ConnectedHomeSummarySchema } from "openpond-sdk/connected-evidence";
@@ -21,7 +22,7 @@ export function ConnectedHome({ connection, teamId, actorId, projectId, onProjec
       {projects.hasNextPage ? <button disabled={projects.isFetchingNextPage} onClick={() => void projects.fetchNextPage()}>More Projects</button> : null}
       <label>From<input type="date" value={range.from} max={range.to} onChange={event => event.target.value && setRange(previous => ({ ...previous, from: event.target.value }))} /></label>
       <label>To<input type="date" value={range.to} min={range.from} onChange={event => event.target.value && setRange(previous => ({ ...previous, to: event.target.value }))} /></label></div>
-    {summary.error || projects.error ? <p role="alert">{(summary.error ?? projects.error)!.message}</p> : null}
+    {summary.error || projects.error ? <ErrorToast error={(summary.error ?? projects.error)!.message} /> : null}
     {summary.isPending ? <p role="status">Loading activity and invocation receipts…</p> : null}
     {data && totals ? <><dl className="evaluation-workspace-meta">{[["Conversations", data.activity.conversations], ["Chat turns", data.activity.chatTurns], ["Work turns", data.activity.workTurns], ["Model invocations", totals.invocations]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{fmt(Number(value))}</dd></div>)}</dl>
       <p>{fmt(totals.inputTokens)} known input tokens; {fmt(totals.cachedInputTokens)} known cached input tokens; {fmt(totals.outputTokens)} known output tokens. {fmt(totals.missingTotal)} invocations have no total-token receipt. {fmt(totals.unattributed)} lack a Project attribution. Dates use UTC.</p>

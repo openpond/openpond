@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   RemoteAccessSettingsStatus,
@@ -215,7 +215,7 @@ export function AccountRemoteAccessSettings({
           </button>
         </div>
       </div>
-      {loadError && inlineErrorMessage(loadError) && <p role="alert">{loadError}</p>}
+      {loadError && <ErrorToast error={loadError} />}
       {status?.state === "signed_out" && (
         <p>Sign in from Settings → Account to connect this computer.</p>
       )}

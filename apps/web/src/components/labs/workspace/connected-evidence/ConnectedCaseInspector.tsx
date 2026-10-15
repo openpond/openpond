@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../../lib/error-messages";
+import { ErrorToast } from "../../../common/ErrorToast";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ConnectedCaseReadbackSchema, ConnectedUnmappedEventsSchema, type ConnectedCaseRefSchema } from "openpond-sdk/connected-evidence";
 import type { z } from "zod";
@@ -22,7 +22,7 @@ export function ConnectedCaseInspector({ api, evidenceRef, onClose }: { api: Wor
     }, getNextPageParam: page => page.nextOffset ?? undefined });
   return <WorkspacePanel action="connected-case" label="Recorded input and evidence" onRequestClose={onClose}><h2>Recorded input and evidence</h2>
     {query.isPending ? <p role="status">Loading retained evidence…</p> : null}
-    {query.error && inlineErrorMessage(query.error) ? <p role="alert">{query.error.message}</p> : null}
+    {query.error ? <ErrorToast error={query.error} /> : null}
     {evidence ? <div className="space-y-5 text-sm">
       <p>{query.data!.origin.replaceAll("_", " ")} {evidence.boundary.projection}. {evidence.boundary.terminal}.</p>
       <p className="text-muted-foreground">Context: {evidence.boundary.coverage.context}. Process: {evidence.boundary.coverage.process}. Artifacts: {evidence.boundary.coverage.artifacts}.</p>
@@ -35,7 +35,7 @@ export function ConnectedCaseInspector({ api, evidenceRef, onClose }: { api: Wor
       </li>)}</ol></section>
       {query.data!.unmappedEvidence.count ? <section><h3 className="font-medium">Unassigned source process events</h3>
         <p className="text-muted-foreground">These {query.data!.unmappedEvidence.count} events belong to the source export. Their case mapping is unavailable, so they are excluded from the frozen input and observed trace above.</p>
-        {unmapped.error && inlineErrorMessage(unmapped.error) ? <p role="alert">{unmapped.error.message}</p> : null}
+        {unmapped.error ? <ErrorToast error={unmapped.error} /> : null}
         <ol className="divide-y divide-border">{unmapped.data?.pages.flatMap(page => page.events).map(event => <li key={event.id} className="py-3"><p>{event.kind.replaceAll("_", " ")} {event.occurredAt ?? "Time unavailable"}</p>
           <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-words text-xs">{JSON.stringify(event.content, null, 2)}</pre></li>)}</ol>
         <Button variant="outline" disabled={unmapped.isFetching || !unmapped.hasNextPage} onClick={() => void unmapped.fetchNextPage()}>{unmapped.isFetching ? "Loading…" : "Load more process events"}</Button>

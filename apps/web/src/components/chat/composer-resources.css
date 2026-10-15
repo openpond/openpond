@@ -11,6 +11,8 @@
 .composer-resource-bar > button:hover { background: var(--surface-raised); }
 .composer-resource-bar > button:disabled { opacity: .5; }
 .composer-resource-bar .composer-resource-primary { display: inline-flex; align-items: center; gap: 4px; }
+.composer-resource-chat-actions .dropdown-trigger > span { display: inline-flex; align-items: center; gap: 3px; }
+.composer-resource-chat-actions .dropdown-menu button small { white-space: normal; line-height: 1.45; overflow-wrap: anywhere; }
 .composer-resource-bar .composer-resource-primary, .composer-resource-bar .composer-resource-primary:hover { background: var(--accent-primary-fill); color: var(--text-on-accent); }
 .composer-resource-area > .chat-resource-error { padding: 5px 0; }
 @container (max-width: 420px) {

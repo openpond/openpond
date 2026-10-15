@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import type { ChatMessage } from "../../lib/app-models";
 import { MessageTimestamp } from "./MessageFooter";
 import { UserMessageContent } from "./UserMessageContent";
@@ -84,7 +84,7 @@ export function TaskMessageRow({
           {state}
         </span>
       </div>
-      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+      {error ? <ErrorToast error={error} /> : null}
     </article>
   );
 }

@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import { useMemo, useState } from "react";
 import type { ClientConnection } from "../../../api/api-client";
 import type { AgentInventory, AgentSource } from "../agent-connections";
@@ -184,7 +184,7 @@ export function AgentLearningControl({
         <label className="provider-toggle">
           <input
             type="checkbox"
-            aria-label={`${agent.name} continual learning`}
+            aria-label={`${agent.name} continuous learning`}
             checked={enabled.length > 0}
             disabled={!available || !bindings.length || query.isPending || query.isError || busy}
             onChange={(event) => {
@@ -203,7 +203,7 @@ export function AgentLearningControl({
           disabled={!connection || !teamId || !projectId || !signedIn || busy}
           onClick={() => setOpen(true)}
         >
-          Continual learning
+          Continuous learning
         </button>
         <small>
           {query.isError
@@ -220,7 +220,7 @@ export function AgentLearningControl({
       {projectId && !bindings.length && query.data ? (
         <small>Sync this agent to the selected Project to use its local connection.</small>
       ) : null}
-      {error && inlineErrorMessage(error) ? <small role="alert">{error}</small> : null}
+      {error ? <ErrorToast error={error} /> : null}
       {open && connection && teamId ? (
         <AgentLearningDialog
           key={projectId}
@@ -292,7 +292,7 @@ function LearningJoinDialog({
           <X size={16} />
         </button>
         <h2>
-          Add {agentName} to {policy?.configuration.name ?? "continual learning"}?
+          Add {agentName} to {policy?.configuration.name ?? "continuous learning"}?
         </h2>
         <p>
           This agent will contribute conversations to the existing model, schedule and spending
@@ -314,7 +314,7 @@ function LearningJoinDialog({
             </select>
           </label>
         ) : null}
-        {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+        {error ? <ErrorToast error={error} /> : null}
         <div className="settings-button-row">
           <button type="button" disabled={busy} onClick={onClose}>
             Cancel

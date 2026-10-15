@@ -1,3 +1,4 @@
+import { ErrorToast } from "../common/ErrorToast";
 import { Download, Loader2, RefreshCw } from "../icons";
 import { useDesktopUpdateAction } from "../../hooks/useDesktopUpdateAction";
 
@@ -25,6 +26,6 @@ export function DesktopUpdateButton({ hasRunningWork }: { hasRunningWork: boolea
     <span className="sr-only" role="status" aria-live="polite">
       {state.status === "ready" ? `OpenPond ${state.version} is ready to install. Restart to update.` : ""}
     </span>
-    {error ? <div className="sidebar-update-error" role="alert">{error}</div> : null}
+    {error ? <ErrorToast error={error} /> : null}
   </div>;
 }

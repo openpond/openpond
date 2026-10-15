@@ -53,6 +53,6 @@ export function useErrorToast(
     }
     if (lastMessageRef.current === message) return;
     lastMessageRef.current = message;
-    showToast?.(message, "error");
+    showToast?.(message, "error", { dedupeKey: `error:${message}` });
   }, [enabled, message, showToast]);
 }

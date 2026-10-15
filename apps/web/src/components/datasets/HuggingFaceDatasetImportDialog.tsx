@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   DatasetFieldBinding,
@@ -196,9 +196,7 @@ export function HuggingFaceDatasetImportDialog({
               />
             </label>
             {job?.status === "failed" && job.error ? (
-              <div className="training-banner error" role="alert">
-                {job.error}
-              </div>
+              <ErrorToast error={job.error} />
             ) : null}
           </div>
         ) : reviewing ? (
@@ -273,15 +271,15 @@ export function HuggingFaceDatasetImportDialog({
               </label>
             ) : null}
             {job?.status === "failed" && job.error ? (
-              <div className="training-banner error" role="alert">{job.error}</div>
+              <ErrorToast error={job.error} />
             ) : null}
           </div>
         ) : (
           <DatasetImportProgress job={job!} />
         )}
 
-        {localError && inlineErrorMessage(localError) ? (
-          <div className="training-banner error" role="alert">{localError}</div>
+        {localError ? (
+          <ErrorToast error={localError} />
         ) : null}
         <div className="training-dialog-actions">
           {!inspection ? (
@@ -411,7 +409,7 @@ function DatasetImportProgress({ job }: { job: DatasetImportJob }) {
             ? `${formatBytes(progress.completedBytes)}${progress.totalBytes ? ` of ${formatBytes(progress.totalBytes)}` : ""}`
             : humanize(progress.phase)}
       </small>
-      {job.error ? <div className="training-banner error">{job.error}</div> : null}
+      {job.error ? <ErrorToast error={job.error} /> : null}
     </div>
   );
 }

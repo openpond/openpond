@@ -1,0 +1,342 @@
+.dataset-workspace {
+  padding: 16px;
+  min-width: 0;
+  color: var(--text-primary);
+  display: grid;
+  gap: 12px;
+  container: dataset-workspace / inline-size;
+}
+.dataset-workspace-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-default);
+}
+.dataset-workspace-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dataset-workspace-section-heading h2,
+.dataset-workspace-section-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.dataset-workspace-section-heading > div {
+  min-width: 0;
+}
+.dataset-workspace-section-heading h3 {
+  overflow-wrap: anywhere;
+}
+.dataset-workspace-section-heading .dropdown-select {
+  max-width: 100%;
+  min-width: 0;
+}
+.dataset-workspace-section-heading .dropdown-trigger {
+  max-width: 280px;
+}
+.dataset-workspace-actions,
+.dataset-workspace-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dataset-workspace-actions .training-button {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.dataset-workspace .evaluation-table-frame {
+  margin: 0;
+}
+.dataset-workspace-run {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.dataset-workspace-run > .run-flow {
+  margin: 4px 0;
+}
+.dataset-workspace .training-metric-chart-grid {
+  grid-template-columns: 1fr;
+}
+.dataset-workspace .training-metric-card-chart {
+  height: 180px;
+}
+.dataset-workspace .training-metric-card-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.dataset-workspace-logs,
+.dataset-workspace-cases,
+.dataset-workspace-charts,
+.dataset-workspace-run {
+  font-size: 12px;
+  min-width: 0;
+}
+.dataset-workspace-logs > summary,
+.dataset-workspace-cases > summary,
+.dataset-workspace-charts > summary {
+  color: var(--text-secondary);
+  padding: 6px 0;
+  cursor: pointer;
+}
+.dataset-workspace-logs ol {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+  max-height: 260px;
+  overflow: auto;
+}
+.dataset-workspace-logs li {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-default);
+  padding: 7px 0;
+  overflow-wrap: anywhere;
+}
+.dataset-workspace-logs time {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.dataset-workspace-logs pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin: 6px 0;
+}
+.dataset-workspace-attempts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.dataset-workspace-attempt {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+}
+.dataset-workspace-attempt.scored {
+  background: var(--accent-primary-fill);
+  border-color: transparent;
+}
+.dataset-workspace-attempt.failed {
+  background: var(--status-danger-fill);
+  border-color: transparent;
+}
+.dataset-workspace-attempt.active {
+  background: var(--accent-primary-fill);
+  animation: dataset-attempt-pulse 1.6s ease-in-out infinite;
+}
+.model-journey.compact {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.model-journey.compact h3 {
+  font-size: 14px;
+  margin: 4px 0;
+}
+.model-journey.compact .model-journey-facts {
+  padding-top: 10px;
+  gap: 10px;
+}
+.model-journey.compact .training-metric-workbench {
+  margin-top: 14px;
+}
+@keyframes dataset-attempt-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dataset-workspace-attempt.active {
+    animation: none;
+  }
+}
+
+.chat-dataset-sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.dataset-workspace-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dataset-workspace .icon-only {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.dataset-workspace-context,
+.dataset-workspace-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.dataset-workspace > .dropdown-select {
+  width: 100%;
+  min-width: 0;
+}
+.dataset-workspace > .dropdown-select .dropdown-trigger {
+  width: 100%;
+  justify-content: space-between;
+}
+.dataset-workspace-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+}
+.dataset-workspace-dialog p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.dataset-workspace-dialog textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 140px;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font: inherit;
+}
+.dataset-training-plan {
+  display: grid;
+  gap: 16px;
+}
+.dataset-training-plan label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.dataset-training-plan input {
+  padding: 9px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+
+.dataset-workspace > .dropdown-select.compact .dropdown-trigger {
+  max-width: none;
+  width: 100%;
+}
+.dataset-workspace > .dropdown-select.compact .dropdown-trigger > span {
+  max-width: none;
+}
+
+.sidebar-tool-tab {
+  padding: 0 12px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.dataset-training-field-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: -8px;
+}
+
+.dataset-workspace-header-actions {
+  margin-left: auto;
+  gap: 6px;
+}
+.dataset-workspace-header-actions .dataset-action {
+  color: var(--text-on-accent);
+  background: var(--accent-primary-fill);
+  border-color: var(--accent-primary-fill);
+}
+.dataset-workspace-header-actions .dataset-action:disabled {
+  color: var(--text-disabled);
+  background: var(--surface-raised);
+  border-color: var(--border-default);
+}
+.dataset-workspace-cases > p {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.dataset-workspace-example-answer {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.dataset-workspace-example-answer pre {
+  max-width: 300px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 11px var(--font-mono);
+}
+
+.dataset-workspace-dialog .training-icon-button {
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+.dataset-workspace-context {
+  color: var(--text-secondary);
+}
+.dataset-workspace-context > span {
+  color: var(--text-muted);
+}
+.dataset-workspace-header-actions .dataset-action:hover:not(:disabled) {
+  background:var(--accent-primary-fill);
+  border-color:var(--accent-primary);
+}
+.dataset-workspace-header-actions .dataset-action {
+  white-space: nowrap;
+}
+
+.dataset-training-plan .model-build-field {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.dataset-training-plan .model-build-field small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.chat-experiment-tool { min-width: 0; color: var(--text-primary); }
+.chat-experiment-tool-header, .chat-experiment-tool-content { display: grid; gap: 12px; padding: 16px; }
+.chat-experiment-tool-header { border-bottom: 1px solid var(--border-default); }
+.chat-experiment-tool h2, .chat-experiment-tool h3 { margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.chat-experiment-tool p { margin: 0; line-height: 1.5; }
+.chat-context-note { color: var(--text-secondary); font-size: 12px; }
+
+.chat-experiment-tool-content + .chat-experiment-tool-content { padding-top: 0; }
+
+.chat-context-picker { position: relative; min-width: 0; }
+.chat-context-picker .chat-training-trigger { max-width: 220px; }
+.chat-context-picker .chat-training-menu { left: 0; right: auto; width: 300px; max-width: min(340px, calc(100vw - 76px)); overflow: visible; }
+.chat-training-menu .dropdown-select { width: 100%; min-width: 0; }
+.chat-training-menu .dropdown-select.compact > .dropdown-trigger { display: grid; grid-template-columns: auto minmax(0, 1fr) 14px; gap: 10px; width: 100%; max-width: none; height: 36px; padding: 0 7px; font-size: 13px; text-align: left; border: 0; }
+.chat-training-menu .dropdown-trigger > span { max-width: none; }
+.chat-training-menu .chat-training-menu-value { min-width: 0; color: var(--text-muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-training-menu .chat-resource-error { padding: 6px; }
+.chat-experiment-tool-header .chat-training-trigger { max-width: 100%; }
+.composer-input-shell:has(.chat-training-trigger.active) { z-index: 6; }
+.composer-primary-controls .chat-context-picker { flex: 0 1 auto; max-width: 160px; }
+.composer-primary-controls .chat-training-trigger { max-width: 100%; }
+.composer-primary-controls .chat-training-menu { left: auto; right: 0; }
+
+.chat-training-menu .dropdown-menu button { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 6px 9px; }
+.chat-training-menu .dropdown-menu button > small { white-space: normal; }
+.composer .composer-primary-controls .chat-training-menu .dropdown-select.compact > .dropdown-trigger { max-width: none; gap: 10px; padding-inline: 7px; }

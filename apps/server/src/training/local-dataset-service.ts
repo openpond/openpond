@@ -9,6 +9,7 @@ import type { SqliteStore } from "../store/store.js";
 import { cacheTasksetPackage } from "./taskset-package-files.js";
 import { localLearningCatalog } from "./local-learning-catalog.js";
 import { localGraderSummaries } from "./local-grader-resources.js";
+import { localGraderInspection } from "./local-grader-inspection.js";
 import { checkLocalDatasetGraders } from "./local-dataset-checks.js";
 import { checkCapturedDatasetSources } from "./chat-dataset-source-checks.js";
 import { projectLocalDatasetWorkspace } from "./local-dataset-projection.js";
@@ -140,8 +141,9 @@ export function createLocalDatasetService(deps: {store:SqliteStore;home:string;o
     const record = await read(input.id, ["read","read_grader","list_graders"].includes(input.action) && input.expectedRevision ? input.expectedRevision : undefined);
     if(input.action==="list_graders")return {summaries:localGraderSummaries(record)};
     if(input.action==="read_grader") {
-      const summary=localGraderSummaries(record).find(summary=>summary.graderId===input.payload.graderId);
+      const summary=localGraderSummaries(record).find(summary=>summary.graderId===input.payload.graderId || summary.id===input.payload.graderId);
       if(!summary)throw new Error("The saved grader was not found.");
+      if (input.payload.view === "inspection") return localGraderInspection(record, summary, input.payload);
       return {record,summary,grader:record.workspace.draft.graders.find(grader=>grader.id===summary.graderId)};
     }
     if (input.action === "read") return {record,summary:localDatasetSummary(record)};

@@ -253,8 +253,10 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
   const subagentMessage = activitySubagentMessage(item);
   const artifacts = activityArtifacts(item);
   const resourceDetail=chatResourceToolDetail(item);
+  const plan = activityPlan(item);
   return {
     id: item.id,
+    ...(plan ? { plan } : {}),
     label: subagentMessage
       ? subagentMessage.direction === "received"
         ? "Child message received"
@@ -344,6 +346,7 @@ function mergeToolActivity(activities: ActivityItem[], item: RuntimeEvent, activ
     else existing.detail = appendCommandOutput(existing.detail, completedContent);
   }
   if (activity.detail) existing.detail = appendCommandOutput(existing.detail, activity.detail);
+  existing.plan = activity.plan ?? existing.plan;
   existing.meta = activity.meta;
   existing.receipt = activity.receipt;
   existing.imagePreview = activity.imagePreview ?? existing.imagePreview;
@@ -361,6 +364,7 @@ function mergeWorkspaceActionActivity(activities: ActivityItem[], item: RuntimeE
   existing.timestamp = activity.timestamp;
   existing.state = activity.state;
   existing.detail = activity.detail;
+  existing.plan = activity.plan ?? existing.plan;
   existing.meta = activity.meta;
   existing.receipt = activity.receipt;
   existing.imagePreview = activity.imagePreview;
@@ -956,4 +960,19 @@ export function boundProjectedCommandOutput(value: string): string {
     MAX_PROJECTED_COMMAND_OUTPUT_CHARS - PROJECTED_COMMAND_OUTPUT_HEAD_CHARS - marker.length,
   );
   return `${value.slice(0, PROJECTED_COMMAND_OUTPUT_HEAD_CHARS)}${marker}${value.slice(-tailLength)}`;
+}
+
+function activityPlan(item: RuntimeEvent): ActivityItem["plan"] {
+  const data = asRecord(item.data);
+  const values = item.action === "update_plan" ? data?.plan ?? asRecord(item.args)?.plan : undefined;
+  if (!Array.isArray(values)) return undefined;
+  const entries: NonNullable<ActivityItem["plan"]> = [];
+  for (const value of values) {
+    const entry = asRecord(value), content = entry?.content ?? entry?.step;
+    if (typeof content !== "string" || !["pending", "in_progress", "completed"].includes(String(entry?.status))) return undefined;
+    entries.push({ content, status: entry!.status as NonNullable<ActivityItem["plan"]>[number]["status"],
+      ...(typeof entry?.id === "string" ? { id: entry.id } : {}),
+      ...(typeof entry?.activeForm === "string" ? { activeForm: entry.activeForm } : {}) });
+  }
+  return entries;
 }

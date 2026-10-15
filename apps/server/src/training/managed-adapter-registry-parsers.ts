@@ -80,6 +80,7 @@ export function requiredRegistryArtifact(
   }
   return {
     id: value.id,
+    label: typeof value.label === "string" && value.label.trim() ? value.label : null,
     source: value.source,
     sourceRef: value.sourceRef,
     state: value.state,

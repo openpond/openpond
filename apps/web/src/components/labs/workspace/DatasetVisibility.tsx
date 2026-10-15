@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import { EvaluationCard, EvaluationStatus } from "./EvaluationPresentation";
 import { useState } from "react";
 import { useDraftNavigation } from "../useDraftNavigation";
@@ -38,7 +39,7 @@ export function DatasetVisibility({ api, dataset, onClose }: { api: WorkspaceApi
   }
   return <>{guard.dialog}<WorkspacePanel action="visibility" label="Dataset marketplace visibility" onRequestClose={() => void guard.requestLeave(onClose)}>
     <header><h2>Marketplace visibility</h2></header>
-    {state.error || error ? <p role="alert">{error ?? state.error?.message}</p> : null}
+    {state.error || error ? <ErrorToast error={error ?? state.error?.message} /> : null}
     {state.isPending ? <p role="status">Loading released Dataset…</p> : null}
     {state.data ? <>
       <EvaluationCard title="Released Dataset">

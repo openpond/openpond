@@ -1,3 +1,4 @@
+import { ErrorToast } from "../common/ErrorToast";
 import {
   useEffect,
   useMemo,
@@ -148,7 +149,7 @@ export function OutputsPage({
           ) : null}
 
           {outputsError || actionError ? (
-            <p className="outputs-error">{actionError ?? outputsError}</p>
+            <ErrorToast error={actionError ?? outputsError} />
           ) : null}
           {!connection ? (
             <OutputMessage>Connect to the local OpenPond server to view outputs.</OutputMessage>

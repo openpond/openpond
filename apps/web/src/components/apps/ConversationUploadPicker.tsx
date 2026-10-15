@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useConnectionReadRetry } from "../../hooks/useConnectionReadRetry";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
@@ -89,7 +89,7 @@ export function ConversationUploadPicker({ connection, connectionId, disabled, p
           : !rows.length && !error ? <tr><td colSpan={3}>{query.trim() || range !== "all" ? "No conversations match these filters." : "No saved conversations found in this installation."}</td></tr> : null}</tbody>
       </table>
     </div>
-    {error && inlineErrorMessage(error) ? <div role="alert"><p>{error}</p><button type="button" className="settings-secondary" disabled={disabled || loading} onClick={() => setRevision(value => value + 1)}>Retry</button></div> : null}
+    {error ? <ErrorToast error={error}><button type="button" className="settings-secondary" disabled={disabled || loading} onClick={() => setRevision(value => value + 1)}>Retry</button></ErrorToast> : null}
     {page?.nextOffset != null ? <button type="button" className="settings-secondary" disabled={disabled || loading} onClick={() => void more()}>Load more conversations</button> : null}
     <p>The complete selected conversations are uploaded, including their prompts, responses, and tool history. Date filters help you find conversations; they do not trim their contents.</p>
     <div className="settings-button-row">

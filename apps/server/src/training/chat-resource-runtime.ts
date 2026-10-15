@@ -1,3 +1,4 @@
+import { createChatContextBrowser } from "./chat-context-browser.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
 import { readChatTrainingAttachment } from "./chat-training-attachment.js";
 import type { createChatProfileExperiments } from "../evaluations/chat-profile-experiments.js";
@@ -39,6 +40,13 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   const team = createChatTeamExperiments({service:deps.teamExperiments,
     resolveInvocation:deps.resolveInvocation,attach:async(context,resources)=>{for(const summary of resources)await emit(context.sessionId,context.turnId,summary);}});
   const cloud=createChatCloudExperiments({store:deps.store,datasets,access:deps.access});
+  const browser = createChatContextBrowser({ store: deps.store, access: deps.access,
+    resources: async () => {
+      const page = await experiments.service.list({ teamId: experiments.scope }) as { items: import("@openpond/contracts").LocalExperimentRecord[] };
+      return [...(await deps.store.listLocalDatasetListings()).map(localDatasetSummary), ...await Promise.all(page.items.map(record => experiments.summary(record))), ...await cloud.list()];
+    },
+    selectResource: async (sessionId, target) => { await request("dataset", { action: "set_focus", payload: { sessionId, kind: target?.kind ?? "dataset", id: target?.id ?? null, revision: target?.revision } }); },
+  });
   async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal):Promise<unknown> {
     if(kind==="dataset")return datasets.request(input,signal);
     const envelope=z.object({action:z.string(),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(input);
@@ -66,7 +74,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     return experiments.request(envelope);
   }
   async function wait(id:string){if(await deps.store.readChatHostedExperiment(id))return cloud.wait(id);await experiments.service.wait(id);return dispatch("experiment",{action:"result",payload:{id}});}
-  async function emit(sessionId:string,turnId:string,summary:ChatResourceSummary) {
+  async function emit(sessionId:string,turnId:string,summary:ChatResourceSummary, showCard = true) {
     if(summary.profileRef) {
       if(!profile)throw new Error("Profile experiment association is unavailable.");
       await profile.authorize(summary.profileRef);
@@ -87,7 +95,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     }
     // Team inputs are immutable pins, not installation-local authoring cards.
     if ((summary.owner || summary.profileRef) && summary.kind !== "experiment") return;
-    await deps.append({id:randomUUID(),name:"workspace_action_result",source:"server",sessionId,turnId,timestamp:new Date().toISOString(),action:"chat_resource",status:"completed",data:{chatResource:summary}});
+    await deps.append({id:randomUUID(),name:"workspace_action_result",source:"server",sessionId,turnId,timestamp:new Date().toISOString(),action:"chat_resource",status:"completed",data:{chatResource:summary,chatResourcePresentation:showCard ? "card" : "context"}});
   }
   function attachedSummaries(action:unknown, object:Record<string,unknown>):ChatResourceSummary[] {
     if (["list","models","schema","profile_catalog"].includes(String(action))) return [];
@@ -111,6 +119,24 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
     const {context:requestedContext,invocationToken,...input} = envelope;
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
+    if (kind === "dataset" && ["context_catalog", "context_resolve", "context_runs", "context_select", "context_selection"].includes(String(input.action))) {
+      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional() }).strict().parse(input.payload ?? {});
+      if (input.action === "context_catalog") return browser.catalog();
+      if (input.action === "context_runs") return { runs: await browser.runs(query.target) };
+      if (input.action === "context_resolve") return { selection: await browser.resolve(query.target) };
+      if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId) };
+      const session = query.sessionId ? await deps.store.getSession(query.sessionId) : null;
+      const target = session?.metadata?.chatContextSelection;
+      if (session && target && typeof target === "object" && ["dataset", "experiment"].includes(String((target as {kind?:unknown}).kind))) {
+        const state = chatExperimentContext(session.metadata);
+        const selected = chatResourceWorkspaces(state).find(scope => scope.id === state.activeScopeId);
+        const reference = target as { kind: string; id: string; revision?: number };
+        if (reference.kind === "dataset" ? selected?.dataset?.id !== reference.id || selected?.dataset?.revision !== reference.revision : !selected?.runs.some(run => run.id === reference.id)) {
+          await browser.select(target, session.id);
+        }
+      }
+      return { selection: target ? await browser.resolve(target) : null };
+    }
     if (kind === "experiment" && ["attach_training", "read_training"].includes(String(input.action))) {
       const ref = z.object({jobId:z.string().min(1).optional(),modelRunId:z.string().min(1).optional(),location:z.enum(["local","cloud"]).default("local"),apiOrigin:z.url().optional(),teamId:z.string().min(1).optional()}).strict()
         .refine(value=>Boolean(value.jobId || value.modelRunId),"Provide a training job or Model Run ID.").parse(input.payload);
@@ -304,7 +330,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     if (context && result && typeof result === "object") {
       const object = result as Record<string,unknown>;
       const summaries = attachedSummaries(input.action,object);
-      for (const summary of summaries) await emit(context.sessionId,context.turnId,summary);
+      for (const summary of summaries) await emit(context.sessionId,context.turnId,summary, !["read","read_grader","list_graders"].includes(String(input.action)));
       if (kind === "experiment" && typeof input.action === "string" && ["run","run_cloud"].includes(input.action)) for (const summary of summaries) void wait(summary.id).then(async result=> {
         const updated = result as {summary:ChatResourceSummary};
         await emit(context.sessionId,context.turnId,{...updated.summary,datasetId:summary.datasetId,datasetRevision:summary.datasetRevision});
@@ -342,7 +368,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     }
     const object = result && typeof result === "object" ? result as Record<string,unknown> : {};
     const summaries = attachedSummaries(action,object);
-    for (const summary of summaries) await emit(context.session.id,context.turnId,summary);
+    for (const summary of summaries) await emit(context.session.id,context.turnId,summary, !["read","read_grader","list_graders"].includes(String(action)));
     if (kind === "experiment" && typeof action === "string" && ["run","run_cloud"].includes(action)) {
       for (const summary of summaries) void wait(summary.id).then(async result=> {
         const updated = result as {summary:ChatResourceSummary};

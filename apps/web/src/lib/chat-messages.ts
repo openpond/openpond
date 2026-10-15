@@ -1,3 +1,4 @@
+import { parseNativeTaskNotification } from "./native-task-notification";
 import { HtmlVisualReferenceSchema } from "@openpond/contracts/html-visuals";
 import { attachChatResources } from "./chat-resources";
 import {
@@ -97,6 +98,13 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
           peer.turnId = item.turnId;
           continue;
         }
+        const nativeData = asRecord(item.data);
+        const notification = item.source === "provider" && nativeData?.retainedHistory === true && nativeData.nativeProvider === "claude-code"
+          ? parseNativeTaskNotification(prompt) : null;
+        if (notification) {
+          messages.push({ id: item.id, role: "assistant", nativeTaskNotification: notification, timestamp: item.timestamp, turnId: item.turnId });
+          continue;
+        }
         const marker = codexControlMessage(prompt);
         if (marker) {
           appendActivityMessage(messages, {
@@ -105,7 +113,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
             source: "provider",
             output: marker.text,
             data: {
-              ...(asRecord(item.data) ?? {}),
+              ...asRecord(item.data),
               kind: marker.kind,
             },
           });

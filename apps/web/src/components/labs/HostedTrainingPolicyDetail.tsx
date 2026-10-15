@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { contentHash } from "@openpond/harness";
 import { HostedTrainingPolicyControlSchema } from "openpond-sdk/post-training";
 import { useEffect, useRef, useState } from "react";
@@ -173,7 +173,7 @@ export function HostedTrainingPolicyDetail({
   return (
     <section className="labs-resource-page">
       <h2>Continual learning policy</h2>
-      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+      {error ? <ErrorToast error={error} /> : null}
       {!value ? (
         <p role="status">Loading exact policy…</p>
       ) : (

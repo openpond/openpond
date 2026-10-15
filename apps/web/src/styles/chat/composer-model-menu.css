@@ -191,3 +191,17 @@
   outline: 0;
   background: var(--state-hover);
 }
+
+/* Outside the scrolling provider list so managed models remain discoverable. */
+.codex-model-menu button.codex-model-managed-provider {
+  flex-shrink: 0;
+  margin-top: 5px;
+  min-height: 36px;
+  background: var(--accent-primary-fill);
+  color: var(--text-on-accent);
+}
+.codex-model-menu button.codex-model-managed-provider:hover,
+.codex-model-menu button.codex-model-managed-provider:focus-visible {
+  background: var(--accent-primary-fill);
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
+}

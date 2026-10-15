@@ -29,7 +29,7 @@ export function initialLearningDraft(
   const value = existing?.configuration;
   return {
     projectId,
-    name: value?.name ?? "Continual learning",
+    name: value?.name ?? "Continuous learning",
     mode: value?.mode ?? "activate",
     definition: value?.definition ?? null,
     configurationId: value?.configuration?.id ?? "",
@@ -120,7 +120,7 @@ export async function submitLearningDraft(
   );
   if (!draft.name.trim()) throw new Error("Enter a policy name.");
   if (!options.projects.some((item) => item.id === draft.projectId))
-    throw new Error("This owned Project is unavailable for continual learning.");
+    throw new Error("This owned Project is unavailable for continuous learning.");
   if (
     draft.configurationId &&
     (!model ||

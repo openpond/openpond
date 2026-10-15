@@ -157,8 +157,8 @@ export function useRightChatPanels(input: {
   ]);
 
   const showRightPanelDiffTab = useCallback(
-    (tab: WorkspaceDiffTabRequest["tab"]) => {
-      setRightPanelTabRequest((current) => ({ id: (current?.id ?? 0) + 1, tab }));
+    (tab: WorkspaceDiffTabRequest["tab"], overview?: WorkspaceDiffTabRequest["overview"]) => {
+      setRightPanelTabRequest((current) => ({ id: (current?.id ?? 0) + 1, tab, overview }));
       showChangesPanel();
     },
     [showChangesPanel],

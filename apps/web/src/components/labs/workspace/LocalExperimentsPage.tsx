@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import { ExperimentDiagnostics } from "./ExperimentDiagnostics";
 import { ExperimentRunPins } from "./ExperimentRunPins";
 import { AdvancedRefinerEvaluationControl } from "./AdvancedRefinerEvaluationControl";
@@ -110,7 +111,7 @@ export function LocalExperimentsPage({
         </button>
       </header>
       <p className="evaluation-meta-line">Executed and retained on this Desktop server using its signed-in account.</p>
-      {failure ? <p role="alert">{failure}</p> : null}
+      {failure ? <ErrorToast error={failure} /> : null}
       {!route.resourceId ? (
         <LocalExperimentCollection key={api.key} api={api} route={route} navigate={navigate} />
       ) : execution ? (

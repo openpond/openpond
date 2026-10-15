@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BootstrapPayload, ProviderSettings } from "@openpond/contracts";
 import { type ClientConnection } from "../../api";
@@ -170,11 +170,11 @@ export function ConnectedAgentsView({
     />
   ) : null;
   return (
-    <section className="connected-agents-view" aria-label="Connected agents">
+    <section className="connected-agents-view" aria-label="Continuous learning">
       <div className="agent-connections-heading">
         <div>
-          <h2>Connected agents</h2>
-          <p>Use your installed agents and sync conversations with OpenPond.</p>
+          <h2>Continuous learning</h2>
+          <p>Sync conversations from your installed agents and configure continuous learning.</p>
         </div>
         <div className="agent-connections-actions">
           <button
@@ -224,9 +224,9 @@ export function ConnectedAgentsView({
           options={[{ value: "", label: projectLoading && !projects.length ? "Fetching projects…" : "Select project" },
             ...projects.map(item => ({ value: item.id, label: item.content.name }))]} />
       </label>
-      {projectError && inlineErrorMessage(projectError) ? <p role="alert">{projectError}</p> : null}
-      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
-      {actionError && inlineErrorMessage(actionError) ? <p role="alert">{actionError}</p> : null}
+      {projectError ? <ErrorToast error={projectError} /> : null}
+      {error ? <ErrorToast error={error} /> : null}
+      {actionError ? <ErrorToast error={actionError} /> : null}
       <div className="agent-connections-grid">
         {AGENT_SOURCES.filter((item) => !hidden.includes(item.id)).map((agent) => (
           <AgentConnectionCard

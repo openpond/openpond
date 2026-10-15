@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { openAiSubscriptionModels } from "./openai-subscription-models.js";
 import { ProviderModelSchema, type ProviderId, type ProviderModel, type ProviderModelCapabilities, type ProviderSettings } from "@openpond/contracts/providers";
 import { type CodexReasoningEffort } from "@openpond/contracts/settings";
 import type {
@@ -142,20 +143,27 @@ export async function listOpenAiCompatibleProviderModels(input: {
   requestTimeoutMs?: number;
   responseBodyLimitBytes?: number;
   errorBodyLimitBytes?: number;
+  subscriptionClientVersion?: string;
+  saveChatGptSubscriptionCredential?: (providerId: OpenAiCompatibleProviderId, credential: ProviderChatGptSubscriptionCredential) => Promise<void>;
 }): Promise<ProviderModel[]> {
   const provider = resolveOpenAiCompatibleProvider({
     ...input,
     requireModel: false,
   });
-  if (provider.auth.type === "chatgpt_subscription") {
-    return subscriptionModelsFromSettings(input.settings, provider.providerId);
-  }
   const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
   try {
-    const requestUrl = providerEndpointUrl(provider.baseUrl, "models");
+    const subscription = provider.auth.type === "chatgpt_subscription";
+    const credential = provider.auth.type === "chatgpt_subscription" ? await usableSubscriptionCredential({ providerId: provider.providerId,
+      credential: provider.auth.credential, saveChatGptSubscriptionCredential: input.saveChatGptSubscriptionCredential }) : null;
+    const requestUrl = new URL(subscription ? "https://chatgpt.com/backend-api/codex/models" : providerEndpointUrl(provider.baseUrl, "models"));
+    // Prefer the locally installed client's protocol version. This baseline is
+    // used by standalone subscription connections without a Codex installation.
+    if (subscription) requestUrl.searchParams.set("client_version", input.subscriptionClientVersion ?? "0.159.1");
+    const headers = credential ? subscriptionHeaders(credential, undefined) : providerHeaders(provider.auth.type === "api_key" ? provider.auth.apiKey : "", "application/json");
+    headers.set("Accept", "application/json");
     const response = await fetch(requestUrl, {
       method: "GET",
-      headers: providerHeaders(provider.auth.apiKey, "application/json"),
+      headers,
       signal: requestSignal.signal,
     });
     if (!response.ok) {
@@ -177,7 +185,7 @@ export async function listOpenAiCompatibleProviderModels(input: {
       requestSignal.signal,
       requestSignal.touch,
     );
-    const models = modelsFromPayload(provider.providerId, payload);
+    const models = subscription ? openAiSubscriptionModels(payload) : modelsFromPayload(provider.providerId, payload);
     if (models.length === 0) {
       throw new Error(`Provider ${provider.providerId} returned no models.`);
     }
@@ -739,26 +747,6 @@ function subscriptionHeaders(
   }
   if (credential.accountId) headers.set("ChatGPT-Account-Id", credential.accountId);
   return headers;
-}
-
-function subscriptionModelsFromSettings(
-  settings: ProviderSettings,
-  providerId: OpenAiCompatibleProviderId,
-): ProviderModel[] {
-  const cached = settings.modelCaches[providerId]?.models ?? [];
-  return cached.length > 0
-    ? cached
-    : [
-        ProviderModelSchema.parse({
-          id: "gpt-5.6-sol",
-          providerId,
-          displayName: "GPT-5.6 Sol",
-          contextWindow: 400000,
-          outputLimit: 128000,
-          source: "curated",
-          capabilities: capabilitiesForModelId("gpt-5.6-sol"),
-        }),
-      ];
 }
 
 function modelsFromPayload(providerId: OpenAiCompatibleProviderId, payload: unknown): ProviderModel[] {

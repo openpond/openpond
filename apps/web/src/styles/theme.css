@@ -57,6 +57,8 @@
   --chart-10: #8bd35f;
   --chart-saturation: 65%;
   --chart-lightness: 68%;
+  --compute-gpu: var(--accent-primary);
+  --compute-cpu: color-mix(in srgb, var(--accent-primary) 45%, var(--text-muted));
   --identity-coding: var(--chart-1);
   --identity-research: var(--chart-6);
   --identity-review: var(--chart-3);

@@ -14,6 +14,9 @@ test("persisted resource replay keeps one final response identity and newest sav
   const final=event("answer",3,{name:"assistant.delta",output:"Your dataset is saved."});
   const newer=event("newer",5,{data:{chatResource:{...summary,revision:2,state:"Saved draft",taskCount:2}}});
   const events=[start,scaffold,saved,final,newer,event("late",6,{data:{chatResource:summary}}),event("forged",7,{source:"model",data:{chatResource:{...summary,revision:99}}})];
+  // Inspection still retains a resource reference, but must not turn a simple
+  // read-only answer into another saved-resource card on replay.
+  events.push(event("inspection",9,{turnId:"read-turn",data:{chatResource:{...summary,state:"Saved draft"},chatResourcePresentation:"context"}}));
   const live=buildChatMessages(events),completed=buildChatMessages([...events,event("complete",8,{name:"turn.completed"})]);
   const resource=completed.filter(message=>message.role==="resources");
   expect(resource).toHaveLength(1);expect(resource[0]).toMatchObject({id:"chat-resources:turn",resources:[{id:"dataset-one",revision:2,taskCount:2}]});

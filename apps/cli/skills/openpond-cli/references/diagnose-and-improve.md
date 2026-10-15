@@ -2,6 +2,11 @@
 
 Use the selected resource and the user's objective. Diagnose inspects evidence and explains the cause and next step without changing the resource or starting a new run. Improve carries the requested change through validation, using the supported CLI and the attached model, execution destination, and authorized budget.
 
+For dataset quality or coverage, task/grader agreement, and failed-eval diagnosis,
+load openpond-taskset-authoring and apply its relevant review guidance. Finish
+with evidenced findings, untested checks, and targeted next fixes; a narrow
+diagnosis does not require a full Taskset readiness review.
+
 ## Dataset
 
 Inspect representative examples, provenance, grader expectations, and relevant experiment results. Fix incorrect examples or missing coverage while preserving source references and held-out evaluation boundaries. Validate the saved revision, then run an experiment to assess the change. Compare with the baseline and explain when changed inputs prevent a direct score comparison.

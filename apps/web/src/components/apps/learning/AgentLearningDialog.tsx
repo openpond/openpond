@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import { useEffect, useRef, useState } from "react";
 import type { ClientConnection } from "../../../api/api-client";
 import { X } from "../../icons";
@@ -89,7 +89,7 @@ export function AgentLearningDialog({
       setDirty(false);
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to save continual learning.");
+      setError(cause instanceof Error ? cause.message : "Unable to save continuous learning.");
     } finally {
       setSaving(false);
     }
@@ -102,13 +102,13 @@ export function AgentLearningDialog({
         className="git-dialog provider-details-dialog agent-learning-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Continual learning"
+        aria-label="Continuous learning"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button
           type="button"
           className="git-dialog-close"
-          aria-label="Close continual learning"
+          aria-label="Close continuous learning"
           disabled={saving}
           onClick={requestClose}
         >
@@ -116,7 +116,7 @@ export function AgentLearningDialog({
         </button>
         <div className="provider-dialog-header">
           <div>
-            <h2>Continual learning</h2>
+            <h2>Continuous learning</h2>
             <span>{projectName}</span>
           </div>
         </div>
@@ -166,7 +166,7 @@ export function AgentLearningDialog({
         <div
           className="surface-tabs provider-agent-tabs"
           role="tablist"
-          aria-label="Continual learning settings"
+          aria-label="Continuous learning settings"
         >
           {(
             [
@@ -239,14 +239,11 @@ export function AgentLearningDialog({
             <p role="status">Fetching available sources, rubrics and models…</p>
           ) : null}
           {query.isError ? (
-            <p role="alert">
-              {query.error.message}{" "}
-              <button type="button" onClick={() => void query.refetch()}>
+            <ErrorToast error={query.error.message}><button type="button" onClick={() => void query.refetch()}>
                 Retry settings
-              </button>
-            </p>
+              </button></ErrorToast>
           ) : null}
-          {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+          {error ? <ErrorToast error={error} /> : null}
           <label className="agent-learning-check">
             <input
               type="checkbox"

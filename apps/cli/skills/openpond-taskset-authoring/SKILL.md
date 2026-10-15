@@ -1,6 +1,6 @@
 ---
 name: openpond-taskset-authoring
-description: Create, improve, inspect, test, or prepare an OpenPond Taskset from a capability, Profile Agent, consented conversations, imported datasets, examples, and traces. Use when the user asks for training or evaluation tasks, controlled benchmarks, graders, GRPO/RFT environments, baseline evaluation, Taskset readiness, or help deciding what a model should practice.
+description: Create, organize, review, improve, or test OpenPond Tasksets and their source data from a capability, Profile Agent, consented conversations, imported datasets, examples, and traces. Use for training or evaluation tasks, data coverage and quality, graders, failed eval diagnosis, controlled benchmarks, GRPO/RFT environments, baseline evaluation, or Taskset readiness.
 ---
 
 # OpenPond Taskset Authoring
@@ -45,6 +45,7 @@ attach the run to it. Taskset creation alone does not imply trained weights.
 
 1. Infer the capability and claim from the user's sentence.
 2. Inspect only the selected Profile, Agent, tools, and consented evidence.
+   Review existing coverage and example quality before generating more tasks.
 3. Separate stable behavior from changing knowledge. Recommend prompting,
    retrieval, or `no_training` when weights are not the right intervention.
 4. Ask one focused question only when a material decision cannot be inferred.
@@ -52,13 +53,41 @@ attach the run to it. Taskset creation alone does not imply trained weights.
    separate from expected outcomes and private grader state.
 6. Author varied tasks with semantic families isolated by split. Label examples
    `extracted`, `corrected`, `synthetic`, or `expert_authored`.
-7. Prefer deterministic graders. Pin, calibrate, and version any model judge.
+7. Prefer deterministic graders. Check that instructions, available context,
+   expected outcomes, and grading criteria agree. Pin, calibrate, and version
+   any model judge.
 8. Materialize the requested Taskset through supported CLI operations; ask only
    for missing material choices. Do not expose the underlying action payload.
 9. Validate schema and lifecycle, grader fixtures, leakage, reward hacking,
    optional reference-solution solvability, and a bounded base-model baseline.
-10. Return a compact readiness summary and keep training as the next, separate
-    action.
+10. Return the scoped quality review described below and keep training as the
+    next, separate action.
+
+## Review and improve existing data
+
+For review, organization, or failed-eval requests, start from the selected data
+and existing results; do not restart the creation workflow. Infer the intended
+use and requested depth. A narrow question needs only the relevant checks, not
+a lab-delivery audit. Creation includes a lightweight coverage and consistency
+review; additional runs follow the user's request and authorized budget.
+
+- Review collections and imports with [Data quality](references/data-quality.md).
+- Review scoring with [Graders and rewards](references/graders-and-rewards.md).
+- Diagnose failed attempts with [Failure diagnosis](references/failure-diagnosis.md).
+
+Diagnose explains findings without saving changes or starting new runs. Improve
+carries authorized fixes through supported CLI operations and validation,
+preserving source references and frozen evaluation boundaries. Do not silently
+remove difficult examples, weaken graders, or change the capability being tested
+to obtain a better score. A review request does not itself authorize training.
+
+Finish with a short quality review: what was inspected or tested (including
+version and sample scope), actionable findings with affected examples and
+evidence, what remains untested or needs human judgment, and the next fixes.
+Distinguish **passed**, **failed**, **missing evidence**, **not run**, and
+**not applicable** for the relevant checks; explain why a check does not apply.
+These are report labels, not new Taskset schema fields. A schema-valid package
+or passing smoke test alone does not establish data quality or training value.
 
 Use the official OpenPond CLI for dataset schema, create/import/save, validation,
 and grader read/save/test operations. Read installed help and use the scoped
@@ -80,6 +109,10 @@ because its name sounds related.
 
 Read only the reference needed for the current decision:
 
+- Collection coverage, example quality, and scoped readiness:
+  [Data quality](references/data-quality.md)
+- Failed attempts, evidence, and targeted repairs:
+  [Failure diagnosis](references/failure-diagnosis.md)
 - Task contracts, task reconstruction, and split isolation:
   `references/task-design.md`
 - Graders, reward eligibility, and calibration:

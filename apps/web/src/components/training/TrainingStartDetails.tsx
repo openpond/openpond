@@ -197,6 +197,7 @@ export function TrainingPreparedConfirmation({
 }
 
 export function TrainingAdvancedSettings({
+  hideSizing = false,
   method,
   trainingExamples,
   maximumTrainingExamples,
@@ -223,6 +224,7 @@ export function TrainingAdvancedSettings({
   onRolloutGroupSizeChange,
   onRolloutConcurrencyChange,
 }: {
+  hideSizing?: boolean;
   method: TrainingMethod;
   trainingExamples: number;
   maximumTrainingExamples: number;
@@ -253,6 +255,7 @@ export function TrainingAdvancedSettings({
     <details className="training-start-advanced">
       <summary>Advanced settings</summary>
       <div className="training-start-fields">
+        {!hideSizing ? <>
         <label>
           <span>Training examples</span>
           <input
@@ -283,6 +286,7 @@ export function TrainingAdvancedSettings({
               onMaxStepsChange(event.target.valueAsNumber || 1)}
           />
         </label>
+        </> : null}
         <label>
           <span>
             {method === "grpo" ? "Prompt length" : "Sequence length"}
@@ -375,7 +379,7 @@ export function TrainingAdvancedSettings({
                 <option value="gspo-token">GSPO-token</option>
               </select>
             </label>
-            <label>
+            {!hideSizing ? <label>
               <span>Rollouts per prompt</span>
               <input
                 type="number"
@@ -387,7 +391,7 @@ export function TrainingAdvancedSettings({
                     event.target.valueAsNumber || 8,
                   )}
               />
-            </label>
+            </label> : null}
             <label>
               <span>Concurrent rollouts</span>
               <input

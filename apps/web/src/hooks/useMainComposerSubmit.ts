@@ -64,16 +64,18 @@ export function useMainComposerSubmit({
       displayPrompt: options.displayPrompt,
       onSessionCreated: (session) => {
         onSessionCreated(session);
+        options.onSessionCreated?.(session);
         if (trainingTurn.metadata) bindTrainingSession(session.id);
       },
       turnMetadata:
         trainingTurn.metadata || options.turnMetadata
-          ? { ...(trainingTurn.metadata ?? {}), ...(options.turnMetadata ?? {}) }
+          ? { ...trainingTurn.metadata, ...options.turnMetadata }
           : undefined,
-      sessionMetadata: trainingTurn.metadata
+      sessionMetadata: trainingTurn.metadata || options.sessionMetadata
         ? {
-            trainingTasksetId: trainingTurn.metadata.trainingTasksetId,
-            trainingTasksetName: trainingTurn.metadata.trainingTasksetName,
+            ...options.sessionMetadata,
+            trainingTasksetId: trainingTurn.metadata?.trainingTasksetId,
+            trainingTasksetName: trainingTurn.metadata?.trainingTasksetName,
           }
         : undefined,
     });

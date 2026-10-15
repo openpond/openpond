@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import type { ConnectedRecordedExecution } from "openpond-sdk/connected-evidence";
 import { experimentCaseKey } from "@openpond/evals/experiments";
 import { useState } from "react";
@@ -160,16 +161,14 @@ export function ExperimentCompare({
         </button>
       ) : null}
       {candidateKind==="recorded_evidence"&&recordedHistory.hasNextPage?<button disabled={recordedHistory.isFetchingNextPage} onClick={()=>void recordedHistory.fetchNextPage()}>More recorded Experiments</button>:null}
-      {recordedHistory.error&&candidateKind==="recorded_evidence"?<p role="alert">{recordedHistory.error.message}</p>:null}
+      {recordedHistory.error&&candidateKind==="recorded_evidence"?<ErrorToast error={recordedHistory.error.message} />:null}
       {passes.hasNextPage ? (
         <button disabled={passes.isFetchingNextPage} onClick={() => void passes.fetchNextPage()}>
           Older scoring passes
         </button>
       ) : null}
       {history.error || passes.error || comparison.error ? (
-        <p role="alert">
-          {history.error?.message ?? passes.error?.message ?? comparison.error?.message}
-        </p>
+        <ErrorToast error={history.error?.message ?? passes.error?.message ?? comparison.error?.message} />
       ) : null}
       {data ? (
         <>

@@ -1,3 +1,4 @@
+import { isTrainingSmoke, trainingSmokeLimits } from "./training-run-presets";
 import { useState } from "react";
 import {
   RftRecipeSchema,
@@ -56,9 +57,8 @@ export function useTrainingStartForm(input: {
           : primaryMethod === "ppo"
             ? "ppo"
             : "sft";
-  const quickTest =
-    input.runPreset === "small"
-    || input.runPreset === "small_experiment";
+  const quickTest = isTrainingSmoke(input.runPreset);
+  const smokeLimits = trainingSmokeLimits(requestedInitialMethod);
   const preferredCandidate = candidateForPreference(
     input.baseModelCandidates,
     input.preferredBaseModel,
@@ -93,8 +93,8 @@ export function useTrainingStartForm(input: {
     initialCandidate?.selectionKey ?? "",
   );
   const [maxSteps, setMaxSteps] = useState(() =>
-    savedRecipe?.optimizer.maxSteps ?? (quickTest && requestedInitialMethod !== "grpo"
-      ? 1
+    savedRecipe?.optimizer.maxSteps ?? (quickTest
+      ? smokeLimits.maxSteps
       : requestedInitialMethod === "grpo"
         ? input.runPreset === "standard" ? 50 : 8
         : requestedInitialMethod === "dpo"
@@ -103,8 +103,9 @@ export function useTrainingStartForm(input: {
             ? input.runPreset === "standard" ? 20 : 2
             : input.runPreset === "standard" ? 100 : 2)
   );
+  const [optimizerIterations, setOptimizerIterations] = useState(savedRecipe?.optimizer.iterations ?? 2);
   const [trainingExamples, setTrainingExamples] = useState(() =>
-    savedRecipe?.dataset.maxExamples ?? Math.max(
+    savedRecipe?.dataset.maxExamples ?? (quickTest ? Math.max(1, Math.min(availableTrainExamples, smokeLimits.trainingExamples)) : Math.max(
       1,
       Math.min(
         availableTrainExamples,
@@ -121,9 +122,9 @@ export function useTrainingStartForm(input: {
             : requestedInitialMethod === "grpo"
                 && input.taskset.datasetArtifact
               ? input.runPreset === "standard" ? 32 : 16
-              : quickTest ? 4 : 1_000,
+              : 1_000,
       ),
-    )
+    ))
   );
   const [sequenceLength, setSequenceLength] = useState(() =>
     savedRecipe?.dataset.maxPromptTokens ?? recommendedSequenceLength(input.taskset)
@@ -137,8 +138,8 @@ export function useTrainingStartForm(input: {
   const [maximumCostUsd, setMaximumCostUsd] =
     useState<number | null>(input.initialApproval?.maximumCostUsd ?? null);
   const [retentionDays, setRetentionDays] = useState(input.initialApproval?.retentionDays ?? 7);
-  const [rolloutGroupSize, setRolloutGroupSize] = useState(savedRecipe?.rollout.groupSize ?? 8);
-  const [rolloutConcurrency, setRolloutConcurrency] = useState(savedRecipe?.rollout.concurrency ?? 4);
+  const [rolloutGroupSize, setRolloutGroupSize] = useState(savedRecipe?.rollout.groupSize ?? (quickTest ? smokeLimits.rolloutGroupSize : 8));
+  const [rolloutConcurrency, setRolloutConcurrency] = useState(savedRecipe?.rollout.concurrency ?? (quickTest ? smokeLimits.rolloutConcurrency : 4));
   const [rolloutMaxOutputTokens, setRolloutMaxOutputTokens] = useState(
     savedRecipe?.rollout.maxOutputTokens ?? DEFAULT_ROLLOUT_OUTPUT_TOKENS,
   );
@@ -169,6 +170,7 @@ export function useTrainingStartForm(input: {
     setBaseModelKey,
     maxSteps,
     setMaxSteps,
+    optimizerIterations, setOptimizerIterations,
     trainingExamples,
     setTrainingExamples,
     sequenceLength,

@@ -2,6 +2,8 @@
 
 The composer bar is the persistent resource control surface. Use it for dataset rows, graders, saved results and training actions. Inline responses explain the current work; they do not need to duplicate that inventory.
 
+Simple read-only answers normally need prose only. Do not republish resource cards for every dataset or grader read. Creation, edits, completed checks and run results can produce saved receipts; related dataset and grader receipts should share one collapsed inspection entry.
+
 Choose the presentation that helps the request: a short sentence, a small HTML summary card, or a compact table when comparing or choosing records. No mandatory HTML template, fixed tabs or all-resources dashboard. A run-start card can show the run name, a brief state and a relevant supported action while its canonical reference also remains attached to the composer.
 
 Keep cards slim: one short header, minimal content, useful working actions, and secondary actions in an overflow menu. Do not expose raw IDs or repeat metadata as badge strips. For saved-record collections, use a simple table rather than stacked cards. If a table needs a title and actions, place them in its first header row, inside the table.

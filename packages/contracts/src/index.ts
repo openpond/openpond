@@ -105,6 +105,7 @@ export * from "./local-experiments.js";
 export * from "./chat-resources.js";
 export * from "./chat-training-resources.js";
 export * from "./chat-training-reference.js";
+export * from "./run-stage-evidence.js";
 export * from "./local-experiment-sources.js";
 export * from "./local-experiment-runs.js";
 
@@ -116,3 +117,4 @@ export * from "./ponder-desktop-handoff-edit.js";
 export * from "./ponder-desktop-inspection.js";
 
 export * from "./ponder-desktop-project-sharing.js";
+export * from "./chat-context-selection.js";

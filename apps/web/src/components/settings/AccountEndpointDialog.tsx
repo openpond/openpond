@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import "../../styles/workspace/git-dialogs.css";
@@ -182,7 +182,7 @@ export function AccountEndpointDialog({
             </label>
           </div>
         </details>
-        {validationError && inlineErrorMessage(validationError) ? <div className="profile-dialog-warning">{validationError}</div> : null}
+        {validationError ? <ErrorToast error={validationError} /> : null}
         <div className="git-dialog-footer account-dialog-footer">
           <div className="account-dialog-save-actions">
             {!connectMode && onRemove ? (

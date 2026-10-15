@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import {DatasetAssignments} from "../../human-review/DatasetAssignments";
 import { DatasetExperiments } from "./DatasetExperiments";
 import { useState } from "react";
@@ -87,7 +88,7 @@ export function LocalProfileDatasetPage({
     ((route.contentHash && route.contentHash !== release.contentHash) ||
       (route.revision && route.revision !== release.revision))
   )
-    return <p role="alert">The local Dataset differs from the requested immutable version.</p>;
+    return <ErrorToast error={"The local Dataset differs from the requested immutable version."} />;
   return (
     <>
       <header className="evaluation-workspace-header">

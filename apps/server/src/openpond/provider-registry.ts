@@ -751,6 +751,10 @@ function modelCacheForSettings(
   existing: ProviderModelCache | undefined,
   hostedCatalogAvailable: boolean,
 ): ProviderModelCache {
+  if (existing?.source === "provider") {
+    return ProviderModelCacheSchema.parse({ ...existing,
+      models: uniqueModels([...existing.models, ...config.modelOverrides.map(id => manualModel(preset.id, id))]) });
+  }
   const source = existing?.source && existing.source !== "none" ? existing.source : preset.modelCacheSource;
   const cacheSource = source === "hosted" ? "hosted" : source === "manual" ? "manual" : "curated";
   const cachedModels =
@@ -918,7 +922,7 @@ export function buildProviderSettings(input: {
   catalog?: ProviderCatalog | null;
 }): ProviderSettings {
   const providers: Record<string, ProviderConfig> = { ...input.file.providers };
-  const modelCaches: Record<string, ProviderModelCache> = { ...(input.file.modelCaches ?? {}) };
+  const modelCaches: Record<string, ProviderModelCache> = { ...input.file.modelCaches };
   const statuses: Record<string, ProviderStatus> = {};
 
   const registered = Object.entries(input.file.providers).flatMap(([id, config]) => isRegisteredAcpProvider(id) && config.acp ? [acpPreset(id, config.acp.displayName)] : []);

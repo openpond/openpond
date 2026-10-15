@@ -6,12 +6,6 @@ const CONNECTION_ERROR_PATTERNS = [
   /^Event stream disconnected$/i,
 ];
 
-/** Transport outages are owned by the shell; keep actionable errors beside the action. */
-export function inlineErrorMessage(error: unknown): string | null {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  return !message.trim() || isConnectionErrorMessage(message) ? null : message;
-}
-
 export function errorMessageForToast(error: unknown, fallback = "Something went wrong."): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const normalized = message.trim();

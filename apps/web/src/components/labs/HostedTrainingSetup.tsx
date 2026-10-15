@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useRef, useState, useImperativeHandle, type Ref } from "react";
 import { contentHash } from "@openpond/harness";
 import {
@@ -397,7 +397,7 @@ export function HostedTrainingSetup({
       <button type="button" disabled={busy} onClick={() => void guard.requestLeave(onClose)}>
         Close setup
       </button>
-      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+      {error ? <ErrorToast error={error} /> : null}
       {!catalog ? (
         <p role="status">Loading current training configuration…</p>
       ) : (

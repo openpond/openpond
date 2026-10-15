@@ -1,3 +1,4 @@
+import { ClaudeTaskProgress } from "@openpond/agent-runtime";
 import { createHash } from "node:crypto";
 import { handleNativeImporter } from "./importer.js";
 import { join } from "node:path";
@@ -96,7 +97,8 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       if ((await nativeCapabilityProbeKeys(launch.sourceHome)).has(nativeCapabilityProbeKey(item.provider, item.session.nativeSessionId)))
         throw new Error("Capability discovery sessions cannot be opened as user conversations.");
       if (branch && item.provider !== "claude-code") throw new Error("Explicit branch selection is only supported for Claude Code.");
-      const retained = await readSession(item.source, item.session, branch ? { branchLeafId: branch.leafId, expectedBranchRevision: branch.revision } : {});
+      const retained = await readSession(item.source, item.session, branch ? { branchLeafId: branch.leafId, expectedBranchRevision: branch.revision }
+        : item.provider === "claude-code" ? { latestBranch: true } : {});
       const native = retained.preview.sessions.find((session) => session.sessionId === item.session.nativeSessionId);
       if (!native) throw new Error("Source history does not match the selected native session.");
       const instance = launch.instanceId;
@@ -194,15 +196,36 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       const ownedBoundaries = ownedNativeBoundaryIds(native, ownedTurns);
       const ownedIndexes = new Set(native.boundaries.filter((boundary) => ownedBoundaries.has(boundary.id)).flatMap((boundary) => Array.from({ length: boundary.end - boundary.start }, (_, index) => boundary.start + index)));
       let turnId: string | undefined;
+      const nativeCalls = new Map<string, Record<string, unknown>>();
+      const progressUpdates: Record<string, unknown>[] = [];
+      const progress = new ClaudeTaskProgress(update => progressUpdates.push(update));
       for (const [index, sourceEvent] of native.events.entries()) {
         if (ownedIndexes.has(index)) continue;
         const eventId = `native-${hash([projectionId, sourceEvent.id, sourceEvent.kind === "message" && sourceEvent.role === "assistant" ? sourceEvent.content : null])}`;
         const common = { id: eventId, sessionId, timestamp: sourceEvent.occurredAt ?? timestamp, source: "provider" as const };
         let normalized: RuntimeEvent | null = null;
-        if (sourceEvent.kind === "message" && sourceEvent.role === "user") { turnId = `native-turn-${hash([projectionId, sourceEvent.id])}`; normalized = { ...common, turnId, name: "turn.started", args: { prompt: text(sourceEvent.content) }, data: { retainedHistory: true, sourceEventId: sourceEvent.id } }; }
+        if (sourceEvent.kind === "message" && sourceEvent.role === "user") { turnId = `native-turn-${hash([projectionId, sourceEvent.id])}`; normalized = { ...common, turnId, name: "turn.started", args: { prompt: text(sourceEvent.content) }, data: { retainedHistory: true, nativeProvider: session.provider, sourceEventId: sourceEvent.id } }; }
         else if (sourceEvent.kind === "message" && sourceEvent.role === "assistant") normalized = { ...common, turnId, name: "assistant.delta", output: text(sourceEvent.content), data: { retainedHistory: true, nativeMessageId: `native-message-${hash([projectionId, sourceEvent.id])}`, delta: text(sourceEvent.content) } };
-        else if (sourceEvent.kind === "tool_call" || sourceEvent.kind === "tool_result") normalized = { ...common, turnId, name: sourceEvent.kind === "tool_call" ? "tool.started" : "tool.completed", action: "native_tool", status: sourceEvent.kind === "tool_call" ? "started" : "completed", data: { retainedHistory: true, callId: sourceEvent.callId, content: sourceEvent.content } };
+        else if (sourceEvent.kind === "tool_call" || sourceEvent.kind === "tool_result") {
+          const block = sourceEvent.content && typeof sourceEvent.content === "object" && !Array.isArray(sourceEvent.content) ? sourceEvent.content as Record<string, unknown> : {};
+          const callId = sourceEvent.callId ?? sourceEvent.id;
+          if (sourceEvent.kind === "tool_call") nativeCalls.set(callId, block);
+          const call = nativeCalls.get(callId) ?? block;
+          const action = typeof call.name === "string" ? call.name : "native_tool";
+          const input = call.input && typeof call.input === "object" && !Array.isArray(call.input) ? call.input as Record<string, unknown> : {};
+          const done = sourceEvent.kind === "tool_result";
+          normalized = { ...common, turnId, name: done ? "tool.completed" : "tool.started", action: "native_tool",
+            status: done ? "completed" : "started", data: { retainedHistory: true, callId: sourceEvent.callId, content: sourceEvent.content } };
+          if (session.provider === "claude-code") {
+            if (!done) progress.tool({ toolCallId: callId, title: action, rawInput: input });
+            else progress.result({ ...block, tool_use_id: callId }, block.nativeToolResult);
+          }
+        }
         if (normalized && !existingIds.has(eventId)) await deps.appendRuntimeEvent(normalized);
+        for (const update of progressUpdates.splice(0)) {
+          const progressId = `${eventId}:progress`;
+          if (!existingIds.has(progressId)) await deps.appendRuntimeEvent({ ...common, id: progressId, turnId, name: "tool.completed", action: "update_plan", status: "completed", data: { ...update, plan: update.entries, retainedHistory: true } });
+        }
       }
       for (const boundary of native.boundaries.filter((entry) => entry.projection === "turn")) {
         if (ownedBoundaries.has(boundary.id)) continue;
@@ -224,7 +247,19 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       }
       return session;
     })();
-    opening.set(openingKey, operation); try { return await operation; } finally { opening.delete(openingKey); }
+    opening.set(openingKey, operation);
+    try { return await operation; }
+    catch (error) {
+      if (!branch) {
+        const retained = (await deps.store.sessionShells()).find(session => session.metadata?.nativeHistoryId === id && !session.metadata.nativeBranch);
+        if (retained?.metadata?.nativeHistoryLoaded === false) {
+          const reason = `Could not open this conversation: ${error instanceof Error ? error.message : "History is unavailable. Try again."}`;
+          const updated = await deps.store.updateSession(retained.id, current => ({ ...current, metadata: { ...current.metadata, nativeReadOnlyReason: reason } }));
+          if (updated) await deps.appendRuntimeEvent(event({ sessionId: updated.id, name: "session.updated", source: "server", data: { session: updated } }));
+        }
+      }
+      throw error;
+    } finally { opening.delete(openingKey); }
   }
   const handle = async (action: string, payload: unknown) => {
     if (action === "list") { const input = z.object({ cursors: z.record(z.string().max(200), z.string().max(4096)).optional(), retain: z.boolean().optional() }).parse(payload ?? {}); return list(input.cursors, input.retain); }

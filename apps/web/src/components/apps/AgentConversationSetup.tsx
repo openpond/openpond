@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useState } from "react";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import dayjs from "dayjs";
@@ -105,7 +105,7 @@ export function AgentConversationSetup({
       projectName={projects.find(project => project.id === selectedConnection.projectId && selectedConnection.teamId === teamId)?.content.name ?? selectedConnection.projectId}
       disabled={disabled || !!inventory?.collector.running} onClose={() => setUploadConnectionId(null)}
       onUpload={keys => action("upload", selectedConnection.id, keys)} />
-    {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+    {error ? <ErrorToast error={error} /> : null}
     {terminal}
   </div>;
   return (
@@ -153,7 +153,7 @@ export function AgentConversationSetup({
               ? `Last synced ${dayjs(item.lastAdmissionAt).fromNow()}`
               : "No uploads acknowledged yet"}
           </small>
-          {item.error ? <p role="alert">{item.error}</p> : null}
+          {item.error ? <ErrorToast error={item.error} /> : null}
           <div className="settings-button-row">
             <button type="button" className="agent-connect-button" disabled={disabled || item.state !== "active" || inventory?.collector.running}
               onClick={() => setUploadConnectionId(item.id)}>Choose conversations…</button>
@@ -294,7 +294,7 @@ export function AgentConversationSetup({
           <code>{inventory.statusCommand}</code>
         </details>
       ) : null}
-      {error && inlineErrorMessage(error) ? <p role="alert">{error}</p> : null}
+      {error ? <ErrorToast error={error} /> : null}
       {terminal}
     </div>
   );

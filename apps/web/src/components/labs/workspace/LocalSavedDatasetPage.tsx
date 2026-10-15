@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import { DropdownSelect } from "../../DropdownSelect";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -21,8 +22,8 @@ export function LocalSavedDatasetPage({ api, route, navigate }: { api: Workspace
   useWorkspaceActions(task ? [{ id: "task", label: "Task", onSelect: () => {} }] : []);
   useWorkspaceResourceName(draft?.name ?? null);
   if (query.isPending) return <p role="status">Loading saved Dataset…</p>;
-  if (query.error) return <p role="alert">{query.error.message} <button className="training-text-button" onClick={() => void query.refetch()}>Retry</button></p>;
-  if (!record || !draft) return <p role="alert">This saved Dataset is unavailable.</p>;
+  if (query.error) return <ErrorToast error={query.error.message}><button className="training-text-button" onClick={() => void query.refetch()}>Retry</button></ErrorToast>;
+  if (!record || !draft) return <ErrorToast error={"This saved Dataset is unavailable."} />;
   const tab = route.detailTab ?? "tasks";
   const graders = localMetadataGraders(record);
   return <>

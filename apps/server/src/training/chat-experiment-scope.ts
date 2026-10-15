@@ -100,6 +100,16 @@ export function createChatExperimentScopes(store: SqliteStore) {
       const now = new Date().toISOString();
       let scope = chatResourceWorkspaces(state).find(candidate => candidate.id === (input.scopeId ?? state.activeScopeId));
       if (input.scopeId && !scope) throw new Error("Experiment scope does not belong to this conversation.");
+      const changingDataset = input.dataset && scope && (scope.dataset?.id !== input.dataset.id
+        || scope.dataset?.revision !== input.dataset.revision
+        || JSON.stringify(scope.dataset?.owner) !== JSON.stringify(input.dataset.owner)
+        || JSON.stringify(scope.dataset?.profileRef) !== JSON.stringify(input.dataset.profileRef));
+      // Browsing another dataset must not relabel retained executions. Explicit
+      // edits to a named experiment still retain its immutable historical pins.
+      if (!input.scopeId && changingDataset && scope && (scope.runs.length || scope.training?.length)) {
+        if (scope.ordinal === null) promote(state, scope, `retained-${randomUUID()}`, now);
+        scope = undefined;
+      }
       if (!scope) scope = input.run ? make(state, `selection-${randomUUID()}`, now) : browsing(state, now);
       if (input.run && scope.ordinal === null) scope = promote(state, scope, `run-${input.run.id}`, now);
       if (input.executionLocation !== undefined) scope.executionLocation = input.executionLocation;

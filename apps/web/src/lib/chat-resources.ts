@@ -31,6 +31,7 @@ export function attachChatResources(messages:ChatMessage[],events:RuntimeEvent[]
   const turns = new Map<string,{sessionId:string;timestamp:string;resources:Map<string,{summary:ChatResourceSummary;timestamp:string}>}>();
   for (const event of events) {
     if (event.source !== "server" || !event.sessionId || !event.turnId || !event.data || typeof event.data !== "object") continue;
+    if ((event.data as Record<string, unknown>).chatResourcePresentation === "context") continue;
     const parsed = ChatResourceSummarySchema.safeParse((event.data as Record<string,unknown>).chatResource);
     if (!parsed.success) continue;
     const summary = parsed.data;

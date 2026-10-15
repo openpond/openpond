@@ -1,8 +1,8 @@
-import { inlineErrorMessage } from "../../../lib/error-messages";
+import { ErrorToast } from "../../common/ErrorToast";
 import type {EvaluationOperationRecovery} from "@openpond/contracts";
 export function ReviewedOperationRecoveryList({items,busy,error,onRestore,onDiscard,onLoadMore}:{items:EvaluationOperationRecovery[];busy:boolean;error?:string;onRestore:(row:EvaluationOperationRecovery)=>void;onDiscard:(row:EvaluationOperationRecovery)=>void;onLoadMore?:()=>void}){
   return <section aria-label="Retained reviewed operations">
-    {error && inlineErrorMessage(error)?<p role="alert">{error}</p>:null}
+    {error?<ErrorToast error={error} />:null}
     {items.length?<><h3>Retained operations</h3><p>Restore the original reviewed command before retrying an uncertain request. Changing the setup does not replace that command.</p></>:null}
     {items.map(row=><div key={row.id}>
       <p>{row.id} / {row.phase??"recovery unavailable"} / {row.createdAt}</p>

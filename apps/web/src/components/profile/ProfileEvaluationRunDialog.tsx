@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useRef, useState } from "react";
 import type { ClientConnection } from "../../api";
 import { inspectProfileEvaluation, type ProfileEvaluationCaseInspection } from "../../api/profile-evaluation-inspection";
@@ -56,7 +56,7 @@ export function ProfileEvaluationRunDialog({ connection, run, onClose }: {
       <p>Pass rate {displayScore(run.passRate)} · Source {source?.sourceRevision} · Run {run.manifest.id}</p>
       <details><summary>Frozen run configuration</summary><pre>{JSON.stringify(run.manifest, null, 2)}</pre></details>
       {loading ? <p role="status">Loading case results…</p> : null}
-      {error && inlineErrorMessage(error) ? <p role="alert">{error} <button type="button" onClick={() => setRetry(current => current + 1)}>Retry</button></p> : null}
+      {error ? <ErrorToast error={error}><button type="button" onClick={() => setRetry(current => current + 1)}>Retry</button></ErrorToast> : null}
       <div className="profile-table-scroll"><table className="profile-evaluation-table"><thead><tr>
         <th scope="col">Task</th><th scope="col">Seed</th><th scope="col">Result</th><th scope="col">Score</th><th scope="col">Grading</th><th scope="col">Latency</th><th scope="col">Cost</th>
       </tr></thead><tbody>{cases.slice(0, caseLimit).map(item => <tr key={item.receiptId}>
@@ -69,7 +69,7 @@ export function ProfileEvaluationRunDialog({ connection, run, onClose }: {
       </tr>)}</tbody></table></div>
       {cases.length > caseLimit ? <button type="button" onClick={() => setCaseLimit(current => current + 50)}>Show more cases</button> : null}
       {detailLoading ? <p role="status">Loading case evidence…</p> : null}
-      {detailError && inlineErrorMessage(detailError) ? <p role="alert">{detailError} <button type="button" onClick={() => setRetry(current => current + 1)}>Retry</button></p> : null}
+      {detailError ? <ErrorToast error={detailError}><button type="button" onClick={() => setRetry(current => current + 1)}>Retry</button></ErrorToast> : null}
       {detail ? <div className="profile-evaluations-detail" aria-label="Case evidence">
         <h3>{detail.taskId} · Seed {detail.seed}</h3>
         <h4>Grader feedback</h4>

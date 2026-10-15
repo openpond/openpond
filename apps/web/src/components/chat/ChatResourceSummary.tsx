@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useState } from "react";
 import type { ChatResourceSummary as Resource, ChatExperimentView } from "@openpond/contracts";
 import type { ClientConnection } from "../../api/api-client";
@@ -108,7 +108,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
     action("HTML charts",async()=>{await chatResourceRequest(connection!,"experiment",{action:"charts",context,payload:{ids:[current.id],operationId:chartOperationId}});},!context);
   }
   const metric=current.score == null ? "" : `${Number((current.score*100).toFixed(1))}%`;
-  const summary=current.kind === "dataset" ? `${current.taskCount ?? 0} examples · ${current.graderCount ?? 0} graders`
+  const summary=current.kind === "dataset" ? `${current.taskCount ?? 0} example${current.taskCount === 1 ? "" : "s"} · ${current.graderCount ?? 0} grader${current.graderCount === 1 ? "" : "s"}`
     : `${current.evaluatedCount ?? 0}/${current.taskCount ?? 0} graded${metric ? ` · ${metric}` : ""}`;
   return <section className={`chat-resource-summary ${expanded ? "" : "compact"}`} aria-label={`${current.kind}: ${current.name}`}>
     <ChatResourceToolbar name={current.name} version={current.revision} summary={summary} primary={primary} actions={actions}>
@@ -141,7 +141,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
       <button type="button" className="training-button" disabled={busy || !selectedModels.length && !model || !subscriptionOnly && !budget} onClick={()=>void perform(run)}>{location === "cloud" ? "Run in cloud" : "Run experiment"}</button><button type="button" className="training-button secondary" disabled={busy} onClick={()=>setSetup(false)}>Close</button>
     </div>}
 
-    {error && inlineErrorMessage(error) && <p role="alert" className="chat-resource-error">{error}</p>}
+    {error && <ErrorToast error={error} />}
     {launched.map(resource=><ChatResourceSummary key={resource.id} initial={resource} connection={connection} />)}
   </section>;
 }

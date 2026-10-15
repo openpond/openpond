@@ -41,5 +41,31 @@ export function claudeGraph(rows: Record<string, unknown>[]) {
       return { leafId: leaf.uuid as string, chainHash: selected.chainHash, title: title.slice(0, 180), updatedAt: connectedTimestamp(last?.timestamp), messages: messages.length };
     });
   }
-  return { sessionId, leaves, select, branches };
+  function latestLeafId(): string {
+    // Match Claude's session browser: walk terminal bookkeeping back to a
+    // message, then prefer the last main-chain message in file order. Wall
+    // clock timestamps and later sidechain/meta records do not choose the chat.
+    const candidates = new Set<string>();
+    for (const leaf of leaves) {
+      let current: Record<string, unknown> | undefined = leaf;
+      const seen = new Set<string>();
+      while (current) {
+        const id = current.uuid as string;
+        if (seen.has(id)) throw new Error("Claude Code branch contains a parent cycle.");
+        seen.add(id);
+        if (current.type === "user" || current.type === "assistant") { candidates.add(id); break; }
+        current = typeof current.parentUuid === "string" ? byId.get(current.parentUuid) : undefined;
+      }
+    }
+    let latest: string | undefined, fallback: string | undefined;
+    for (const row of nodes) {
+      const id = row.uuid as string;
+      if (!candidates.has(id)) continue;
+      fallback = id;
+      if (!row.isSidechain && !row.teamName && !row.isMeta) latest = id;
+    }
+    if (!latest && !fallback) throw new Error("Claude Code transcript has no conversation message.");
+    return (latest ?? fallback)!;
+  }
+  return { sessionId, leaves, select, branches, latestLeafId };
 }

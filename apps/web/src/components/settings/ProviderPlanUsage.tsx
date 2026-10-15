@@ -19,6 +19,19 @@ function statusLabel(usage: Usage | undefined, loading: boolean): string {
   return "Unavailable";
 }
 
+export function ProviderPlanUsageRefresh({ connection, provider }: {
+  connection: ClientConnection | null;
+  provider: PlanUsageProvider;
+}) {
+  const query = useProviderPlanUsage(connection, provider, { poll: false });
+  const name = provider === "claude-code" ? "Claude" : "Codex";
+  return <button type="button" className="plan-usage-refresh" aria-label={`Refresh ${name} plan usage`}
+    title={`Check usage (cached for up to ${provider === "claude-code" ? "5 minutes" : "1 minute"})`}
+    disabled={!connection || query.isFetching} onClick={() => void query.refetch()}>
+    <RefreshCw size={13} className={query.isFetching ? "settings-spin" : undefined} />
+  </button>;
+}
+
 export function ProviderPlanUsage({ connection, provider, compact = false, onOpen }: {
   connection: ClientConnection | null;
   provider: PlanUsageProvider;
@@ -42,14 +55,13 @@ export function ProviderPlanUsage({ connection, provider, compact = false, onOpe
   </button>;
 
   return <section className="provider-plan-usage" aria-label={`${name} plan usage`}>
-    <div className="plan-usage-heading"><button type="button" className="plan-usage-refresh" aria-label={`Refresh ${name} plan usage`} title={`Check usage (cached for up to ${provider === "claude-code" ? "5 minutes" : "1 minute"})`} disabled={!connection || query.isFetching} onClick={() => void query.refetch()}><RefreshCw size={13} className={query.isFetching ? "settings-spin" : undefined} /></button></div>
     {available ? <>
       {usage.windows.map(window => <div className="plan-usage-window" key={window.id}>
         <div><span>{window.label}</span><strong>{percent(window.remainingPercent)}{stale ? " · last known" : ""}</strong></div>
         <meter min={0} max={100} low={10} high={25} optimum={100} value={window.remainingPercent} aria-label={`${name} ${window.label} remaining`} />
         <small>{resetLabel(window)}</small>
       </div>)}
-      {stale ? <small role="status">Usage needs refreshing. Last checked {new Date(usage.fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.</small> : <small className="plan-usage-note">Shared across your account. Updates automatically.</small>}
+      {stale ? <small role="status">Usage needs refreshing. Last checked {new Date(usage.fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.</small> : null}
     </> : <p role="status">{query.isError ? "Could not load usage. Try refreshing." : usage?.message ?? (connection ? "Loading plan usage…" : "Connect to load plan usage.")}</p>}
   </section>;
 }

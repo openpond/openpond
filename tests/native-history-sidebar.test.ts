@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -13,6 +13,7 @@ import { nativeHistoryWorkspaceAvailable } from "../apps/server/src/runtime/nati
 import { createNativeCapabilityProbe } from "../apps/server/src/runtime/native-agents/capability-probes.js";
 import { previewAgentImport } from "@openpond/evals/connected-evidence";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages.js";
+import { readSession } from "../packages/evals/src/native-conversations/history.js";
 
 const acquisition = vi.hoisted(() => ({
   discover: vi.fn(), list: vi.fn(), read: vi.fn(), sourceHome: "/fixture-account",
@@ -73,6 +74,73 @@ test("native source import renders retained text and tool activity without rewri
     expect(JSON.stringify(preview)).toBe(original);
     expect(events.filter(event => event.name.startsWith("tool.")).every(event => event.action === "native_tool")).toBe(true);
   }
+});
+
+// A reopened native chat must show the same task IDs/status as its live
+// session; losing structured tool results strands the planner on pending.
+test("retained Claude task results rebuild progress and keep notifications out of user bubbles", async () => {
+  const f = await fixture();
+  const notification = "<task-notification><task-id>background-1</task-id><status>completed</status><summary>Checks finished</summary></task-notification>";
+  const rows = [
+    { uuid: "request", parentUuid: null, type: "user", message: { content: "Implement the plan" } },
+    { uuid: "create", parentUuid: "request", type: "assistant", message: { content: [{ type: "tool_use", id: "create-call", name: "TaskCreate", input: { subject: "Verify" } }] } },
+    { uuid: "created", parentUuid: "create", type: "user", tool_use_result: { task: { id: "5", subject: "Verify" } }, message: { content: [{ type: "tool_result", tool_use_id: "create-call", content: "Created task 5" }] } },
+    { uuid: "update", parentUuid: "created", type: "assistant", message: { content: [{ type: "tool_use", id: "update-call", name: "TaskUpdate", input: { taskId: "5", status: "completed" } }] } },
+    { uuid: "updated", parentUuid: "update", type: "user", tool_use_result: { success: true, taskId: "5" }, message: { content: [{ type: "tool_result", tool_use_id: "update-call", content: "Updated task 5" }] } },
+    { uuid: "notification", parentUuid: "updated", type: "user", message: { content: notification } },
+    { uuid: "answer", parentUuid: "notification", type: "assistant", message: { content: "Done", stop_reason: "end_turn" } },
+  ].map((row, index) => ({ ...row, sessionId: "vendor-id", timestamp: new Date(1000 + index * 1000).toISOString() }));
+  const preview = previewAgentImport({ source: "claude_code", files: [{ path: "history.jsonl", text: rows.map(row => JSON.stringify(row)).join("\n") }] });
+  expect(preview.issues).toEqual([]);
+  const selectedSource = { ...source("claude-progress-instance", false), source: "claude_code" };
+  acquisition.discover.mockResolvedValue([selectedSource]);
+  acquisition.list.mockResolvedValue({ items: [native(selectedSource.instanceId)], nextCursor: null });
+  acquisition.read.mockResolvedValue({ preview });
+  const handle = f.api(); await handle("list");
+  const opened = await handle("open", { id: selectionId(selectedSource.instanceId) }) as Session;
+  const messages = buildChatMessages(await f.store.runtimeEventsForSession(opened.id));
+  const snapshots = messages.flatMap(message => message.activities ?? []).flatMap(activity => activity.plan ? [activity.plan] : []);
+  expect(snapshots.at(-1)).toEqual([{ id: "5", content: "Verify", status: "completed" }]);
+  expect(messages.filter(message => message.role === "user").map(message => message.content)).toEqual(["Implement the plan"]);
+  expect(messages.find(message => message.nativeTaskNotification)?.nativeTaskNotification).toMatchObject({ taskId: "background-1", status: "completed", summary: "Checks finished" });
+  // A typed user request with the same syntax stays a user request.
+  const typed = buildChatMessages([{ id: "typed", name: "turn.started", source: "user", timestamp: "2026-10-14T00:00:00Z", sessionId: "chat", args: { prompt: notification } }]);
+  expect(typed[0]?.role).toBe("user");
+});
+
+// The actual saved Claude graph must open the canonical chat, preserve its
+// resume identity and load messages after a restart, without a UUID selection.
+test("opens a branched Claude transcript into its resumable sidebar conversation", async () => {
+  const f = await fixture();
+  const sessionId = "a635de7e-1111-4222-8333-444444444444";
+  const path = join(f.home, `${sessionId}.jsonl`);
+  const selectedSource: NativeSource = { ...source("claude-latest", false), source: "claude_code", root: path, acquisition: "files" };
+  const saved = { ...native(selectedSource.instanceId, sessionId), path, cwd: f.home };
+  const rows = [
+    { uuid: "request", parentUuid: null, type: "user", message: { content: "Hello" } },
+    { uuid: "old-reply", parentUuid: "request", type: "assistant", message: { content: "Earlier attempt", stop_reason: "end_turn" } },
+    { uuid: "reply", parentUuid: "request", type: "assistant", message: { content: "Current answer", stop_reason: "end_turn" } },
+  ].map((row, index) => ({ ...row, sessionId, cwd: f.home, timestamp: new Date(1000 + index * 1000).toISOString() }));
+  await writeFile(path, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+  acquisition.discover.mockResolvedValue([selectedSource]);
+  acquisition.list.mockResolvedValue({ items: [saved], nextCursor: null });
+  acquisition.read.mockImplementation(readSession);
+  const handle = f.api(async () => true);
+  await handle("list", { retain: true });
+  const id = selectionId(selectedSource.instanceId, sessionId);
+  acquisition.read.mockRejectedValueOnce(new Error("Source temporarily unavailable"));
+  await expect(handle("open", { id })).rejects.toThrow("Source temporarily unavailable");
+  expect((await f.store.getSession(`native-${id}`))?.metadata).toMatchObject({ nativeHistoryLoaded: false,
+    nativeReadOnlyReason: expect.stringContaining("Source temporarily unavailable") });
+  const opened = await handle("open", { id }) as Session;
+  expect(opened).toMatchObject({ id: `native-${id}`, nativeAgent: { provider: "claude-code", sessionId, cwd: f.home }, metadata: { nativeHistoryLoaded: true, nativeReadOnlyReason: null } });
+  expect(opened.metadata?.nativeBranch).toBeUndefined();
+  const messages = buildChatMessages(await f.store.runtimeEventsForSession(opened.id));
+  expect(messages.map(message => message.content)).toEqual(["Hello", "Current answer"]);
+  await f.reopen();
+  const reopened = await f.api(async () => true)("open", { id }) as Session;
+  expect(reopened.nativeAgent).toEqual(opened.nativeAgent);
+  expect(buildChatMessages(await f.store.runtimeEventsForSession(opened.id)).map(message => message.content)).toEqual(["Hello", "Current answer"]);
 });
 
 async function fixture() {

@@ -67,6 +67,7 @@ export type TrainingStartDialogProps = {
     approval: TrainingStartApproval;
   }) => void;
   runPreset?: ModelRunPreset;
+  onRunPresetChange?: (preset: ModelRunPreset) => void;
   hideMethodTabs?: boolean;
   approvalPresentation?: "inline" | "dialog";
   configurationContent?: ReactNode;

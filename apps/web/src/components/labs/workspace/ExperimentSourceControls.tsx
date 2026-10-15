@@ -1,3 +1,4 @@
+import { ErrorToast } from "../../common/ErrorToast";
 import type { ExperimentSetupDraft } from "./EvaluationSetupState";
 import type { useExperimentSources } from "./useExperimentSources";
 import type { WorkspaceApi } from "./workspace-api";
@@ -191,26 +192,20 @@ export function ExperimentSourceControls({
         <p role="status">Loading authorized local sources…</p>
       ) : null}
       {sources.local.error ? (
-        <p role="alert">
-          {sources.local.error.message}
-          <button type="button" onClick={() => void sources.local.refetch()}>
+        <ErrorToast error={sources.local.error.message}><button type="button" onClick={() => void sources.local.refetch()}>
             Retry source discovery
-          </button>
-        </p>
+          </button></ErrorToast>
       ) : null}
-      {sources.unavailable ? <p role="alert">{sources.unavailable}</p> : null}
+      {sources.unavailable ? <ErrorToast error={sources.unavailable} /> : null}
       {api.location === "hosted" && draft.mode === "model_harness" ? (
         <>
           {sources.hosted.isPending ? (
             <p role="status">Loading published Harness sources…</p>
           ) : null}
           {sources.hosted.error ? (
-            <p role="alert">
-              {sources.hosted.error.message}
-              <button type="button" onClick={() => void sources.hosted.refetch()}>
+            <ErrorToast error={sources.hosted.error.message}><button type="button" onClick={() => void sources.hosted.refetch()}>
                 Retry source discovery
-              </button>
-            </p>
+              </button></ErrorToast>
           ) : null}
           {sources.hosted.hasNextPage ? (
             <button

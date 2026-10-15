@@ -16,6 +16,13 @@ export async function runLocalDatasetsCommand(options:Record<string,string|boole
     payload = JSON.parse(await readFile(file,"utf8"));
   }
   const revision = optionString(options,"expectedRevision");
+  const graderAction = ["read-grader", "save-grader", "test-grader"].includes(action);
+  const datasetId = graderAction ? optionString(options,"datasetId") : undefined;
+  const graderId = graderAction ? optionString(options,"graderId") || (datasetId ? id : undefined) : undefined;
+  if (graderAction) payload = { ...payload as Record<string, unknown>, ...(graderId ? {graderId} : {}),
+    ...(action === "read-grader" ? {view:"inspection",
+      ...(options.limit !== undefined ? {limit:Number(options.limit)} : {}),
+      ...(options.offset !== undefined ? {offset:Number(options.offset)} : {})} : {}) };
   const conversational:Record<string,unknown> | null = action === "context" ? {action:"context",payload}
     : action === "select-destination" ? {action:"set_destination",payload:{executionLocation:id === "hosted" ? "cloud" : id}}
     : action === "select-model" ? {action:"set_model",payload:{evaluationModel:id}}
@@ -25,7 +32,7 @@ export async function runLocalDatasetsCommand(options:Record<string,string|boole
     : action === "rename-experiment" ? {action:"rename_scope",payload:{scopeId:id,...payload as object}}
     : null;
   if (conversational && !process.env.OPENPOND_CHAT_INVOCATION) throw new Error("Chat selection commands require the app's scoped command executor.");
-  const response = await request(new URL("/v1/local-datasets",base),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...(conversational ?? {action:action.replaceAll("-","_"),...(id?{id}:{}),...(options.operationId?{operationId:optionString(options,"operationId")}:{}),...(revision?{expectedRevision:Number(revision)}:{}),payload}),...(process.env.OPENPOND_CHAT_INVOCATION ? {invocationToken:process.env.OPENPOND_CHAT_INVOCATION} : {})})});
+  const response = await request(new URL("/v1/local-datasets",base),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...(conversational ?? {action:action.replaceAll("-","_"),...(datasetId || id ? {id:datasetId || id}:{}),...(options.operationId?{operationId:optionString(options,"operationId")}:{}),...(revision?{expectedRevision:Number(revision)}:{}),payload}),...(process.env.OPENPOND_CHAT_INVOCATION ? {invocationToken:process.env.OPENPOND_CHAT_INVOCATION} : {})})});
   const result = await response.json() as Record<string,unknown>;
   if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : `Local Dataset request failed (${response.status}).`);
   if (parseBooleanOption(options.json)) { console.log(JSON.stringify(result,null,2)); return; }

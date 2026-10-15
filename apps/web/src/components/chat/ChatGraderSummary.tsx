@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import {useEffect,useState} from "react";
 import type {ChatResourceSummary,LocalDatasetRecord} from "@openpond/contracts";
 import type {ClientConnection} from "../../api/api-client";
@@ -40,6 +40,6 @@ export function ChatGraderSummary({initial,connection,context}:{initial:ChatReso
     {expanded && examples.length > 5 && <div className="chat-resource-pagination"><button type="button" disabled={rowPage===0} onClick={()=>setRowPage(value=>value-1)}>Previous</button><span>{rowPage+1}/{Math.ceil(examples.length/5)}</span><button type="button" disabled={(rowPage+1)*5>=examples.length} onClick={()=>setRowPage(value=>value+1)}>Show more</button></div>}
     {expanded && check && <div className="chat-resource-checks">{check.issues.filter(issue=>!issue.graderId || issue.graderId===current.graderId).map((issue,index)=><p key={index}>{issue.message}</p>)}</div>}
     {editing && grader && <div className="chat-resource-grader-editor"><p>Save a new Dataset revision. Earlier examples and Experiment inputs stay pinned to their saved version.</p><JsonObjectField label="Grader definition" value={grader} disabled={busy} onChange={value=>{setGrader(value);setOperation(null);}}/><JsonArrayField label="Saved calibration examples" value={fixtures} disabled={busy} onChange={value=>{setFixtures(value);setOperation(null);}}/><div className="chat-resource-actions"><button className="training-button" disabled={busy} onClick={()=>void perform(async()=>{const operationId=operation ?? crypto.randomUUID();setOperation(operationId);const result=await chatResourceRequest<Reply>(connection!,"dataset",{action:"save_grader",id:current.datasetId,expectedRevision:current.datasetRevision,operationId,payload:{grader:{...grader,id:current.graderId},fixtures},context});const summary=result.record.workspace.draft.graders.find(g=>g.id===current.graderId);if(!summary)throw new Error("The original grader was removed; inspect the saved Dataset.");const read=await chatResourceRequest<Reply>(connection!,"dataset",{action:"read_grader",id:current.datasetId,expectedRevision:result.record.workspace.draft.revision,payload:{graderId:summary.id}});setCurrent(read.summary);setReply(read);setEditing(false);setOperation(null);})}>Save revision</button><button className="training-button secondary" disabled={busy} onClick={()=>setEditing(false)}>Close editor</button></div></div>}
-    {error && inlineErrorMessage(error) && <p role="alert" className="chat-resource-error">{error}</p>}
+    {error && <ErrorToast error={error} />}
   </section>;
 }

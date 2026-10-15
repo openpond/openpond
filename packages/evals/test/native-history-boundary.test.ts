@@ -137,3 +137,42 @@ it("fences explicit Claude branch authority through snapshot, pause, queue reset
     await expect(readSession(source, native, { branchAnchor: anchor })).rejects.toThrow("history changed");
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+// Opening a desktop chat must follow Claude's main chain even after a retry,
+// trailing bookkeeping or a newer sidechain. Import consent stays explicit.
+it("opens the latest Claude conversation chain without granting import branch authority", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "claude-latest-history-"));
+  const sessionId = "a635de7e-1111-4222-8333-444444444444";
+  const path = join(directory, `${sessionId}.jsonl`);
+  const message = (uuid: string, parentUuid: string | null, type: string, text: string, extra = {}) => ({
+    uuid, parentUuid, type, sessionId, cwd: directory, timestamp: "2026-10-02T00:00:01Z",
+    message: { content: text, ...(type === "assistant" ? { stop_reason: "end_turn" } : {}) }, ...extra,
+  });
+  const rows = [message("root", null, "user", "Shared input"),
+    message("old", "root", "assistant", "OLD_BRANCH", { timestamp: "2099-01-01T00:00:00Z" }),
+    message("current", "root", "assistant", "CURRENT_BRANCH"),
+    { uuid: "attachment", parentUuid: "current", type: "attachment", sessionId },
+    message("side", "root", "assistant", "SIDECHAIN", { isSidechain: true }),
+    message("team", "root", "assistant", "TEAM", { teamName: "worker" }),
+    message("meta", "root", "user", "META", { isMeta: true }),
+    { uuid: "metadata", type: "custom-title", sessionId, customTitle: "Title" },
+  ];
+  const write = () => writeFile(path, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+  const source = { source: "claude_code" as const, root: path, machineId: "machine", instanceId: "instance", acquisition: "files" as const, available: true, capabilities: { history: true, live: true, nativeResume: false } };
+  try {
+    await write();
+    const native = (await listSessions(source)).items[0]!;
+    const opened = await readSession(source, native, { latestBranch: true });
+    expect(opened.preview.issues).toEqual([]);
+    expect(opened.preview.sessions[0]?.sessionId).toBe(sessionId);
+    expect(opened.preview.sessions[0]?.events.filter(event => event.kind === "message").map(event => event.id)).toEqual(["root", "current"]);
+    expect(opened.files[0]!.text).not.toMatch(/OLD_BRANCH|SIDECHAIN|TEAM|META/);
+    await expect(readSession(source, native)).rejects.toThrow("multiple branches");
+    await expect(readSession(source, { ...native, nativeSessionId: "foreign" }, { latestBranch: true })).rejects.toThrow("changed identity");
+    await expect(readSession(source, native, { latestBranch: true, branchLeafId: "old" })).rejects.toThrow("either");
+    rows.push(message("continued", "attachment", "user", "Continue here"));
+    await write();
+    const followed = await readSession(source, native, { latestBranch: true });
+    expect(followed.preview.sessions[0]?.events.filter(event => event.kind === "message").map(event => event.id)).toEqual(["root", "current", "continued"]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

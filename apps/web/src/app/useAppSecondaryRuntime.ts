@@ -907,6 +907,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       return;
     }
     setRightPanelMode("home");
+    if(view === "chat") setRightPanelTabRequest(current=>({id:(current?.id??0)+1,tab:"outputs",overview:"new"}));
     setDiffPanelOpen(true);
   }, [
     diffPanelOpen,

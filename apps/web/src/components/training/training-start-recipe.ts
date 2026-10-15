@@ -21,6 +21,8 @@ export function trainingRecipe(input: {
   destinationId: TrainingDestinationId;
   baseModelId: string;
   maxSteps: number;
+  optimizerIterations?: number;
+  resizeRolloutBudget?: boolean;
   sequenceLength: number;
   rank: number;
   learningRate: number;
@@ -78,7 +80,7 @@ export function trainingRecipe(input: {
       learningRate: input.learningRate,
       maxSteps: input.maxSteps,
       clipRange: 0.2,
-      iterations: 2,
+      iterations: input.optimizerIterations ?? 2,
       microbatchSize: 1,
       gradientAccumulationSteps: groupSize,
       advantageEpsilon: 1e-8,
@@ -126,9 +128,10 @@ export function trainingRecipe(input: {
     dataset: { ...saved.dataset, maxExamples: input.trainingExamples, maxPromptTokens: input.sequenceLength },
     lora: { ...saved.lora, rank: input.rank },
     rollout: { ...saved.rollout, groupSize, concurrency: rolloutConcurrency, maxOutputTokens: input.rolloutMaxOutputTokens },
-    optimizer: { ...saved.optimizer, learningRate: input.learningRate, maxSteps: input.maxSteps },
+    optimizer: { ...saved.optimizer, learningRate: input.learningRate, maxSteps: input.maxSteps, iterations: input.optimizerIterations ?? saved.optimizer.iterations },
     loss: { ...saved.loss, method: input.rftLossMethod ?? saved.loss.method, klBeta: input.klBeta },
     reward: generated.reward,
+    ...(input.resizeRolloutBudget ? { resourceLimits: { ...saved.resourceLimits, maxRollouts: input.maxSteps * groupSize } } : {}),
     // Preparation derives execution semantics from the edited fields. Keep the
     // caller's resource ceilings, including limits that have no form control.
     policyOptimization: null,

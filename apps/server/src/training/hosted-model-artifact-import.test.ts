@@ -88,7 +88,7 @@ describe("Hosted Model serving receipts", () => {
     expect(model.frozenEvaluationArtifactId).toBe([...f.artifacts.values()].find(value => value.kind === "evaluation")?.id);
     expect([...f.artifacts.values()].every(value => value.path.startsWith("sandbox-managed-rl://job/"))).toBe(true);
     model.managedServing = { schemaVersion: "openpond.managedAdapterServingProjection.v1", teamId: "team", source: "sandbox_managed_rl",
-      sourceRef: "job", canonicalArtifactId: "canonical", canonicalArtifactState: "promotable", canonicalDeploymentId: "deployment",
+      sourceRef: "job", canonicalArtifactId: "canonical", canonicalModelName: null, canonicalArtifactState: "promotable", canonicalDeploymentId: "deployment",
       canonicalDeploymentState: "ready", state: "ready", customerBindingAllowed: true, artifactContentHash: H, baseProfileId: null,
       publishedAt: NOW, lastSyncedAt: NOW, lastError: null };
     vi.stubGlobal("fetch", f.request);

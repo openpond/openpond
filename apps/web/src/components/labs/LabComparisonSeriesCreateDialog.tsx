@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useMemo, useState, type FormEvent } from "react";
 import type {
   ModelComparisonScheduleEntry,
@@ -193,7 +193,7 @@ export function LabComparisonSeriesCreateDialog({
           <label><span>Maximum retained regression</span><input min={0} step="0.01" type="number" value={retentionTolerance} onChange={(event) => setRetentionTolerance(Number(event.currentTarget.value))} /></label>
           <div className="labs-comparison-policy-summary"><strong>{dailyRanks.length + 3} releases · rank {maximumEnabledRank} maximum</strong><small>This rule only chooses the next daily parent. P7 consolidates the queued daily cohorts; P8 retrains on the full eligible pool. Master promotion stays separate.</small></div>
         </fieldset>
-        {error && inlineErrorMessage(error) ? <div className="labs-rename-error" role="alert">{error}</div> : null}
+        {error ? <ErrorToast error={error} /> : null}
         <footer><button disabled={busy} type="button" onClick={onClose}>Cancel</button><button disabled={busy || !name.trim() || !objective.trim()} type="submit">{busy ? "Saving…" : "Create draft"}</button></footer>
       </form>
     </AppDialog>

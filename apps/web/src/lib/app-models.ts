@@ -83,6 +83,7 @@ export type ActivityItem = {
   controlKind?: "goal_context" | "turn_aborted";
   callId?: string;
   backgroundTaskId?: string;
+  plan?: Array<{ id?: string; content: string; status: "pending" | "in_progress" | "completed"; activeForm?: string }>;
   detail?: string;
   terminal?: {
     exitCode?: number | null;
@@ -228,6 +229,7 @@ export type ChatMessage = {
   id: string;
   /** The wrap-up response of a successfully completed turn. */
   finalAnswer?: boolean;
+  nativeTaskNotification?: import("./native-task-notification").NativeTaskNotification;
   turnStartedAt?: string;
   turnCompletedAt?: string;
   interactionKind?: "steer";
@@ -668,14 +670,16 @@ export function modelOptionsForProvider(
   );
   const fromCache = cached.map(modelOptionFromProviderModel);
   const config = providerConfig(settings, provider);
-  const manual = [...(config?.modelOverrides ?? []), config?.defaultModel]
+  const discovered = providerModelCache(settings, provider)?.source === "provider";
+  const manual = [...(config?.modelOverrides ?? []),
+    !discovered || cached.some(model => model.id === config?.defaultModel) ? config?.defaultModel : undefined]
     .filter(
       (value): value is string =>
         Boolean(value?.trim()) &&
         (provider !== "openpond" || value !== DEFAULT_OPENPOND_CHAT_MODEL),
     )
     .map((value) => ({ value, label: modelDisplayLabel(value) }));
-  const fallback = provider === "openpond" && fromCache.length > 0
+  const fallback = discovered || provider === "openpond" && fromCache.length > 0
     ? []
     : fallbackModelOptions(provider);
   return uniqueDropdownOptions([...fromCache, ...manual, ...fallback]);
@@ -743,12 +747,16 @@ export function defaultModelForProvider(
   provider: ChatProvider,
   settings?: ProviderSettings | null,
 ): string {
+  const discovered = providerModelCache(settings, provider)?.source === "provider";
+  const options = modelOptionsForProvider(provider, settings);
+  const selectable = (model: string) => !discovered || options.some(option => option.value === model);
   const configDefault = providerConfig(settings, provider)?.defaultModel?.trim();
-  if (configDefault) return configDefault;
+  if (configDefault && selectable(configDefault)) return configDefault;
   const statusDefault = providerStatus(settings, provider)?.defaultModel?.trim();
-  if (statusDefault) return statusDefault;
-  const firstOption = modelOptionsForProvider(provider, settings)[0]?.value?.trim();
+  if (statusDefault && selectable(statusDefault)) return statusDefault;
+  const firstOption = options[0]?.value?.trim();
   if (firstOption) return firstOption;
+  if (discovered) return "";
   if (provider === "codex") return DEFAULT_CODEX_CHAT_MODEL;
   if (provider === "openpond") return DEFAULT_OPENPOND_CHAT_MODEL;
   return "";
@@ -760,6 +768,9 @@ export function normalizeChatModel(
   settings?: ProviderSettings | null,
 ): string {
   const trimmed = model?.trim();
+  // Keep managed identity while its catalog loads or serving is cold.
+  // An explicit empty selection is the managed provider awaiting a model.
+  if (provider === "openpond" && (model === "" || trimmed?.startsWith("managed:"))) return trimmed ?? "";
   // Native catalogs are session-scoped and loaded lazily. Preserve an explicit
   // choice until the runtime validates it against that session's live catalog.
   if (isRegisteredAcpProvider(provider)) return trimmed ?? "";
@@ -790,6 +801,7 @@ export function modelForTurn(
   settings?: ProviderSettings | null,
 ): string | undefined {
   const normalized = normalizeChatModel(provider, model, settings);
+  if (provider === "openpond" && !normalized) throw new Error("Choose an OpenPond Managed model before sending a message.");
   return normalized || undefined;
 }
 

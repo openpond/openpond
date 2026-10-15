@@ -1,4 +1,4 @@
-import { inlineErrorMessage } from "../../lib/error-messages";
+import { ErrorToast } from "../common/ErrorToast";
 import { useMemo, useState, type FormEvent } from "react";
 import type {
   ChatModelRef,
@@ -194,8 +194,8 @@ export function LabScorerCreateDialog({
           <label className="labs-scorer-checkbox"><input checked={hardGate} type="checkbox" onChange={(event) => setHardGate(event.currentTarget.checked)} /><span>Required gate</span></label>
           <label className="labs-scorer-checkbox"><input checked={rewardEligible} type="checkbox" onChange={(event) => setRewardEligible(event.currentTarget.checked)} /><span>Request reward eligibility</span></label>
         </div>
-        {!tasksets.length ? <div className="labs-rename-error" role="alert">Create or attach a Taskset before adding a scorer.</div> : null}
-        {error && inlineErrorMessage(error) ? <div className="labs-rename-error" role="alert">{error}</div> : null}
+        {!tasksets.length ? <ErrorToast error={"Create or attach a Taskset before adding a scorer."} /> : null}
+        {error ? <ErrorToast error={error} /> : null}
         <footer>
           <button disabled={busy} type="button" onClick={onClose}>Cancel</button>
           <button disabled={!valid || busy} type="submit">{busy ? "Publishing…" : "Create scorer"}</button>

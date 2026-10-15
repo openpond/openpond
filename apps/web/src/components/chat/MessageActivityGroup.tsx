@@ -1,3 +1,5 @@
+import { latestActivityPlan } from "../../lib/chat-task-progress";
+import { ActivityPlanCard } from "./ActivityPlanCard";
 import { useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   CircleAlert,
@@ -76,6 +78,7 @@ export function ActivityGroup({
   const summaryImage =
     activities.find((activity) => activity.imagePreview)?.imagePreview ?? null;
   const artifacts = message.deliverables ?? [];
+  const plan = latestActivityPlan(activities);
   const openImageSrc = useActivityImageUrl(
     openImage,
     connection,
@@ -146,6 +149,7 @@ export function ActivityGroup({
               ) : null}
             </div>
           ) : null}
+          {plan ? <ActivityPlanCard entries={plan} /> : null}
           {artifacts.length > 0 ? (
             <ActivityArtifacts
               artifacts={artifacts}
@@ -844,7 +848,7 @@ function useActivityImageUrl(
 
 function isAbsoluteLocalImagePath(path: string): boolean {
   return (
-    /^file:\/\//i.test(path) || /^\//.test(path) || /^[A-Za-z]:[\\/]/.test(path)
+    /^file:\/\//i.test(path) || path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path)
   );
 }
 

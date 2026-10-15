@@ -1,0 +1,215 @@
+.run-flow {
+  min-width: 0;
+  width: 100%;
+}
+.run-flow-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.run-flow-box {
+  fill: var(--surface-panel);
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+.run-flow-loop {
+  fill: none;
+  stroke: var(--border-default);
+  stroke-dasharray: 4 5;
+}
+.run-flow-loop.live {
+  stroke: color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  animation: run-flow-march 1.2s linear infinite;
+}
+.run-flow-caption {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+.run-flow-label {
+  fill: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+.run-flow-status {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+.run-flow-detail {
+  fill: var(--accent-primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.run-flow-node.pending .run-flow-label,
+.run-flow-node.missing .run-flow-label,
+.run-flow-node.pending .run-flow-detail,
+.run-flow-node.missing .run-flow-detail {
+  fill: var(--text-muted);
+}
+.run-flow-node.missing .run-flow-box {
+  stroke-dasharray: 3 3;
+}
+.run-flow-node.active .run-flow-box {
+  stroke: var(--accent-primary);
+}
+.run-flow-node.done .run-flow-box {
+  stroke: color-mix(in srgb, var(--accent-primary) 55%, transparent);
+}
+.run-flow-wire {
+  fill: none;
+  stroke: var(--border-default);
+  stroke-width: 1.25;
+}
+.run-flow-wire.done {
+  stroke: color-mix(in srgb, var(--accent-primary) 60%, var(--border-default));
+}
+.run-flow-arrow {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.25;
+}
+.run-flow-stream {
+  fill: none;
+  stroke: var(--accent-primary);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 9;
+  animation: run-flow-stream 0.6s linear infinite;
+}
+.run-flow-packet,
+.run-flow-fill,
+.run-flow-shimmer {
+  fill: var(--accent-primary);
+}
+.run-flow-track {
+  fill: var(--border-default);
+}
+.run-flow-halo {
+  fill: none;
+  stroke: var(--accent-primary);
+  stroke-width: 1;
+  animation: run-flow-halo 1.8s ease-in-out infinite;
+}
+.run-flow-check {
+  fill: none;
+  stroke: var(--accent-primary);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.console-run-flow {
+  width: 100%;
+  overflow-x: auto;
+  padding: 8px 0;
+  scrollbar-width: thin;
+}
+.run-flow-badge {
+  fill: var(--surface-panel);
+}
+.training-rollout-groups {
+  margin: 12px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.training-rollout-groups header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.training-rollout-groups ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+}
+.training-rollout-groups li {
+  display: grid;
+  grid-template-columns: 65px minmax(0, 1fr) 80px;
+  gap: 8px;
+  align-items: center;
+  margin: 7px 0;
+}
+.training-rollout-groups li > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.training-rollout-cell {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+}
+.training-rollout-cell.scored {
+  background: var(--accent-primary-fill);
+  border-color: transparent;
+}
+.training-rollout-cell.active {
+  background: var(--accent-primary-fill);
+  border-color: var(--accent-primary);
+  animation: run-flow-halo 1.4s ease-in-out infinite;
+}
+.training-rollout-cell.failed {
+  background: var(--status-danger-fill);
+  border-color: transparent;
+}
+@keyframes run-flow-stream {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+@keyframes run-flow-march {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+@keyframes run-flow-halo {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-flow-loop.live,
+  .run-flow-stream,
+  .run-flow-halo,
+  .training-rollout-cell.active {
+    animation: none;
+  }
+  .run-flow-packet,
+  .run-flow-shimmer {
+    display: none;
+  }
+}
+
+.training-rollout-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.training-rollout-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.training-rollout-legend i {
+  display: inline-block;
+}
+
+.compute-gpu { --compute-color: var(--compute-gpu); }
+.compute-cpu { --compute-color: var(--compute-cpu); }
+.run-flow-node:is(.compute-gpu, .compute-cpu) .run-flow-box {
+  fill: color-mix(in srgb, var(--compute-color) 7%, var(--surface-panel));
+  stroke: color-mix(in srgb, var(--compute-color) 55%, var(--border-default));
+}
+.run-flow-node:is(.compute-gpu, .compute-cpu).active .run-flow-box { stroke: var(--compute-color); }
+.run-flow-node:is(.compute-gpu, .compute-cpu) :is(.run-flow-detail, .run-flow-fill, .run-flow-shimmer) { fill: var(--compute-color); }
+.run-flow-node:is(.compute-gpu, .compute-cpu) :is(.run-flow-check, .run-flow-halo) { stroke: var(--compute-color); }
+.run-flow-compute-legend { display: flex; justify-content: flex-end; gap: 16px; font-size: 11px; color: var(--text-muted); }
+.run-flow-compute-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.run-flow-compute-legend span::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--compute-color); }

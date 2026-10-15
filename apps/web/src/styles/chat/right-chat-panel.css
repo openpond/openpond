@@ -344,3 +344,5 @@
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-info) 38%, transparent); }
   70%, 100% { box-shadow: 0 0 0 5px transparent; }
 }
+
+.right-sidebar-output-empty { grid-column:1/-1; margin:0; color:var(--text-muted); font-size:12px; text-align:center; }

@@ -15,7 +15,7 @@ Use [Compact inline resource presentation](compact-resource-tables.md) as guidan
 
 ## Discovery and inline selection
 
-For “list my datasets” or similar discovery, use the scoped CLI. Local discovery uses `"$OPENPOND_CLI_NODE" "$OPENPOND_CLI_ENTRY" datasets list --local --json`; omitting `--local` selects the hosted/team command family. Discovery opens dataset focus without creating an experiment, selecting a returned dataset, or starting compute. Dataset-only focus has no experiment number. The bar’s New experiment action expands dataset/grader selection below the fixed top row and creates an experiment only when the user confirms the configuration. Reuse an existing experiment when the request concerns it. Keep the response bounded and relevant: a short summary usually suffices; a compact selectable table is useful when the user needs to choose among records. Do not attach all discovery results. For a specific dataset, read that resource through the CLI so its canonical reference attaches. Inspect `datasets context --local --json` if the bar or selection appears missing, and surface attachment failures instead of claiming selection succeeded.
+For “list my datasets” or similar discovery, use the scoped CLI. Local discovery uses `"$OPENPOND_CLI_NODE" "$OPENPOND_CLI_ENTRY" datasets list --local --json`; omitting `--local` selects the hosted/team command family. Discovery opens dataset focus without creating an experiment, selecting a returned dataset, or starting compute. Dataset-only focus has no experiment number. New experiment in the bar’s chat-actions menu prepares an unsent request to create a draft in the current chat, without compute. Manual configuration remains below the bar. Reuse an existing experiment when the request concerns it. Keep the response bounded and relevant: a short summary usually suffices; a compact selectable table is useful when the user needs to choose among records. Do not attach all discovery results. For a specific dataset, read that resource through the CLI so its canonical reference attaches. Inspect `datasets context --local --json` if the bar or selection appears missing, and surface attachment failures instead of claiming selection succeeded.
 
 For a published OpenPond HTML picker, render Select buttons with `data-openpond-resource-kind="dataset"`, `data-openpond-resource-id="<exact-id>"`, and `data-openpond-resource-revision="<revision>"`; experiments use kind `experiment`. The host validates a real click, selects the resource, collapses the picker with Change, and queues a canonical selection message. Keep this presentation compact and use a saved-record table. Do not add scripts that call APIs or manufacture selection messages.
 
@@ -38,6 +38,8 @@ Read the installed command help for exact flags and input contracts; capability 
 
 When the app provides a scoped command executor, run the CLI with `"$OPENPOND_CLI_NODE" "$OPENPOND_CLI_ENTRY"` as its prefix (`openpond_exec_command` for native agents; the existing `exec_command` for hosted chat). This uses the app's bundled installation and attaches saved results to the originating chat. Do not use the provider's unrelated shell for these workflows or copy invocation credentials into arguments.
 
+Use that supplied prefix directly. Do not spend a command printing or probing its environment variables before every request; investigate setup only after an actual execution failure. Reuse command contracts already read in this conversation, and batch independent inspections where useful. A simple grader question normally needs one listing and, only when criteria are needed, one grader inspection.
+
 Use `datasets context --local --json` to inspect the current scope; `datasets select <id> --local --expected-revision <revision>` selects an existing dataset. `datasets new-experiment --local --operation-id <stable-id>` creates a configuration scope without compute. Scope selection/rename use `select-experiment` and `rename-experiment`; check their current help. These commands require app-supplied context. Mere `datasets list` discovery does not attach all records.
 
 Use the application's supplied local server context and OpenPond home when present. Pass that home with `--home`; the standard development desktop uses `~/.openpond/openpond-app-dev`. Check this context before diagnosing missing authentication. Do not guess a second installation, scrape credentials, or switch teams to get an operation to succeed. Local dataset commands use `--local`; hosted operations have their own explicit destination/account options. Local experiment execution may still call a paid remote inference provider.
@@ -45,6 +47,12 @@ Use the application's supplied local server context and OpenPond home when prese
 For Diagnose, Improve, or grader repair, read [Diagnose and improve](diagnose-and-improve.md).
 
 ## Dataset and grader work
+
+For a simple question about the selected dataset, use the exact dataset ID and revision from the attached context. Do not ask the user to identify a dataset that is already selected. `this dataset` refers to the sole attached dataset; multiple distinct datasets require disambiguation.
+
+For "what are my graders?", start with `datasets list-graders <dataset-id> --local --expected-revision <revision> --json`. If the grader's criteria need inspection, use `datasets read-grader <grader-id> --dataset-id <dataset-id> --local --expected-revision <revision> --json`; both attached grader IDs and native grader IDs are accepted. Alternatively use `read-grader <dataset-id> --grader-id <grader-id>`. This returns the definition, readable verifier source, and a page of fixtures, without the whole dataset. `--offset` and `--limit` page the fixtures. Do not decode dataset exports or use Python for this lookup. Read a whole dataset only when its tasks or source files are needed.
+
+Answer small inspection questions briefly: identify the dataset and revision, name the graders and explain their checks, then distinguish fixture checks from model results. Progress updates should describe the operation being performed, not speculate about shell syntax or implementation choices. Read-only inspection does not require extra dataset/grader cards. For improvement advice, lead with the strongest confirmed finding and the next useful step; keep broader suggestions secondary.
 
 Use the bundled openpond-taskset-authoring skill for deeper task design, split isolation, provenance, and grader calibration. Inspect source schemas and representative examples before importing or mapping data. Preserve source provenance and save useful drafts even when validation is incomplete. Read the supported dataset schema before authoring an unfamiliar request.
 
@@ -57,6 +65,8 @@ Discover available models before selecting an evaluated model. In a scoped chat,
 Use existing authorized limits. Ask for a missing spending ceiling when the selected operation requires one. A subscription run with unavailable dollar accounting must not be described as costing zero.
 
 Inspect status, results, coverage, and failed cases before claiming success or proposing an improvement. Report pass rate only when the grader defines pass/fail; otherwise report the actual score. Compare matched inputs when making improvement claims, and identify changed-input comparisons.
+
+For "are there open experiments?", filter the returned experiment summaries by the exact selected datasetId and inspect every returned page before reporting a total. Keep active runs separate from completed history and unsent experiment drafts. Include intermediate dataset revisions in the history count rather than reporting only the oldest and newest runs.
 
 Use the resource-specific Diagnose/Improve guidance above. The older source-component improvement API is not the general chat improvement path.
 
@@ -86,11 +96,11 @@ When the app supplies scoped CLI context, local training start/status and hosted
 
 ### State-aware actions
 
-The bar has one primary action based on retained run evidence and the selected configuration: New experiment, Set up, Run, Run updated, View progress, Improve, or Retry. Dataset/workspace or model changes require fresh evaluation evidence; an unchanged completed run leads to result and coverage analysis. Improve makes a targeted change, validates it, and evaluates it within the authorized scope; it does not automatically train or deploy a model. Repeat run is an explicit overflow action and always creates separate evidence after reconciling uncertain submissions.
+The bar keeps Set up, Run, Run updated, View progress, or Retry as its primary action based on retained evidence and configuration. New experiment, Diagnose, Improve, Compare, grader checks, and training requests live in the plus/chat menu, which shows their exact request text. Dataset/workspace or model changes require fresh evaluation evidence; an unchanged completed run leads to result and coverage analysis. Improve makes a targeted change, validates it, and evaluates it within the authorized scope; it does not automatically train or deploy a model. Repeat run is an explicit chat action and always creates separate evidence after reconciling uncertain submissions.
 
 The independent chat experiment runner currently evaluates all graders in the selected dataset revision. Selecting one grader in the bar is an inspection/test focus, not a run filter. This runner does not expose saved-answer regrading through the independent CLI route; do not claim that it does or repurpose grader fixture tests as experiment results. Team-owned scoring has its own CLI operations and authority. The independent bar uses Run updated for changed graders until compatible scoring is exposed for that owner.
 
-Setup and row inspection stay in the controls. Execution and improvement actions show a compact request preview, then append an unsent request with exact dataset, retained run, grader, and evaluation-model references. Opening an action never sends it. Train prepares hosted training on OpenPond and keeps serving/deployment separate. Dataset discovery still requires no numbered experiment.
+Setup and row inspection stay in the controls. Execution and improvement actions show a compact request preview, then append an unsent request with exact dataset, retained run, grader, and evaluation-model references. Opening an action never sends it. Ready to train inspects readiness; Prepare training requests a hosted plan, model options, data requirements, and cost without uploads or a training submission. Serving/deployment remain separate. Dataset discovery still requires no numbered experiment.
 
 
 ### Execution destination

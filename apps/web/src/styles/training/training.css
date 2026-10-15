@@ -619,3 +619,16 @@
   }
   .dataset-import-mapping-table>div{grid-template-columns:1fr}
 }
+
+.training-run-configuration { min-width: 0; }
+.training-run-quantities { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.training-run-quantities > label, .dataset-training-plan .training-run-quantities > label, .training-run-method { display: grid; align-content: start; gap: 3px; min-width: 0; padding: 6px; border: 1px solid var(--border-default); border-radius: 5px; background: var(--surface-input); }
+.training-run-quantities > label > span, .training-run-method > span { color: var(--text-muted); font-size: 9px; line-height: 13px; white-space: nowrap; }
+.training-run-quantities input, .dataset-training-plan .training-run-quantities input { width: 100%; min-width: 0; height: 22px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text-primary); font: inherit; font-size: 12px; }
+.training-run-method .dropdown-select { min-width: 0; width: 100%; }
+.training-run-method .dropdown-select.compact .dropdown-trigger { min-width: 0; width: 100%; height: 22px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: transparent; font-size: 11px; gap: 2px; }
+.training-run-method .dropdown-select.compact .dropdown-trigger svg { width: 10px; height: 10px; flex-shrink: 0; }
+.training-run-method .dropdown-select.compact .dropdown-trigger span { min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; }
+.training-spend-estimate { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(130px, 1fr); align-items: center; gap: 12px; }
+.training-spend-estimate button { border: 1px solid var(--border-default); background: var(--surface-input); color: var(--text-primary); padding: 9px; border-radius: 6px; cursor: pointer; }
+.training-spend-estimate button:disabled { color: var(--text-muted); cursor: default; }

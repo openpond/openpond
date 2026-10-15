@@ -31,6 +31,7 @@ export const ManagedAdapterServingProjectionSchema = z.object({
   source: z.literal("sandbox_managed_rl"),
   sourceRef: IdSchema,
   canonicalArtifactId: IdSchema.nullable(),
+  canonicalModelName: z.string().trim().min(1).max(256).nullable().default(null),
   canonicalArtifactState: z
     .enum(["imported_unvalidated", "evaluating", "promotable", "rejected", "deleted"])
     .nullable(),
@@ -148,9 +149,9 @@ export function resolveModelBindingEligibility(
     };
   }
   if (
-    managedAdapterProjectionReady(projection)
-    && projection.canonicalArtifactId
-    && projection.canonicalDeploymentId
+    managedAdapterProjectionReady(projection) &&
+    projection.canonicalArtifactId &&
+    projection.canonicalDeploymentId
   ) {
     return {
       kind: "sandbox_serving",

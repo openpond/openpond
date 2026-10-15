@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { apiFetch, ApiRequestError } from "../apps/web/src/api/api-client";
 import { ConnectionRequestError, connectionStatus, reportConnectionRestored, subscribeConnectionStatus } from "../apps/web/src/api/connection-status";
-import { inlineErrorMessage } from "../apps/web/src/lib/error-messages";
+import { isConnectionErrorMessage } from "../apps/web/src/lib/error-messages";
 
 // Structured server failures must retain a readable reason and HTTP status;
 // coercing their envelope makes every UI action fail as [object Object].
@@ -31,7 +31,7 @@ test("owns concurrent transport failures until recovery without hiding server er
     const oldRequest = apiFetch(connection, "/slow").catch(error => error);
     const errors = await Promise.all([apiFetch(connection, "/a"), apiFetch({ ...connection }, "/b")].map(p => p.catch(error => error)));
     expect(errors.every(error => error instanceof ConnectionRequestError)).toBe(true);
-    expect(inlineErrorMessage(errors[0])).toBeNull();
+    expect(isConnectionErrorMessage(errors[0].message)).toBe(true);
     expect(connectionStatus(connection).error).toBeTruthy();
     expect(connectionStatus(other).error).toBeNull();
     expect(notify).toHaveBeenCalledTimes(1);
@@ -51,7 +51,7 @@ test("owns concurrent transport failures until recovery without hiding server er
     fetch.mockResolvedValueOnce(Response.json({ error: "Sign in to your agent." }, { status: 401 }));
     const actionable = await apiFetch(connection, "/setup").catch(error => error);
     expect(actionable).toBeInstanceOf(ApiRequestError);
-    expect(inlineErrorMessage(actionable)).toBe(actionable.message);
+    expect(isConnectionErrorMessage(actionable.message)).toBe(false);
     expect(connectionStatus(connection).error).toBeNull();
 
     await apiFetch(connection, "/new-outage").catch(() => {});
