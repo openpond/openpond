@@ -12,6 +12,9 @@ import { runLocalProfileExperimentCommand } from "./experiments-profile-local";
 export async function runLocalExperimentsCommand(options:Record<string,string|boolean>,rest:string[]) {
   if (await runLocalProfileExperimentCommand(options, rest)) return;
   const [action,id,candidateId]=rest,teamId=optionString(options,"team");
+  const receiptId=optionString(options,"receiptId");
+  if(action==="case" && (!id || rest.length!==2 || !receiptId))
+    throw new Error("Usage: experiments case <run-id> --local --receipt-id <retained-receipt-id> [--after-sequence <n>] [--limit <1..500>] --json. A task id is not a receipt id; find receiptId in experiments result <run-id> --local --json (independent runs: evidence.cases[].receiptId).");
   if(options.revision!==undefined)throw new Error("A local Experiment is one immutable run; read it by id rather than a saved configuration revision.");
   if(action!=="read"&&options.contentHash!==undefined)throw new Error("An exact configuration hash requires the local read action.");
   if(!action||rest.length>(action==="compare"?3:2))throw new Error("Local Experiments require an action; use --server-url for an existing local server.");
@@ -38,9 +41,12 @@ export async function runLocalExperimentsCommand(options:Record<string,string|bo
     else if(action === "run" || action === "run-cloud") result=await command(action.replaceAll("-","_"),await input());
     else if(action === "list") result=await command("list",{});
     else if(action === "compare" && id && candidateId) result=await command("compare",{baselineId:id,candidateId});
-    else if(action==="case" && id && optionString(options,"receiptId"))result=await command("case",{id,receiptId:optionString(options,"receiptId")});
+    else if(action==="case" && id && receiptId) {
+      const sequence=optionString(options,"afterSequence"),limit=optionString(options,"limit");
+      result=await command("case",{id,receiptId,...(sequence?{afterSequence:Number(sequence)}:{}),...(limit?{limit:Number(limit)}:{})});
+    }
     else if(id && ["read","status","cancel","result"].includes(action)) result=await command(action,{id});
-    else throw new Error("Independent local Experiments support models/run/list/read/status/cancel/result/compare. Workspace operations require --team.");
+    else throw new Error("Independent local Experiments support models/run/list/read/status/cancel/result/compare/case. Workspace operations require --team.");
     if(parseBooleanOption(options.json))console.log(JSON.stringify(result,null,2));else printLocalExperimentResult(result);return;
   }
   if(action==="prepare-harness") {
@@ -64,8 +70,7 @@ export async function runLocalExperimentsCommand(options:Record<string,string|bo
       result=await command("runFromRelease",{configuration,expectedPackageHash:source.packageHash});
     } else if(action==="passes")result=await command("passes",{executionId:id,...(afterId?{afterId}:{}),...(limit?{limit:Number(limit)}:{})});
     else if(action==="case") {
-      const receiptId=optionString(options,"receiptId"),sequence=optionString(options,"afterSequence");
-      if(!receiptId)throw new Error("Local case inspection requires --receipt-id from the retained execution.");
+      const sequence=optionString(options,"afterSequence");
       result=await command("case",{id,receiptId,...(sequence?{afterSequence:Number(sequence)}:{}),...(limit?{limit:Number(limit)}:{})});
     }
     else if(action==="score") {
