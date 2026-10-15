@@ -1,0 +1,7 @@
+.composer-training-context { display:flex; align-items:center; gap:12px; min-width:0; padding:8px 14px; margin-bottom:6px; border:1px solid var(--border-default); border-radius:10px; background:var(--surface-panel); font-size:12px; }
+.composer-training-context-copy { display:flex; align-items:baseline; flex-wrap:wrap; gap:3px 8px; flex:1; min-width:0; }
+.composer-training-context-kind { color:var(--text-muted); flex:0 0 auto; }
+.composer-training-context strong { font-weight:500; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.composer-training-context-detail { flex-basis:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-secondary); }
+.composer-training-context > button { flex:0 0 auto; border:0; border-radius:5px; padding:6px 8px; background:transparent; color:var(--text-primary); font:inherit; }
+.composer-training-context > button:hover { background:var(--surface-raised); }

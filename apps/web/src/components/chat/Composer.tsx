@@ -4,6 +4,7 @@ import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ChatContextPicker } from "./ChatContextPicker";
+import { ComposerTrainingContext } from "./ComposerTrainingContext";
 import { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { useComposerResourceRequests } from "./useComposerResourceRequests";
 import {
@@ -1663,6 +1664,7 @@ export function Composer({
       )}
       {composeNotice?.tone === "warning" ? <ErrorToast error={composeNotice.message} />
         : composeNotice ? <div className="composer-notice info" role="status">{composeNotice.message}</div> : null}
+      {surface === "chat" ? <ComposerTrainingContext context={contextSelection} sessionId={taskSessionId ?? null} /> : null}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu
