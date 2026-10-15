@@ -11,6 +11,8 @@ type DevtoolsTarget = {
 
 type CdpResponse = {
   id?: number;
+  method?: string;
+  params?: unknown;
   result?: unknown;
   error?: { message?: string; data?: string };
 };
@@ -29,6 +31,7 @@ type CdpEvaluation = {
 
 export class CdpClient {
   private nextId = 1;
+  private readonly eventListeners = new Map<string, Set<(params: unknown) => void>>();
   private readonly pending = new Map<number, {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
@@ -38,7 +41,10 @@ export class CdpClient {
     socket.addEventListener("message", (event) => {
       const data = typeof event.data === "string" ? event.data : event.data.toString();
       const message = JSON.parse(data) as CdpResponse;
-      if (!message.id) return;
+      if (!message.id) {
+        if (message.method) for (const listener of this.eventListeners.get(message.method) ?? []) listener(message.params);
+        return;
+      }
       const pending = this.pending.get(message.id);
       if (!pending) return;
       this.pending.delete(message.id);
@@ -61,6 +67,7 @@ export class CdpClient {
   }
 
   async send<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    if (this.socket.readyState !== WebSocket.OPEN) throw new Error("CDP socket is closed.");
     const id = this.nextId++;
     const result = new Promise<T>((resolve, reject) => {
       this.pending.set(id, {
@@ -72,7 +79,19 @@ export class CdpClient {
     return result;
   }
 
+  on<T>(method: string, listener: (params: T) => void): () => void {
+    const listeners = this.eventListeners.get(method) ?? new Set<(params: unknown) => void>();
+    const handler = (params: unknown) => listener(params as T);
+    listeners.add(handler);
+    this.eventListeners.set(method, listeners);
+    return () => {
+      listeners.delete(handler);
+      if (!listeners.size) this.eventListeners.delete(method);
+    };
+  }
+
   close(): void {
+    this.eventListeners.clear();
     this.socket.close();
   }
 }

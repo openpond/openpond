@@ -11,6 +11,7 @@ export async function bundledChatCliEnvironment(): Promise<NodeJS.ProcessEnv> {
     if (await access(source).then(() => true, () => false)) {
       return { OPENPOND_CLI_NODE: process.execPath, OPENPOND_CLI_ENTRY: source };
     }
+    throw new Error("The official development CLI source launcher is missing. Restore apps/cli/src/cli/source-entry.mjs before using CLI workflows.");
   }
   const candidates = [
     path.resolve(directory,"../../../cli/dist/cli.js"),

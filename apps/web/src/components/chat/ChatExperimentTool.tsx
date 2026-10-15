@@ -55,7 +55,7 @@ export function ChatExperimentTool({ connection, sessionId, events }: { connecti
       {training ? training.location === "cloud" ? <ModelTrainingJourney compact connection={connection} teamId={training.owner.teamId}
         projectId={training.job.modelProjectId} jobId={training.jobId} onOpenRun={() => window.location.assign(modelsPath(modelsLocation("runs", null, { area: "console", resourceId: `hosted-run:${training.jobId}` })))} /> : <LocalTrainingOverview connection={connection} training={training} />
         : <PlannedTrainingFlow />}
-      <ChatTrainingInputs dataset={selected.dataset} graders={selected.graders ?? []} model={selected.model} />
+      <ChatTrainingInputs connection={connection} dataset={selected.dataset} graders={selected.graders ?? []} model={selected.model} />
       <TrainingWorkspaceSection title="Experiments">
         <DropdownSelect floating label="Experiment" value="" options={[{ value: "", label: "Experiment", disabled: true },
           ...(context.catalog.data?.options ?? []).filter(item => item.target.kind === "experiment").map(item => ({ value: JSON.stringify(item.target), label: item.label, description: item.detail }))]}

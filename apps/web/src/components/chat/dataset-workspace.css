@@ -351,5 +351,14 @@
 .training-context-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 16px; font-size: 12px; margin: 0; }
 .training-context-facts dt { color: var(--text-muted); }
 .training-context-facts dd { margin: 0; overflow-wrap: anywhere; }
+.dataset-row-preview { display: grid; gap: 10px; min-width: 0; }
+.dataset-row-preview td { vertical-align: top; overflow-wrap: anywhere; }
+.dataset-row-preview td:first-child { max-width: 110px; }
+.dataset-row-preview td > div { max-height: 160px; overflow: auto; white-space: pre-wrap; }
+.dataset-row-preview td > div:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.dataset-row-preview details { margin-top: 8px; }
+.dataset-row-preview summary { cursor: pointer; color: var(--text-secondary); }
+.dataset-row-preview summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.dataset-row-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 11px; }
 .dataset-workspace-section-heading > .dataset-workspace-title { min-width: 0; }
 .dataset-workspace-title h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }

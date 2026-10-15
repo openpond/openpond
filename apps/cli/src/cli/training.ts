@@ -89,7 +89,11 @@ export async function runTrainingCommand(
   const json = parseBooleanOption(options.json);
 
   if (subcommand === "pull-project") {
-    printResult(await client.pullHostedProject(id, pullProfileId!), json);
+    const snapshotFile = optionString(options, "snapshotFile");
+    const bytes = snapshotFile ? await readFile(snapshotFile) : null;
+    if (bytes && bytes.byteLength > 64 * 1024 * 1024) throw new Error("Model pull snapshot exceeds 64 MiB.");
+    const snapshot: unknown = bytes ? JSON.parse(bytes.toString("utf8")) : undefined;
+    printResult(await client.pullHostedProject(id, pullProfileId!, snapshot), json);
     return;
   }
 
@@ -335,8 +339,8 @@ export class TrainingApiClient {
     return this.json(`/v1/training${scope}`, "GET");
   }
 
-  pullHostedProject(hostedProjectId: string, profileId: string): Promise<unknown> {
-    return this.json(`/v1/training/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/pull`, "POST", { profileId });
+  pullHostedProject(hostedProjectId: string, profileId: string, snapshot?: unknown): Promise<unknown> {
+    return this.json(`/v1/training/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/pull`, "POST", { profileId, ...(snapshot !== undefined ? { snapshot } : {}) });
   }
 
   startHarnessRefinerBenchmark(modelId: string, body: unknown): Promise<unknown> {

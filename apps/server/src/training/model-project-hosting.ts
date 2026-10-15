@@ -22,6 +22,7 @@ import { prepareImportedTasksetPackage, type PreparedImportedTasksetPackage } fr
 import { exportLocalModelTasksetPackage } from "./model-taskset-package-export.js";
 import { pushModelTasksetPackage } from "./model-taskset-package-hosting.js";
 import { learningRef, sameLearningRef } from "@openpond/evals/learning";
+import { ModelProjectPullSnapshotSchema, prepareModelProjectPullSnapshot } from "./model-project-pull-snapshot.js";
 
 import type { SqliteStore } from "../store/store.js";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
@@ -186,6 +187,7 @@ export function createModelProjectHostingService(input: {
   async function pullProject(inputValue: {
     hostedProjectId: string;
     profileId: string;
+    snapshot?: unknown;
   }): Promise<{
     project: ModelProject;
     hosted: HostedModelProjectDetail;
@@ -198,7 +200,15 @@ export function createModelProjectHostingService(input: {
       listHostedJobs(access, inputValue.hostedProjectId),
     ]);
     const summary = hosted.project;
+    if (summary.id !== inputValue.hostedProjectId || summary.teamId !== access.teamId) throw new Error("The hosted Model identity differs from the selected Model.");
+    const snapshot = inputValue.snapshot === undefined ? null : ModelProjectPullSnapshotSchema.parse(inputValue.snapshot);
+    if (snapshot && ![summary.trainingSetup.tasksetRef, summary.trainingSetup.evaluationTasksetRef].some(ref => ref && sameLearningRef(ref, learningRef(snapshot.taskset)))) {
+      throw new Error("Snapshot is not selected by the authenticated hosted Model.");
+    }
     const existing = await input.store.getModelProject(summary.portableProjectId);
+    if (snapshot && existing && existing.profileId !== inputValue.profileId) {
+      throw new Error(`Existing local Model belongs to Profile ${existing.profileId}; snapshot import cannot move it to ${inputValue.profileId}. Local work was retained.`);
+    }
     if (existing && !canReplaceFromHosted(existing, summary, access.teamId, access.apiBaseUrl)) {
       throw new Error(
         `Model Project ${summary.portableProjectId} has local changes or belongs to a different hosted workspace. Pulling would overwrite local work.`,
@@ -218,7 +228,12 @@ export function createModelProjectHostingService(input: {
         continue;
       }
       const options = { baseUrl: access.apiBaseUrl, apiKey: access.token, teamId: access.teamId, fetch: fetchImpl };
-      const [value, metadata] = await Promise.all([
+      const recovered = snapshot && sameLearningRef(selected, learningRef(snapshot.taskset))
+        ? prepareModelProjectPullSnapshot(snapshot, selected, existing?.profileId ?? inputValue.profileId) : null;
+      const [value, metadata] = recovered ? [recovered.package, {
+        // This is the authenticated release identity, not a claimed catalog row.
+        id: selected.id, name: recovered.taskset.name, createdAt: recovered.taskset.createdAt,
+      }] : await Promise.all([
         new OpenPondTasksetPackageClient(options).get(summary.id, selected),
         new OpenPondTasksetCatalogClient(options).resolve(selected),
       ]);
@@ -226,7 +241,7 @@ export function createModelProjectHostingService(input: {
       const binding = tasksetPackageRewardBinding(value);
       const packageBinding = binding ? learningRef(binding) : null;
       if (field === "tasksetRef" && (Boolean(selectedBinding) !== Boolean(packageBinding) || (selectedBinding && packageBinding && !sameLearningRef(selectedBinding, packageBinding)))) throw new Error("Hosted Model Reward selection differs from its immutable Taskset package.");
-      const prepared: PreparedImportedTasksetPackage = prepareImportedTasksetPackage({ package: value,
+      const prepared: PreparedImportedTasksetPackage = recovered ?? prepareImportedTasksetPackage({ package: value,
         profileId: existing?.profileId ?? inputValue.profileId, name: metadata.name, createdAt: metadata.createdAt });
       const priorLink = existing?.hosted?.tasksets.find(link => link.releaseId === selected.id && link.releaseRevision === selected.revision && link.releaseHash === selected.contentHash);
       const previousTaskset = priorLink?.localTasksetHash

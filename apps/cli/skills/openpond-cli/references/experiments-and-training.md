@@ -145,8 +145,14 @@ This uses the local app API and its signed-in hosted account; do not pass the ho
 API origin as the pull command's API URL. The existing owner checks local changes,
 downloads immutable package references and preserves their asset/verifier bytes.
 Read the returned exact references before preparing another run. Pulling does not
-start training or serving. Do not reauthor an old published dataset to substitute
-for a newer canonical package.
+start training or serving. For an explicitly requested historical projected pin
+that cannot resolve through the portable catalog, `--snapshot-file <path>` accepts
+`{"schemaVersion":"openpond.modelProjectPullSnapshot.v1","package":<immutable package>,"taskset":<saved projected Taskset>}`.
+This is an explicit recovery input, never an automatic fallback. The app verifies
+the authenticated Model pin and Profile, recomputes the complete projection, and
+requires canonical equality before the atomic import. Preserve both original files
+and their distinct hashes; never reconstruct a missing package or override a hash.
+Do not reauthor an old published dataset to substitute for a newer canonical package.
 
 Use the current CLI's prepare/start/status/watch/artifacts operations for the selected backend. Return retained job/model references and read saved completion state; a submitted job is not a trained model. CLI flags that acknowledge submission do not create user authorization or enlarge a budget.
 
