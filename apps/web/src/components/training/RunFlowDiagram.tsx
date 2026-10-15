@@ -78,7 +78,7 @@ function FlowBox({
     node.compute ??
     (["Grade", "Save checkpoint"].includes(node.label)
       ? "cpu"
-      : ["Rollouts", "Update adapter", "Activate policy", "Evaluate"].includes(node.label)
+      : ["Baseline evaluation", "Rollouts", "Update adapter", "Activate policy", "Evaluate"].includes(node.label)
         ? "gpu"
         : undefined);
   return (

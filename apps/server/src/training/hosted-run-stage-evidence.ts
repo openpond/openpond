@@ -86,6 +86,10 @@ const Raw = z
           kind: z.string(),
           state: z.string(),
           score: z.union([z.string(), z.number()]).nullable(),
+          metrics: z.object({
+            taskCount: z.number().int().nonnegative().optional(),
+            targetTaskCount: z.number().int().positive().optional(),
+          }).passthrough().optional(),
         })
         .passthrough(),
     ),
@@ -123,6 +127,11 @@ export function hostedRunStageEvidence(
     throw new Error("Flow evidence belongs to a different training run.");
   const live = !["completed", "cancelled", "failed", "budget_exhausted"].includes(job.state);
   const qualification = job.inputBundle?.executionIntent?.purpose === "collection";
+  const baseline = qualification ? undefined : detail.evaluations.find((item) => item.kind === "baseline");
+  const baselineCount = baseline?.metrics?.taskCount;
+  const baselineTarget = baseline?.metrics?.targetTaskCount;
+  const baselineCounts = baselineCount !== undefined && baselineTarget !== undefined && baselineCount <= baselineTarget;
+  const baselineScore = baseline?.state === "completed" ? number(baseline.score) : null;
   const lease =
     detail.gpuLeases.find((item) => !item.terminatedAt) ??
     [...detail.gpuLeases].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
@@ -140,7 +149,18 @@ export function hostedRunStageEvidence(
         "provisioning_gpu",
         "provisioning_rollouts",
         "warming",
-      ].includes(job.state),
+      ].includes(job.state) && !baseline,
+    },
+    {
+      label: "Baseline evaluation",
+      done: baseline?.state === "completed",
+      active: baseline?.state === "running",
+      skip: !baseline,
+      detail: [
+        baselineCounts ? `${baselineCount}/${baselineTarget} cases graded` : "Case counts not recorded",
+        baselineScore !== null ? `score ${baselineScore.toFixed(3)}` : null,
+      ].filter(Boolean).join("; "),
+      ...(baselineCounts ? { progress: baselineCount / baselineTarget } : {}),
     },
     {
       label: "Rollouts",
@@ -301,6 +321,9 @@ function stageErrors(detail: z.infer<typeof Raw>): Record<string, string> {
   if (failedRollouts.length) errors.Rollouts = `${failedRollouts.length} failed attempt(s). Inspect the rollout records for details.`;
   if (detail.evaluations.some(item => item.kind === "candidate" && item.state === "failed")) {
     errors.Evaluate = `Candidate evaluation failed. ${detail.job.terminalReason ?? "Inspect evaluation records for details."}`;
+  }
+  if (detail.evaluations.some(item => item.kind === "baseline" && item.state === "failed")) {
+    errors["Baseline evaluation"] = `Baseline evaluation failed. ${detail.job.terminalReason ?? "Inspect evaluation records for details."}`;
   }
   const checkpoint = detail.checkpoints.find(item => item.state === "failed");
   if (checkpoint && !errors["Save checkpoint"]) errors["Save checkpoint"] = checkpoint.id ? `Checkpoint ${checkpoint.id} failed.` : "Checkpoint failed.";

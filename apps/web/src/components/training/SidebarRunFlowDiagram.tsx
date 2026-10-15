@@ -66,7 +66,7 @@ export function SidebarRunFlowDiagram({
 }
 
 function StageCard({ node, live }: { node: RunFlowNode; live: boolean }) {
-  const compute = node.compute ?? (["Rollouts", "Update adapter", "Activate policy", "Evaluate"].includes(node.label) ? "gpu" : undefined);
+  const compute = node.compute ?? (["Baseline evaluation", "Rollouts", "Update adapter", "Activate policy", "Evaluate"].includes(node.label) ? "gpu" : undefined);
   const active = live && node.state === "active";
   const progress = node.progress === undefined ? undefined : Math.round(Math.min(1, Math.max(0, node.progress)) * 100);
   return (

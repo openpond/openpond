@@ -57,6 +57,39 @@ test("hosted flow keeps execution evidence and owner boundaries", () => {
   expect(recovered.nodes.find(node => node.label === "Update adapter")).toMatchObject({ state: "done" });
   expect(recovered.nodes.find(node => node.label === "Update adapter")?.error).toBeUndefined();
 
+  // Baseline scoring can occupy the warming phase for minutes. Preserve its
+  // actual case progress separately from preparation and optimizer evidence.
+  const baseline = {
+    kind: "baseline", state: "running", score: null as string | null,
+    metrics: { taskCount: 1, targetTaskCount: 3, taskResults: [{ privateAnswer: "private-baseline-answer" }] },
+  };
+  const baselineRaw = { ...raw, job: { ...raw.job, state: "warming", completedGroups: 0 }, evaluations: [baseline] };
+  const partial = hostedRunStageEvidence(baselineRaw, { entries: [] }, identity);
+  expect(partial.nodes.find(node => node.label === "Prepare")?.state).toBe("done");
+  expect(partial.nodes.find(node => node.label === "Baseline evaluation")).toMatchObject({ state: "active", progress: 1 / 3 });
+  expect(partial.nodes.find(node => node.label === "Baseline evaluation")?.detail).toContain("1/3");
+  expect(partial.nodes.find(node => node.label === "Update adapter")?.state).toBe("pending");
+  expect(JSON.stringify(partial)).not.toContain("private-");
+  const completedBaseline = hostedRunStageEvidence({ ...baselineRaw,
+    job: { ...baselineRaw.job, state: "update_phase" },
+    evaluations: [{ ...baseline, state: "completed", score: "0", metrics: { taskCount: 3, targetTaskCount: 3 } }],
+  }, { entries: [] }, identity);
+  expect(completedBaseline.nodes.find(node => node.label === "Baseline evaluation")).toMatchObject({ state: "done", progress: 1 });
+  expect(completedBaseline.nodes.find(node => node.label === "Baseline evaluation")?.detail).toContain("0.000");
+  expect(completedBaseline.nodes.find(node => node.label === "Update adapter")?.state).toBe("active");
+  const failedBaseline = hostedRunStageEvidence({ ...baselineRaw, job: { ...baselineRaw.job, state: "failed" },
+    evaluations: [{ ...baseline, state: "failed" }],
+  }, { entries: [] }, identity);
+  expect(failedBaseline.nodes.find(node => node.label === "Baseline evaluation")).toMatchObject({ state: "failed", progress: 1 / 3 });
+  expect(failedBaseline.nodes.find(node => node.label === "Update adapter")?.state).toBe("missing");
+  const uncounted = hostedRunStageEvidence({ ...baselineRaw, evaluations: [{ ...baseline, metrics: {} }] }, { entries: [] }, identity);
+  expect(uncounted.nodes.find(node => node.label === "Baseline evaluation")?.progress).toBeUndefined();
+  expect(flow.nodes.some(node => node.label === "Baseline evaluation")).toBe(false);
+  const qualification = hostedRunStageEvidence({ ...baselineRaw,
+    job: { ...baselineRaw.job, inputBundle: { ...raw.job.inputBundle, executionIntent: { purpose: "collection" } } },
+  }, { entries: [] }, identity);
+  expect(qualification.nodes.some(node => node.label === "Baseline evaluation")).toBe(false);
+
   expect(() =>
     hostedRunStageEvidence(
       { ...raw, job: { ...raw.job, teamId: "other-team" } },
