@@ -682,6 +682,8 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
     if (action === "save_model_project") {
       return deps.store.saveModelProjectConfiguration(parseModelProjectSaveRequest(input));
     }
+    if (action === "prepare_local_model_project") return deps.store.prepareLocalModelProject(input);
+    if (action === "apply_local_model_project_preparation") return deps.store.applyLocalModelProjectPreparation(input);
     if (action === "check_model_project") {
       return checkModelProjectConfiguration({ store: deps.store, request: input, destinations: deps.training.destinations });
     }

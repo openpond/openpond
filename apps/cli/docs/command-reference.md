@@ -955,7 +955,9 @@ Options:
 
 ```text
 Usage:
-  openpond training <projects|inspect-project|create-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]
+  openpond training <projects|inspect-project|create-project|prepare-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]
+  openpond training prepare-project <input.json> [--dry-run] [--output <receipt.json>] [--json]
+  openpond training prepare-project <reviewed-receipt.json> --apply [--output <saved.json>] [--json]
   openpond training pull-project <hosted-model-project-id> --profile <local-profile-id> [--snapshot-file <verified-package-and-projection.json>] [--json]
   openpond training projects [--profile <local-profile-id>] [--json]
   openpond training inspect-project <local-model-project-id> [--profile <local-profile-id>] [--json]
@@ -988,6 +990,7 @@ Usage:
 Options:
   --account <string>
   --api-base-url <string>
+  --apply
   --cancel-on-infrastructure-error
   --cleanup-reserve-ms <integer>
   --cleanup-timeout-ms <integer>
@@ -996,6 +999,7 @@ Options:
   --deadline-at <string>
   --destination <string>
   --detach
+  --dry-run
   --evaluation-id <string>
   --export-approved
   --gpu-placement-objective <string>
@@ -1006,6 +1010,7 @@ Options:
   --model <string>
   --name <string>
   --objective <string>
+  --output <string>
   --profile <string>
   --project-id <string>
   --provider <string>

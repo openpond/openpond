@@ -476,8 +476,10 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "training",
-    usage: "openpond training <projects|inspect-project|create-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]",
+    usage: "openpond training <projects|inspect-project|create-project|prepare-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]",
     usages: [
+      "openpond training prepare-project <input.json> [--dry-run] [--output <receipt.json>] [--json]",
+      "openpond training prepare-project <reviewed-receipt.json> --apply [--output <saved.json>] [--json]",
       "openpond training pull-project <hosted-model-project-id> --profile <local-profile-id> [--snapshot-file <verified-package-and-projection.json>] [--json]",
       "openpond training projects [--profile <local-profile-id>] [--json]",
       "openpond training inspect-project <local-model-project-id> [--profile <local-profile-id>] [--json]",
@@ -509,6 +511,9 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     ],
     optionSchema: {
       apiBaseUrl: "string",
+      apply: "boolean",
+      dryRun: "boolean",
+      output: "string",
       comparisonSeriesEntry: "string",
       snapshotFile: "string",
       teamId: "string",

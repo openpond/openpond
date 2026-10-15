@@ -18,6 +18,18 @@ import {
 
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
+  if (request.method === "POST" && ["/v1/training/model-project-preparations/prepare", "/v1/training/model-project-preparations/apply"].includes(requestUrl.pathname)) {
+    try {
+      const action = requestUrl.pathname.endsWith("/apply") ? "apply_local_model_project_preparation" : "prepare_local_model_project";
+      response.setHeader("Cache-Control", "no-store");
+      sendJson(response, 200, await deps.trainingPayload(action, await readJson(request, { maxBytes: 67_108_864 }), requestUrl));
+    } catch (error) {
+      if (error instanceof ZodError) sendJson(response, 400, { code: "model_preparation_invalid", error: "Project preparation does not match its contract." });
+      else if (error instanceof Error) sendJson(response, 409, { code: "model_preparation_conflict", error: error.message });
+      else throw error;
+    }
+    return true;
+  }
   const candidate = /^\/v1\/training\/candidate-evaluations(?:\/([^/]+)(?:\/(prepare|run|cancel))?)?$/.exec(requestUrl.pathname);
   if ((requestUrl.pathname === "/v1/training/candidates" && request.method === "GET") ||
       (candidate && (request.method === "GET" && candidate[1] && !candidate[2] || request.method === "POST" && (!candidate[1] || candidate[2])))) {

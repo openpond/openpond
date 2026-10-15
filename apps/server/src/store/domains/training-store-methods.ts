@@ -7,6 +7,7 @@ export function trainingStoreMethods(context: SqliteDomainContext, lifecycle: St
   const trainingJobs = lazyStoreDomain(lifecycle, () => import("../store-training-jobs.js").then(module => new module.SqliteTrainingJobsStore(context)));
   const trainingModels = lazyStoreDomain(lifecycle, () => import("../store-training-models.js").then(module => new module.SqliteTrainingModelStore(context)));
   const modelConfiguration = lazyStoreDomain(lifecycle, () => import("../store-model-configuration.js").then(module => new module.SqliteModelConfigurationStore(context)));
+  const modelPreparation = lazyStoreDomain(lifecycle, () => import("../store-model-project-preparation.js").then(module => new module.SqliteModelProjectPreparationStore(context)));
   const modelBatchReview = lazyStoreDomain(lifecycle, () => import("../store-model-batch-review.js").then(module => new module.SqliteModelBatchReviewStore(context)));
   const taskInventory = lazyStoreDomain(lifecycle, () => import("../store-task-inventory.js").then(module => new module.SqliteTaskInventoryStore(context)));
   const tasksetDrafts = lazyStoreDomain(lifecycle, () => import("../store-taskset-drafts.js").then(module => new module.SqliteTasksetDraftStore(context)));
@@ -15,6 +16,7 @@ export function trainingStoreMethods(context: SqliteDomainContext, lifecycle: St
   const createImprove = lazyStoreDomain(lifecycle, () => import("../store-create-improve.js").then(module => new module.SqliteCreateImproveStore(context)));
   const overview = lazyStoreDomain(lifecycle, () => import("../store-training-overview.js").then(module => new module.SqliteTrainingOverviewStore(context)));
   return {
+    ...modelPreparation.methods(["prepareLocalModelProject", "applyLocalModelProjectPreparation"]),
     ...overview.methods(["readTrainingActivityState", "readTrainingNavigation"]),
     ...chatResources.methods(["listChatHostedExperiments", "readChatHostedExperiment", "retainChatHostedExperiment", "localResourceOwnerId", "readLocalDataset", "readLocalDatasetByWorkspaceHash", "readLocalDatasetListing", "readLocalDatasetProjection", "listLocalDatasets", "listLocalDatasetListings", "recoverLocalDatasetOperation", "saveLocalDataset", "updateLocalDatasetMetadata", "linkChatResource", "chatResourceLinks", "readChatExperimentGroup", "prepareChatExperimentGroup"]),
     ...training.methods([

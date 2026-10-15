@@ -52,6 +52,7 @@ export async function runTrainingCommand(
       "artifacts",
       "benchmark",
       "create-project",
+      "prepare-project",
       "pull-project",
       "projects",
       "inspect-project",
@@ -61,7 +62,7 @@ export async function runTrainingCommand(
     (!id && subcommand !== "projects")
   ) {
     throw new Error(
-      "usage: training <projects|inspect-project|create-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]",
+      "usage: training <projects|inspect-project|create-project|prepare-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]",
     );
   }
   if (rest.length > 2) {
@@ -75,7 +76,7 @@ export async function runTrainingCommand(
     resolveApiBaseUrlOption(options) ??
     process.env.OPENPOND_LOCAL_API_URL?.replace(/\/$/, "") ??
     DEFAULT_LOCAL_TRAINING_API_URL;
-  if (["pull-project", "projects", "inspect-project"].includes(subcommand)) {
+  if (["pull-project", "projects", "inspect-project", "prepare-project"].includes(subcommand)) {
     const origin = new URL(baseUrl);
     if (origin.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname) || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/") {
       throw new Error(`training ${subcommand} uses the local app's HTTP loopback API; the app resolves its signed-in hosted account.`);
@@ -113,6 +114,10 @@ export async function runTrainingCommand(
       tasksetId: id,
     });
     printResult(project, json);
+    return;
+  }
+  if (subcommand === "prepare-project") {
+    await (await import("./training-project-preparation")).runProjectPreparation(client, id, options);
     return;
   }
 
@@ -393,6 +398,10 @@ export class TrainingApiClient {
 
   saveModelProject(request: ModelProjectSaveRequest): Promise<unknown> {
     return this.json("/v1/training/models", "PUT", request);
+  }
+
+  prepareLocalModelProject(body: unknown, apply: boolean): Promise<unknown> {
+    return this.json(`/v1/training/model-project-preparations/${apply ? "apply" : "prepare"}`, "POST", body);
   }
 
   private async json(
