@@ -67,6 +67,7 @@ export function AppDialog({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (dialogStack.at(-1) !== instance) return;
+      if (inertExclusionSelector && event.target instanceof Element && event.target.closest(inertExclusionSelector)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();

@@ -8,18 +8,20 @@ import { AppDialog } from "../dialogs/AppDialog";
 const TerminalOverlay = lazy(() => import("./TerminalOverlay").then((module) => ({ default: module.TerminalOverlay })));
 
 /** Uses the existing authenticated terminal service for native login and the shared Importer CLI. */
-export function NativeSetupTerminal({ connection, command, onClose, onComplete, modal = false }: { connection: ClientConnection; command: string; onClose(): void; onComplete?(): void; modal?: boolean }) {
+export function NativeSetupTerminal({ connection, command, displayCommand = "OpenPond setup", onClose, onComplete, modal = false }: { connection: ClientConnection; command: string; displayCommand?: string; onClose(): void; onComplete?(): void; modal?: boolean }) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [scope] = useState(() => ({ kind: "draft" as const, id: `native-setup-${crypto.randomUUID()}` }));
   const completed = useRef(false);
-  const [queued] = useState(() => ({ id: Date.now(), scope, command }));
+  const [setupCommand] = useState(() => ({ command, displayCommand }));
   useEffect(() => {
-    if (!completed.current && tabs.some((tab) => tab.lastCommand === command && tab.lastExitCode === 0 && tab.commandStatus === "success")) {
+    // Setup completion comes from the launched process, independently of
+    // shell prompt hooks or normalization of the displayed command.
+    if (!completed.current && tabs.some((tab) => tab.lastCommand !== null && tab.lastExitCode === 0 && tab.commandStatus === "success")) {
       completed.current = true;
       onComplete?.();
     }
-  }, [tabs, command, onComplete]);
-  const terminal = <Suspense fallback={<p role="status">Opening setup terminal…</p>}><TerminalOverlay open disposeOnUnmount connection={connection} scope={scope} tabs={tabs} onTabsChange={setTabs} cwd={null} appId={null} workspaceName="Agent setup" queuedCommand={queued} onClose={onClose} /></Suspense>;
+  }, [tabs, onComplete]);
+  const terminal = <Suspense fallback={<p role="status">Opening setup terminal…</p>}><TerminalOverlay open disposeOnUnmount connection={connection} scope={scope} tabs={tabs} onTabsChange={setTabs} cwd={null} appId={null} workspaceName="Agent setup" queuedCommand={null} setupCommand={setupCommand} onClose={onClose} /></Suspense>;
   return createPortal(modal
     ? <AppDialog ariaLabel="Agent setup terminal" backdropClassName="native-setup-modal-backdrop" className="native-setup-terminal" onClose={onClose}>{terminal}</AppDialog>
     : <div className="native-setup-terminal">{terminal}</div>, document.body);

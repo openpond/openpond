@@ -17,6 +17,8 @@ export type TerminalTab = {
   updatedAt: number;
 };
 
+export type TerminalSetupCommand = { command: string; displayCommand: string };
+
 export type TerminalQueuedCommand = {
   id: number;
   scope: TerminalScope;
@@ -32,6 +34,7 @@ export type TerminalClientMessage =
       appId: string | null;
       cols: number;
       rows: number;
+      setup?: TerminalSetupCommand;
     }
   | {
       type: "input";

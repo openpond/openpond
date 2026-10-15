@@ -17,6 +17,7 @@ import {
   type TerminalQueuedCommand,
   type TerminalServerMessage,
   type TerminalTab,
+  type TerminalSetupCommand,
 } from "./terminal-overlay-types";
 import { useErrorToast } from "../../app/AppToastContext";
 
@@ -33,6 +34,10 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   appId,
   workspaceName,
   queuedCommand,
+  setupCommand,
+  background = false,
+  onOutput,
+  setupInput,
   onClose,
 }: {
   open: boolean;
@@ -45,6 +50,10 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   appId: string | null;
   workspaceName: string | null;
   queuedCommand: TerminalQueuedCommand | null;
+  setupCommand?: TerminalSetupCommand;
+  background?: boolean;
+  onOutput?: (data: string) => void;
+  setupInput?: { id: number; data: string };
   onClose: () => void;
 }) {
   const [activeTabIdsByScope, setActiveTabIdsByScope] = useState<Record<string, string | null>>({});
@@ -61,11 +70,20 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   const retryTimeoutRef = useRef<number | null>(null);
   const queuedCommandIdRef = useRef<number | null>(null);
   const wasOpenRef = useRef(false);
+  const outputRef = useRef(onOutput);
+  outputRef.current = onOutput;
+  const setupInputIdRef = useRef<number | null>(null);
+  const visibleRef = useRef(open);
+  visibleRef.current = open;
   const hasTabs = tabs.length > 0;
+  const connectionRef = useRef(connection);
+  connectionRef.current = connection;
   const connectionKey = connection ? `${connection.serverUrl}|${connection.token}` : "disconnected";
   const activeScopeKey = terminalScopeKey(scope);
   const scopedTabs = useMemo(() => terminalTabsForScope(tabs, scope), [scope, tabs]);
   const activeTabId = activeTabIdsByScope[activeScopeKey] ?? scopedTabs[0]?.id ?? null;
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
   const activeTab = useMemo(
     () => scopedTabs.find((tab) => tab.id === activeTabId) ?? scopedTabs[0] ?? null,
     [activeTabId, scopedTabs]
@@ -215,19 +233,21 @@ export const TerminalOverlay = memo(function TerminalOverlay({
         appId: tab.appId,
         cols: dimensions.cols,
         rows: dimensions.rows,
+        setup: setupCommand,
       });
     },
-    [sendMessage]
+    [sendMessage, setupCommand]
   );
 
   const handleServerMessage = useCallback((message: TerminalServerMessage) => {
     if (message.type === "output") {
+      outputRef.current?.(message.data);
       terminalsRef.current.get(message.terminalId)?.write(message.data);
       return;
     }
     if (message.type === "ready") {
       flushPendingInput(message.terminalId);
-      if (message.terminalId === activeTabId) {
+      if (visibleRef.current && message.terminalId === activeTabIdRef.current) {
         window.requestAnimationFrame(() => terminalsRef.current.get(message.terminalId)?.focus());
       }
       onTabsChange((current) =>
@@ -336,7 +356,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
         )
       );
     }
-  }, [activeTabId, clearSuccessReset, flushPendingInput, onTabsChange, scheduleSuccessReset]);
+  }, [clearSuccessReset, flushPendingInput, onTabsChange, scheduleSuccessReset]);
 
   useEffect(() => {
     return () => {
@@ -346,7 +366,8 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   }, []);
 
   useEffect(() => {
-    if (!connection || !hasTabs) {
+    const currentConnection = connectionRef.current;
+    if (!currentConnection || !hasTabs) {
       setSocketOpen(false);
       return undefined;
     }
@@ -354,7 +375,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     let closedByCleanup = false;
     setConnectionError(null);
     setSocketOpen(false);
-    const socket = new WebSocket(terminalWebSocketUrl(connection), terminalWebSocketProtocols(connection));
+    const socket = new WebSocket(terminalWebSocketUrl(currentConnection), terminalWebSocketProtocols(currentConnection));
     socketRef.current = socket;
 
     socket.addEventListener("open", () => {
@@ -403,7 +424,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
       if (socketRef.current === socket) socketRef.current = null;
       socket.close();
     };
-  }, [connection, connectionKey, disposeOnUnmount, handleServerMessage, hasTabs, onTabsChange, socketRetryKey]);
+  }, [connectionKey, disposeOnUnmount, handleServerMessage, hasTabs, onTabsChange, socketRetryKey]);
 
   useEffect(() => {
     if (!socketOpen) return;
@@ -414,7 +435,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
   }, [socketOpen, startTab, tabs]);
 
   useEffect(() => {
-    if (!open) {
+    if (!open && !background) {
       wasOpenRef.current = false;
       return;
     }
@@ -422,7 +443,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     wasOpenRef.current = true;
     if (!openedNow || !connection || scopedTabs.length > 0) return;
     addTab();
-  }, [addTab, connection, open, scopedTabs.length]);
+  }, [addTab, background, connection, open, scopedTabs.length]);
 
   useEffect(() => {
     if (scopedTabs.length === 0) return;
@@ -453,6 +474,12 @@ export const TerminalOverlay = memo(function TerminalOverlay({
     }
   }, [activeTabId, open, queuedCommand, scope, scopedTabs, sendMessage]);
 
+  useEffect(() => {
+    if (!setupInput || setupInputIdRef.current === setupInput.id || !activeTabId) return;
+    if (activeTab?.status !== "running") return;
+    if (sendMessage({ type: "input", terminalId: activeTabId, data: setupInput.data })) setupInputIdRef.current = setupInput.id;
+  }, [activeTab?.status, activeTabId, sendMessage, setupInput, socketOpen]);
+
   return (
     <div className={`guake-terminal-overlay ${open ? "open" : ""}`} aria-hidden={!open} inert={open ? undefined : true}>
       <section className="guake-terminal-panel" aria-label="Terminal">
@@ -477,7 +504,8 @@ export const TerminalOverlay = memo(function TerminalOverlay({
                   aria-label={`Close ${tab.title}`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    closeTab(tab.id);
+                    if (setupCommand) onClose();
+                    else closeTab(tab.id);
                   }}
                 >
                   <X size={13} />
@@ -485,9 +513,9 @@ export const TerminalOverlay = memo(function TerminalOverlay({
               </div>
             ))}
           </div>
-          <button type="button" className="guake-terminal-icon-button" title="New terminal tab" onClick={addTab}>
+          {!setupCommand ? <button type="button" className="guake-terminal-icon-button" title="New terminal tab" onClick={addTab}>
             <Plus size={15} />
-          </button>
+          </button> : null}
           <div className="guake-terminal-spacer" />
           {activeTab?.detail && <div className="guake-terminal-cwd">{activeTab.detail}</div>}
           <button type="button" className="guake-terminal-icon-button" title="Hide terminal" onClick={onClose}>

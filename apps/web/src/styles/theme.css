@@ -21,6 +21,8 @@
   --accent-info: #3aa3ff;
   --accent-warm: #ff7a2f;
   --text-on-accent: #ffffff;
+  --action-cayenne: #b83e27;
+  --action-cayenne-hover: #a33320;
   --state-hover: #292929;
   --state-pressed: #343434;
   --state-selected: #303030;
@@ -96,6 +98,8 @@
   --accent-info: #1769b3;
   --accent-warm: #a94909;
   --text-on-accent: #ffffff;
+  --action-cayenne: #b83e27;
+  --action-cayenne-hover: #a33320;
   --state-hover: #eeeeee;
   --state-pressed: #e4e4e4;
   --state-selected: #e8e8e8;

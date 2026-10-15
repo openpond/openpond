@@ -50,7 +50,7 @@ describe.skipIf(process.platform === "win32")("native installer discovery", () =
   // server or a newly created version-manager directory. Verify auth/models
   // from the server's real launch boundary, with no executable override.
   test.each([
-    ".local/bin", ".nvm/versions/node/v24.1.0/bin", ".local/share/fnm/node-versions/v24.1.0/installation/bin",
+    ".local/bin", ".claude/local", ".claude/local/node_modules/.bin", ".nvm/versions/node/v24.1.0/bin", ".local/share/fnm/node-versions/v24.1.0/installation/bin",
     "Library/Application Support/fnm/node-versions/v24.1.0/installation/bin",
     ".local/share/mise/installs/node/24.1.0/bin", ".asdf/installs/nodejs/24.1.0/bin", ".nodenv/versions/24.1.0/bin",
     "n/n/versions/node/24.1.0/bin", "Library/pnpm", "custom npm prefix/bin",

@@ -2,6 +2,7 @@ import { ErrorToast } from "../common/ErrorToast";
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { modelDisplayLabel } from "../../lib/model-display";
+import { useNativeLogin } from "../terminal/NativeLoginProvider";
 import { NativeSetupTerminal } from "../terminal/NativeSetupTerminal";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, CircleAlert, Loader2, RefreshCw } from "../icons";
@@ -24,7 +25,7 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
   onCheck: CheckNativeProvider;
   cachedModels: ProviderModel[];
 }) {
-  const [command, setCommand] = useState<string | null>(null);
+  const [command, setCommand] = useState<{ command: string; displayCommand: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<NativeProviderCheck | null>(null);
   const [working, setWorking] = useState(false);
@@ -34,6 +35,7 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
   const ownSave = useRef<string | null>(null);
   const latestCheck = useRef(onCheck);
   latestCheck.current = onCheck;
+  const nativeLogin = useNativeLogin();
   const registered = isRegisteredAcpProvider(providerId);
   const info = setup[providerId] ?? { executable: config.acp?.command ?? "", install: config.acp?.installUrl ?? "" };
   const [agentCommand, setAgentCommand] = useState(config.acp?.command ?? "");
@@ -87,8 +89,11 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
     active.current?.abort(); active.current = controller;
     setWorking(true); setError(null);
     try {
-      const loginResult = await apiFetch<{ command: string }>(connection, `/v1/providers/${providerId}/native-setup`, { method: "POST", body: JSON.stringify({ action: "login" }), signal: controller.signal });
-      if (active.current === controller && !controller.signal.aborted) setCommand(loginResult.command);
+      const loginResult = await apiFetch<{ command: string; displayCommand: string }>(connection, `/v1/providers/${providerId}/native-setup`, { method: "POST", body: JSON.stringify({ action: "login" }), signal: controller.signal });
+      if (active.current === controller && !controller.signal.aborted) {
+        if (providerId === "claude-code") nativeLogin.start(loginResult);
+        else setCommand(loginResult);
+      }
     } catch (failure) {
       if (active.current === controller) setError(failure instanceof Error ? failure.message : "Could not open native login.");
     } finally { clearTimeout(timeout); if (active.current === controller) { active.current = null; setWorking(false); } }
@@ -107,6 +112,14 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
     } catch (failure) { if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : "Authentication failed."); }
     finally { clearTimeout(timeout); if (active.current === controller) { active.current = null; setWorking(false); } }
   }
+  useEffect(() => {
+    if (providerId !== "claude-code" || !nativeLogin.result) return;
+    const verified = nativeLogin.result.settings.providers[providerId];
+    if ((verified?.binaryPath || null) !== (config.binaryPath || null) || (verified?.sourceHome || null) !== (config.sourceHome || null)) return;
+    setResult(nativeLogin.result);
+    setError(nativeLogin.result.status === "unavailable" ? nativeLogin.result.error : null);
+  }, [nativeLogin.result, providerId, config.binaryPath, config.sourceHome]);
+
   const models = result?.settings.modelCaches[providerId]?.models ?? cachedModels;
   const modelNames = [...new Set(models.map(model => modelDisplayLabel(model.displayName || model.id)))];
   const message = error ?? result?.error;
@@ -119,12 +132,12 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
     {message ? <ErrorToast error={message} /> : null}
     {modelNames.length ? <section className="native-model-section" aria-label="Available models"><div className="native-model-heading"><h3>Models</h3><small>{modelNames.length} available</small></div><div className="native-model-list" tabIndex={0} aria-label="Models" role="list">{modelNames.map(name => <span key={name} role="listitem">{name}</span>)}</div><small>Choose a model when starting a chat.</small></section> : null}
     {result?.version ? <small className="native-agent-version">{result.version}</small> : null}
-    {!registered && result?.status === "needs_login" ? <button type="button" className="settings-secondary" disabled={disabled || dirty || !connection} title={dirty ? "Save changes before signing in to a different installation" : undefined} onClick={() => void login()}>Sign in</button> : null}
+    {!registered && result?.status === "needs_login" ? <button type="button" className="settings-secondary" disabled={disabled || dirty || !connection} title={dirty ? "Save changes before signing in to a different installation" : undefined} onClick={() => providerId === "claude-code" && nativeLogin.active ? nativeLogin.resume() : void login()}>{providerId === "claude-code" && nativeLogin.active ? "Continue sign-in" : "Sign in"}</button> : null}
     {registered && result?.authMethods?.length ? <div className="acp-auth-methods">{result.authMethods.map(method => method.type === "terminal" ? <p key={method.id}>Use {method.name} in the agent’s own terminal, then refresh this connection.</p> : <button key={method.id} type="button" className="settings-secondary" disabled={disabled || dirty || !connection} onClick={() => void authenticate(method.id)} title={method.description}>{method.name}</button>)}</div> : null}
     {result?.status === "missing" && info.install ? <p><a href={info.install} target="_blank" rel="noreferrer">Install {status.displayName}</a>, then refresh this connection.</p> : null}
     {providerId === "codex" && result?.status === "missing" ? <p>OpenPond needs the Codex CLI installed separately from ChatGPT.</p> : null}
     {(error || result?.status === "unavailable") && !working ? <button type="button" className="settings-secondary" disabled={disabled || !connection} onClick={() => void check()}>Retry</button> : null}
-    {command && connection ? <NativeSetupTerminal connection={connection} command={command} onComplete={() => { setCommand(null); void check(); }} onClose={() => { setCommand(null); void check(); }} /> : null}
+    {command && connection ? <NativeSetupTerminal connection={connection} command={command.command} displayCommand={command.displayCommand} onComplete={() => { setCommand(null); void check(); }} onClose={() => { setCommand(null); void check(); }} /> : null}
     {isAcpProvider(providerId) ? <details>
       <summary>Advanced</summary>
       <form className="provider-card-form" onSubmit={(event) => void save(event)}>

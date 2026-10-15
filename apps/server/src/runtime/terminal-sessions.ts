@@ -29,6 +29,7 @@ type TerminalClientMessage =
       appId?: string | null;
       cols?: number;
       rows?: number;
+      setup?: { command: string; displayCommand: string };
     }
   | {
       type: "input";
@@ -64,7 +65,6 @@ type TerminalSession = {
   outputBuffer: string;
   promptReady: boolean;
   pendingPromptInput: string[];
-  promptInputTimer: NodeJS.Timeout | null;
 };
 
 const DISCONNECTED_SESSION_TTL_MS = 8000;
@@ -98,6 +98,11 @@ export function parseClientMessage(raw: RawData, isBinary: boolean): TerminalCli
     if (payload.type === "start" && typeof payload.terminalId === "string") {
       const scope = TerminalScopeSchema.safeParse(payload.scope);
       if (!scope.success) return null;
+      if (payload.setup !== undefined) {
+        const setup = payload.setup;
+        if (!setup || typeof setup.command !== "string" || !setup.command.trim() || setup.command.length > 64 * 1024 || setup.command.includes("\0") ||
+          typeof setup.displayCommand !== "string" || !setup.displayCommand.trim() || setup.displayCommand.length > 200 || /[\x00-\x1f\x7f]/u.test(setup.displayCommand)) return null;
+      }
       return { ...payload, scope: scope.data } as TerminalClientMessage;
     }
     if (payload.type === "input" && typeof payload.terminalId === "string" && typeof payload.data === "string") {
@@ -489,8 +494,6 @@ export function createTerminalWebSocketHandler(deps: {
     if (event.type === "command_start") session.promptReady = false;
     if (event.type === "prompt_ready") {
       session.promptReady = true;
-      if (session.promptInputTimer) clearTimeout(session.promptInputTimer);
-      session.promptInputTimer = null;
       const pending = session.pendingPromptInput.splice(0);
       if (pending.length) {
         session.promptReady = false;
@@ -519,7 +522,6 @@ export function createTerminalWebSocketHandler(deps: {
     if (!session) return;
     sessions.delete(terminalId);
     if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
-    if (session.promptInputTimer) clearTimeout(session.promptInputTimer);
     if (session.socket) removeSocketTerminal(session.socket, terminalId);
     for (const disposable of session.disposables) disposable.dispose();
     session.disposables = [];
@@ -601,9 +603,15 @@ export function createTerminalWebSocketHandler(deps: {
 
     const cols = clampInteger(message.cols, MIN_COLS, MAX_COLS, DEFAULT_COLS);
     const rows = clampInteger(message.rows, MIN_ROWS, MAX_ROWS, DEFAULT_ROWS);
-    const fallbackCwd = safeCwd(deps.defaultCwdForApp(message.appId ?? null), process.cwd());
+    const fallbackCwd = message.setup ? os.homedir() : safeCwd(deps.defaultCwdForApp(message.appId ?? null), process.cwd());
     const cwd = safeCwd(message.cwd, fallbackCwd);
-    const shell = defaultShell();
+    // Setup commands already contain the discovered launch environment. Run
+    // them as a PTY process, never as text typed into a user's interactive rc.
+    const shell = message.setup
+      ? { command: process.platform === "win32" ? "powershell.exe" : "/bin/sh",
+          args: process.platform === "win32" ? ["-NoLogo", "-NoProfile", "-Command", message.setup.command] : ["-c", message.setup.command],
+          label: message.setup.displayCommand, env: undefined, integrationDir: null }
+      : defaultShell();
 
     try {
       const pty = spawnPty(shell.command, shell.args, {
@@ -638,15 +646,16 @@ export function createTerminalWebSocketHandler(deps: {
         outputBuffer: "",
         promptReady: false,
         pendingPromptInput: [],
-        promptInputTimer: null,
       };
       session.disposables.push(
-        pty.onData((data) => handleSessionData(session, data)),
+        pty.onData((data) => message.setup ? sendSessionOutput(session, data) : handleSessionData(session, data)),
         pty.onExit((exit) => {
+          if (message.setup && session.socket) send(session.socket, {
+            type: "command_end", terminalId: session.id, exitCode: exit.exitCode, sequence: 2,
+          });
           sessions.delete(message.terminalId);
           if (session.socket) removeSocketTerminal(session.socket, message.terminalId);
           if (session.cleanupTimer) clearTimeout(session.cleanupTimer);
-          if (session.promptInputTimer) clearTimeout(session.promptInputTimer);
           for (const disposable of session.disposables) disposable.dispose();
           session.disposables = [];
           removeShellIntegrationDir(session.integrationDir);
@@ -670,6 +679,10 @@ export function createTerminalWebSocketHandler(deps: {
       sessions.set(message.terminalId, session);
       socketSessions(socket).add(message.terminalId);
       attachSession(socket, session);
+      if (message.setup) {
+        send(socket, { type: "command_start", terminalId: session.id, command: message.setup.displayCommand, sequence: 1 });
+        sendSessionOutput(session, `${message.setup.displayCommand}\r\n`);
+      }
       deps.logger.info("terminal started", {
         terminalId: message.terminalId,
         scope: terminalScopeLogValue(message.scope),
@@ -699,14 +712,9 @@ export function createTerminalWebSocketHandler(deps: {
     if (message.type === "input") {
       if (message.waitForPrompt && ["bash", "zsh"].includes(session.shell) && !session.promptReady) {
         session.pendingPromptInput.push(message.data);
-        if (!session.promptInputTimer) session.promptInputTimer = setTimeout(() => {
-          session.pendingPromptInput = [];
-          session.promptInputTimer = null;
-          if (session.socket) send(session.socket, {
-            type: "error", terminalId: session.id,
-            message: "The shell did not finish starting. Run the sign-in command in your normal Terminal, then refresh the connection.",
-          });
-        }, 30_000);
+        // Startup can legitimately wait for an update answer or run an update.
+        // Keep automated input queued until the shell's real prompt is ready;
+        // elapsed time must never consume or discard the setup command.
         return;
       }
       session.pty.write(message.data);
