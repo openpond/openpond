@@ -4,7 +4,7 @@ import {
   type Taskset,
   type TasksetReadinessReport,
 } from "@openpond/contracts";
-import { contentHash, validateTaskset } from "@openpond/taskset-sdk";
+import { contentHash, resolvePortableTasksetRewardExecution, validateTaskset } from "@openpond/taskset-sdk";
 import { TaskBatchPackageMetadataSchema } from "@openpond/evals/learning";
 
 export function buildTasksetReadiness(input: {
@@ -62,7 +62,13 @@ export function buildTasksetReadiness(input: {
     ? artifactSignalApproved ? artifactTrainCount : 0
     : trainTasks.length;
   const approvedPreferenceCount = input.taskset.learningSignals.preferences.filter((signal) => signal.approved).length;
-  const executableRewardCount = input.taskset.learningSignals.rewards.filter((signal) => signal.approved && signal.executable).length;
+  // Published bindings own reward execution; legacy signal annotations cannot
+  // substitute for a missing or evaluation-only canonical training reward.
+  const rewardExecution = resolvePortableTasksetRewardExecution(input.taskset);
+  const executableRewardCount = rewardExecution
+    ? rewardExecution.binding.sources.filter((source) => source.role === "training" && source.weight > 0
+      && (!source.taskIds || trainTasks.some((task) => source.taskIds!.includes(task.id)))).length
+    : input.taskset.learningSignals.rewards.filter((signal) => signal.approved && signal.executable).length;
   const trainTaskCount = requiresPreferencePairs
     ? approvedPreferenceCount
     : requiresOnlineReward
