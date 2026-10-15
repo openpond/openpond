@@ -1,0 +1,7 @@
+.composer-textarea-frame:has(.composer-next-step) { position:relative; }
+.composer-next-step { position:absolute; top:15px; left:14px; right:14px; display:flex; align-items:flex-start; gap:8px; color:var(--text-muted); }
+.composer-next-step button { border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.composer-next-step-accept { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; min-width:0; flex:1; padding:1px 0; text-align:left; font-size:14px; line-height:1.45; }
+.composer-next-step-accept small { font-size:11px; white-space:nowrap; }
+.composer-next-step-dismiss { padding:0 4px; }
+.composer-next-step button:focus-visible { outline:2px solid var(--focus-ring); outline-offset:3px; border-radius:3px; }

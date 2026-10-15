@@ -1,3 +1,5 @@
+import { useComposerNextStep } from "./useComposerNextStep";
+import { ComposerNextStep } from "./ComposerNextStep";
 import { ErrorToast } from "../common/ErrorToast";
 import { composerResourceMetadata, mergeComposerResourceContexts, composerSubmissionResourceContext } from "./composer-resource-context";
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
@@ -441,6 +443,13 @@ export function Composer({
       : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments || contextSelection.selecting;
+  const nextStep = useComposerNextStep({
+    connection: surface === "chat" ? connection : null, sessionId: taskSessionId ?? null,
+    events: taskEvents, prompt, selectionKey: JSON.stringify(contextSelection.selection?.target ?? null), inputRef,
+    blocked: busy || running || serializingAttachments || contextSelection.selecting || attachments.length > 0
+      || Boolean(selectedAction || selectedCommand) || composerSteerDraftsForScope(steerDraftsByScope, submissionScopeKey, initialSteerDrafts).length > 0
+      || Boolean(taskInbox.enabled && !taskInbox.snapshot) || Boolean(taskInbox.snapshot?.activeTurnId || taskInbox.snapshot?.inputs.some(item => item.state === "pending")),
+  });
 
   function beginSubmissionForScope(scopeKey = submissionScopeKey): boolean {
     if (nativeReadOnlyReason) return false;
@@ -1701,17 +1710,21 @@ export function Composer({
         )}
         <div
           className="composer-textarea-frame"
+          onCompositionStartCapture={nextStep.onCompositionStart}
+          onCompositionEndCapture={nextStep.onCompositionEnd}
           onClick={(event) => {
             if (event.target === event.currentTarget)
               inputRef.current?.focusAtPromptIndex(cursorIndex);
           }}
         >
+          <ComposerNextStep next={nextStep} />
           <ComposerInlineInput
             ref={inputRef}
             connectedAppMentions={connectedAppMentions}
             disabled={inputDisabled}
             onCursorChange={setCursorIndex}
             onKeyDown={(event) => {
+              if (nextStep.onKeyDown(event)) return;
               if (
                 addMenuOpen &&
                 [
@@ -1861,6 +1874,7 @@ export function Composer({
             onPasteFiles={addFiles}
             onPasteTextAsAttachment={handlePasteTextAsAttachment}
             onPromptChange={(nextValue, nextPromptCursor) => {
+              if (nextValue) nextStep.dismiss();
               if (addMenuOpen) {
                 const queryStart = Math.max(
                   0,
@@ -1919,7 +1933,7 @@ export function Composer({
               }
               setSelectedInvocationPosition(position);
             }}
-            placeholder={placeholder}
+            placeholder={nextStep.suggestion ? "" : placeholder}
             prompt={prompt}
             token={selectedInvocationToken}
           />
