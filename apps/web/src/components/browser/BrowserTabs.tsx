@@ -1,15 +1,12 @@
-import type { ReactNode } from "react";
 import { Globe2, Plus, X } from "../icons";
 
 export function BrowserTabs({
-  leadingTabs,
   activeTabId,
   tabs,
   onCloseTab,
   onNewTab,
   onSelectTab,
 }: {
-  leadingTabs?: ReactNode;
   activeTabId: string | null;
   tabs: BrowserTabState[];
   onCloseTab: (tabId: string) => void;
@@ -18,7 +15,6 @@ export function BrowserTabs({
 }) {
   return (
     <div className="browser-tabs" role="tablist" aria-label="Browser tabs">
-      {leadingTabs}
       {!tabs.length ? (
         <div className="browser-tab active">
           <Globe2 size={13} aria-hidden />

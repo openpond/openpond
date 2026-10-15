@@ -1366,7 +1366,6 @@ export function MainPane({
       conversationId={browserConversationId}
       connection={connection}
       visualTabs={htmlVisualTabs}
-      leadingTabs={view==="chat"?<button type="button" className="browser-tab-main sidebar-tool-tab" role="tab" aria-selected={false} onClick={onShowExperimentsPanel}>{trainingLabel}</button>:undefined}
       expanded={diffPanelExpanded}
       onResizeStart={onDiffPanelResizeStart}
     />

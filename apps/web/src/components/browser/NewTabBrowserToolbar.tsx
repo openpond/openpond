@@ -12,7 +12,7 @@ export function NewTabBrowserToolbar({ conversationId, onOpenBrowser }: { conver
       if (window.confirm("Clear browser data for this conversation? Tabs, cookies, cache, and local storage will be removed.")) void browser.clearData();
     }}
     onNavigate={url => {
-      void browser.open(url, { newTab: true, explicitFile: true }).then(opened => { if (opened) onOpenBrowser(); })
+      void browser.open(url, { explicitFile: true }).then(opened => { if (opened) onOpenBrowser(); })
         .catch(error => toast?.(error instanceof Error ? error.message : "Could not open browser.", "error"));
     }} />;
 }

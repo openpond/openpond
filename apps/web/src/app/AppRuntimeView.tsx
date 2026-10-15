@@ -27,7 +27,6 @@ import {
   isDesktopShell,
   isMacPlatform,
 } from "../components/app-shell/WindowControls";
-import { AppSplash } from "../components/splash/AppSplash";
 import {
   mergeLiveRuntimeEventLists,
   oldestRuntimeEventSequence,
@@ -877,7 +876,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   ]);
   const sidebarActivity = useMemo(() => sidebarActivityTimes(sidebarEventsBySession(runtimeIndexes.eventsBySessionId)), [runtimeIndexes.eventsBySessionId]);
   if (!startup.ready) {
-    return <AppSplash startup={startup} />;
+    return null;
   }
 
   if (view === "settings") {
