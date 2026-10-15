@@ -15,6 +15,12 @@ import {
 import type { SqliteStore } from "../store/store.js";
 
 const empty = (): ChatExperimentContext => ({ scopes: [], activeScopeId: null, selectionVersion: 0, selectedAt: null, selectionOperations:{} });
+function sameResourcePin(first: ChatResourceSummary | null, second: ChatResourceSummary) {
+  return first !== null && first.kind === second.kind && first.id === second.id && first.revision === second.revision
+    && (first.location ?? "local") === (second.location ?? "local")
+    && first.owner?.teamId === second.owner?.teamId && first.owner?.actorId === second.owner?.actorId
+    && JSON.stringify(first.profileRef ?? null) === JSON.stringify(second.profileRef ?? null);
+}
 export function chatExperimentContext(metadata: Record<string, unknown> | undefined): ChatExperimentContext {
   const parsed = ChatExperimentContextSchema.safeParse(metadata?.chatExperimentContext);
   return parsed.success ? parsed.data : empty();
@@ -125,8 +131,17 @@ export function createChatExperimentScopes(store: SqliteStore) {
       }
       if (input.expectedSelectionVersion !== undefined && input.expectedSelectionVersion !== state.selectionVersion) throw new Error("Resource selection changed. Refresh before selecting again.");
       const now = new Date().toISOString();
-      let scope = chatResourceWorkspaces(state).find(candidate => candidate.id === (input.scopeId ?? state.activeScopeId));
+      const workspaces = chatResourceWorkspaces(state);
+      let scope = workspaces.find(candidate => candidate.id === (input.scopeId ?? state.activeScopeId));
       if (input.scopeId && !scope) throw new Error("Experiment scope does not belong to this conversation.");
+      const { run, dataset } = input;
+      if (!input.scopeId && run && dataset) {
+        // Browsing a retained run should return to its exact input snapshot.
+        // Explicit scope selections still allow intentionally separate experiments.
+        const matches = (candidate: typeof scope) => candidate && sameResourcePin(candidate.dataset, dataset)
+          && candidate.runs.some(saved => sameResourcePin(saved, run));
+        scope = (matches(scope) ? scope : workspaces.find(matches)) ?? scope;
+      }
       const changingDataset = input.dataset && scope && (scope.dataset?.id !== input.dataset.id
         || scope.dataset?.revision !== input.dataset.revision
         || JSON.stringify(scope.dataset?.owner) !== JSON.stringify(input.dataset.owner)

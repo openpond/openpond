@@ -143,5 +143,39 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     expect(switched.datasetFocus?.dataset?.id).toBe("examples");
     expect(switched.datasetFocus?.training ?? []).toEqual([]);
 
+    // Browsing saved runs at different revisions must reuse their scopes,
+    // including after restart, without merging explicit experiments or owners.
+    await store.insertSessionAtFront(SessionSchema.parse({ id:"chat-reselect",provider:"codex",title:"Retained history",appId:null,appName:null,cwd:null,codexThreadId:null,pinned:false,archived:false,order:0,
+      createdAt:"2026-10-01T00:00:00.000Z",updatedAt:"2026-10-01T00:00:00.000Z",status:"idle" }));
+    const originalDataset = { ...dataset(1), owner: ownerA };
+    const revisedDataset = { ...dataset(2), owner: ownerA };
+    const originalRun = { ...run, owner: ownerA, state:"Completed" };
+    const revisedRun = { ...originalRun, id:"revised-run", datasetRevision:2 };
+    const originalScope = (await scopes.select("chat-reselect", { dataset:originalDataset, run:originalRun })).activeScopeId;
+    const revisedScope = (await scopes.select("chat-reselect", { dataset:revisedDataset, run:revisedRun })).activeScopeId;
+    expect(revisedScope).not.toBe(originalScope);
+    for (let repeat = 0; repeat < 2; repeat++) {
+      const original = await scopes.select("chat-reselect", { dataset:originalDataset, run:originalRun });
+      expect(original.activeScopeId).toBe(originalScope);
+      expect(original.scopes).toHaveLength(2);
+      const revised = await scopes.select("chat-reselect", { dataset:revisedDataset, run:revisedRun });
+      expect(revised.activeScopeId).toBe(revisedScope);
+      expect(revised.scopes).toHaveLength(2);
+    }
+    store.close(); store = new SqliteStore(home); scopes = createChatExperimentScopes(store);
+    const restored = await scopes.select("chat-reselect", { dataset:originalDataset, run:originalRun });
+    expect(restored.activeScopeId).toBe(originalScope);
+    expect(restored.scopes.map(scope => [scope.dataset?.revision, scope.runs[0]?.id])).toEqual([[1,originalRun.id],[2,revisedRun.id]]);
+    const explicit = await scopes.create("chat-reselect", "intentional-new-experiment");
+    const explicitId = explicit.activeScopeId!;
+    expect(explicit.scopes).toHaveLength(3);
+    const separate = await scopes.select("chat-reselect", { scopeId:explicitId, dataset:originalDataset, run:originalRun });
+    expect(separate.activeScopeId).toBe(explicitId);
+    expect(separate.scopes).toHaveLength(3);
+    const foreign = await scopes.select("chat-reselect", { dataset:{...originalDataset,owner:ownerB}, run:{...originalRun,owner:ownerB} });
+    expect(foreign.scopes).toHaveLength(4);
+    expect(foreign.activeScopeId).not.toBe(originalScope);
+    expect(foreign.scopes.find(scope=>scope.id===originalScope)?.dataset?.owner).toEqual(ownerA);
+
   } finally { await store.close(); await rm(home, { recursive: true, force: true }); }
 });
