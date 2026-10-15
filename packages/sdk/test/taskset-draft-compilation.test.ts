@@ -13,15 +13,21 @@ import { bindOrdinaryModelTasksetReward, createTasksetPackage } from "../src/tas
 // create an owned revision and reject scorer changes or substituted parents.
 it("publishes bound task edits with exact Reward and source lineage", () => {
   const ordinary = ordinaryToolTaskset();
+  const historicalTasks = createLearningTextAsset({ path: "tasks/tasks.jsonl", mediaType: "application/jsonl", visibility: "host_private", text: '{"originalSource":true}\n' });
+  const { contentHash: _historicalHash, ...historicalTasksContent } = historicalTasks;
+  const historicalTasksAlias = sealLearningContent({ ...historicalTasksContent, id: "historical-tasks-alias", asset: { ...historicalTasks.asset, id: "historical-tasks-alias" } });
+  const historicalCheck = createLearningTextAsset({ path: "legacy/check.js", mediaType: "application/javascript", visibility: "host_private", text: "export const historical = true;" });
+  const historicalFiles = [historicalTasks, historicalTasksAlias, historicalCheck].map(asset => ({ asset: asset.asset, base64: Buffer.from(asset.text).toString("base64") }));
+  historicalFiles.push({ ...historicalFiles[2]!, asset: { ...historicalCheck.asset, id: "historical-check-alias" } });
   const { contentHash: _hash, ...content } = ordinary.taskset;
   const { contentHash: _packageHash, ...packageContent } = ordinary;
-  const original = createTasksetPackage({ ...packageContent, taskset: sealLearningContent({ ...content,
+  const original = createTasksetPackage({ ...packageContent, files: [...ordinary.files, ...historicalFiles], taskset: sealLearningContent({ ...content,
     metadata: { ...content.metadata, ordinaryAuthoring: { ...content.metadata.ordinaryAuthoring as object, instructions: "Inspect the task's public value." } } }) });
   const asset = createLearningTextAsset({ path: "reward/check.js", mediaType: "application/javascript", visibility: "verifier", text: "export function verify() { return { score: 1, passed: true }; }" });
   const reward = RewardReleaseSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardRelease.v1", id: "task-edit-reward", revision: 1, name: "Outcome", description: "", implementation: { kind: "custom_verifier", verifierRef: asset.asset, exportName: "verify", timeoutMs: 1_000, networkPolicy: "none" }, rawScore: { minimum: 0, maximum: 1 }, assets: [asset.asset] }));
   const binding = RewardBindingSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardBinding.v1", id: "task-edit-binding", revision: 1, sources: [{ graderId: "outcome", reward: learningRef(reward), role: "training", normalization: { kind: "identity" }, weight: 1, required: true, hardGate: true, privileged: true, fixtureRefs: [] }], aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }));
   const owner = { scopeId: "workspace", modelId: "bound-edit-model" };
-  const source = bindOrdinaryModelTasksetReward({ owner, source: original, rewardBinding: binding, rewards: [reward], assets: [asset] });
+  const source = bindOrdinaryModelTasksetReward({ owner, source: original, rewardBinding: binding, rewards: [reward], assets: [asset, historicalTasks, historicalTasksAlias] });
   const before = JSON.stringify(source);
   const now = "2026-09-10T12:00:00.000Z";
   const preparation = prepareModelTasksetDraft({ owner, source, request: { schemaVersion: "openpond.modelTasksetDraftRequest.v1", operationId: "edit-bound", modelId: owner.modelId, expectedModelRevision: 1, sourcePackageHash: source.contentHash } });
@@ -41,7 +47,26 @@ it("publishes bound task edits with exact Reward and source lineage", () => {
   expect(published.taskset.tasks[0]?.privilegedContextRef).toBe(source.taskset.tasks[0]?.privilegedContextRef);
   expect(published.taskset.metadata.modelTasksetDerivation).toMatchObject({ owner, parent: learningRef(source.taskset) });
   expect(published.environment).toEqual(source.environment);
+  for (const file of historicalFiles) expect(published.files.find(candidate => candidate.asset.id === file.asset.id)).toEqual(file);
+  expect(published.modelResources?.assets.find(asset => asset.id === historicalTasks.id)).toEqual(historicalTasks);
+  expect(published.modelResources?.assets.find(asset => asset.id === historicalTasksAlias.id)).toEqual(historicalTasksAlias);
   expect(published).toEqual(compile());
+  // A fixture-only revision must reach the native package as well as its
+  // local projection; otherwise a reviewed audit disappears on export/reload.
+  const fixtures = [{ id: "reviewed-outcome", taskId: workspace.draft.tasks[0]!.id, label: "positive" as const,
+    output: { text: "Reviewed output" }, infrastructureError: null, expectedPassed: true,
+    expectedRewardEligible: true, metadata: { graderIds: ["outcome"] } }];
+  const fixtureEdit = saveTasksetDraftWorkspaceDocument({ workspace, now, expectedDraftRevision: workspace.draft.revision,
+    draft: { ...workspace.draft, graderFixtures: fixtures } });
+  const fixturePublication = compile(fixtureEdit);
+  expect(fixturePublication.taskset.metadata.starterAuthoring).toEqual({ graderFixtures: fixtures });
+  expect(prepareImportedTasksetPackage({ package: fixturePublication, profileId: owner.scopeId, name: "Bound task", createdAt: now }).taskset.graderFixtures).toEqual(fixtures);
+  expect(fixturePublication.taskset.tasks).toEqual(published.taskset.tasks);
+  expect(fixturePublication.files).toEqual(published.files);
+  expect(fixturePublication.modelResources?.rewardBinding).toEqual(binding);
+  expect(fixturePublication.modelResources?.rewards).toEqual([reward]);
+  expect(() => compile(createTasksetDraftWorkspace({ schemaVersion: workspace.schemaVersion, draft: workspace.draft,
+    files: workspace.files.filter(file => !file.path.startsWith("source-artifacts/") || file.contentHash !== historicalTasks.asset.contentHash) }))).toThrow(/source artifact/);
   expect(() => compile(workspace, original)).toThrow(/bound|Bound/);
   const changedGrader = saveTasksetDraftWorkspaceDocument({ workspace, now, expectedDraftRevision: workspace.draft.revision,
     draft: { ...workspace.draft, graders: workspace.draft.graders.map(grader => ({ ...grader, weight: 2 })) } });

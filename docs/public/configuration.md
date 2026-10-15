@@ -48,6 +48,21 @@ Credentials are references to encrypted records or environment variable names. H
 openpond config export --file settings.json
 ```
 
+## Bounded OpChat requests
+
+`opchat chat` uses the selected home's signed-in account and requires an explicit model, workspace, output limit, request ID, deadline and spending cap. It checks that model's current catalog entry in the same workspace before sending one request:
+
+```sh
+openpond --home ~/.openpond/openpond-app-dev opchat chat \
+  --model <catalog-model-id> --team-id <workspace-id> \
+  --message 'Reply with exactly OK' --max-output-tokens 8 \
+  --request-id <unique-request-id> --timeout-sec 240 --max-spend <usd>
+```
+
+This submits a paid request. The full-context retail reservation must fit `--max-spend`; it is not predicted spend or a physical GPU budget. An API URL override must match the signed-in account's chat origin. Add `--stream` for an SSE transport that stays open through a quiet provider startup. Both modes emit one JSON receipt after completion with the catalog quote, authoritative completion/model/request identity and reported usage. A streamed completion is marked `assembledFromStream`; success requires a terminal finish marker and `[DONE]`. Heartbeats are transport activity, not completion or usage. A successful response still requires ledger reconciliation and does not confirm provider cleanup.
+
+An explicitly approved request can warm a self-hosted model before evaluating an unchanged dataset whose case timeout cannot cover cold startup. Prepare the evaluation first, then start it promptly after warming. The command never retries. Cancellation or a deadline after dispatch leaves charges and provider cleanup unconfirmed until reconciled; a stable request ID is for correlation and does not make replay safe. Provider startup, idle time, storage and cleanup need separate budget and lifecycle controls.
+
 ## Local voice dictation
 
 Voice dictation uses whisper.cpp locally with `small.en-q5_1` by default, a quantized English model with an approximately 181 MiB download. OpenPond downloads it once on first transcription and reuses the file in `voice-models/` inside the active home. Each transcription loads the model into a separate process that exits afterward; working memory exceeds the download size.

@@ -1,4 +1,5 @@
 import type { RunStageEvidence } from "@openpond/contracts";
+import { TrainingAttemptTable } from "./TrainingAttemptTable";
 
 /** Planned attempts and scored rewards use the same lane presentation as the console graph. */
 export function TrainingRolloutGroups({ evidence }: { evidence: RunStageEvidence }) {
@@ -81,6 +82,7 @@ export function TrainingRolloutGroups({ evidence }: { evidence: RunStageEvidence
           );
         })}
       </ol>
+      <TrainingAttemptTable groups={evidence.groups} />
       {evidence.groupCount > evidence.groups.length ? (
         <p>
           Showing {evidence.groups.length} of {evidence.groupCount} rollout groups.

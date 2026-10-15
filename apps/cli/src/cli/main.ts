@@ -5,6 +5,7 @@ import { resolveAccountOption, resolveBaseUrlOption } from "./common/urls";
 import { getInstalledCliVersion } from "./common/version";
 import { runCliCommand } from "./command-registry";
 import { resolveCliTopLevelAction } from "./top-level-action";
+import { CliReportedError } from "./common/reported-error";
 
 export async function runOpenPondCli(argv = process.argv.slice(2)): Promise<void> {
   if (await runEmbeddedCompanion(argv)) return;
@@ -107,6 +108,10 @@ async function runEmbeddedCompanion(argv: string[]): Promise<boolean> {
 }
 
 void runOpenPondCli().catch(async (error) => {
+  if (error instanceof CliReportedError) {
+    process.exitCode = error.exitCode;
+    return;
+  }
   const message = error instanceof Error ? error.message : String(error);
   const issue = (error as { issue?: unknown }).issue;
   const trainingError = (await import("./common/training-error")).trainingCliError(error);

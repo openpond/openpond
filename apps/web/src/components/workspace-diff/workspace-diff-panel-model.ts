@@ -6,6 +6,10 @@ export type WorkspaceDiffPanelViewState = {
   activeTab: DiffTab;
   openFilePaths: string[];
   selectedPath: string | null;
+  filesTabOpen: boolean;
+  overviewTabs: number[];
+  activeOverviewId: number;
+  tabOrder: string[];
 };
 
 export type WorkspaceDiffTabRequest = {
@@ -81,6 +85,10 @@ export function defaultWorkspaceDiffPanelViewState(): WorkspaceDiffPanelViewStat
     activeTab: "files",
     openFilePaths: [],
     selectedPath: null,
+    filesTabOpen: false,
+    overviewTabs: [0],
+    activeOverviewId: 0,
+    tabOrder: ["overview-0"],
   };
 }
 
@@ -91,6 +99,10 @@ export function cloneWorkspaceDiffPanelViewState(
     activeTab: state.activeTab,
     openFilePaths: [...state.openFilePaths],
     selectedPath: state.selectedPath,
+    filesTabOpen: state.filesTabOpen,
+    overviewTabs: [...state.overviewTabs],
+    activeOverviewId: state.activeOverviewId,
+    tabOrder: [...state.tabOrder],
   };
 }
 
@@ -107,6 +119,7 @@ export function normalizeWorkspaceDiffPanelViewState(
     ? normalizeWorkspaceDiffPath(state.selectedPath, workspaceRootPath) || null
     : null;
   return {
+    ...cloneWorkspaceDiffPanelViewState(state),
     activeTab: state.activeTab === "file" && !selectedPath ? "files" : state.activeTab,
     openFilePaths,
     selectedPath,
@@ -120,6 +133,12 @@ export function workspaceDiffPanelViewStatesEqual(
   return (
     left.activeTab === right.activeTab &&
     left.selectedPath === right.selectedPath &&
+    left.filesTabOpen === right.filesTabOpen &&
+    left.activeOverviewId === right.activeOverviewId &&
+    left.overviewTabs.length === right.overviewTabs.length &&
+    left.overviewTabs.every((id, index) => id === right.overviewTabs[index]) &&
+    left.tabOrder.length === right.tabOrder.length &&
+    left.tabOrder.every((id, index) => id === right.tabOrder[index]) &&
     left.openFilePaths.length === right.openFilePaths.length &&
     left.openFilePaths.every((path, index) => path === right.openFilePaths[index])
   );

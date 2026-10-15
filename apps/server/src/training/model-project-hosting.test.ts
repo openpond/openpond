@@ -2,6 +2,10 @@ import { OpenPondLearningClient } from "openpond-sdk/learning";
 import { createModelLearningHostingService } from "./model-learning-hosting.js";
 import { describe, expect, test, vi } from "vitest";
 import { OpenPondModelTasksetRunsClient } from "openpond-sdk/model-taskset-runs";
+import {
+  HostedModelProjectSummarySchema,
+  HostedModelProjectSyncSchema,
+} from "openpond-sdk/model-projects";
 
 import { createModelProjectHostingService } from "./model-project-hosting.js";
 import { createModelTasksetRunHostingService } from "./model-taskset-run-hosting.js";
@@ -393,7 +397,9 @@ describe("Model Project hosting", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  test("syncs the portable project identity and persists hosted lineage", async () => {
+  // A reviewed hardware requirement must survive the same transport and pull
+  // used by another desktop, rather than silently reverting to any GPU.
+  test("preserves the H100 requirement and project identity through sync and pull", async () => {
     const project = {
       schemaVersion: "openpond.modelProject.v2" as const,
       id: "model_project_1",
@@ -412,33 +418,47 @@ describe("Model Project hosting", () => {
       createdAt: "2026-08-25T12:00:00.000Z",
       updatedAt: "2026-08-25T12:30:00.000Z",
     };
-    const saveModelProjectHosting = vi.fn(async (_previous: unknown, value: unknown) => value);
-    const request = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+    let stored: unknown = project;
+    let hosted: unknown;
+    const saveModelProjectHosting = vi.fn(async (_previous: unknown, value: unknown) => {
+      stored = value;
+      return value;
+    });
+    const request = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (new URL(String(url)).pathname === "/v1/managed-rl/jobs") {
+        return Response.json({ jobs: [] });
+      }
+      if (init?.method !== "PUT") {
+        return Response.json({ project: hosted, resources: [], jobCount: 0, latestJobIds: [] });
+      }
       expect(new Headers(init?.headers).get("accept")).toBe(
         "application/vnd.openpond.model-project+json;version=2",
       );
       expect(new Headers(init?.headers).get("content-type")).toBe(
         "application/vnd.openpond.model-project+json;version=2",
       );
-      const body = JSON.parse(String(init?.body));
+      const body = HostedModelProjectSyncSchema.parse(JSON.parse(String(init?.body)));
       expect(body).toMatchObject({
         portableProjectId: project.id,
         sourceRevision: project.revision,
         expectedEtag: null,
       });
-      expect(body.trainingSetup).not.toHaveProperty("managedGpuRequirement");
-      return new Response(JSON.stringify({
-        project: {
-          id: "hosted_project_1",
-          portableProjectId: project.id,
-          revision: 2,
-          etag: "b".repeat(64),
-        },
-      }), { status: 200, headers: { "content-type": "application/json" } });
+      expect(body.trainingSetup.managedGpuRequirement).toBe("h100_hbm3");
+      const { schemaVersion: _schemaVersion, expectedEtag: _expectedEtag, ...definition } = body;
+      hosted = HostedModelProjectSummarySchema.parse({
+        ...definition,
+        id: "hosted_project_1",
+        teamId: "team_1",
+        revision: 2,
+        etag: "b".repeat(64),
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      });
+      return Response.json({ project: hosted });
     });
     const service = createModelProjectHostingService({
       store: {
-        getModelProject: vi.fn(async () => project),
+        getModelProject: vi.fn(async () => stored),
         saveModelProjectHosting,
       } as never,
       resolveAccess: async () => ({
@@ -461,6 +481,22 @@ describe("Model Project hosting", () => {
     });
     expect(synced.trainingSetup.managedGpuRequirement).toBe("h100_hbm3");
     expect(saveModelProjectHosting).toHaveBeenCalledWith(project, synced);
+    // A different desktop starts without a local copy and consumes the
+    // authenticated saved definition, including the required GPU family.
+    stored = null;
+    const pulled = await service.pullProject({
+      hostedProjectId: "hosted_project_1",
+      profileId: project.profileId,
+    });
+    expect(pulled.project.trainingSetup).toEqual(synced.trainingSetup);
+    expect(pulled.project.hosted).toMatchObject({
+      projectId: synced.hosted!.projectId,
+      etag: synced.hosted!.etag,
+      teamId: synced.hosted!.teamId,
+      syncedSourceRevision: synced.hosted!.syncedSourceRevision,
+    });
+    expect(pulled.project.id).toBe(project.id);
+    expect(pulled.project.revision).toBe(project.revision);
   });
 
   test("preserves a stale hosted ETag conflict without bypassing the concurrent edit", async () => {

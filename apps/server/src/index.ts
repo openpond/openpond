@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createSessionGoalPayload } from "./api/session-goal-payload.js";
 import { createLocalAgentSchedulePayloads } from "./api/local-agent-schedule-payloads.js";
 import { createDesktopVisualRuntime } from "./visuals/visual-runtime.js";
 import { withUrlModels } from "./enclave/provider.js";
@@ -1828,6 +1829,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       patchSession: patchSessionPayload,
       sendTurn,
       runSessionCommand: runSessionCommandPayload,
+      patchSessionGoal: createSessionGoalPayload({ getSession, appendRuntimeEvent }),
       ensureCloudWorkspaceReady,
       recordPreflightTurnFailure,
       listCreateImproveRunsPayload: async (requestUrl) => ({

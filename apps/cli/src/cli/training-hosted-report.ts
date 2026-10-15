@@ -85,10 +85,16 @@ export function buildHostedTrainingReport(input: {
       optimizerSkippedNoSignal: skipped.some(event => event.data.rolloutGroupId === groupId),
     };
   });
-  const componentNames = new Set(scored.flatMap(event => Object.keys(record(event.data.rewardComponents)).filter(key => code(key))));
+  const componentNames = new Set(scored.flatMap(event => Object.entries(record(event.data.rewardComponents))
+    .filter(([key, value]) => code(key) && finite(value) !== null).map(([key]) => key)));
   const componentRewards = Object.fromEntries([...componentNames].sort().map(name => [
     name, statistics(scored.map(event => finite(record(event.data.rewardComponents)[name]))),
   ]));
+  if (scored.length && ![...componentNames].some(name => name !== "reward")) {
+    add("per_grader_reward_breakdown_unavailable", "Eligible aggregate rewards are recorded, but no separate finite numeric component fields are present. Per-grader coverage and scores are unavailable; missing breakdowns are not zero grades.");
+  } else if (componentNames.size) {
+    add("reward_component_binding_unverified", "Reward components summarize finite numeric event fields only. The reward field is aggregate; other fields are not established as individual grader scores without matching the frozen grader binding.");
+  }
   const inferenceRows = inference.map(event => record(event.data.timings));
   const optimizerRows = optimizer.map(event => record(event.data.timings));
   if (inference.length && inferenceRows.some(row => nonnegative(row.vllmRequestSeconds) === null)) {

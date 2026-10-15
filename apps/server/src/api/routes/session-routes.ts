@@ -28,6 +28,15 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     return true;
   }
   const sessionPatchMatch = /^\/v1\/sessions\/([^/]+)$/.exec(requestUrl.pathname);
+  const goalMatch = /^\/v1\/sessions\/([^/]+)\/goal$/.exec(requestUrl.pathname);
+  if (request.method === "GET" && goalMatch) {
+    sendJson(response, 200, await deps.patchSessionGoal(decodeURIComponent(goalMatch[1]!), undefined));
+    return true;
+  }
+  if (request.method === "PATCH" && goalMatch) {
+    sendJson(response, 200, await deps.patchSessionGoal(decodeURIComponent(goalMatch[1]!), await readJson(request)));
+    return true;
+  }
   if (request.method === "PATCH" && sessionPatchMatch) {
     markTransitionalAgentAdapter();
     sendJson(response, 200, await patchSession(sessionPatchMatch[1]!, await readJson(request)));

@@ -2,7 +2,7 @@
 
 Use the selected resource and the user's objective. Diagnose inspects evidence and explains the cause and next step without changing the resource or starting a new run. Improve carries the requested change through validation, using the supported CLI and the attached model, execution destination, and authorized budget.
 
-For dataset quality or coverage, task/grader agreement, and failed-eval diagnosis,
+For experiment-result interpretation, dataset quality or coverage, task/grader agreement, and failed-eval diagnosis,
 load openpond-taskset-authoring and apply its relevant review guidance. Finish
 with evidenced findings, untested checks, and targeted next fixes; a narrow
 diagnosis does not require a full Taskset readiness review.
@@ -19,7 +19,9 @@ Inspect the rubric or verifier, fixtures, and misgraded outputs. Repair the grad
 
 ## Experiment
 
-Inspect status, coverage, individual outcomes, grader behavior, and execution failures. Identify whether the problem is the dataset, grader, prompt/harness, model, or infrastructure. Make a targeted supported change, validate it, then run a new experiment and compare retained results. For a perfect result, investigate coverage and generalization instead of inventing failures.
+Load openpond-taskset-authoring's `references/failure-diagnosis.md` for the results-review procedure. Inspect coverage, component scores and representative outputs, including apparent successes, before choosing an intervention. Derive domain-specific metrics from the selected task; keep campaign-specific priorities in its working doc rather than embedding them in this general skill.
+
+Diagnose returns evidenced findings and a next-step recommendation. Improve applies a justified authorized change, validates it and uses the smallest relevant experiment to compare retained results. Do not rewrite a grader or start training merely because an aggregate score looks surprising. A valid review can recommend continuing the planned run with unchanged grading and inspecting its results afterward.
 
 Use the existing CLI operations for the selected resource owner. Do not route general improvement to the legacy source-component `openpond improve` workflow. Training is a separate action, not the default implementation of Improve.
 

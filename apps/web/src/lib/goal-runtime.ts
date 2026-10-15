@@ -26,6 +26,11 @@ type ThreadGoalRecord = {
   observedAt: string | null;
 };
 
+export function goalRuntimeFromRecord(record: Record<string, unknown>, observedAt: string): GoalRuntimeStatus | null {
+  const goal = threadGoalFromRecord(record, "codex", observedAt);
+  return goal ? goalRuntimeStatus(goal) : null;
+}
+
 export function latestGoalRuntimeFromEvents(events: RuntimeEvent[]): GoalRuntimeStatus | null {
   let terminalTurnAfterGoal = false;
   const observedAt = latestEventTimestamp(events);

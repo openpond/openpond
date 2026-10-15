@@ -28,6 +28,14 @@
   padding: 0;
   text-align: left;
   cursor: pointer;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.activity-summary > svg:not(.activity-summary-toggle) {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .activity-summary:hover {

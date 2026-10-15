@@ -48,6 +48,7 @@ export async function runModelProjectHostingAction(
     return service.pullProject({
       hostedProjectId: requiredString(input.hostedProjectId, "hostedProjectId"),
       profileId: requiredString(input.profileId, "profileId"),
+      ...(input.snapshot !== undefined ? { snapshot: input.snapshot } : {}),
     });
   }
   return service.syncProject(requiredString(input.modelId, "modelId"));

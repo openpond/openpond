@@ -70,7 +70,7 @@ export function ChatContextPicker({ context, disabled = false, placement = "bott
       <DropdownSelect compact floating label={`${typeLabels[type]} name`} value={value}
         floatingMenuWidth={340} floatingMenuMaxHeight={360}
         triggerContent={<><span>{typeLabels[type]}</span><span className="chat-training-menu-value">{(current?.target.kind === "dataset" ? `Draft · ${current.label}` : current?.label) ?? (context.catalog.isPending ? "Loading…" : "None")}</span><ChevronRight size={14} /></>}
-        options={[{ value: "", label: "None" }, ...(type === "experiment" ? [{ value: "new-experiment", label: "New experiment…", separatorBefore: true }] : []), ...choices.map(choice => ({ value: JSON.stringify(choice.target), label: choice.label, description: choice.detail }))]}
+        options={[{ value: "", label: "None" }, ...(type === "experiment" ? [{ value: "new-experiment", label: "New experiment…", separatorBefore: true }] : []), ...choices.map(choice => ({ value: JSON.stringify(choice.target), label: choice.label, description: `${choice.target.location === "cloud" ? "OpenPond Managed" : "Local"} · ${choice.detail}${choices.filter(item => item.label === choice.label && item.target.location === choice.target.location).length > 1 ? ` · ${choice.target.id.slice(-8)}` : ""}` }))]}
         disabled={unavailable || context.catalog.isPending} onChange={raw => void select(raw)} />
       {issue ? <ErrorToast error={issue}>{context.catalog.error ? <button type="button" onClick={() => void context.catalog.refetch()}>Retry</button> : null}</ErrorToast> : null}
     </div> : issue ? <ErrorToast error={issue} /> : null}

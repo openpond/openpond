@@ -16,6 +16,26 @@ afterEach(() => {
 });
 
 describe("training CLI", () => {
+  // Failure story: pulling a reviewed hosted package must use the canonical
+  // local importer and explicit Profile, without syncing or starting training.
+  test("pulls an exact hosted Model into an explicitly selected local Profile", async () => {
+    console.log = (message?: unknown) => logs.push(String(message ?? ""));
+    const pinned = { project: { id: "portable-model", trainingSetup: { tasksetRef: { id: "frozen-taskset", contentHash: "a".repeat(64), revision: 1 } } } };
+    const request = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(String(url)).toBe("http://127.0.0.1:17874/v1/training/hosted-model-projects/hosted-model/pull");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({ profileId: "reviewed-profile" });
+      return jsonResponse(pinned);
+    });
+    await expect(runTrainingCommand({ apiBaseUrl: "http://local.test", json: "true" }, ["pull-project", "hosted-model"], { request: request as typeof fetch })).rejects.toThrow("--profile");
+    expect(request).not.toHaveBeenCalled();
+    await expect(runTrainingCommand({ apiBaseUrl: "https://hosted.example", profile: "reviewed-profile" }, ["pull-project", "hosted-model"], { request: request as typeof fetch })).rejects.toThrow("loopback");
+    expect(request).not.toHaveBeenCalled();
+    await runTrainingCommand({ apiBaseUrl: "http://127.0.0.1:17874", profile: "reviewed-profile", json: "true" }, ["pull-project", "hosted-model"], { request: request as typeof fetch });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(logs.at(-1)!)).toEqual(pinned);
+  });
+
   test("creates a persisted managed Model Project from a published Taskset", async () => {
     console.log = (message?: unknown) => logs.push(String(message ?? ""));
     const directory = await mkdtemp(

@@ -126,7 +126,7 @@ export const ModelProjectTrainingSetupSchema = z
   .strict();
 
 export const HostedModelProjectTrainingSetupSchema =
-  ModelProjectTrainingSetupSchema.omit({ managedGpuRequirement: true });
+  ModelProjectTrainingSetupSchema;
 
 export const HostedModelProjectLinkSchema = z
   .object({

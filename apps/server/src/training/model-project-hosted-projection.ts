@@ -6,9 +6,5 @@ import {
 export function hostedModelProjectTrainingSetup(
   trainingSetup: ModelProject["trainingSetup"],
 ) {
-  const {
-    managedGpuRequirement: _managedGpuRequirement,
-    ...hostedTrainingSetup
-  } = trainingSetup;
-  return HostedModelProjectTrainingSetupSchema.parse(hostedTrainingSetup);
+  return HostedModelProjectTrainingSetupSchema.parse(trainingSetup);
 }

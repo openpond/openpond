@@ -52,7 +52,7 @@ export function GettingStartedDialog({ connection, payload, onPayload, onClose }
   }
 
   return <>
-    <AppDialog ariaLabel="Get started with OpenPond" backdropClassName="git-dialog-backdrop" className="git-dialog getting-started-dialog" onClose={onClose}>
+    <AppDialog inertExclusionSelector=".native-login-session" ariaLabel="Get started with OpenPond" backdropClassName="git-dialog-backdrop" className="git-dialog getting-started-dialog" onClose={onClose}>
       <button type="button" className="git-dialog-close" aria-label="Close get started" title="Close" onClick={onClose}><X size={16} /></button>
       <header className="getting-started-header">
         <h2>Get started with OpenPond</h2>

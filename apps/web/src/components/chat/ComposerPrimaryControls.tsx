@@ -66,6 +66,7 @@ export function ComposerPrimaryControls({
   modelOptions = [],
   hideModelControls = false,
   trainingControl,
+  inboxControl,
   openPondCommandAccessMode,
   showCommandAccess = true,
   profileTarget,
@@ -115,6 +116,7 @@ export function ComposerPrimaryControls({
   modelOptions?: DropdownOption[];
   hideModelControls?: boolean;
   trainingControl?: ReactNode;
+  inboxControl?: ReactNode;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
   showCommandAccess?: boolean;
   profileTarget?: ComposerProfileTargetState | null;
@@ -425,6 +427,7 @@ export function ComposerPrimaryControls({
         </span>
       )}
       {trainingControl}
+      {inboxControl}
       {!hideModelControls && (
         <ComposerModelMenu
           disabled={busy}

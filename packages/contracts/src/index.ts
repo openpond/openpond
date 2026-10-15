@@ -118,3 +118,5 @@ export * from "./ponder-desktop-inspection.js";
 
 export * from "./ponder-desktop-project-sharing.js";
 export * from "./chat-context-selection.js";
+
+export * from "./chat-next-step.js";

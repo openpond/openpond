@@ -3,6 +3,7 @@ import type { ProviderConfig, ProviderSettings } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 import { apiFetch } from "../../api/api-client";
 import { Check, ExternalLink, Loader2, Plus } from "../icons";
+import { useNativeLogin } from "../terminal/NativeLoginProvider";
 import { NativeSetupTerminal } from "../terminal/NativeSetupTerminal";
 import type { NativeProviderCheck } from "../settings/native-provider-check";
 
@@ -19,10 +20,13 @@ export function OnboardingAgentCard({ providerId, connection, config, onProvider
   onProviders: (providers: ProviderSettings) => void;
 }) {
   const info = AGENTS[providerId];
+  const nativeLogin = useNativeLogin();
+  const loginActive = useRef(nativeLogin.active);
+  loginActive.current = nativeLogin.active;
   const [result, setResult] = useState<NativeProviderCheck | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [command, setCommand] = useState<string | null>(null);
+  const [command, setCommand] = useState<{ command: string; displayCommand: string } | null>(null);
   const active = useRef<AbortController | null>(null);
   const mounted = useRef(false);
   const latestProviders = useRef(onProviders);
@@ -57,8 +61,8 @@ export function OnboardingAgentCard({ providerId, connection, config, onProvider
   }, [connection.serverUrl, connection.token, providerId]);
 
   useEffect(() => {
-    if (!command) void check();
-    function onFocus() { if (!active.current && !command) void check(); }
+    if (!command && !(providerId === "claude-code" && loginActive.current)) void check();
+    function onFocus() { if (!active.current && !command && !(providerId === "claude-code" && loginActive.current)) void check(); }
     window.addEventListener("focus", onFocus);
     return () => {
       window.removeEventListener("focus", onFocus);
@@ -66,7 +70,7 @@ export function OnboardingAgentCard({ providerId, connection, config, onProvider
       active.current = null;
       controller?.abort();
     };
-  }, [check, config?.binaryPath, config?.sourceHome, command]);
+  }, [check, config?.binaryPath, config?.sourceHome, command, providerId]);
 
   async function connect() {
     if (busy) return;
@@ -91,7 +95,7 @@ export function OnboardingAgentCard({ providerId, connection, config, onProvider
     setBusy(true);
     setError(null);
     try {
-      const next = await apiFetch<{ command: string }>(connection, `/v1/providers/${providerId}/native-setup`, {
+      const next = await apiFetch<{ command: string; displayCommand: string }>(connection, `/v1/providers/${providerId}/native-setup`, {
         method: "POST", body: JSON.stringify({ action: "login" }), signal: controller.signal,
       });
       if (active.current !== controller || controller.signal.aborted) return;
@@ -100,7 +104,10 @@ export function OnboardingAgentCard({ providerId, connection, config, onProvider
         if (active.current !== controller || controller.signal.aborted) return;
         latestProviders.current(providers);
       }
-      if (active.current === controller && !controller.signal.aborted) setCommand(next.command);
+      if (active.current === controller && !controller.signal.aborted) {
+        if (providerId === "claude-code") nativeLogin.start(next);
+        else setCommand(next);
+      }
     } catch (caught) {
       if (active.current === controller) setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -109,18 +116,28 @@ export function OnboardingAgentCard({ providerId, connection, config, onProvider
     }
   }
 
+  useEffect(() => {
+    if (providerId !== "claude-code" || !nativeLogin.result) return;
+    const verified = nativeLogin.result.settings.providers[providerId];
+    if ((verified?.binaryPath || null) !== (config?.binaryPath || null) || (verified?.sourceHome || null) !== (config?.sourceHome || null)) return;
+    setBusy(false);
+    setResult(nativeLogin.result);
+    setError(nativeLogin.result.status === "unavailable" ? nativeLogin.result.error : null);
+  }, [nativeLogin.result, providerId, config?.binaryPath, config?.sourceHome]);
+
   const ready = !error && result?.status === "ready";
   return <li className="getting-started-card">
     <img className="getting-started-provider-icon" src={`/agent-sources/${providerId}.svg`} alt="" />
     <h3>{info.name}</h3>
     <div className="getting-started-card-status" role="status" aria-live="polite">
-      {busy ? <Loader2 className="settings-spin" size={20} aria-label={`Checking ${info.name}`} />
+      {providerId === "claude-code" && nativeLogin.active ? <button type="button" onClick={nativeLogin.resume}>Continue sign-in</button>
+        : busy ? <Loader2 className="settings-spin" size={20} aria-label={`Checking ${info.name}`} />
         : ready && config?.enabled ? <span><Check size={16} /> Connected</span>
         : ready ? <button type="button" aria-label={`Connect ${info.name}`} onClick={() => void connect()}><Plus size={14} /> Connect</button>
         : result?.status === "missing" ? <a href={info.installUrl} target="_blank" rel="noreferrer">Install {info.name} <ExternalLink size={12} /></a>
-        : result?.status === "needs_login" ? <button type="button" aria-label={`Log in to ${info.name}`} title={error ?? undefined} onClick={() => void login()}>Log in</button>
+        : result?.status === "needs_login" ? <button type="button" className="getting-started-login" aria-label={`Log in to ${info.name}`} title={error ?? undefined} onClick={() => void login()}>Log in</button>
         : <button type="button" aria-label={`Retry ${info.name} connection`} title={error ?? "Check connection again"} onClick={() => void check()}>Retry</button>}
     </div>
-    {command ? <NativeSetupTerminal modal connection={connection} command={command} onComplete={() => setCommand(null)} onClose={() => setCommand(null)} /> : null}
+    {command ? <NativeSetupTerminal modal connection={connection} command={command.command} displayCommand={command.displayCommand} onComplete={() => setCommand(null)} onClose={() => setCommand(null)} /> : null}
   </li>;
 }

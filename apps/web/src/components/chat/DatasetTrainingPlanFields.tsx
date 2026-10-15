@@ -69,6 +69,8 @@ export function DatasetTrainingPlanFields({
   const validSizing = Object.values(sizing).every(value => Number.isInteger(value) && value > 0)
     && sizing.prompts <= 100000 && sizing.groups <= 100000 && sizing.iterations >= (method === "grpo" ? 2 : 1) && sizing.iterations <= (method === "grpo" ? 16 : 100)
     && sizing.rollouts >= 2 && sizing.rollouts <= 16 && Number.isInteger(sizing.concurrency) && sizing.concurrency >= 1 && sizing.concurrency <= 16 && sizing.rollouts % sizing.concurrency === 0;
+  const canReview = Boolean(dataset && target?.available && model && validSizing);
+  const planContext = `using ${method.toUpperCase()} for ${dataset?.name}, revision ${dataset?.revision}, using ${model?.modelId} on OpenPond Managed`;
   return (
     <div className="dataset-training-plan">
       {catalog.error ? (
@@ -122,15 +124,17 @@ export function DatasetTrainingPlanFields({
           aria-label="Maximum training spend"
           value={budget}
           onChange={(event) => setBudget(event.target.value)}
-        /><button type="button" disabled title="A provider estimate requires validated training data and a reviewed recipe.">Estimate after review</button></div>
+        /><button type="button" disabled={!canReview} onClick={() => onAddToChat(
+          `Review the training cost ${planContext}. ${limits} Keep this review attached to the selected experiment and inspect the pinned examples, splits, graders, and recipe before estimating. ${valid ? `Use $${amount.toFixed(2)} as the maximum spend.` : "Ask me to choose a hard spend cap before any submission."} Show the current provider estimate or exact quote when supported, its assumptions, what is included, and any separately billed preparation, evaluation, idle, or serving costs. If an estimate is unavailable, explain why and the next step. Do not upload data, start training, or allocate serving capacity.`,
+        )}>Review cost in chat</button></div>
       </label>
       <button
         type="button"
         className="training-button"
-        disabled={!valid || !validSizing}
+        disabled={!canReview || !valid}
         onClick={() =>
           onAddToChat(
-            `Prepare a training plan using ${method.toUpperCase()} for ${dataset?.name}, revision ${dataset?.revision}, using ${model!.modelId} on OpenPond Managed, with a maximum spend of $${amount.toFixed(2)}. ${limits} Keep it attached to the selected experiment. Inspect its examples, splits, graders, and data permissions; show the recipe, required changes, and cost for review. Do not upload data or start training.`,
+            `Prepare a training plan ${planContext}, with a maximum spend of $${amount.toFixed(2)}. ${limits} Keep it attached to the selected experiment. Inspect its examples, splits, graders, and data permissions; show the recipe, required changes, and cost for review. Do not upload data or start training.`,
           )
         }
       >

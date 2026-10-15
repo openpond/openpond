@@ -87,7 +87,7 @@ export function compileModelTasksetReward(input: {
   const { contentHash: _definitionHash, ...definitionContent } = edited.taskDefinition;
   const taskExecution = { ...definitionContent.execution, policy, environmentRelease: { id: environment.id, contentHash: environment.contentHash }, verifierSetRelease: { id: verifierSet.id, contentHash: verifierSet.contentHash } };
   const taskDefinition = TaskDefinitionSchema.parse(sealLearningContent({ ...definitionContent, id: `${id}-definition`, revision, rewardBinding: learningRef(rewardBinding), execution: taskExecution }));
-  const authoring = source.taskset.metadata.starterAuthoring ?? source.taskset.metadata.ordinaryAuthoring;
+  const authoring = edited.taskset.metadata.starterAuthoring ?? edited.taskset.metadata.ordinaryAuthoring;
   const graderFixtures = authoring && typeof authoring === "object" && !Array.isArray(authoring) && "graderFixtures" in authoring ? authoring.graderFixtures : undefined;
   // Keep provenance through exact lineage. Source package qualifications and
   // privacy attestations describe different bytes and must not be copied.

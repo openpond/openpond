@@ -1,0 +1,36 @@
+.composer-inbox-trigger {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  flex-shrink: 0; min-width: 28px; height: 28px; padding: 0 5px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--text-muted);
+}
+.composer-inbox-trigger:hover, .composer-inbox-popover header button:hover { background: var(--state-hover); color: var(--text-primary); }
+.composer-inbox-count { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--accent-primary); }
+.composer-inbox-popover {
+  position: fixed; margin: 0; inset: auto; width: min(280px, calc(100vw - 24px)); max-height: 480px;
+  overflow: auto;
+  padding: 0; border: 1px solid var(--border-default); border-radius: 12px;
+  background: var(--surface-floating); color: var(--text-primary);
+}
+.composer-inbox-popover { padding: 12px; }
+.composer-inbox-popover header { display: flex; align-items: center; gap: 6px; }
+.composer-inbox-popover h2 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; }
+.composer-inbox-popover header button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); }
+.composer-inbox-empty { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.composer-inbox-scroll { overflow: auto; max-height: 300px; margin-top: 8px; }
+.composer-inbox-scroll table { width: 100%; table-layout: fixed; }
+.composer-inbox-scroll th:first-child { width: 40%; }
+.composer-inbox-scroll td { vertical-align: top !important; }
+.composer-inbox-scroll tbody tr { cursor: default; }
+.composer-inbox-sender { display: block; overflow-wrap: anywhere; font-size: 12px; }
+.composer-inbox-scroll time, .composer-inbox-kind { display: block; margin: 4px 0; color: var(--text-muted); font-size: 11px; }
+.composer-inbox-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+.composer-inbox-empty { padding: 28px 0; text-align: center; }
+.composer-inbox-trigger:focus-visible, .composer-inbox-popover button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.composer-inbox-status { font-size: 11px; color: var(--text-secondary); }
+.composer-inbox-scroll summary { cursor: pointer; font-size: 12px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-inbox-scroll details[open] summary { color: var(--text-muted); margin-bottom: 6px; }
+.composer-inbox-scroll small { display: block; margin-top: 6px; overflow-wrap: anywhere; color: var(--text-muted); }
+.composer-inbox-scroll .composer-inbox-body { margin: 0; }
+
+.composer-inbox-scroll th, .composer-inbox-scroll td { padding: 8px !important; }

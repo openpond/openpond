@@ -122,3 +122,6 @@ export { default as Inbox } from "lucide-react/dist/esm/icons/inbox.js";
 export { default as List } from "lucide-react/dist/esm/icons/list.js";
 export { default as Sparkles } from "lucide-react/dist/esm/icons/sparkles.js";
 export { default as Terminal } from "lucide-react/dist/esm/icons/terminal.js";
+
+export { default as Pencil } from "lucide-react/dist/esm/icons/pencil.js";
+export { default as Target } from "lucide-react/dist/esm/icons/target.js";

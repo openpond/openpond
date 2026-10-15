@@ -156,7 +156,7 @@ export function DatasetWorkspace({
                 Retry
               </button></ErrorToast>
           ) : null}
-          <ChatTrainingInputs dataset={dataset} graders={resources.graders} />
+          <ChatTrainingInputs connection={connection} dataset={dataset} graders={resources.graders} />
           {currentRun ? (
             <TrainingWorkspaceSection title="Results">
             <DatasetRunEvidence
@@ -170,6 +170,7 @@ export function DatasetWorkspace({
           <TrainingWorkspaceSection title="Training">
           <DatasetTrainingOverview
             connection={connection}
+            sessionId={sessionId}
             resources={resources}
             onRequest={request}
           />

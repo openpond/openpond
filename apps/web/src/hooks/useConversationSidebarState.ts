@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { Session } from "@openpond/contracts";
 import type { AppAction, RightChatPanel, RightPanelMode } from "../app/app-state";
 import type { AppView } from "../lib/app-models";
@@ -17,6 +17,7 @@ import {
   type WorkspaceDiffPanelViewState,
 } from "../components/workspace-diff/workspace-diff-panel-model";
 import { isCloudWorkspaceKind } from "../lib/workspace-location";
+import { restoreConversationSidebarSnapshot, saveConversationSidebarSnapshot } from "../lib/conversation-sidebar-storage";
 
 export function useConversationSidebarState(input: {
   appDispatch: Dispatch<AppAction>;
@@ -54,11 +55,12 @@ export function useConversationSidebarState(input: {
     viewWorkspaceKind,
     workspaceDiffPanelViewState,
   } = input;
+  const [restoredSnapshot] = useState(restoreConversationSidebarSnapshot);
   const rightSidebarStateByConversationRef = useRef<Map<string, RightSidebarConversationState>>(
-    new Map(),
+    new Map(Object.entries(restoredSnapshot.conversations)),
   );
   const workspaceDiffPanelStateByScopeRef = useRef<Map<string, WorkspaceDiffPanelViewState>>(
-    new Map(),
+    new Map(Object.entries(restoredSnapshot.workspaces)),
   );
   const activeRightSidebarConversationRef = useRef<string | null>(null);
   const activeWorkspaceDiffPanelStateKeyRef = useRef<string | null>(null);
@@ -140,6 +142,39 @@ export function useConversationSidebarState(input: {
         : cloneWorkspaceDiffPanelViewState(restoredWorkspaceDiffPanelState),
     );
   }, [workspaceDiffPanelStateKey]);
+  const persistSnapshot = useCallback(() => {
+    saveConversationSidebarSnapshot({
+      conversations: Object.fromEntries(rightSidebarStateByConversationRef.current),
+      workspaces: Object.fromEntries(workspaceDiffPanelStateByScopeRef.current),
+    });
+  }, []);
+  const reportSaveFailure = useCallback(() => appDispatch({ type: "showToast", toast: {
+    id: Date.now(), createdAt: Date.now(), tone: "error",
+    message: "Sidebar selections could not be saved on this device.",
+    dedupeKey: "conversation-sidebar-recovery", actionLabel: "Retry",
+    onAction: () => { persistSnapshot(); return true; },
+  } }), [appDispatch, persistSnapshot]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try { persistSnapshot(); }
+      catch { reportSaveFailure(); }
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [persistSnapshot, reportSaveFailure, browserConversationId, currentRightSidebarConversationState, workspaceDiffPanelStateKey, workspaceDiffPanelViewState]);
+  useEffect(() => {
+    const saveBeforeExit = (event: Event) => {
+      try { persistSnapshot(); }
+      catch { reportSaveFailure(); event.preventDefault(); }
+    };
+    window.addEventListener("beforeunload", saveBeforeExit);
+    window.addEventListener("pagehide", saveBeforeExit);
+    window.addEventListener("openpond:before-update", saveBeforeExit);
+    return () => {
+      window.removeEventListener("beforeunload", saveBeforeExit);
+      window.removeEventListener("pagehide", saveBeforeExit);
+      window.removeEventListener("openpond:before-update", saveBeforeExit);
+    };
+  }, [persistSnapshot, reportSaveFailure]);
   const handleWorkspaceDiffPanelViewStateChange = useCallback(
     (state: WorkspaceDiffPanelViewState) => {
       setWorkspaceDiffPanelViewState((current) =>

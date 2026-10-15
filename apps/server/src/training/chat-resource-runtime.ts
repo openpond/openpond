@@ -1,3 +1,4 @@
+import { createChatNextStepService } from "./chat-next-step.js";
 import { createChatContextBrowser } from "./chat-context-browser.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
 import { readChatTrainingAttachment } from "./chat-training-attachment.js";
@@ -67,6 +68,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return { dataset: localDatasetSummary(record), graders: localGraderSummaries(record).map(item => ({ ...item, rows: [] })) };
     },
   });
+  const nextSteps = createChatNextStepService({ store: deps.store, current: browser.current });
   async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal):Promise<unknown> {
     if(kind==="dataset")return datasets.request(input,signal);
     const envelope=z.object({action:z.string(),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(input);
@@ -139,6 +141,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
     const {context:requestedContext,invocationToken,...input} = envelope;
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
+    if (kind === "dataset" && input.action === "next_step") return nextSteps.request(input.payload, context);
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_runs", "context_select", "context_selection"].includes(String(input.action))) {
       const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional() }).strict().parse(input.payload ?? {});
       if (input.action === "context_catalog") return browser.catalog(true, query.sessionId);
@@ -350,6 +353,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   }
   const execute:ChatResourceAction = async(context,kind,payload)=> {
     const action = payload.action;
+    if (kind === "dataset" && action === "next_step") return nextSteps.request(payload.payload, {sessionId:context.session.id,turnId:context.turnId});
     if(kind==="experiment" && action==="improve") {
       if(!deps.improve)throw new Error("The qualified Improve owner is unavailable.");
       return deps.improve(payload.payload);

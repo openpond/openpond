@@ -1,4 +1,9 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { createServer } from "node:http";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { runBoundedOpChat } from "../src/cli/opchat-bounded-chat";
+
+// Exercise the source transport with the source CLI, independent of staged dist.
+vi.mock("@openpond/cloud/hosted-chat", () => import("../../../packages/cloud/src/hosted-chat"));
 
 import {
   getOpChatModel,
@@ -111,42 +116,196 @@ describe("OpChat hosted chat client", () => {
     ]);
   });
 
-  test("sends non-streaming chat completions to /opchat/v1/chat/completions", async () => {
-    const requests: Array<{ url: string; body: unknown }> = [];
+  // Failure story: a CLI warm request must not dispatch outside its workspace,
+  // quoted cap or deadline, or call an aborted provider request free/safe to retry.
+  test("bounds a CLI call before dispatch and preserves uncertain cancellation", async () => {
+    const requests: Array<{ url: string; method: string; headers: Headers; body: unknown }> = [];
+    const receipts: Record<string, unknown>[] = [];
+    const options = {
+      model: "openpond/qwen3-8b-base", message: "Reply OK", teamId: "team_test",
+      maxOutputTokens: "8", requestId: "warm-proof", timeoutSec: "1", maxSpend: "0.05",
+    };
+    const dependencies = {
+      account: async () => ({ token: "session_test", chatApiBaseUrl: "https://api.example.test/opchat/v1" }),
+      emit: (receipt: Record<string, unknown>) => { receipts.push(receipt); },
+    };
     globalThis.fetch = async (input, init) => {
       requests.push({
-        url: String(input),
+        url: String(input), method: init?.method ?? "GET", headers: new Headers(init?.headers),
         body: JSON.parse(String(init?.body ?? "{}")) as unknown,
       });
+      if (init?.method === "GET") return jsonResponse({
+        id: options.model, context_window: 8192, output_limit: 2048,
+        metadata: { billing: { pricing: {
+          version: "base-rate-v1", source: "openpond-serving", effectiveAt: "2026-10-05T00:00:00Z",
+          inputUsdPerMillionTokens: 5, cachedInputUsdPerMillionTokens: 5, outputUsdPerMillionTokens: 20,
+        } } },
+      });
+      if (new Headers(init?.headers).get("x-request-id") === "cancel-proof") {
+        return await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+        });
+      }
       return jsonResponse({
-        id: "chatcmpl_test",
+        id: "chatcmpl_test", model: options.model, request_id: options.requestId, provider_request_id: "pool/job",
         choices: [{ message: { content: "hello" }, finish_reason: "stop" }],
         usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
       });
     };
-
-    await expect(
-      sendHostedChatTurn({
-        apiBaseUrl: "https://api.openpond.ai/opchat/v1",
-        token: "opk_test",
-        model: "openpond-chat",
-        messages: [{ role: "user", content: "hello" }],
-      })
-    ).resolves.toMatchObject({
-      id: "chatcmpl_test",
-      usage: { total_tokens: 5 },
+    await expect(runBoundedOpChat({ ...options, opchatApiBaseUrl: "https://other.test" }, dependencies)).rejects.toThrow("origin");
+    expect(requests).toHaveLength(0);
+    await expect(runBoundedOpChat({ ...options, maxSpend: "0.04" }, dependencies)).rejects.toThrow("exceeds --max-spend");
+    expect(requests.map(request => request.method)).toEqual(["GET"]);
+    await runBoundedOpChat(options, dependencies);
+    const posted = requests.filter(request => request.method === "POST");
+    expect(posted).toHaveLength(1);
+    expect(posted[0]?.url).toBe("https://api.example.test/opchat/v1/chat/completions");
+    expect(posted[0]?.body).toMatchObject({
+      model: options.model, max_tokens: 8, messages: [{ role: "user", content: "Reply OK" }], stream: false,
+    });
+    for (const request of requests) {
+      expect(request.headers.get("authorization")).toBe("Bearer session_test");
+      expect(request.headers.get("x-openpond-team-id")).toBe("team_test");
+    }
+    expect(posted[0]?.headers.get("x-request-id")).toBe("warm-proof");
+    expect(posted[0]?.headers.get("x-openpond-request-id")).toBe("warm-proof");
+    expect(receipts.at(-1)).toMatchObject({
+      status: "completed", quote: { maximumRequestCostUsd: 0.04112 },
+      completion: { id: "chatcmpl_test", request_id: "warm-proof", provider_request_id: "pool/job" },
+      usage: { total_tokens: 5 }, accounting: { chargedUsd: null, requiresLedgerReconciliation: true },
+    });
+    await expect(runBoundedOpChat({ ...options, requestId: "cancel-proof" }, dependencies)).rejects.toThrow("deadline");
+    expect(requests.filter(request => request.method === "POST")).toHaveLength(2);
+    expect(receipts.at(-1)).toMatchObject({
+      status: "timed_out", requestId: "cancel-proof", dispatchAttempted: true,
+      accounting: { state: "unknown", chargedUsd: null, cleanupConfirmed: false },
     });
 
-    expect(requests).toEqual([
-      {
-        url: "https://api.openpond.ai/opchat/v1/chat/completions",
-        body: {
-          model: "openpond-chat",
-          messages: [{ role: "user", content: "hello" }],
-          stream: false,
+    const catalogFetch = globalThis.fetch;
+    for (const mode of ["complete", "identity", "truncated", "no-finish", "cancel"] as const) {
+      const requestId = `stream-${mode}`;
+      let dispatches = 0;
+      let bodyCancelled = false;
+      let streamController: ReadableStreamDefaultController<Uint8Array>;
+      globalThis.fetch = async (url, init) => {
+        if (init?.method === "GET") return catalogFetch(url, init);
+        dispatches++;
+        expect(new Headers(init?.headers).get("accept")).toBe("text/event-stream");
+        expect(new Headers(init?.headers).get("x-openpond-team-id")).toBe(options.teamId);
+        expect(new Headers(init?.headers).get("x-request-id")).toBe(requestId);
+        expect(JSON.parse(String(init?.body))).toMatchObject({ stream: true, max_tokens: 8 });
+        const chunk = (delta: Record<string, unknown>, terminal = false) =>
+          `data: ${JSON.stringify({ id: "chatcmpl_stream", model: options.model, request_id: requestId,
+            choices: [{ delta, finish_reason: terminal ? "stop" : null }],
+            ...(terminal ? { usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 } } : {}),
+          })}\n\n`;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            streamController = controller;
+            controller.enqueue(new TextEncoder().encode(": openpond-pending\n\n" + chunk({ content: "OK" })));
+            if (mode === "cancel") {
+              init?.signal?.addEventListener("abort", () => controller.error(init.signal?.reason), { once: true });
+              return;
+            }
+            if (mode === "identity") {
+              controller.enqueue(new TextEncoder().encode(chunk({ content: "wrong" }).replace("chatcmpl_stream", "chatcmpl_other")));
+              return;
+            }
+            if (mode !== "no-finish") controller.enqueue(new TextEncoder().encode(chunk({}, true)));
+            if (mode === "truncated") controller.close();
+            else controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+          },
+          cancel() { bodyCancelled = true; },
+        });
+        return new Response(body, { headers: { "content-type": "text/event-stream" } });
+      };
+      const pending = runBoundedOpChat({ ...options, stream: true, requestId }, dependencies);
+      if (mode === "complete") {
+        await pending;
+        expect(receipts.at(-1)).toMatchObject({
+          status: "completed", transport: "sse", text: "OK", finishReason: "stop",
+          completion: { id: "chatcmpl_stream", request_id: requestId, assembledFromStream: true },
+          usage: { total_tokens: 4 }, accounting: { chargedUsd: null, requiresLedgerReconciliation: true },
+        });
+        expect(bodyCancelled).toBe(false);
+        streamController!.close();
+      } else {
+        await expect(pending).rejects.toThrow(mode === "identity" ? "identity" : mode === "truncated" ? "[DONE]" : mode === "cancel" ? "deadline" : "terminal");
+        expect(receipts.at(-1)).toMatchObject({
+          status: mode === "cancel" ? "timed_out" : "failed", automaticRetry: false,
+          accounting: { state: "unknown", chargedUsd: null, cleanupConfirmed: false },
+        });
+        if (mode === "identity") expect(bodyCancelled).toBe(true);
+        if (mode === "no-finish") streamController!.close();
+      }
+      expect(dispatches).toBe(1);
+    }
+
+    // A real socket can fail after valid SSE bytes. Preserve partial evidence,
+    // bounded cause metadata and unknown accounting without another dispatch.
+    let socketDispatches = 0;
+    let terminateSocket = () => {};
+    const privateSentinel = "private-header-and-cause-sentinel";
+    const server = createServer((_request, response) => {
+      socketDispatches++;
+      terminateSocket = () => response.destroy();
+      response.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform", "x-accel-buffering": "no",
+        "x-private-debug": privateSentinel,
+      });
+      response.write(": openpond-pending\n\ndata: " + JSON.stringify({
+        id: "chatcmpl_socket", model: options.model, request_id: "stream-socket",
+        choices: [{ delta: { content: "partial" }, finish_reason: null }],
+      }) + "\n\n");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Missing socket fixture port");
+    globalThis.fetch = async (url, init) => {
+      if (init?.method === "GET") return catalogFetch(url, init);
+      const response = await originalFetch(`http://127.0.0.1:${address.port}`, init);
+      const reader = response.body!.getReader();
+      let reads = 0;
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          // HWM0 prevents prefetch: the second read occurs after the CLI has
+          // consumed the first frame, independent of machine scheduling.
+          if (reads++ === 1) terminateSocket();
+          const chunk = await reader.read();
+          if (chunk.done) controller.close();
+          else controller.enqueue(chunk.value);
         },
-      },
-    ]);
+        cancel(reason) { return reader.cancel(reason); },
+      }, { highWaterMark: 0 });
+      return new Response(body, { headers: response.headers, status: response.status });
+    };
+    try {
+      await expect(runBoundedOpChat({ ...options, stream: true, requestId: "stream-socket" }, dependencies))
+        .rejects.toThrow("terminated");
+      const retained = receipts.at(-1);
+      expect(retained).toMatchObject({
+        status: "failed", transport: "sse", text: "partial", completion: null,
+        automaticRetry: false,
+        errorCauses: [{ name: "TypeError", code: null }, { name: "SocketError", code: "UND_ERR_SOCKET" }],
+        streamDiagnostics: {
+          phase: "response_body", response: {
+            status: 200, eventStream: true, noCache: true, noTransform: true, bufferingDisabled: true,
+          },
+          dataFrames: 1, commentFrames: 1, errorFrames: 0, doneAtMs: null,
+        },
+        accounting: { state: "unknown", chargedUsd: null, cleanupConfirmed: false },
+      });
+      const timing = retained?.streamDiagnostics as Record<string, number>;
+      expect(timing.bytes).toBeGreaterThan(0);
+      expect(timing.lastByteAtMs).toBeGreaterThanOrEqual(0);
+      expect(timing.silentForMs).toBeGreaterThanOrEqual(0);
+      expect(JSON.stringify(retained)).not.toContain(privateSentinel);
+      expect(socketDispatches).toBe(1);
+    } finally {
+      terminateSocket();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
   });
 
   test("sends OpenAI chat tools and preserves assistant tool calls", async () => {

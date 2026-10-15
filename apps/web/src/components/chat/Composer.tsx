@@ -1,9 +1,13 @@
+import { consumeComposerAddMenuKey, handleComposerMenuKey } from "./composer-menu-keyboard";
+import { useComposerNextStep } from "./useComposerNextStep";
+import { ComposerNextStep } from "./ComposerNextStep";
 import { ErrorToast } from "../common/ErrorToast";
-import { composerResourceMetadata, mergeComposerResourceContexts } from "./composer-resource-context";
+import { composerResourceMetadata, mergeComposerResourceContexts, composerSubmissionResourceContext } from "./composer-resource-context";
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ChatContextPicker } from "./ChatContextPicker";
+import { ComposerResourceContext } from "./ComposerResourceContext";
 import { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { useComposerResourceRequests } from "./useComposerResourceRequests";
 import {
@@ -64,6 +68,7 @@ import { insertVoiceTranscript } from "../../lib/voice-text";
 import { deliverVoiceTranscript } from "../../lib/voice-transcript-delivery";
 import { requestVoiceInputSubmit } from "../../lib/voice-transcription-job";
 import { useTaskInbox } from "../../hooks/useTaskInbox";
+import { ComposerInbox } from "./ComposerInbox";
 import { TaskInboxPanel } from "./TaskInboxPanel";
 import {
   ComposerProjectTargetControl,
@@ -179,6 +184,7 @@ export function Composer({
   readOnlyReason = null,
   running = busy,
   taskSessionId = null,
+  goalSessionId = taskSessionId,
   taskEvents = EMPTY_TASK_EVENTS,
   steerActiveResponses = false,
   submissionScopeKey = "default", composerDraftStore,
@@ -440,6 +446,13 @@ export function Composer({
       : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments || contextSelection.selecting;
+  const nextStep = useComposerNextStep({
+    connection: surface === "chat" ? connection : null, sessionId: taskSessionId ?? null,
+    events: taskEvents, prompt, selectionKey: JSON.stringify(contextSelection.selection?.target ?? null), inputRef,
+    blocked: busy || running || serializingAttachments || contextSelection.selecting || attachments.length > 0
+      || Boolean(selectedAction || selectedCommand) || composerSteerDraftsForScope(steerDraftsByScope, submissionScopeKey, initialSteerDrafts).length > 0
+      || Boolean(taskInbox.enabled && !taskInbox.snapshot) || Boolean(taskInbox.snapshot?.activeTurnId || taskInbox.snapshot?.inputs.some(item => item.state === "pending")),
+  });
 
   function beginSubmissionForScope(scopeKey = submissionScopeKey): boolean {
     if (nativeReadOnlyReason) return false;
@@ -1350,7 +1363,9 @@ export function Composer({
     if (!beginSubmissionForScope(submissionScope)) return false;
     setAddMenuOpen(false);
     setAttachmentError(null);
-    const submissionContexts = contextSelection.selection?.training || contextSelection.selection?.model ? [] : currentResourceContexts();
+    const { contexts: submissionContexts, focus: submissionFocus } = composerSubmissionResourceContext(
+      resourceDrafts.current.get(submissionScope), currentResourceContexts(), contextSelection.selection,
+    );
     const stagedAttachments = stageAttachmentsForSubmit();
     try {
       setSerializingAttachmentScopeKey(
@@ -1381,7 +1396,7 @@ export function Composer({
                 : {}),
               ...(promptOverride !== undefined ? { promptOverride } : {}),
               ...(options.preservePrompt ? { preservePrompt: true } : {}),
-              turnMetadata: { ...composerResourceMetadata(submissionContexts), ...(contextSelection.selection ? { chatResourceFocus: contextSelection.selection } : {}) },
+              turnMetadata: { ...composerResourceMetadata(submissionContexts), ...(submissionFocus ? { chatResourceFocus: submissionFocus } : {}) },
               ...(contextSelection.selection ? { sessionMetadata: { chatContextSelection: contextSelection.selection.target } } : {}),
               onSessionCreated: session => contextSelection.moveToSession(session.id),
             }
@@ -1601,7 +1616,7 @@ export function Composer({
         onClose={closeSubmitIssueDialog}
         onSubmit={submitIssueForm}
       />
-      {(showProjectFooter || surface === "chat") && (
+      {mode === "start" && (showProjectFooter || surface === "chat") && (
         <div className="composer-footer">
           {showProjectFooter ? (
             <ComposerProjectTargetControl
@@ -1652,8 +1667,19 @@ export function Composer({
           void submitQueuedSteerDraft(draftId);
         }}
       />}
-      {showGoalRuntime && goalRuntime && (
+      {composeNotice?.tone === "warning" ? <ErrorToast error={composeNotice.message} />
+        : composeNotice ? <div className="composer-notice info" role="status">{composeNotice.message}</div> : null}
+      {surface === "chat" ? <ComposerResourceContext key={`${taskSessionId}:${JSON.stringify(contextSelection.selection?.target)}`} context={contextSelection} resources={chatResources} sessionId={taskSessionId ?? null} busy={busy} /> : null}
+      {(showGoalRuntime || (mode !== "start" && provider === "codex" && goalSessionId)) && (
         <ComposerGoalStrip
+          key={goalSessionId ?? submissionScopeKey}
+          connection={provider === "codex" ? connection : null}
+          sessionId={goalSessionId ?? null}
+          running={running}
+          onPause={stopCurrentTurn}
+          onResume={() => onSubmit([], null, null, {
+            preservePrompt: true, promptOverride: "Continue pursuing the current goal.",
+          })}
           detailsOpen={goalDetailsOpen}
           goalRuntime={goalRuntime}
           objectiveId={goalDetailsId}
@@ -1661,8 +1687,6 @@ export function Composer({
           onToggleDetails={() => setGoalDetailsOpen((open) => !open)}
         />
       )}
-      {composeNotice?.tone === "warning" ? <ErrorToast error={composeNotice.message} />
-        : composeNotice ? <div className="composer-notice info" role="status">{composeNotice.message}</div> : null}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu
@@ -1697,125 +1721,38 @@ export function Composer({
         )}
         <div
           className="composer-textarea-frame"
+          onCompositionStartCapture={nextStep.onCompositionStart}
+          onCompositionEndCapture={nextStep.onCompositionEnd}
           onClick={(event) => {
             if (event.target === event.currentTarget)
               inputRef.current?.focusAtPromptIndex(cursorIndex);
           }}
         >
+          <ComposerNextStep next={nextStep} />
           <ComposerInlineInput
             ref={inputRef}
             connectedAppMentions={connectedAppMentions}
+            ariaDescribedBy={nextStep.suggestion ? nextStep.descriptionId : undefined}
             disabled={inputDisabled}
             onCursorChange={setCursorIndex}
             onKeyDown={(event) => {
-              if (
-                addMenuOpen &&
-                [
-                  "ArrowDown",
-                  "ArrowUp",
-                  "Home",
-                  "End",
-                  "Enter",
-                  "Escape",
-                ].includes(event.key)
-              ) {
-                event.preventDefault();
-                return;
-              }
-              if (showMentionMenu) {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setMentionIndex(
-                    (current) => (current + 1) % mentionMatches.length
-                  );
-                  return;
-                }
-                if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setMentionIndex(
-                    (current) =>
-                      (current - 1 + mentionMatches.length) %
-                      mentionMatches.length
-                  );
-                  return;
-                }
-                if (event.key === "Enter" || event.key === "Tab") {
-                  event.preventDefault();
-                  selectMentionItem(
-                    mentionMatches[mentionIndex] ?? mentionMatches[0]!
-                  );
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setMentionMenuDismissedPrompt(activeMentionKey);
-                  return;
-                }
-              }
-              if (showSkillMenu) {
-                if (skillMatches.length > 0 && event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setSkillIndex(
-                    (current) => (current + 1) % skillMatches.length
-                  );
-                  return;
-                }
-                if (skillMatches.length > 0 && event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setSkillIndex(
-                    (current) =>
-                      (current - 1 + skillMatches.length) % skillMatches.length
-                  );
-                  return;
-                }
-                if (
-                  skillMatches.length > 0 &&
-                  (event.key === "Enter" || event.key === "Tab")
-                ) {
-                  event.preventDefault();
-                  selectProfileSkill(
-                    skillMatches[skillIndex] ?? skillMatches[0]!
-                  );
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setSkillMenuDismissedPrompt(activeSkillKey ?? prompt);
-                  return;
-                }
-              }
-              if (showActionMenu) {
-                if (slashMatches.length > 0 && event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setActionIndex(
-                    (current) => (current + 1) % slashMatches.length
-                  );
-                  return;
-                }
-                if (slashMatches.length > 0 && event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setActionIndex(
-                    (current) =>
-                      (current - 1 + slashMatches.length) % slashMatches.length
-                  );
-                  return;
-                }
-                if (
-                  slashMatches.length > 0 &&
-                  (event.key === "Enter" || event.key === "Tab")
-                ) {
-                  event.preventDefault();
-                  selectSlashMenuItem(
-                    slashMatches[actionIndex] ?? slashMatches[0]!
-                  );
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setActionMenuDismissedPrompt(activeSlashKey ?? prompt);
-                  return;
-                }
-              }
+              if (nextStep.onKeyDown(event)) return;
+              if (consumeComposerAddMenuKey(event, addMenuOpen)) return;
+              if (handleComposerMenuKey(event, {
+                open: showMentionMenu, matches: mentionMatches, index: mentionIndex,
+                setIndex: setMentionIndex, select: selectMentionItem,
+                dismiss: () => setMentionMenuDismissedPrompt(activeMentionKey),
+              })) return;
+              if (handleComposerMenuKey(event, {
+                open: showSkillMenu, matches: skillMatches, index: skillIndex,
+                setIndex: setSkillIndex, select: selectProfileSkill,
+                dismiss: () => setSkillMenuDismissedPrompt(activeSkillKey ?? prompt),
+              })) return;
+              if (handleComposerMenuKey(event, {
+                open: showActionMenu, matches: slashMatches, index: actionIndex,
+                setIndex: setActionIndex, select: selectSlashMenuItem,
+                dismiss: () => setActionMenuDismissedPrompt(activeSlashKey ?? prompt),
+              })) return;
               if (
                 (selectedAction || selectedCommand) &&
                 event.key === "Backspace" &&
@@ -1915,12 +1852,13 @@ export function Composer({
               }
               setSelectedInvocationPosition(position);
             }}
-            placeholder={placeholder}
+            placeholder={nextStep.suggestion ? "" : placeholder}
             prompt={prompt}
             token={selectedInvocationToken}
           />
         </div>
         <ComposerPrimaryControls
+          inboxControl={surface === "chat" && taskInbox.enabled ? <ComposerInbox key={taskSessionId} inbox={taskInbox} sessionId={taskSessionId!} events={taskEvents} /> : null}
           trainingControl={surface === "chat" ? <ChatContextPicker context={contextSelection} disabled={busy} placement={dropdownPlacement} /> : null}
           surface={surface}
           teamUseModel={teamUseModel}

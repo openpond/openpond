@@ -1,12 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { CodexReasoningEffortSchema } from "@openpond/contracts";
 import { loadConfig } from "../config";
 import {
   getOpChatModel,
   listOpChatModels,
   resolveOpChatApiBaseUrl,
-  sendHostedChatTurn,
-  streamHostedChatTurn,
 } from "../hosted-chat";
 import { runOpChatSmoke } from "../opchat-smoke";
 import {
@@ -22,6 +19,11 @@ export async function runOpChatCommand(
   rest: string[]
 ): Promise<void> {
   const subcommand = rest[0] || "smoke";
+  if (subcommand === "chat") {
+    if (rest.length !== 1) throw new Error("opchat chat accepts options, not positional arguments.");
+    await (await import("./opchat-bounded-chat")).runBoundedOpChat(options);
+    return;
+  }
   const config = await loadConfig();
   const apiKey = await ensureApiKey(config, resolveBaseUrl(config));
   const apiBaseUrl = resolveOpChatCliBaseUrl(config, options);
@@ -52,53 +54,6 @@ export async function runOpChatCommand(
     return;
   }
 
-  if (subcommand === "chat") {
-    const model = optionString(options, "model") || "openpond-chat";
-    const effortOption = optionString(options, "effort");
-    const reasoningEffort = effortOption
-      ? CodexReasoningEffortSchema.parse(effortOption)
-      : undefined;
-    const message =
-      optionString(options, "message") ||
-      optionString(options, "prompt") ||
-      "Reply with a short confirmation from OpChat.";
-    const stream = parseBooleanOption(options.stream);
-    if (!stream) {
-      const completion = await sendHostedChatTurn({
-        apiBaseUrl,
-        token: apiKey,
-        model,
-        reasoningEffort,
-        messages: [{ role: "user", content: message }],
-      });
-      console.log(JSON.stringify(completion, null, 2));
-      return;
-    }
-
-    let text = "";
-    let finishReason: string | null = null;
-    let usage: unknown = null;
-    for await (const chunk of streamHostedChatTurn({
-      apiBaseUrl,
-      token: apiKey,
-      model,
-      reasoningEffort,
-      messages: [{ role: "user", content: message }],
-    })) {
-      if (chunk.type === "text_delta") {
-        text += chunk.text;
-        process.stdout.write(chunk.text);
-      } else if (chunk.type === "finish") {
-        finishReason = chunk.finishReason;
-      } else if (chunk.type === "usage") {
-        usage = chunk.usage;
-      }
-    }
-    process.stdout.write("\n");
-    console.log(JSON.stringify({ finishReason, usage, text }, null, 2));
-    return;
-  }
-
   if (subcommand === "smoke") {
     const summary = await runOpChatSmoke({
       apiBaseUrl,
@@ -119,7 +74,7 @@ export async function runOpChatCommand(
   }
 
   throw new Error(
-    "usage: opchat <provider-catalog|models|model|chat|smoke> [--opchat-api-base-url <url>] [chat --model <id> --effort <off|low|medium|high|xhigh|max>]"
+    "usage: opchat <provider-catalog|models|model|smoke> [--opchat-api-base-url <url>]\n  opchat chat --model <id> --message <text> --team-id <id> --max-output-tokens <n> --request-id <id> --timeout-sec <1..600> --max-spend <usd> [--stream] (one bounded request; JSON receipt after completion)"
   );
 }
 

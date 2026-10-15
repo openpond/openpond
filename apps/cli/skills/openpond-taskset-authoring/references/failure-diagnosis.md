@@ -1,4 +1,55 @@
-# Diagnose failed attempts
+# Review experiment results and diagnose attempts
+
+## Interpret the run before choosing an intervention
+
+Use this review for completed or partial experiments, including evaluation
+attached to training. Match its depth to the user's question; it does not
+automatically require a new run, a grader rewrite or a full readiness audit.
+
+- Identify the evaluated model/checkpoint, task and grader revisions, execution
+  destination, and whether results are training rewards, development evaluation
+  or frozen evaluation. Optimizer completion does not establish model quality.
+- Establish coverage: distinct tasks and families, attempts per task, completed
+  outputs, scored outcomes, unresolved answers and execution/grader failures.
+  Repeated attempts on one task do not establish broader task coverage. State
+  denominators and distinguish missing results from observed incorrect answers.
+- Derive useful component metrics from the task's success criteria and available
+  evidence. Inspect distributions and meaningful task groups alongside the
+  aggregate. Use existing fields/feedback where possible; a diagnostic report
+  does not require changing the model's output schema. Report unavailable
+  metrics as missing rather than inferring them from a headline score.
+- Read the actual aggregation, weights, gates and thresholds before interpreting
+  reward. Separate raw component scores, shaped training reward and acceptance.
+  High partial credit can be intentional; it is not a correctness percentage or
+  proof of a defective grader. Check whether tradeoffs and relative rankings
+  represent the user's objective.
+- Inspect permitted representative outputs across success, partial credit and
+  failure, including high scores with potentially important mistakes and low
+  scores with potentially valid alternative answers. Tie each concern to the
+  output, source/reference evidence and grader decision. State sample selection
+  and size; a targeted sample does not estimate the whole run's error rate.
+- Compare baseline and candidate on matched cases with common scoring rules.
+  Explain changed tasks, graders, prompts, budgets or execution conditions
+  before attributing a difference to learning. Preserve original results; scores
+  under different reward formulas are not directly comparable. Regrading needs
+  a supported owning-backend operation; fixture replay is separate evidence.
+
+Use the diagnosis below to distinguish a model mistake from a task, data,
+grader or execution problem. For a suspected reward mismatch, first compare
+saved outputs and controlled fixtures against independently grounded expected
+judgments. This can establish scoring alignment, not improved learning.
+Recommend a model experiment or training comparison only when it answers a
+specific unresolved question and its execution is within the user's scope and
+budget. Reuse suitable retained evidence rather than defaulting to extra runs.
+
+Finish with the measured outcome and coverage, the most important supported
+findings with example references, uncertainties, and the smallest justified
+next action. Keeping the current setup and collecting the already-planned
+evaluation is a valid conclusion when no material defect is established.
+Separate changes needed before the next run from observations to review after
+it. Preserve frozen-evaluation boundaries when inspecting any examples below.
+
+## Diagnose an observed problem
 
 Use existing run results and observable evidence to explain failures before
 recommending more data or training. Diagnosis is separate from scoring: a

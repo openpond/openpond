@@ -48,6 +48,12 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     return JSON.parse(bytes.toString("utf8"));
   };
   if (rest.length > 2) throw new Error(`${action} accepts at most one identifier or input file.`);
+  if (["hosted-serving-pools", "hosted-base-serving-prepare", "hosted-serving-pool-retire"].includes(action ?? "")) {
+    print(await (await import("./training-hosted-serving")).runHostedServingCommand({
+      action: action!, target, baseUrl, headers, request, readInput,
+      confirmed: parseBooleanOption(options.yes),
+    })); return;
+  }
   if (action === "hosted-provider" || action === "hosted-quotes") {
     if (target) throw new Error(`${action} does not accept an identifier.`);
     const path = action === "hosted-provider" ? "/v1/managed-rl/provider-inventory" : "/v1/managed-rl/quotes";

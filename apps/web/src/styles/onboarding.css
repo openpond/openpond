@@ -1,24 +1,26 @@
-.getting-started-dialog {
-  width: min(660px, calc(100vw - 34px));
+.git-dialog.getting-started-dialog {
+  width: min(800px, calc(100vw - 34px));
   max-height: calc(100dvh - 34px);
   overflow-y: auto;
-  gap: 24px;
-  padding: 28px;
+  gap: 32px;
+  padding: 36px;
   outline: none;
 }
 
 .getting-started-header { display: grid; gap: 10px; padding-right: 20px; }
 .getting-started-header h2 { margin: 0; font-size: 23px; font-weight: 500; letter-spacing: -0.5px; }
-.getting-started-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-.getting-started-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-width: 0; aspect-ratio: 1; padding: 16px 10px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-panel); text-align: center; }
+.getting-started-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.getting-started-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-width: 0; aspect-ratio: 1; padding: 24px 16px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-panel); text-align: center; }
 .getting-started-provider-icon { width: 30px; height: 30px; object-fit: contain; }
-.getting-started-card h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.getting-started-card h3 { margin: 0; font-size: 14px; font-weight: 500; white-space: nowrap; }
 .getting-started-card-status { display: flex; align-items: center; justify-content: center; min-height: 26px; color: var(--accent-primary); font-size: 12px; }
 .getting-started-card-status span, .getting-started-card-status a, .getting-started-card-status button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 .getting-started-card-status a, .getting-started-key-link { color: var(--accent-primary); text-decoration: none; }
 .getting-started-card-status a:hover, .getting-started-key-link:hover { text-decoration: underline; }
 .getting-started-card-status button { padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: transparent; color: var(--accent-primary); font: inherit; cursor: pointer; }
 .getting-started-card-status button:hover { background: var(--state-hover); }
+.getting-started-card-status .getting-started-login { border-color: var(--action-cayenne); background: var(--action-cayenne); color: var(--text-on-accent); }
+.getting-started-card-status .getting-started-login:hover { border-color: var(--action-cayenne-hover); background: var(--action-cayenne-hover); }
 .getting-started-account-backdrop { z-index: 100; }
 .getting-started-account-dialog form { display: grid; gap: 16px; }
 .getting-started-account-dialog form > button { justify-self: end; }
@@ -26,10 +28,8 @@
 .getting-started-account-dialog .getting-started-error { margin: 0; color: var(--accent-primary); font-size: 12px; line-height: 1.5; }
 .getting-started-dialog :is(button, a):focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 3px; }
 
-@media (max-width: 520px) {
-  .getting-started-dialog { padding: 20px; }
-  .getting-started-cards { gap: 8px; }
-  .getting-started-card { gap: 12px; min-height: 150px; padding: 12px 6px; }
-  .getting-started-card h3 { font-size: 12px; }
-  .getting-started-card-status { font-size: 11px; }
+@media (max-width: 620px) {
+  .git-dialog.getting-started-dialog { gap: 24px; padding: 24px; }
+  .getting-started-cards { grid-template-columns: 1fr; gap: 12px; }
+  .getting-started-card { aspect-ratio: auto; gap: 12px; min-height: 180px; padding: 24px 16px; }
 }

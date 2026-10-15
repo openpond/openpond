@@ -52,23 +52,36 @@ export async function runTrainingCommand(
       "artifacts",
       "benchmark",
       "create-project",
+      "prepare-project",
+      "pull-project",
+      "projects",
+      "inspect-project",
     ].includes(
       subcommand,
     ) ||
-    !id
+    (!id && subcommand !== "projects")
   ) {
     throw new Error(
-      "usage: training <create-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-run-id|run-id|model-id>",
+      "usage: training <projects|inspect-project|create-project|prepare-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]",
     );
   }
   if (rest.length > 2) {
     throw new Error(`training ${subcommand} accepts exactly one identifier`);
   }
+  if (subcommand === "projects" && id) throw new Error("training projects does not accept an identifier; use inspect-project <id>.");
+  const pullProfileId = subcommand === "pull-project" ? optionString(options, "profile") : null;
+  if (subcommand === "pull-project" && !pullProfileId) throw new Error("training pull-project requires --profile <local-profile-id>.");
 
   const baseUrl =
     resolveApiBaseUrlOption(options) ??
     process.env.OPENPOND_LOCAL_API_URL?.replace(/\/$/, "") ??
     DEFAULT_LOCAL_TRAINING_API_URL;
+  if (["pull-project", "projects", "inspect-project", "prepare-project"].includes(subcommand)) {
+    const origin = new URL(baseUrl);
+    if (origin.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname) || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/") {
+      throw new Error(`training ${subcommand} uses the local app's HTTP loopback API; the app resolves its signed-in hosted account.`);
+    }
+  }
   const client = new TrainingApiClient({
     baseUrl,
     request:
@@ -79,6 +92,21 @@ export async function runTrainingCommand(
   });
   const json = parseBooleanOption(options.json);
 
+  if (subcommand === "projects" || subcommand === "inspect-project") {
+    printResult(await client.inspectProjects(subcommand === "inspect-project" ? id : undefined, optionString(options, "profile") ?? undefined), json);
+    return;
+  }
+  if (!id) throw new Error(`training ${subcommand} requires an identifier.`);
+
+  if (subcommand === "pull-project") {
+    const snapshotFile = optionString(options, "snapshotFile");
+    const bytes = snapshotFile ? await readFile(snapshotFile) : null;
+    if (bytes && bytes.byteLength > 64 * 1024 * 1024) throw new Error("Model pull snapshot exceeds 64 MiB.");
+    const snapshot: unknown = bytes ? JSON.parse(bytes.toString("utf8")) : undefined;
+    printResult(await client.pullHostedProject(id, pullProfileId!, snapshot), json);
+    return;
+  }
+
   if (subcommand === "create-project") {
     const project = await createManagedModelProject({
       client,
@@ -86,6 +114,10 @@ export async function runTrainingCommand(
       tasksetId: id,
     });
     printResult(project, json);
+    return;
+  }
+  if (subcommand === "prepare-project") {
+    await (await import("./training-project-preparation")).runProjectPreparation(client, id, options);
     return;
   }
 
@@ -321,6 +353,15 @@ export class TrainingApiClient {
     return this.json(`/v1/training${scope}`, "GET");
   }
 
+  inspectProjects(modelId?: string, profileId?: string): Promise<unknown> {
+    const scope = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
+    return this.json(`/v1/training/model-projects${modelId ? `/${encodeURIComponent(modelId)}` : ""}${scope}`, "GET");
+  }
+
+  pullHostedProject(hostedProjectId: string, profileId: string, snapshot?: unknown): Promise<unknown> {
+    return this.json(`/v1/training/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/pull`, "POST", { profileId, ...(snapshot !== undefined ? { snapshot } : {}) });
+  }
+
   startHarnessRefinerBenchmark(modelId: string, body: unknown): Promise<unknown> {
     return this.json(
       `/v1/training/models/${encodeURIComponent(modelId)}/harness-refiner-benchmark`,
@@ -357,6 +398,10 @@ export class TrainingApiClient {
 
   saveModelProject(request: ModelProjectSaveRequest): Promise<unknown> {
     return this.json("/v1/training/models", "PUT", request);
+  }
+
+  prepareLocalModelProject(body: unknown, apply: boolean): Promise<unknown> {
+    return this.json(`/v1/training/model-project-preparations/${apply ? "apply" : "prepare"}`, "POST", body);
   }
 
   private async json(

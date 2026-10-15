@@ -54,6 +54,7 @@ export type ComposerProps = {
   busy: boolean;
   running?: boolean;
   taskSessionId?: string | null;
+  goalSessionId?: string | null;
   taskEvents?: readonly RuntimeEvent[];
   steerActiveResponses?: boolean;
   submissionScopeKey?: string;

@@ -1,20 +1,25 @@
 import { TaskResourceContextsSchema } from "@openpond/contracts";
 import type { StoredComposerDraft } from "./composer-draft-store";
 const KEY = "openpond.desktop-update-drafts.v1";
+const MAX_SNAPSHOT_CHARACTERS = 512 * 1024;
 
-// Only an explicit update restart saves this recovery snapshot. Storage remains
-// local to the Electron profile; no draft content is sent over updater IPC.
+// Renderer reloads and explicit update restarts share this recovery snapshot.
+// Storage stays local to the Electron profile; no draft is sent over updater IPC.
 export function saveDesktopUpdateDrafts(drafts: Record<string, StoredComposerDraft>, storage: Storage = window.localStorage): void {
-  storage.setItem(KEY, JSON.stringify(drafts));
+  if (Object.keys(drafts).length > 512) throw new Error("Too many unsent drafts for local recovery.");
+  const serialized = JSON.stringify(drafts);
+  if (serialized.length > MAX_SNAPSHOT_CHARACTERS) throw new Error("Unsent drafts exceed local recovery capacity.");
+  storage.setItem(KEY, serialized);
 }
 
 export function restoreDesktopUpdateDrafts(storage?: Storage): Record<string, StoredComposerDraft> {
   try {
     const target = storage ?? window.localStorage;
     const raw = target.getItem(KEY);
-    if (!raw) return {};
+    if (!raw || raw.length > MAX_SNAPSHOT_CHARACTERS) return {};
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    if (Object.keys(parsed).length > 512) return {};
     const drafts: Record<string, StoredComposerDraft> = {};
     for (const [key, value] of Object.entries(parsed)) {
       if (!/^(?:new-chat|(?:session|project|app):.+)$/.test(key)) continue;
@@ -29,8 +34,4 @@ export function restoreDesktopUpdateDrafts(storage?: Storage): Record<string, St
   } catch {
     return {};
   }
-}
-
-export function clearDesktopUpdateDrafts(storage: Storage = window.localStorage): void {
-  storage.removeItem(KEY);
 }

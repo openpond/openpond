@@ -149,6 +149,14 @@ Usage:
   openpond experiments <models|run|run-cloud|list|read|status|cancel|result|compare|case> [id] [candidate-id] --local [--server-url <loopback-origin>] [--input-file <path>] [--receipt-id <id>] [--json]
   openpond experiments <profile-catalog|prepare-profile|run-profile|inspect-profile> --local [--server-url <loopback-origin>] [--input-file <path>] [--json]
   openpond experiments <prepare-harness|run|read|list|status|diagnostics|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]
+  Case inspection: experiments case <run-id> --local --receipt-id <retained-receipt-id> [--after-sequence <nonnegative-integer>] [--limit <1..500>] --json. Only compare accepts a second positional run id; a task id is not a receipt id.
+  Find retained receipt IDs with experiments result <run-id> --local --json (independent saved Dataset runs: evidence.cases[].receiptId; workspace runs: cases[].receiptId). Case inspection reads retained output/grading/trace and never executes inference or grading.
+  Independent saved Dataset input (use --local without --team): {"datasetId":"<saved-id>","revision":3,"operationId":"reviewed-evaluation-1","maximumCostUsd":1,"taskLimit":10,"seed":0,"maxOutputTokens":1024,"models":[{"providerId":"openpond","modelId":"<exact catalog id>"}]}
+  Resolve models with experiments models --local --json; use each entry's providerId and id as modelId. Supported providers: openpond, custom-openai-compatible, claude-code, codex. Select 1–8 distinct models.
+  Input bounds: positive saved revision; operationId 1–120 characters; taskLimit 1–100 (default 10, first saved tasks); seed 0–2147483647 (default 0); maxOutputTokens 1–262144 (default 1024, capped by the selected model). Dataset revision pins its graders; no configuration/request wrapper is accepted here.
+  maximumCostUsd is a positive total ceiling up to 10000, divided across selected models and covering metered inference/grading. Use the authorized ceiling; the example is illustrative. It may be omitted only when every model is codex and the Dataset has no model-judge grader; subscription dollar cost remains unknown.
+  Prepare only: read datasets context/read/check-graders and experiments models, then write and review the input file. There is no independent Dataset prepare/dry-run command. experiments run --local --input-file <path> executes; reuse operationId only for the exact same input after reconciling status.
+  --team uses the workspace configuration contract instead. prepare-harness and prepare-profile prepare their released Harness/Profile workflows, not independent saved Dataset inputs.
 
 Options:
   --after-call-id <string>
@@ -947,11 +955,19 @@ Options:
 
 ```text
 Usage:
-  openpond training <create-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-run-id|run-id|model-id>
+  openpond training <projects|inspect-project|create-project|prepare-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]
+  openpond training prepare-project <input.json> [--dry-run] [--output <receipt.json>] [--json]
+  openpond training prepare-project <reviewed-receipt.json> --apply [--output <saved.json>] [--json]
+  openpond training pull-project <hosted-model-project-id> --profile <local-profile-id> [--snapshot-file <verified-package-and-projection.json>] [--json]
+  openpond training projects [--profile <local-profile-id>] [--json]
+  openpond training inspect-project <local-model-project-id> [--profile <local-profile-id>] [--json]
   openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]
   openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
   openpond training hosted-models|hosted-batches|hosted-preparations|hosted-capabilities --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-workers --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-serving-pools --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-base-serving-prepare <base-profile.json> --team-id <id> [--api-base-url <url>] --yes [--json]
+  openpond training hosted-serving-pool-retire <pool-and-reason.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-provider|hosted-quotes --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-worker <physical-worker-id> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-worker-stop|hosted-worker-resume|hosted-worker-retire|hosted-worker-warm-idle <control.json> --team-id <id> [--api-base-url <url>] --yes [--json]
@@ -974,6 +990,7 @@ Usage:
 Options:
   --account <string>
   --api-base-url <string>
+  --apply
   --cancel-on-infrastructure-error
   --cleanup-reserve-ms <integer>
   --cleanup-timeout-ms <integer>
@@ -982,6 +999,7 @@ Options:
   --deadline-at <string>
   --destination <string>
   --detach
+  --dry-run
   --evaluation-id <string>
   --export-approved
   --gpu-placement-objective <string>
@@ -992,6 +1010,7 @@ Options:
   --model <string>
   --name <string>
   --objective <string>
+  --output <string>
   --profile <string>
   --project-id <string>
   --provider <string>
@@ -1000,6 +1019,7 @@ Options:
   --retention-days <integer>
   --rollout-placement <string>
   --run-preset <string>
+  --snapshot-file <string>
   --team-id <string>
   --trajectory-id <string>
   --wait-for-cleanup
@@ -1025,7 +1045,8 @@ Options:
 
 ```text
 Usage:
-  openpond opchat <command> [args]
+  openpond opchat <provider-catalog|models|model|smoke> [args]
+  openpond opchat chat --model <id> --message <text> --team-id <id> --max-output-tokens <n> --request-id <id> --timeout-sec <1..600> --max-spend <usd> [--stream] (one bounded request; JSON receipt after completion)
 
 Options:
   --compatibility-model <string>
@@ -1034,14 +1055,19 @@ Options:
   --env <string>
   --environment <string>
   --json
+  --max-output-tokens <integer>
+  --max-spend <number>
   --message <string>
   --model <string>
   --opchat-api-base-url <string>
   --opchat-api-url <string>
   --prompt <string>
+  --request-id <string>
   --skip-stream
   --skip-tool
   --stream
+  --team-id <string>
+  --timeout-sec <integer>
 ```
 ## teams-bot
 

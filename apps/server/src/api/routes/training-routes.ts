@@ -18,6 +18,18 @@ import {
 
 export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
+  if (request.method === "POST" && ["/v1/training/model-project-preparations/prepare", "/v1/training/model-project-preparations/apply"].includes(requestUrl.pathname)) {
+    try {
+      const action = requestUrl.pathname.endsWith("/apply") ? "apply_local_model_project_preparation" : "prepare_local_model_project";
+      response.setHeader("Cache-Control", "no-store");
+      sendJson(response, 200, await deps.trainingPayload(action, await readJson(request, { maxBytes: 67_108_864 }), requestUrl));
+    } catch (error) {
+      if (error instanceof ZodError) sendJson(response, 400, { code: "model_preparation_invalid", error: "Project preparation does not match its contract." });
+      else if (error instanceof Error) sendJson(response, 409, { code: "model_preparation_conflict", error: error.message });
+      else throw error;
+    }
+    return true;
+  }
   const candidate = /^\/v1\/training\/candidate-evaluations(?:\/([^/]+)(?:\/(prepare|run|cancel))?)?$/.exec(requestUrl.pathname);
   if ((requestUrl.pathname === "/v1/training/candidates" && request.method === "GET") ||
       (candidate && (request.method === "GET" && candidate[1] && !candidate[2] || request.method === "POST" && (!candidate[1] || candidate[2])))) {
@@ -249,6 +261,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     return true;
   }
   const routes: Array<{ method: string; path: string; action: string; status?: number }> = [
+    { method: "GET", path: "/v1/training/model-projects", action: "inspect_local_model_projects" },
     { method: "POST", path: "/v1/training/sources", action: "add_source", status: 201 },
     { method: "POST", path: "/v1/training/sources/batch", action: "add_sources", status: 201 },
     { method: "POST", path: "/v1/training/sources/estimate", action: "estimate_sources" },
@@ -288,6 +301,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     return true;
   }
   const dynamic = [
+    { pattern: /^\/v1\/training\/model-projects\/([^/]+)$/, method: "GET", action: "inspect_local_model_projects", key: "modelProjectId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/graders$/, method: "GET", action: "taskset_grader_details", key: "tasksetId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/attempts\/([^/]+)\/evidence$/, method: "GET", action: "model_comparison_attempt_evidence", key: "runId", assignmentKey: "attemptId" },
     { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/seal$/, method: "POST", action: "seal_model_comparison_series", key: "seriesId" },

@@ -1,0 +1,56 @@
+.composer-goal-strip {
+  min-width: 0;
+  margin: 0 14px -12px;
+  padding: 3px 7px 15px 11px;
+  border: 1px solid var(--border-default);
+  border-bottom: 0;
+  border-radius: 17px 17px 0 0;
+  background: var(--surface-floating);
+  color: var(--text-primary);
+}
+
+.composer-resource-area:has(+ .composer-goal-strip) { margin-inline: 14px; }
+.composer-resource-area + .composer-goal-strip { border-radius: 0; }
+.composer-goal-heading { display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 30px; }
+.composer-goal-toggle {
+  display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0;
+  min-height: 30px; border: 0; padding: 0; background: transparent;
+  color: var(--text-primary); font-size: 13px; text-align: left;
+}
+.composer-goal-toggle > svg { flex-shrink: 0; color: var(--text-muted); }
+.composer-goal-strip.active .composer-goal-toggle > svg { color: var(--accent-primary); }
+.composer-goal-status { flex-shrink: 0; font-weight: 500; }
+.composer-goal-preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+.composer-goal-time { flex-shrink: 0; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.composer-goal-actions { display: flex; align-items: center; gap: 1px; }
+.composer-goal-actions button, .composer-goal-disclosure {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-muted);
+}
+.composer-goal-actions button:hover:not(:disabled), .composer-goal-disclosure:hover:not(:disabled) { background: var(--state-hover); color: var(--text-primary); }
+.composer-goal-strip button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 5px; }
+.composer-goal-strip button:disabled { opacity: 0.45; }
+.composer-goal-disclosure[aria-expanded="true"] svg { transform: rotate(180deg); }
+.composer-goal-objective { padding: 5px 4px 9px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.composer-goal-objective p { margin: 0 0 7px; white-space: pre-wrap; max-height: 180px; overflow: auto; }
+.composer-goal-objective small { color: var(--text-muted); font-size: 12px; }
+.composer-goal-subagent-summary { display: block; margin-top: 4px; color: var(--text-secondary); }
+.composer-goal-editor { display: grid; gap: 8px; margin-bottom: 8px; }
+.composer-goal-editor label { font-weight: 500; }
+.composer-goal-editor textarea {
+  width: 100%; min-height: 90px; max-height: 240px; resize: vertical;
+  border: 1px solid var(--border-strong); border-radius: 8px; padding: 9px 10px;
+  background: var(--surface-input); color: var(--text-primary); font: inherit; line-height: 1.5;
+}
+.composer-goal-editor textarea:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.composer-goal-editor-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.composer-goal-editor-actions button { padding: 6px 10px; border: 0; border-radius: 6px; background: var(--state-hover); color: var(--text-primary); font: inherit; }
+.composer-goal-editor-actions .composer-goal-save { background: var(--accent-primary-fill); color: var(--text-on-accent); }
+@media (max-width: 480px) {
+  .composer-goal-strip { margin-inline: 8px; padding-inline: 7px; }
+  .composer-goal-heading { gap: 3px; }
+  .composer-goal-status { font-size: 12px; }
+  .composer-goal-preview { display: none; }
+  .composer-goal-time { margin-left: auto; }
+}

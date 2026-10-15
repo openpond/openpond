@@ -1842,7 +1842,7 @@ export function createServerPayloads(deps: {
         if (input.action === "login") {
           const binary = getCodexStatus().binaryPath;
           if (!binary) throw new Error("Install Codex before signing in.");
-          return { command: nativeTerminalCommand(binary, ["login"], { PATH: process.env.PATH ?? "", ...(process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}) }) };
+          return { displayCommand: "codex login", command: nativeTerminalCommand(binary, ["login"], { PATH: process.env.PATH ?? "", ...(process.env.CODEX_HOME ? { CODEX_HOME: process.env.CODEX_HOME } : {}) }) };
         }
         signal?.throwIfAborted();
         const validation = await validateProviderCredentialPayload("codex", {}) as { nativeStatus: string; errors: string[]; providers: ProviderSettings };
@@ -1855,7 +1855,7 @@ export function createServerPayloads(deps: {
         const launch = nativeAgentLaunch(provider, file.providers[provider]);
         if (isRegisteredAcpProvider(provider)) throw new Error("Choose an advertised ACP authentication method to sign in.");
         const definition = NATIVE_AGENTS[provider];
-        return { command: nativeTerminalCommand(launch.command, definition.login.slice(1), {
+        return { displayCommand: definition.login.join(" "), command: nativeTerminalCommand(launch.command, definition.login.slice(1), {
           PATH: launch.env.PATH ?? "",
           [definition.homeVariable]: launch.env[definition.homeVariable] ?? "",
           ...(provider === "claude-code" ? {

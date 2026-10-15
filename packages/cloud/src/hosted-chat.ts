@@ -167,9 +167,28 @@ export type HostedChatStreamDelta =
       raw: unknown;
     };
 
+/** Transport metadata only: never headers, SSE contents or request credentials. */
+type HostedChatStreamDiagnosticDetails =
+  | { type: "request" }
+  | {
+      type: "headers";
+      status: number;
+      eventStream: boolean;
+      noCache: boolean;
+      noTransform: boolean;
+      bufferingDisabled: boolean;
+    }
+  | { type: "bytes"; byteLength: number }
+  | { type: "comment" }
+  | { type: "data"; errorFrame: boolean }
+  | { type: "done" };
+
+export type HostedChatStreamDiagnostic = HostedChatStreamDiagnosticDetails & { elapsedMs: number };
+
 export type HostedChatRequestOptions = {
   apiBaseUrl: string;
   token: string;
+  teamId?: string;
   model: string;
   messages: HostedChatMessage[];
   requestId?: string;
@@ -181,11 +200,13 @@ export type HostedChatRequestOptions = {
   toolChoice?: HostedChatToolChoice;
   tool_choice?: HostedChatToolChoice;
   metadata?: Record<string, unknown>;
+  onStreamDiagnostic?: (event: HostedChatStreamDiagnostic) => void;
 };
 
 export type HostedModelsRequestOptions = {
   apiBaseUrl: string;
   token: string;
+  teamId?: string;
   signal?: AbortSignal;
 };
 
@@ -272,14 +293,18 @@ function requireToken(value: string): string {
 function hostedHeaders(
   token: string,
   accept: string,
-  requestId?: string
+  requestId?: string,
+  teamId?: string,
 ): Headers {
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${requireToken(token)}`);
   headers.set("Content-Type", "application/json");
   headers.set("Accept", accept);
   headers.set("x-openpond-client", "openpond-code");
-  headers.set("x-openpond-request-id", requestId || randomUUID());
+  const operationId = requestId || randomUUID();
+  headers.set("x-openpond-request-id", operationId);
+  headers.set("x-request-id", operationId);
+  if (teamId) headers.set("x-openpond-team-id", teamId);
   return headers;
 }
 
@@ -366,7 +391,8 @@ export async function listOpChatModels(
   const requestUrl = `${apiBaseUrl}/models`;
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: hostedHeaders(options.token, "application/json"),
+    redirect: "error",
+    headers: hostedHeaders(options.token, "application/json", undefined, options.teamId),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -388,7 +414,8 @@ export async function getOpChatModel(
     requestUrl,
     {
       method: "GET",
-      headers: hostedHeaders(options.token, "application/json"),
+      redirect: "error",
+      headers: hostedHeaders(options.token, "application/json", undefined, options.teamId),
       signal: options.signal,
     }
   );
@@ -411,7 +438,8 @@ export async function listOpChatProviders(
   const requestUrl = `${apiBaseUrl}/providers`;
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: hostedHeaders(options.token, "application/json"),
+    redirect: "error",
+    headers: hostedHeaders(options.token, "application/json", undefined, options.teamId),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -433,7 +461,8 @@ export async function getOpChatProvider(
     requestUrl,
     {
       method: "GET",
-      headers: hostedHeaders(options.token, "application/json"),
+      redirect: "error",
+      headers: hostedHeaders(options.token, "application/json", undefined, options.teamId),
       signal: options.signal,
     }
   );
@@ -456,10 +485,12 @@ export async function sendHostedChatTurn(
   const requestUrl = `${apiBaseUrl}/chat/completions`;
   const response = await fetch(requestUrl, {
     method: "POST",
+    redirect: "error",
     headers: hostedHeaders(
       options.token,
       "application/json",
-      options.requestId
+      options.requestId,
+      options.teamId,
     ),
     body: JSON.stringify(buildHostedChatBody(options, false)),
     signal: options.signal,
@@ -491,11 +522,13 @@ type OpenAIStreamChunk = {
 
 async function* parseOpenAISSE(
   stream: ReadableStream<Uint8Array>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  observe?: (event: HostedChatStreamDiagnosticDetails) => void,
 ): AsyncGenerator<unknown, void, unknown> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let sawDone = false;
   const readAbortError = () =>
     signal?.reason instanceof Error
       ? signal.reason
@@ -506,19 +539,37 @@ async function* parseOpenAISSE(
       if (signal?.aborted) throw readAbortError();
       const result = await reader.read();
       if (result.done) break;
+      observe?.({ type: "bytes", byteLength: result.value.byteLength });
       buffer += decoder.decode(result.value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
       for (const line of lines) {
         const trimmed = line.trim();
+        if (trimmed.startsWith(":")) observe?.({ type: "comment" });
         if (!trimmed.startsWith("data:")) continue;
         const data = trimmed.slice(5).trim();
         if (!data) continue;
-        if (data === "[DONE]") return;
-        yield JSON.parse(data) as unknown;
+        if (data === "[DONE]") {
+          sawDone = true;
+          observe?.({ type: "done" });
+          return;
+        }
+        const parsed: unknown = JSON.parse(data);
+        observe?.({
+          type: "data",
+          errorFrame: Boolean(parsed && typeof parsed === "object" && "error" in parsed),
+        });
+        yield parsed;
       }
     }
+    throw new Error("Hosted chat stream ended before [DONE].");
   } finally {
+    if (!sawDone) {
+      // Consumer/protocol failure must close the transport, never leave paid
+      // provider work running behind a released reader. Normal DONE may still
+      // be followed by server-side accounting settlement; do not cancel it.
+      await reader.cancel().catch(() => {});
+    }
     try {
       reader.releaseLock();
     } catch {
@@ -532,15 +583,35 @@ export async function* streamHostedChatTurn(
 ): AsyncGenerator<HostedChatStreamDelta, void, unknown> {
   const apiBaseUrl = normalizeApiBaseUrl(options.apiBaseUrl);
   const requestUrl = `${apiBaseUrl}/chat/completions`;
+  const started = performance.now();
+  const observe = (event: HostedChatStreamDiagnosticDetails) => {
+    try {
+      options.onStreamDiagnostic?.({ ...event, elapsedMs: Math.round(performance.now() - started) });
+    } catch {
+      // An optional observer must not change request or stream lifecycle.
+    }
+  };
+  observe({ type: "request" });
   const response = await fetch(requestUrl, {
     method: "POST",
+    redirect: "error",
     headers: hostedHeaders(
       options.token,
       "text/event-stream",
-      options.requestId
+      options.requestId,
+      options.teamId,
     ),
     body: JSON.stringify(buildHostedChatBody(options, true)),
     signal: options.signal,
+  });
+  const cacheControl = response.headers.get("cache-control")?.toLowerCase().split(",").map(value => value.trim()) ?? [];
+  observe({
+    type: "headers",
+    status: response.status,
+    eventStream: response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() === "text/event-stream",
+    noCache: cacheControl.includes("no-cache"),
+    noTransform: cacheControl.includes("no-transform"),
+    bufferingDisabled: response.headers.get("x-accel-buffering")?.toLowerCase() === "no",
   });
   if (!response.ok || !response.body) {
     throw new Error(
@@ -550,7 +621,7 @@ export async function* streamHostedChatTurn(
     );
   }
 
-  for await (const raw of parseOpenAISSE(response.body, options.signal)) {
+  for await (const raw of parseOpenAISSE(response.body, options.signal, observe)) {
     const chunk = raw as OpenAIStreamChunk;
     if (chunk.error) {
       throw new Error(chunk.error.message || "Hosted chat stream error");

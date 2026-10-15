@@ -11,7 +11,7 @@ import { prepareModelStarterTaskset } from "../apps/server/src/training/model-st
 import { createModelStarterCreationService } from "../apps/server/src/training/model-starter-creation-service.js";
 import { createModelStarterRuntime } from "../apps/server/src/training/model-starter-runtime.js";
 import { exportLocalModelTasksetPackage } from "../apps/server/src/training/model-taskset-package-export.js";
-import { createTasksetPackage, decodeTasksetPackageFile, TasksetPackagePublicationSchema, type TasksetPackageReceipt } from "openpond-sdk/taskset-packages";
+import { createTasksetPackage, decodeTasksetPackageFile, prepareImportedTasksetPackage, TasksetPackagePublicationSchema, type TasksetPackageReceipt } from "openpond-sdk/taskset-packages";
 import { createModelProjectHostingService } from "../apps/server/src/training/model-project-hosting.js";
 import { tasksetPackageDirectoryId } from "../apps/server/src/training/taskset-package-path.js";
 import { hostedModelProjectTrainingSetup } from "../apps/server/src/training/model-project-hosted-projection.js";
@@ -261,6 +261,78 @@ it("pulls complete private packages atomically and exports their exact bytes aft
       expect(ordinaryTaskset.graders[0]!.kind).toBe(exported.taskset.graders[0]!.kind);
       expect(await exportLocalModelTasksetPackage({ store: generic, storeDir: generic.home, profileId: ordinary.project.profileId, modelId: ordinary.project.id })).toEqual(servedPackage);
     } finally { await generic.close(); }
+  } finally { await source.close(); await target.close(); }
+}));
+
+// Historical projected references can be recovered only from the exact package
+// and canonical projection; a forged snapshot must leave the real store empty.
+it("recovers an explicitly pinned projected snapshot atomically and rejects altered evidence", async () => withTempDirectory("projected-snapshot-", async home => {
+  const source = new SqliteStore(path.join(home, "source"));
+  let target = new SqliteStore(path.join(home, "target"));
+  try {
+    const original = await source.saveModelStarterCreation(await starterInput());
+    const value = await exportLocalModelTasksetPackage({ store: source, storeDir: source.home, profileId: original.profileId, modelId: original.id });
+    const projected = prepareImportedTasksetPackage({ package: value, profileId: "snapshot-profile", name: original.name, createdAt: original.createdAt }).taskset;
+    const hosted = { id: "historical-model", teamId: "team", portableProjectId: original.id, name: original.name,
+      objective: original.objective, defaultBaseModel: original.defaultBaseModel, defaultDestinationId: original.defaultDestinationId,
+      trainingSetup: { ...hostedModelProjectTrainingSetup(original.trainingSetup), tasksetRef: learningRef(projected), evaluationTasksetRef: learningRef(projected) },
+      sourceRevision: 1, revision: 1, etag: "a".repeat(64), sourceUpdatedAt: original.updatedAt, createdAt: original.createdAt, updatedAt: original.updatedAt };
+    const service = () => createModelProjectHostingService({ store: target,
+      resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test", teamId: "team" }),
+      fetch: async url => {
+        const pathname = new URL(String(url)).pathname;
+        if (pathname === "/v1/managed-rl/jobs") return Response.json({ jobs: [] });
+        if (pathname.startsWith("/v1/taskset-")) throw new Error("Snapshot recovery must not replace supplied evidence with a catalog download.");
+        return Response.json({ project: hosted, resources: [], jobCount: 0, latestJobIds: [] });
+      } });
+    const snapshot = { schemaVersion: "openpond.modelProjectPullSnapshot.v1", package: value, taskset: projected };
+    const corrupted = structuredClone(snapshot);
+    corrupted.package.files[0]!.base64 = Buffer.from("altered private bytes").toString("base64");
+    const alteredProjection = { ...snapshot, taskset: { ...projected, objective: "Changed instructions" } };
+    const foreignPin = { ...snapshot, taskset: { ...projected, contentHash: "f".repeat(64) } };
+    await expect(service().pullProject({ hostedProjectId: hosted.id, profileId: "another-profile", snapshot })).rejects.toThrow();
+    expect(await target.getModelProject(original.id)).toBeNull();
+    expect(await target.getTaskset(projected.id)).toBeNull();
+    for (const invalid of [corrupted, alteredProjection, foreignPin]) {
+      await expect(service().pullProject({ hostedProjectId: hosted.id, profileId: "snapshot-profile", snapshot: invalid })).rejects.toThrow();
+      expect(await target.getModelProject(original.id)).toBeNull();
+      expect(await target.getTaskset(projected.id)).toBeNull();
+    }
+    const result = await service().pullProject({ hostedProjectId: hosted.id, profileId: "snapshot-profile", snapshot });
+    expect(result.project.trainingSetup.tasksetRef).toEqual(learningRef(projected));
+    expect(await target.getTaskset(projected.id)).toEqual(projected);
+    await expect(service().pullProject({ hostedProjectId: hosted.id, profileId: "another-profile", snapshot })).rejects.toThrow();
+    expect(await target.getModelProject(original.id)).toEqual(result.project);
+    const { inspectLocalModelProjects } = await import("../apps/server/src/training/model-project-inspection.js");
+    const listing = await inspectLocalModelProjects(target);
+    expect(listing.projects?.map(project => project.id)).toContain(original.id);
+    const inspected = await inspectLocalModelProjects(target, original.id, "snapshot-profile");
+    expect(inspected.tasksets?.every(binding => binding.available && binding.reference?.contentHash === projected.contentHash)).toBe(true);
+    expect(inspected.tasksets?.[0]?.taskset).toMatchObject({ id: projected.id, revision: projected.revision, contentHash: projected.contentHash, taskCount: projected.tasks.length, importedPackageHash: value.contentHash });
+    expect(inspected.tasksets?.[0]?.taskset).not.toHaveProperty("tasks");
+    expect(inspected.tasksets?.[0]?.taskset?.graders[0]).not.toHaveProperty("module");
+    expect(JSON.stringify(inspected)).not.toContain(value.files[0]!.base64);
+    const sensitiveReader = {
+      listModelProjects: target.listModelProjects.bind(target),
+      getModelProject: async () => ({ ...result.project, trainingSetup: {
+        ...result.project.trainingSetup, recipe: { ...result.project.trainingSetup.recipe, privateSentinel: "private-recipe-payload-must-not-leak" },
+      } }),
+      getTasksetRevision: target.getTasksetRevision.bind(target),
+    };
+    const privateInspection = await inspectLocalModelProjects(sensitiveReader, original.id);
+    expect(privateInspection.project?.trainingSetup.recipePresent).toBe(true);
+    expect(privateInspection.project?.trainingSetup).not.toHaveProperty("recipe");
+    expect(JSON.stringify(privateInspection)).not.toContain("private-recipe-payload-must-not-leak");
+    await expect(inspectLocalModelProjects(target, original.id, "another-profile")).rejects.toThrow();
+    const mismatched = await inspectLocalModelProjects({
+      listModelProjects: target.listModelProjects.bind(target), getModelProject: target.getModelProject.bind(target),
+      getTasksetRevision: async () => ({ ...projected, contentHash: "f".repeat(64) }),
+    }, original.id);
+    expect(mismatched.tasksets?.every(binding => !binding.available && binding.taskset === null)).toBe(true);
+    expect(await target.getModelProject(original.id)).toEqual(result.project);
+    expect(await target.getTaskset(projected.id)).toEqual(projected);
+    await target.close(); target = new SqliteStore(path.join(home, "target"));
+    expect(await exportLocalModelTasksetPackage({ store: target, storeDir: target.home, profileId: "snapshot-profile", modelId: original.id })).toEqual(value);
   } finally { await source.close(); await target.close(); }
 }));
 

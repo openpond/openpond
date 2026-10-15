@@ -12,7 +12,7 @@ import { DatasetWorkspace } from "./DatasetWorkspace";
 import { ModelTrainingJourney } from "../labs/ModelTrainingJourney";
 import { LocalTrainingOverview } from "./DatasetTrainingOverview";
 import { ChatTrainingInputs, TrainingWorkspaceSection } from "./ChatTrainingInputs";
-import { RunFlowDiagram } from "../training/RunFlowDiagram";
+import { PlannedTrainingFlow } from "../training/RunFlowDiagram";
 
 export function ChatExperimentTool({ connection, sessionId, events }: { connection: ClientConnection; sessionId: string | null; events: RuntimeEvent[] }) {
   const context = useChatContextSelection(connection, sessionId);
@@ -48,14 +48,14 @@ export function ChatExperimentTool({ connection, sessionId, events }: { connecti
     {selected?.model ? <div className="chat-experiment-tool-content">
       <dl className="training-context-facts"><dt>Base model</dt><dd>{selected.model.baseModel ?? "—"}</dd></dl>
       <DropdownSelect floating label="Training run" value={runValue} disabled={context.runs.isPending || context.selecting}
-        options={[{ value: "", label: context.runs.isPending ? "Loading training runs…" : "No training runs", disabled: true },
+        options={[...(!runOptions.length ? [{ value: "", label: context.runs.isFetching ? "Loading training runs…" : context.runs.error ? "Choose training run" : "No training runs", disabled: true }] : []),
           ...runOptions]}
         onChange={raw => void choose(raw)} />
-      <ErrorToast error={context.runs.error} />
+      <ErrorToast error={context.runs.error}>{context.runs.error ? <button type="button" className="training-button secondary" onClick={() => void context.runs.refetch()}>Retry training history</button> : null}</ErrorToast>
       {training ? training.location === "cloud" ? <ModelTrainingJourney compact connection={connection} teamId={training.owner.teamId}
         projectId={training.job.modelProjectId} jobId={training.jobId} onOpenRun={() => window.location.assign(modelsPath(modelsLocation("runs", null, { area: "console", resourceId: `hosted-run:${training.jobId}` })))} /> : <LocalTrainingOverview connection={connection} training={training} />
-        : <RunFlowDiagram live={false} nodes={["Prepare", "Rollouts", "Optimize", "Checkpoint", "Activate policy", "Evaluate", "Finish"].map(label => ({ label, state: "pending" as const, status: "Not started" }))} />}
-      <ChatTrainingInputs dataset={selected.dataset} graders={selected.graders ?? []} model={selected.model} />
+        : <PlannedTrainingFlow />}
+      <ChatTrainingInputs connection={connection} dataset={selected.dataset} graders={selected.graders ?? []} model={selected.model} />
       <TrainingWorkspaceSection title="Experiments">
         <DropdownSelect floating label="Experiment" value="" options={[{ value: "", label: "Experiment", disabled: true },
           ...(context.catalog.data?.options ?? []).filter(item => item.target.kind === "experiment").map(item => ({ value: JSON.stringify(item.target), label: item.label, description: item.detail }))]}

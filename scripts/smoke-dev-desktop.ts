@@ -270,9 +270,24 @@ async function main(): Promise<void> {
 }
 
 async function verifyDesktopNavigation(cdp: CdpClient): Promise<{
+  gettingStartedDismissed: boolean;
   keyboardNavigationPassed: boolean;
   composerAvailable: boolean;
 }> {
+  // Finish first-run setup before measuring unrelated keyboard/render behavior.
+  // The explicit entry point also works when an editable has deferred auto-open.
+  await evaluateValue(cdp, `window.dispatchEvent(new Event("openpond:open-get-started"))`);
+  await waitFor(
+    () => evaluateValue<boolean>(cdp, `Boolean(document.querySelector('[aria-label="Close get started"]'))`),
+    DEFAULT_TIMEOUT_MS,
+    "First-run setup did not open."
+  );
+  await evaluateValue(cdp, `document.querySelector('[aria-label="Close get started"]').click()`);
+  await waitFor(
+    () => evaluateValue<boolean>(cdp, `!document.querySelector('[role="dialog"][aria-label="Get started with OpenPond"]')`),
+    DEFAULT_TIMEOUT_MS,
+    "First-run setup did not dismiss."
+  );
   // Exercise destination changes with real keyboard input. The rail replaced
   // the old product menu; successful navigation must still reveal usable views.
   await selectDesktopDestination(cdp, "Apps");
@@ -298,7 +313,7 @@ async function verifyDesktopNavigation(cdp: CdpClient): Promise<{
     DEFAULT_TIMEOUT_MS,
     "Home did not render the thread composer after keyboard navigation."
   );
-  return { keyboardNavigationPassed: true, composerAvailable: true };
+  return { gettingStartedDismissed: true, keyboardNavigationPassed: true, composerAvailable: true };
 }
 
 async function selectDesktopDestination(cdp: CdpClient, label: string): Promise<void> {

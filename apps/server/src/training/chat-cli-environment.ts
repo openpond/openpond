@@ -4,6 +4,15 @@ import { fileURLToPath } from "node:url";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 export async function bundledChatCliEnvironment(): Promise<NodeJS.ProcessEnv> {
+  // Source development uses the official CLI source, including newly added
+  // commands, without requiring a package build. Packaged JS uses only dist.
+  if (import.meta.url.endsWith(".ts")) {
+    const source = path.resolve(directory, "../../../cli/src/cli/source-entry.mjs");
+    if (await access(source).then(() => true, () => false)) {
+      return { OPENPOND_CLI_NODE: process.execPath, OPENPOND_CLI_ENTRY: source };
+    }
+    throw new Error("The official development CLI source launcher is missing. Restore apps/cli/src/cli/source-entry.mjs before using CLI workflows.");
+  }
   const candidates = [
     path.resolve(directory,"../../../cli/dist/cli.js"),
     path.resolve(directory,"cli.js"),

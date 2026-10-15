@@ -25,7 +25,11 @@ export function DesktopGettingStarted({ ready, connection, payload, onPayload }:
 
   useEffect(() => {
     if (!desktop || !ready || !connection || !accountSettled || dismissed || complete || open) return;
-    return scheduleGettingStarted(() => setOpen(true), () => document.hidden || Boolean(document.querySelector('[role="dialog"]')));
+    return scheduleGettingStarted(() => setOpen(true), () => {
+      const focused = document.activeElement;
+      return document.hidden || Boolean(document.querySelector('[role="dialog"]'))
+        || (focused instanceof HTMLElement && (focused.isContentEditable || focused.matches("input, textarea")));
+    });
   }, [desktop, ready, connection?.serverUrl, connection?.token, accountSettled, dismissed, complete, open]);
 
   useEffect(() => {

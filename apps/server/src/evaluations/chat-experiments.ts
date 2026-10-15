@@ -80,13 +80,17 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
       const pin=await hostedPin();
       const catalog=await (deps.hosted?.catalog ?? loadOpenPondHostedModels)();
       if(contentHash(await hostedPin())!==contentHash(pin))throw new Error("Hosted account changed while loading models.");
+      const observedAt=new Date().toISOString();
       const models=[];
       for(const model of catalog.models) {
         try {
-          const raw=model.raw as {output_limit?:number};
+          const raw=model.raw as {output_limit?:number;context_window?:number};
           const outputLimit=raw.output_limit ?? 0;
           const admission=await prepareLocalExperimentModel({kind:"hosted_chat",modelId:model.id,maxOutputTokens:Math.min(1024,outputLimit),temperature:0,topP:1},async()=>catalog);
-          models.push({id:model.id,name:model.displayName,providerId:"openpond" as const,configurationHash:admission.model.configurationHash,outputLimit});
+          models.push({id:model.id,name:model.displayName,providerId:"openpond" as const,configurationHash:admission.model.configurationHash,outputLimit,
+            contextWindow:Number(raw.context_window),pricing:admission.pricing,
+            quote:{kind:"worst_case_request_reservation" as const,observedAt,maxOutputTokens:admission.model.maxOutputTokens,
+              maximumRequestCostUsd:admission.maximumChargeUsd,predictedSpend:false as const}});
         } catch {/* Only models with qualified pricing and bounds can be run. */}
       }
       return {models,status:catalog.error ?? "Ready"};

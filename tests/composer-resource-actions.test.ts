@@ -1,6 +1,6 @@
 import {expect,test} from "vitest";
-import type {ChatResourceSummary} from "@openpond/contracts";
-import {captureComposerResourceContext,mergeComposerResourceContexts} from "../apps/web/src/components/chat/composer-resource-context";
+import type {ChatResourceSummary,ChatContextSelection} from "@openpond/contracts";
+import {captureComposerResourceContext,mergeComposerResourceContexts,composerSubmissionResourceContext} from "../apps/web/src/components/chat/composer-resource-context";
 import { datasetWorkspaceContext } from "../apps/web/src/components/chat/dataset-workspace-data";
 
 // Failure story: preparing two requests must retain each model and execution pin.
@@ -15,6 +15,10 @@ test("resource requests preserve draft model targets",()=>{
   expect(combined.map(context=>context.executionLocation)).toEqual(["local","cloud"]);
   expect(combined.map(context=>context.evaluationModel)).toEqual(["codex/model-a","openpond/model-b"]);
   expect(combined[0]!.resources).toContainEqual(expect.objectContaining({kind:"experiment",id:"run"}));
+  // Changing the bottom picker after preparing the action must not redirect it.
+  const selected = {target:{kind:"model",id:"other-model",location:"cloud"},label:"Other model",detail:"",model:{id:"other-model"}} as ChatContextSelection;
+  expect(composerSubmissionResourceContext(drafted, combined, selected)).toEqual({contexts:drafted,focus:null});
+  expect(composerSubmissionResourceContext(undefined, combined, selected)).toEqual({contexts:[],focus:selected});
 });
 
 // Failure story: diagnosing a historical row must not attach today's grader
