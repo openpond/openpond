@@ -238,7 +238,8 @@ function parseInlineMath(
   let closing = start + 1;
   while ((closing = content.indexOf("$", closing + 1)) >= 0) {
     if (content[closing - 1] === "\\") continue;
-    if (content[closing + 1] === "$" || /\s/.test(content[closing - 1] ?? "")) continue;
+    // A dollar sign before a number starts another amount, not a math close.
+    if (content[closing + 1] === "$" || /\d/.test(content[closing + 1] ?? "") || /\s/.test(content[closing - 1] ?? "")) continue;
     return {
       content: content.slice(start + 1, closing),
       end: closing + 1,

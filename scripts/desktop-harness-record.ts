@@ -86,6 +86,7 @@ async function record() {
     await cdp.send("Page.stopScreencast");
     unsubscribe();
     await writing;
+    durationSeconds = Math.max(durationSeconds, frames.at(-1)?.atSeconds ?? 0);
     if (failure) throw failure;
     if (!frames.length) throw new Error("No screencast frames received; no video was fabricated.");
     const timeline = frames.flatMap((frame, index) => [

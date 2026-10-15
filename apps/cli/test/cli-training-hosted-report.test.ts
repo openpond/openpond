@@ -22,13 +22,15 @@ function event(id: string, data: Record<string, unknown>, type = "rollout_metric
 
 describe("hosted report accounting and learning evidence", () => {
   // Failure story: repeated event snapshots inflate cost denominators; allocation
-  // costs get added to job costs; ineligible rewards hide a no-signal problem.
+  // costs get added to job costs; metadata or ineligible-only fields get presented
+  // as grader components; ineligible rewards hide a no-signal problem.
   test("keeps accounting views separate and aggregates only eligible recorded evidence", () => {
-    const first = event("trajectory-1", { metricKind: "rollout_trajectory", rolloutGroupId: "group-1", rewardEligible: true, reward: 0, terminalClass: "policy", inputTokens: 10, outputTokens: 2 });
+    const first = event("trajectory-1", { metricKind: "rollout_trajectory", rolloutGroupId: "group-1", rewardEligible: true, reward: 0, terminalClass: "policy", inputTokens: 10, outputTokens: 2,
+      rewardComponents: { reward: 0, scope: 0.5, executionTiming: { totalRolloutSeconds: 3 }, rewardCompositionHash: "private prompt hash", workOutcome: { status: "complete" }, nonfinite: Number.POSITIVE_INFINITY } });
     const events = [first, first,
       event("trajectory-2", { metricKind: "rollout_trajectory", rolloutGroupId: "group-1", rewardEligible: true, reward: 1, terminalClass: "policy" }),
       event("trajectory-3", { metricKind: "rollout_trajectory", rolloutGroupId: "group-2", rewardEligible: true, reward: 0, terminalClass: "policy" }),
-      event("trajectory-4", { metricKind: "rollout_trajectory", rolloutGroupId: "group-2", rewardEligible: false, reward: 99, terminalClass: "infrastructure" }),
+      event("trajectory-4", { metricKind: "rollout_trajectory", rolloutGroupId: "group-2", rewardEligible: false, reward: 99, terminalClass: "infrastructure", rewardComponents: { ineligibleOnly: 99 } }),
       event("skipped-2", { rolloutGroupId: "group-2" }, "optimizer_skipped_no_signal"),
       event("allocation-1", { metricKind: "gpu_allocation", allocationId: "allocation-1", accruedGpuUsd: 4, accruedGpuSeconds: 45 }),
       event("infer-1", { metricKind: "inference_command", timings: { commandTotalSeconds: 5, vllmRequestSeconds: 4, vllmPrefillSeconds: 2, vllmDecodeSeconds: 2 } }, "infer"),
@@ -47,6 +49,12 @@ describe("hosted report accounting and learning evidence", () => {
     expect(report.wall.elapsedSeconds).toBe(60);
     expect(report.timings.inferenceSeconds.vllmRequestSeconds).toMatchObject({ total: 4, observations: 1, missing: 1 });
     expect(report.learning.entropy.mean).toBeNull();
+    expect(Object.keys(report.trajectories.rewardComponents)).toEqual(["reward", "scope"]);
+    expect(report.trajectories.rewardComponents.scope).toMatchObject({ observations: 1, missing: 2, mean: 0.5 });
+    expect(report.findings.map(finding => finding.code)).toContain("reward_component_binding_unverified");
+    const aggregateOnly = buildHostedTrainingReport({ job, events: [{ ...first, data: { ...first.data, rewardComponents: { reward: 0, executionTiming: {}, rewardCompositionHash: "private prompt hash", workOutcome: {} } } }], outputs, versionBeforeRead: 3, generatedAt: end });
+    expect(Object.keys(aggregateOnly.trajectories.rewardComponents)).toEqual(["reward"]);
+    expect(aggregateOnly.findings.map(finding => finding.code)).toContain("per_grader_reward_breakdown_unavailable");
     expect(JSON.stringify(report)).not.toContain("private prompt");
   });
 

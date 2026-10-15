@@ -35,6 +35,14 @@ export function DatasetRunProgress({
   const generated = cases.filter((item) => item.output !== null).length;
   const graded = cases.filter((item) => item.score !== null).length;
   const settled = cases.filter((item) => !["pending", "running"].includes(item.status)).length;
+  const failures = cases.filter(item => item.status === "failed");
+  const generationFailures = failures.filter(item => item.output === null);
+  const cancelled = cases.filter(item => item.status === "cancelled").length;
+  const failed = /^failed$/i.test(run.state);
+  const failureEvidence = (items: typeof cases) => items.length
+    ? items.slice(0, 3).map(item => `${item.taskId}: ${item.error ?? item.status}`).join("\n")
+      + (items.length > 3 ? `\n${items.length - 3} more failures in the retained results.` : "")
+    : undefined;
   const preparing = live && !cases.some((item) => item.status !== "pending");
   const generating = live && !preparing && generated < total;
   const grading = live && !preparing && !generating && graded < total;
@@ -46,14 +54,15 @@ export function DatasetRunProgress({
     },
     {
       label: "Rollouts",
-      state: generating
+      state: generationFailures.length ? "failed" : generating
         ? "active"
         : total > 0 && generated === total
           ? "done"
           : live
             ? "pending"
             : "missing",
-      status: generating ? "Generating answers" : "Model outputs",
+      status: generationFailures.length ? "Error recorded" : generating ? "Generating answers" : "Model outputs",
+      error: failureEvidence(generationFailures),
       detail: `${generated}/${total} generated`,
       progress: total ? generated / total : 0,
     },
@@ -73,13 +82,15 @@ export function DatasetRunProgress({
     {
       label: "Results",
       state:
-        !live && run.state === "completed" && !error
+        failed ? "failed" : !live && run.state === "completed"
           ? "done"
           : live && settled === total
             ? "active"
-            : "pending",
-      status: live ? "Waiting for evidence" : error ? "Refresh unavailable" : run.state,
-      detail: run.score == null ? "Score unavailable" : `Mean score ${run.score.toFixed(3)}`,
+            : live ? "pending" : "missing",
+      status: live ? "Waiting for evidence" : failed ? "Failed" : run.state,
+      error: failed ? failureEvidence(failures) ?? "The run ended with a failure. Inspect its retained cases and logs." : undefined,
+      detail: (run.score == null ? "Score unavailable" : `Mean score ${run.score.toFixed(3)}`)
+        + (failed && cases.length ? ` · ${failures.length} execution failure${failures.length === 1 ? "" : "s"} · ${cancelled} cancelled` : ""),
     },
   ];
   return (
