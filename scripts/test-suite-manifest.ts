@@ -75,6 +75,7 @@ export const ROOT_SYSTEM_TESTS = [
   "tests/manual-compaction-usage.test.ts",
   "tests/model-tool-registry.test.ts",
   "tests/model-project-authoring.test.ts",
+  "tests/local-model-project-preparation.test.ts",
   "tests/model-starter-taskset.test.ts",
   "tests/starter-tool-attempt.test.ts",
   "tests/model-usage-store.test.ts",
