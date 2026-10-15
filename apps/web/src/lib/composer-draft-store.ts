@@ -96,6 +96,7 @@ export function createComposerDraftStore(
       if (resolved) drafts.set(scopeKey, resolved);
       else drafts.delete(scopeKey);
       if (scopeKey === activeScopeKey) publish(resolved);
+      else for (const listener of listeners) listener();
     },
     applyAppAction(action) {
       if (action.type === "field") {

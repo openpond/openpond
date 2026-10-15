@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useDesktopUpdates } from "./useDesktopUpdates";
-import { clearDesktopUpdateDrafts } from "../lib/desktop-update-drafts";
 
 export type DesktopUpdateAction = "check" | "download" | "restart";
 
@@ -22,10 +21,7 @@ export function useDesktopUpdateAction(hasRunningWork: boolean) {
         if (!window.dispatchEvent(new Event("openpond:before-update", { cancelable: true }))) {
           throw new Error("Could not save your drafts. Save them before restarting to update.");
         }
-        const result = await bridge.restartAndInstall({ hasRunningWork });
-        // A canceled or failed restart keeps this renderer alive. Discard the
-        // snapshot so a later ordinary launch cannot restore stale drafts.
-        if (result.status !== "restarting") clearDesktopUpdateDrafts();
+        await bridge.restartAndInstall({ hasRunningWork });
       } else if (action === "check") {
         await bridge.check();
       } else {

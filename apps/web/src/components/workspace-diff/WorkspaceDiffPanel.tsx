@@ -351,11 +351,11 @@ function WorkspaceDiffPanelInner({
   ) => void;
 }) {
   const initialViewState = viewState ?? defaultWorkspaceDiffPanelViewState();
-  const [filesTabOpen, setFilesTabOpen] = useState(!renderOutputs || tabRequest?.tab === "files");
-  const [overviewTabs, setOverviewTabs] = useState<number[]>([0]);
-  const [activeOverviewId, setActiveOverviewId] = useState(0);
-  const nextOverviewId = useRef(1);
-  const [tabOrder, setTabOrder] = useState<string[]>(["overview-0", ...initialViewState.openFilePaths]);
+  const [filesTabOpen, setFilesTabOpen] = useState(!renderOutputs || tabRequest?.tab === "files" || initialViewState.filesTabOpen);
+  const [overviewTabs, setOverviewTabs] = useState<number[]>(initialViewState.overviewTabs);
+  const [activeOverviewId, setActiveOverviewId] = useState(initialViewState.activeOverviewId);
+  const nextOverviewId = useRef(Math.max(0, ...initialViewState.overviewTabs) + 1);
+  const [tabOrder, setTabOrder] = useState<string[]>(initialViewState.tabOrder);
   const [activeTab, setActiveTab] = useState<DiffTab>(tabRequest?.tab ?? initialViewState.activeTab);
   const [menuOpen, setMenuOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -554,8 +554,12 @@ function WorkspaceDiffPanelInner({
       activeTab,
       openFilePaths,
       selectedPath,
+      filesTabOpen,
+      overviewTabs,
+      activeOverviewId,
+      tabOrder,
     }),
-    [activeTab, openFilePaths, selectedPath],
+    [activeTab, openFilePaths, selectedPath, filesTabOpen, overviewTabs, activeOverviewId, tabOrder],
   );
 
   useEffect(() => {
@@ -615,6 +619,11 @@ function WorkspaceDiffPanelInner({
     setActiveTab(current => tabRequest?.tab === "outputs" && current === "outputs" ? current : next.activeTab);
     setOpenFilePaths(next.openFilePaths);
     setSelectedPath(next.selectedPath);
+    setFilesTabOpen(!renderOutputs || next.filesTabOpen);
+    setOverviewTabs(next.overviewTabs);
+    setActiveOverviewId(next.activeOverviewId);
+    setTabOrder(next.tabOrder);
+    nextOverviewId.current = Math.max(0, ...next.overviewTabs) + 1;
   }, [viewState, workspaceRootPath, tabRequest?.tab, providedFilePaths]);
 
   useEffect(() => {

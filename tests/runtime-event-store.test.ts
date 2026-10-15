@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import type { RuntimeEvent } from "@openpond/contracts";
 import { RuntimeEventStore } from "../apps/web/src/lib/runtime-event-store";
+import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import { createSessionEventSync } from "../apps/web/src/lib/session-event-sync";
 import type { RuntimeEventPagePayload } from "../apps/web/src/api";
 
@@ -171,6 +172,36 @@ test("reconciles a stale visible chat across paged gaps and overlapping live eve
   expect(store.getSessionEvents("a").map((item) => item.sequence)).toEqual([1, 2, 3, 4, 5]);
   expect(store.getSessionEvents("a").at(-1)?.name).toBe("turn.completed");
   expect(store.getSessionEvents("other").map((item) => item.sequence)).toEqual([100]);
+  expect(errors).not.toHaveBeenCalled();
+  sync.close();
+});
+
+// A tail beginning inside an inline code span used to phase-shift every later
+// delimiter and omit the answer opening until older history was manually loaded.
+test("loads the beginning of a turn cut by the 500-event tail without loading older turns", async () => {
+  const store = new RuntimeEventStore();
+  const chunks = ["Keep `release-", ...Array.from({ length: 598 }, () => "x"), "` and **40%**."];
+  const events = [
+    { ...event("older", "a", 1), turnId: "old", output: "Older answer" },
+    { ...event("start", "a", 2), turnId: "current", name: "turn.started", output: undefined },
+    ...chunks.map((output, index) => ({ ...event(`chunk-${index}`, "a", index + 3), turnId: "current", output })),
+    { ...event("done", "a", 603), turnId: "current", name: "turn.completed", output: undefined },
+  ];
+  const fetchPage = vi.fn(async (request: { beforeSequence?: number; limit: number }) => {
+    const matching = events.filter(event => event.sequence! < request.beforeSequence!);
+    const selected = matching.slice(-request.limit);
+    return { ...page(selected.map(event => event.sequence!), matching.length > selected.length),
+      events: selected.map(event => ({ sequence: event.sequence!, event })) };
+  });
+  const onPage = vi.fn();
+  const errors = vi.fn();
+  const sync = createSessionEventSync({ sessionId: "a", store, fetchPage, onPage, onError: errors });
+  await sync.refresh();
+  const retained = store.getSessionEvents("a");
+  expect(fetchPage).toHaveBeenCalledTimes(2);
+  expect(retained).toEqual(events.slice(1));
+  expect(buildChatMessages(retained).find(message => message.finalAnswer)?.content).toBe(chunks.join(""));
+  expect(onPage.mock.calls[0]![0]).toMatchObject({ previousSequence: 2, hasMore: true });
   expect(errors).not.toHaveBeenCalled();
   sync.close();
 });
