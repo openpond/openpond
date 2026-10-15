@@ -10,7 +10,7 @@ export function ChangeSummaryCard({
   onOpenFileInSidebar?: (path: string) => void;
 }) {
   const [openPath, setOpenPath] = useState<string | null>(null);
-  const title = `${summary.filesChanged} ${summary.filesChanged === 1 ? "file" : "files"} changed`;
+  const title = `Workspace changes · ${summary.filesChanged} ${summary.filesChanged === 1 ? "file" : "files"}`;
   const totals = summary.files.reduce(
     (counts, file) => {
       const fileCounts = displayFileCounts(file);
@@ -24,7 +24,11 @@ export function ChangeSummaryCard({
   return (
     <div className="change-summary-card">
       <div className="change-summary-header">
-        <span>{title}</span>
+        <span>
+          {title}
+          <br />
+          <small style={{ color: "var(--text-muted)" }}>May include edits from other chats or tools.</small>
+        </span>
         <span className="change-summary-counts">
           <span className="diff-addition">+{totals.additions}</span>
           <span className="diff-deletion">-{totals.deletions}</span>
