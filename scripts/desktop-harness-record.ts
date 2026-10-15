@@ -1,46 +1,42 @@
-import { spawn } from "node:child_process";
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CdpClient, CdpDesktopHarnessRenderer, waitForDevtoolsTarget } from "./desktop-harness/cdp.js";
+import { encodeRecording, type RecordedFrame } from "./desktop-harness/recording-encoder.js";
 
-type Frame = { file: string; atSeconds: number; browserTimestamp: number | null };
 type ScreencastFrame = { data: string; sessionId: number; metadata: { timestamp?: number } };
 
 function options(args: string[]) {
-  let port = 9333, durationSeconds = 600, output = "";
+  let port = 9333, durationSeconds = 600, output = "", encodeExisting = "", encodeVideo = false;
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === "--help") {
-      console.log("usage: pnpm exec tsx scripts/desktop-harness-record.ts --output <raw.mp4> [--port 9333] [--duration-seconds 600]\nRecords only the existing dark 1920×1080 OpenPond page. Type q and Enter or send SIGINT to finish early. Original JPEG frames and timestamps are retained beside the MP4.");
+      console.log("usage: pnpm exec tsx scripts/desktop-harness-record.ts --output <raw.mp4> [--port 9333] [--duration-seconds 600] [--encode]\n       pnpm exec tsx scripts/desktop-harness-record.ts --encode-recording <recording.json> --output <raw.mp4>\nRecords only the existing dark 1920×1080 OpenPond page. Type q and Enter or send SIGINT to finish early. Capture retains original JPEG frames and timestamps; encoding is opt-in so it can use a separately scheduled resource window.");
       process.exit(0);
     }
+    if (flag === "--encode") { encodeVideo = true; continue; }
     const value = args[++i];
     if (!value) throw new Error(`Missing value for ${flag}.`);
     if (flag === "--port") port = Number(value);
     else if (flag === "--duration-seconds") durationSeconds = Number(value);
     else if (flag === "--output") output = path.resolve(value);
+    else if (flag === "--encode-recording") encodeExisting = path.resolve(value);
     else throw new Error(`Unknown option ${flag}.`);
   }
   if (!output.endsWith(".mp4")) throw new Error("Choose an .mp4 output path.");
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid DevTools port.");
   if (!Number.isFinite(durationSeconds) || durationSeconds < 1 || durationSeconds > 1800) throw new Error("Recording duration must be 1–1800 seconds.");
-  return { port, durationSeconds, output };
-}
-
-async function encode(manifest: string, output: string) {
-  const child = spawn("ffmpeg", ["-hide_banner", "-loglevel", "error", "-n", "-filter_threads", "2", "-f", "concat", "-safe", "0", "-i", manifest,
-    "-an", "-vf", "fps=30", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output],
-  { stdio: ["ignore", "ignore", "pipe"] });
-  let errors = "";
-  child.stderr.on("data", (chunk: Buffer) => { errors = (errors + chunk.toString()).slice(-8000); });
-  await new Promise<void>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`Video encoding failed (${code}): ${errors}`)));
-  });
+  return { port, durationSeconds, output, encodeExisting, encodeVideo };
 }
 
 async function record() {
   const args = options(process.argv.slice(2));
+  if (args.encodeExisting) {
+    const recording = JSON.parse(await readFile(args.encodeExisting, "utf8")) as { schemaVersion: string; frames: RecordedFrame[]; durationSeconds: number };
+    if (recording.schemaVersion !== "openpond.desktopRecording.v1" || !Array.isArray(recording.frames)) throw new Error("Choose a retained desktop recording manifest.");
+    await encodeRecording(path.dirname(args.encodeExisting), recording.frames, recording.durationSeconds, args.output);
+    console.log(JSON.stringify({ output: args.output, width: 1920, height: 1080, fps: 30 }));
+    return;
+  }
   const target = await waitForDevtoolsTarget(args.port, 15000, (item) => item.type === "page" && item.title === "OpenPond App");
   const pageUrl = new URL(target.url);
   pageUrl.search = "";
@@ -48,7 +44,7 @@ async function record() {
   const cdp = await CdpClient.connect(target.webSocketDebuggerUrl);
   const renderer = new CdpDesktopHarnessRenderer(cdp, path.dirname(args.output), 10000);
   const frameDirectory = args.output.replace(/\.mp4$/, "-frames");
-  const frames: Frame[] = [];
+  const frames: RecordedFrame[] = [];
   let writing = Promise.resolve(), failure: unknown;
   let finish!: () => void;
   const finished = new Promise<void>((resolve) => { finish = resolve; });
@@ -103,9 +99,9 @@ async function record() {
       schemaVersion: "openpond.desktopRecording.v1", state: "captured", startedAt: new Date(start).toISOString(), durationSeconds,
       pageUrl: pageUrl.toString(), viewport, frames, output: args.output,
     }, null, 2));
-    console.log(`Retained ${frames.length} original frames and timestamps. Encoding raw MP4 with two threads…`);
-    await encode(manifest, args.output);
-    console.log(JSON.stringify({ output: args.output, originalFrames: frameDirectory, frames: frames.length, durationSeconds, width: 1920, height: 1080, fps: 30 }));
+    console.log(`Retained ${frames.length} original frames and timestamps.${args.encodeVideo ? " Encoding with one input and output thread…" : " Encoding deferred to a separate resource window."}`);
+    if (args.encodeVideo) await encodeRecording(frameDirectory, frames, durationSeconds, args.output);
+    console.log(JSON.stringify({ output: args.encodeVideo ? args.output : null, originalFrames: frameDirectory, frames: frames.length, durationSeconds, width: 1920, height: 1080, fps: 30 }));
   } finally {
     if (timeout) clearTimeout(timeout);
     unsubscribe();

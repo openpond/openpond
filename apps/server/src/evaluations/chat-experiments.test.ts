@@ -32,6 +32,12 @@ test("chat authoring, grader checks and bounded multi-model runs retain exact ev
     state:async()=>({settings:ProviderSettingsSchema.parse({}),secrets:{version:1,providers:{}}}),
     hosted:{access:async()=>({apiBaseUrl:"https://example.test",actorId,teamId:"team"}),catalog,stream}});
   try {
+    // Discovery must expose the same current pricing/bounds used by admission;
+    // a predicted token estimate cannot stand in for a durable reservation.
+    const choices=await experiments.request({action:"models",payload:{}}) as {models:Array<Record<string,unknown>>};
+    expect(choices.models.find(model=>model.id==="model-a")).toMatchObject({contextWindow:1000,outputLimit:64,
+      pricing:{version:"1",source:"owner",effectiveAt:"2026-10-10T00:00:00.000Z",inputUsdPerMillionTokens:1,cachedInputUsdPerMillionTokens:1,outputUsdPerMillionTokens:1},
+      quote:{kind:"worst_case_request_reservation",maxOutputTokens:64,maximumRequestCostUsd:0.001064,predictedSpend:false}});
     const created=await datasets.request({action:"create",operationId:"author",payload:{name:"Chat <examples>",draft:{objective:"Check exact answers",
       tasks:["one","two"].map(id=>({schemaVersion:"openpond.taskData.v1",id,clusterKey:id,split:"validation",input:{prompt:"Reply with pond."},expectedOutput:{text:"pond",privateMarker:"GOLD_CANARY"},policyVisibleContext:{},privilegedContextRef:null,sourceRefs:[],tags:[],metadata:{}})),
       graders:[{id:"accuracy",version:"1",label:"Exact answer",kind:"content",weight:1,hardGate:true,rewardEligible:false,privileged:true,config:{operator:"final_answer_equals_expected"},metadata:{}}],
