@@ -42,6 +42,20 @@ it("publishes bound task edits with exact Reward and source lineage", () => {
   expect(published.taskset.metadata.modelTasksetDerivation).toMatchObject({ owner, parent: learningRef(source.taskset) });
   expect(published.environment).toEqual(source.environment);
   expect(published).toEqual(compile());
+  // A fixture-only revision must reach the native package as well as its
+  // local projection; otherwise a reviewed audit disappears on export/reload.
+  const fixtures = [{ id: "reviewed-outcome", taskId: workspace.draft.tasks[0]!.id, label: "positive" as const,
+    output: { text: "Reviewed output" }, infrastructureError: null, expectedPassed: true,
+    expectedRewardEligible: true, metadata: { graderIds: ["outcome"] } }];
+  const fixtureEdit = saveTasksetDraftWorkspaceDocument({ workspace, now, expectedDraftRevision: workspace.draft.revision,
+    draft: { ...workspace.draft, graderFixtures: fixtures } });
+  const fixturePublication = compile(fixtureEdit);
+  expect(fixturePublication.taskset.metadata.starterAuthoring).toEqual({ graderFixtures: fixtures });
+  expect(prepareImportedTasksetPackage({ package: fixturePublication, profileId: owner.scopeId, name: "Bound task", createdAt: now }).taskset.graderFixtures).toEqual(fixtures);
+  expect(fixturePublication.taskset.tasks).toEqual(published.taskset.tasks);
+  expect(fixturePublication.files).toEqual(published.files);
+  expect(fixturePublication.modelResources?.rewardBinding).toEqual(binding);
+  expect(fixturePublication.modelResources?.rewards).toEqual([reward]);
   expect(() => compile(workspace, original)).toThrow(/bound|Bound/);
   const changedGrader = saveTasksetDraftWorkspaceDocument({ workspace, now, expectedDraftRevision: workspace.draft.revision,
     draft: { ...workspace.draft, graders: workspace.draft.graders.map(grader => ({ ...grader, weight: 2 })) } });
