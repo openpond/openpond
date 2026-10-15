@@ -1,4 +1,4 @@
-import { chatTrainingAttachmentKey, chatTrainingReference, type ChatTrainingAttachment, TaskResourceContextsSchema, type ChatResourceSummary, type TaskResourceContext } from "@openpond/contracts";
+import { chatTrainingAttachmentKey, chatTrainingReference, type ChatTrainingAttachment, type ChatContextSelection, TaskResourceContextsSchema, type ChatResourceSummary, type TaskResourceContext } from "@openpond/contracts";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 
 export function captureComposerResourceContext(resources: ReturnType<typeof useChatResourceFocus>, training?: ChatTrainingAttachment): TaskResourceContext[] {
@@ -35,4 +35,14 @@ export function composerResourceMetadata(contexts: TaskResourceContext[]): Recor
       chatExperimentSelectionVersion: contexts[0]!.selectionVersion,
     } : {}),
   };
+}
+
+/** Explicit action pins survive a later picker change; inferred focus must not contradict them. */
+export function composerSubmissionResourceContext(
+  drafted: TaskResourceContext[] | undefined,
+  inferred: TaskResourceContext[],
+  selected: ChatContextSelection | null,
+): { contexts: TaskResourceContext[]; focus: ChatContextSelection | null } {
+  if (drafted?.length) return { contexts: drafted, focus: null };
+  return { contexts: selected?.model || selected?.training ? [] : inferred, focus: selected };
 }

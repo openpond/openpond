@@ -1,10 +1,10 @@
 import { ErrorToast } from "../common/ErrorToast";
-import { composerResourceMetadata, mergeComposerResourceContexts } from "./composer-resource-context";
+import { composerResourceMetadata, mergeComposerResourceContexts, composerSubmissionResourceContext } from "./composer-resource-context";
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ChatContextPicker } from "./ChatContextPicker";
-import { ComposerTrainingContext } from "./ComposerTrainingContext";
+import { ComposerResourceContext } from "./ComposerResourceContext";
 import { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { useComposerResourceRequests } from "./useComposerResourceRequests";
 import {
@@ -1351,7 +1351,9 @@ export function Composer({
     if (!beginSubmissionForScope(submissionScope)) return false;
     setAddMenuOpen(false);
     setAttachmentError(null);
-    const submissionContexts = contextSelection.selection?.training || contextSelection.selection?.model ? [] : currentResourceContexts();
+    const { contexts: submissionContexts, focus: submissionFocus } = composerSubmissionResourceContext(
+      resourceDrafts.current.get(submissionScope), currentResourceContexts(), contextSelection.selection,
+    );
     const stagedAttachments = stageAttachmentsForSubmit();
     try {
       setSerializingAttachmentScopeKey(
@@ -1382,7 +1384,7 @@ export function Composer({
                 : {}),
               ...(promptOverride !== undefined ? { promptOverride } : {}),
               ...(options.preservePrompt ? { preservePrompt: true } : {}),
-              turnMetadata: { ...composerResourceMetadata(submissionContexts), ...(contextSelection.selection ? { chatResourceFocus: contextSelection.selection } : {}) },
+              turnMetadata: { ...composerResourceMetadata(submissionContexts), ...(submissionFocus ? { chatResourceFocus: submissionFocus } : {}) },
               ...(contextSelection.selection ? { sessionMetadata: { chatContextSelection: contextSelection.selection.target } } : {}),
               onSessionCreated: session => contextSelection.moveToSession(session.id),
             }
@@ -1664,7 +1666,7 @@ export function Composer({
       )}
       {composeNotice?.tone === "warning" ? <ErrorToast error={composeNotice.message} />
         : composeNotice ? <div className="composer-notice info" role="status">{composeNotice.message}</div> : null}
-      {surface === "chat" ? <ComposerTrainingContext context={contextSelection} sessionId={taskSessionId ?? null} /> : null}
+      {surface === "chat" ? <ComposerResourceContext key={`${taskSessionId}:${JSON.stringify(contextSelection.selection?.target)}`} context={contextSelection} resources={chatResources} sessionId={taskSessionId ?? null} busy={busy} /> : null}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu
