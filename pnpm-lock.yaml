@@ -664,10 +664,10 @@ importers:
   packages/sdk:
     dependencies:
       '@openpond/evals':
-        specifier: ^0.12.0
+        specifier: ^0.12.1
         version: link:../evals
       '@openpond/harness':
-        specifier: ^0.4.8
+        specifier: ^0.4.9
         version: link:../harness
       esbuild:
         specifier: 0.28.1
