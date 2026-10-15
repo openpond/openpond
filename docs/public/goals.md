@@ -14,4 +14,6 @@ OpenPond passes the complete `/goal ...` command to Codex unchanged. Codex remai
 
 OpenPond bridges Codex-native Goal updates into the app so the current status, elapsed time, budget information when supplied, completion state, and Goal details remain visible. Codex history can also restore that presentation when a task is reopened.
 
+The attached composer goal bar shows the objective and elapsed time. Expand it for details, or use Edit goal to save a revised objective directly through Codex's native goal API. Editing preserves status, usage, and budgets; Cancel leaves the saved objective unchanged. The editor checks for changes from another editor before saving. Pause updates the native goal and interrupts an OpenPond-owned turn when one is running. Resume reactivates the goal and sends a continuation when the chat is idle, preserving any text already in the composer.
+
 Normal OpenPond-hosted turns and subagents remain available without Goal mode. Subagents belong to their parent task and keep their ordinary progress, review, messaging, and cleanup lifecycle.

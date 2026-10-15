@@ -23,6 +23,14 @@ import type {
 import { apiFetch, type ClientConnection } from "./api-client";
 
 export const sessionApi = {
+  getGoal: (connection: ClientConnection, sessionId: string) =>
+    apiFetch<{ goal: Record<string, unknown> | null; observedAt: string }>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/goal`),
+  patchGoal: (connection: ClientConnection, sessionId: string, input: {
+    expectedObjective: string; objective?: string; status?: "active" | "paused";
+  }) => apiFetch<{ goal: Record<string, unknown>; observedAt: string }>(
+    connection, `/v1/sessions/${encodeURIComponent(sessionId)}/goal`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  ),
   taskInbox: (connection: ClientConnection, sessionId: string) =>
     apiFetch<TaskInboxSnapshot>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/inbox`),
   steerTurn: (connection: ClientConnection, sessionId: string, input: SteerTurnRequest) =>

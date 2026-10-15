@@ -68,6 +68,7 @@ import { insertVoiceTranscript } from "../../lib/voice-text";
 import { deliverVoiceTranscript } from "../../lib/voice-transcript-delivery";
 import { requestVoiceInputSubmit } from "../../lib/voice-transcription-job";
 import { useTaskInbox } from "../../hooks/useTaskInbox";
+import { ComposerInbox } from "./ComposerInbox";
 import { TaskInboxPanel } from "./TaskInboxPanel";
 import {
   ComposerProjectTargetControl,
@@ -183,6 +184,7 @@ export function Composer({
   readOnlyReason = null,
   running = busy,
   taskSessionId = null,
+  goalSessionId = taskSessionId,
   taskEvents = EMPTY_TASK_EVENTS,
   steerActiveResponses = false,
   submissionScopeKey = "default", composerDraftStore,
@@ -1614,7 +1616,7 @@ export function Composer({
         onClose={closeSubmitIssueDialog}
         onSubmit={submitIssueForm}
       />
-      {(showProjectFooter || surface === "chat") && (
+      {mode === "start" && (showProjectFooter || surface === "chat") && (
         <div className="composer-footer">
           {showProjectFooter ? (
             <ComposerProjectTargetControl
@@ -1665,8 +1667,19 @@ export function Composer({
           void submitQueuedSteerDraft(draftId);
         }}
       />}
-      {showGoalRuntime && goalRuntime && (
+      {composeNotice?.tone === "warning" ? <ErrorToast error={composeNotice.message} />
+        : composeNotice ? <div className="composer-notice info" role="status">{composeNotice.message}</div> : null}
+      {surface === "chat" ? <ComposerResourceContext key={`${taskSessionId}:${JSON.stringify(contextSelection.selection?.target)}`} context={contextSelection} resources={chatResources} sessionId={taskSessionId ?? null} busy={busy} /> : null}
+      {(showGoalRuntime || (mode !== "start" && provider === "codex" && goalSessionId)) && (
         <ComposerGoalStrip
+          key={goalSessionId ?? submissionScopeKey}
+          connection={provider === "codex" ? connection : null}
+          sessionId={goalSessionId ?? null}
+          running={running}
+          onPause={stopCurrentTurn}
+          onResume={() => onSubmit([], null, null, {
+            preservePrompt: true, promptOverride: "Continue pursuing the current goal.",
+          })}
           detailsOpen={goalDetailsOpen}
           goalRuntime={goalRuntime}
           objectiveId={goalDetailsId}
@@ -1674,9 +1687,6 @@ export function Composer({
           onToggleDetails={() => setGoalDetailsOpen((open) => !open)}
         />
       )}
-      {composeNotice?.tone === "warning" ? <ErrorToast error={composeNotice.message} />
-        : composeNotice ? <div className="composer-notice info" role="status">{composeNotice.message}</div> : null}
-      {surface === "chat" ? <ComposerResourceContext key={`${taskSessionId}:${JSON.stringify(contextSelection.selection?.target)}`} context={contextSelection} resources={chatResources} sessionId={taskSessionId ?? null} busy={busy} /> : null}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu
@@ -1848,6 +1858,7 @@ export function Composer({
           />
         </div>
         <ComposerPrimaryControls
+          inboxControl={surface === "chat" && taskInbox.enabled ? <ComposerInbox key={taskSessionId} inbox={taskInbox} sessionId={taskSessionId!} events={taskEvents} /> : null}
           trainingControl={surface === "chat" ? <ChatContextPicker context={contextSelection} disabled={busy} placement={dropdownPlacement} /> : null}
           surface={surface}
           teamUseModel={teamUseModel}

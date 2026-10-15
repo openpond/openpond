@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { resolveCodexBinary } from "./binary.js";
 import { defaultServerRequestResult } from "./default-result.js";
+import type { CodexThreadGoal, CodexThreadGoalPatch } from "./goal.js";
 import type {
   CodexClientOptions,
   CodexDynamicToolSpec,
@@ -93,6 +94,16 @@ export class CodexAppServerClient {
   async readAccount(): Promise<unknown> {
     await this.initialize();
     return this.request("account/read", {});
+  }
+
+  async getThreadGoal(threadId: string): Promise<{ goal: CodexThreadGoal | null }> {
+    await this.initialize();
+    return this.request("thread/goal/get", { threadId }) as Promise<{ goal: CodexThreadGoal | null }>;
+  }
+
+  async setThreadGoal(threadId: string, patch: CodexThreadGoalPatch): Promise<{ goal: CodexThreadGoal }> {
+    await this.initialize();
+    return this.request("thread/goal/set", { threadId, ...patch }) as Promise<{ goal: CodexThreadGoal }>;
   }
 
   async readConfig(): Promise<unknown> {

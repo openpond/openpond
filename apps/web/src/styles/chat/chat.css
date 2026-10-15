@@ -70,8 +70,8 @@
   max-width: min(620px, 72%);
   padding: 10px 15px;
   border-radius: 20px;
-  background: var(--state-hover);
-  color: var(--text-primary);
+  background: var(--surface-chat-message);
+  color: var(--text-chat-message);
   word-break: break-word;
   font-size: 14px;
   line-height: 1.55;
@@ -1214,6 +1214,20 @@ button.user-message-attachment {
   background: transparent;
   color: var(--text-muted);
   padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.message-row:hover .message-copy-button,
+.message-row:focus-within .message-copy-button,
+.ponder-transcript-message:hover .message-copy-button,
+.ponder-transcript-message:focus-within .message-copy-button {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .message-copy-button { opacity: 1; pointer-events: auto; }
 }
 
 .message-copy-button:hover:not(:disabled),
@@ -1224,7 +1238,13 @@ button.user-message-attachment {
 }
 
 .message-copy-button:disabled {
-  opacity: 0.45;
+  visibility: hidden;
+}
+
+.message-copy-button.is-copied,
+.message-copy-button.is-copied:hover,
+.message-copy-button.is-copied:focus-visible {
+  color: var(--accent-primary);
 }
 
 .message-timestamp {

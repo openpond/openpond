@@ -3,11 +3,13 @@
    Media surfaces and external brand artwork intentionally retain their own contrast. */
 :root, :root[data-theme="dark"] {
   color-scheme: dark;
-  --surface-page: #101010;
-  --surface-navigation: #191919;
+  --surface-page: #181818;
+  --surface-navigation: #202020;
   --surface-panel: #191919;
   --surface-raised: #1f1f1f;
-  --surface-input: #2b2b2b;
+  --surface-input: #333333;
+  --surface-chat-message: #16434b;
+  --text-chat-message: #f0fbfc;
   --surface-floating: #242424;
   --text-primary: #f4f4f5;
   --text-secondary: #b9b9b9;
@@ -85,6 +87,8 @@
   --surface-panel: #ffffff;
   --surface-raised: #f5f5f5;
   --surface-input: #ffffff;
+  --surface-chat-message: #d9f1f4;
+  --text-chat-message: #153a42;
   --surface-floating: #ffffff;
   --text-primary: #202124;
   --text-secondary: #505359;

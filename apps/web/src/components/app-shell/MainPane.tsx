@@ -1836,6 +1836,7 @@ export function MainPane({
                 running={turnRunning}
                 steerActiveResponses={appPreferences.steerActiveResponses}
                 taskSessionId={liveSessionId}
+                goalSessionId={selectedSessionId}
                 taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
                 composerDraftStore={composerDraftStore}
@@ -1927,6 +1928,7 @@ export function MainPane({
                 running={turnRunning}
                 steerActiveResponses={appPreferences.steerActiveResponses}
                 taskSessionId={liveSessionId}
+                goalSessionId={selectedSessionId}
                 taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
                 composerDraftStore={composerDraftStore}
