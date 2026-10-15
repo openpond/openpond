@@ -13,6 +13,7 @@ import {
 import { detectComposerRepoLinks, type ComposerRepoLink } from "../../lib/composer-repo-links";
 import { connectedAppIconUrl, OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { resizeComposerTextarea } from "./ComposerLayout";
+import { readComposerEditorState } from "./composer-editor-state";
 
 const INLINE_TOKEN_SELECTOR = "[data-inline-token='true']";
 const INLINE_REPO_LINK_SELECTOR = "[data-inline-repo-link='true']";
@@ -31,11 +32,6 @@ export type ComposerInlineInputHandle = {
   getPrompt: () => string;
   focusAtPromptIndex: (index: number, options?: { afterToken?: boolean }) => void;
   resize: () => void;
-};
-
-type ExtractedEditorState = {
-  text: string;
-  tokenPosition: number | null;
 };
 
 type ViewSelection = {
@@ -87,46 +83,11 @@ function promptIndexFromViewIndex(viewIndex: number, token: ComposerInlineToken 
   return clampIndex(viewIndex > position ? viewIndex - 1 : viewIndex, prompt.length);
 }
 
-function extractEditorState(root: HTMLElement): ExtractedEditorState {
-  let text = "";
-  let tokenAt: number | null = null;
-
-  function visit(node: Node) {
-    if (isInlineRepoLink(node)) {
-      text += node.dataset.repoUrl ?? "";
-      return;
-    }
-    if (isInlineConnectedAppMention(node)) {
-      text += node.dataset.connectedMentionText ?? "";
-      return;
-    }
-    if (isInlineToken(node)) {
-      tokenAt = text.length;
-      return;
-    }
-    if (node.nodeType === Node.TEXT_NODE) {
-      text += node.textContent ?? "";
-      return;
-    }
-    if (node instanceof HTMLBRElement) return;
-    node.childNodes.forEach(visit);
-  }
-
-  root.childNodes.forEach(visit);
-  return { text, tokenPosition: tokenAt };
-}
+const extractEditorState = readComposerEditorState;
 
 function viewLength(node: Node): number {
-  if (isInlineRepoLink(node)) return node.dataset.repoUrl?.length ?? 0;
-  if (isInlineConnectedAppMention(node)) return node.dataset.connectedMentionText?.length ?? 0;
-  if (isInlineToken(node)) return 1;
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
-  if (node instanceof HTMLBRElement) return 0;
-  let length = 0;
-  node.childNodes.forEach((child) => {
-    length += viewLength(child);
-  });
-  return length;
+  const state = readComposerEditorState(node);
+  return state.text.length + (state.tokenPosition === null ? 0 : 1);
 }
 
 function viewIndexForSelectionBoundary(
@@ -135,44 +96,10 @@ function viewIndexForSelectionBoundary(
   targetOffset: number,
 ): number | null {
   if (!targetNode || (targetNode !== root && !root.contains(targetNode))) return null;
-
-  let index = 0;
-  let found = false;
-
-  function visit(node: Node) {
-    if (found) return;
-    if (
-      (isInlineToken(node) || isInlineRepoLink(node) || isInlineConnectedAppMention(node)) &&
-      (node === targetNode || node.contains(targetNode))
-    ) {
-      if (node !== targetNode || targetOffset > 0) index += viewLength(node);
-      found = true;
-      return;
-    }
-    if (isInlineToken(node) || isInlineRepoLink(node) || isInlineConnectedAppMention(node)) {
-      index += viewLength(node);
-      return;
-    }
-    if (node === targetNode) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        index += targetOffset;
-      } else {
-        const children = Array.from(node.childNodes).slice(0, targetOffset);
-        for (const child of children) index += viewLength(child);
-      }
-      found = true;
-      return;
-    }
-    if (node.nodeType === Node.TEXT_NODE) {
-      index += node.textContent?.length ?? 0;
-      return;
-    }
-    if (node instanceof HTMLBRElement) return;
-    node.childNodes.forEach(visit);
-  }
-
-  visit(root);
-  return found ? index : null;
+  const prefix = document.createRange();
+  prefix.selectNodeContents(root);
+  prefix.setEnd(targetNode, targetOffset);
+  return viewLength(prefix.cloneContents());
 }
 
 function selectionViewRange(root: HTMLElement): ViewSelection | null {
@@ -548,6 +475,17 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
     if (!root) return;
     const nextViewIndex = selectionViewRange(root)?.focus ?? viewLength(root);
     const nextState = extractEditorState(root);
+    if (root.querySelector("div, p, br")) {
+      // Keep cursor/token coordinates in the existing text-node editor model
+      // after Chromium's insertText creates block wrappers for newlines.
+      rebuildEditorDom(
+        root,
+        nextState.text,
+        token && nextState.tokenPosition !== null ? { ...token, position: nextState.tokenPosition } : null,
+        connectedAppMentions,
+      );
+      setSelectionByViewIndex(root, nextViewIndex);
+    }
     const nextCursor = promptIndexFromViewIndex(nextViewIndex, token, nextState.text);
     root.dataset.empty = nextState.text.length === 0 && !token ? "true" : "false";
     onTokenPositionChange(nextState.tokenPosition);
@@ -583,7 +521,10 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
         insertPlainText("\n");
         syncAfterProgrammaticInsert();
       }}
-      onInput={syncFromDom}
+      onInput={(event) => {
+        if (!(event.nativeEvent as InputEvent).isComposing) syncFromDom();
+      }}
+      onCompositionEnd={syncFromDom}
       onKeyDown={(event) => {
         onKeyDown(event);
       }}

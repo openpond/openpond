@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { readComposerEditorState } from "../../apps/web/src/components/chat/composer-editor-state.js";
 import type { DesktopHarnessConnection, DesktopHarnessRenderer } from "./types.js";
 
 type DevtoolsTarget = {
@@ -193,7 +194,9 @@ export class CdpDesktopHarnessRenderer implements DesktopHarnessRenderer {
         `(() => {
           const input = [...document.querySelectorAll('.composer-inline-input[role="textbox"]')]
             .find((candidate) => candidate instanceof HTMLElement && candidate.offsetParent !== null);
-          return input instanceof HTMLElement && input.textContent === ${JSON.stringify(text)};
+          return input instanceof HTMLElement &&
+            (${readComposerEditorState.toString()})(input).text.replace(/\\r\\n?/g, "\\n") ===
+            ${JSON.stringify(text)}.replace(/\\r\\n?/g, "\\n");
         })()`,
       ),
       Math.min(this.defaultTimeoutMs, 10_000),
@@ -256,7 +259,8 @@ export class CdpDesktopHarnessRenderer implements DesktopHarnessRenderer {
         const send = form?.querySelector('.send-button');
         const expectedToken = input instanceof HTMLElement && input.dataset.desktopHarnessExpectedToken === 'true';
         return input instanceof HTMLElement &&
-          (input.textContent ?? '').includes(${JSON.stringify(prompt)}) &&
+          (${readComposerEditorState.toString()})(input).text.replace(/\\r\\n?/g, "\\n") ===
+            ${JSON.stringify(prompt)}.replace(/\\r\\n?/g, "\\n") &&
           (!expectedToken || Boolean(input.querySelector('[data-inline-token="true"]'))) &&
           form instanceof HTMLFormElement &&
           send instanceof HTMLButtonElement &&
@@ -270,7 +274,12 @@ export class CdpDesktopHarnessRenderer implements DesktopHarnessRenderer {
         const input = document.querySelector('[data-desktop-harness-composer-target="true"]');
         const form = input?.closest('form.composer');
         const send = form?.querySelector('.send-button');
-        if (!(form instanceof HTMLFormElement) || !(send instanceof HTMLButtonElement) || send.disabled) return false;
+        const expectedToken = input instanceof HTMLElement && input.dataset.desktopHarnessExpectedToken === 'true';
+        if (!(input instanceof HTMLElement) ||
+          (${readComposerEditorState.toString()})(input).text.replace(/\\r\\n?/g, "\\n") !==
+            ${JSON.stringify(prompt)}.replace(/\\r\\n?/g, "\\n") ||
+          (expectedToken && !input.querySelector('[data-inline-token="true"]')) ||
+          !(form instanceof HTMLFormElement) || !(send instanceof HTMLButtonElement) || send.disabled) return false;
         send.click();
         return true;
       })()`,
