@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CodexReasoningEffortSchema } from "@openpond/contracts";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import { CliReportedError } from "./common/reported-error";
+import { boundedTransportError, createStreamDiagnostics } from "./opchat-transport-diagnostics";
 import {
   getOpChatModel,
   resolveOpChatApiBaseUrl,
@@ -82,6 +83,8 @@ export async function runBoundedOpChat(
   let text = "";
   let finishReason: string | null = null;
   let apiOrigin: string | null = null;
+  const streamDiagnostics = createStreamDiagnostics();
+  let errorCauses: ReturnType<typeof boundedTransportError> | null = null;
   const abort = (signal: string) => controller.abort(new Error(`OpChat cancelled by ${signal}.`));
   const interrupt = () => abort("SIGINT");
   const terminate = () => abort("SIGTERM");
@@ -108,6 +111,8 @@ export async function runBoundedOpChat(
       teamId: input.teamId,
       automaticRetry: false,
       transport: streaming ? "sse" : "json",
+      ...(streaming ? { streamDiagnostics: streamDiagnostics.snapshot() } : {}),
+      ...(errorCauses ? { errorCauses } : {}),
       startedAt,
       completedAt: new Date().toISOString(),
       apiOrigin,
@@ -208,6 +213,7 @@ export async function runBoundedOpChat(
       maxTokens: input.maxOutputTokens,
       signal: controller.signal,
       messages: [{ role: "user" as const, content: input.message }],
+      ...(streaming ? { onStreamDiagnostic: streamDiagnostics.observe } : {}),
     };
     dispatchAttempted = true;
     if (streaming) {
@@ -257,6 +263,7 @@ export async function runBoundedOpChat(
     emit(receipt("completed"));
   } catch (error) {
     const cause = controller.signal.aborted ? controller.signal.reason : error;
+    errorCauses = boundedTransportError(cause);
     const message = cause instanceof Error ? cause.message : String(cause);
     const status = controller.signal.aborted
       ? cause instanceof Error && cause.name === "TimeoutError"

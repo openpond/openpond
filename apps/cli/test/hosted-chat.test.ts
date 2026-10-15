@@ -1,5 +1,9 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { createServer } from "node:http";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { runBoundedOpChat } from "../src/cli/opchat-bounded-chat";
+
+// Exercise the source transport with the source CLI, independent of staged dist.
+vi.mock("@openpond/cloud/hosted-chat", () => import("../../../packages/cloud/src/hosted-chat"));
 
 import {
   getOpChatModel,
@@ -235,6 +239,72 @@ describe("OpChat hosted chat client", () => {
         if (mode === "no-finish") streamController!.close();
       }
       expect(dispatches).toBe(1);
+    }
+
+    // A real socket can fail after valid SSE bytes. Preserve partial evidence,
+    // bounded cause metadata and unknown accounting without another dispatch.
+    let socketDispatches = 0;
+    let terminateSocket = () => {};
+    const privateSentinel = "private-header-and-cause-sentinel";
+    const server = createServer((_request, response) => {
+      socketDispatches++;
+      terminateSocket = () => response.destroy();
+      response.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform", "x-accel-buffering": "no",
+        "x-private-debug": privateSentinel,
+      });
+      response.write(": openpond-pending\n\ndata: " + JSON.stringify({
+        id: "chatcmpl_socket", model: options.model, request_id: "stream-socket",
+        choices: [{ delta: { content: "partial" }, finish_reason: null }],
+      }) + "\n\n");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Missing socket fixture port");
+    globalThis.fetch = async (url, init) => {
+      if (init?.method === "GET") return catalogFetch(url, init);
+      const response = await originalFetch(`http://127.0.0.1:${address.port}`, init);
+      const reader = response.body!.getReader();
+      let reads = 0;
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          // HWM0 prevents prefetch: the second read occurs after the CLI has
+          // consumed the first frame, independent of machine scheduling.
+          if (reads++ === 1) terminateSocket();
+          const chunk = await reader.read();
+          if (chunk.done) controller.close();
+          else controller.enqueue(chunk.value);
+        },
+        cancel(reason) { return reader.cancel(reason); },
+      }, { highWaterMark: 0 });
+      return new Response(body, { headers: response.headers, status: response.status });
+    };
+    try {
+      await expect(runBoundedOpChat({ ...options, stream: true, requestId: "stream-socket" }, dependencies))
+        .rejects.toThrow("terminated");
+      const retained = receipts.at(-1);
+      expect(retained).toMatchObject({
+        status: "failed", transport: "sse", text: "partial", completion: null,
+        automaticRetry: false,
+        errorCauses: [{ name: "TypeError", code: null }, { name: "SocketError", code: "UND_ERR_SOCKET" }],
+        streamDiagnostics: {
+          phase: "response_body", response: {
+            status: 200, eventStream: true, noCache: true, noTransform: true, bufferingDisabled: true,
+          },
+          dataFrames: 1, commentFrames: 1, errorFrames: 0, doneAtMs: null,
+        },
+        accounting: { state: "unknown", chargedUsd: null, cleanupConfirmed: false },
+      });
+      const timing = retained?.streamDiagnostics as Record<string, number>;
+      expect(timing.bytes).toBeGreaterThan(0);
+      expect(timing.lastByteAtMs).toBeGreaterThanOrEqual(0);
+      expect(timing.silentForMs).toBeGreaterThanOrEqual(0);
+      expect(JSON.stringify(retained)).not.toContain(privateSentinel);
+      expect(socketDispatches).toBe(1);
+    } finally {
+      terminateSocket();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
   });
 
