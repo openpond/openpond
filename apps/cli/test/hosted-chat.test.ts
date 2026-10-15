@@ -176,6 +176,66 @@ describe("OpChat hosted chat client", () => {
       status: "timed_out", requestId: "cancel-proof", dispatchAttempted: true,
       accounting: { state: "unknown", chargedUsd: null, cleanupConfirmed: false },
     });
+
+    const catalogFetch = globalThis.fetch;
+    for (const mode of ["complete", "identity", "truncated", "no-finish", "cancel"] as const) {
+      const requestId = `stream-${mode}`;
+      let dispatches = 0;
+      let bodyCancelled = false;
+      let streamController: ReadableStreamDefaultController<Uint8Array>;
+      globalThis.fetch = async (url, init) => {
+        if (init?.method === "GET") return catalogFetch(url, init);
+        dispatches++;
+        expect(new Headers(init?.headers).get("accept")).toBe("text/event-stream");
+        expect(new Headers(init?.headers).get("x-openpond-team-id")).toBe(options.teamId);
+        expect(new Headers(init?.headers).get("x-request-id")).toBe(requestId);
+        expect(JSON.parse(String(init?.body))).toMatchObject({ stream: true, max_tokens: 8 });
+        const chunk = (delta: Record<string, unknown>, terminal = false) =>
+          `data: ${JSON.stringify({ id: "chatcmpl_stream", model: options.model, request_id: requestId,
+            choices: [{ delta, finish_reason: terminal ? "stop" : null }],
+            ...(terminal ? { usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 } } : {}),
+          })}\n\n`;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            streamController = controller;
+            controller.enqueue(new TextEncoder().encode(": openpond-pending\n\n" + chunk({ content: "OK" })));
+            if (mode === "cancel") {
+              init?.signal?.addEventListener("abort", () => controller.error(init.signal?.reason), { once: true });
+              return;
+            }
+            if (mode === "identity") {
+              controller.enqueue(new TextEncoder().encode(chunk({ content: "wrong" }).replace("chatcmpl_stream", "chatcmpl_other")));
+              return;
+            }
+            if (mode !== "no-finish") controller.enqueue(new TextEncoder().encode(chunk({}, true)));
+            if (mode === "truncated") controller.close();
+            else controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+          },
+          cancel() { bodyCancelled = true; },
+        });
+        return new Response(body, { headers: { "content-type": "text/event-stream" } });
+      };
+      const pending = runBoundedOpChat({ ...options, stream: true, requestId }, dependencies);
+      if (mode === "complete") {
+        await pending;
+        expect(receipts.at(-1)).toMatchObject({
+          status: "completed", transport: "sse", text: "OK", finishReason: "stop",
+          completion: { id: "chatcmpl_stream", request_id: requestId, assembledFromStream: true },
+          usage: { total_tokens: 4 }, accounting: { chargedUsd: null, requiresLedgerReconciliation: true },
+        });
+        expect(bodyCancelled).toBe(false);
+        streamController!.close();
+      } else {
+        await expect(pending).rejects.toThrow(mode === "identity" ? "identity" : mode === "truncated" ? "[DONE]" : mode === "cancel" ? "deadline" : "terminal");
+        expect(receipts.at(-1)).toMatchObject({
+          status: mode === "cancel" ? "timed_out" : "failed", automaticRetry: false,
+          accounting: { state: "unknown", chargedUsd: null, cleanupConfirmed: false },
+        });
+        if (mode === "identity") expect(bodyCancelled).toBe(true);
+        if (mode === "no-finish") streamController!.close();
+      }
+      expect(dispatches).toBe(1);
+    }
   });
 
   test("sends OpenAI chat tools and preserves assistant tool calls", async () => {

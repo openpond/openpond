@@ -7,6 +7,7 @@ import {
   getOpChatModel,
   resolveOpChatApiBaseUrl,
   sendHostedChatTurn,
+  streamHostedChatTurn,
   type HostedChatCompletion,
   type HostedChatUsage,
 } from "../hosted-chat";
@@ -68,8 +69,7 @@ export async function runBoundedOpChat(
     ...options,
     message: optionString(options, "message") || optionString(options, "prompt"),
   });
-  if (parseBooleanOption(options.stream))
-    throw new Error("Bounded OpChat requires a non-streaming completion receipt; omit --stream.");
+  const streaming = parseBooleanOption(options.stream);
   const reasoningEffort =
     options.effort === undefined ? undefined : CodexReasoningEffortSchema.parse(options.effort);
   const emit = dependencies.emit ?? ((value) => console.log(JSON.stringify(value, null, 2)));
@@ -93,6 +93,7 @@ export async function runBoundedOpChat(
   process.once("SIGTERM", terminate);
   const receipt = (status: string, error?: string): Receipt => {
     const measuredUsage =
+      status === "completed" &&
       usage &&
       usage.estimated !== true &&
       [
@@ -106,6 +107,7 @@ export async function runBoundedOpChat(
       model: input.model,
       teamId: input.teamId,
       automaticRetry: false,
+      transport: streaming ? "sse" : "json",
       startedAt,
       completedAt: new Date().toISOString(),
       apiOrigin,
@@ -208,10 +210,42 @@ export async function runBoundedOpChat(
       messages: [{ role: "user" as const, content: input.message }],
     };
     dispatchAttempted = true;
-    completion = await sendHostedChatTurn(request);
-    usage = completion.usage ?? null;
-    text = completion.choices?.[0]?.message?.content ?? "";
-    finishReason = completion.choices?.[0]?.finish_reason ?? null;
+    if (streaming) {
+      let completionId: string | null = null;
+      let created: number | undefined;
+      for await (const delta of streamHostedChatTurn(request)) {
+        controller.signal.throwIfAborted();
+        const raw = delta.raw && typeof delta.raw === "object"
+          ? delta.raw as Record<string, unknown>
+          : {};
+        if (
+          typeof raw.id !== "string" || !raw.id ||
+          raw.model !== input.model || raw.request_id !== input.requestId ||
+          (completionId !== null && raw.id !== completionId)
+        ) throw new Error("The stream does not match the admitted completion, model and request identity.");
+        completionId = raw.id;
+        if (typeof raw.created === "number") created = raw.created;
+        if (delta.type === "text_delta") text += delta.text;
+        if (delta.type === "usage") usage = delta.usage;
+        if (delta.type === "finish") finishReason = delta.finishReason;
+        if (delta.type === "tool_call_delta")
+          throw new Error("The bounded OpChat request did not admit tool calls.");
+      }
+      if (!completionId || !finishReason)
+        throw new Error("The stream ended without a terminal completion receipt.");
+      completion = {
+        id: completionId, model: input.model, request_id: input.requestId,
+        object: "chat.completion", assembledFromStream: true,
+        ...(created === undefined ? {} : { created }),
+        choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: finishReason }],
+        ...(usage === null ? {} : { usage }),
+      };
+    } else {
+      completion = await sendHostedChatTurn(request);
+      usage = completion.usage ?? null;
+      text = completion.choices?.[0]?.message?.content ?? "";
+      finishReason = completion.choices?.[0]?.finish_reason ?? null;
+    }
     if (
       !completion.id ||
       completion.model !== input.model ||

@@ -508,6 +508,7 @@ async function* parseOpenAISSE(
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let sawDone = false;
   const readAbortError = () =>
     signal?.reason instanceof Error
       ? signal.reason
@@ -526,11 +527,21 @@ async function* parseOpenAISSE(
         if (!trimmed.startsWith("data:")) continue;
         const data = trimmed.slice(5).trim();
         if (!data) continue;
-        if (data === "[DONE]") return;
+        if (data === "[DONE]") {
+          sawDone = true;
+          return;
+        }
         yield JSON.parse(data) as unknown;
       }
     }
+    throw new Error("Hosted chat stream ended before [DONE].");
   } finally {
+    if (!sawDone) {
+      // Consumer/protocol failure must close the transport, never leave paid
+      // provider work running behind a released reader. Normal DONE may still
+      // be followed by server-side accounting settlement; do not cancel it.
+      await reader.cancel().catch(() => {});
+    }
     try {
       reader.releaseLock();
     } catch {

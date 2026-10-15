@@ -1039,7 +1039,7 @@ Options:
 ```text
 Usage:
   openpond opchat <provider-catalog|models|model|smoke> [args]
-  openpond opchat chat --model <id> --message <text> --team-id <id> --max-output-tokens <n> --request-id <id> --timeout-sec <1..600> --max-spend <usd> (non-streaming; omit --stream)
+  openpond opchat chat --model <id> --message <text> --team-id <id> --max-output-tokens <n> --request-id <id> --timeout-sec <1..600> --max-spend <usd> [--stream] (one bounded request; JSON receipt after completion)
 
 Options:
   --compatibility-model <string>
