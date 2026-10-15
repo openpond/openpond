@@ -1,6 +1,6 @@
 ---
 name: openpond-taskset-authoring
-description: Create, organize, review, improve, or test OpenPond Tasksets and their source data from a capability, Profile Agent, consented conversations, imported datasets, examples, and traces. Use for training or evaluation tasks, data coverage and quality, graders, failed eval diagnosis, controlled benchmarks, GRPO/RFT environments, baseline evaluation, or Taskset readiness.
+description: Create, organize, review, improve, or test OpenPond Tasksets and their source data from a capability, Profile Agent, consented conversations, imported datasets, examples, and traces. Use for training or evaluation tasks, data coverage and quality, graders, experiment result interpretation, failed eval diagnosis, controlled benchmarks, GRPO/RFT environments, baseline evaluation, or Taskset readiness.
 ---
 
 # OpenPond Taskset Authoring
@@ -73,7 +73,8 @@ review; additional runs follow the user's request and authorized budget.
 
 - Review collections and imports with [Data quality](references/data-quality.md).
 - Review scoring with [Graders and rewards](references/graders-and-rewards.md).
-- Diagnose failed attempts with [Failure diagnosis](references/failure-diagnosis.md).
+- Interpret experiment outcomes, including high-scoring results, and diagnose
+  attempts with [Results review and diagnosis](references/failure-diagnosis.md).
 
 Diagnose explains findings without saving changes or starting new runs. Improve
 carries authorized fixes through supported CLI operations and validation,
@@ -111,8 +112,8 @@ Read only the reference needed for the current decision:
 
 - Collection coverage, example quality, and scoped readiness:
   [Data quality](references/data-quality.md)
-- Failed attempts, evidence, and targeted repairs:
-  [Failure diagnosis](references/failure-diagnosis.md)
+- Experiment results, coverage, scoring interpretation and targeted repairs:
+  [Results review and diagnosis](references/failure-diagnosis.md)
 - Task contracts, task reconstruction, and split isolation:
   `references/task-design.md`
 - Graders, reward eligibility, and calibration:
