@@ -947,11 +947,17 @@ Options:
 
 ```text
 Usage:
-  openpond training <create-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-run-id|run-id|model-id>
+  openpond training <projects|inspect-project|create-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]
+  openpond training pull-project <hosted-model-project-id> --profile <local-profile-id> [--snapshot-file <verified-package-and-projection.json>] [--json]
+  openpond training projects [--profile <local-profile-id>] [--json]
+  openpond training inspect-project <local-model-project-id> [--profile <local-profile-id>] [--json]
   openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]
   openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
   openpond training hosted-models|hosted-batches|hosted-preparations|hosted-capabilities --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-workers --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-serving-pools --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-base-serving-prepare <base-profile.json> --team-id <id> [--api-base-url <url>] --yes [--json]
+  openpond training hosted-serving-pool-retire <pool-and-reason.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-provider|hosted-quotes --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-worker <physical-worker-id> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-worker-stop|hosted-worker-resume|hosted-worker-retire|hosted-worker-warm-idle <control.json> --team-id <id> [--api-base-url <url>] --yes [--json]
@@ -1000,6 +1006,7 @@ Options:
   --retention-days <integer>
   --rollout-placement <string>
   --run-preset <string>
+  --snapshot-file <string>
   --team-id <string>
   --trajectory-id <string>
   --wait-for-cleanup

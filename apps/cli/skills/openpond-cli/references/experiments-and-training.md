@@ -139,6 +139,20 @@ warm: inspect actual readiness and current startup/idle/retention behavior,
 explain separate serving charges, and do not promise a latency or start serving
 merely because a model was inspected.
 
+Inspect serving capacity with `training hosted-serving-pools --team-id <id>`
+using the same account home and API origin. Listing does not prepare or wake a
+pool. When the user has authorized serving setup, use
+`training hosted-base-serving-prepare <base-profile.json> --team-id <id> --yes`,
+where the strict input is `{"baseProfileId":"qwen3-8b-b968826d"}`. This prepares
+the configured serving provider's capacity; it is separate from inference and
+may incur provider charges. Do not use a training worker as a serving pool or
+invent an adapter artifact for base-model setup. Inspect readiness and refresh
+`experiments models --local --json` before choosing an evaluation model. Retire
+authorized capacity through `training hosted-serving-pool-retire <input.json>
+--team-id <id> --yes`, with `{"poolId":"<owned-pool>","reason":"<reason>"}`;
+then recheck inventory until retirement completes. A zero-minimum pool is not
+proof that a worker has already scaled down or that billing has settled.
+
 Inspect saved canonical Models first with `training projects --json`, then
 `training inspect-project <local-model-project-id> --json`. These read-only local
 commands return the saved Profile, recipe presence, execution settings and exact training/evaluation Taskset
