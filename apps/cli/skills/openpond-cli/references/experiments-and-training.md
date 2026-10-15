@@ -101,6 +101,50 @@ Test graders against meaningful known-good and known-bad examples before claimin
 
 Discover available models before selecting an evaluated model. In a scoped chat, persist the explicit choice with `openpond datasets select-model <providerId/modelId> --local --json` using an exact entry from `openpond experiments models --local --json`. Read the current selection with `openpond datasets context --local --json`; `evaluationModel` is the evaluation target. A user-named model overrides that saved choice once resolved to an available catalog entry; ambiguous names need clarification. Do not substitute the chat model or another provider when the chosen model is unavailable. The agent answering this chat and the model under evaluation are separate choices. Pin the dataset revision and grader configuration; use a stable operation identity for replay where supported. Reconcile an uncertain submission before issuing a new run.
 
+For an independent saved Dataset, `experiments run --local --input-file <path>`
+uses this input **without `--team`**. It does not accept the workspace SDK's
+`configuration` or `request` wrapper:
+
+```json
+{
+  "datasetId": "<saved dataset id>",
+  "revision": 3,
+  "operationId": "reviewed-evaluation-1",
+  "maximumCostUsd": 1,
+  "taskLimit": 10,
+  "seed": 0,
+  "maxOutputTokens": 1024,
+  "models": [{"providerId": "openpond", "modelId": "<exact catalog id>"}]
+}
+```
+
+Take `providerId` and `id` from `experiments models --local --json`; put that
+entry's `id` in `modelId`. Providers are `openpond`,
+`custom-openai-compatible`, `claude-code`, and `codex`; select 1–8 distinct
+models. The saved revision must be positive and pins its Dataset and graders.
+`operationId` is a 1–120 character value inside the JSON. `taskLimit` is 1–100,
+defaults to 10, and takes the first tasks in the saved package; `seed` records
+the case seed, rather than selecting a random subset. Its range is
+0–2147483647 and its default is 0. `maxOutputTokens` is 1–262144, defaults to
+1024, and is capped by each model's output limit.
+
+`maximumCostUsd` is the total positive ceiling, at most 10000, divided across
+the selected models and covering metered inference and grading. It may be
+omitted only when every selected model is `codex` and the Dataset has no
+model-judge grader. Subscription dollar accounting remains unknown. The
+example's ceiling is illustrative; use the user's authorized bound.
+
+For a prepare-only request, read `datasets context --local --json`, the exact
+saved Dataset revision, its graders/check results, and
+`experiments models --local --json`, then write and review the input file.
+Stop there: `run` executes and may incur metered charges. There is no independent
+Dataset prepare/dry-run command. `prepare-harness` and `prepare-profile` belong
+to their released Harness/Profile workflows. Do not use them as substitutes.
+When execution is authorized, send the reviewed file through the scoped CLI;
+reuse its operation identity only for the exact same input after reconciling
+status. Workspace operations with `--team` use their separate configuration
+contract.
+
 Use existing authorized limits. Ask for a missing spending ceiling when the selected operation requires one. A subscription run with unavailable dollar accounting must not be described as costing zero.
 
 Inspect status, results, coverage, and failed cases before claiming success or proposing an improvement. Report pass rate only when the grader defines pass/fail; otherwise report the actual score. Compare matched inputs when making improvement claims, and identify changed-input comparisons.

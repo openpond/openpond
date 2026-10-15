@@ -149,6 +149,12 @@ Usage:
   openpond experiments <models|run|run-cloud|list|read|status|cancel|result|compare|case> [id] [candidate-id] --local [--server-url <loopback-origin>] [--input-file <path>] [--receipt-id <id>] [--json]
   openpond experiments <profile-catalog|prepare-profile|run-profile|inspect-profile> --local [--server-url <loopback-origin>] [--input-file <path>] [--json]
   openpond experiments <prepare-harness|run|read|list|status|diagnostics|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]
+  Independent saved Dataset input (use --local without --team): {"datasetId":"<saved-id>","revision":3,"operationId":"reviewed-evaluation-1","maximumCostUsd":1,"taskLimit":10,"seed":0,"maxOutputTokens":1024,"models":[{"providerId":"openpond","modelId":"<exact catalog id>"}]}
+  Resolve models with experiments models --local --json; use each entry's providerId and id as modelId. Supported providers: openpond, custom-openai-compatible, claude-code, codex. Select 1–8 distinct models.
+  Input bounds: positive saved revision; operationId 1–120 characters; taskLimit 1–100 (default 10, first saved tasks); seed 0–2147483647 (default 0); maxOutputTokens 1–262144 (default 1024, capped by the selected model). Dataset revision pins its graders; no configuration/request wrapper is accepted here.
+  maximumCostUsd is a positive total ceiling up to 10000, divided across selected models and covering metered inference/grading. Use the authorized ceiling; the example is illustrative. It may be omitted only when every model is codex and the Dataset has no model-judge grader; subscription dollar cost remains unknown.
+  Prepare only: read datasets context/read/check-graders and experiments models, then write and review the input file. There is no independent Dataset prepare/dry-run command. experiments run --local --input-file <path> executes; reuse operationId only for the exact same input after reconciling status.
+  --team uses the workspace configuration contract instead. prepare-harness and prepare-profile prepare their released Harness/Profile workflows, not independent saved Dataset inputs.
 
 Options:
   --after-call-id <string>
