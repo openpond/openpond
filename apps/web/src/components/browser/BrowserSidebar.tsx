@@ -1,5 +1,5 @@
 import { ErrorToast } from "../common/ErrorToast";
-import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useRef, useState } from "react";
 import "../../styles/browser/browser-sidebar.css";
 import { Globe2 } from "../icons";
@@ -21,14 +21,12 @@ export function BrowserSidebar({
   onResizeStart,
   connection = null,
   visualTabs,
-  leadingTabs,
 }: {
   conversationId: string;
   expanded: boolean;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   connection?: ClientConnection | null;
   visualTabs?: ReturnType<typeof useHtmlVisualTabs>;
-  leadingTabs?: ReactNode;
 }) {
   const browser = useBrowserSidebar(conversationId);
   const [reloadVersions, setReloadVersions] = useState<Record<string, number>>({});
@@ -92,7 +90,6 @@ export function BrowserSidebar({
         />
       )}
       <BrowserTabs
-        leadingTabs={leadingTabs}
         activeTabId={activeVisual?.publicationId ?? browser.state.activeTabId}
         tabs={[...browser.state.tabs, ...documentTabs]}
         onCloseTab={(tabId) => {

@@ -2,8 +2,10 @@ import type { StorageStartupProgress } from "@openpond/runtime/ready-line-parser
 import { startupProgressHtml } from "./desktop-startup-progress-page.js";
 import { UI_THEME_CSS } from "@openpond/contracts/ui-theme.generated";
 import { resolvedDesktopTheme } from "./desktop-appearance.js";
-import type { BrowserWindow } from "electron";
-import { appDisplayName } from "./desktop-environment.js";
+import { app, type BrowserWindow } from "electron";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { appDisplayName, repoRoot } from "./desktop-environment.js";
 
 export async function showLoadError(window: BrowserWindow, error: unknown, onPageUrl: (url: string) => void): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
@@ -78,7 +80,11 @@ export async function showLoadError(window: BrowserWindow, error: unknown, onPag
 }
 
 export async function showStartupProgressPage(window: BrowserWindow, onPageUrl: (url: string) => void): Promise<void> {
-  const url = `data:text/html;charset=utf-8,${encodeURIComponent(startupProgressHtml(UI_THEME_CSS, resolvedDesktopTheme(), appDisplayName()))}`;
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, "web", "openpond-icon.png")
+    : path.join(repoRoot(), "apps", "web", "public", "openpond-icon.png");
+  const iconDataUrl = `data:image/png;base64,${(await readFile(iconPath)).toString("base64")}`;
+  const url = `data:text/html;charset=utf-8,${encodeURIComponent(startupProgressHtml(UI_THEME_CSS, resolvedDesktopTheme(), appDisplayName(), iconDataUrl))}`;
   onPageUrl(url);
   await window.loadURL(url);
 }
@@ -91,6 +97,7 @@ export function updateStartupProgress(window: BrowserWindow, progress: StorageSt
     const label = document.getElementById("openpond-startup-message");
     const bar = document.getElementById("openpond-startup-progress");
     if (!label || !bar) return;
+    label.classList.remove("startup-status");
     label.textContent = ${JSON.stringify(progress.message + (progress.percent === undefined ? "" : ` (${progress.percent}%)`))};
     bar.hidden = ${progress.percent === undefined};
     bar.value = ${progress.percent ?? 0};
