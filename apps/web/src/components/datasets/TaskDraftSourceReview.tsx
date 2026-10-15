@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { TasksetDraft } from "@openpond/contracts";
+import { DropdownSelect } from "../DropdownSelect";
 import { AppDialog } from "../dialogs/AppDialog";
-import { Field } from "./TasksetDraftEditorPrimitives";
 
 type Source = TasksetDraft["sourceRefs"][number];
 
@@ -20,15 +20,15 @@ export function TaskDraftSourceReview({ draft, onApply, onClose }: {
       <h3>{source.title}</h3>
       <p>{draft.tasks.filter(task => task.sourceRefs.includes(source.id)).length} tasks use this source. Review their inputs, context, private references and attached files.</p>
       {"originalFileNames" in source ? <p>{source.originalFileNames.join(", ")}</p> : null}
-      <Field label="Secrets review"><select aria-label="Secrets review" value={source.secretScanStatus} onChange={event => update({ secretScanStatus: event.target.value as Source["secretScanStatus"] })}>
-        <option value="pending">Pending review</option><option value="passed">Reviewed: no exposed credentials</option><option value="blocked">Blocked: credentials found</option>
-      </select></Field>
-      <Field label="Privacy review"><select aria-label="Privacy review" value={source.piiScanStatus} onChange={event => update({ piiScanStatus: event.target.value as Source["piiScanStatus"] })}>
-        <option value="pending">Pending review</option><option value="passed">Reviewed: privacy requirements satisfied</option><option value="review">Needs further review</option><option value="blocked">Blocked</option>
-      </select></Field>
-      <Field label="Permission to use this source"><select aria-label="Permission to use this source" value={source.licensingStatus} onChange={event => update({ licensingStatus: event.target.value as Source["licensingStatus"] })}>
-        <option value="pending">Pending review</option><option value="approved">Reviewed: permitted for this use</option><option value="review">Needs further review</option><option value="blocked">Blocked</option>
-      </select></Field>
+      <div className="taskset-draft-field"><span>Secrets review</span><DropdownSelect floating label="Secrets review" value={source.secretScanStatus}
+        options={[{ value: "pending", label: "Pending review" }, { value: "passed", label: "Reviewed: no exposed credentials" }, { value: "blocked", label: "Blocked: credentials found" }]}
+        onChange={value => update({ secretScanStatus: value as Source["secretScanStatus"] })} /></div>
+      <div className="taskset-draft-field"><span>Privacy review</span><DropdownSelect floating label="Privacy review" value={source.piiScanStatus}
+        options={[{ value: "pending", label: "Pending review" }, { value: "passed", label: "Reviewed: privacy requirements satisfied" }, { value: "review", label: "Needs further review" }, { value: "blocked", label: "Blocked" }]}
+        onChange={value => update({ piiScanStatus: value as Source["piiScanStatus"] })} /></div>
+      <div className="taskset-draft-field"><span>Permission to use this source</span><DropdownSelect floating label="Permission to use this source" value={source.licensingStatus}
+        options={[{ value: "pending", label: "Pending review" }, { value: "approved", label: "Reviewed: permitted for this use" }, { value: "review", label: "Needs further review" }, { value: "blocked", label: "Blocked" }]}
+        onChange={value => update({ licensingStatus: value as Source["licensingStatus"] })} /></div>
       {"consent" in source && source.consent.status !== "granted" ? <p role="status">This source also needs consent in its original review workflow.</p> : null}
       <details><summary>Source identity</summary><dl><dt>ID</dt><dd>{source.id}</dd><dt>Content hash</dt><dd>{source.sourceHash}</dd></dl></details>
     </section> : null}
