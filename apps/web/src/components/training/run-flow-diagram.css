@@ -227,7 +227,7 @@
 .sidebar-run-card:is(.compute-gpu, .compute-cpu) { background: color-mix(in srgb, var(--compute-color) 7%, var(--surface-panel)); border-color: color-mix(in srgb, var(--compute-color) 45%, var(--border-default)); }
 .sidebar-run-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 5px; color: var(--text-primary); }
 .sidebar-run-card-heading strong { font-size: 12px; font-weight: 500; }
-.sidebar-run-card-heading > span { padding-top: 2px; color: var(--text-muted); font-size: 9px; }
+.sidebar-run-card-heading > span { flex-shrink: 0; padding-top: 2px; color: var(--text-muted); font-size: 9px; white-space: nowrap; }
 .sidebar-run-card-heading > svg { flex-shrink: 0; color: var(--compute-color, var(--accent-primary)); margin-top: 2px; }
 .sidebar-run-status { color: var(--text-secondary); }
 .sidebar-run-detail { color: var(--compute-color, var(--text-secondary)); font-variant-numeric: tabular-nums; }
