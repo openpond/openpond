@@ -170,6 +170,7 @@ export function DatasetWorkspace({
           <TrainingWorkspaceSection title="Training">
           <DatasetTrainingOverview
             connection={connection}
+            sessionId={sessionId}
             resources={resources}
             onRequest={request}
           />

@@ -3,9 +3,10 @@ import { z } from "zod";
 const Node = z
   .object({
     label: z.string(),
-    state: z.enum(["done", "active", "pending", "missing"]),
+    state: z.enum(["done", "active", "pending", "missing", "failed"]),
     status: z.string(),
     detail: z.string().optional(),
+    error: z.string().optional(),
     progress: z.number().min(0).max(1).optional(),
     inLoop: z.boolean().optional(),
   })

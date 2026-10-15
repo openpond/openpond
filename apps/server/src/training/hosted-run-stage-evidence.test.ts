@@ -41,6 +41,22 @@ test("hosted flow keeps execution evidence and owner boundaries", () => {
   expect(flow.nodes.find((node) => node.label === "Activate policy")?.state).toBe("missing");
   expect(flow.groups[0]?.attempts[0]?.reward).toBe(0.25);
   expect(JSON.stringify(flow)).not.toContain("private-");
+  // A failed update must remain visible without inventing a failed checkpoint;
+  // a later successful retry must clear the stage's stale command failure.
+  const failed = {
+    ...raw,
+    job: { ...raw.job, state: "failed" },
+    commands: [{ commandType: "train_step", state: "failed", errorCode: "optimizer_nonfinite", updatedAt: "2026-10-14T18:04:00Z" }],
+  };
+  const failureFlow = hostedRunStageEvidence(failed, { entries: [] }, identity);
+  expect(failureFlow.nodes.find(node => node.label === "Update adapter")).toMatchObject({ state: "failed", error: "train_step: optimizer_nonfinite" });
+  expect(failureFlow.nodes.find(node => node.label === "Save checkpoint")?.state).toBe("missing");
+  const recovered = hostedRunStageEvidence({ ...failed, job: { ...raw.job, optimizerUpdatesApplied: 1 }, commands: [
+    ...failed.commands, { commandType: "train_step", state: "completed", updatedAt: "2026-10-14T18:05:00Z" },
+  ] }, { entries: [] }, identity);
+  expect(recovered.nodes.find(node => node.label === "Update adapter")).toMatchObject({ state: "done" });
+  expect(recovered.nodes.find(node => node.label === "Update adapter")?.error).toBeUndefined();
+
   expect(() =>
     hostedRunStageEvidence(
       { ...raw, job: { ...raw.job, teamId: "other-team" } },

@@ -12,7 +12,7 @@ import "./model-training-journey.css";
 import { TrainingMetricWorkbench } from "../training/TrainingMetricWorkbench";
 import { hostedTrainingMetricSeries } from "../training/hosted-training-metrics";
 import { RunStageEvidenceSchema } from "@openpond/contracts";
-import { ConsoleRunFlowDiagram } from "../training/RunFlowDiagram";
+import { ConsoleRunFlowDiagram, RunFlowDiagram } from "../training/RunFlowDiagram";
 import { TrainingRolloutGroups } from "../training/TrainingRolloutGroups";
 
 const Detail = z.object({
@@ -101,6 +101,7 @@ export function ModelTrainingJourney({
     );
   const recordedGroup = latestRollout?.data.rolloutGroupIndex;
   const latestEvent = detail?.events.at(-1);
+  const FlowDiagram = compact ? RunFlowDiagram : ConsoleRunFlowDiagram;
   const headline =
     detail?.flow?.nodes.find((node) => node.state === "active")?.label ??
     (detail?.flow && !detail.flow.live
@@ -126,7 +127,7 @@ export function ModelTrainingJourney({
       </div>
       {detail?.flow ? (
         <>
-          <ConsoleRunFlowDiagram
+          <FlowDiagram
             nodes={detail.flow.nodes}
             inference={detail.flow.inference}
             live={detail.flow.live && !error}

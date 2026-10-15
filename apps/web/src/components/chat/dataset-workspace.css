@@ -315,6 +315,7 @@
 }
 
 .chat-experiment-tool { min-width: 0; color: var(--text-primary); }
+.workspace-diff-tool-view > .chat-experiment-tool { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 .chat-experiment-tool-header, .chat-experiment-tool-content { display: grid; gap: 12px; padding: 16px; }
 .chat-experiment-tool-header { border-bottom: 1px solid var(--border-default); }
 .chat-experiment-tool h2, .chat-experiment-tool h3 { margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }

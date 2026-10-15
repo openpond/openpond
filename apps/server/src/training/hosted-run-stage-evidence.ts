@@ -16,6 +16,8 @@ const Raw = z
         completedGroups: z.number().int().nonnegative(),
         optimizerUpdatesApplied: z.number().int().nonnegative().default(0),
         currentPolicyVersion: z.number().int().nonnegative(),
+        terminalReason: z.string().nullish(),
+        canonicalPublishFailureCode: z.string().nullish(),
         inputBundle: z
           .object({
             recipe: z
@@ -67,8 +69,14 @@ const Raw = z
         .passthrough(),
     ),
     checkpoints: collection(
-      z.object({ adapterSha256: z.string().nullable().optional() }).passthrough(),
+      z.object({ id: z.string().optional(), state: z.string().optional(), adapterSha256: z.string().nullable().optional() }).passthrough(),
     ),
+    commands: collection(z.object({
+      commandType: z.string(),
+      state: z.string(),
+      errorCode: z.string().nullish(),
+      updatedAt: z.string(),
+    }).passthrough()),
     policyVersions: collection(
       z.object({ version: z.number().int().nonnegative(), served: z.boolean() }).passthrough(),
     ),
@@ -120,6 +128,7 @@ export function hostedRunStageEvidence(
     [...detail.gpuLeases].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
   const gpuLive = Boolean(lease?.readyAt && !lease.terminatedAt && live);
   const graded = detail.trajectories.filter((item) => number(item.reward) !== null).length;
+  const errors = stageErrors(detail);
   const stages = [
     {
       label: "Prepare",
@@ -207,9 +216,9 @@ export function hostedRunStageEvidence(
       .filter((stage) => !stage.skip)
       .map((stage) => ({
         label: stage.label,
-        state: live && stage.active ? "active" : stage.done ? "done" : live ? "pending" : "missing",
+        state: errors[stage.label] ? "failed" : live && stage.active ? "active" : stage.done ? "done" : live ? "pending" : "missing",
         status:
-          live && stage.active
+          errors[stage.label] ? "Error recorded" : live && stage.active
             ? "In progress"
             : stage.done
               ? "Recorded"
@@ -218,6 +227,7 @@ export function hostedRunStageEvidence(
                 : "Not recorded",
         ...(stage.inLoop ? { inLoop: true } : {}),
         ...(stage.detail ? { detail: stage.detail } : {}),
+        ...(errors[stage.label] ? { error: errors[stage.label] } : {}),
         ...(stage.progress !== undefined ? { progress: stage.progress } : {}),
       })),
     inference: lease
@@ -265,4 +275,36 @@ export function hostedRunStageEvidence(
         level: entry.level,
       })),
   });
+}
+
+/** Preserve attributable failure evidence without treating unexecuted stages as failures. */
+function stageErrors(detail: z.infer<typeof Raw>): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const commandStages: Record<string, string> = {
+    train_step: "Update adapter",
+    upload_checkpoint: "Save checkpoint",
+    qualify_checkpoint: "Save checkpoint",
+    start_inference: detail.policyVersions.some(policy => policy.version > 0) ? "Activate policy" : "Prepare",
+    score_reward_model: "Grade",
+    stop: "Finish",
+  };
+  const latest = new Map<string, typeof detail.commands[number]>();
+  for (const command of detail.commands) {
+    const previous = latest.get(command.commandType);
+    if (!previous || command.updatedAt > previous.updatedAt) latest.set(command.commandType, command);
+  }
+  for (const [type, command] of latest) {
+    const stage = commandStages[type];
+    if (stage && command.state === "failed") errors[stage] = `${type}: ${command.errorCode ?? "Worker command failed"}`;
+  }
+  const failedRollouts = detail.rollouts.filter(item => item.state.endsWith("failed"));
+  if (failedRollouts.length) errors.Rollouts = `${failedRollouts.length} failed attempt(s). Inspect the rollout records for details.`;
+  if (detail.evaluations.some(item => item.kind === "candidate" && item.state === "failed")) {
+    errors.Evaluate = `Candidate evaluation failed. ${detail.job.terminalReason ?? "Inspect evaluation records for details."}`;
+  }
+  const checkpoint = detail.checkpoints.find(item => item.state === "failed");
+  if (checkpoint && !errors["Save checkpoint"]) errors["Save checkpoint"] = checkpoint.id ? `Checkpoint ${checkpoint.id} failed.` : "Checkpoint failed.";
+  if (detail.job.state === "failed" && !detail.gpuLeases.some(lease => lease.readyAt)) errors.Prepare = detail.job.terminalReason ?? "Run preparation failed.";
+  if (detail.job.canonicalPublishFailureCode) errors.Finish = detail.job.canonicalPublishFailureCode;
+  return errors;
 }

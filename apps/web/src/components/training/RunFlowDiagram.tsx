@@ -1,165 +1,44 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId } from "react";
+import { SidebarRunFlowDiagram } from "./SidebarRunFlowDiagram";
 import "./run-flow-diagram.css";
 
 export type RunFlowNode = {
   label: string;
   compute?: "gpu" | "cpu";
-  state: "done" | "active" | "pending" | "missing";
+  state: "done" | "active" | "pending" | "missing" | "failed";
+  error?: string;
   status: string;
   detail?: string;
   progress?: number;
   inLoop?: boolean;
 };
 
-/** Console run-stage presentation, reflowed to keep labels readable in a sidebar. */
-export function RunFlowDiagram({
-  nodes,
-  live,
-  loopLabel,
-  inference,
-}: {
+/** Reflow the console journey into readable stage clusters at sidebar widths. */
+export function RunFlowDiagram(props: {
   nodes: RunFlowNode[];
   live: boolean;
   loopLabel?: string;
-  inference?: RunFlowNode;
+  inference?: RunFlowNode | null;
+  groupLabel?: string;
+  policyLabel?: string;
 }) {
-  const container = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(480);
-  const marker = useId().replace(/[^\w-]/g, "");
-  useEffect(() => {
-    const element = container.current;
-    if (!element) return;
-    const observer = new ResizeObserver((entries) =>
-      setWidth(Math.max(220, entries[0]!.contentRect.width)),
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  const columns = Math.max(1, Math.min(nodes.length, 4, Math.floor((width - 32) / 174)));
-  const gap = 36,
-    boxHeight = 72,
-    rowHeight = 104;
-  const top = loopLabel ? 40 : 12;
-  const boxWidth = (width - 40 - gap * (columns - 1)) / columns;
-  const positions = nodes.map((_, index) => {
-    const row = Math.floor(index / columns),
-      column = index % columns;
-    const rowColumns = Math.min(columns, nodes.length - row * columns);
-    const rowWidth = rowColumns * boxWidth + (rowColumns - 1) * gap;
-    return {
-      x: (width - rowWidth) / 2 + (row % 2 ? rowColumns - column - 1 : column) * (boxWidth + gap),
-      y: top + row * rowHeight,
-    };
-  });
-  const rows = Math.ceil(nodes.length / columns);
-  const height = top + (rows - 1) * rowHeight + boxHeight + 16 + (inference ? rowHeight : 0);
-  const loop = positions.filter((_, index) => nodes[index]?.inLoop);
-  const loopActive = live && nodes.some((node) => node.inLoop && node.state === "active");
-  const links = positions.slice(1).map((position, index) => {
-    const previous = positions[index]!;
-    const sameRow = previous.y === position.y;
-    const right = position.x > previous.x;
-    const path = sameRow
-      ? `M${previous.x + (right ? boxWidth : 0)} ${previous.y + boxHeight / 2} H${position.x + (right ? 0 : boxWidth)}`
-      : `M${previous.x + boxWidth / 2} ${previous.y + boxHeight} V${previous.y + boxHeight + (rowHeight - boxHeight) / 2} H${position.x + boxWidth / 2} V${position.y}`;
-    return {
-      path,
-      active: live && (nodes[index]?.state === "active" || nodes[index + 1]?.state === "active"),
-      done: nodes[index]?.state === "done",
-    };
-  });
-  return (
-    <div ref={container} className="run-flow" aria-label="Run stages">
-      <svg
-        className="run-flow-diagram"
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label={nodes
-          .map((node) => `${node.label}: ${node.status}${node.detail ? `, ${node.detail}` : ""}`)
-          .join(". ")}
-      >
-        <defs>
-          <marker
-            id={marker}
-            viewBox="0 0 8 8"
-            refX="6"
-            refY="4"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M1 1 L7 4 L1 7" className="run-flow-arrow" />
-          </marker>
-        </defs>
-        {loop.length && loopLabel ? (
-          <g>
-            <rect
-              className={`run-flow-loop ${loopActive ? "live" : ""}`}
-              x={8}
-              y={Math.min(...loop.map((p) => p.y)) - 28}
-              width={width - 16}
-              height={
-                Math.max(...loop.map((p) => p.y)) -
-                Math.min(...loop.map((p) => p.y)) +
-                boxHeight +
-                48
-              }
-              rx={12}
-            />
-            <text className="run-flow-caption" x={20} y={Math.min(...loop.map((p) => p.y)) - 12}>
-              {loopLabel}
-            </text>
-          </g>
-        ) : null}
-        {links.map((link, index) => (
-          <g key={index}>
-            <path
-              d={link.path}
-              className={`run-flow-wire ${link.done ? "done" : ""}`}
-              markerEnd={`url(#${marker})`}
-            />
-            {link.active ? <FlowPackets path={link.path} /> : null}
-          </g>
-        ))}
-        {loopActive && loop.length > 1 ? (
-          <path
-            className="run-flow-stream"
-            d={`M${width - 8} ${Math.max(...loop.map((p) => p.y)) + 16} V${Math.min(...loop.map((p) => p.y)) - 12}`}
-            markerEnd={`url(#${marker})`}
-          />
-        ) : null}
-        {nodes.map((node, index) => (
-          <FlowBox
-            key={node.label}
-            node={node}
-            {...positions[index]!}
-            width={boxWidth}
-            animated={live}
-          />
-        ))}
-        {inference ? (
-          <g>
-            <FlowBox
-              node={inference}
-              x={20}
-              y={40 + rows * rowHeight}
-              width={boxWidth}
-              animated={live}
-            />
-            <path
-              className="run-flow-wire"
-              d={`M${20 + boxWidth / 2} ${40 + rows * rowHeight} V${40 + rows * rowHeight - 26} H${width - 4} V${positions.find((_, index) => nodes[index]?.label.includes("Roll"))?.y ?? 40}`}
-            />
-            {live && inference.state === "active" ? (
-              <FlowPackets
-                path={`M${20 + boxWidth / 2} ${40 + rows * rowHeight} V${40 + rows * rowHeight - 26} H${width - 4}`}
-              />
-            ) : null}
-          </g>
-        ) : null}
-      </svg>
-    </div>
-  );
+  return <SidebarRunFlowDiagram {...props} />;
+}
+
+const plannedStages: RunFlowNode[] = [
+  { label: "Prepare", state: "pending", status: "Not started" },
+  { label: "Rollouts", compute: "gpu", state: "pending", status: "Not started", inLoop: true },
+  { label: "Grade", compute: "cpu", state: "pending", status: "Not started", inLoop: true },
+  { label: "Update adapter", compute: "gpu", state: "pending", status: "Not started", inLoop: true },
+  { label: "Save checkpoint", compute: "cpu", state: "pending", status: "Not started", inLoop: true },
+  { label: "Activate policy", compute: "gpu", state: "pending", status: "Not started", inLoop: true },
+  { label: "Evaluate", compute: "gpu", state: "pending", status: "Not started" },
+  { label: "Finish", state: "pending", status: "Not started" },
+];
+
+export function PlannedTrainingFlow() {
+  return <RunFlowDiagram nodes={plannedStages} live={false} loopLabel="Training groups"
+    inference={{ label: "GPU worker", compute: "gpu", state: "pending", status: "Not allocated" }} />;
 }
 
 function FlowPackets({ path }: { path: string }) {
@@ -211,6 +90,7 @@ function FlowBox({
         {node.label}: {node.status}
         {compute ? ` (${compute.toUpperCase()})` : ""}
         {node.detail ? ` — ${node.detail}` : ""}
+        {node.error ? ` — ${node.error}` : ""}
       </title>
       {active && animated ? (
         <rect className="run-flow-halo" x={x - 4} y={y - 4} width={width + 8} height={80} rx={14} />
@@ -400,6 +280,10 @@ export function ConsoleRunFlowDiagram({
           />
         ) : null}
       </svg>
+      {nodes.some((node) => node.error) ? <details className="sidebar-run-error">
+        <summary>Recorded stage failures</summary>
+        {nodes.filter((node) => node.error).map((node) => <p key={node.label}><strong>{node.label}</strong>: {node.error}</p>)}
+      </details> : null}
       <span className="training-muted">{groupLabel}</span>
     </div>
   );

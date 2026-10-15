@@ -200,8 +200,10 @@
   background: var(--accent-primary-fill);
   color: var(--text-on-accent);
 }
-.codex-model-menu button.codex-model-managed-provider:hover,
-.codex-model-menu button.codex-model-managed-provider:focus-visible {
+.codex-model-menu button.codex-model-managed-provider:hover {
   background: var(--accent-primary-fill);
-  box-shadow: inset 0 0 0 2px var(--focus-ring);
+}
+.codex-model-menu button.codex-model-managed-provider:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -3px;
 }

@@ -52,23 +52,32 @@ export async function runTrainingCommand(
       "artifacts",
       "benchmark",
       "create-project",
+      "pull-project",
     ].includes(
       subcommand,
     ) ||
     !id
   ) {
     throw new Error(
-      "usage: training <create-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-run-id|run-id|model-id>",
+      "usage: training <create-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> <taskset-id|model-project-id|model-run-id|run-id|model-id>",
     );
   }
   if (rest.length > 2) {
     throw new Error(`training ${subcommand} accepts exactly one identifier`);
   }
+  const pullProfileId = subcommand === "pull-project" ? optionString(options, "profile") : null;
+  if (subcommand === "pull-project" && !pullProfileId) throw new Error("training pull-project requires --profile <local-profile-id>.");
 
   const baseUrl =
     resolveApiBaseUrlOption(options) ??
     process.env.OPENPOND_LOCAL_API_URL?.replace(/\/$/, "") ??
     DEFAULT_LOCAL_TRAINING_API_URL;
+  if (subcommand === "pull-project") {
+    const origin = new URL(baseUrl);
+    if (origin.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname) || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== "/") {
+      throw new Error("training pull-project uses the local app's HTTP loopback API; the app resolves its signed-in hosted account.");
+    }
+  }
   const client = new TrainingApiClient({
     baseUrl,
     request:
@@ -78,6 +87,11 @@ export async function runTrainingCommand(
       }),
   });
   const json = parseBooleanOption(options.json);
+
+  if (subcommand === "pull-project") {
+    printResult(await client.pullHostedProject(id, pullProfileId!), json);
+    return;
+  }
 
   if (subcommand === "create-project") {
     const project = await createManagedModelProject({
@@ -319,6 +333,10 @@ export class TrainingApiClient {
   trainingState(profileId?: string): Promise<unknown> {
     const scope = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
     return this.json(`/v1/training${scope}`, "GET");
+  }
+
+  pullHostedProject(hostedProjectId: string, profileId: string): Promise<unknown> {
+    return this.json(`/v1/training/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/pull`, "POST", { profileId });
   }
 
   startHarnessRefinerBenchmark(modelId: string, body: unknown): Promise<unknown> {
