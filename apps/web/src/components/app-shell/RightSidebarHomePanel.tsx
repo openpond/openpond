@@ -121,7 +121,7 @@ export function RightSidebarHomeActions({
     },
   ];
 
-  if (onOpenExperiments) actions.unshift({id:"experiments",label:"Experiments",meta:"Training",icon:ChartColumnStacked,onSelect:onOpenExperiments});
+  if (onOpenExperiments) actions.unshift({id:"experiments",label:"Training",meta:"Experiments and models",icon:ChartColumnStacked,onSelect:onOpenExperiments});
   if (onOpenFile) actions.splice(onOpenExperiments?3:2, 0, { id: "open-file", label: "Open file", icon: FolderOpen, onSelect: onOpenFile });
   return (
     <div className="right-sidebar-home-actions" role="menu" aria-label="Workspace actions">

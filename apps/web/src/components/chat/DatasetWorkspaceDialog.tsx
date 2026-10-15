@@ -3,7 +3,6 @@ import type { ClientConnection } from "../../api";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { AppDialog } from "../dialogs/AppDialog";
 import { X } from "../icons";
-import { ComposerExperimentSetup } from "./ComposerExperimentSetup";
 import { ComposerResourcePanel } from "./ComposerResourcePanel";
 import { DatasetTrainingPlanFields } from "./DatasetTrainingPlanFields";
 import type { DatasetWorkspaceDialogState } from "./DatasetWorkspace";
@@ -40,22 +39,7 @@ export function DatasetWorkspaceDialog({
           <X size={18} />
         </button>
       </header>
-      {dialog.title === "New experiment" ? (
-        <>
-          <p>Uses {resources.focus.dataset?.name} and its current graders. This creates a draft.</p>
-          <ComposerExperimentSetup
-            resources={resources}
-            busy={false}
-            createNew
-            onClose={onClose}
-            onAddGrader={() =>
-              onAddToChat(
-                `Create a grader for ${resources.focus.dataset?.name}, revision ${resources.focus.dataset?.revision}. Ask what it should check, then validate it before evaluating.`,
-              )
-            }
-          />
-        </>
-      ) : dialog.title === "Add grader" ? (
+      {dialog.title === "Add grader" ? (
         <ComposerResourcePanel
           kind="grader"
           resources={resources}

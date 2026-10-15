@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   ChatExperimentContextSchema,
+  ChatContextTargetSchema,
+  type ChatContextTarget,
   chatResourceWorkspaces,
   ChatTrainingAttachmentSchema,
   chatTrainingAttachmentKey,
@@ -19,13 +21,13 @@ export function chatExperimentContext(metadata: Record<string, unknown> | undefi
 }
 
 export function createChatExperimentScopes(store: SqliteStore) {
-  async function change(sessionId: string, apply: (state: ChatExperimentContext) => void) {
+  async function change(sessionId: string, apply: (state: ChatExperimentContext, metadata: Record<string, unknown>) => void) {
     // updateSession serializes this callback with all other session writes.
     // Read state inside the callback so concurrent selections cannot lose scopes.
     const session = await store.updateSession(sessionId, current => {
       if (current.systemKind || ["sandbox", "sandbox_template"].includes(current.workspaceKind ?? "")) throw new Error("This conversation cannot select local resources.");
       const state = chatExperimentContext(current.metadata);
-      apply(state);
+      apply(state, current.metadata ?? {});
       return { ...current, metadata: { ...current.metadata, chatExperimentContext: ChatExperimentContextSchema.parse(state) } };
     });
     if (!session) throw new Error("Conversation was not found.");
@@ -83,6 +85,31 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (source) { scope.dataset = source.dataset; scope.evaluationModel = source.evaluationModel; scope.executionLocation = source.executionLocation; scope.graders = availableGraders.map(grader => ({...grader, rows: []})); }
       scope.selectedGraderId = graderId === undefined ? source?.selectedGraderId ?? null : graderId;
       state.activeScopeId = scope.id; state.selectionVersion++; state.selectedAt = now;
+    });
+  }
+
+  async function createForDataset(sessionId: string, input: {
+    dataset: ChatResourceSummary; graders: ChatResourceSummary[]; operationId: string;
+    expected?: { version: number; target: ChatContextTarget };
+  }) {
+    return change(sessionId, (state, metadata) => {
+      if (input.expected) {
+        const target = ChatContextTargetSchema.safeParse(metadata.chatContextSelection);
+        if (state.selectionVersion !== input.expected.version || !target.success ||
+          JSON.stringify(target.data) !== JSON.stringify(input.expected.target)) throw new Error("The chat context changed before the experiment was prepared.");
+      }
+      if (state.scopes.some(scope => scope.operationId === input.operationId)) return;
+      if (input.dataset.kind !== "dataset" || input.graders.some(grader => grader.datasetId !== input.dataset.id || grader.datasetRevision !== input.dataset.revision)) throw new Error("The graders do not match this dataset revision.");
+      const now = new Date().toISOString();
+      const source = chatResourceWorkspaces(state).find(scope => scope.id === state.activeScopeId);
+      const scope = make(state, input.operationId, now);
+      scope.dataset = input.dataset;
+      scope.graders = input.graders.map(grader => ({ ...grader, rows: [] }));
+      scope.evaluationModel = source?.evaluationModel;
+      scope.executionLocation = source?.executionLocation;
+      state.activeScopeId = scope.id;
+      state.selectionVersion++;
+      state.selectedAt = now;
     });
   }
 
@@ -245,5 +272,5 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
-  return { ensure, create, select, attach, attachTraining };
+  return { ensure, create, createForDataset, select, attach, attachTraining };
 }

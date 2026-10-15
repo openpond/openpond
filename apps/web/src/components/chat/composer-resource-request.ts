@@ -2,7 +2,7 @@ import { TaskResourceContextsSchema, type TaskResourceContext } from "@openpond/
 
 export const COMPOSER_RESOURCE_REQUEST = "openpond-composer-resource-request";
 export type ComposerResourceRequest = {
-  sessionId: string;
+  sessionId: string | null;
   text: string;
   contexts: TaskResourceContext[];
 };

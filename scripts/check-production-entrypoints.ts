@@ -31,6 +31,7 @@ for (const relativePath of [
   "apps/web/src/test-pages/thread-toast-browser-proof-entry.tsx",
   "apps/web/src/test-pages/html-visual-browser-proof.tsx",
   "apps/web/src/test-pages/chat-history-scroll-browser-proof.tsx",
+  "apps/web/src/test-pages/native-agent-cards-browser-proof.tsx",
   "apps/cli/src/index.ts",
   "apps/cli/src/cli/main.ts",
   "apps/cli/src/sandbox-template/manifest.ts",

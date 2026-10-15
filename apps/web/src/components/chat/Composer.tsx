@@ -1,11 +1,11 @@
 import { ErrorToast } from "../common/ErrorToast";
-import { composerResourceMetadata, mergeComposerResourceContexts } from "./composer-resource-context";
+import { composerResourceMetadata } from "./composer-resource-context";
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ChatContextPicker } from "./ChatContextPicker";
 import { useChatContextSelection } from "../../hooks/useChatContextSelection";
-import { COMPOSER_RESOURCE_REQUEST, type ComposerResourceRequest } from "./composer-resource-request";
+import { useComposerResourceRequests } from "./useComposerResourceRequests";
 import {
   lazy,
   Suspense,
@@ -229,27 +229,9 @@ export function Composer({
   const useActiveSteering = steerActiveResponses;
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
   const contextSelection = useChatContextSelection(surface === "chat" ? connection : null, taskSessionId ?? null);
-  const chatResources = useChatResourceFocus(surface === "chat" ? connection : null,taskSessionId ?? null);
+  const chatResources = useChatResourceFocus(surface === "chat" && !contextSelection.selection?.model && !contextSelection.selection?.training ? connection : null, taskSessionId ?? null);
   const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources, composerDraftStore);
-  useEffect(() => {
-    if (surface !== "chat" || !voiceInputChannelKey.startsWith("main-composer:")) return;
-    const receive = (event: Event) => {
-      const request = (event as CustomEvent<ComposerResourceRequest>).detail;
-      if (request?.sessionId !== taskSessionId || !request.text.trim()) return;
-      try {
-        resourceDrafts.current.set(submissionScopeKey, mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], request.contexts));
-      } catch {
-        showToast("Send or clear the current resource actions before adding more.", "info");
-        return;
-      }
-      const existing = inputRef.current?.getPrompt() ?? prompt;
-      const next = existing.trim() ? `${existing}\n\n${request.text}` : request.text;
-      onPromptChange(next);
-      requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(next.length));
-    };
-    window.addEventListener(COMPOSER_RESOURCE_REQUEST, receive);
-    return () => window.removeEventListener(COMPOSER_RESOURCE_REQUEST, receive);
-  }, [surface, voiceInputChannelKey, taskSessionId, submissionScopeKey, prompt, onPromptChange, showToast, composerDraftStore]);
+  useComposerResourceRequests({ surface, voiceInputChannelKey, taskSessionId, submissionScopeKey, prompt, onPromptChange, showToast, resourceDrafts, inputRef, composerDraftStore });
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);

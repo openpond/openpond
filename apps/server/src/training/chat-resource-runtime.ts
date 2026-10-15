@@ -45,7 +45,27 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       const page = await experiments.service.list({ teamId: experiments.scope }) as { items: import("@openpond/contracts").LocalExperimentRecord[] };
       return [...(await deps.store.listLocalDatasetListings()).map(localDatasetSummary), ...await Promise.all(page.items.map(record => experiments.summary(record))), ...await cloud.list()];
     },
-    selectResource: async (sessionId, target) => { await request("dataset", { action: "set_focus", payload: { sessionId, kind: target?.kind ?? "dataset", id: target?.id ?? null, revision: target?.revision } }); },
+    resource: async target => target.kind === "dataset"
+      ? localDatasetSummary(await datasets.readListing(target.id, target.revision))
+      : (await dispatch("experiment", { action: "status", payload: { id: target.id } }) as { summary: ChatResourceSummary }).summary,
+    selectResource: async (sessionId, target, version) => {
+      if (target?.scopeId) { await request("dataset", { action: "select_scope", payload: { sessionId, scopeId: target.scopeId, expectedSelectionVersion: version } }); return; }
+      await request("dataset", { action: "set_focus", payload: { sessionId, kind: target?.kind ?? "dataset", id: target?.id ?? null, revision: target?.revision, expectedSelectionVersion: version } }); },
+    createExperiment: async (sessionId, dataset, expected) => {
+      const record = await datasets.readListing(dataset.id, dataset.revision);
+      await scopes.createForDataset(sessionId, { dataset: localDatasetSummary(record), graders: localGraderSummaries(record), operationId: `experiment-${randomUUID()}`, expected });
+    },
+    inspectResource: async resource => {
+      if (resource.owner || resource.profileRef) {
+        const result = resource.kind === "experiment" ? await dispatch("experiment", { action: "result", payload: { id: resource.id } }) as { inputs?: ChatResourceSummary[] } : null;
+        return { dataset: result?.inputs?.find(item => item.kind === "dataset"), graders: result?.inputs?.filter(item => item.kind === "grader") ?? [] };
+      }
+      const id = resource.kind === "dataset" ? resource.id : resource.datasetId;
+      const revision = resource.kind === "dataset" ? resource.revision : resource.datasetRevision;
+      if (!id || !revision) return {};
+      const record = await datasets.readListing(id, revision);
+      return { dataset: localDatasetSummary(record), graders: localGraderSummaries(record).map(item => ({ ...item, rows: [] })) };
+    },
   });
   async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal):Promise<unknown> {
     if(kind==="dataset")return datasets.request(input,signal);
@@ -120,22 +140,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const {context:requestedContext,invocationToken,...input} = envelope;
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_runs", "context_select", "context_selection"].includes(String(input.action))) {
-      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional() }).strict().parse(input.payload ?? {});
-      if (input.action === "context_catalog") return browser.catalog();
+      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional() }).strict().parse(input.payload ?? {});
+      if (input.action === "context_catalog") return browser.catalog(true, query.sessionId);
       if (input.action === "context_runs") return { runs: await browser.runs(query.target) };
       if (input.action === "context_resolve") return { selection: await browser.resolve(query.target) };
-      if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId) };
-      const session = query.sessionId ? await deps.store.getSession(query.sessionId) : null;
-      const target = session?.metadata?.chatContextSelection;
-      if (session && target && typeof target === "object" && ["dataset", "experiment"].includes(String((target as {kind?:unknown}).kind))) {
-        const state = chatExperimentContext(session.metadata);
-        const selected = chatResourceWorkspaces(state).find(scope => scope.id === state.activeScopeId);
-        const reference = target as { kind: string; id: string; revision?: number };
-        if (reference.kind === "dataset" ? selected?.dataset?.id !== reference.id || selected?.dataset?.revision !== reference.revision : !selected?.runs.some(run => run.id === reference.id)) {
-          await browser.select(target, session.id);
-        }
-      }
-      return { selection: target ? await browser.resolve(target) : null };
+      if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId, query.newExperiment) };
+      return { selection: query.sessionId ? await browser.current(query.sessionId) : null };
     }
     if (kind === "experiment" && ["attach_training", "read_training"].includes(String(input.action))) {
       const ref = z.object({jobId:z.string().min(1).optional(),modelRunId:z.string().min(1).optional(),location:z.enum(["local","cloud"]).default("local"),apiOrigin:z.url().optional(),teamId:z.string().min(1).optional()}).strict()

@@ -2,11 +2,12 @@ import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useRef, useState } from "react";
 import { ChatContextTargetSchema } from "@openpond/contracts";
 import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
+import { ChatExperimentDraftDialog } from "./ChatExperimentDraftDialog";
 import { DropdownSelect } from "../DropdownSelect";
 import { ChevronDown, ChevronRight } from "../icons";
 
-type ContextType = "dataset" | "experiment" | "model";
-const typeLabels = { dataset: "Dataset", experiment: "Experiment", model: "Model" } as const;
+type ContextType = "experiment" | "model";
+const typeLabels = { experiment: "Experiment", model: "Model" } as const;
 
 export function ChatContextPicker({ context, disabled = false, placement = "bottom" }: {
   context: ReturnType<typeof useChatContextSelection>;
@@ -14,18 +15,19 @@ export function ChatContextPicker({ context, disabled = false, placement = "bott
   placement?: "top" | "bottom";
 }) {
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [draftType, setDraftType] = useState<ContextType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const selected = context.selection;
-  const selectedType = selected?.target.kind === "training" ? "model" : selected?.target.kind;
-  const type = draftType ?? selectedType ?? "dataset";
+  const selectedType = selected?.target.kind === "training" ? "model" : selected?.target.kind === "dataset" ? "experiment" : selected?.target.kind;
+  const type = draftType ?? selectedType ?? "experiment";
   const choices = (context.catalog.data?.options ?? []).filter(option => option.target.kind === type);
   const modelId = selected?.training
     ? selected.training.location === "cloud" ? selected.training.job.modelProjectId : selected.training.modelId
     : null;
-  const current = selected?.target.kind === type ? selected : type === "model" && modelId
+  const current = selected?.target.kind === type || type === "experiment" && selected?.target.kind === "dataset" ? selected : type === "model" && modelId
     ? choices.find(choice => choice.target.id === modelId && choice.target.location === selected?.training?.location)
     : null;
   const value = current ? JSON.stringify(current.target) : "";
@@ -45,6 +47,7 @@ export function ChatContextPicker({ context, disabled = false, placement = "bott
     return () => { document.removeEventListener("pointerdown", pointer); document.removeEventListener("keydown", key); };
   }, [open]);
   async function select(raw: string) {
+    if (raw === "new-experiment") { setOpen(false); setCreating(true); return; }
     setError(null);
     try {
       await context.select(raw ? ChatContextTargetSchema.parse(JSON.parse(raw)) : null);
@@ -56,7 +59,7 @@ export function ChatContextPicker({ context, disabled = false, placement = "bott
       aria-label="Training" aria-haspopup="dialog" aria-expanded={open} disabled={unavailable}
       title={selected ? `${selected.label}: ${selected.detail}` : "Training"}
       onClick={() => { setDraftType(null); setOpen(value => !value); }}>
-      <span>{selected?.label ?? "Training"}</span><ChevronDown size={14} />
+      <span>{selected?.target.kind === "dataset" ? `Experiment draft · ${selected.label}` : selected?.model?.name ?? selected?.label ?? "Training"}</span><ChevronDown size={14} />
     </button>
     {open ? <div className="codex-model-menu chat-training-menu" role="dialog" aria-label="Training context">
       <DropdownSelect compact floating label="Training type" value={type}
@@ -66,10 +69,11 @@ export function ChatContextPicker({ context, disabled = false, placement = "bott
         disabled={unavailable} onChange={value => setDraftType(value as ContextType)} />
       <DropdownSelect compact floating label={`${typeLabels[type]} name`} value={value}
         floatingMenuWidth={340} floatingMenuMaxHeight={360}
-        triggerContent={<><span>{typeLabels[type]}</span><span className="chat-training-menu-value">{current?.label ?? (context.catalog.isPending ? "Loading…" : "None")}</span><ChevronRight size={14} /></>}
-        options={[{ value: "", label: "None" }, ...choices.map(choice => ({ value: JSON.stringify(choice.target), label: choice.label, description: choice.detail }))]}
+        triggerContent={<><span>{typeLabels[type]}</span><span className="chat-training-menu-value">{(current?.target.kind === "dataset" ? `Draft · ${current.label}` : current?.label) ?? (context.catalog.isPending ? "Loading…" : "None")}</span><ChevronRight size={14} /></>}
+        options={[{ value: "", label: "None" }, ...(type === "experiment" ? [{ value: "new-experiment", label: "New experiment…", separatorBefore: true }] : []), ...choices.map(choice => ({ value: JSON.stringify(choice.target), label: choice.label, description: choice.detail }))]}
         disabled={unavailable || context.catalog.isPending} onChange={raw => void select(raw)} />
       {issue ? <ErrorToast error={issue}>{context.catalog.error ? <button type="button" onClick={() => void context.catalog.refetch()}>Retry</button> : null}</ErrorToast> : null}
     </div> : issue ? <ErrorToast error={issue} /> : null}
+    {creating ? <ChatExperimentDraftDialog context={context} onClose={() => setCreating(false)} /> : null}
   </div>;
 }

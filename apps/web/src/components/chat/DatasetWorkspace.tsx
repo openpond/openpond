@@ -11,6 +11,7 @@ import {
 import type { ClientConnection } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
+import { ChatTrainingInputs, TrainingWorkspaceSection } from "./ChatTrainingInputs";
 import { Plus } from "../icons";
 import { chatResourceRequest } from "../../api/chat-resource-api";
 import { DatasetRunEvidence, DatasetRunProgress } from "./DatasetRunProgress";
@@ -36,32 +37,36 @@ export function DatasetWorkspace({
   sessionId,
   resources,
   events,
+  selectedExperiment,
+  experimentName,
 }: {
   connection: ClientConnection;
-  sessionId: string;
+  sessionId: string | null;
   resources: Resources;
   events: RuntimeEvent[];
+  selectedExperiment?: ChatResourceSummary | null;
+  experimentName?: string;
 }) {
   const dataset = resources.focus.dataset,
     datasetKey = dataset ? resourceIdentity(dataset) : "";
   const [dialog, setDialog] = useState<DatasetWorkspaceDialogState | null>(null);
-  const collection = useDatasetWorkspaceRuns(connection, dataset, resources.experiments, events);
+  const collection = useDatasetWorkspaceRuns(selectedExperiment === undefined ? connection : null, dataset, resources.experiments, events);
   const scope = resources.scope;
   const scoped = scope?.ordinal !== null && scope?.ordinal !== undefined;
   const rows = scoped ? collection.rows.filter(run => scope.runs.some(pin => resourceIdentity(pin) === resourceIdentity(run))) : collection.rows;
   const draft = scoped && !scope.runs.length ? scope : null;
-  const selected = draft ? null : rows.find(run => run.id === scope?.selectedRunId)
+  const selected = selectedExperiment !== undefined ? selectedExperiment : draft ? null : rows.find(run => run.id === scope?.selectedRunId)
     ?? rows.find(run => activeRun(run.state)) ?? rows[0] ?? (scoped ? scope.runs.at(-1) ?? null : null);
   const detail = useDatasetRunDetail(connection, selected);
   const currentRun = detail.data?.summary ?? selected;
   useEffect(() => { setDialog(null); }, [datasetKey, scope?.id]);
   const experimentNumber = scope?.ordinal;
-  const experimentLabel = experimentNumber ? `Experiment ${experimentNumber}` : "Experiment";
+  const experimentLabel = experimentName ?? selectedExperiment?.name ?? (selectedExperiment === null ? "Experiment draft" : experimentNumber ? `Experiment ${experimentNumber}` : "Experiment");
   const context = dataset
     ? `${dataset.name}, revision ${dataset.revision}`
     : "the selected Dataset";
   function request(title: string, run?: ChatResourceSummary, training?: ChatTrainingAttachment) {
-    if (["New experiment", "Add grader", "New training"].includes(title)) {
+    if (["Add grader", "New training"].includes(title)) {
       setDialog({ title });
       return;
     }
@@ -91,16 +96,7 @@ export function DatasetWorkspace({
       <header className="dataset-workspace-section-heading">
         <div className="dataset-workspace-title">
           <h2>{experimentLabel}</h2>
-          <button
-            type="button"
-            className="training-button secondary icon-only"
-            aria-label="New experiment"
-            title="New experiment using the selected dataset and graders"
-            disabled={!dataset || resources.selecting}
-            onClick={() => request("New experiment")}
-          >
-            <Plus size={15} />
-          </button>
+
         </div>
         <div className="dataset-workspace-actions dataset-workspace-header-actions">
           <button type="button" className="training-button secondary" disabled={!dataset} onClick={() => request("Run experiment")}>Evaluate</button>
@@ -135,12 +131,10 @@ export function DatasetWorkspace({
         <ErrorToast error={resources.error} />
       ) : null}
       {!dataset ? (
-        <p>Select a dataset above the chat box to see its experiments.</p>
+        <p>Choose an experiment, or create one from a dataset.</p>
       ) : (
         <>
-          <p className="dataset-workspace-context">
-            <span>Dataset:</span> {dataset.name}
-          </p>
+          <p className="dataset-workspace-context"><span>Dataset:</span> {dataset.name} · revision {dataset.revision}</p>
           {currentRun ? (
             <DatasetRunProgress
               key={`progress:${resourceIdentity(currentRun)}`}
@@ -162,19 +156,24 @@ export function DatasetWorkspace({
                 Retry
               </button></ErrorToast>
           ) : null}
+          <ChatTrainingInputs dataset={dataset} graders={resources.graders} />
           {currentRun ? (
+            <TrainingWorkspaceSection title="Results">
             <DatasetRunEvidence
               key={`evidence:${resourceIdentity(currentRun)}`}
               connection={connection}
               run={currentRun}
               view={detail.data?.view}
             />
+            </TrainingWorkspaceSection>
           ) : null}
+          <TrainingWorkspaceSection title="Training">
           <DatasetTrainingOverview
             connection={connection}
             resources={resources}
             onRequest={request}
           />
+          </TrainingWorkspaceSection>
         </>
       )}
       {dialog ? (

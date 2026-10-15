@@ -75,6 +75,7 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
       } }, abort.signal);
       if (admitted === generation.current && !abort.signal.aborted) { setFocus(next); focusRef.current = next;
         if (action !== "set_model" && action !== "set_destination") setGraders((next.scopeContext ? chatResourceWorkspaces(next.scopeContext).find(scope=>scope.id===next.scopeContext?.activeScopeId) : null)?.graders ?? []); setError(null); }
+      if (!abort.signal.aborted) window.dispatchEvent(new CustomEvent("openpond-resource-focus-changed", { detail: { sessionId } }));
       return !abort.signal.aborted;
     } catch (cause) {
       if (admitted === generation.current && !abort.signal.aborted) setError(cause instanceof Error ? cause.message : "Resource selection failed.");

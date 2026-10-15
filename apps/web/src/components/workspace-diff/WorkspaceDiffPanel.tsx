@@ -73,6 +73,7 @@ export function WorkspaceDiffPanel({
   sourceSwitcher,
   tabRequest,
   renderOutputs,
+  outputsLabel,
   additionalTabs,
   viewState,
   onRefresh,
@@ -111,6 +112,7 @@ export function WorkspaceDiffPanel({
   sourceSwitcher?: WorkspaceFileSourceSwitcher | null;
   tabRequest?: WorkspaceDiffTabRequest | null;
   renderOutputs?: (onOpenFile: () => void, tabId: number) => ReactNode;
+  outputsLabel?: string;
   additionalTabs?: ReactNode;
   viewState?: WorkspaceDiffPanelViewState | null;
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
@@ -155,6 +157,7 @@ export function WorkspaceDiffPanel({
       tabRequest={tabRequest ?? null}
       additionalTabs={additionalTabs}
       renderOutputs={renderOutputs ?? null}
+      outputsLabel={outputsLabel}
       viewState={viewState ?? null}
       onRefresh={onRefresh}
       onResizeStart={onResizeStart}
@@ -286,6 +289,7 @@ function WorkspaceDiffPanelInner({
   sourceSwitcher,
   tabRequest,
   renderOutputs,
+  outputsLabel,
   additionalTabs,
   viewState,
   onRefresh,
@@ -324,6 +328,7 @@ function WorkspaceDiffPanelInner({
   sourceSwitcher: WorkspaceFileSourceSwitcher | null;
   tabRequest: WorkspaceDiffTabRequest | null;
   renderOutputs: ((onOpenFile: () => void, tabId: number) => ReactNode) | null;
+  outputsLabel?: string;
   additionalTabs?: ReactNode;
   viewState: WorkspaceDiffPanelViewState | null;
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
@@ -1642,6 +1647,7 @@ function WorkspaceDiffPanelInner({
           if (activeTab === "files") ensureNewTab();
         } : undefined}
         overviewTabs={renderOutputs ? overviewTabs : []}
+        outputsLabel={outputsLabel}
         activeOverviewId={activeOverviewId}
         onNewOverview={renderOutputs ? () => {
           const id = nextOverviewId.current++;

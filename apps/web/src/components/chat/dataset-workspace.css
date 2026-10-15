@@ -340,3 +340,15 @@
 .chat-training-menu .dropdown-menu button { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 6px 9px; }
 .chat-training-menu .dropdown-menu button > small { white-space: normal; }
 .composer .composer-primary-controls .chat-training-menu .dropdown-select.compact > .dropdown-trigger { max-width: none; gap: 10px; padding-inline: 7px; }
+
+.training-workspace-section { border-top: 1px solid var(--border-default); }
+.training-workspace-section > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 13px 0; list-style: none; font-size: 13px; font-weight: 500; }
+.training-workspace-section > summary::before { content: "›"; color: var(--text-muted); transition: transform 120ms ease; }
+.training-workspace-section[open] > summary::before { transform: rotate(90deg); }
+.training-workspace-section > summary::-webkit-details-marker { display: none; }
+.training-workspace-section-content { display: grid; gap: 12px; padding-bottom: 14px; min-width: 0; }
+.training-context-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 16px; font-size: 12px; margin: 0; }
+.training-context-facts dt { color: var(--text-muted); }
+.training-context-facts dd { margin: 0; overflow-wrap: anywhere; }
+.dataset-workspace-section-heading > .dataset-workspace-title { min-width: 0; }
+.dataset-workspace-title h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }

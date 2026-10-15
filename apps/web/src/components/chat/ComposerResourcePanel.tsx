@@ -1,6 +1,7 @@
 import { ErrorToast } from "../common/ErrorToast";
 import { Plus } from "../icons";
 import { useEffect, useState } from "react";
+import { ChatGraderRequestPanel } from "./ChatGraderRequestPanel";
 import type { DatasetResponse } from "../../api/chat-resource-api";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 
@@ -13,18 +14,13 @@ export function ComposerResourcePanel({ kind, resources, busy, onDraft }: {
   const [description, setDescription] = useState("");
   if (kind === "rows") return <DatasetRows resources={resources} />;
   const dataset = resources.focus.dataset;
-  const context = dataset ? `${dataset.name} V${dataset.revision}` : "the selected dataset";
-  const labels = {
-    dataset: {title:"New dataset", placeholder:"What examples should it contain?", button:"Chat"},
-    grader: {title:"Create grader", placeholder:"What should the grader check?", button:"Chat"},
-  }[kind];
+  if (kind === "grader") return <ChatGraderRequestPanel dataset={dataset} busy={busy || resources.selecting} onDraft={onDraft} />;
+  const labels = {title:"New dataset", placeholder:"What examples should it contain?", button:"Chat"};
   function submit() {
     const detail = description.trim();
-    const request = kind === "dataset" ? `Create a new dataset: ${detail}`
-      : `Create a grader for ${context}: ${detail}`;
-    onDraft(request);
+    onDraft(`Create a new dataset: ${detail}`);
   }
-  const disabled = busy || resources.selecting || kind !== "dataset" && !dataset || !description.trim();
+  const disabled = busy || resources.selecting || !description.trim();
   return <div className="composer-resource-request" onKeyDown={event => { if (!event.nativeEvent.isComposing && event.key === "Enter" && event.target instanceof HTMLInputElement) { event.preventDefault(); event.stopPropagation(); if (!disabled) submit(); } }}>
     <div className="composer-experiment-setup-heading"><strong>{labels.title}</strong></div>
     <input autoFocus aria-label={labels.placeholder} placeholder={labels.placeholder} value={description} onChange={event => setDescription(event.target.value)} disabled={busy} />

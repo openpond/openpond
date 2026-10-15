@@ -1,3 +1,4 @@
+import { useTrainingSidebarContext } from "../../hooks/useTrainingSidebarContext";
 import { ChatContextAccountScope } from "../../hooks/useChatContextSelection";
 import { rememberChatSelection } from "../../lib/chat-selection-preference";
 import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
@@ -365,6 +366,8 @@ export function MainPane({
     bootstrap?.profileLibrary?.lastUsed ??
     null;
   const accountTeamScopeKey = mainPaneAccountScopeKey(bootstrap);
+  const trainingLabel = useTrainingSidebarContext({ connection, sessionId: selectedSessionId, accountScope: accountTeamScopeKey,
+    active: view === "chat", onOpen: onShowExperimentsPanel });
   const selectedProfileState =
     profileStateForRef(
       bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
@@ -1283,6 +1286,7 @@ export function MainPane({
       tabRequest={workOutputsTabRequest}
       additionalTabs={view === "chat" ? <BrowserTabButtons tabs={sidebarBrowser.state.tabs} activeTabId={null} onSelectTab={id=>{void sidebarBrowser.selectTab(id);htmlVisualTabs.showBrowser();onShowBrowserPanel();}} onCloseTab={id=>void sidebarBrowser.closeTab(id)}/> : undefined}
       renderOutputs={workPanel ?? undefined}
+      outputsLabel={trainingLabel}
       viewState={workspaceDiffPanelViewState}
       workspaceName={
         showLabCandidateDiffPanel
@@ -1362,7 +1366,7 @@ export function MainPane({
       conversationId={browserConversationId}
       connection={connection}
       visualTabs={htmlVisualTabs}
-      leadingTabs={view==="chat"?<button type="button" className="browser-tab-main sidebar-tool-tab" role="tab" aria-selected={false} onClick={onShowExperimentsPanel}>Experiments</button>:undefined}
+      leadingTabs={view==="chat"?<button type="button" className="browser-tab-main sidebar-tool-tab" role="tab" aria-selected={false} onClick={onShowExperimentsPanel}>{trainingLabel}</button>:undefined}
       expanded={diffPanelExpanded}
       onResizeStart={onDiffPanelResizeStart}
     />
