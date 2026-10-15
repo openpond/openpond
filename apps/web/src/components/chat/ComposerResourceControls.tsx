@@ -69,7 +69,7 @@ export function ComposerResourceControls({resources,busy,onDraft}: {
     ] : []),
     ...(run ? [{value:"Compare",label:"Compare results",separatorBefore:true},
       ...(primary==="Improve" ? [{value:"Repeat run",label:"Repeat run"}] : [])] : []),
-  ].map(item=>({...item,description:requests[item.value]}));
+  ];
   return <div className={`composer-resource-area ${expanded ? "is-expanded" : ""}`}>
     <div className="composer-resource-bar" aria-label={isExperiment ? "Current experiment" : "Current dataset"}>
       {isExperiment ? <DropdownSelect compact floating placement="top" floatingMenuWidth={280} label="Experiment scope" value={scope.id} className="composer-resource-number"
@@ -85,10 +85,21 @@ export function ComposerResourceControls({resources,busy,onDraft}: {
         options={[{value:"",label:"All graders",shortLabel:`Graders ${resources.graders.length}`},...resources.graders.map(item=>({value:item.id,label:item.name})),{value:"add",label:"Create grader",icon:"plus",separatorBefore:true}]}
         onChange={value=>{if(value==="add")open("grader");else void resources.select("grader",value);}} disabled={disabled||!dataset}/>
       {primary!=="New experiment" && primary!=="Improve" ? <button type="button" className="composer-resource-primary" disabled={disabled} onClick={()=>primary==="Set up"?open("experiment"):request(primary)}>{primary}</button>:null}
-      <DropdownSelect compact floating searchable placement="top" floatingMenuWidth={420} floatingMenuMaxHeight={440} label="Chat actions" tooltip="Preview a request to add to chat" value="" className="composer-resource-chat-actions" triggerContent={<><Plus size={13}/><MessageSquare size={15}/></>}
+      <DropdownSelect compact floating searchable placement="top" floatingMenuWidth={280} floatingMenuMaxHeight={440} label="Chat actions" tooltip="Add a request to chat" value="" className="composer-resource-chat-actions" triggerContent={<><Plus size={13}/><MessageSquare size={15}/></>}
         options={[...chatActions,
-          ...(scope.training??[]).map((job,index)=>({value:`training:${chatTrainingAttachmentKey(job)}`,label:`Check training ${index+1}`,description:"Check this training job and show its results and any model it produced."}))]}
-        onChange={value=>{if(value.startsWith("training:")){const job=scope.training?.find(item=>`training:${chatTrainingAttachmentKey(item)}`===value);if(job)onDraft("Check this training job and show its results and any model it produced.",job);}else request(value);}} disabled={disabled}/>
+          ...(scope.training??[]).map((job,index)=>({value:`training:${chatTrainingAttachmentKey(job)}`,label:`Check training ${index+1}`}))]}
+        onChange={value=>{
+          if(disabled)return;
+          if(value.startsWith("training:")){
+            const job=scope.training?.find(item=>`training:${chatTrainingAttachmentKey(item)}`===value);
+            if(job)onDraft("Check this training job and show its results and any model it produced.",job);
+          }else{
+            const choice=chatActions.find(item=>item.value===value);
+            if(!choice||("disabled" in choice&&choice.disabled)||!requests[value])return;
+            onDraft(requests[value]);
+          }
+          setExpanded(false);
+        }} disabled={disabled}/>
       <button type="button" className="composer-resource-expand" aria-label={expanded?"Collapse resource controls":"Expand resource controls"} aria-expanded={expanded} aria-controls={panelId}
         onClick={()=>{setHasOpened(true);if(!expanded)setPanel("experiment");setExpanded(value=>!value);}}><ChevronDown size={15}/></button>
     </div>

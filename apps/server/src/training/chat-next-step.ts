@@ -98,15 +98,22 @@ export function createChatNextStepService(deps: { store: SqliteStore; current(se
     const recommendation = z.object({turnId:z.string(),fingerprint:z.string(),action:ChatNextStepActionSchema}).safeParse(session.metadata?.chatNextStepRecommendation);
     const candidate = recommendation.success && recommendation.data.turnId===turn.id && recommendation.data.fingerprint===fingerprint
       ? candidates.find(item=>item.action===recommendation.data.action) ?? candidates[0]! : candidates[0]!;
-    const id = contentHash({fingerprint,action:candidate.action});
-    const consumed = z.object({turnId:z.string(),ids:z.array(z.string())}).safeParse(session.metadata?.chatNextStepConsumed);
-    const ids = consumed.success && consumed.data.turnId===turn.id ? consumed.data.ids : [];
-    if (ids.length) return {suggestion:null,eligible:[]};
+    const baseId = contentHash({fingerprint,action:candidate.action});
+    const storedOffer = z.object({baseId:z.string(),id:z.string(),state:z.enum(["offered","accepted","dismissed"])}).safeParse(session.metadata?.chatNextStepOffer);
+    const offer = storedOffer.success && storedOffer.data.baseId === baseId ? storedOffer.data : null;
+    if (offer?.state === "dismissed") return {suggestion:null,eligible:[]};
+    let id = offer?.id ?? baseId;
+    if (input.operation === "read" && offer?.state === "accepted") {
+      // Clearing an accepted editable draft may offer the same valid next step
+      // again. Each offer still accepts once, including concurrent key/clicks.
+      id = contentHash({baseId,previousOfferId:id});
+      await update(current=>({...current,metadata:{...current.metadata,chatNextStepOffer:{baseId,id,state:"offered"}}}));
+    } else if (offer?.state === "accepted") return {suggestion:null,eligible:[]};
     const pinnedContexts = candidate.baseline ? contexts.map((context,index)=>index===0 ? {...context,resources:[...context.resources,{kind:candidate.baseline!.kind,id:candidate.baseline!.id,revision:candidate.baseline!.revision,datasetId:candidate.baseline!.datasetId,datasetRevision:candidate.baseline!.datasetRevision,owner:candidate.baseline!.owner,profileRef:candidate.baseline!.profileRef}]} : context) : contexts;
     const suggestion: ChatNextStep = ChatNextStepSchema.parse({id,sessionId:session.id,sourceTurnId:turn.id,action:candidate.action,label:candidate.label,draft:candidate.draft,contexts:pinnedContexts,focus});
     if (input.operation === "read") return {suggestion};
     if (input.id!==id) return {suggestion:null,stale:true};
-    await update(current=>({...current,metadata:{...current.metadata,chatNextStepConsumed:{turnId:turn.id,ids:[...ids,id].slice(-100)}}}));
+    await update(current=>({...current,metadata:{...current.metadata,chatNextStepOffer:{baseId,id,state:input.operation==="accept" ? "accepted" : "dismissed"}}}));
     const settled = await snapshot(session.id);
     if (!settled || settled.fingerprint !== fingerprint || settled.guard !== guard) return {suggestion:null,stale:true};
     return {suggestion:input.operation==="accept" ? suggestion : null};

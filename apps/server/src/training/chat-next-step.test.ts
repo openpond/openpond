@@ -20,14 +20,18 @@ function fixture() {
   return {create,set beforeUpdate(value:(()=>void)|null){beforeUpdate=value;},get session(){return session;},set session(value){session=value;},get turn(){return turn;},set turn(value){turn=value;},get focus(){return focus;},set focus(value){focus=value;},set pending(value:boolean){pending=value;}};
 }
 
-// A double key/click must consume one recommendation once; reload cannot offer it again.
-test("next steps consume once, persist dismissal, and reject stale or cross-chat acceptance",async()=>{
+// A double key/click accepts one offer once; clearing a draft can reoffer it, while Escape stays dismissed.
+test("next steps accept once per offer, rearm after a cleared draft, and reject stale or cross-chat acceptance",async()=>{
   const f=fixture(),service=f.create();
   const first=await service.request({sessionId:"chat"}) as {suggestion:{id:string;contexts:unknown[]}};
   expect(first.suggestion.contexts).toHaveLength(1);
   const accepted=await Promise.all([service.request({sessionId:"chat",operation:"accept",id:first.suggestion.id}),service.request({sessionId:"chat",operation:"accept",id:first.suggestion.id})]);
   expect(accepted.filter(item=>"suggestion" in item && item.suggestion)).toHaveLength(1);
-  expect(await f.create().request({sessionId:"chat"})).toMatchObject({suggestion:null});
+  const reoffered = await f.create().request({sessionId:"chat"}) as {suggestion:{id:string}};
+  expect(reoffered.suggestion.id).not.toBe(first.suggestion.id);
+  expect(await service.request({sessionId:"chat",operation:"accept",id:first.suggestion.id})).toMatchObject({suggestion:null,stale:true});
+  const reaccepted=await Promise.all([service.request({sessionId:"chat",operation:"accept",id:reoffered.suggestion.id}),service.request({sessionId:"chat",operation:"accept",id:reoffered.suggestion.id})]);
+  expect(reaccepted.filter(item=>"suggestion" in item && item.suggestion)).toHaveLength(1);
   f.turn={...f.turn,id:"turn2"};
   const next=await service.request({sessionId:"chat"}) as {suggestion:{id:string}};
   f.focus={...f.focus!,dataset:{...f.focus!.dataset!,revision:2}};

@@ -398,6 +398,7 @@ function rebuildEditorDom(
 
 export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   connectedAppMentions?: ConnectedAppMentionOption[];
+  ariaDescribedBy?: string;
   disabled: boolean;
   onCursorChange: (index: number) => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
@@ -410,6 +411,7 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   token: ComposerInlineToken | null;
 }>(function ComposerInlineInput({
   connectedAppMentions = [],
+  ariaDescribedBy,
   disabled,
   onCursorChange,
   onKeyDown,
@@ -511,6 +513,7 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
       className="composer-inline-input"
       role="textbox"
       aria-multiline="true"
+      aria-describedby={ariaDescribedBy}
       contentEditable={!disabled}
       suppressContentEditableWarning
       data-empty={isEmpty ? "true" : "false"}

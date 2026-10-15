@@ -1732,6 +1732,7 @@ export function Composer({
           <ComposerInlineInput
             ref={inputRef}
             connectedAppMentions={connectedAppMentions}
+            ariaDescribedBy={nextStep.suggestion ? nextStep.descriptionId : undefined}
             disabled={inputDisabled}
             onCursorChange={setCursorIndex}
             onKeyDown={(event) => {
@@ -1793,7 +1794,6 @@ export function Composer({
             onPasteFiles={addFiles}
             onPasteTextAsAttachment={handlePasteTextAsAttachment}
             onPromptChange={(nextValue, nextPromptCursor) => {
-              if (nextValue) nextStep.dismiss();
               if (addMenuOpen) {
                 const queryStart = Math.max(
                   0,
