@@ -148,7 +148,7 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
     signal: AbortSignal = new AbortController().signal,
   ): Promise<unknown> {
     const input = record(payload);
-    if (action === "inspect_local_model_projects") return inspectLocalModelProjects(deps.store, string(input.modelProjectId), requestUrl?.searchParams.get("profileId") ?? undefined);
+    if (action === "inspect_local_model_projects") return inspectLocalModelProjects(deps.store, string(input.modelProjectId) ?? undefined, requestUrl?.searchParams.get("profileId") ?? undefined);
     if (action === "task_inventory" || action === "task_inventory_detail") {
       const { profileId, query } = taskInventoryRequest(requestUrl);
       return action === "task_inventory" ? taskInventory.list(profileId, query) : taskInventory.detail(profileId, query);
