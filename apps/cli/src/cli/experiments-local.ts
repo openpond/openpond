@@ -39,7 +39,10 @@ export async function runLocalExperimentsCommand(options:Record<string,string|bo
   if(!teamId) {
     if(action === "models") result=await command("models",{});
     else if(action === "run" || action === "run-cloud") result=await command(action.replaceAll("-","_"),await input());
-    else if(action === "list") result=await command("list",{});
+    else if(action === "list") {
+      const afterId=optionString(options,"afterId"),limit=optionString(options,"limit");
+      result=await command("list",{...(afterId?{afterId}:{}),...(limit?{limit:Number(limit)}:{})});
+    }
     else if(action === "compare" && id && candidateId) result=await command("compare",{baselineId:id,candidateId});
     else if(action==="case" && id && receiptId) {
       const sequence=optionString(options,"afterSequence"),limit=optionString(options,"limit");
