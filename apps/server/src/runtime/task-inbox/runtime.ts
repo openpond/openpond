@@ -135,11 +135,13 @@ export function createTaskInboxRuntime(deps: {
   async function send(input: {
     senderSessionId: string; sessionId: string; body: string; kind?: "message" | "followup" | "result";
     idempotencyKey: string; replyTo?: string | null; runtimeNotice?: boolean; reportingOnly?: boolean;
+    executionPermissions?: import("../../openpond/model-tool-registry.js").ModelToolExecutionContext["turnPermissions"];
   }): Promise<TaskInput> {
     await authorize(input.senderSessionId, input.sessionId);
+    const relationship = (await deps.store.localPonderAgents?.())?.find(agent => agent.sessionId === input.sessionId && agent.coordinatorSessionId === input.senderSessionId);
     return admit({ id: randomUUID(), sessionId: input.sessionId, senderSessionId: input.senderSessionId,
       senderKind: input.kind === "result" || input.runtimeNotice ? "runtime" : "task", kind: input.kind ?? "message", body: input.body,
-      payload: input.reportingOnly ? { taskReportingOnly: true } : {}, idempotencyKey: input.idempotencyKey, replyTo: input.replyTo ?? null, expectedTurnId: null });
+      payload: { ...(input.reportingOnly ? { taskReportingOnly: true } : {}), ...(relationship ? {localPonderControlRevision:relationship.revision,...(input.executionPermissions ? {localPonderExecutionPermissions:input.executionPermissions} : {})} : {}) }, idempotencyKey: input.idempotencyKey, replyTo: input.replyTo ?? null, expectedTurnId: null });
   }
 
   async function list(senderId: string): Promise<TaskPeer[]> {
@@ -364,6 +366,11 @@ export function createTaskInboxRuntime(deps: {
     stopScheduling() { closed = true; },
     async close() { closed = true; await Promise.allSettled(dispatching.values()); },
     async notifyAccepted(input: TaskInput) { await notify(TaskInputSchema.parse(input)); },
+    async admitRuntimeLocalMessage(input:TaskInputAdmission){
+      const coordinator=await deps.store.localPonderState?.();
+      if(input.senderKind!=="runtime"||input.senderSessionId!==null||!input.payload.localPonderHostedResult||coordinator?.sessionId!==input.sessionId)throw new Error("Local runtime admission requires the current coordinator result.");
+      return admit(input);
+    },
     admitUserLocalMessage(input: TaskInputAdmission) {
       if (input.senderKind !== "user" || input.senderSessionId !== null) throw new Error("Local message admission requires a user input.");
       return admit(input);

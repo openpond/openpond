@@ -68,7 +68,6 @@ import { insertVoiceTranscript } from "../../lib/voice-text";
 import { deliverVoiceTranscript } from "../../lib/voice-transcript-delivery";
 import { requestVoiceInputSubmit } from "../../lib/voice-transcription-job";
 import { useTaskInbox } from "../../hooks/useTaskInbox";
-import { ComposerInbox } from "./ComposerInbox";
 import { TaskInboxPanel } from "./TaskInboxPanel";
 import {
   ComposerProjectTargetControl,
@@ -166,6 +165,7 @@ export function Composer({
   experience = "development",
   mode,
   surface = "chat",
+  placeholder: customPlaceholder,
   teamUseModel = false,
   teamUseModelLocked = false,
   teamMentionMembers = [],
@@ -182,6 +182,8 @@ export function Composer({
   createImproveRuntime = null,
   busy,
   readOnlyReason = null,
+  readOnlySession = null,
+  onOpenNativeParent,
   running = busy,
   taskSessionId = null,
   goalSessionId = taskSessionId,
@@ -193,6 +195,10 @@ export function Composer({
   initialSteerDrafts = EMPTY_STEER_DRAFTS,
   showProjectFooter = true,
   hideModelControls = false,
+  modelSelectionDisabled = false,
+  allowedModelRefs,
+  executionControl,
+  enableResourceContext = true,
   autoFocus = false,
   focusRequestId = 0,
   attachmentRequest = null,
@@ -226,7 +232,7 @@ export function Composer({
   onPauseGoal,
 }: ComposerProps) {
   const nativeAvailability = useNativeConversationAvailability({
-    connection, sessionId: taskSessionId ?? null, events: taskEvents, fallbackReason: readOnlyReason ?? null,
+    connection, sessionId: taskSessionId ?? readOnlySession?.id ?? null, events: taskEvents, fallbackReason: readOnlyReason ?? null, fallbackSession: readOnlySession,
   });
   const nativeReadOnlyReason = nativeAvailability.reason;
   const composerRef = useRef<HTMLFormElement | null>(null);
@@ -234,8 +240,8 @@ export function Composer({
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
   const useActiveSteering = steerActiveResponses;
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
-  const contextSelection = useChatContextSelection(surface === "chat" ? connection : null, taskSessionId ?? null);
-  const chatResources = useChatResourceFocus(surface === "chat" && !contextSelection.selection?.model && !contextSelection.selection?.training ? connection : null, taskSessionId ?? null);
+  const contextSelection = useChatContextSelection(surface === "chat" && enableResourceContext ? connection : null, taskSessionId ?? null);
+  const chatResources = useChatResourceFocus(surface === "chat" && enableResourceContext && !contextSelection.selection?.model && !contextSelection.selection?.training ? connection : null, taskSessionId ?? null);
   const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources, composerDraftStore);
   useComposerResourceRequests({ surface, voiceInputChannelKey, taskSessionId, submissionScopeKey, prompt, onPromptChange, showToast, resourceDrafts, inputRef, composerDraftStore });
 
@@ -336,7 +342,7 @@ export function Composer({
     },
     [addFiles, attachments],
   );
-  const placeholder = composerPlaceholder({ experience, mode, surface });
+  const placeholder = customPlaceholder ?? composerPlaceholder({ experience, mode, surface });
   const repositoryWork = experience === "development"
     || (experience === "work" && projectTarget.value !== "none");
   const modelValue = normalizeChatModel(provider, model, providerSettings);
@@ -447,7 +453,7 @@ export function Composer({
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments || contextSelection.selecting;
   const nextStep = useComposerNextStep({
-    connection: surface === "chat" ? connection : null, sessionId: taskSessionId ?? null,
+    connection: surface === "chat" && enableResourceContext ? connection : null, sessionId: taskSessionId ?? null,
     events: taskEvents, prompt, selectionKey: JSON.stringify(contextSelection.selection?.target ?? null), inputRef,
     blocked: busy || running || serializingAttachments || contextSelection.selecting || attachments.length > 0
       || Boolean(selectedAction || selectedCommand) || composerSteerDraftsForScope(steerDraftsByScope, submissionScopeKey, initialSteerDrafts).length > 0
@@ -480,9 +486,9 @@ export function Composer({
     );
   }
   const providerOptions = useMemo(() => {
-    const options = providerOptionsFromSettings(providerSettings, {
-      enabledOnly: true,
-    }).map((option) => ({ ...option, description: undefined }));
+    const options = allowedModelRefs
+      ? [...new Set(allowedModelRefs.map(ref => ref.providerId))].map(value => ({value, label:chatProviderLabel(value,providerSettings), description:undefined}))
+      : providerOptionsFromSettings(providerSettings, {enabledOnly:true}).map(option => ({...option,description:undefined}));
     const experienceOptions =
       repositoryWork
         ? options
@@ -510,7 +516,7 @@ export function Composer({
       separatorBefore: true,
     };
     return [...withCurrent, setupProviderOption];
-  }, [provider, providerSettings, repositoryWork, workspaceTarget.value]);
+  }, [provider, providerSettings, repositoryWork, workspaceTarget.value, allowedModelRefs]);
   const modelOptions = useMemo(
     () => modelOptionsForProvider(provider, providerSettings),
     [provider, providerSettings]
@@ -1546,7 +1552,7 @@ export function Composer({
   }
 
   if (nativeReadOnlyReason) return <NativeConversationUnavailable
-    connection={connection} session={nativeAvailability.session} reason={nativeReadOnlyReason} onRechecked={nativeAvailability.acceptSession}
+    connection={connection} session={nativeAvailability.session} reason={nativeReadOnlyReason} onRechecked={nativeAvailability.acceptSession} onOpenParent={onOpenNativeParent}
   />;
 
   return (
@@ -1669,7 +1675,7 @@ export function Composer({
       />}
       {composeNotice?.tone === "warning" ? <ErrorToast error={composeNotice.message} />
         : composeNotice ? <div className="composer-notice info" role="status">{composeNotice.message}</div> : null}
-      {surface === "chat" ? <ComposerResourceContext key={`${taskSessionId}:${JSON.stringify(contextSelection.selection?.target)}`} context={contextSelection} resources={chatResources} sessionId={taskSessionId ?? null} busy={busy} /> : null}
+      {surface === "chat" && enableResourceContext ? <ComposerResourceContext key={`${taskSessionId}:${JSON.stringify(contextSelection.selection?.target)}`} context={contextSelection} resources={chatResources} sessionId={taskSessionId ?? null} busy={busy} /> : null}
       {(showGoalRuntime || (mode !== "start" && provider === "codex" && goalSessionId)) && (
         <ComposerGoalStrip
           key={goalSessionId ?? submissionScopeKey}
@@ -1858,8 +1864,7 @@ export function Composer({
           />
         </div>
         <ComposerPrimaryControls
-          inboxControl={surface === "chat" && taskInbox.enabled ? <ComposerInbox key={taskSessionId} inbox={taskInbox} sessionId={taskSessionId!} events={taskEvents} /> : null}
-          trainingControl={surface === "chat" ? <ChatContextPicker context={contextSelection} disabled={busy} placement={dropdownPlacement} /> : null}
+          trainingControl={surface === "chat" && enableResourceContext ? <ChatContextPicker context={contextSelection} disabled={busy} placement={dropdownPlacement} /> : null}
           surface={surface}
           teamUseModel={teamUseModel}
           teamUseModelLocked={teamUseModelLocked}
@@ -1881,6 +1886,9 @@ export function Composer({
           modelValue={modelValue}
           modelOptions={modelOptions}
           hideModelControls={hideModelControls}
+          modelSelectionDisabled={modelSelectionDisabled}
+          allowedModelRefs={allowedModelRefs}
+          executionControl={executionControl}
           openPondCommandAccessMode={openPondCommandAccessMode}
           showCommandAccess={repositoryWork}
           profileTarget={showProjectFooter ? null : profileTarget}

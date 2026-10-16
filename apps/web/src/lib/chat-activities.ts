@@ -1,3 +1,5 @@
+import { boundProjectedCommandOutput } from "./chat-command-output";
+export { MAX_PROJECTED_COMMAND_OUTPUT_CHARS, boundProjectedCommandOutput } from "./chat-command-output";
 import type { RuntimeEvent } from "@openpond/contracts";
 import type { ActivityItem, ChatMessage } from "./app-models";
 import { asRecord, findLast, parseMaybeJson, stringValue } from "./chat-message-utils";
@@ -16,9 +18,6 @@ import {
 } from "./codex-control-messages";
 import { isSteerInterruptionReason } from "./steer-interruption";
 import {chatResourceToolEvent,chatResourceToolDetail} from "./chat-resources";
-
-export const MAX_PROJECTED_COMMAND_OUTPUT_CHARS = 64 * 1024;
-const PROJECTED_COMMAND_OUTPUT_HEAD_CHARS = 8 * 1024;
 
 export { activityGroupSummary, summarizeActivityGroup } from "./chat-activity-summary";
 export {
@@ -40,6 +39,17 @@ export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEven
       const running = background.some(entry => entry.state === "running" || entry.state === "pending");
       owner.traceState = running ? "running" : background.some(entry => entry.state === "failed") ? "failed" : "settled";
       owner.traceCompletedAt = running ? undefined : item.timestamp;
+      return;
+    }
+  }
+  // Peer receipts can separate a call's start and completion in the timeline.
+  // Resolve the original call within this turn instead of leaving it running
+  // and adding a second completed row after the receipt.
+  if (item.name === "tool.completed" && activity.callId) {
+    const owner = findLast(messages, candidate => candidate.turnId === item.turnId && candidate.role === "activity_group"
+      && Boolean(candidate.activities?.some(entry => entry.callId === activity.callId && entry.state === "running")));
+    if (owner) {
+      owner.activities = appendActivityToList(owner.activities ?? [], item, activity);
       return;
     }
   }
@@ -250,6 +260,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
   const receipt = activityReceipt(item);
   const meta = activityMeta(item);
   const openSession = activityOpenSession(item);
+  const startedAgent = activityStartedAgent(item);
   const subagentMessage = activitySubagentMessage(item);
   const artifacts = activityArtifacts(item);
   const resourceDetail=chatResourceToolDetail(item);
@@ -283,6 +294,7 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     ...(meta ? { meta } : {}),
     ...(receipt ? { receipt } : {}),
     ...(openSession ? { openSession } : {}),
+    ...(startedAgent ? { startedAgent, startedAgentProvider: stringValue(asRecord(asRecord(item.args)?.modelRef), ["providerId"]) ?? undefined } : {}),
     ...(subagentMessage ? { subagentMessage } : {}),
     state: activityState(item),
     ...(imagePreview ? { imagePreview } : {}),
@@ -347,6 +359,9 @@ function mergeToolActivity(activities: ActivityItem[], item: RuntimeEvent, activ
   }
   if (activity.detail) existing.detail = appendCommandOutput(existing.detail, activity.detail);
   existing.plan = activity.plan ?? existing.plan;
+  existing.startedAgent = activity.startedAgent ?? existing.startedAgent;
+  existing.startedAgentProvider = activity.startedAgentProvider ?? existing.startedAgentProvider;
+  existing.openSession = activity.openSession ?? existing.openSession;
   existing.meta = activity.meta;
   existing.receipt = activity.receipt;
   existing.imagePreview = activity.imagePreview ?? existing.imagePreview;
@@ -754,7 +769,20 @@ function activityReceipt(item: RuntimeEvent): ActivityItem["receipt"] | undefine
     : undefined;
 }
 
+function activityStartedAgent(item: RuntimeEvent): string | undefined {
+  if (item.action === "openpond_start_agent") return stringValue(asRecord(item.args), ["title"]) ?? undefined;
+  if (item.name !== "subagent.started") return undefined;
+  const data = asRecord(item.data);
+  const run = asRecord(data?.run);
+  return stringValue(run, ["title", "name", "roleId"]) ?? stringValue(data, ["title", "name", "roleId"]) ?? undefined;
+}
+
 function activityOpenSession(item: RuntimeEvent): ActivityItem["openSession"] | undefined {
+  if (item.action === "openpond_start_agent" && item.name === "tool.completed" && item.status !== "failed") {
+    const result = asRecord(asRecord(item.data)?.result) ?? asRecord(parseMaybeJson(item.output ?? ""));
+    const sessionId = stringValue(result, ["sessionId"]);
+    if (sessionId) return {sessionId, label:"Open conversation"};
+  }
   if (!item.name.startsWith("subagent.")) return undefined;
   const data = asRecord(item.data);
   const run = asRecord(data?.run);
@@ -950,16 +978,6 @@ function appendCommandOutput(existing: string | undefined, next: string): string
   if (next.includes(current)) return boundProjectedCommandOutput(next);
   const separator = current.endsWith("\n") || next.startsWith("\n") ? "" : "\n";
   return boundProjectedCommandOutput(`${current}${separator}${next}`);
-}
-
-export function boundProjectedCommandOutput(value: string): string {
-  if (value.length <= MAX_PROJECTED_COMMAND_OUTPUT_CHARS) return value;
-  const marker = "\n\n… output omitted from live view; full output remains in task history …\n\n";
-  const tailLength = Math.max(
-    0,
-    MAX_PROJECTED_COMMAND_OUTPUT_CHARS - PROJECTED_COMMAND_OUTPUT_HEAD_CHARS - marker.length,
-  );
-  return `${value.slice(0, PROJECTED_COMMAND_OUTPUT_HEAD_CHARS)}${marker}${value.slice(-tailLength)}`;
 }
 
 function activityPlan(item: RuntimeEvent): ActivityItem["plan"] {

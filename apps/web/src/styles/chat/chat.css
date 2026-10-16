@@ -1171,38 +1171,94 @@ button.user-message-attachment {
   color: var(--text-muted);
 }
 
-.message-row.user.task-message-row {
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.task-message-attribution {
+.task-message-summary-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--text-muted);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-  max-width: min(620px, 72%);
-  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
 }
 
-.task-message-attribution button {
+.task-message-direction {
+  color: var(--accent-primary);
+}
+
+.task-message-state {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.task-message-conversation {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
+  min-width: 0;
+  max-width: 100%;
   background: none;
   border: 0;
   padding: 0;
   color: var(--accent-primary);
   text-align: left;
   cursor: pointer;
+  font-size: 12px;
 }
 
-.task-message-attribution button:focus-visible {
+.task-message-conversation-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-message-conversation .conversation-source-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.task-message-conversation .conversation-source-icon img {
+  width: 14px;
+  height: 14px;
+}
+
+.activity-created-agents {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.activity-created-agents > span {
+  flex: 0 0 auto;
+}
+
+.activity-created-agents > .conversation-source-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.activity-created-agents > .conversation-source-icon img {
+  width: 14px;
+  height: 14px;
+}
+
+.task-message-conversation:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
+
+.message-copy-button,
+.message-kv-cache-metric {
+  opacity: 0;
+  pointer-events: none;
+}
 
 .message-copy-button {
   display: inline-grid;
@@ -1214,10 +1270,12 @@ button.user-message-attachment {
   background: transparent;
   color: var(--text-muted);
   padding: 0;
-  opacity: 0;
-  pointer-events: none;
 }
 
+.message-row:hover .message-kv-cache-metric,
+.message-row:focus-within .message-kv-cache-metric,
+.ponder-transcript-message:hover .message-kv-cache-metric,
+.ponder-transcript-message:focus-within .message-kv-cache-metric,
 .message-row:hover .message-copy-button,
 .message-row:focus-within .message-copy-button,
 .ponder-transcript-message:hover .message-copy-button,
@@ -1227,7 +1285,7 @@ button.user-message-attachment {
 }
 
 @media (hover: none) {
-  .message-copy-button { opacity: 1; pointer-events: auto; }
+  .message-copy-button, .message-kv-cache-metric { opacity: 1; pointer-events: auto; }
 }
 
 .message-copy-button:hover:not(:disabled),
@@ -1694,4 +1752,23 @@ button.user-message-attachment {
 .ponder-transcript-message:focus-within > .assistant-message-footer { opacity: 1; }
 @media (hover: none) {
   .ponder-transcript-message > .assistant-message-footer { opacity: 1; }
+}
+
+.activity-summary-label-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.activity-summary-label-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.activity-summary-label-toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
 }

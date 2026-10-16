@@ -20,7 +20,7 @@ export async function handleSettingsRoutes({
     sendJson(response, 200, await deps.providerPlanUsagePayload(planUsage[1]!));
     return true;
   }
-  const nativeHistory = /^\/v1\/native-history\/(list|open|branches|collector)$/.exec(requestUrl.pathname);
+  const nativeHistory = /^\/v1\/native-history\/(list|open|branches|collector|children)$/.exec(requestUrl.pathname);
   if (nativeHistory && request.method === "POST" && deps.nativeHistoryPayload) {
     sendJson(response, 200, await deps.nativeHistoryPayload(nativeHistory[1]!, await readJson(request)));
     return true;

@@ -121,7 +121,7 @@ function sessionFileJson(source: NativeSource, path: string) {
 }
 export async function listSessions(
   source: NativeSource,
-  input: { since?: string; cursor?: string; limit?: number } = {},
+  input: { since?: string; cursor?: string; limit?: number; parentNativeSessionId?: string } = {},
 ) {
   if (!source.available || !source.capabilities.history)
     throw new Error(source.reason ?? "Native history is unavailable.");
@@ -138,6 +138,7 @@ export async function listSessions(
   const paths = await pathsBelow(source),
     candidates: NativeSession[] = [];
   for (const path of paths) {
+    if (input.parentNativeSessionId && source.source === "claude_code" && !path.replaceAll("\\", "/").includes(`/${input.parentNativeSessionId}/subagents/`)) continue;
     if (input.cursor && path <= input.cursor) continue;
     try {
       const modified = await stat(join(source.root, path));
@@ -216,12 +217,14 @@ export async function listSessions(
       // Claude writes queue/history bookkeeping before its first message. The
       // native session's message metadata owns cwd; encoded project-directory
       // names are ambiguous and must never be decoded into a guessed path.
+      const claudeWorker = source.source === "claude_code" && /(?:^|[\/])subagents[\/]agent-[^\/]+\.jsonl$/u.test(path)
+        ? rows.find(row => row.isSidechain === true && typeof row.agentId === "string" && `agent-${row.agentId}` === id && typeof row.sessionId === "string" && basename(dirname(dirname(path))) === row.sessionId) : undefined;
       const claudeMessage = source.source === "claude_code"
-        ? rows.find((row) => row.sessionId === id && row.type === "user" && typeof row.cwd === "string" && isAbsolute(row.cwd))
+        ? rows.find((row) => row.sessionId === (claudeWorker?.sessionId ?? id) && row.type === "user" && typeof row.cwd === "string" && isAbsolute(row.cwd))
         : undefined;
       let cwd = claudeMessage?.cwd ?? payload.cwd;
       let title = source.source === "claude_code"
-        ? claudeConversationTitle(rows, id)
+        ? claudeConversationTitle(rows, claudeWorker ? String(claudeWorker.sessionId) : id, Boolean(claudeWorker))
         : retainedConversationTitle(payload.title, id);
       if (source.source === "grok_build" && path.endsWith("updates.jsonl")) {
         try {
@@ -235,6 +238,7 @@ export async function listSessions(
       }
       candidates.push({
         nativeSessionId: id,
+        ...(claudeWorker ? { parentNativeSessionId: String(claudeWorker.sessionId) } : {}),
         sourceInstanceId: source.instanceId,
         path,
         title,
@@ -270,13 +274,23 @@ export async function listSessions(
     nextCursor: candidates.length > limit ? candidates[limit - 1]!.path : null,
   };
 }
+/** Revalidate worker identity after acquisition; parent sessionId is shared by siblings. */
+function assertClaudeIdentity(session: NativeSession, rows: Record<string, unknown>[]) {
+  const graph = claudeGraph(rows);
+  if (graph.sessionId !== (session.parentNativeSessionId ?? session.nativeSessionId)) throw new Error("Native session changed identity.");
+  if (session.parentNativeSessionId) {
+    const messages = rows.filter(row => row.type === "user" || row.type === "assistant");
+    if (messages.some(row => row.isSidechain !== true || `agent-${String(row.agentId)}` !== session.nativeSessionId))
+      throw new Error("Native worker changed identity.");
+  }
+  return graph;
+}
 export async function inspectSessionBranches(source: NativeSource, session: NativeSession): Promise<NativeBranchInspection> {
   if (source.source !== "claude_code") return { revision: "", branches: [] };
   if (session.issue) throw new Error(session.issue);
   if (session.sourceInstanceId !== source.instanceId) throw new Error("Native session belongs to another selected source.");
   const text = await readSelectedFile(source, session.path);
-  const graph = claudeGraph(connectedJsonLines({ path: basename(session.path), text }));
-  if (graph.sessionId !== session.nativeSessionId) throw new Error("Native session changed identity.");
+  const graph = assertClaudeIdentity(session, connectedJsonLines({ path: basename(session.path), text }));
   return { revision: contentHash(text), branches: graph.branches() };
 }
 
@@ -311,8 +325,7 @@ export async function readSession(
   if (input.expectedBranchRevision && !input.branchLeafId) throw new Error("Choose a branch before supplying its revision.");
   if (source.source === "claude_code") {
     const file = files[0]!;
-    const graph = claudeGraph(connectedJsonLines(file));
-    if (graph.sessionId !== session.nativeSessionId) throw new Error("Native session changed identity.");
+    const graph = assertClaudeIdentity(session, connectedJsonLines(file));
     if (input.latestBranch) {
       if (input.branchLeafId || input.expectedBranchRevision || input.branchAnchor) throw new Error("Choose either the latest conversation or an explicit branch.");
       // Desktop inspection follows the native conversation. Imports keep their

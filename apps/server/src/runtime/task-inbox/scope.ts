@@ -9,7 +9,7 @@ export function tasksShareProject(left: Session, right: Session): boolean {
 }
 
 export async function canCoordinateTasks(left: Session, right: Session, getSession: (id: string) => Promise<Session>): Promise<boolean> {
-  if (left.id === right.id || left.systemKind || right.systemKind || left.status === "closed" || right.status === "closed" || left.archived || right.archived) return false;
+  if (left.id === right.id || (left.systemKind && left.systemKind !== "openpond.ponder") || (right.systemKind && right.systemKind !== "openpond.ponder") || left.status === "closed" || right.status === "closed" || left.archived || right.archived) return false;
   if (tasksShareProject(left, right)) return true;
   if (left.cloudTeamId !== right.cloudTeamId) return false;
   const root = async (session: Session): Promise<string> => {

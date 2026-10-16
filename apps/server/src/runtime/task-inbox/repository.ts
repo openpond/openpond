@@ -5,6 +5,11 @@ import type {
 
 /** Transactional inbox port shared by the local SQLite and hosted implementations. */
 export interface TaskInboxRepository {
+  assertLocalPonderInput?(input: Pick<TaskInputAdmission,"senderSessionId"|"sessionId"|"payload">): Promise<void>;
+  localPonderState?(): Promise<import("../../openpond/local-ponder-contract.js").LocalPonderCoordinator | null>;
+  localPonderAgents?(): Promise<import("../../openpond/local-ponder-contract.js").LocalPonderRelationship[]>;
+  registerLocalPonderAgent?(value: import("../../openpond/local-ponder-contract.js").LocalPonderRelationship): Promise<import("../../openpond/local-ponder-contract.js").LocalPonderRelationship>;
+
   recoverTaskInboxOwners(ownerId: string): Promise<Array<{ sessionId: string; turnId: string }>>;
   hasTaskCompletion(turnId: string): Promise<boolean>;
   taskInboxSnapshot(sessionId: string): Promise<TaskInboxSnapshot>;

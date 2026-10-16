@@ -1,3 +1,4 @@
+import { AGENTS_OVERVIEW_TAB_ID } from "./workspace-diff-panel-model";
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import {
   BookOpenText,
@@ -190,8 +191,8 @@ export function WorkspaceDiffTabs({
           <div className={`workspace-diff-tab file ${visibleTab === "outputs" && activeOverviewId === id ? "active" : ""}`} key={`overview-${id}`}>
             <button type="button" className="workspace-diff-tab-main" role="tab" aria-selected={visibleTab === "outputs" && activeOverviewId === id}
               tabIndex={visibleTab === "outputs" && activeOverviewId === id ? 0 : -1}
-              onClick={() => onSelectOverview?.(id)}><FileText className="workspace-diff-tab-icon" size={14} /><span>{id===-1?outputsLabel:"New tab"}</span></button>
-            <button type="button" className="workspace-diff-tab-close" aria-label={id===-1?`Close ${outputsLabel}`:"Close new tab"}
+              onClick={() => onSelectOverview?.(id)}><FileText className="workspace-diff-tab-icon" size={14} /><span>{id===AGENTS_OVERVIEW_TAB_ID?"Agents":id===-1?outputsLabel:"New tab"}</span></button>
+            <button type="button" className="workspace-diff-tab-close" aria-label={id===AGENTS_OVERVIEW_TAB_ID?"Close Agents":id===-1?`Close ${outputsLabel}`:"Close new tab"}
               onClick={() => onCloseOverview?.(id)}><X size={12} /></button>
           </div>
     )),

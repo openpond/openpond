@@ -6,7 +6,7 @@ function titleText(value: unknown): string | null {
 }
 
 /** Retained provider titles take precedence over a preview of the first real user prompt. */
-export function claudeConversationTitle(rows: readonly Record<string, unknown>[], sessionId: string): string {
+export function claudeConversationTitle(rows: readonly Record<string, unknown>[], sessionId: string, allowSidechain = false): string {
   const owned = rows.filter((row) => row.sessionId === undefined || row.sessionId === sessionId);
   for (const row of [...owned].reverse()) {
     if (row.type === "custom-title") {
@@ -21,7 +21,7 @@ export function claudeConversationTitle(rows: readonly Record<string, unknown>[]
     }
   }
   for (const row of owned) {
-    if (row.type !== "user" || row.sessionId !== sessionId || row.isMeta || row.isSidechain) continue;
+    if (row.type !== "user" || row.sessionId !== sessionId || row.isMeta || (row.isSidechain && !allowSidechain)) continue;
     const content = object(row.message).content;
     const title = titleText(Array.isArray(content)
       ? content.filter((part) => object(part).type === "text").map((part) => object(part).text).filter((part) => typeof part === "string").join(" ")

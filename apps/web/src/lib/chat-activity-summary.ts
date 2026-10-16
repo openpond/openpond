@@ -56,7 +56,7 @@ type CommandSummary = {
   testsOrChecks?: number;
 };
 
-export function summarizeActivityGroup(activities: ActivityItem[]): ActivityGroupSummary {
+export function summarizeActivityGroup(activities: ActivityItem[], includeStartedAgents = true): ActivityGroupSummary {
   const childMessageSummary = summarizeChildMessageActivities(activities);
   if (childMessageSummary) return childMessageSummary;
 
@@ -95,10 +95,19 @@ export function summarizeActivityGroup(activities: ActivityItem[]): ActivityGrou
     fallbackLabel ||
     "Ran command";
 
-  return {
-    kind: summaryKind(counters, runClause),
-    text,
-  };
+  return {kind: summaryKind(counters, runClause), text: includeStartedAgents ? withStartedAgents(text, activities) : text};
+}
+
+export function withStartedAgents(summary: string, activities: ActivityItem[]): string {
+  const names = startedAgentNames(activities);
+  return names.length ? `${summary}, started ${names.length === 1 ? "subagent" : "subagents"} ${formatList(names)}` : summary;
+}
+
+/** Only successful launches count; later messages/inspection never imply creation. */
+export function startedAgentNames(activities: ActivityItem[]): string[] {
+  return [...new Set(activities.flatMap(activity => activity.startedAgent &&
+    (activity.action !== "openpond_start_agent" || activity.state === "completed")
+      ? [activity.startedAgent] : []))];
 }
 
 export function activityGroupSummary(activities: ActivityItem[]): string {

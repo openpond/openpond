@@ -69,6 +69,7 @@ import type { SkillPackageSourceSelection } from "./skill-package-source";
 export type MainPaneProps = {
   evaluationSidebarActive?: boolean;
   onEvaluationSidebarControl?: (control: import("../labs/workspace/WorkspacePanel").EvaluationSidebarControl | null) => void;
+  ponderNavigationVersion?: number;
   ponderMode?: "clean" | "activity" | null;
   onPonderModeChange?: (mode: "clean" | "activity" | null) => void;
   experience: Experience;
@@ -258,6 +259,7 @@ export type MainPaneProps = {
   onShowTrainingDraftPanel: () => void;
   onShowFilesPanel: () => void;
   onShowExperimentsPanel: () => void;
+  onShowAgentsPanel: () => void;
   onShowRightChatPanel: () => void;
   onAddRightChat: () => void;
   onOpenRightChatForSession: (sessionId: string, session?: Session) => void;

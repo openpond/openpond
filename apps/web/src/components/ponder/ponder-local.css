@@ -1,0 +1,78 @@
+.ponder-workspace { display:flex; flex:1; min-width:0; min-height:0; height:100%; }
+.ponder-main { flex:1; min-width:0; display:flex; flex-direction:column; }
+.ponder-main > .chat-column { flex:1; min-height:0; }
+.ponder-connection-bar { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border-default); }
+.ponder-connection-bar button { display:inline-flex; align-items:center; gap:6px; background:transparent; border:0; color:var(--text-secondary); cursor:pointer; font-size:12px; }
+.ponder-empty { max-width:480px; margin:48px auto; color:var(--text-secondary); }
+.ponder-empty h2 { color:var(--text-primary); }
+.ponder-agents-view { flex:1; min-width:0; width:100%; height:100%; display:flex; flex-direction:column; overflow:hidden; }
+.ponder-agents-view header, .ponder-setup header { display:flex; align-items:center; gap:8px; padding:12px; }
+.ponder-agents-view h2, .ponder-setup h2 { flex:1; font-size:15px; margin:0; }
+.ponder-agents-view header button, .ponder-setup header button { display:grid; place-items:center; border:0; background:transparent; color:var(--text-secondary); padding:6px; cursor:pointer; }
+.ponder-agents-view h2, .ponder-agent-row > button:first-child > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ponder-agent-list { overflow:auto; padding:12px; }
+.ponder-agent-conversation { flex:1; min-height:0; --chat-composer-reserve:0px; }
+.ponder-agent-list h3 { font-size:12px; font-weight:500; color:var(--text-muted); margin:16px 0 8px; }
+.ponder-agent-row { display:flex; align-items:center; gap:8px; padding:8px 0; }
+.ponder-agent-row > button:first-child { display:flex; align-items:center; text-align:left; flex:1; min-width:0; gap:8px; border:0; background:transparent; color:var(--text-primary); cursor:pointer; }
+.ponder-agent-row small { display:block; max-width:180px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:11px; color:var(--text-muted); margin-top:4px; }
+.ponder-agent-row > button:last-child, .ponder-agent-assignment button { font-size:11px; border:1px solid var(--border-default); border-radius:6px; padding:5px 8px; background:var(--surface-floating); color:var(--text-primary); cursor:pointer; }
+.ponder-agent-assignment { padding:12px; border-bottom:1px solid var(--border-default); font-size:12px; color:var(--text-secondary); }
+.ponder-agent-assignment p { white-space:pre-wrap; overflow-wrap:anywhere; }
+.ponder-agent-assignment span { display:block; margin-bottom:8px; }
+.ponder-setup { width:min(520px, calc(100vw - 32px)); max-height:85vh; overflow:auto; padding:16px; }
+.ponder-setup > p { color:var(--text-secondary); font-size:13px; line-height:1.5; }
+.ponder-setup-card { padding:12px; border:1px solid var(--border-default); border-radius:8px; margin:12px 0; font-size:13px; }
+.ponder-setup-card h3 { margin:0; font-size:14px; }
+.ponder-setup-card label { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.ponder-setup-card p, .ponder-setup-card small { color:var(--text-secondary); line-height:1.5; }
+.ponder-setup-card button { margin:6px 8px 0 0; }
+
+.ponder-setup { color:var(--text-primary); background:var(--surface-floating); border:1px solid var(--border-default); border-radius:12px; margin:auto; }
+.ponder-setup::backdrop { background:var(--backdrop); }
+
+.ponder-connections { inset:auto; position:fixed; overflow:auto; width:min(320px,calc(100vw - 24px)); padding:16px; border:1px solid var(--border-default); border-radius:12px; background:var(--surface-floating); color:var(--text-primary); }
+.ponder-connections h3 { margin:0; font-size:14px; }
+.ponder-connections p, .ponder-connections small { font-size:12px; color:var(--text-muted); }
+.ponder-connections label { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px; margin-top:10px; border:1px solid var(--border-default); border-radius:8px; background:var(--surface-raised); font-size:13px; }
+.ponder-connections label small { display:block; margin-top:4px; }
+.ponder-access-section { display:grid; gap:6px; margin-top:10px; }
+.ponder-access-section label { margin-top:0; padding:10px 12px; }
+.ponder-connection-card { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; padding:10px 12px; border:1px solid var(--border-default); border-radius:8px; background:var(--surface-raised); color:var(--text-primary); text-align:left; font:inherit; font-size:13px; }
+.ponder-connection-dot { width:9px; height:9px; flex-shrink:0; border-radius:50%; background:var(--text-muted); }
+.ponder-connection-dot.connected { background:var(--accent-primary-fill); }
+.ponder-connection-card small { display:block; margin-top:4px; }
+.ponder-connections .ponder-hosted-sandboxes { margin-top:14px; padding:8px 0; border:0; background:transparent; }
+
+
+.ponder-setup-card small { display:block; margin:10px -12px -12px; padding:8px 12px; border-top:1px solid var(--border-default); background:var(--surface-raised); border-radius:0 0 8px 8px; }
+.ponder-setup-card p { margin:8px 0; }
+.ponder-setup-card input[role="switch"], .ponder-connections input[role="switch"] { appearance:none; width:30px; height:18px; border:1px solid var(--border-default); border-radius:10px; background:var(--surface-raised); flex-shrink:0; position:relative; }
+.ponder-setup-card input[role="switch"]::after, .ponder-connections input[role="switch"]::after { content:""; position:absolute; width:12px; height:12px; border-radius:50%; background:var(--text-muted); top:2px; left:2px; }
+.ponder-connections input[role="switch"]:checked::after { left:14px; background:var(--accent-primary); }
+
+.ponder-execution-control { display:inline-flex; align-items:center; flex-shrink:0; height:28px; padding:0 10px; border:0; border-radius:6px; background:var(--accent-primary-fill); color:var(--text-on-accent); cursor:pointer; font-size:11px; white-space:nowrap; }
+.ponder-execution-control:hover { filter:brightness(1.1); }
+.ponder-agents-view > header { border-bottom:1px solid var(--border-default); }
+.ponder-agent-list > section + section { border-top:1px solid var(--border-default); margin-top:12px; }
+.ponder-agent-row + .ponder-agent-row { border-top:1px solid var(--border-default); }
+.ponder-connections > button { display:block; width:100%; text-align:left; margin-top:10px; padding:8px 0; border:0; background:transparent; color:var(--text-secondary); cursor:pointer; font:inherit; font-size:12px; }
+@media(max-width:600px) { .ponder-execution-control { max-width:110px; font-size:10px; } }
+.main-pane > .ponder-workspace { grid-column:1; grid-row:1; }
+.ponder-main .composer .context-status-shell { display:inline-flex; flex-shrink:0; }
+
+.ponder-hosted-outputs { border-top:1px solid var(--border-default); margin-top:12px; padding-top:12px; }
+.ponder-hosted-outputs h3 { font-size:12px; font-weight:500; color:var(--text-secondary); margin:0 0 8px; }
+.ponder-hosted-outputs > div { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 0; font-size:12px; }
+.ponder-hosted-outputs strong { flex:1; min-width:0; overflow-wrap:anywhere; font-weight:500; }
+.ponder-hosted-outputs a { color:var(--accent-primary); }
+.ponder-agent-assignment small { display:block; overflow-wrap:anywhere; margin-bottom:8px; }
+.ponder-setup-card input[role="switch"]:checked::after { left:14px; background:var(--accent-primary); }
+
+.ponder-hosted-wait { margin:12px 0; }
+.ponder-hosted-wait strong { display:block; margin-bottom:4px; }
+.ponder-hosted-wait dl { margin:8px 0; }
+.ponder-hosted-wait dt { color:var(--text-muted); font-size:11px; }
+.ponder-hosted-wait dd { margin:4px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+
+.ponder-hosted-outputs button { font-size:11px; border:1px solid var(--border-default); border-radius:6px; padding:5px 8px; background:var(--surface-floating); color:var(--text-primary); cursor:pointer; }

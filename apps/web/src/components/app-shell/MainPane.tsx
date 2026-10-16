@@ -1,3 +1,5 @@
+import { PonderAgentsView } from "../ponder/PonderAgentsView";
+import { AGENTS_OVERVIEW_TAB_ID } from "../workspace-diff/workspace-diff-panel-model";
 import { useTrainingSidebarContext } from "../../hooks/useTrainingSidebarContext";
 import { ChatContextAccountScope } from "../../hooks/useChatContextSelection";
 import { rememberChatSelection } from "../../lib/chat-selection-preference";
@@ -92,7 +94,6 @@ import {
 } from "./main-pane-helpers";
 import {
   ActiveTrainingChatHandoffBar,
-  MessageNavigationControls,
   WorkspaceSyncButton,
   mainPaneViewClass,
   shouldShowRightSidebarHomePanel,
@@ -103,7 +104,7 @@ import {
   type ComposerAttachmentRequest,
 } from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
-import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
+import { ConversationSurface } from "../chat/ConversationSurface";
 import { MainPanePonder } from "./MainPanePonder";
 import { mainPaneAccountScopeKey } from "./main-pane-account-scope";
 import { RightSidebarHomeActions } from "./RightSidebarHomePanel";
@@ -140,17 +141,13 @@ const TrainingDraftPanel = lazy(() =>
     default: module.TrainingDraftPanel,
   }))
 );
-const MainChatThread = lazy(() =>
-  import("./MainChatThread").then((module) => ({
-    default: module.MainChatThread,
-  }))
-);
 const TrainingCreationPanel = lazy(() =>
   import("../training/TrainingCreationPanel").then((module) => ({
     default: module.TrainingCreationPanel,
   }))
 );
 export function MainPane({
+  ponderNavigationVersion = 0,
   ponderMode = null,
   onPonderModeChange,
   experience,
@@ -280,6 +277,7 @@ export function MainPane({
   onShowTrainingDraftPanel,
   onShowFilesPanel,
   onShowExperimentsPanel,
+  onShowAgentsPanel,
   onShowRightChatPanel,
   onAddRightChat,
   onOpenRightChatForSession,
@@ -302,6 +300,7 @@ export function MainPane({
   onLoadMoreChatHistory,
 }: MainPaneProps) {
   const sidebarBrowser = useBrowserSidebar(browserConversationId);
+  const [agentSelectionRequest, setAgentSelectionRequest] = useState<{sessionId:string; version:number} | undefined>();
   const [chatProjector] = useState(() => new IncrementalChatProjector());
   const seenWorkspaceRun = useRef<{sessionId:string|null;eventId:string|null}|null>(null);
   const liveSessionId = selectedSessionId && !isCodexHistorySessionId(selectedSessionId)
@@ -361,6 +360,7 @@ export function MainPane({
       null,
     [bootstrap?.sessions, selectedSessionId]
   );
+  const selectedNativeSession = trainingSessions.find(session => session.id === selectedSessionId) ?? selectedProfileSession;
   const selectedProfileRef =
     selectedProfileSession?.currentProfile ??
     bootstrap?.profileLibrary?.lastUsed ??
@@ -1071,30 +1071,6 @@ export function MainPane({
     },
     [changeDraftProvider, onTrainingChatHandoffDismiss, trainingChatHandoff]
   );
-  const {
-    chatColumnStyle,
-    chatThreadPreparingInitialScroll,
-    chatThreadRef,
-    chatTimelineRows,
-    composerStackRef,
-    goToUserMessage,
-    handleChatScroll,
-    jumpToLatestChatMessage,
-    showScrollToBottomButton,
-    userMessageNavigation,
-  } = useMainPaneChatScroll({
-    browserConversationId,
-    chatSubmissionVersion,
-    chatHistoryHasMore,
-    chatHistoryLoading,
-    chatMessages,
-    onLoadMoreChatHistory,
-    pendingApproval,
-    showChatThread,
-    showThinkingIndicator,
-    turnRunning,
-    view,
-  });
   const handleOpenBrowserLink = useCallback(
     (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => {
       void openBrowserLink({
@@ -1206,10 +1182,11 @@ export function MainPane({
     ? `candidate:${labCandidateReview.selection.runId}:${labCandidateReview.selection.candidateId}`
     : null;
   const workPanel = view === "chat" ? (openFile: () => void, tabId: number) => {
+    if (tabId === AGENTS_OVERVIEW_TAB_ID && connection) return <PonderAgentsView selectionRequest={ponderMode ? agentSelectionRequest : undefined} connection={connection} accountScopeKey={accountTeamScopeKey} ponder={Boolean(ponderMode)} parentSessionId={selectedSessionId} sessions={trainingSessions} onOpenChat={onOpenSession}/>;
     const Overview = tabId === -1 ? ChatDatasetSidebar : RightSidebarOverview;
     return <Overview conversationId={browserConversationId} onOpenBrowser={onShowBrowserPanel} sessionId={selectedSessionId} connection={connection} workspaceId={activeWorkspaceAppId} sandboxId={rightSidebarUsesSandbox ? rightSidebarSandboxId : null} messages={chatMessages} events={runtimeEvents} onOpenFile={handleOpenFileInSidebar}
       actions={<RightSidebarHomeActions terminalOpen={terminalOpen} sideChatAvailable
-        onOpenFile={openFile} onOpenFiles={onShowFilesPanel} onOpenExperiments={onShowExperimentsPanel}
+        onOpenFile={openFile} onOpenFiles={onShowFilesPanel} onOpenAgents={onShowAgentsPanel} onOpenExperiments={onShowExperimentsPanel}
         onOpenReview={onShowDiffPanel} onOpenSideChat={onAddRightChat}
         onOpenTrainingDraft={onShowTrainingDraftPanel} trainingDraftAvailable={Boolean(selectedSessionId)}
         onToggleTerminal={onToggleTerminal} />}
@@ -1447,6 +1424,7 @@ export function MainPane({
       terminalOpen={terminalOpen}
       sideChatAvailable={view === "chat" || view === "labs"}
       onOpenFiles={onShowFilesPanel}
+      onOpenAgents={onShowAgentsPanel}
       onOpenReview={onShowDiffPanel}
       onOpenSideChat={onAddRightChat}
       onOpenTrainingDraft={onShowTrainingDraftPanel}
@@ -1542,8 +1520,12 @@ export function MainPane({
           <CollaborationTabs onSelect={setView} view={view} />
         </Suspense>
       ) : null}
-      {view === "chat" && ponderMode && connection && bootstrap?.account.activeProfile ? (
-        <MainPanePonder key={accountTeamScopeKey} accountScopeKey={accountTeamScopeKey} connection={connection} presentation={ponderMode} localSessions={trainingSessions} composer={{
+      {view === "chat" && ponderMode && connection && bootstrap ? (
+        <><MainPanePonder navigationVersion={ponderNavigationVersion} messageContext={{accountBaseUrl,activeWorkspaceAppId,
+          billingOrganizationSlug:billingTarget.organizationSlug,billingTeamId:billingTarget.teamId,
+          onOpenBrowserLink:handleOpenBrowserLink,onOpenAttachmentInSidebar:handleOpenAttachmentInSidebar,
+          onOpenFileInSidebar:handleOpenFileInSidebar,onOpenProfileSettings,workspaceRootPath}}
+          onOpenAgents={sessionId => {if(sessionId)setAgentSelectionRequest(current=>({sessionId,version:(current?.version??0)+1}));onShowAgentsPanel();}} contextCompaction={appPreferences.contextCompaction} key={accountTeamScopeKey} accountScopeKey={accountTeamScopeKey} connection={connection} presentation={ponderMode} localSessions={trainingSessions} composer={{
           contextWindowStatus, providerSettings: bootstrap.providers ?? null,
           provider: activeProvider, model: activeModel, projectTarget, workspaceTarget,
           codexPermissionMode, codexReasoningEffort, openPondCommandAccessMode,
@@ -1555,7 +1537,7 @@ export function MainPane({
           onCodexReasoningEffortChange: changeCodexReasoningEffort,
           onOpenPondCommandAccessModeChange: changeOpenPondCommandAccessMode,
           showToast,
-        }} accountBaseUrl={projectsAccountBaseUrl} onOpenBrowserLink={handleOpenBrowserLink} onOpenLocalWork={onOpenSession} />
+        }} accountBaseUrl={projectsAccountBaseUrl} onOpenBrowserLink={handleOpenBrowserLink} onOpenLocalWork={onOpenSession} />{terminalPanel}<Suspense fallback={null}>{rightPanel}</Suspense></>
       ) : view === "apps" ? (
         <Suspense fallback={null}>
           <AppsView
@@ -1727,28 +1709,24 @@ export function MainPane({
         <Suspense fallback={null}>{rightPanel}</Suspense>
       ) : showChatThread ? (
         <>
-          <div
-            className={`chat-column ${pendingApproval ? "has-approval" : ""}`}
-            style={chatColumnStyle}
-          >
-            <Suspense fallback={null}>
-              <MainChatThread
-                formalReviewTeamId={appPreferences.defaultTeamId ?? null}
-                formalReviewActorId={bootstrap?.account.profile?.id ?? null}
-                formalReviewScopeKey={accountTeamScopeKey}
-                onFormalReviewOpen={() => setView("labs")}
-                accountBaseUrl={accountBaseUrl}
-                activeWorkspaceAppId={activeWorkspaceAppId}
-                billingOrganizationSlug={billingTarget.organizationSlug}
-                billingTeamId={billingTarget.teamId}
-                connection={connection}
-                conversationKey={browserConversationId ?? "draft"}
-                creation={selectedTrainingCreation}
-                onOpenBrowserLink={handleOpenBrowserLink}
-                onOpenAttachmentInSidebar={handleOpenAttachmentInSidebar}
-                onOpenFileInSidebar={handleOpenFileInSidebar}
-                onOpenProfileSettings={onOpenProfileSettings}
-                onResolveUserQuestion={async (_question, resolution) => {
+          <ConversationSurface hasApproval={Boolean(pendingApproval)} scroll={{
+            browserConversationId, chatSubmissionVersion, chatHistoryHasMore, chatHistoryLoading, chatMessages,
+            onLoadMoreChatHistory, pendingApproval, showChatThread, showThinkingIndicator, turnRunning, view,
+          }} thread={{formalReviewTeamId: appPreferences.defaultTeamId ?? null,
+                formalReviewActorId: bootstrap?.account.profile?.id ?? null,
+                formalReviewScopeKey: accountTeamScopeKey,
+                onFormalReviewOpen: () => setView("labs"),
+                accountBaseUrl: accountBaseUrl,
+                activeWorkspaceAppId: activeWorkspaceAppId,
+                billingOrganizationSlug: billingTarget.organizationSlug,
+                billingTeamId: billingTarget.teamId,
+                connection: connection,
+                creation: selectedTrainingCreation,
+                onOpenBrowserLink: handleOpenBrowserLink,
+                onOpenAttachmentInSidebar: handleOpenAttachmentInSidebar,
+                onOpenFileInSidebar: handleOpenFileInSidebar,
+                onOpenProfileSettings: onOpenProfileSettings,
+                onResolveUserQuestion: async (_question, resolution) => {
                   const displayPrompt =
                     resolution.action === "answer"
                       ? resolution.text
@@ -1759,26 +1737,11 @@ export function MainPane({
                   });
                   if (!sent)
                     throw new Error("The question response could not be sent.");
-                }}
-                onOpenSession={onOpenSession}
-                onOpenPonder={() => onPonderModeChange?.("clean")}
-                onScroll={(event) => handleChatScroll(event.currentTarget)}
-                rows={chatTimelineRows}
-                sessionId={browserConversationId}
-                turnRunning={turnRunning}
-                userAttachmentDisplay={
-                  activeProvider === "codex" ? "compact" : "full"
-                }
-                threadRef={chatThreadRef}
-                workspaceRootPath={workspaceRootPath}
-              />
-            </Suspense>
-            <div
-              className={`composer-stack dock ${
-                pendingApproval ? "has-approval" : ""
-              }`}
-              ref={composerStackRef}
-            >
+                },
+                onOpenSession: onOpenSession,
+                onOpenPonder: () => onPonderModeChange?.("clean"),
+                userAttachmentDisplay: activeProvider === "codex" ? "compact" : "full",
+                workspaceRootPath: workspaceRootPath}} composerPrefix={<>
               {selectedTrainingCreation ? (
                 <Suspense fallback={null}>
                   <TrainingCreationPanel
@@ -1794,24 +1757,12 @@ export function MainPane({
                 approval={pendingApproval}
                 onResolve={resolveApproval}
               />
-              {showScrollToBottomButton && !chatThreadPreparingInitialScroll ? (
-                <MessageNavigationControls
-                  canGoNext={userMessageNavigation.canGoNext}
-                  canGoPrevious={userMessageNavigation.canGoPrevious}
-                  onJumpToLatest={jumpToLatestChatMessage}
-                  onNext={() => {
-                    if (userMessageNavigation.canGoNext)
-                      goToUserMessage("next");
-                  }}
-                  onPrevious={() => {
-                    if (userMessageNavigation.canGoPrevious)
-                      goToUserMessage("previous");
-                  }}
-                />
-              ) : null}
+            </>} composer={
               <DraftBoundComposer
                 experience={experience}
-                readOnlyReason={typeof selectedProfileSession?.metadata?.nativeReadOnlyReason === "string" ? selectedProfileSession.metadata.nativeReadOnlyReason : null}
+                readOnlyReason={typeof selectedNativeSession?.metadata?.nativeReadOnlyReason === "string" ? selectedNativeSession.metadata.nativeReadOnlyReason : null}
+                readOnlySession={selectedNativeSession}
+                onOpenNativeParent={onOpenSession}
                 draftStore={composerDraftStore}
                 attachmentRequest={composerAttachmentRequest}
                 mode="dock"
@@ -1878,8 +1829,7 @@ export function MainPane({
                 onSubmit={submitComposerPrompt}
                 onStop={stopTurn}
               />
-            </div>
-          </div>
+            }/>
           {terminalPanel}
           <Suspense fallback={null}>{rightPanel}</Suspense>
         </>

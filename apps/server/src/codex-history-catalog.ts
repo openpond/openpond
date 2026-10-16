@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import {
   asRecord,
@@ -25,11 +26,14 @@ export type CodexHistoryPromptEntry = {
   latestAt: string | null;
 };
 
-function cachedFileReader<T>(read: (file: string) => Promise<T>) {
+function cachedFileReader<T>(read: (file: string) => Promise<T>, validateContent=false) {
   const cache = new Map<string, { signature: string; value: Promise<T> }>();
   async function signature(file: string) {
     const stat = await fs.stat(file);
-    return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
+    // Small mutable indexes can be rewritten with identical size/timestamps on
+    // coarse filesystems. Content validation keeps native child titles/parents fresh.
+    const content=validateContent?createHash("sha256").update(await fs.readFile(file)).digest("hex"):"";
+    return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}:${content}`;
   }
   return async (file: string): Promise<T> => {
     let version: string;
@@ -60,8 +64,8 @@ function cachedFileReader<T>(read: (file: string) => Promise<T>) {
   };
 }
 const prompts = cachedFileReader(parsePromptHistory);
-const index = cachedFileReader(parseSessionIndex);
-const globalState = cachedFileReader(parseGlobalState);
+const index = cachedFileReader(parseSessionIndex,true);
+const globalState = cachedFileReader(parseGlobalState,true);
 export const readPromptHistory = (home: string) => prompts(path.join(home, "history.jsonl"));
 export const readSessionIndex = (home: string) => index(path.join(home, "session_index.jsonl"));
 export const readGlobalState = (home: string) =>

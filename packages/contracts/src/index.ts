@@ -120,3 +120,5 @@ export * from "./ponder-desktop-project-sharing.js";
 export * from "./chat-context-selection.js";
 
 export * from "./chat-next-step.js";
+
+export * from "./ponder-hosted.js";

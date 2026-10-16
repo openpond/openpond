@@ -1,10 +1,10 @@
 import type { ComponentProps, PointerEvent as ReactPointerEvent } from "react";
 import {
   Clipboard,
+  MessageSquare,
   ChartColumnStacked,
   FolderOpen,
   Maximize2,
-  MessageSquare,
   Minimize2,
   PanelRight,
   SquareTerminal,
@@ -25,6 +25,7 @@ export function RightSidebarHomePanel({
   terminalOpen,
   sideChatAvailable,
   onOpenFiles,
+  onOpenAgents,
   onOpenReview,
   onOpenSideChat,
   onOpenTrainingDraft,
@@ -37,6 +38,7 @@ export function RightSidebarHomePanel({
   terminalOpen: boolean;
   sideChatAvailable: boolean;
   onOpenFiles: () => void;
+  onOpenAgents?: () => void;
   onOpenReview: () => void;
   onOpenSideChat: () => void;
   onOpenTrainingDraft: () => void;
@@ -77,7 +79,7 @@ export function RightSidebarHomePanel({
       </div>
       <div className="right-sidebar-home-body">
         <RightSidebarHomeActions terminalOpen={terminalOpen} sideChatAvailable={sideChatAvailable}
-          onOpenFiles={onOpenFiles} onOpenReview={onOpenReview}
+          onOpenFiles={onOpenFiles} onOpenAgents={onOpenAgents} onOpenReview={onOpenReview}
           onOpenSideChat={onOpenSideChat} onOpenTrainingDraft={onOpenTrainingDraft}
           trainingDraftAvailable={trainingDraftAvailable} onToggleTerminal={onToggleTerminal} />
       </div>
@@ -86,11 +88,11 @@ export function RightSidebarHomePanel({
 }
 
 export function RightSidebarHomeActions({
-  terminalOpen, sideChatAvailable, onOpenFiles, onOpenFile, onOpenReview, onOpenExperiments,
+  terminalOpen, sideChatAvailable, onOpenFiles, onOpenFile, onOpenReview, onOpenExperiments, onOpenAgents,
   onOpenSideChat, onOpenTrainingDraft, trainingDraftAvailable, onToggleTerminal,
 }: Pick<ComponentProps<typeof RightSidebarHomePanel>,
   | "terminalOpen" | "sideChatAvailable" | "onOpenFiles"
-  | "onOpenReview" | "onOpenSideChat" | "onOpenTrainingDraft"
+  | "onOpenAgents" | "onOpenReview" | "onOpenSideChat" | "onOpenTrainingDraft"
   | "trainingDraftAvailable" | "onToggleTerminal"
 > & { onOpenFile?: () => void; onOpenExperiments?: () => void }) {
   const actions: RightSidebarHomeAction[] = [
@@ -121,6 +123,7 @@ export function RightSidebarHomeActions({
     },
   ];
 
+  if (onOpenAgents) actions.push({id:"agents",label:"Agents",icon:MessageSquare,onSelect:onOpenAgents});
   if (onOpenExperiments) actions.unshift({id:"experiments",label:"Training",meta:"Experiments and models",icon:ChartColumnStacked,onSelect:onOpenExperiments});
   if (onOpenFile) actions.splice(onOpenExperiments?3:2, 0, { id: "open-file", label: "Open file", icon: FolderOpen, onSelect: onOpenFile });
   return (

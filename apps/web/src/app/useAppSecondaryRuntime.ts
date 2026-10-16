@@ -224,6 +224,11 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       const isCurrent = () => navigationScopeRef.current === navigationScope && isOriginCurrent();
       if (!connection || !isCurrent()) return false;
       let session = sidebarSessions.find(item => item.id === sessionId);
+      if (!session && sessionId.startsWith("codex_history_")) {
+        const payload = await api.codexHistoryThread(connection, sessionId, { tail: true });
+        if (!isCurrent()) return false;
+        session = payload.session;
+      }
       if (!session) {
         const payload = await api.bootstrap(connection);
         if (!isCurrent()) return false;

@@ -1,3 +1,4 @@
+import { changeLocalPonderModel, changeLocalPonderControl } from "./local-ponder.js";
 import type { PonderDesktopOperation } from "@openpond/contracts/ponder-desktop";
 import { assertPonderDesktopRecipient } from "./ponder-desktop-input.js";
 import { localSessionOwnershipRevision } from "../remote-relay/session-ownership.js";
@@ -57,6 +58,38 @@ type RuntimeEventRecentWindow = {
 };
 
 export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistoryStorage {
+  async configureLocalPonderModel(modelRef:import("@openpond/contracts").ChatModelRef,revision:number) {
+    await this.ready;
+    const write=this.writeQueue.then(async()=>{
+      this.database.exec("BEGIN IMMEDIATE");
+      let result;
+      try {result=changeLocalPonderModel(this.database,modelRef,revision);this.database.exec("COMMIT");}
+      catch(error) {this.database.exec("ROLLBACK");throw error;}
+      const index=this.data.sessions.findIndex(session=>session.id===result.session.id);
+      if(index>=0) this.data.sessions[index]=result.session;
+      await this.upsertSessionShellProjection(result.session,index);
+      await this.rebuildThreadDetailProjectionForSession(result.session.id);
+      return result;
+    });
+    this.writeQueue=write.then(()=>undefined,()=>undefined);
+    return write;
+  }
+  async controlLocalPonderAgent(sessionId:string,owner:"ponder"|"user",revision:number) {
+    await this.ready;
+    const write=this.writeQueue.then(async()=>{
+      this.database.exec("BEGIN IMMEDIATE");
+      let result;
+      try { result=changeLocalPonderControl(this.database,sessionId,owner,revision);this.database.exec("COMMIT"); }
+      catch(error) {this.database.exec("ROLLBACK");throw error;}
+      const index=this.data.sessions.findIndex(session=>session.id===sessionId);
+      if(index>=0) this.data.sessions[index]=result.session;
+      await this.upsertSessionShellProjection(result.session,index);
+      await this.rebuildThreadDetailProjectionForSession(sessionId);
+      return result;
+    });
+    this.writeQueue=write.then(()=>undefined,()=>undefined);
+    return write;
+  }
   private runtimeSummaryCache: ReturnType<typeof sessionRuntimeSummaries> | null = null;
   private sessionRuntimeSummaries() {
     return (this.runtimeSummaryCache ??= sessionRuntimeSummaries(this.data.turns));
@@ -348,6 +381,13 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
     };
   }
 
+  async latestLocalPonderActivity(sessionId:string):Promise<RuntimeEvent|null> {
+    await this.ready;await this.writeQueue;
+    const row=await this.get<EventPagePayloadRow>(`SELECT sequence,payload FROM events WHERE session_id=?
+      AND name IN ('tool.started','tool.completed','turn.completed','turn.failed','turn.interrupted','task.wait','approval.requested','user_question.asked')
+      ORDER BY sequence DESC LIMIT 1`,[sessionId]);
+    return row ? runtimeEventWithSequence(row.payload,row.sequence) : null;
+  }
   async runtimeEventsForSession(
     sessionId: string,
     query: {

@@ -25,6 +25,7 @@ import { FILE_TRUNCATED_MARKER, readSandboxFile, sandboxChangedFiles, sandboxRep
 import type { WorkspaceMonacoEditorHandle, WorkspaceMonacoLspActionInput } from "./WorkspaceMonacoEditor";
 import { useErrorToast } from "../../app/AppToastContext";
 import {
+  AGENTS_OVERVIEW_TAB_ID,
   WORKSPACE_TEMPLATE_CONFIG_PATH,
   cloneWorkspaceDiffPanelViewState,
   defaultWorkspaceDiffPanelViewState,
@@ -793,12 +794,16 @@ function WorkspaceDiffPanelInner({
     if (!tabRequest) return;
     if (tabRequest.tab === "files") openFilesTab();
     if (tabRequest.tab === "outputs") {
-      if (tabRequest.overview === "experiments") {
+      if (tabRequest.overview === "agents") {
+        setOverviewTabs(current => current.includes(AGENTS_OVERVIEW_TAB_ID) ? current : [...current,AGENTS_OVERVIEW_TAB_ID]);
+        setActiveOverviewId(AGENTS_OVERVIEW_TAB_ID);
+        setTabOrder(current => current.includes(`overview-${AGENTS_OVERVIEW_TAB_ID}`) ? current : [...current,`overview-${AGENTS_OVERVIEW_TAB_ID}`]);
+      } else if (tabRequest.overview === "experiments") {
         setOverviewTabs(current => current.includes(-1) ? current : [...current, -1]);
         setActiveOverviewId(-1);
         setTabOrder(current => current.includes("overview--1") ? current : [...current, "overview--1"]);
       } else if (tabRequest.overview === "new") {
-        const id = overviewTabs.find(value => value !== -1) ?? nextOverviewId.current++;
+        const id = overviewTabs.find(value => value >= 0) ?? nextOverviewId.current++;
         setOverviewTabs(current => current.includes(id) ? current : [...current, id]);
         setActiveOverviewId(id);
         setTabOrder(current => current.includes(`overview-${id}`) ? current : [...current, `overview-${id}`]);
@@ -911,8 +916,8 @@ function WorkspaceDiffPanelInner({
   }
 
   function ensureNewTab() {
-    if (overviewTabs.some(id => id !== -1)) {
-      setActiveOverviewId(overviewTabs.filter(id => id !== -1).at(-1)!);
+    if (overviewTabs.some(id => id >= 0)) {
+      setActiveOverviewId(overviewTabs.filter(id => id >= 0).at(-1)!);
     } else {
       const id = nextOverviewId.current++;
       setOverviewTabs([id]);

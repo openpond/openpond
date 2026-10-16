@@ -176,3 +176,29 @@ it("opens the latest Claude conversation chain without granting import branch au
     expect(followed.preview.sessions[0]?.events.filter(event => event.kind === "message").map(event => event.id)).toEqual(["root", "current", "continued"]);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+// Child files use a distinct agent filename while each event retains the parent
+// sessionId. Inspection must acquire only that file and preserve both identities.
+it("acquires a Claude internal worker without substituting the parent transcript", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "claude-worker-history-"));
+  const childDir = join(directory, "projects", "fixture", "parent-native", "subagents");
+  await mkdir(childDir, { recursive: true });
+  const rows = [
+    { uuid: "u", parentUuid: null, type: "user", message: { content: "Child task" } },
+    { uuid: "a", parentUuid: "u", type: "assistant", message: { content: [{ type: "text", text: "Child result" }], stop_reason: "end_turn" } },
+  ].map((row, index) => ({ ...row, sessionId: "parent-native", agentId: "worker", isSidechain: true, cwd: directory, timestamp: new Date(1000 + index * 1000).toISOString() }));
+  await writeFile(join(childDir, "agent-worker.jsonl"), rows.map(row => JSON.stringify(row)).join("\n") + "\n");
+  const source = { source: "claude_code" as const, root: directory, machineId: "machine", instanceId: "instance", acquisition: "files" as const, available: true, capabilities: { history: true, live: true, nativeResume: true } };
+  try {
+    const child = (await listSessions(source)).items[0]!;
+    expect(child).toMatchObject({ nativeSessionId: "agent-worker", parentNativeSessionId: "parent-native", cwd: directory, title: "Child task" });
+    const retained = await readSession(source, child, { latestBranch: true });
+    expect(retained.preview.sessions[0]?.events.some(event => JSON.stringify(event.content).includes("Child result"))).toBe(true);
+    // A selected child replaced by its sibling/parent still shares sessionId.
+    await writeFile(join(childDir, "agent-worker.jsonl"), rows.map(row => JSON.stringify({ ...row, agentId: "sibling" })).join("\n") + "\n");
+    await expect(readSession(source, child, { latestBranch: true })).rejects.toThrow("Native worker changed identity");
+    await expect(inspectSessionBranches(source, child)).rejects.toThrow("Native worker changed identity");
+    await writeFile(join(childDir, "agent-worker.jsonl"), rows.map(row => JSON.stringify({ ...row, isSidechain: false })).join("\n") + "\n");
+    await expect(readSession(source, child, { latestBranch: true })).rejects.toThrow("Native worker changed identity");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

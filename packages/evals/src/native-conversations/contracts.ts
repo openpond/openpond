@@ -13,6 +13,8 @@ export interface NativeSource {
 export interface NativeSession {
   nativeSessionId: string;
   sourceInstanceId: string;
+  /** Native worker identity is distinct from the parent transcript session id. */
+  parentNativeSessionId?: string;
   path: string;
   title: string;
   cwd: string | null;

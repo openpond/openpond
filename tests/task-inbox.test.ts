@@ -1,9 +1,10 @@
+import { retainedTaskInputAcknowledgement } from "../apps/web/src/lib/task-input-acknowledgement";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { TaskSignals } from "@openpond/agent-runtime";
-import { TaskResourceContextsSchema, SessionSchema, SubagentRunSchema, TaskWaitSchema, TurnSchema, type TaskInputAdmission } from "@openpond/contracts";
+import { TaskInputSchema, TaskResourceContextsSchema, SessionSchema, SubagentRunSchema, TaskWaitSchema, TurnSchema, type TaskInputAdmission } from "@openpond/contracts";
 import { SqliteStore } from "../apps/server/src/store/store";
 import { createTaskInboxRuntime } from "../apps/server/src/runtime/task-inbox/runtime";
 import { createTaskCoordinationMcp } from "../apps/server/src/runtime/task-inbox/codex-mcp";
@@ -445,4 +446,15 @@ test("native request sealing preserves late messages across restart", async () =
   expect(await f.store.getTaskInput(late.id)).toMatchObject({ state: "included", error: expect.stringContaining("failed") });
   expect(await f.store.taskInboxPaused("a")).toBe(true);
   expect(await f.store.reserveTaskFollowup("a", "no-replay", "restarted-owner")).toBeNull();
+});
+
+// A server restart can lose the HTTP response after admission. Recovery must
+// acknowledge the exact receipt instead of submitting another identical prompt.
+test("recovers only the matching durable queued intent after a lost acknowledgement", () => {
+  const receipt = TaskInputSchema.parse({ ...input({kind: "queued"}), sequence: 1, state: "pending", turnId: null, requestIds: [], revision: 1, createdAt: "2026-10-15T00:00:00Z", updatedAt: "2026-10-15T00:00:00Z", error: null });
+  const intent = { key: receipt.idempotencyKey, body: receipt.body, kind: "queued" };
+  expect(retainedTaskInputAcknowledgement([receipt], intent)).toBe(receipt);
+  expect(retainedTaskInputAcknowledgement([receipt], { ...intent, key: "other-attempt" })).toBeNull();
+  expect(retainedTaskInputAcknowledgement([{ ...receipt, state: "cancelled" }], intent)).toBeNull();
+  expect(retainedTaskInputAcknowledgement([{ ...receipt, senderKind: "ponder" }], intent)).toBeNull();
 });

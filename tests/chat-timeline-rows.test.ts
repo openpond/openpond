@@ -1,12 +1,74 @@
+import { groupActivityRuns } from "../apps/web/src/lib/chat-activity-runs";
 import { describe, expect, test } from "vitest";
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
 import {
   buildChatTimelineRows,
+  chatTimelineMessages,
   latestAssistantMessageId,
   shouldShowThinkingIndicator,
 } from "../apps/web/src/lib/chat-timeline-rows";
 
 describe("chat timeline rows", () => {
+
+  // Late peer receipts used to leak into the main conversation after completion.
+  // Keep them ordered and reachable while preserving ordinary response rows.
+  test("rolls late sent/received exchanges into existing work disclosures without changing direct conversation", () => {
+    const user = message("turn:user", "user", "Request");
+    const final = {...message("turn:answer", "assistant", "Done"), finalAnswer: true};
+    const exchanges: ChatMessage[] = Array.from({length: 1001}, (_, index) => ({
+      id: `peer-${index}`, role: "task_message", content: `Original exchange ${index}`,
+      timestamp: "2026-07-01T10:01:00.000Z",
+    }));
+    const next = message("next:user", "user", "Next question");
+    const rows = buildChatTimelineRows([user, final, ...exchanges, next]);
+    expect(rows.map(row => row.type)).toEqual(["message", "message", "work", "message"]);
+    expect(chatTimelineMessages(rows)).toEqual([user, final, ...exchanges, next]);
+    const partial = buildChatTimelineRows([user, final, exchanges[0]!]);
+    expect(rows[2]?.id).toBe(partial[2]?.id);
+    expect(rows[2]?.type === "work" && rows[2].messages.map(row => row.message)).toEqual(exchanges);
+    const commentary = message("turn:commentary", "assistant", "A direct update");
+    const split = buildChatTimelineRows([exchanges[0]!, commentary, exchanges[1]!]);
+    expect(split.map(row => row.type)).toEqual(["work", "message", "work"]);
+    expect(chatTimelineMessages(split)).toEqual([exchanges[0], commentary, exchanges[1]]);
+  });
+
+  // The first command anchors one disclosure throughout an agent round trip;
+  // completion must not replace it or duplicate the streamed message details.
+  test("keeps one Ponder work row from the first command through peer exchanges and completion", () => {
+    const user = message("turn:user", "user", "Ask the agent");
+    const command: ChatMessage = {id: "first-command", role: "activity_group", turnId: "turn", timestamp: user.timestamp,
+      activities: [{id: "tool", label: "Ran", content: "followup", timestamp: user.timestamp}]};
+    const sent: ChatMessage = {id: "sent", role: "task_message", timestamp: user.timestamp, content: "Calculate 2+2"};
+    const received: ChatMessage = {...sent, id: "received", turnId: "turn", content: "4"};
+    const answer = {...message("turn:answer", "assistant", "The result is 4"), finalAnswer: true};
+    const stages = [[user, command], [user, command, sent], [user, command, sent, received], [user, command, sent, received, answer]];
+    for (const messages of stages) {
+      const rows = buildChatTimelineRows(messages, {groupInProgressWork: true});
+      const work = rows.filter(row => row.type === "work");
+      expect(work).toHaveLength(1);
+      expect(work[0]?.id).toBe("work:first-command");
+      expect(chatTimelineMessages(rows)).toEqual(messages);
+    }
+  });
+
+  // Peer receipts must not split a continuous tool run; real assistant dialogue must.
+  test("combines consecutive tool groups and peer messages while preserving original detail order", () => {
+    const tool = (id: string): ChatMessage => ({id, role: "activity_group", timestamp: "2026-07-01T10:00:00Z",
+      activities: [{id: `${id}-call`, label: "Ran command", content: id, timestamp: "2026-07-01T10:00:00Z"}]});
+    const peer: ChatMessage = {id: "peer", role: "task_message", timestamp: "2026-07-01T10:00:00Z", content: "Result"};
+    const original = [tool("one"), peer, tool("two"), tool("three")];
+    const rows = original.map(message => ({id: `message:${message.id}`, type: "message" as const, message, showFooter: false}));
+    const grouped = groupActivityRuns(rows);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.id).toBe(rows[0]?.id);
+    expect(grouped[0]?.message.activities?.map(activity => activity.id)).toEqual(["one-call", "two-call", "three-call"]);
+    expect(grouped[0]?.message.activityMessages).toEqual(original);
+    expect(original[0]?.activityMessages).toBeUndefined();
+    expect(groupActivityRuns(rows.slice(0, 2))[0]?.id).toBe(grouped[0]?.id);
+    const response = {id: "message:response", type: "message" as const, message: message("turn:response", "assistant", "A direct update"), showFooter: false};
+    expect(groupActivityRuns([...rows, response, ...rows]).map(row => row.id)).toEqual([rows[0]?.id, response.id, rows[0]?.id]);
+  });
+
   test("derives stable message row ids before rendering", () => {
     const messages = [
       message("turn-1:user", "user", "Request one"),

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -17,7 +17,7 @@ const exceptions = new Map([
 const files = [...new Set(execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "--",
   "apps/web/src", "apps/web/public/appearance.js", "apps/desktop/src", "packages/contracts/src/html-visuals.ts",
   "packages/contracts/src/html-visual-document.ts"], { cwd: root, encoding: "utf8" }).trim().split("\n"))]
-  .filter(file => /\.(css|[jt]sx?)$/.test(file) && !/\.(test|spec)\.|\/test-pages\//.test(file) && !exceptions.has(file));
+  .filter(file => /\.(css|[jt]sx?)$/.test(file) && !/\.(test|spec)\.|\/test-pages\//.test(file) && !exceptions.has(file) && existsSync(new URL(file, new URL("../", import.meta.url))));
 const errors = [];
 const literal = /#[\da-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|oklch|oklab|lab|lch|color)\([^)]*\)/gi;
 const oldVariable = /var\(\s*--(?:bg|panel|panel-soft|panel-hover|text|muted|muted-strong|border|cyan|blue|orange|danger|warning|success|accent)\s*[,)]/g;

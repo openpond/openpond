@@ -1,3 +1,4 @@
+import { assertNativeWorkerDirectInput } from "./native-worker-capabilities.js";
 import { createTaskCoordinationMcp } from "./task-inbox/codex-mcp.js";
 import type { CodexTurnInput } from "./turns/ports.js";
 import type {
@@ -93,6 +94,7 @@ export function createCodexRuntimeManager({
     session: Session,
     turnInput: CodexTurnInput
   ): Promise<RuntimeCodexSession> {
+    assertNativeWorkerDirectInput(session);
     const existing = codexSessions.get(session.id);
     if (
       existing?.permissionMode === turnInput.codexPermissionMode &&

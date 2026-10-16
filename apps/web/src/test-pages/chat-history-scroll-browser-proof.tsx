@@ -22,6 +22,7 @@ let maxInFlight = 0;
 let finish: (loaded: boolean) => void = () => {};
 let scroll: ReturnType<typeof useMainPaneChatScroll>;
 let submission = 0;
+let navigationVersion = 0;
 let running = false;
 let streamingFixture = false;
 let answerHeight = 40;
@@ -29,6 +30,7 @@ let answerHeight = 40;
 function Harness() {
   scroll = useMainPaneChatScroll({
     browserConversationId: conversation,
+    navigationVersion,
     chatSubmissionVersion: submission,
     chatHistoryHasMore: hasMore,
     chatHistoryLoading: loading,
@@ -116,6 +118,35 @@ async function run() {
   finish(true);
   await frames();
   check(thread().scrollTop === otherTop && calls === 4, "An old chat request changed the new chat viewport.");
+
+  // Initial asynchronous history must settle at the latest row, and explicitly
+  // reopening the same chat must reset reading position without replacing history.
+  conversation = "async-history";
+  messages = [];
+  loading = true;
+  render();
+  await frames();
+  messages = [message("Loaded earlier"), message("Loaded latest")];
+  loading = false;
+  render();
+  await frames();
+  check(thread().scrollHeight - thread().clientHeight - thread().scrollTop < 1,
+    "Asynchronous initial history opened above the latest message.");
+  reachTop();
+  await frames();
+  check(thread().scrollTop === 0, "Reader could not move away from latest.");
+  navigationVersion++;
+  render();
+  await frames();
+  check(thread().scrollHeight - thread().clientHeight - thread().scrollTop < 1,
+    "Reopening the same conversation did not return to latest.");
+
+  navigationVersion++;
+  render();
+  reachTop();
+  await frames();
+  check(!scroll.chatThreadPreparingInitialScroll,
+    "Reading before the initial settling frames stranded navigation in its preparing state.");
 
   // Real layout and native scroll events are needed to catch the sent-message
   // spacer trapping a reader who returns to a response while it still streams.

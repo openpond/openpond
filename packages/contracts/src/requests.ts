@@ -251,6 +251,7 @@ export const CompactSessionRequestSchema = z.object({
 export type CompactSessionRequest = z.infer<typeof CompactSessionRequestSchema>;
 
 export const PatchSessionRequestSchema = z.object({
+  hiddenFromDefaultSidebar: z.boolean().optional(),
   experience: ExperienceSchema.optional(),
   provider: ChatProviderSchema.optional(),
   modelRef: ChatModelRefSchema.nullable().optional(),

@@ -1,3 +1,5 @@
+import type { ActivityItem } from "./chat-activity-types";
+export type { ActivityItem } from "./chat-activity-types";
 import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
 import type { DragEvent } from "react";
 import { modelDisplayLabel } from "./model-display";
@@ -73,72 +75,6 @@ export type SettingsSection =
   | "usage"
   | "personalization"
   | "diagnostics";
-export type ActivityItem = {
-  id: string;
-  label: string;
-  content: string;
-  timestamp: string;
-  kind?: "command" | "control" | "reasoning";
-  action?: string;
-  controlKind?: "goal_context" | "turn_aborted";
-  callId?: string;
-  backgroundTaskId?: string;
-  plan?: Array<{ id?: string; content: string; status: "pending" | "in_progress" | "completed"; activeForm?: string }>;
-  detail?: string;
-  terminal?: {
-    exitCode?: number | null;
-    durationMs?: number;
-  };
-  meta?: string;
-  receipt?: {
-    id: string;
-    status: string;
-    totalUsd: string;
-  };
-  openSession?: {
-    sessionId: string;
-    label: string;
-    roleId?: string;
-    status?: string;
-  };
-  subagentMessage?: {
-    direction: "received" | "sent";
-    summary: string;
-    body: string;
-    messageId: string;
-    kind: string;
-    fromRunId: string;
-    toRunId?: string | null;
-    toRole?: string | null;
-    childSessionId?: string | null;
-    roleId?: string | null;
-    modelRef?: {
-      providerId: string;
-      modelId: string;
-    } | null;
-    deliveryStatus?: string | null;
-    wakeReason?: string | null;
-    createdAt?: string | null;
-    refs?: Array<{
-      kind: string;
-      id: string;
-      label: string;
-    }>;
-  };
-  state?: "running" | "completed" | "failed" | "pending";
-  imagePreview?: {
-    path: string;
-    appId: string | null;
-    title: string;
-  };
-  artifacts?: Array<{
-    path: string;
-    title: string;
-    contentType: string;
-    sizeBytes: number | null;
-  }>;
-};
-
 export type ChatSource = {
   id: string;
   title: string;
@@ -226,9 +162,12 @@ export type HarnessRefinerActivity = {
 };
 
 export type ChatMessage = {
+  /** Original ordered activity/message rows, combined only for tool disclosure presentation. */
+  activityMessages?: ChatMessage[];
   id: string;
   /** The wrap-up response of a successfully completed turn. */
   finalAnswer?: boolean;
+  footerCacheSummary?: {cacheHitRate: number | null};
   nativeTaskNotification?: import("./native-task-notification").NativeTaskNotification;
   turnStartedAt?: string;
   turnCompletedAt?: string;
@@ -257,6 +196,12 @@ export type ChatMessage = {
   createImproveRun?: CreateImproveRun | null;
   userQuestion?: SessionUserQuestion;
   reasoningContent?: string;
+  /** UI projection of a hosted receipt; does not claim a local persisted TaskInput. */
+  taskMessagePresentation?: {
+    input: Pick<TaskInput, "body" | "state" | "error">;
+    direction: "sent" | "received";
+    peer: {sessionId: string; title: string; provider: string};
+  };
   taskMessage?: {
     input: TaskInput;
     direction: "received" | "sent";

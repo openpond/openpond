@@ -1,5 +1,5 @@
 import type { ChatProvider } from "@openpond/contracts";
-import { isOpenAiCompatibleProviderId } from "./openai-compatible-provider.js";
+import { isManagedLocalChatProvider } from "./managed-chat-provider.js";
 
 export type AppSummaryContextAdapter = {
   kind: "app_summary";
@@ -23,7 +23,7 @@ export function resolveContextCompactionAdapter(provider: ChatProvider): Context
       route: "openpond_hosted",
     };
   }
-  if (isOpenAiCompatibleProviderId(provider)) {
+  if (isManagedLocalChatProvider(provider)) {
     return {
       kind: "app_summary",
       provider,

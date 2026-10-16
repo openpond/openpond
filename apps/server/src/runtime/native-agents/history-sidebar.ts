@@ -25,10 +25,14 @@ export async function retainNativeSidebarShell(store: SqliteStore, shells: Sessi
       Date.parse(input.session.updatedAt) > Date.parse(String(existing.metadata?.sidebarActivityAt ?? existing.createdAt));
     const needsIdentity = existing.metadata?.nativeHistoryId !== input.id;
     const titleChanged = existing.metadata?.nativeSourceTitle !== input.session.title;
-    if (!sourceChanged && !needsIdentity && !titleChanged) return { session: existing, changed: false };
+    const needsWorkerIdentity = existing.metadata?.nativeSessionId !== input.session.nativeSessionId || existing.metadata?.nativeParentSessionId !== input.session.parentNativeSessionId;
+    if (!sourceChanged && !needsIdentity && !titleChanged && !needsWorkerIdentity) return { session: existing, changed: false };
     const updated = await store.updateSession(existing.id, (current) => ({ ...current,
       title: current.metadata?.titleSource !== "manual" && current.title === current.metadata?.nativeSourceTitle ? input.session.title : current.title,
+      ...(input.session.parentNativeSessionId ? { hiddenFromDefaultSidebar: current.metadata?.nativeWorkerPromoted !== true, nativeAgent: null } : {}),
       metadata: { ...current.metadata, nativeHistoryId: input.id,
+        nativeSessionId: input.session.nativeSessionId, nativeParentSessionId: input.session.parentNativeSessionId,
+        ...(input.session.parentNativeSessionId ? { nativeWorker: true, nativeWorkerCanResume: false, nativeResumeAvailable: false } : {}),
         sourceInstanceId: input.source.instanceId, sourceMachineId: input.source.machineId,
         nativeSource: input.source.source, nativeSourceTitle: input.session.title,
         ...(sourceChanged ? { sidebarActivityAt: input.session.updatedAt } : {}) },
@@ -38,8 +42,11 @@ export async function retainNativeSidebarShell(store: SqliteStore, shells: Sessi
   const session = SessionSchema.parse({ id: `native-${input.id}`, experience: "work", provider: input.provider,
     title: input.session.title, appId: null, appName: null, cwd: input.session.cwd, codexThreadId: null,
     nativeAgent: null, createdAt: input.session.updatedAt, updatedAt: input.session.updatedAt,
+    hiddenFromDefaultSidebar: Boolean(input.session.parentNativeSessionId),
     status: "idle", pinned: false, archived: false, order: 0,
-    metadata: { nativeHistoryId: input.id, nativeHistoryProjection: true, nativeHistoryLoaded: false,
+    metadata: { nativeSessionId: input.session.nativeSessionId, nativeParentSessionId: input.session.parentNativeSessionId,
+      ...(input.session.parentNativeSessionId ? { nativeWorker: true, nativeWorkerCanResume: false } : {}),
+      nativeHistoryId: input.id, nativeHistoryProjection: true, nativeHistoryLoaded: false,
       nativeResumeAvailable: false, nativeReadOnlyReason: "Opening conversation…",
       sourceMachineId: input.source.machineId, sourceInstanceId: input.source.instanceId, nativeSource: input.source.source,
       nativeSourceTitle: input.session.title, sidebarActivityAt: input.session.updatedAt },

@@ -12,7 +12,7 @@ import type {
   UsageRequestAttribution,
 } from "@openpond/contracts";
 import { UsageRequestAttributionSchema } from "@openpond/contracts/usage";
-import { isOpenAiCompatibleProviderId } from "../openpond/openai-compatible-provider.js";
+import { isManagedLocalChatProvider } from "../openpond/managed-chat-provider.js";
 import { now, textFromUnknown } from "../utils.js";
 import { normalizeModelUsageTokens } from "./model-usage-normalization.js";
 
@@ -172,7 +172,7 @@ export function modelUsageDeltaHasOutput(delta: ModelUsageDeltaLike): boolean {
 function modelUsageRoute(provider: ChatProvider): ModelUsageRoute {
   if (provider === "openpond") return "openpond_hosted";
   if (provider === "codex") return "codex_app_server";
-  if (isOpenAiCompatibleProviderId(provider)) return "local_byok";
+  if (isManagedLocalChatProvider(provider)) return "local_byok";
   return "unknown";
 }
 

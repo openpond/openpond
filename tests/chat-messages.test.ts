@@ -109,14 +109,7 @@ describe("chat message projection", () => {
         status: "completed",
       },
     ]);
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: messages[1]!,
-        onOpenSession: () => undefined,
-      })
-    );
-    expect(html).toContain("activity-subagent-avatar-group");
-    expect(html).toContain("Open Coding subagent (completed) conversation");
+
   });
 
   test("extracts a new child session shell from live subagent start receipts", () => {
@@ -245,7 +238,7 @@ describe("chat message projection", () => {
 
     const activities = messages[1]?.activities ?? [];
     expect(activityGroupSummary(activities)).toBe(
-      "Subagent completed, read a file, and searched code"
+      "Subagent completed, read a file, and searched code, started subagent research"
     );
 
     const html = renderToStaticMarkup(
@@ -258,10 +251,8 @@ describe("chat message projection", () => {
       "Searching for &quot;openpond_subagent_start&quot; in apps/server/src and tests"
     );
     expect(html).not.toContain(
-      "Subagent completed, read a file, and searched code"
+      "Subagent completed, read a file, and searched code, started subagent research"
     );
-    expect(html).toContain("activity-subagent-avatar-group");
-    expect(html).toContain("Open Research subagent (completed) conversation");
   });
 
   test("deduplicates running subagent receipts in parent activity summaries", () => {

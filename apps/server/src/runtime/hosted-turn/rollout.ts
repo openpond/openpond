@@ -17,6 +17,7 @@ export type HostedToolRolloutFlags = {
 const VERIFIED_NATIVE_TOOL_PROVIDERS = new Set<ChatProvider>([
   "openpond",
   "openai",
+  "anthropic",
   "xai",
   "openrouter",
   "deepseek",

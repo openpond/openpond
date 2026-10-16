@@ -20,7 +20,7 @@ import { DEFAULT_SESSION_EXPERIENCE, ExperienceSchema } from "./experiences.js";
 import { HarnessTurnSnapshotSchema } from "./harness-workspaces.js";
 import { ProfileComponentBindingSchema, ProfileWorkflowBindingSchema } from "@openpond/harness";
 
-export const SystemSessionKindSchema = z.enum(["openpond.lab"]);
+export const SystemSessionKindSchema = z.enum(["openpond.lab", "openpond.ponder"]);
 
 export const SessionSchema = z.object({
   id: z.string(),

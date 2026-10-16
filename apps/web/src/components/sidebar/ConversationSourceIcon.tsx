@@ -7,7 +7,7 @@ const SOURCES: Record<string, string> = {
 };
 
 /** Source identity stays visible independently of execution status and expansion. */
-export function ConversationSourceIcon({ session }: { session: Session }) {
+export function ConversationSourceIcon({ session }: { session: Pick<Session, "provider"> & {metadata?: Session["metadata"]} }) {
   const source = SOURCES[session.provider];
   const label = source ?? (isRegisteredAcpProvider(session.provider) ? (typeof session.metadata?.acpAgentName === "string" ? session.metadata.acpAgentName : "ACP agent") : session.provider === "openpond" ? "OpenPond" : session.provider);
   return <span className="conversation-source-icon" role="img" aria-label={label} title={label}>
