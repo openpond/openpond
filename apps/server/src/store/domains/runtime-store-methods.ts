@@ -15,7 +15,11 @@ export function runtimeStoreMethods(context: SqliteDomainContext, lifecycle: Sto
   const subagents = lazyStoreDomain(lifecycle, () => import("../store-subagents.js").then(module => new module.SqliteSubagentStore(context)));
   const usage = lazyStoreDomain(lifecycle, () => import("../store-usage.js").then(module => new module.SqliteUsageStore(context)));
   const sidebarPreferences = lazyStoreDomain(lifecycle, () => import("../store-sidebar-preferences.js").then(module => new module.SqliteSidebarPreferenceStore(context)));
+  const ponderHosted = lazyStoreDomain(lifecycle, () => import("../store-ponder-hosted.js").then(module => new module.SqlitePonderHostedStore(context)));
+  const ponderHistory = lazyStoreDomain(lifecycle, () => import("../store-ponder-history.js").then(module => new module.SqlitePonderHistoryStore(context)));
   return {
+    ...ponderHosted.methods(["reserveHostedPonderInput","saveHostedPonderInput","hostedPonderConnection","configureHostedPonderConnection","hostedPonderJobs","reserveHostedPonderJob","saveHostedPonderJob"]),
+    ...ponderHistory.methods(["readPonderHistory", "savePonderHistory", "admitPonderHistoryRequest", "getPonderHistoryRequest", "pendingPonderHistorySessions", "latestPonderHistoryRequest"]),
     ...schedules.methods([
       "listLocalAgentSchedules",
       "listDueLocalAgentSchedules",
@@ -53,6 +57,7 @@ export function runtimeStoreMethods(context: SqliteDomainContext, lifecycle: Sto
       "reorderSidebarApps",
     ]),
     ...taskInbox.methods([
+      "assertLocalPonderInput", "localPonderState", "saveLocalPonderState", "localPonderAgents", "registerLocalPonderAgent",
       "initializeRemoteDeviceStore",
       "setRemoteDeviceAuthority",
       "getRemoteDeviceReceipt",

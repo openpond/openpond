@@ -1,8 +1,11 @@
+import { ActivityAgentLinks, createdAgentPeers } from "./ActivityAgentLinks";
+import { TaskMessageRow } from "./TaskMessageRow";
 import { latestActivityPlan } from "../../lib/chat-task-progress";
 import { ActivityPlanCard } from "./ActivityPlanCard";
 import { useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   CircleAlert,
+  ChevronDown,
   Bot,
   ChartColumnStacked,
   FileText,
@@ -54,12 +57,14 @@ export function ActivityGroup({
   message,
   onOpenFileInSidebar,
   onOpenSession,
+  onOpenPonder,
 }: {
   activeWorkspaceAppId: string | null;
   connection: ClientConnection | null;
   message: ChatMessage;
   onOpenFileInSidebar?: (path: string) => void;
   onOpenSession?: (sessionId: string) => void;
+  onOpenPonder?: () => void;
 }) {
   const activities = message.activities ?? [];
   const [toolsExpanded, setToolsExpanded] = useState(false);
@@ -68,7 +73,7 @@ export function ActivityGroup({
   >(null);
   const toolListId = useId();
   const summary = useMemo(
-    () => summarizeActivityGroup(activities),
+    () => summarizeActivityGroup(activities, false),
     [activities]
   );
   const presentation = useMemo(
@@ -97,14 +102,16 @@ export function ActivityGroup({
     duration,
     activities
   );
+  const created = createdAgentPeers(activities);
+  const hasAgentLinks = created.length > 0 || Boolean(message.activityMessages?.some(item => item.taskMessage || item.taskMessagePresentation));
   const summaryOpenSessions = subagentOpenSessions(activities);
   const childMessageSummary =
     activities.length > 0 &&
     activities.every((activity) => activity.subagentMessage);
 
-  const hasDetails = presentation.toolCount > 0 || Boolean(message.refinerActivity);
+  const hasDetails = presentation.toolCount > 0 || Boolean(message.refinerActivity) || Boolean(message.activityMessages?.some(item => item.taskMessage || item.taskMessagePresentation));
 
-  if (childMessageSummary && !message.refinerActivity) {
+  if (childMessageSummary && !message.refinerActivity && !message.activityMessages) {
     return <SubagentMessageActivityGroup activities={activities} />;
   }
 
@@ -132,15 +139,26 @@ export function ActivityGroup({
                   )
                 }
                 onToggle={
-                  hasDetails
+                  hasDetails && !hasAgentLinks
                     ? () => setToolsExpanded((current) => !current)
                     : undefined
                 }
                 running={running}
               >
-                {summaryText || "Worked"}
+                {hasAgentLinks && hasDetails ? <button type="button" className="activity-summary-label-toggle"
+                  aria-expanded={toolsExpanded} aria-controls={toolListId} onClick={() => setToolsExpanded(value => !value)}>
+                  {summaryText === "Ran" ? "Ran commands" : summaryText || "Worked"}
+                </button> : summaryText === "Ran" ? "Ran commands" : summaryText || "Worked"}
+                {hasAgentLinks ? <ActivityAgentLinks activities={activities} messages={message.activityMessages ?? []}
+                  onToggle={() => setToolsExpanded(value => !value)} expanded={toolsExpanded} controls={toolListId}
+                  connection={connection} onOpenSession={onOpenSession} onOpenPonder={onOpenPonder}/> : null}
               </ChatActivitySummary>
-              {summaryOpenSessions.length > 0 && onOpenSession ? (
+              {hasAgentLinks && hasDetails ? <button type="button" className="activity-summary activity-tool-summary"
+                aria-label="Tool activity details" aria-expanded={toolsExpanded} aria-controls={toolListId}
+                onClick={() => setToolsExpanded(value => !value)}>
+                <ChevronDown aria-hidden className={`activity-summary-toggle ${toolsExpanded ? "expanded" : ""}`} size={14}/>
+              </button> : null}
+              {summaryOpenSessions.length > 0 && onOpenSession && !hasAgentLinks ? (
                 <SubagentAvatarGroup
                   onOpenSession={onOpenSession}
                   onShowAll={() => setToolsExpanded(true)}
@@ -149,6 +167,9 @@ export function ActivityGroup({
               ) : null}
             </div>
           ) : null}
+          {created.length ? <ActivityAgentLinks createdOnly activities={activities}
+            messages={message.activityMessages ?? []} connection={connection}
+            onOpenSession={onOpenSession} onOpenPonder={onOpenPonder}/> : null}
           {plan ? <ActivityPlanCard entries={plan} /> : null}
           {artifacts.length > 0 ? (
             <ActivityArtifacts
@@ -159,17 +180,15 @@ export function ActivityGroup({
           ) : null}
           {toolsExpanded && hasDetails ? (
             <div className="work-trace-flow" id={toolListId}>
-              {presentation.visibleActivities.map((activity) => (
-                <ActivityToolRow
-                  activeWorkspaceAppId={activeWorkspaceAppId}
-                  activity={activity}
-                  connection={connection}
-                  key={activity.id}
-                  onOpenImage={setOpenImage}
-                  onOpenSession={onOpenSession}
-                />
-              ))}
-              <RefinerActivityRow activity={message.refinerActivity} />
+              {(message.activityMessages ?? [message]).map(item => item.role === "task_message"
+                ? <TaskMessageRow key={item.id} message={item} connection={connection}
+                    onOpenSession={onOpenSession} onOpenPonder={onOpenPonder}/>
+                : <div key={item.id} className="activity-tool-row">
+                    {workTracePresentation(item.activities ?? [], true).visibleActivities.map(activity =>
+                      <ActivityToolRow key={activity.id} activeWorkspaceAppId={activeWorkspaceAppId} activity={activity}
+                        connection={connection} onOpenImage={setOpenImage} onOpenSession={onOpenSession}/>)}
+                    <RefinerActivityRow activity={item.refinerActivity}/>
+                  </div>)}
             </div>
           ) : null}
           <ImageLightbox
@@ -627,7 +646,8 @@ function workTraceSummaryText(
   activities: ActivityItem[]
 ): string {
   if (traceState === "running") {
-    return latestWorkTraceActivitySummary(activities) || summary || "Working…";
+    const latest = latestWorkTraceActivitySummary(activities);
+    return latest || summary || "Working…";
   }
   if (traceState === "failed") {
     return `${duration ? `Failed after ${duration}` : "Failed"}${

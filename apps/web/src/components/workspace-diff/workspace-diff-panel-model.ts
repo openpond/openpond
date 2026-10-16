@@ -1,3 +1,4 @@
+export const AGENTS_OVERVIEW_TAB_ID = -2;
 import type { WorkspaceDiffFile } from "@openpond/contracts";
 
 export type DiffTab = "goal" | "summary" | "files" | "file" | "outputs";
@@ -13,7 +14,7 @@ export type WorkspaceDiffPanelViewState = {
 };
 
 export type WorkspaceDiffTabRequest = {
-  overview?: "new" | "experiments";
+  overview?: "new" | "experiments" | "agents";
   id: number;
   tab: Extract<DiffTab, "files" | "summary" | "file" | "outputs">;
 };

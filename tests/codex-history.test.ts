@@ -1,9 +1,12 @@
+import { resolveNativeConversationAvailability } from "../apps/web/src/lib/native-conversation-capabilities.js";
+import { assertNativeWorkerDirectInput } from "../apps/server/src/runtime/native-worker-capabilities.js";
+import { resolveNativeWorkerParents } from "../apps/server/src/native-worker-sessions.js";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import type { LocalProject, Session } from "@openpond/contracts";
+import { SessionSchema, type LocalProject, type Session } from "@openpond/contracts";
 import {
   codexHistorySessionId,
   loadCodexHistoryThreads,
@@ -1491,4 +1494,76 @@ test("history catalog cache observes append, replacement, and deletion", async (
     await writeFile(path.join(home, ".codex-global-state.json"), JSON.stringify({ "thread-workspace-root-hints": { one: "/first" } }));
     expect((await readGlobalState(home)).workspaceRootHints.get("one")).toBe("/first");
   } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+// Native delegation is provider-owned; after reload it must remain attached to
+// the same desktop parent and promotion must survive without deleting parentage.
+test("retains native Codex child parentage and explicit sidebar promotion", async () => {
+  const codexHome = await mkdtemp(path.join(os.tmpdir(), "codex-native-worker-"));
+  const threadId = "019e7138-5da2-7671-8837-202a36e0fff9";
+  try {
+    const directory = path.join(codexHome, "sessions", "2026", "05", "28");
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, `rollout-2026-05-28T20-52-59-${threadId}.jsonl`), JSON.stringify({ type: "session_meta", timestamp: "2026-05-29T00:53:17.784Z", payload: {
+      id: threadId, cwd: codexHome, source: { subagent: { thread_spawn: { parent_thread_id: "parent-thread", agent_path: "/root/research" } } },
+    } }) + "\n");
+    const child = (await loadCodexHistoryThreads({ codexHome }))[0]!.session;
+    expect(child).toMatchObject({ title: "/root/research", parentSessionId: codexHistorySessionId("parent-thread"), hiddenFromDefaultSidebar: true,
+      metadata: { nativeWorker: true, nativeWorkerCanResume: false, nativeParentSessionId: "parent-thread" } });
+    const parent = { ...child, id: "desktop-parent", codexThreadId: "parent-thread" };
+    expect(resolveNativeWorkerParents([child], [parent])[0]?.parentSessionId).toBe(parent.id);
+    const promoted = applyCodexHistorySidebarPreference(child, { [threadId]: { hiddenFromDefaultSidebar: false } });
+    expect(promoted).toMatchObject({ id: child.id, parentSessionId: child.parentSessionId, hiddenFromDefaultSidebar: false });
+  } finally { await rm(codexHome, { recursive: true, force: true }); }
+});
+
+// Bootstrap's recency horizon must not hide a selected parent's older child.
+// Parent receipts alone cannot authorize an unrelated thread's transcript.
+test("discovers only verified Codex children from the selected parent's receipts", async () => {
+  const { codexNativeChildren } = await import("../apps/server/src/codex-native-children.js");
+  const codexHome = await mkdtemp(path.join(os.tmpdir(), "codex-parent-children-"));
+  const parentId = "019e7138-5da2-7671-8837-202a36e0ffa1";
+  const childId = "019e7138-5da2-7671-8837-202a36e0ffa2";
+  const otherId = "019e7138-5da2-7671-8837-202a36e0ffa3";
+  try {
+    const directory = path.join(codexHome, "sessions", "2026", "05", "28");
+    await mkdir(directory, { recursive: true });
+    const writeThread = (id: string, records: unknown[]) => writeFile(path.join(directory, `rollout-2026-05-28T20-52-59-${id}.jsonl`), records.map(record => JSON.stringify(record)).join("\n") + "\n");
+    const header = (id: string, parent?: string) => ({ type: "session_meta", payload: { id, cwd: codexHome, ...(parent ? { source: { subagent: { thread_spawn: { parent_thread_id: parent, agent_path: "/root/worker" } } } } : {}) } });
+    const receipt = (id: string) => ({ type: "event_msg", payload: { type: "item_completed", thread_id: parentId, item: { type: "SubAgentActivity", agent_thread_id: id } } });
+    // Native fork copies its parent's header after the authoritative child header.
+    await writeThread(childId, [header(childId, parentId), header(parentId)]);
+    await writeThread(otherId, [header(otherId, "foreign-parent")]);
+    await writeThread(parentId, [header(parentId), receipt(childId), receipt(otherId)]);
+    const parent = (await loadCodexHistoryThreads({ codexHome, onlyThreadIds: new Set([parentId]) }))[0]!.session;
+    const page = await codexNativeChildren({ ...parent, id: "desktop-parent" }, undefined, codexHome);
+    expect(page.items.map(child => [child.codexThreadId, child.parentSessionId, child.hiddenFromDefaultSidebar])).toEqual([[childId, "desktop-parent", true]]);
+    expect(page.beforeOffset).toBeNull();
+    await writeThread(parentId, [header(parentId), receipt(childId), { type: "diagnostic", text: "x".repeat(4 * 1024 * 1024) }, receipt(otherId)]);
+    let olderPage = await codexNativeChildren({ ...parent, id: "desktop-parent" }, undefined, codexHome);
+    expect(olderPage.beforeOffset).not.toBeNull();
+    const discovered: string[] = [];
+    for (let pages = 0; pages < 4; pages++) {
+      discovered.push(...olderPage.items.map(child => child.codexThreadId!));
+      if (olderPage.beforeOffset === null) break;
+      olderPage = await codexNativeChildren({ ...parent, id: "desktop-parent" }, olderPage.beforeOffset, codexHome);
+    }
+    expect(discovered).toEqual([childId]);
+  } finally { await rm(codexHome, { recursive: true, force: true }); }
+});
+
+
+// Native v2 children reject direct app-server input. Parentage alone must not
+// disable ordinary standalone Codex workers created and controlled by Ponder.
+test("blocks native worker input while allowing Ponder standalone worker input", () => {
+  const standalone = SessionSchema.parse({ id: "standalone-worker", provider: "codex", title: "Worker", parentSessionId: "ponder", appId: null, appName: null,
+    cwd: "/workspace", codexThreadId: "standalone-native-thread", createdAt: "2026-10-15T00:00:00Z", updatedAt: "2026-10-15T00:00:00Z", status: "idle", pinned: false, archived: false, order: 0 });
+  expect(() => assertNativeWorkerDirectInput(standalone)).not.toThrow();
+  const unsupported = { ...standalone, metadata: { nativeWorker: true, nativeWorkerCanResume: false } };
+  expect(() => assertNativeWorkerDirectInput(unsupported)).toThrow("controlled by its parent conversation");
+  const availability = resolveNativeConversationAvailability({ sessionId: unsupported.id, current: unsupported,
+    observed: { ...standalone, metadata: { nativeReadOnlyReason: null, nativeWorkerCanResume: true } }, fallbackReason: null });
+  expect(availability.session).toBe(unsupported);
+  expect(availability.reason).toBeTruthy();
+  expect(resolveNativeConversationAvailability({ sessionId: "different-session", current: unsupported, observed: null, fallbackReason: null }).reason).toBeNull();
 });

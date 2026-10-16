@@ -235,6 +235,7 @@ export function createSessionStore(deps: {
         {
           ...session,
           ...input,
+          ...(session.metadata?.nativeWorker && input.hiddenFromDefaultSidebar !== undefined ? { metadata: { ...session.metadata, nativeWorkerPromoted: !input.hiddenFromDefaultSidebar } } : {}),
           ...(qualifiedNative ? { nativeAgent: qualifiedNative } : {}),
           ...(input.metadata !== undefined ? { metadata: preserveDeviceSessionIdentity(session.metadata, input.metadata) } : {}),
           ...(input.title !== undefined ? { metadata: { ...session.metadata, ...preserveDeviceSessionIdentity(session.metadata, input.metadata), titleSource: "manual", autoTitle: null } } : {}),

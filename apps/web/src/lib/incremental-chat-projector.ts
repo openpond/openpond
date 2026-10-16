@@ -42,7 +42,13 @@ export class IncrementalChatProjector {
     const prefixMessages = this.projection.messages.filter(
       (message) => !message.turnId || !suffixTurnIds.has(message.turnId),
     );
-    const messages = [...prefixMessages, ...buildChatMessages(suffixEvents)];
+    const suffixMessages = buildChatMessages(suffixEvents);
+    const prefixIds = new Set(prefixMessages.map(message => message.id));
+    // Peer receipts intentionally have no sender-turn identity. A later receipt
+    // update can therefore cross the replay boundary; rebuild to retain its
+    // original position and latest state instead of rendering it twice.
+    if (suffixMessages.some(message => prefixIds.has(message.id))) return this.replace(events);
+    const messages = [...prefixMessages, ...suffixMessages];
     this.projection = { events, messages };
     return messages;
   }

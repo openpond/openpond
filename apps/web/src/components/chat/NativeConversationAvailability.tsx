@@ -1,3 +1,4 @@
+import { resolveNativeConversationAvailability } from "../../lib/native-conversation-capabilities";
 import { useErrorToast } from "../../app/AppToastContext";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SessionSchema, type RuntimeEvent, type Session } from "@openpond/contracts";
@@ -5,12 +6,13 @@ import type { ClientConnection } from "../../api";
 import { apiFetch } from "../../api/api-client";
 
 export function useNativeConversationAvailability({
-  connection, sessionId, events, fallbackReason,
+  connection, sessionId, events, fallbackReason, fallbackSession,
 }: {
   connection: ClientConnection | null;
   sessionId: string | null;
   events: readonly RuntimeEvent[];
   fallbackReason: string | null;
+  fallbackSession?: Session | null;
 }) {
   const latest = useMemo(() => {
     for (let index = events.length - 1; index >= 0; index--) {
@@ -23,28 +25,36 @@ export function useNativeConversationAvailability({
     return null;
   }, [events, sessionId]);
   const [rechecked, setRechecked] = useState<{ connection: ClientConnection | null; eventId: string | undefined; session: Session } | null>(null);
-  const session = rechecked?.connection === connection && rechecked.session.id === sessionId && rechecked.eventId === latest?.eventId
+  const observed = rechecked?.connection === connection && rechecked.session.id === sessionId && rechecked.eventId === latest?.eventId
     ? rechecked.session : latest?.session ?? null;
-  const reason = session ? (typeof session.metadata?.nativeReadOnlyReason === "string" ? session.metadata.nativeReadOnlyReason : null) : fallbackReason;
+  const { session, reason } = resolveNativeConversationAvailability({ sessionId, current: fallbackSession, observed, fallbackReason });
   return { session, reason, acceptSession: (value: Session) => setRechecked({ connection, eventId: latest?.eventId, session: value }) };
 }
 
 export function NativeConversationUnavailable({
-  connection, session, reason, onRechecked,
+  connection, session, reason, onRechecked, onOpenParent,
 }: {
   connection: ClientConnection | null;
   session: Session | null;
   reason: string;
   onRechecked: (session: Session) => void;
+  onOpenParent?: (sessionId: string) => void | Promise<unknown>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useErrorToast(error);
   const generation = useRef(0);
   useEffect(() => { generation.current++; setBusy(false); setError(null); return () => { generation.current++; }; }, [connection, session?.id]);
-  const historyId = !session?.metadata?.nativeBranch && session?.metadata?.nativeHistoryId;
+  const unsupportedChild = session?.metadata?.nativeWorker === true && session.metadata.nativeWorkerCanResume === false;
+  const historyId = !unsupportedChild && !session?.metadata?.nativeBranch && session?.metadata?.nativeHistoryId;
   return <div className="composer dock native-conversation-unavailable">
     <p role="status">{reason}</p>
+    {unsupportedChild && session?.parentSessionId && onOpenParent ? <button type="button" disabled={busy} onClick={async () => {
+      setBusy(true); setError(null);
+      try { await onOpenParent(session.parentSessionId!); }
+      catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+      finally { setBusy(false); }
+    }}>Open parent chat</button> : null}
     {connection && typeof historyId === "string" ? <button type="button" disabled={busy} onClick={async () => {
       const current = generation.current;
       setBusy(true); setError(null);

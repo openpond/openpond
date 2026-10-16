@@ -1,3 +1,4 @@
+import { retainedTaskInputAcknowledgement } from "../lib/task-input-acknowledgement";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RuntimeEvent, SendTurnRequest, TaskInput, TaskInputMutation } from "@openpond/contracts";
@@ -24,6 +25,7 @@ export function useTaskInbox(connection: ClientConnection | null, sessionId: str
   const enabled = Boolean(connection && sessionId);
   const state = useQuery({ queryKey, enabled, staleTime: 0, refetchOnWindowFocus: true, refetchOnReconnect: true,
     queryFn: () => sessionApi.taskInbox(connection!, sessionId!),
+    refetchInterval: query => query.state.data?.inputs.some(input => input.state === "pending") ? 2000 : query.state.data?.paused ? 10000 : false,
   });
   const [operation, setOperation] = useState<{ scope: string; id: string } | null>(null);
   const [failure, setFailure] = useState<{ scope: string; message: string } | null>(null);
@@ -57,6 +59,8 @@ export function useTaskInbox(connection: ClientConnection | null, sessionId: str
       void refresh();
       return true;
     } catch (error) {
+      const durable = queries.getQueryData<typeof state.data>(queryKey)?.inputs.find(input => input.idempotencyKey === id);
+      if (durable && ["pending", "included", "resolved"].includes(durable.state)) return true;
       setFailure({ scope: operationScope, message: error instanceof Error ? error.message : String(error) });
       void refresh();
       return false;
@@ -103,7 +107,17 @@ export function useTaskInbox(connection: ClientConnection | null, sessionId: str
     return sent;
   }
 
+  const storageKey = connection && sessionId ? `openpond:task-input:${connection.serverUrl}:${sessionId}` : null;
+  const retainedIntent = storageKey ? savedIntent(storageKey) : null;
+  const acknowledgedInput = retainedTaskInputAcknowledgement(state.data?.inputs ?? [], retainedIntent);
+
   return {
+    acknowledgedInput,
+    acknowledgeRetainedInput: () => {
+      if (!storageKey || !acknowledgedInput || savedIntent(storageKey)?.key !== acknowledgedInput.idempotencyKey) return;
+      try { sessionStorage.removeItem(storageKey); } catch { /* Optional browser recovery storage. */ }
+      setOperation(current => current?.scope === operationScope && current.id === acknowledgedInput.idempotencyKey ? null : current);
+    },
     enabled, snapshot: state.data ?? null,
     busyId: operation?.scope === operationScope ? operation.id : null,
     error: failure?.scope === operationScope ? failure.message : state.error?.message ?? null,

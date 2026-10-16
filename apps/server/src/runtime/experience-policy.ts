@@ -18,6 +18,18 @@ const CHAT_MODEL_TOOLS = new Set([
 ]);
 
 const WORK_MODEL_TOOLS = new Set([
+  "ponder_history_events",
+  "ponder_history_search",
+  "ponder_history_read",
+  "openpond_discover_hosted_agents",
+  "openpond_stage_hosted_input",
+  "openpond_start_hosted_agent",
+  "openpond_inspect_hosted_agent",
+  "openpond_cancel_hosted_agent",
+  "openpond_discover_agents",
+  "openpond_start_agent",
+  "openpond_inspect_agent",
+  "openpond_stop_agent",
   "recommend_next_step",
   "exec_command",
   "html_preview",

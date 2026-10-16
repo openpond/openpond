@@ -1,4 +1,5 @@
-import { useId, useState, type ReactNode } from "react";
+import { groupActivityRuns } from "../../lib/chat-activity-runs";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import type { ChatTimelineMessageRow, ChatTimelineRow } from "../../lib/chat-timeline-rows";
 import { ChatActivitySummary } from "./ChatActivitySummary";
 import { ThinkingIndicator } from "./Messages";
@@ -10,6 +11,7 @@ export function ChatTimelineEntry({ row, renderMessage }: {
 }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
+  const messages = useMemo(() => row.type === "work" ? groupActivityRuns(row.messages) : [], [row]);
   if (row.type === "thinking") return <ThinkingIndicator />;
   if (row.type === "message") return renderMessage(row);
   return (
@@ -19,7 +21,7 @@ export function ChatTimelineEntry({ row, renderMessage }: {
         {row.label}
       </ChatActivitySummary>
       {expanded ? <div className="chat-work-history-content" id={detailsId}>
-        {row.messages.map(message => <div key={message.id}>{renderMessage(message)}</div>)}
+        {messages.map(message => <div key={message.id}>{renderMessage(message)}</div>)}
       </div> : null}
     </div>
   );

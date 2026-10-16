@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ComposerDraftStore } from "../../lib/composer-draft-store";
 import type {
   ChatAttachment,
@@ -41,7 +42,10 @@ export type ComposerProps = {
   teamMentionMembers?: TeamChatMember[];
   onTeamUseModelChange?: (value: boolean) => void;
   prompt: string;
+  placeholder?: string;
   readOnlyReason?: string | null;
+  readOnlySession?: Session | null;
+  onOpenNativeParent?: (sessionId: string) => void | Promise<unknown>;
   composeNotice?: ComposerNotice | null;
   mentionApps?: OpenPondApp[];
   connectedAppMentions?: ConnectedAppMentionOption[];
@@ -64,6 +68,10 @@ export type ComposerProps = {
   initialSteerDrafts?: ComposerSteerDraft[];
   showProjectFooter?: boolean;
   hideModelControls?: boolean;
+  modelSelectionDisabled?: boolean;
+  allowedModelRefs?: readonly {providerId: ChatProvider; modelId: string}[];
+  executionControl?: ReactNode;
+  enableResourceContext?: boolean;
   autoFocus?: boolean;
   focusRequestId?: number;
   attachmentRequest?: { id: number; file: File } | null;

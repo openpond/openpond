@@ -66,7 +66,9 @@ export function ComposerPrimaryControls({
   modelOptions = [],
   hideModelControls = false,
   trainingControl,
-  inboxControl,
+  executionControl,
+  allowedModelRefs,
+  modelSelectionDisabled = false,
   openPondCommandAccessMode,
   showCommandAccess = true,
   profileTarget,
@@ -116,7 +118,9 @@ export function ComposerPrimaryControls({
   modelOptions?: DropdownOption[];
   hideModelControls?: boolean;
   trainingControl?: ReactNode;
-  inboxControl?: ReactNode;
+  executionControl?: ReactNode;
+  allowedModelRefs?: readonly {providerId: ChatProvider; modelId: string}[];
+  modelSelectionDisabled?: boolean;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
   showCommandAccess?: boolean;
   profileTarget?: ComposerProfileTargetState | null;
@@ -213,8 +217,12 @@ export function ComposerPrimaryControls({
         currentProvider: provider,
         providerOptions,
         providerSettings,
+      }).flatMap(group => {
+        if (!allowedModelRefs) return [group];
+        const options = group.options.filter(option => allowedModelRefs.some(ref => ref.providerId === group.provider && ref.modelId === option.value));
+        return options.length ? [{...group, options, defaultModel:options.some(option => option.value === group.defaultModel) ? group.defaultModel : options[0].value}] : [];
       }),
-    [modelOptions, provider, providerOptions, providerSettings, refreshedSettings],
+    [modelOptions, provider, providerOptions, providerSettings, refreshedSettings, allowedModelRefs],
   );
   const teamModelGroups = useMemo(
     () => modelGroups.filter((group) => TEAM_CHAT_LOCAL_PROVIDER_IDS.has(group.provider)),
@@ -281,6 +289,7 @@ export function ComposerPrimaryControls({
             onReasoningEffortChange={onCodexReasoningEffortChange}
           />
         ) : null}
+        {executionControl}
         <VoiceInputButton
           buttonClassName="composer-icon"
           connection={connection}
@@ -427,10 +436,9 @@ export function ComposerPrimaryControls({
         </span>
       )}
       {trainingControl}
-      {inboxControl}
       {!hideModelControls && (
         <ComposerModelMenu
-          disabled={busy}
+          disabled={busy || modelSelectionDisabled}
           model={displayedModel}
           modelGroups={modelGroups}
           placement={dropdownPlacement}
@@ -442,6 +450,7 @@ export function ComposerPrimaryControls({
           onReasoningEffortChange={onCodexReasoningEffortChange}
         />
       )}
+      {executionControl}
       <VoiceInputButton
         buttonClassName="composer-icon"
         connection={connection}

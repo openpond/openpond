@@ -97,11 +97,19 @@ export type SubagentSandboxCleanupRequest = {
 };
 
 export type TurnRepository = TaskInboxRepository & {
+  latestPonderHistoryRequest?: import("../../store/store-ponder-history.js").SqlitePonderHistoryStore["latestPonderHistoryRequest"];
+  pendingPonderHistorySessions?: import("../../store/store-ponder-history.js").SqlitePonderHistoryStore["pendingPonderHistorySessions"];
+  getPonderHistoryRequest?: import("../../store/store-ponder-history.js").SqlitePonderHistoryStore["getPonderHistoryRequest"];
+  readPonderHistory?: import("../../store/store-ponder-history.js").SqlitePonderHistoryStore["readPonderHistory"];
+  savePonderHistory?: import("../../store/store-ponder-history.js").SqlitePonderHistoryStore["savePonderHistory"];
+  admitPonderHistoryRequest?: import("../../store/store-ponder-history.js").SqlitePonderHistoryStore["admitPonderHistoryRequest"];
   getPonderDesktopResult?(operationId: string, turnId: string): Promise<import("@openpond/contracts").PonderDesktopResult | null>;
   sessionShells(): Promise<Session[]>;
   getTaskset?(
     id: string
   ): Promise<import("@openpond/contracts").Taskset | null>;
+  runtimeEventPageRows?(query:{sessionId:string|null;afterSequence:number;beforeSequence:number|null;limit:number}):Promise<{
+    entries:Array<{sequence:number;event:RuntimeEvent}>;totalMatchingEvents:number;remainingMatchingEvents:number}>;
   runtimeEventsForSession(
     sessionId: string,
     query?: {
@@ -252,6 +260,7 @@ export type SessionWorkspaceResolver = {
 };
 
 export type ProviderRuntime = {
+  getPonderHistoryCredential?: (providerId:ChatProvider) => Promise<string>;
   ensureCodexRuntime(
     session: Session,
     turnInput: CodexTurnInput
@@ -265,6 +274,7 @@ export type ProviderRuntime = {
     maxOutputTokens?: number;
     requestId: string;
     promptCacheKey?: string;
+    expectedPonderHistoryCredential?: string;
     reasoningEffort?: CodexReasoningEffort;
     signal: AbortSignal;
   }) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
@@ -332,6 +342,10 @@ export type TurnRunnerDependencies = {
   }) => Promise<import("@openpond/contracts").GradeResult>;
   upsertApproval: (approval: Approval) => Promise<void>;
   createSession?: (payload: unknown) => Promise<Session>;
+  createReservedSession?: ReturnType<typeof import("../../store/session-store.js").createSessionStore>["createReservedSession"];
+  localPonderProjects?: () => Promise<Array<{id:string;name:string;workspacePath:string}>>;
+  localPonderHosted?:ReturnType<typeof import("../../openpond/ponder-hosted-service.js").createPonderHostedService>;
+  localPonderProviderSettings?: () => Promise<ProviderSettings>;
   getSession: (sessionId: string) => Promise<Session>;
   updateSession: (
     sessionId: string,
@@ -498,6 +512,7 @@ export type TurnRunnerDependencies = {
   ) => Promise<string>;
   appendAssistantText: TurnEventSink["appendAssistantText"];
   appendHostedContextUsage: TurnEventSink["appendHostedContextUsage"];
+  getPonderHistoryCredential?: ProviderRuntime["getPonderHistoryCredential"];
   streamLocalByokChatTurn?: ProviderRuntime["streamLocalByokChatTurn"];
   streamOpenPondHostedChatTurn?: ProviderRuntime["streamOpenPondHostedChatTurn"];
   /** A trusted execution owner can bind a fresh evaluation session to its
@@ -517,6 +532,8 @@ export type TurnRunnerDependencies = {
 };
 
 export type TurnRunner = TurnDispatcherPort & {
+  notifyHostedPonderCompletion?:(job:import("../../store/store-ponder-hosted.js").HostedPonderJob)=>Promise<string>;
+  notifyLocalPonderControl?(relationship: import("../../openpond/local-ponder-contract.js").LocalPonderRelationship): Promise<void>;
   admitUserLocalMessage(input: import("@openpond/contracts").TaskInputAdmission): Promise<TaskInput>;
   admitPonderLocalMessage(input: import("@openpond/contracts").TaskInputAdmission): Promise<TaskInput>;
   steerSessionTurn(sessionId: string, payload: unknown): Promise<TaskInput>;

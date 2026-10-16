@@ -1,3 +1,7 @@
+import { NATIVE_WORKER_READ_ONLY_REASON } from "../native-worker-capabilities.js";
+import { codexNativeChildren } from "../../codex-native-children.js";
+import { codexHistoryThreadIdFromSessionId, loadCodexHistoryThreads } from "../../codex-history.js";
+import { applyCodexHistorySidebarPreferences, loadCodexHistorySidebarPreferences } from "../../codex-history-sidebar-preferences.js";
 import { ClaudeTaskProgress } from "@openpond/agent-runtime";
 import { createHash } from "node:crypto";
 import { handleNativeImporter } from "./importer.js";
@@ -24,7 +28,7 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
   const selected = new Map<string, { source: NativeSource; session: NativeSession; provider: NativeAgentId }>();
   const opening = new Map<string, Promise<Session>>();
   const workspaceFailures = new Map<string, string>();
-  async function list(cursors: Record<string, string> = {}, retain = false) {
+  async function list(cursors: Record<string, string> = {}, retain = false, parent?: Session) {
     const directory = collectorDirectory(); const machineId = await collectorMachineId(directory);
     const file = await readProvidersFile(join(deps.storeDir, "providers.json"));
     const locations: Partial<Record<NativeSource["source"], string>> = {};
@@ -38,13 +42,16 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
     const nextCursors: Record<string, string> = {};
     const shells = retain ? await deps.store.sessionShells() : [];
     for (const source of sources) {
+      if (parent && (providerFor[source.source as keyof typeof providerFor] !== parent.provider ||
+        (parent.metadata?.sourceInstanceId ? parent.metadata.sourceInstanceId !== source.instanceId :
+          !parent.nativeAgent || parent.nativeAgent.instanceId !== nativeAgentLaunch(parent.nativeAgent.provider, file.providers[parent.nativeAgent.provider]).instanceId))) continue;
       if (Object.keys(cursors).length && !cursors[source.instanceId]) continue;
       if (!source.capabilities.history) { if (source.available && source.reason) warnings.push(`${source.source}: ${source.reason}`); continue; }
       const provider = providerFor[source.source as keyof typeof providerFor];
       try {
         const launch = nativeAgentLaunch(provider, file.providers[provider]);
         const probes = await nativeCapabilityProbeKeys(launch.sourceHome);
-        const page = await listSessions(source, { limit: 50, cursor: cursors[source.instanceId] });
+        const page = await listSessions(source, { limit: 50, cursor: cursors[source.instanceId], ...(parent ? { parentNativeSessionId: parent.nativeAgent?.sessionId ?? String(parent.metadata?.nativeSessionId ?? "") } : {}) });
         for (const session of page.items) {
           const id = hash([source.instanceId, session.nativeSessionId]);
           if (probes.has(nativeCapabilityProbeKey(provider, session.nativeSessionId))) {
@@ -68,6 +75,26 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
         }
         if (page.nextCursor) nextCursors[source.instanceId] = page.nextCursor;
       } catch (error) { warnings.push(`${provider}: ${error instanceof Error ? error.message : "History unavailable"}`); }
+    }
+    if (retain) {
+      const currentShells = await deps.store.sessionShells();
+      for (const child of currentShells) {
+        const parentNativeId = child.metadata?.nativeParentSessionId;
+        if (typeof parentNativeId !== "string") continue;
+        const childSource = sources.find(source => source.instanceId === child.metadata?.sourceInstanceId &&
+          providerFor[source.source as keyof typeof providerFor] === child.provider);
+        const parent = currentShells.find(candidate => {
+          if (candidate.id === child.id || candidate.provider !== child.provider ||
+            (candidate.nativeAgent?.sessionId !== parentNativeId && candidate.metadata?.nativeSessionId !== parentNativeId)) return false;
+          if (typeof child.metadata?.sourceInstanceId === "string" && candidate.metadata?.sourceInstanceId === child.metadata.sourceInstanceId) return true;
+          const native = candidate.nativeAgent;
+          return Boolean(childSource && !candidate.metadata?.sourceInstanceId && native &&
+            native.instanceId === nativeAgentLaunch(native.provider, file.providers[native.provider]).instanceId);
+        });
+        if (!parent || child.parentSessionId === parent.id) continue;
+        const updated = await deps.store.updateSession(child.id, current => ({ ...current, parentSessionId: parent.id }));
+        if (updated) await deps.appendRuntimeEvent(event({ sessionId: child.id, name: "session.updated", source: "server", data: { session: updated } }));
+      }
     }
     return { sources, nextCursors, items: items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), warnings, collector: await collectorStatus(directory) };
   }
@@ -99,7 +126,7 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       if (branch && item.provider !== "claude-code") throw new Error("Explicit branch selection is only supported for Claude Code.");
       const retained = await readSession(item.source, item.session, branch ? { branchLeafId: branch.leafId, expectedBranchRevision: branch.revision }
         : item.provider === "claude-code" ? { latestBranch: true } : {});
-      const native = retained.preview.sessions.find((session) => session.sessionId === item.session.nativeSessionId);
+      const native = retained.preview.sessions.find((session) => session.sessionId === (item.session.parentNativeSessionId ?? item.session.nativeSessionId));
       if (!native) throw new Error("Source history does not match the selected native session.");
       const instance = launch.instanceId;
       const shells = await deps.store.sessionShells();
@@ -109,7 +136,7 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       let workspaceRecoveryError: string | null = null;
       let recoveredMetadata: Record<string, unknown> = {};
       let recovered = false;
-      if (!branch && !workspaceAvailable && deps.workspaceAvailable && deps.qualifyWorkspace) {
+      if (!branch && !item.session.parentNativeSessionId && !workspaceAvailable && deps.workspaceAvailable && deps.qualifyWorkspace) {
         const failureKey = hash([id, instance, cwd]);
         if (retryWorkspace) workspaceFailures.delete(failureKey);
         let activeWork = false;
@@ -153,12 +180,14 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       }
       const qualified = owned?.nativeAgent;
       const alreadyQualified = qualified?.provider === item.provider && qualified.instanceId === instance && qualified.sessionId === native.sessionId && qualified.cwd === cwd;
-      const resume = !branch && workspaceAvailable
+      const resume = !branch && !item.session.parentNativeSessionId && workspaceAvailable
         ? recovered || alreadyQualified || item.source.capabilities.nativeResume || await deps.canResume?.(item.provider, cwd!)
         : false;
       const canResume = typeof resume === "object" ? resume.available : Boolean(resume);
-      const readOnlyKind = branch ? "branch" : !cwd ? "workspace_unknown" : !workspaceAvailable ? "workspace_missing" : canResume ? null : "agent";
-      const readOnlyReason = branch
+      const readOnlyKind = item.session.parentNativeSessionId ? "agent" : branch ? "branch" : !cwd ? "workspace_unknown" : !workspaceAvailable ? "workspace_missing" : canResume ? null : "agent";
+      const readOnlyReason = item.session.parentNativeSessionId
+        ? NATIVE_WORKER_READ_ONLY_REASON
+        : branch
         ? "Read-only Claude branch snapshot. Open the original conversation to continue; this selected branch remains unchanged."
         : workspaceRecoveryError
           ? `Could not resume this conversation in an app workspace: ${workspaceRecoveryError}`
@@ -173,11 +202,14 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
       let session = owned ?? await deps.store.getSession(sessionId);
       const timestamp = item.session.updatedAt;
       if (!session) {
-        session = SessionSchema.parse({ id: sessionId, experience: "work", provider: item.provider, title: `${item.session.title}${branch ? ` · Branch ${branch.leafId.slice(0, 8)}` : ""}`, appId: null, appName: null, cwd, codexThreadId: null, createdAt: timestamp, updatedAt: timestamp, status: "idle", pinned: false, archived: false, order: 0,
+        session = SessionSchema.parse({ id: sessionId, hiddenFromDefaultSidebar: Boolean(item.session.parentNativeSessionId), parentSessionId: item.session.parentNativeSessionId ? shells.find(candidate => candidate.provider === item.provider && !candidate.metadata?.nativeWorker && (candidate.nativeAgent?.sessionId === item.session.parentNativeSessionId || candidate.metadata?.nativeSessionId === item.session.parentNativeSessionId) && (candidate.metadata?.sourceInstanceId === item.source.instanceId || (!candidate.metadata?.sourceInstanceId && candidate.nativeAgent?.instanceId === instance)))?.id ?? null : null, experience: "work", provider: item.provider, title: `${item.session.title}${branch ? ` · Branch ${branch.leafId.slice(0, 8)}` : ""}`, appId: null, appName: null, cwd, codexThreadId: null, createdAt: timestamp, updatedAt: timestamp, status: "idle", pinned: false, archived: false, order: 0,
           nativeAgent: canResume ? { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: cwd! } : null,
-          metadata: { nativeHistoryId: id, nativeHistoryProjection: true, nativeHistoryLoaded: true, sourceInstanceId: item.source.instanceId, sourceMachineId: item.source.machineId, nativeSource: item.source.source, nativeResumeAvailable: canResume, nativeSourceHash: native.contentHash, nativeReadOnlyReason: readOnlyReason, nativeReadOnlyKind: readOnlyKind, ...recoveredMetadata, ...(branch ? { nativeBranch: branch } : {}) } });
+          metadata: { nativeSessionId: item.session.nativeSessionId, nativeParentSessionId: item.session.parentNativeSessionId, ...(item.session.parentNativeSessionId ? { nativeWorker: true, nativeWorkerCanResume: false } : {}), nativeHistoryId: id, nativeHistoryProjection: true, nativeHistoryLoaded: true, sourceInstanceId: item.source.instanceId, sourceMachineId: item.source.machineId, nativeSource: item.source.source, nativeResumeAvailable: canResume, nativeSourceHash: native.contentHash, nativeReadOnlyReason: readOnlyReason, nativeReadOnlyKind: readOnlyKind, ...recoveredMetadata, ...(branch ? { nativeBranch: branch } : {}) } });
         await deps.store.insertSessionAtFront(session);
         await deps.appendRuntimeEvent(event({ sessionId, name: "session.started", source: "server", data: { session, retainedHistory: true } }));
+      }
+      if (item.session.parentNativeSessionId && session.nativeAgent) {
+        session = await deps.store.updateSession(sessionId, current => ({ ...current, nativeAgent: null, metadata: { ...current.metadata, nativeResumeAvailable: false, nativeReadOnlyReason: readOnlyReason, nativeReadOnlyKind: "agent" } })) ?? session;
       }
       if (session.metadata?.nativeHistoryProjection && !session.nativeAgent && canResume && !session.metadata.nativeBranch) {
         const updated = await deps.store.updateSession(sessionId, (current) => ({ ...current, cwd, nativeAgent: { provider: item.provider, instanceId: instance, sessionId: native.sessionId, cwd: cwd! }, metadata: { ...current.metadata, nativeResumeAvailable: true, nativeReadOnlyReason: null, nativeReadOnlyKind: null } }));
@@ -262,6 +294,24 @@ export function createNativeHistory(deps: { store: SqliteStore; storeDir: string
     } finally { opening.delete(openingKey); }
   }
   const handle = async (action: string, payload: unknown) => {
+    if (action === "children") {
+      const input = z.object({ parentSessionId: z.string().min(1).max(200), beforeOffset: z.number().int().nonnegative().optional(), cursors: z.record(z.string(), z.string()).optional() }).parse(payload);
+      let parent = await deps.store.getSession(input.parentSessionId);
+      if (!parent) {
+        const threadId = codexHistoryThreadIdFromSessionId(input.parentSessionId);
+        if (threadId) parent = (await loadCodexHistoryThreads({ onlyThreadIds: new Set([threadId]), metadataLimit: 1 }))[0]?.session ?? null;
+      }
+      if (!parent) throw new Error("Parent conversation is unavailable.");
+      if (parent.provider === "codex") {
+        const page = await codexNativeChildren(parent, input.beforeOffset);
+        return { ...page, items: applyCodexHistorySidebarPreferences(page.items, await loadCodexHistorySidebarPreferences(deps.store)) };
+      }
+      if (parent.provider === "claude-code") {
+        const page = await list(input.cursors, true, parent);
+        return { items: (await deps.store.sessionShells()).filter(child => child.parentSessionId === parent.id), cursors: page.nextCursors, beforeOffset: null };
+      }
+      return { items: (await deps.store.sessionShells()).filter(child => child.parentSessionId === parent.id), beforeOffset: null };
+    }
     if (action === "list") { const input = z.object({ cursors: z.record(z.string().max(200), z.string().max(4096)).optional(), retain: z.boolean().optional() }).parse(payload ?? {}); return list(input.cursors, input.retain); }
     if (action === "branches") {
       const { id } = z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }).parse(payload);

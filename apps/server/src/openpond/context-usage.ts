@@ -1,6 +1,7 @@
 import { ContextUsageSnapshotSchema, type ChatProvider, type ContextUsageSource, type ContextUsageSnapshot, type HostedContextProvider } from "@openpond/contracts/settings";
 import { type ProviderSettings } from "@openpond/contracts/providers";
 import type { HostedChatMessage, HostedChatTool } from "@openpond/cloud";
+import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 import { admittedHostedModelLimits } from "../runtime/hosted-model-limits.js";
 
 const ESTIMATED_CHARS_PER_TOKEN = 4;
@@ -193,13 +194,9 @@ function numericUsageValue(usage: unknown, keys: string[]): number | null {
 }
 
 function tokenCountFromUsage(usage: unknown, includeCompletion: boolean): number | null {
-  const promptTokens = numericUsageValue(usage, ["prompt_tokens", "promptTokens", "input_tokens", "inputTokens"]);
-  const completionTokens = numericUsageValue(usage, [
-    "completion_tokens",
-    "completionTokens",
-    "output_tokens",
-    "outputTokens",
-  ]);
+  const normalized = normalizeModelUsageTokens(usage);
+  const promptTokens = normalized.promptTokens;
+  const completionTokens = normalized.completionTokens;
   const totalTokens = numericUsageValue(usage, ["total_tokens", "totalTokens"]);
 
   if (includeCompletion) {

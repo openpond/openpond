@@ -1,8 +1,9 @@
+import { ponderProviderCredential } from "./ponder-provider-credential.js";
 import type { ProviderSettings } from "@openpond/contracts/providers";
 import type { ProviderRuntime } from "../runtime/turns/ports.js";
 import type { createManagedAdapterChatRuntime } from "../training/managed-adapter-chat-runtime.js";
 import { resolveUrlModel } from "../enclave/connection.js";
-import { streamOpenAiCompatibleChatCompletion } from "./openai-compatible-provider.js";
+import { streamManagedLocalChatCompletion } from "./managed-chat-provider.js";
 import { readProviderSecrets, writeProviderChatGptSubscriptionCredential } from "./provider-secrets.js";
 
 export function createLocalByokChatStream({ home, managedAdapterChatRuntime, localByokRuntimeState, providerSecretPaths, now }: {
@@ -25,10 +26,12 @@ export function createLocalByokChatStream({ home, managedAdapterChatRuntime, loc
       return;
     }
     const state = await localByokRuntimeState();
+    if(input.expectedPonderHistoryCredential && ponderProviderCredential({providerId:input.providerId,...state}) !== input.expectedPonderHistoryCredential)
+      throw new Error("ponder_history_provider_credential_changed");
     const urlModel = input.providerId === "custom-openai-compatible" && input.modelId?.startsWith("url:")
       ? await resolveUrlModel(home, input.modelId) : null;
     if (urlModel && urlModel.protocol !== "openai") throw new Error("The selected connection is not an OpenAI-compatible model.");
-    for await (const delta of streamOpenAiCompatibleChatCompletion({
+    for await (const delta of streamManagedLocalChatCompletion({
       ...(urlModel ? { resolvedProvider: { providerId: "custom-openai-compatible" as const, baseUrl: urlModel.endpoint, model: urlModel.model, auth: { type: "api_key" as const, apiKey: urlModel.token } }, allowAnonymous: true } : {}),
       providerId: input.providerId,
       settings: state.settings,

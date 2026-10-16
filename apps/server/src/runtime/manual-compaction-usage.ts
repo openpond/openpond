@@ -3,11 +3,11 @@ import { streamOpenPondHostedChatTurn as defaultStream } from "@openpond/runtime
 import { assertConfigRunCurrent, type EffectiveConfig } from "@openpond/persistence";
 import { runHostedContextCompaction } from "../openpond/context-compaction/index.js";
 import { startProviderRequestUsageRecorder } from "./model-usage-recorder.js";
-import { streamOpenAiCompatibleChatCompletion } from "../openpond/openai-compatible-provider.js";
+import { streamManagedLocalChatCompletion } from "../openpond/managed-chat-provider.js";
 import { writeProviderChatGptSubscriptionCredential, type ProviderSecretStorePaths } from "../openpond/provider-secrets.js";
 import { now } from "../utils.js";
 
-type ByokInput = Parameters<typeof streamOpenAiCompatibleChatCompletion>[0];
+type ByokInput = Parameters<typeof streamManagedLocalChatCompletion>[0];
 export function createManualCompactionRecorder({ home, safeUpsertModelUsageRecord, streamOpenPondHostedChatTurn, localByokRuntimeState, providerSecretPaths }: {
   home: string;
   safeUpsertModelUsageRecord(record: ModelUsageRecord): Promise<void>;
@@ -90,7 +90,7 @@ export function createManualCompactionRecorder({ home, safeUpsertModelUsageRecor
             }
 
             const state = await localByokRuntimeState();
-            for await (const delta of streamOpenAiCompatibleChatCompletion({
+            for await (const delta of streamManagedLocalChatCompletion({
               providerId: streamInput.provider,
               settings: state.settings,
               secrets: state.secrets,

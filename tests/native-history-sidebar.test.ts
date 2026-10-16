@@ -399,3 +399,49 @@ test("failed automatic recovery retains history and authority until an explicit 
   await expect(handle("open", { id })).rejects.toThrow("Source history does not match");
   expect(qualifyWorkspace).toHaveBeenCalledTimes(2);
 });
+
+// A Claude internal agent shares its parent's event sessionId; mapping that id
+// as resumable would open the parent or create a duplicate independent worker.
+test("retains native child identity across restart without granting parent resume authority", async () => {
+  const f = await fixture();
+  const nativeSource = { ...source("claude-worker-source"), source: "claude_code" as const };
+  const parent = native(nativeSource.instanceId, "parent-native");
+  const child = { ...native(nativeSource.instanceId, "agent-worker"), parentNativeSessionId: parent.nativeSessionId };
+  acquisition.discover.mockResolvedValue([nativeSource]);
+  acquisition.list.mockResolvedValue({ items: [child, parent], nextCursor: null });
+  acquisition.read.mockImplementation((_source, value: NativeSession) => ({ preview: { sessions: [{ sessionId: value.parentNativeSessionId ?? value.nativeSessionId, contentHash: "snapshot", events: [], boundaries: [] }] } }));
+  const qualifyWorkspace = vi.fn();
+  const canResume = vi.fn(async () => true);
+  const api = f.api(canResume, { workspaceAvailable: async () => true, qualifyWorkspace });
+  await api("list", { retain: true });
+  const id = selectionId(nativeSource.instanceId, child.nativeSessionId);
+  const opened = await api("open", { id }) as Session;
+  expect(opened).toMatchObject({ parentSessionId: `native-${selectionId(nativeSource.instanceId, parent.nativeSessionId)}`, hiddenFromDefaultSidebar: true, nativeAgent: null,
+    metadata: { nativeWorker: true, nativeWorkerCanResume: false, nativeResumeAvailable: false } });
+  expect(canResume).not.toHaveBeenCalled();
+  expect(qualifyWorkspace).not.toHaveBeenCalled();
+  await f.store.updateSession(opened.id, current => ({ ...current, hiddenFromDefaultSidebar: false, metadata: { ...current.metadata, nativeWorkerPromoted: true } }));
+  await f.reopen();
+  await f.api()("list", { retain: true });
+  expect(await f.store.getSession(opened.id)).toMatchObject({ hiddenFromDefaultSidebar: false, nativeAgent: null, parentSessionId: opened.parentSessionId });
+});
+
+// An account switch must not attach an old-source child to a new managed parent
+// merely because that provider reused the same vendor session identifier.
+test("does not reparent inactive-source workers to the current account", async () => {
+  const f = await fixture();
+  const oldSource = { ...source("old-claude-account"), source: "claude_code" as const };
+  const child = { ...native(oldSource.instanceId, "agent-old-worker"), parentNativeSessionId: "equal-parent-id" };
+  acquisition.discover.mockResolvedValue([oldSource]);
+  acquisition.list.mockResolvedValue({ items: [child], nextCursor: null });
+  await f.api()("list", { retain: true });
+  const childId = `native-${selectionId(oldSource.instanceId, child.nativeSessionId)}`;
+  const shell = (await f.store.getSession(childId))!;
+  await f.store.updateSession(childId, current => ({ ...current, parentSessionId: "old-desktop-parent" }));
+  await f.store.insertSessionAtFront(SessionSchema.parse({ ...shell, id: "new-desktop-parent", hiddenFromDefaultSidebar: false,
+    metadata: {}, nativeAgent: { provider: "claude-code", instanceId: nativeAgentLaunch("claude-code").instanceId, sessionId: child.parentNativeSessionId, cwd: "/workspace" } }));
+  acquisition.discover.mockResolvedValue([{ ...oldSource, instanceId: "new-claude-account" }]);
+  acquisition.list.mockResolvedValue({ items: [], nextCursor: null });
+  await f.api()("list", { retain: true });
+  expect((await f.store.getSession(childId))?.parentSessionId).toBe("old-desktop-parent");
+});

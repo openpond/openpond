@@ -1,3 +1,4 @@
+import { assertNativeWorkerDirectInput } from "../native-worker-capabilities.js";
 import { acpCategoryOption, acpSelectValues, acpSessionModels, acpSessionModes } from "./session-controls.js";
 import { createProviderRequestUsageRecord } from "../model-usage-recorder.js";
 import { createSafeModelUsagePersistence } from "../turns/model-usage-persistence.js";
@@ -24,6 +25,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
   const approvals = createNativeAgentApprovals(deps);
   const persistUsage = createSafeModelUsagePersistence({ upsert: deps.store.upsertModelUsageRecord?.bind(deps.store), appendRuntimeEvent: deps.appendRuntimeEvent });
   async function ensure(session: Session, cwd: string, coordination?: TaskCoordinationBridge, reportingOnly = false): Promise<RunningSession> {
+    assertNativeWorkerDirectInput(session);
     if (reportingOnly && session.provider !== "claude-code") throw new Error("Reporting-only native acknowledgment is supported by Claude Code only.");
     if (!isNativeAgentId(session.provider)) throw new Error("Not a native ACP provider.");
     if (session.metadata?.nativeHistoryProjection && !session.nativeAgent) throw new Error("This retained conversation has no qualified native resume reference. It is available for inspection only.");

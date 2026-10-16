@@ -9,6 +9,7 @@ import type { SqliteStore } from "./store/store.js";
 
 
 export type CodexHistorySidebarPreference = {
+  hiddenFromDefaultSidebar?: boolean;
   pinned?: boolean;
   savedForLater?: boolean;
   archived?: boolean;
@@ -65,6 +66,7 @@ export function applyCodexHistorySidebarPreference(
 
   return {
     ...session,
+    ...(typeof preference.hiddenFromDefaultSidebar === "boolean" ? { hiddenFromDefaultSidebar: preference.hiddenFromDefaultSidebar } : {}),
     ...(typeof preference.pinned === "boolean" ? { pinned: preference.pinned } : {}),
     ...(typeof preference.savedForLater === "boolean" ? { savedForLater: preference.savedForLater } : {}),
     ...(typeof preference.archived === "boolean" ? { archived: preference.archived } : {}),
@@ -78,6 +80,7 @@ function mergePreferencePatch(
   input: PatchSessionRequest,
 ): CodexHistorySidebarPreference {
   const next: CodexHistorySidebarPreference = { ...existing };
+  if (typeof input.hiddenFromDefaultSidebar === "boolean") next.hiddenFromDefaultSidebar = input.hiddenFromDefaultSidebar;
   if (typeof input.pinned === "boolean") next.pinned = input.pinned;
   if (typeof input.savedForLater === "boolean") next.savedForLater = input.savedForLater;
   if (typeof input.archived === "boolean") next.archived = input.archived;
@@ -103,6 +106,7 @@ function normalizePreference(value: unknown): CodexHistorySidebarPreference {
   const input = value as Record<string, unknown>;
   const preference: CodexHistorySidebarPreference = {};
 
+  if (typeof input.hiddenFromDefaultSidebar === "boolean") preference.hiddenFromDefaultSidebar = input.hiddenFromDefaultSidebar;
   if (typeof input.pinned === "boolean") preference.pinned = input.pinned;
   if (typeof input.savedForLater === "boolean") preference.savedForLater = input.savedForLater;
   if (typeof input.archived === "boolean") preference.archived = input.archived;

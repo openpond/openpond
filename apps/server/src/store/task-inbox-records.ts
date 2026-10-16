@@ -1,3 +1,4 @@
+import { assertLocalPonderAdmission } from "./local-ponder.js";
 import { isDeepStrictEqual } from "node:util";
 import { TaskInputSchema, TASK_INBOX_MAX_PENDING, type TaskInput, type TaskInputAdmission } from "@openpond/contracts/task-inbox";
 import { type Session, type Turn } from "@openpond/contracts/sessions";
@@ -88,6 +89,7 @@ export function admitTaskInput(db: OpenPondSqliteConnection, admission: TaskInpu
       throw new LocalManagedMessageError("The managed target changed before message admission. Refresh and review the message before sending.");
     }
   }
+  assertLocalPonderAdmission(db, admission);
   const owner = readInboxOwner(db, admission.sessionId);
   if (admission.kind === "steer") assertSteerTarget(db, admission.sessionId, admission.expectedTurnId);
   if (admission.kind === "steer") assertCorrectionBudget(db, admission.expectedTurnId!, admission.body);

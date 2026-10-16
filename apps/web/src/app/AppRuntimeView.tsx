@@ -72,6 +72,7 @@ const EMPTY_CLOUD_PROJECTS: CloudProject[] = [];
 
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [ponderMode, setPonderMode] = useState<"clean" | "activity" | null>(null);
+  const [ponderNavigationVersion, setPonderNavigationVersion] = useState(0);
   const ponderModeRestored = useRef(new Set<string>());
   const [scheduledDetailOpen, setScheduledDetailOpen] = useState(false);
   const [evaluationSidebar, setEvaluationSidebar] = useState<import("../components/labs/workspace/WorkspacePanel").EvaluationSidebarControl | null>(null);
@@ -984,6 +985,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         sidebar={{
           activityTimes: sidebarActivity,
           onOpenPonder: () => {
+            setPonderNavigationVersion(version => version + 1);
             navigateDesktopRoute({ kind: "chat", sessionId: null });
             setSelectedSessionId(null);
             setView("chat");
@@ -1126,13 +1128,19 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           terminalOpen,
           rightSidebarAvailable: rightSidebarAvailableForView,
           rightSidebarOpen: view === "labs" && hostedEvaluationRoute ? evaluationSidebar?.open ?? false : view === "scheduled" ? scheduledDetailOpen : diffPanelOpen,
-          onToggleDiffPanel: toggleRightSidebar,
+          onToggleDiffPanel: () => {
+            if(view === "chat" && ponderMode && !diffPanelOpen) showRightPanelDiffTab("outputs", "agents");
+            else toggleRightSidebar();
+          },
           onToggleRightSidebar:
             view === "labs" && hostedEvaluationRoute ? evaluationSidebar?.toggle : view === "scheduled"
               ? () => setScheduledDetailOpen((open) => !open)
               : view === "team" && Boolean(teamAiThreadId)
               ? toggleTeamAiSidebar
-              : toggleRightSidebar,
+              : () => {
+                if(view === "chat" && ponderMode && !diffPanelOpen) showRightPanelDiffTab("outputs", "agents");
+                else toggleRightSidebar();
+              },
           onOpenSearch: () => {
             setSectionMenuOpen(null);
             setSearchOpen(true);
@@ -1176,6 +1184,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             ),
         }}
         mainPane={{
+          ponderNavigationVersion,
           ponderMode,
           onPonderModeChange: setPonderMode,
           experience: activeExperience,
@@ -1337,6 +1346,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           onShowBrowserPanel: showBrowserPanel,
           onShowFilesPanel: () => showRightPanelDiffTab("files"),
           onShowExperimentsPanel: () => showRightPanelDiffTab("outputs", "experiments"),
+          onShowAgentsPanel: () => showRightPanelDiffTab("outputs", "agents"),
           onShowGoalSidebarTab: showGoalSidebarTab,
           onShowTrainingDraftPanel: () => {
             setRightPanelMode("training");

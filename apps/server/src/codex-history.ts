@@ -1,3 +1,4 @@
+import { NATIVE_WORKER_READ_ONLY_REASON } from "./runtime/native-worker-capabilities.js";
 import { readPromptHistory, readSessionIndex, readGlobalState, type CodexHistoryIndexEntry, type CodexHistoryPromptEntry } from "./codex-history-catalog.js";
 import { readJsonlRecords } from "./codex-history-jsonl.js";
 import {
@@ -85,6 +86,8 @@ type SessionMetadata = {
   id: string | null;
   cwd: string | null;
   createdAt: string | null;
+  parentThreadId?: string | null;
+  agentPath?: string | null;
 };
 
 type TailStatus = {
@@ -146,6 +149,7 @@ export async function loadCodexHistorySessions(
   options: {
     codexHome?: string;
     excludeThreadIds?: ReadonlySet<string>;
+    onlyThreadIds?: ReadonlySet<string>;
     includeThreadId?: string | null;
     metadataLimit?: number;
   } = {}
@@ -245,6 +249,7 @@ export async function loadCodexHistoryThreads(
   options: {
     codexHome?: string;
     excludeThreadIds?: ReadonlySet<string>;
+    onlyThreadIds?: ReadonlySet<string>;
     includeThreadId?: string | null;
     metadataLimit?: number;
   } = {}
@@ -262,8 +267,8 @@ export async function loadCodexHistoryThreads(
   const ranked = files
     .filter(
       (file) =>
-        !excludeThreadIds.has(file.threadId) ||
-        file.threadId === options.includeThreadId
+        (!options.onlyThreadIds || options.onlyThreadIds.has(file.threadId)) && (!excludeThreadIds.has(file.threadId) ||
+        file.threadId === options.includeThreadId)
     )
     .map((file) => ({
       file,
@@ -315,13 +320,15 @@ export async function loadCodexHistoryThreads(
         experience: "development",
         provider: "codex",
         openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
-        title,
+        title: metadata.agentPath ?? title,
+        parentSessionId: metadata.parentThreadId ? codexHistorySessionId(metadata.parentThreadId) : null,
+        hiddenFromDefaultSidebar: Boolean(metadata.parentThreadId),
         appId: null,
         appName: null,
         workspaceId: null,
         workspaceName: null,
         metadata: sessionMetadataWithCodexGoalRuntime(
-          undefined,
+          metadata.parentThreadId ? { nativeParentSessionId: metadata.parentThreadId, nativeWorker: true, nativeWorkerCanResume: false, nativeResumeAvailable: false, nativeReadOnlyReason: NATIVE_WORKER_READ_ONLY_REASON } : undefined,
           tailStatus.goalRuntime
         ),
         cwd,
@@ -914,7 +921,16 @@ async function readCodexSessionMetadata(
     const payload = asRecord(record.payload);
     if (!payload) return;
     if (record.type === "session_meta") {
+      const recordId = stringValue(payload.id) ?? stringValue(payload.session_id);
+      // Forked native workers retain ancestor session_meta records after their
+      // own header. Only this file's first authoritative identity owns parentage.
+      if (recordId !== file.threadId || metadata.id) return;
+      const spawn = asRecord(asRecord(asRecord(payload.source)?.subagent)?.thread_spawn);
+      const parentThreadId = stringValue(spawn?.parent_thread_id) ??
+        (payload.thread_source === "subagent" ? stringValue(payload.parent_thread_id) : null);
       metadata = {
+        parentThreadId,
+        agentPath: parentThreadId ? stringValue(spawn?.agent_path) ?? stringValue(payload.agent_path) : null,
         id:
           metadata.id ??
           stringValue(payload.id) ??

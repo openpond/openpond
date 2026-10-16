@@ -108,7 +108,7 @@ export function SidebarSectionList({
   currentUserId,
   openTeamDm,
   onOpenPonder,
-  workflowGroups = [],
+  workflowGroups: _workflowGroups = [],
   workflowSessions = [],
   trainingSessionIds = EMPTY_TRAINING_SESSION_IDS,
   activityTimes = {},
@@ -293,6 +293,8 @@ export function SidebarSectionList({
       showCodexChats,
     ]
   );
+  // Ponder delegation is presented in its Agents tool view; ordinary/pinned chats remain individual rows.
+  const workflowGroups: typeof _workflowGroups = [];
   const workflowTaskRows = sidebarTaskRows({ activeSessions: workflowSessions.filter(session => !session.archived && !session.hiddenFromDefaultSidebar),
     doneSessions: workflowSessions.filter(session => session.archived && !session.hiddenFromDefaultSidebar),
     filter: taskFilter, inProgressSessionIds, onlyRunningTasks, selectedTasksetId, showCodexChats, sort: taskSort });
@@ -844,7 +846,7 @@ export function SidebarSectionList({
           <SidebarNewThreadButton beginNewChat={beginNewChat} />
         </div>
       </div>
-      {account?.activeProfile && onOpenPonder ? (
+      {onOpenPonder ? (
         <button type="button" className="sidebar-row sidebar-task-row sidebar-ponder-entry" onClick={onOpenPonder}>
           <span className="conversation-source-icon" aria-hidden="true"><img src={OPENPOND_ICON_URL} alt="" /></span>
           <span>Ponder Pal</span>

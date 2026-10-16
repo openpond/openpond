@@ -98,6 +98,7 @@ export type HttpRouteDeps = {
   activateRefinerReleasePayload: (payload: unknown) => Promise<unknown>;
   rollbackRefinerReleasePayload: (payload: unknown) => Promise<unknown>;
   listHostedSavedWorkPayload: () => Promise<unknown>;
+  localPonder: ReturnType<typeof import("../openpond/local-ponder-service.js").createLocalPonderService>;
   ponderRequestPayload: (input: { path: string; method?: "GET" | "POST"; body?: Record<string, unknown>; idempotencyKey?: string }) => Promise<Record<string, unknown>>;
   ponderDesktopConnectionPayload: (action: "status" | "link" | "unlink") => Promise<unknown>;
   ponderDesktopAttachSessionPayload: (payload: unknown) => Promise<unknown>;

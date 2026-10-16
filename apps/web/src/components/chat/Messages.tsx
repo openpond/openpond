@@ -45,7 +45,7 @@ type MessageRowProps = {
   connection?: ClientConnection | null;
   conversationLinks?: readonly { conversationId: string; title: string }[];
   message: ChatMessage;
-  kvCacheSummary?: UsageTurnCacheSummary | null;
+  kvCacheSummary?: Pick<UsageTurnCacheSummary, "cacheHitRate"> | null;
   onOpenBrowserLink?: (
     href: string,
     options?: { explicitFile?: boolean; newTab?: boolean }
@@ -104,6 +104,7 @@ export const MessageRow = memo(function MessageRow({
         message={message}
         onOpenFileInSidebar={onOpenFileInSidebar}
         onOpenSession={onOpenSession}
+        onOpenPonder={onOpenPonder}
       />
     );
   }
@@ -296,6 +297,7 @@ function chatMessageShallowEqual(
     previous.userQuestion === next.userQuestion &&
     previous.reasoningContent === next.reasoningContent
     && previous.taskMessage === next.taskMessage
+    && previous.taskMessagePresentation === next.taskMessagePresentation
   );
 }
 

@@ -57,6 +57,7 @@ import { LEARNING_TABLES_SQL } from "./store-learning-schema.js";
 import { MODEL_PROJECT_AUTHORING_TABLES_SQL } from "./store-model-project-authoring-schema.js";
 import { pruneMigrationBackups } from "./store-backup-retention.js";
 import { ensureMigrationBackup } from "./store-migration-backup.js";
+import { LOCAL_PONDER_SCHEMA } from "./local-ponder.js";
 import { TASK_INBOX_SCHEMA_SQL } from "./store-task-inbox-schema.js";
 import { CHAT_RESOURCE_TABLES_SQL } from "./store-chat-resource-schema.js";
 import { migrateLocalDatasetStorage } from "./store-local-dataset-storage.js";
@@ -80,6 +81,7 @@ export class SqliteStoreCore {
   }
   async createTaskInboxTables(): Promise<void> {
     await this.exec(TASK_INBOX_SCHEMA_SQL);
+    await this.exec(LOCAL_PONDER_SCHEMA);
   }
   async createLearningTables(): Promise<void> {
     await this.exec(LEARNING_TABLES_SQL);
@@ -285,6 +287,7 @@ export class SqliteStoreCore {
 
   async createSchema(): Promise<void> {
     await this.exec(SQLITE_CREATE_SCHEMA_SQL);
+    await this.exec(LOCAL_PONDER_SCHEMA);
   }
 
   async createWorkEvidenceTables(): Promise<void> {

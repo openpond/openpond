@@ -1,3 +1,5 @@
+import { assertLocalPonderAdmission, LOCAL_PONDER_SCHEMA } from "./local-ponder.js";
+import { LocalPonderCoordinatorSchema, LocalPonderRelationshipSchema, type LocalPonderCoordinator, type LocalPonderRelationship } from "../openpond/local-ponder-contract.js";
 import { TASK_INPUT_BATCH_MAX_CHARS, TaskInputMutationSchema, TaskWaitSchema, type TaskInboxSnapshot, type TaskInput, type TaskInputAdmission, type TaskInputMutation, type TaskWait } from "@openpond/contracts/task-inbox";
 import { SubagentRunSchema, type SubagentRun } from "@openpond/contracts/subagents";
 import { assertRemoteAdmission, REMOTE_LOCAL_SCHEMA, type RemoteLocalAuthority } from "../remote-relay/admission.js";
@@ -26,6 +28,36 @@ import {
 const LEASE_MS = 90_000;
 
 export class SqliteTaskInboxStore extends SqliteStoreDomain {
+  async localPonderState(): Promise<LocalPonderCoordinator | null> {
+    return this.inboxWrite(db => { db.exec(LOCAL_PONDER_SCHEMA);
+      const row = db.get<{payload:string}>("SELECT payload FROM local_ponder_state WHERE id=1");
+      return row ? LocalPonderCoordinatorSchema.parse(JSON.parse(row.payload)) : null;
+    });
+  }
+  async saveLocalPonderState(value: LocalPonderCoordinator): Promise<LocalPonderCoordinator> {
+    return this.inboxWrite(db => { db.exec(LOCAL_PONDER_SCHEMA);
+      const parsed = LocalPonderCoordinatorSchema.parse(value);
+      db.run("INSERT INTO local_ponder_state(id,payload) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload", [JSON.stringify(parsed)]);
+      return parsed;
+    });
+  }
+  async localPonderAgents(): Promise<LocalPonderRelationship[]> {
+    return this.inboxWrite(db => { db.exec(LOCAL_PONDER_SCHEMA);
+      return db.all<{payload:string}>("SELECT payload FROM local_ponder_agents ORDER BY rowid").map(row => LocalPonderRelationshipSchema.parse(JSON.parse(row.payload)));
+    });
+  }
+  async registerLocalPonderAgent(value: LocalPonderRelationship): Promise<LocalPonderRelationship> {
+    return this.inboxWrite(db => { db.exec(LOCAL_PONDER_SCHEMA);
+      const previous = db.get<{payload:string}>("SELECT payload FROM local_ponder_agents WHERE creation_key=?", [value.creationKey]);
+      if (previous) return LocalPonderRelationshipSchema.parse(JSON.parse(previous.payload));
+      const parsed = LocalPonderRelationshipSchema.parse(value);
+      db.run("INSERT INTO local_ponder_agents(session_id,coordinator_id,creation_key,payload) VALUES(?,?,?,?)", [parsed.sessionId,parsed.coordinatorId,parsed.creationKey,JSON.stringify(parsed)]);
+      return parsed;
+    });
+  }
+  async assertLocalPonderInput(input: Pick<TaskInputAdmission,"senderSessionId"|"sessionId"|"payload">): Promise<void> {
+    return this.inboxWrite(db => assertLocalPonderAdmission(db,input));
+  }
   async initializeRemoteDeviceStore() {
     return this.inboxWrite(db => { db.exec(REMOTE_LOCAL_SCHEMA); db.run("DELETE FROM remote_device_authority"); });
   }
@@ -335,6 +367,9 @@ export class SqliteTaskInboxStore extends SqliteStoreDomain {
       let remaining = TASK_INPUT_BATCH_MAX_CHARS;
       const included: TaskInput[] = [];
       for (const input of pendingTaskInputs(db, sessionId, turnId)) {
+        try { assertLocalPonderAdmission(db,input); } catch {
+          writeTaskInput(db,{...input,state:"rejected",error:"local_ponder_control_changed",updatedAt:new Date().toISOString()}); continue;
+        }
         if (input.body.length > remaining || included.length >= 32) break;
         remaining -= input.body.length;
         included.push(writeTaskInput(db, { ...input, state: "included", turnId,
@@ -390,6 +425,9 @@ export class SqliteTaskInboxStore extends SqliteStoreDomain {
       if (!owner || owner.turn_id !== turnId || owner.owner_id !== ownerId) return;
       db.run("UPDATE task_inbox_turns SET accepting = 0, paused = CASE WHEN ? = 1 THEN 1 ELSE paused END, lease_until = 0 WHERE session_id = ?", [outcome === "completed" ? 0 : 1, sessionId]);
       for (const input of pendingTaskInputs(db, sessionId, turnId)) {
+        try { assertLocalPonderAdmission(db,input); } catch {
+          writeTaskInput(db,{...input,state:"rejected",error:"local_ponder_control_changed",updatedAt:new Date().toISOString()}); continue;
+        }
         if (input.kind === "steer") writeTaskInput(db, { ...input, state: "rejected", error: `Turn ${outcome} before this correction was included. Send it as a follow-up.`, updatedAt: new Date().toISOString() });
         else if (input.turnId === turnId) writeTaskInput(db, { ...input, turnId: null, updatedAt: new Date().toISOString() });
       }
@@ -411,6 +449,9 @@ export class SqliteTaskInboxStore extends SqliteStoreDomain {
       let selected: TaskInput | null = null;
       for (const row of rows) {
         const input = inputFromRow(row);
+        try { assertLocalPonderAdmission(db,input); } catch {
+          return writeTaskInput(db,{...input,state:"rejected",error:"local_ponder_control_changed",updatedAt:new Date().toISOString()});
+        }
         if (input.senderKind === "ponder" || input.payload.remoteDevice !== undefined) {
           const sessionRow = db.get<{ payload: string }>("SELECT payload FROM sessions WHERE id = ?", [sessionId]);
           try {

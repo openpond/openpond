@@ -835,7 +835,7 @@ function rawProviderModel(record: Record<string, unknown>): Record<string, unkno
   return Object.fromEntries(allowed.map((key) => [key, record[key]]).filter(([, value]) => value !== undefined));
 }
 
-async function readProviderError(
+export async function readProviderError(
   response: Response,
   maxBytes = PROVIDER_ERROR_BODY_LIMIT_BYTES,
   signal?: AbortSignal,
@@ -889,7 +889,7 @@ async function readProviderJson(
   }
 }
 
-async function readLimitedResponseText(
+export async function readLimitedResponseText(
   response: Response,
   maxBytes: number,
   options: { truncate: boolean },
@@ -926,7 +926,7 @@ async function readLimitedResponseText(
   return { text, truncated };
 }
 
-function createProviderRequestSignal(
+export function createProviderRequestSignal(
   signal: AbortSignal | undefined,
   timeoutMs = DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS,
 ): { signal: AbortSignal; touch: () => void; cleanup: () => void } {
@@ -1005,7 +1005,7 @@ function errorMessageFromPayload(payload: unknown): string {
   return [stringValue(record.error), stringValue(record.message)].filter(Boolean).join(": ") || JSON.stringify(payload);
 }
 
-async function* parseSse(
+export async function* parseSse(
   stream: ReadableStream<Uint8Array>,
   signal?: AbortSignal,
   onProgress?: () => void,

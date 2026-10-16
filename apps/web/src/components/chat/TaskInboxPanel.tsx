@@ -17,7 +17,7 @@ export function TaskInboxPanel({ inbox, onRestore, canRestore }: {
     {queued.length > 0 && <div className="composer-steer-stack" aria-label="Queued messages">
       {queued.map((input) => {
         const activeTurnId = snapshot?.activeTurnId;
-        const starting = Boolean(input.turnId);
+        const starting = Boolean(input.turnId && !snapshot?.paused);
         const actionLabel = starting ? "Starting" : activeTurnId ? "Steer" : snapshot?.paused ? "Resume" : "Send";
         const actionDisabledReason = starting
           ? "This message is starting its turn."

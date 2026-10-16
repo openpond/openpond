@@ -1,3 +1,4 @@
+import { resolveNativeWorkerParents } from "../native-worker-sessions.js";
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { z } from "zod";
 import { createAcpRegistrationService } from "../runtime/native-agents/acp-registrations.js";
@@ -114,6 +115,7 @@ import {
   listOpenAiCompatibleProviderModels,
   validateOpenAiCompatibleProvider,
 } from "../openpond/openai-compatible-provider.js";
+import { listAnthropicProviderModels, validateAnthropicProvider } from "../openpond/anthropic-provider.js";
 import { createOpenAiSubscriptionAuthService } from "../openpond/openai-subscription-auth.js";
 import { ProviderDiagnosticsTracker } from "../openpond/provider-diagnostics.js";
 import {
@@ -463,9 +465,9 @@ export function createServerPayloads(deps: {
           fetchedAt: now(),
           catalog: state.catalog,
         });
-        if (isOpenAiCompatibleProviderId(providerId)) {
+        if (providerId === "anthropic" || isOpenAiCompatibleProviderId(providerId)) {
           try {
-            const models = await listOpenAiCompatibleProviderModels({
+            const models = await (providerId === "anthropic" ? listAnthropicProviderModels : listOpenAiCompatibleProviderModels)({
               providerId,
               settings: state.settings,
               secrets: state.secrets,
@@ -637,9 +639,9 @@ export function createServerPayloads(deps: {
           };
         }
 
-        if (isOpenAiCompatibleProviderId(providerId)) {
+        if (providerId === "anthropic" || isOpenAiCompatibleProviderId(providerId)) {
           try {
-            const validation = await validateOpenAiCompatibleProvider({
+            const validation = await (providerId === "anthropic" ? validateAnthropicProvider : validateOpenAiCompatibleProvider)({
               providerId,
               settings: state.settings,
               secrets: state.secrets,
@@ -947,6 +949,14 @@ export function createServerPayloads(deps: {
       store.getSidebarAppPreferences(scope),
       listSidebarFileBookmarksForScope(scope),
     ]);
+    // Explicitly promoted workers remain visible even outside the recent history window.
+    const recentCodexIds = new Set(codexHistorySessions.map(session => session.codexThreadId));
+    const promotedCodexIds = new Set(Object.entries(codexHistorySidebarPreferences)
+      .filter(([id, preference]) => preference.hiddenFromDefaultSidebar === false && !recentCodexIds.has(id) && !openPondCodexThreadIds.has(id))
+      .map(([id]) => id));
+    const retainedCodexHistorySessions = promotedCodexIds.size ? [...codexHistorySessions, ...await loadCodexHistorySessions({
+      onlyThreadIds: promotedCodexIds, metadataLimit: promotedCodexIds.size,
+    })] : codexHistorySessions;
     // Provider catalog refresh may persist configuration; return its final revision.
     const configuration = await resolveEffectiveConfig(storeDir);
     const payload: BootstrapPayload = {
@@ -975,7 +985,7 @@ export function createServerPayloads(deps: {
       codexHistorySessions: validBootstrapSessions(
         codexHistorySessionsWithLiveStatus(
           applyCodexHistorySidebarPreferences(
-            codexHistorySessions,
+            resolveNativeWorkerParents(retainedCodexHistorySessions, [...sessionShells, ...retainedCodexHistorySessions]),
             codexHistorySidebarPreferences
           )
         )

@@ -1,8 +1,13 @@
 #!/usr/bin/env node
+import { loadAuthenticatedOpenPondAccountContext } from "@openpond/runtime";
+import { createPonderHostedService } from "./openpond/ponder-hosted-service.js";
+import { createCapturedOpenPondPublicApiClient } from "./openpond/account-public-api-client.js";
+import { createLocalPonderService } from "./openpond/local-ponder-service.js";
 import { createSessionGoalPayload } from "./api/session-goal-payload.js";
 import { createLocalAgentSchedulePayloads } from "./api/local-agent-schedule-payloads.js";
 import { createDesktopVisualRuntime } from "./visuals/visual-runtime.js";
 import { withUrlModels } from "./enclave/provider.js";
+import { ponderProviderCredential, ponderHostedCredential } from "./openpond/ponder-provider-credential.js";
 import { createLocalByokChatStream } from "./openpond/local-byok-chat-stream.js";
 import { createModelUsagePersistence } from "./runtime/model-usage-persistence.js";
 import { createAccountAuthorityChange, type AccountAuthorityChange } from "./runtime/account-authority-change.js";
@@ -101,7 +106,7 @@ import { createCodexBridge } from "./runtime/codex-bridge.js";
 import { createCodexRuntimeManager } from "./runtime/codex-runtime.js";
 import { createServerPayloads } from "./api/server-payloads.js";
 import { createProjectActionRunPayload } from "./project-actions/project-action-payload.js";
-import { findLocalProject } from "./workspace/local-projects.js";
+import { findLocalProject, listLocalProjects } from "./workspace/local-projects.js";
 import {
   runtimeEventPageRequestFromUrl,
   runtimeEventsPagePayloadFromEntries,
@@ -896,7 +901,15 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     readProfilePackage: (sourcePath, workflowId) => readChatWorkflowPackage({ sourcePath, workflowId }),
   });
   onStartupFailure(() => chatWorkflows.stop());
+  const hostedPonder=createPonderHostedService({store,notifyCompletion:job=>turnRunner.notifyHostedPonderCompletion!(job),projects:async()=> (await listLocalProjects(store)).map(project=>({id:project.id,workspacePath:project.workspacePath})),access:async()=>{
+    const context=await loadAuthenticatedOpenPondAccountContext();const id=context.accountState.profile?.id;
+    if(context.accountState.state!=="signed_in"||!id)return null;
+    const teamId=(await loadAppPreferences()).defaultTeamId ?? null;
+    const client=createCapturedOpenPondPublicApiClient(context,teamId ?? undefined);
+    return {client,account:{id,apiBaseUrl:client.audience,teamId}};
+  }});
   const turnRunner = createTurnRunner({
+    localPonderHosted:hostedPonder,
     isRemoteAgentModel: async (providerId, modelId) => providerId === "custom-openai-compatible" && modelId.startsWith("url:") &&
       (await (await import("./enclave/connection.js")).resolveUrlModel(storeDir, modelId)).protocol === "tvc",
     enclaveChat: async (modelId, prompt, signal) => (await import("@openpond/contracts/enclave")).EnclaveReplySchema.parse(await enclavePayload("chat", { id: modelId, prompt }, signal)),
@@ -920,6 +933,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     ) => store.getTasksetRevision(tasksetId, revision, contentHash),
     gradeCreateImproveTaskAttempt: taskEvaluationService.grade,
     createSession,
+    createReservedSession,
+    localPonderProjects:()=>listLocalProjects(store),
+    localPonderProviderSettings:()=>providerSettingsPayload({refreshCatalog:false}),
     upsertApproval,
     getSession,
     updateSession,
@@ -1145,6 +1161,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     hostedSystemPrompt,
     appendAssistantText,
     appendHostedContextUsage,
+    getPonderHistoryCredential:async providerId=> providerId === "openpond"
+      ? ponderHostedCredential(await resolveHostedApiAccess())
+      : ponderProviderCredential({providerId,...await localByokRuntimeState()}),
     streamLocalByokChatTurn: createLocalByokChatStream({
       home: store.home, managedAdapterChatRuntime, localByokRuntimeState, providerSecretPaths, now,
     }),
@@ -1821,6 +1840,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       ...desktopVisualHttp,
       agentRuntime,
       ...desktopManagedAgentRoutes,
+      localPonder: createLocalPonderService({hosted:hostedPonder,store,createSession:createSessionWithAutoTitle,createReservedSession,
+        notifyControl:relationship=>turnRunner.notifyLocalPonderControl!(relationship),
+        providerSettings:() => providerSettingsPayload({refreshCatalog:false}),appendRuntimeEvent}),
       ponderDesktopConnectionPayload: ponderDesktopManager.connection,
       ponderDesktopAttachSessionPayload: ponderDesktopManager.attachSession,
       ponderDesktopProjectsPayload: ponderDesktopManager.projects,
@@ -1889,7 +1911,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     runtimeClosers: [
       sessionTitleService.close,
       chatResources.close,
-      ()=>closeCoordinatedEvaluations({schedules,localExperiments,benchmarks:harnessRefinerBenchmarks,improvements,advancedBoundary,drainWork:turnRunner.close}),
+      ()=>closeCoordinatedEvaluations({schedules,localExperiments,benchmarks:harnessRefinerBenchmarks,improvements,advancedBoundary,drainWork:async()=>{await hostedPonder.close();await turnRunner.close();}}),
       trainingApi.learning.close,
       waitForOpenPondRefresh,
       closeCoordination,
@@ -1919,6 +1941,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   if (options.httpEnabled !== false) await publishRuntimeEndpoint(storeDir, `http://${host}:${actualPort}`, serverId);
   await turnRunner.recoverPendingSubagentCompletions();
   await turnRunner.recoverTaskInbox();
+  hostedPonder.startMonitoring();
   workSandboxLifecycle.start();
   void ponderDesktopManager.start().catch(error => logger.warn("Ponder desktop initialization failed", { error: String(error) }));
   void remoteRelayManager.start().catch(error => logger.warn("Remote relay initialization failed", { error: String(error) }));

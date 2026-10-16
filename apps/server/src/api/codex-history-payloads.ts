@@ -1,3 +1,5 @@
+import { assertNativeWorkerDirectInput } from "../runtime/native-worker-capabilities.js";
+import { resolveNativeWorkerParents } from "../native-worker-sessions.js";
 import { admitTurnConfiguration, saveTurnConfiguration, assertTurnConfiguration, watchTurnConfiguration } from "../runtime/turn-configuration.js";
 import {
   PatchSessionRequestSchema,
@@ -66,7 +68,7 @@ export function createCodexHistoryPayloads(input: {
       }),
       loadCodexHistorySidebarPreferences(input.store),
     ]);
-    const session = applyCodexHistorySidebarPreference(payload.session, preferences);
+    const session = applyCodexHistorySidebarPreference(resolveNativeWorkerParents([payload.session], await input.store.sessionShells())[0]!, preferences);
     const resolvedPayload = {
       ...payload,
       session: codexHistorySessionWithLiveStatus(session, turnIsActive(sessionId)),
@@ -98,7 +100,7 @@ export function createCodexHistoryPayloads(input: {
     await patchCodexHistorySidebarPreference(input.store, sessionId, payload);
     return codexHistorySessionWithLiveStatus(
       applyCodexHistorySidebarPreference(
-        current.session,
+        resolveNativeWorkerParents([current.session], await input.store.sessionShells())[0]!,
         await loadCodexHistorySidebarPreferences(input.store),
       ),
       turnIsActive(sessionId),
@@ -113,6 +115,7 @@ export function createCodexHistoryPayloads(input: {
     const current = await readCodexHistoryThreadPayload(sessionId, {
       attachmentRootDir: input.attachmentRootDir,
     });
+    assertNativeWorkerDirectInput(current.session);
     const threadId = current.session.codexThreadId;
     if (!threadId) throw new Error("Codex history session is missing its Codex thread id");
     const cwd = turnInput.cwd ?? current.session.cwd;

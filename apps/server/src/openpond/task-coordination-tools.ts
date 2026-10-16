@@ -18,7 +18,7 @@ const WaitSchema = z.object({
 
 function tool(name: string, description: string, schema: z.ZodType, execute: (context: ModelToolExecutionContext) => Promise<unknown>): ModelToolDefinition {
   return { name, description, parameters: z.toJSONSchema(schema),
-    enabled: ({ session }) => session.experience !== "chat" && !session.systemKind,
+    enabled: ({ session }) => session.systemKind === "openpond.ponder" || (session.experience !== "chat" && !session.systemKind),
     execute: async (context) => {
       const data = await execute(context);
       return { toolCallId: context.callId, name, ok: true, contentText: JSON.stringify(data), data };

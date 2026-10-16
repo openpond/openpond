@@ -1,11 +1,11 @@
 import { latestChatPlan } from "../../lib/chat-task-progress";
 import { ActivityPlanCard } from "../chat/ActivityPlanCard";
-import { lazy, Suspense, useMemo, type ComponentProps, type Ref, type UIEvent } from "react";
+import { lazy, Suspense, useMemo, type ComponentProps, type Ref, type UIEvent, type ReactNode } from "react";
 import type { TaskCreationSnapshot } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { useNewMessageIds } from "../../hooks/useNewMessageIds";
 import { useSessionTurnCache } from "../../hooks/useSessionTurnCache";
-import { buildChatTimelineRows, chatTimelineMessages } from "../../lib/chat-timeline-rows";
+import { buildChatTimelineRows, chatTimelineMessages, type ChatTimelineMessageRow } from "../../lib/chat-timeline-rows";
 import { ConversationFormalReview } from "../human-review/ConversationFormalReview";
 import { ChatTimelineEntry } from "../chat/ChatTimelineEntry";
 import { MessageRow } from "../chat/Messages";
@@ -23,13 +23,13 @@ export function MainChatThread({
   formalReviewActorId,
   formalReviewScopeKey,
   onFormalReviewOpen,
-  accountBaseUrl,
-  activeWorkspaceAppId,
-  billingOrganizationSlug,
-  billingTeamId,
-  connection,
+  accountBaseUrl = null,
+  activeWorkspaceAppId = null,
+  billingOrganizationSlug = null,
+  billingTeamId = null,
+  connection = null,
   conversationKey,
-  creation,
+  creation = null,
   onOpenBrowserLink,
   onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
@@ -41,35 +41,47 @@ export function MainChatThread({
   rows,
   sessionId,
   turnRunning,
-  userAttachmentDisplay,
+  userAttachmentDisplay = "full",
   threadRef,
-  workspaceRootPath,
+  workspaceRootPath = null,
+  beforeMessages,
+  afterMessages,
+  loading = false,
+  label = "Conversation",
+  renderMessage,
+  usageSessionId = sessionId,
 }: {
   formalReviewTeamId?: string | null;
   formalReviewActorId?: string | null;
   formalReviewScopeKey?: string;
   onFormalReviewOpen?: () => void;
-  accountBaseUrl: string | null;
-  activeWorkspaceAppId: string | null;
-  billingOrganizationSlug: string | null;
-  billingTeamId: string | null;
-  connection: ClientConnection | null;
+  accountBaseUrl?: string | null;
+  activeWorkspaceAppId?: string | null;
+  billingOrganizationSlug?: string | null;
+  billingTeamId?: string | null;
+  connection?: ClientConnection | null;
   conversationKey: string;
-  creation: TaskCreationSnapshot | null;
-  onOpenBrowserLink: MessageRowProps["onOpenBrowserLink"];
-  onOpenAttachmentInSidebar: MessageRowProps["onOpenAttachmentInSidebar"];
-  onOpenFileInSidebar: MessageRowProps["onOpenFileInSidebar"];
-  onOpenProfileSettings: MessageRowProps["onOpenProfileSettings"];
-  onResolveUserQuestion: MessageRowProps["onResolveUserQuestion"];
-  onOpenSession: MessageRowProps["onOpenSession"];
+  creation?: TaskCreationSnapshot | null;
+  onOpenBrowserLink?: MessageRowProps["onOpenBrowserLink"];
+  onOpenAttachmentInSidebar?: MessageRowProps["onOpenAttachmentInSidebar"];
+  onOpenFileInSidebar?: MessageRowProps["onOpenFileInSidebar"];
+  onOpenProfileSettings?: MessageRowProps["onOpenProfileSettings"];
+  onResolveUserQuestion?: MessageRowProps["onResolveUserQuestion"];
+  onOpenSession?: MessageRowProps["onOpenSession"];
   onOpenPonder?: MessageRowProps["onOpenPonder"];
   onScroll: (event: UIEvent<HTMLElement>) => void;
   rows: ReturnType<typeof buildChatTimelineRows>;
   sessionId: string | null;
   turnRunning: boolean;
-  userAttachmentDisplay: NonNullable<MessageRowProps["userAttachmentDisplay"]>;
+  userAttachmentDisplay?: NonNullable<MessageRowProps["userAttachmentDisplay"]>;
   threadRef: Ref<HTMLElement>;
-  workspaceRootPath: string | null;
+  workspaceRootPath?: string | null;
+  beforeMessages?: ReactNode;
+  afterMessages?: ReactNode;
+  loading?: boolean;
+  label?: string;
+  renderMessage?: (row: ChatTimelineMessageRow) => ReactNode;
+  usageSessionId?: string | null;
 }) {
   const messages = useMemo(() => chatTimelineMessages(rows), [rows]);
   const currentPlan = useMemo(() => latestChatPlan(messages), [messages]);
@@ -78,7 +90,7 @@ export function MainChatThread({
   const turnCache = useSessionTurnCache({
     connection,
     latestTurnId,
-    sessionId,
+    sessionId: usageSessionId,
     turnRunning,
   });
 
@@ -86,15 +98,17 @@ export function MainChatThread({
     <>
       <section
         className="chat-thread"
-        aria-label="Conversation"
+        aria-label={label}
+        aria-busy={loading}
         ref={threadRef}
         onScroll={onScroll}
       >
+        {beforeMessages}
         {rows.map((row) => (
           <ChatTimelineEntry
             key={row.id}
             row={row}
-            renderMessage={(row) => (
+            renderMessage={(row) => renderMessage?.(row) ?? (
               <MessageRow
                 activeWorkspaceAppId={activeWorkspaceAppId}
                 accountBaseUrl={accountBaseUrl}
@@ -106,9 +120,9 @@ export function MainChatThread({
                 }
                 key={row.id}
                 kvCacheSummary={
-                  row.showFooter && row.message.turnId
+                  row.message.footerCacheSummary ?? (row.showFooter && row.message.turnId
                     ? (turnCache.get(row.message.turnId) ?? null)
-                    : null
+                    : null)
                 }
                 message={row.message}
                 onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
@@ -125,6 +139,7 @@ export function MainChatThread({
             )}
           />
         ))}
+        {afterMessages}
         {connection &&
         formalReviewTeamId &&
         formalReviewActorId &&

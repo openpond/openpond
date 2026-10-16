@@ -1,8 +1,44 @@
+import { ZodError } from "zod";
 import { readJson, sendJson } from "../http.js";
 import type { HttpRouteContext } from "../http-route-types.js";
 
 export async function handlePonderRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   const path = requestUrl.pathname;
+  if (path === "/v1/ponder/local" || path.startsWith("/v1/ponder/local/")) {
+    try {
+      const hosted=deps.localPonder.hosted;
+      if(path === "/v1/ponder/local/hosted-sandboxes" && hosted){
+        if(request.method==="GET"){sendJson(response,200,await hosted.status());return true;}
+        if(request.method==="POST"){sendJson(response,200,await hosted.configure(await readJson(request)));return true;}
+      }
+      if(path === "/v1/ponder/local/hosted-inputs" && hosted && request.method==="POST"){const local=await deps.localPonder.readSnapshot();if(!local.session)throw new Error("local_ponder_unavailable");sendJson(response,201,await hosted.stageInput(local.session.id,await readJson(request)));return true;}
+      if(path === "/v1/ponder/local/hosted-agents" && hosted){
+        if(request.method==="GET"){sendJson(response,200,await hosted.list());return true;}
+        if(request.method==="POST"){const local=await deps.localPonder.readSnapshot();if(!local.session)throw new Error("local_ponder_unavailable");sendJson(response,201,await hosted.start(local.session.id,await readJson(request)));return true;}
+      }
+      const hostedOutput=/^\/v1\/ponder\/local\/hosted-agents\/([^/]+)\/outputs\/([^/]+)$/.exec(path);
+      if(hostedOutput&&hosted&&request.method==="GET"){sendJson(response,200,await hosted.output(decodeURIComponent(hostedOutput[1]!),decodeURIComponent(hostedOutput[2]!)));return true;}
+      const hostedAgent=/^\/v1\/ponder\/local\/hosted-agents\/([^/]+)(\/cancel)?$/.exec(path);
+      if(hostedAgent&&hosted){if(request.method==="GET"&&!hostedAgent[2]){sendJson(response,200,await hosted.detail(decodeURIComponent(hostedAgent[1]!)));return true;}if(request.method==="POST"&&hostedAgent[2]){sendJson(response,200,await hosted.cancel(decodeURIComponent(hostedAgent[1]!)));return true;}}
+
+      if (path === "/v1/ponder/local" && ["GET","POST"].includes(request.method ?? "")) {
+        sendJson(response,200,request.method === "POST" ? await deps.localPonder.configure(await readJson(request)) : requestUrl.searchParams.get("catalog") === "0" ? await deps.localPonder.readSnapshot() : await deps.localPonder.read()); return true;
+      }
+      if (path === "/v1/ponder/local/agents" && request.method === "GET") {
+        sendJson(response,200,await deps.localPonder.agents()); return true;
+      }
+      const localControl = /^\/v1\/ponder\/local\/agents\/([^/]+)\/control$/.exec(path);
+      if (localControl && request.method === "POST") {
+        sendJson(response,200,await deps.localPonder.control(decodeURIComponent(localControl[1]!),await readJson(request))); return true;
+      }
+    } catch(error) {
+      if(error instanceof ZodError) {sendJson(response,422,{error:"local_ponder_invalid_request"});return true;}
+      if(error instanceof Error && error.message.startsWith("local_ponder_")) {
+        sendJson(response,error.message.endsWith("_not_found") ? 404 : error.message.endsWith("_unavailable") ? 422 : 409,{error:error.message});return true;
+      }
+      throw error;
+    }
+  }
   if (path === "/v1/ponder/desktop/projects" && request.method === "GET") {
     sendJson(response, 200, await deps.ponderDesktopProjectsPayload(requestUrl.searchParams.get("after")));
     return true;

@@ -9,6 +9,7 @@ import type { FileLedgerEntry } from "./file-ledger-types.js";
 export type HostedCompactionProvider = ChatProvider;
 
 export type ContextCompactionStreamDelta = {
+  finishReason?: string | null;
   text?: string;
   reasoningText?: string;
   usage?: unknown;
