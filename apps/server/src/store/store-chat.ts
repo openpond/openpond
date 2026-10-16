@@ -1,3 +1,4 @@
+import { changeLocalPonderRemoteAccess } from "./local-ponder-remote.js";
 import { changeLocalPonderModel, changeLocalPonderControl } from "./local-ponder.js";
 import type { PonderDesktopOperation } from "@openpond/contracts/ponder-desktop";
 import { assertPonderDesktopRecipient } from "./ponder-desktop-input.js";
@@ -58,36 +59,29 @@ type RuntimeEventRecentWindow = {
 };
 
 export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistoryStorage {
-  async configureLocalPonderModel(modelRef:import("@openpond/contracts").ChatModelRef,revision:number) {
+  configureLocalPonderRemoteAccess(input: Parameters<typeof changeLocalPonderRemoteAccess>[1]) {
+    return this.updateLocalPonderSession(() => changeLocalPonderRemoteAccess(this.database, input));
+  }
+  configureLocalPonderModel(modelRef:import("@openpond/contracts").ChatModelRef, revision:number) {
+    return this.updateLocalPonderSession(() => changeLocalPonderModel(this.database, modelRef, revision));
+  }
+  controlLocalPonderAgent(sessionId:string, owner:"ponder"|"user", revision:number) {
+    return this.updateLocalPonderSession(() => changeLocalPonderControl(this.database, sessionId, owner, revision));
+  }
+  private async updateLocalPonderSession<T extends {session: Session}>(mutate: () => T): Promise<T> {
     await this.ready;
-    const write=this.writeQueue.then(async()=>{
+    const write = this.writeQueue.then(async () => {
       this.database.exec("BEGIN IMMEDIATE");
-      let result;
-      try {result=changeLocalPonderModel(this.database,modelRef,revision);this.database.exec("COMMIT");}
-      catch(error) {this.database.exec("ROLLBACK");throw error;}
-      const index=this.data.sessions.findIndex(session=>session.id===result.session.id);
-      if(index>=0) this.data.sessions[index]=result.session;
-      await this.upsertSessionShellProjection(result.session,index);
+      let result: T;
+      try { result = mutate(); this.database.exec("COMMIT"); }
+      catch (error) { this.database.exec("ROLLBACK"); throw error; }
+      const index = this.data.sessions.findIndex(session => session.id === result.session.id);
+      if (index >= 0) this.data.sessions[index] = result.session;
+      await this.upsertSessionShellProjection(result.session, index);
       await this.rebuildThreadDetailProjectionForSession(result.session.id);
       return result;
     });
-    this.writeQueue=write.then(()=>undefined,()=>undefined);
-    return write;
-  }
-  async controlLocalPonderAgent(sessionId:string,owner:"ponder"|"user",revision:number) {
-    await this.ready;
-    const write=this.writeQueue.then(async()=>{
-      this.database.exec("BEGIN IMMEDIATE");
-      let result;
-      try { result=changeLocalPonderControl(this.database,sessionId,owner,revision);this.database.exec("COMMIT"); }
-      catch(error) {this.database.exec("ROLLBACK");throw error;}
-      const index=this.data.sessions.findIndex(session=>session.id===sessionId);
-      if(index>=0) this.data.sessions[index]=result.session;
-      await this.upsertSessionShellProjection(result.session,index);
-      await this.rebuildThreadDetailProjectionForSession(sessionId);
-      return result;
-    });
-    this.writeQueue=write.then(()=>undefined,()=>undefined);
+    this.writeQueue = write.then(() => undefined, () => undefined);
     return write;
   }
   private runtimeSummaryCache: ReturnType<typeof sessionRuntimeSummaries> | null = null;

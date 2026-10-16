@@ -44,9 +44,10 @@ export function localSessionConfigurationRevision(session: Session) {
 }
 
 
-export function localSessionMayResolveOwnership(session: Session) {
-  return session.metadata?.ponderLocalOwner === undefined && !session.archived && !session.systemKind
-    && !session.hiddenFromDefaultSidebar && session.status !== "closed"
+export function localSessionMayResolveOwnership(session: Session, selectedPonderSessionId?: string) {
+  const selectedPonder = session.id === selectedPonderSessionId && session.systemKind === "openpond.ponder";
+  return session.metadata?.ponderLocalOwner === undefined && !session.archived && (!session.systemKind || selectedPonder)
+    && (!session.hiddenFromDefaultSidebar || selectedPonder) && session.status !== "closed"
     && !session.metadata?.nativeHistoryProjection && !isCodexHistorySessionId(session.id)
     && !["sandbox", "sandbox_template", "sandbox_app"].includes(session.workspaceKind ?? "");
 }

@@ -1,4 +1,5 @@
 import { listenRemoteRelayEvents } from "./runtime-events.js";
+import { deviceOwnsLocalSession } from "./local-scope.js";
 import { Hello, Keys, type RemoteRelayDependencies, type Selected } from "./manager-types.js";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
@@ -176,6 +177,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
     if (!catalogCurrent()) return;
     const tasks = await captureRemoteTaskCatalog({
       owner: catalogOwner.owner,
+      ponder: await deps.store.localPonderState(),
       sessions: allSessions,
       inspect: deps.inspect,
       approvals,
@@ -560,6 +562,7 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
           const page = await readRemoteHistory({
             store: deps.store,
             owner: next.owner,
+            ponder: await deps.store.localPonderState(),
             taskId: request.taskId,
             cursor,
             outputs: deps.outputs,
@@ -859,6 +862,23 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
         await serial(connect);
         schedule();
       }
+      if (action === "publish-ponder" || action === "unpublish-ponder") {
+        const input = z.object({ revision: z.number().int().positive() }).strict().parse(payload);
+        const coordinator = await deps.store.localPonderState();
+        if (!coordinator?.sessionId) throw new Error("remote_ponder_unavailable");
+        const session = await deps.store.getSession(coordinator.sessionId);
+        if (!session) throw new Error("remote_ponder_unavailable");
+        if (action === "publish-ponder" && !deviceOwnsLocalSession(session, current.owner)) {
+          const qualify = await deps.prepareOwnerAttachment(current.owner, coordinator.sessionId);
+          const result = await qualify(session);
+          if (!result.eligible) throw new Error(result.reason ?? "remote_ponder_unavailable");
+        }
+        await deps.store.configureLocalPonderRemoteAccess({ enabled: action === "publish-ponder",
+          revision: input.revision, owner: current.owner, assertCurrent: assertCurrentAccount });
+        if (action === "unpublish-ponder") subscriptions.delete(coordinator.sessionId);
+        catalogDirty = true;
+        if (authority) await catalog();
+      }
       if (action === "attach") {
         const input = z
           .object({
@@ -923,7 +943,15 @@ export function createRemoteRelayManager(deps: RemoteRelayDependencies) {
       const qualify = await deps.prepareOwnerAttachment(current.owner);
       const unresolvedTasks = await unresolvedLocalOwnership({ sessions: await sessions(), qualify,
         latestTurn: id => deps.store.latestTurnForSession(id), assertCurrent: assertCurrentAccount });
-      return { ...this.status(), devices: devices.devices, unresolvedTasks };
+      const coordinator = await deps.store.localPonderState();
+      const ponderSession = coordinator?.sessionId ? await deps.store.getSession(coordinator.sessionId) : null;
+      const owned = Boolean(ponderSession && deviceOwnsLocalSession(ponderSession, current.owner));
+      assertCurrentAccount();
+      return { ...this.status(), devices: devices.devices, unresolvedTasks,
+        ponder: coordinator ? { coordinatorId: coordinator.id, sessionId: coordinator.sessionId,
+          revision: coordinator.revision, enabled: owned && coordinator.remoteAccessEnabled,
+          canPublish: Boolean(ponderSession && (owned || ponderSession.metadata?.ponderLocalOwner === undefined)) } : null };
+
     },
     async setEnabled(enabled: boolean) {
       if (authorityChanging) throw new Error("remote_account_changing");

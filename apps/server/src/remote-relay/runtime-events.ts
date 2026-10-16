@@ -74,6 +74,11 @@ export function listenRemoteRelayEvents(input: {
       if (!session || current().authority !== authority || current().selected !== selected) return;
       const { deviceOwnsLocalSession } = await import("./local-scope.js");
       if (!deviceOwnsLocalSession(session, selected.owner)) return;
+      if (session.systemKind === "openpond.ponder") {
+        const ponder = await deps.store.localPonderState();
+        if (!ponder?.remoteAccessEnabled || ponder.sessionId !== session.id
+          || session.metadata?.localPonderCoordinatorId !== ponder.id) return;
+      }
       if (semanticChange) await catalog();
       if (event.name === "turn.completed")
         item.artifactIds = (await deps.outputs(session))

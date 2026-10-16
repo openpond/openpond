@@ -1,5 +1,5 @@
 // Generated from Sandbox shared/remote-device.ts. Do not edit.
-// Source SHA256: 0065cfe0a56c9326564d3ebb34719a3fc1cd5b10c26dbd8f07540efa2ce3bda8
+// Source SHA256: 474b2f2da97ed81b4952f6c70df92c34e2a704af92b994aab9776640a6c5bcd8
 // Refresh: node scripts/sync-remote-device-contract.mjs
 import { z } from "zod";
 export const REMOTE_DEVICE_PROTOCOL_VERSION = 1 as const;
@@ -98,6 +98,8 @@ export const RemoteTaskSchema = z
   .object({
     id: id,
     localSessionId: id,
+    // Explicit desktop-selected coordinator identity; clients never match titles or guess IDs.
+    ponderCoordinatorId: id.optional(),
     title: z.string().max(1000),
     projectId: id.nullable(),
     projectLabel: z.string().max(1000).nullable(),
@@ -217,6 +219,11 @@ export type RemoteHistoryItem = {
   role?: "user" | "assistant" | "system";
   text?: string;
   toolName?: string;
+  coordinationKind?: "sent" | "received" | "started";
+  coordinationInputId?: string;
+  peerSessionId?: string;
+  peerTitle?: string;
+  peerProvider?: string;
   status?: string;
   approvalId?: string;
   artifactIds?: string[];
@@ -246,6 +253,11 @@ export const RemoteHistoryItemSchema = z
     role: z.enum(["user", "assistant", "system"]).optional(),
     text: z.string().max(100000).optional(),
     toolName: z.string().max(200).optional(),
+    coordinationKind: z.enum(["sent", "received", "started"]).optional(),
+    coordinationInputId: id.optional(),
+    peerSessionId: id.optional(),
+    peerTitle: z.string().max(1000).optional(),
+    peerProvider: z.string().max(100).optional(),
     status: z.string().max(100).optional(),
     approvalId: id.optional(),
     artifactIds: z.array(id).max(100).optional(),

@@ -4,7 +4,7 @@ import { ChatModelRefSchema } from "@openpond/contracts/providers";
 export const LocalPonderCoordinatorSchema = z.object({
   id: z.string(), location: z.literal("local"), sessionId: z.string().nullable(),
   modelRef: ChatModelRefSchema.nullable(), revision: z.number().int().positive(),
-  remoteAccessEnabled: z.literal(false), hostedSandboxesEnabled: z.boolean(), hostedActivation: z.literal("inactive"),
+  remoteAccessEnabled: z.boolean(), hostedSandboxesEnabled: z.boolean(), hostedActivation: z.literal("inactive"),
 });
 export type LocalPonderCoordinator = z.infer<typeof LocalPonderCoordinatorSchema>;
 export const LocalPonderRelationshipSchema = z.object({
