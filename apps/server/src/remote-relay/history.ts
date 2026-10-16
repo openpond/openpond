@@ -1,4 +1,4 @@
-import type { RemoteHistoryItem, RemoteHistoryPage, RuntimeEvent } from "@openpond/contracts";
+import { TaskInputSchema, type RemoteHistoryItem, type RemoteHistoryPage, type RuntimeEvent } from "@openpond/contracts";
 import { randomUUID } from "node:crypto";
 import type { SqliteStore } from "../store/store.js";
 import { deviceOwnsLocalSession, type DeviceLocalOwner } from "./local-scope.js";
@@ -6,6 +6,23 @@ import { observeRemoteHistorySequence, remoteHistoryGeneration } from "./catalog
 
 /** Allowlist projection: no raw args, file paths, provider payloads or internal events. */
 export function projectRemoteEvent(event: RuntimeEvent, sequence: number): RemoteHistoryItem | null {
+  if (event.name === "task.input") {
+    const data = event.data as Record<string, unknown> | undefined;
+    const parsed = TaskInputSchema.safeParse(data?.input);
+    if (!parsed.success || parsed.data.senderKind === "user" || !parsed.data.senderSessionId) return null;
+    const input = parsed.data;
+    const delivery = data?.delivery as {direction?: unknown; peer?: {sessionId?: unknown; title?: unknown; provider?: unknown}} | undefined;
+    const sent = delivery?.direction === "sent" && event.sessionId === input.senderSessionId;
+    if (!sent && event.sessionId !== input.sessionId) return null;
+    const peerId = sent ? input.sessionId : input.senderSessionId!;
+    const peer = delivery?.peer;
+    const matches = peer?.sessionId === peerId;
+    return {id: event.id, sequence, timestamp: event.timestamp, type: "tool",
+      coordinationKind: sent ? "sent" : "received", coordinationInputId: input.id, peerSessionId: peerId,
+      peerTitle: matches && typeof peer?.title === "string" ? peer.title.slice(0, 1000) : "Another task",
+      ...(matches && typeof peer?.provider === "string" ? {peerProvider: peer.provider.slice(0, 100)} : {}),
+      text: input.body.slice(0, 100000), status: event.status, ...(event.turnId ? {turnId: event.turnId} : {})};
+  }
   const userMessage = event.name === "turn.started" && typeof event.args?.prompt === "string";
   const message = userMessage || event.name === "assistant.delta";
   const tool = ["tool.started", "tool.completed"].includes(event.name);
@@ -31,6 +48,9 @@ export function projectRemoteEvent(event: RuntimeEvent, sequence: number): Remot
     ...(message ? { role: userMessage ? "user" as const : "assistant" as const } : {}),
     ...(content ? { text: content } : {}),
     ...(tool && event.action ? { toolName: event.action.slice(0, 200) } : {}),
+    ...(event.name === "tool.completed" && event.action === "openpond_start_agent" && event.status === "completed"
+      && typeof event.args?.title === "string" ? {coordinationKind: "started" as const,
+        peerTitle: event.args.title.slice(0, 1000)} : {}),
     ...(status ? { status } : {}),
     ...(approval && typeof (data.approvalId ?? data.id) === "string" ? { approvalId: (data.approvalId ?? data.id) as string } : {}),
   };
@@ -47,7 +67,7 @@ export async function normalizeRemoteEventTurn(store: Pick<SqliteStore, "turnByP
 export function* projectRemoteEventChunks(event: RuntimeEvent, sequence: number, offset = 0): Generator<RemoteHistoryItem> {
   const item = projectRemoteEvent(event, sequence);
   if (!item) return;
-  if (!item.text || item.type !== "message") { yield item; return; }
+  if (!item.text || (item.type !== "message" && !item.coordinationKind)) { yield item; return; }
   for (let start = offset; start < item.text.length; start += 8_000) {
     yield { ...item, fragmentIndex: Math.floor(start / 8_000), fragmentCount: Math.ceil(item.text.length / 8_000), id: `${item.id}:${start}`, text: item.text.slice(start, start + 8_000),
       textMode: start === 0 ? item.textMode : "append" };
@@ -56,13 +76,16 @@ export function* projectRemoteEventChunks(event: RuntimeEvent, sequence: number,
 
 export async function readRemoteHistory(input: {
   store: Pick<SqliteStore, "getSession" | "runtimeEventPageRows" | "latestEventSequence" | "turnByProviderTurnId">;
-  owner: DeviceLocalOwner; taskId: string; cursor: string | null;
+  owner: DeviceLocalOwner; ponder?: import("../openpond/local-ponder-contract.js").LocalPonderCoordinator | null; taskId: string; cursor: string | null;
   outputs?(session: import("@openpond/contracts").Session): Promise<import("@openpond/contracts").FileOutputRef[]>;
 }): Promise<RemoteHistoryPage> {
   const session = await input.store.getSession(input.taskId);
   if (!session || !deviceOwnsLocalSession(session, input.owner)) throw new Error("remote_task_not_owned");
   const currentSequence = await input.store.latestEventSequence();
   observeRemoteHistorySequence(currentSequence);
+  if (session.systemKind === "openpond.ponder" && (!input.ponder?.remoteAccessEnabled
+    || input.ponder.sessionId !== session.id || session.metadata?.localPonderCoordinatorId !== input.ponder.id))
+    throw new Error("remote_ponder_access_off");
   const generation = remoteHistoryGeneration(session);
   const outputs = input.outputs ? await input.outputs(session) : [];
   let after = 0;
@@ -90,7 +113,7 @@ export async function readRemoteHistory(input: {
       const size = Buffer.byteLength(JSON.stringify(item));
       if (bytes + size > 200_000) { finished = false; break outer; }
       items.push(item); bytes += size;
-      if (item.type === "message") nextFragment += item.text?.length ?? 0;
+      if (item.type === "message" || item.coordinationKind) nextFragment += item.text?.length ?? 0;
     }
     last = entry.sequence; nextFragment = 0;
     if (last >= watermark) { finished = true; break; }

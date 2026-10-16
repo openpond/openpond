@@ -4,7 +4,7 @@ import { deviceOwnsLocalSession, type DeviceLocalOwner } from "./local-scope.js"
 import { localSessionMayResolveOwnership, localSessionOwnershipRevision } from "./session-ownership.js";
 
 export type OwnerAttachmentQualifier = (session: Session) => Promise<{ eligible: boolean; reason: string | null }>;
-export type PrepareOwnerAttachment = (owner: DeviceLocalOwner) => Promise<OwnerAttachmentQualifier>;
+export type PrepareOwnerAttachment = (owner: DeviceLocalOwner, selectedPonderSessionId?: string) => Promise<OwnerAttachmentQualifier>;
 
 /** Candidate discovery is read-only and shares one captured readiness batch. */
 export async function unresolvedLocalOwnership(input: {

@@ -1,3 +1,4 @@
+import { isManagedLocalChatProvider } from "../../openpond/managed-chat-provider-id.js";
 import type { ProviderConfig, Session } from "@openpond/contracts";
 import { access, constants } from "node:fs/promises";
 import { delimiter, extname, isAbsolute, join } from "node:path";
@@ -20,6 +21,7 @@ export function createLocalManagedReadiness(deps: {
   configProvider(provider: string): Promise<ProviderConfig | null>;
   codexStatus(): Promise<{ available: boolean; enabled: boolean; reason: string | null }>;
   openPondStatus(session: Session): Promise<{ available: boolean; reason: string | null }>;
+  managedStatus?(session: Session): Promise<{ available: boolean; reason: string | null }>;
   nativeStatus?(session: Session): Promise<{ available: boolean; reason: string | null }>;
 }) {
   return async (session: Session): Promise<{ available: boolean; canSteer: boolean; reason: string | null }> => {
@@ -30,6 +32,11 @@ export function createLocalManagedReadiness(deps: {
       const status = await deps.openPondStatus(session);
       if (!status.available) return unavailable(status.reason ?? "The captured OpenPond account is unavailable.");
       return { available: true, canSteer: true, reason: null };
+    }
+    if (isManagedLocalChatProvider(session.provider)) {
+      const status = await deps.managedStatus?.(session);
+      return status?.available ? { available: true, canSteer: true, reason: null }
+        : unavailable(status?.reason ?? "The original managed chat provider is unavailable.");
     }
     if (session.provider === "codex") {
       if (!session.codexThreadId || !session.cwd) return unavailable("This conversation has no original managed Codex thread and working directory.");

@@ -59,6 +59,11 @@ export function createDesktopManagedAgentRoutes(deps: {
     },
     readiness: createLocalManagedReadiness({
       openPondStatus: createOpenPondManagedReadiness(deps.loadAppPreferences),
+      managedStatus: async session => {
+        const status = (await deps.localByokRuntimeState()).settings.statuses[session.provider];
+        return { available: Boolean(status?.enabled && status.available && status.routing.localRuntime),
+          reason: status?.lastError ?? "Enable and connect this task's original managed provider." };
+      },
       configProvider: async (provider) =>
         (await deps.localByokRuntimeState()).settings.providers[
           provider as ChatProvider
@@ -81,9 +86,9 @@ export function createDesktopManagedAgentRoutes(deps: {
   });
   return {
     localManagedMessaging,
-    prepareOwnerAttachment: async (owner: DeviceLocalOwner) =>
+    prepareOwnerAttachment: async (owner: DeviceLocalOwner, selectedPonderSessionId?: string) =>
       createLocalOwnerAttachmentInspection({
-        owner,
+        owner, selectedPonderSessionId,
         providers: structuredClone(
           (await deps.localByokRuntimeState()).settings,
         ),

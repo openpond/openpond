@@ -1,6 +1,6 @@
 import { useHostedSandboxes } from "./useHostedSandboxes";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RemoteAccessSettingsStatus } from "@openpond/contracts";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
@@ -8,6 +8,7 @@ import { useErrorToast } from "../../app/AppToastContext";
 import type { LocalPonderState } from "./ponder-local-types";
 
 export function PonderConnections({state, connection, accountScopeKey, onSetup}: {state: LocalPonderState | null; connection: ClientConnection; accountScopeKey: string; onSetup(): void}) {
+  const queries = useQueryClient();
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -18,6 +19,18 @@ export function PonderConnections({state, connection, accountScopeKey, onSetup}:
     staleTime: 5000, refetchInterval: open ? 10000 : false,
     queryFn: ({signal}) => apiFetch<RemoteAccessSettingsStatus>(connection, "/v1/account-remote-access", {signal: AbortSignal.any([signal, AbortSignal.timeout(15000)])}),
   });
+  const publication = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      if (!remote.data?.ponder) throw new Error("Set up Ponder and sign in before enabling remote access.");
+      return apiFetch<RemoteAccessSettingsStatus>(connection,
+        `/v1/account-remote-access/${enabled ? "publish-ponder" : "unpublish-ponder"}`, {
+          method: "POST", body: JSON.stringify({revision: remote.data.ponder.revision}),
+        });
+    },
+    onSuccess: value => queries.setQueryData(["account-remote-access", connectionQueryScope(connection)], value),
+    onError: () => { void remote.refetch(); },
+  });
+  useErrorToast(publication.error);
   useErrorToast(remote.error?.message ?? null);
   const remoteLabel = !remote.data ? (remote.isPending ? "Checking connection…" : "Unknown") : ({
     connected: "Connected", connecting: "Connecting", reconnecting: "Reconnecting", offline: "Offline",
@@ -41,8 +54,12 @@ export function PonderConnections({state, connection, accountScopeKey, onSetup}:
       <h3>Connections</h3>
       <section className="ponder-access-section" aria-label="Desktop and remote access">
         <label><span>This desktop<small>{state?.session ? "Ponder runs here" : "Set up Ponder to start"}</small></span><input type="checkbox" role="switch" aria-label="This desktop execution" checked={Boolean(state?.session)} readOnly disabled/></label>
+        <label><span>Remote Ponder<small>{remote.data?.ponder?.enabled ? "Available through this desktop while it is connected" : "Share this Ponder with your signed-in web and iOS clients"}</small></span>
+          <input type="checkbox" role="switch" aria-label="Remote Ponder enabled" checked={remote.data?.ponder?.enabled ?? false}
+            disabled={!remote.data?.ponder?.canPublish || publication.isPending || !state?.session}
+            onChange={event => publication.mutate(event.currentTarget.checked)}/></label>
         {(["Web access", "iOS access"] as const).map(title => <div key={title} className="ponder-connection-card" role="group" aria-label={title}>
-          <span>{title}<small>{remoteLabel}</small></span><span className={`ponder-connection-dot${remote.data?.state === "connected" ? " connected" : ""}`} role="img" aria-label={`${title}: ${remoteLabel}`} title="Shared desktop relay connection"/>
+          <span>{title}<small>{remote.data?.ponder?.enabled ? remoteLabel : "Ponder access off"}</small></span><span className={`ponder-connection-dot${remote.data?.ponder?.enabled && remote.data.state === "connected" ? " connected" : ""}`} role="img" aria-label={`${title}: ${remoteLabel}`} title="Shared desktop relay connection"/>
         </div>)}
       </section>
       <label className="ponder-hosted-sandboxes"><span>Hosted sandboxes<small>{hosted.loading ? "Checking availability…" : hosted.state?.enabled ? "Selected assignments may run in hosted Work." : hosted.state?.reason ?? "Allow selected assignments and required project context to run in hosted Work. Usage may incur charges."}</small></span><input type="checkbox" role="switch" aria-label="Hosted sandboxes enabled" checked={hosted.state?.enabled ?? false}

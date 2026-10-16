@@ -1,3 +1,4 @@
+import { assertLocalPonderRemoteAccess } from "../store/local-ponder-remote.js";
 import { createPublicKey, verify } from "node:crypto";
 import { remoteDeviceCanonicalContent, remoteDevicePermitMessage, type RemoteDispatchCommand, type RemoteDeviceServicePublicKey, type Session } from "@openpond/contracts";
 import type { OpenPondSqliteConnection } from "../store/sqlite/sqlite-driver.js";
@@ -16,6 +17,7 @@ export const REMOTE_LOCAL_SCHEMA = `CREATE TABLE IF NOT EXISTS remote_device_aut
 /** Run inside canonical admission's BEGIN IMMEDIATE: logout and admission linearize here. */
 export function assertRemoteAdmission(db: OpenPondSqliteConnection, command: RemoteDispatchCommand, session: Session) {
   if (command.payload.resume === true && command.action !== "follow_up") throw new Error("remote_resume_action_invalid");
+  assertLocalPonderRemoteAccess(db, session);
   const cancelled = db.get<{ payload_hash: string }>("SELECT payload_hash FROM remote_device_cancellations WHERE id=?", [command.id]);
   if (cancelled) throw new Error(cancelled.payload_hash === command.payloadHash ? "remote_command_cancelled" : "remote_command_identity_changed");
   const row = db.get<{ payload: string }>("SELECT payload FROM remote_device_authority WHERE id=1");
