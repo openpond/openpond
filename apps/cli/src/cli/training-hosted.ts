@@ -131,9 +131,10 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     if (job.id !== target || job.teamId !== teamId || before.id !== target || before.teamId !== teamId) {
       throw new Error("Hosted report status identity mismatch.");
     }
+    const recoverySourceJob = job.recovery ? await client.getJob(job.recovery.sourceJobId) : undefined;
     const { buildHostedTrainingReport } = await import("./training-hosted-report");
     await printAttached(buildHostedTrainingReport({
-      job, events, outputs, versionBeforeRead: before.version, generatedAt: new Date().toISOString(),
+      job, events, outputs, recoverySourceJob, versionBeforeRead: before.version, generatedAt: new Date().toISOString(),
     }), target);
     return;
   }

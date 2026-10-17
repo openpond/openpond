@@ -21,6 +21,32 @@ function event(id: string, data: Record<string, unknown>, type = "rollout_metric
 }
 
 describe("hosted report accounting and learning evidence", () => {
+  // Failure story: an inherited optimizer update is charged against the new
+  // run's time/cost even before that run performs any optimizer work.
+  test("separates verified inherited progress from this execution's efficiency", () => {
+    const source = TrainingJobSchema.parse({ ...job, id: "source-job", state: "cancelled",
+      rolloutProgress: { groupsCompleted: 1, groupsTarget: 4, optimizerUpdatesApplied: 1, optimizerUpdatesSkipped: 0 } });
+    const recovered = TrainingJobSchema.parse({ ...job,
+      recovery: { sourceJobId: source.id, checkpointId: "checkpoint-1", policyVersion: 1, completedGroups: 1, optimizerMode: "continue" },
+      rolloutProgress: source.rolloutProgress });
+    const report = buildHostedTrainingReport({ job: recovered, recoverySourceJob: source, events: [], outputs, versionBeforeRead: 3, generatedAt: end });
+    expect(report.progress.inherited.optimizerUpdatesApplied).toBe(1);
+    expect(report.progress.currentExecution.optimizerUpdatesApplied).toBe(0);
+    expect(report.throughput.appliedUpdatesPerWallHour).toBe(0);
+    expect(report.costs.perAppliedUpdateUsd).toBeNull();
+    expect(report.findings.map(finding => finding.code)).not.toContain("optimizer_event_coverage_incomplete");
+    const updated = buildHostedTrainingReport({
+      job: { ...recovered, rolloutProgress: { ...recovered.rolloutProgress, groupsCompleted: 2, optimizerUpdatesApplied: 2 } },
+      recoverySourceJob: source, events: [event("new-update", { metricKind: "policy_optimization" }, "optimizer_metric")],
+      outputs, versionBeforeRead: 3, generatedAt: end,
+    });
+    expect(updated.progress.currentExecution.optimizerUpdatesApplied).toBe(1);
+    expect(updated.throughput.appliedUpdatesPerWallHour).toBe(60);
+    expect(updated.costs.perAppliedUpdateUsd).toBe(6);
+    expect(() => buildHostedTrainingReport({ job: recovered, recoverySourceJob: { ...source, teamId: "other-team" }, events: [], outputs, versionBeforeRead: 3, generatedAt: end })).toThrow("terminal source");
+    expect(() => buildHostedTrainingReport({ job: recovered, events: [], outputs, versionBeforeRead: 3, generatedAt: end })).toThrow("terminal source");
+  });
+
   // Failure story: repeated event snapshots inflate cost denominators; allocation
   // costs get added to job costs; metadata or ineligible-only fields get presented
   // as grader components; ineligible rewards hide a no-signal problem.

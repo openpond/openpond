@@ -22,10 +22,30 @@ export function buildHostedTrainingReport(input: {
   job: TrainingJob;
   events: TrainingJobEvent[];
   outputs: TrainingJobOutputs;
+  recoverySourceJob?: TrainingJob;
   versionBeforeRead: number;
   generatedAt: string;
 }) {
   const { job, outputs } = input;
+  const source = input.recoverySourceJob;
+  if (job.recovery && (!source || source.id !== job.recovery.sourceJobId || source.teamId !== job.teamId ||
+      !source.completedAt || !["failed", "cancelled"].includes(source.state) ||
+      source.rolloutProgress.groupsCompleted !== job.recovery.completedGroups ||
+      source.rolloutProgress.optimizerUpdatesApplied + source.rolloutProgress.optimizerUpdatesSkipped !== job.recovery.completedGroups)) {
+    throw new Error("Hosted recovery report requires the unchanged terminal source run's progress.");
+  }
+  const inherited = job.recovery && source ? source.rolloutProgress : {
+    groupsCompleted: 0, optimizerUpdatesApplied: 0, optimizerUpdatesSkipped: 0,
+  };
+  const currentExecution = {
+    groupsCompleted: job.rolloutProgress.groupsCompleted - inherited.groupsCompleted,
+    groupsTarget: job.rolloutProgress.groupsTarget - inherited.groupsCompleted,
+    optimizerUpdatesApplied: job.rolloutProgress.optimizerUpdatesApplied - inherited.optimizerUpdatesApplied,
+    optimizerUpdatesSkipped: job.rolloutProgress.optimizerUpdatesSkipped - inherited.optimizerUpdatesSkipped,
+  };
+  if (Object.values(currentExecution).some(value => value < 0)) {
+    throw new Error("Hosted recovery source progress exceeds the recovered run's progress.");
+  }
   if (input.events.length > 100_000) throw new Error("Hosted report exceeds 100,000 events.");
   if (input.events.some(event => event.jobId !== job.id) ||
       outputs.outputs.some(output => output.jobId !== job.id) ||
@@ -52,6 +72,7 @@ export function buildHostedTrainingReport(input: {
   const workers = events.filter(event => event.data.metricKind === "physical_gpu_worker");
   const findings: Array<{ code: string; message: string }> = [];
   const add = (code: string, message: string) => findings.push({ code, message });
+  if (job.recovery) add("checkpoint_recovery_reuses_progress", "Cumulative progress includes the source run; throughput and per-update cost use only this execution's new updates.");
   const jobRevisionStableDuringRead = input.versionBeforeRead === job.version;
   if (!jobRevisionStableDuringRead) add("job_changed_during_read", "The job changed during these reads; rerun for a stable snapshot.");
   if (!trajectories.length) add("no_recorded_trajectories", "No trajectory evidence is present; this report cannot assess model quality or learning.");
@@ -100,10 +121,10 @@ export function buildHostedTrainingReport(input: {
   if (inference.length && inferenceRows.some(row => nonnegative(row.vllmRequestSeconds) === null)) {
     add("inference_timing_incomplete", "Some inference commands lack request timing; missing measurements are not zero durations.");
   }
-  if (optimizer.length < job.rolloutProgress.optimizerUpdatesApplied) {
+  if (optimizer.length < currentExecution.optimizerUpdatesApplied) {
     add("optimizer_event_coverage_incomplete", "Fewer optimizer events were returned than applied updates; report evidence may be incomplete.");
   }
-  if (skipped.length < job.rolloutProgress.optimizerUpdatesSkipped) {
+  if (skipped.length < currentExecution.optimizerUpdatesSkipped) {
     add("no_signal_event_coverage_incomplete", "Fewer no-signal events were returned than skipped updates; group details may be incomplete.");
   }
   const end = Date.parse(job.completedAt ?? input.generatedAt);
@@ -131,22 +152,27 @@ export function buildHostedTrainingReport(input: {
       state: job.state, phase: job.phase, version: job.version,
       terminalReasonPresent: job.terminalReason !== null,
       createdAt: job.createdAt, completedAt: job.completedAt,
+      ...(job.recovery ? { recovery: job.recovery } : {}),
     },
     evidence: {
       jobRevisionStableDuringRead, versionBeforeRead: input.versionBeforeRead, versionAfterRead: job.version,
       readModel: "independent_authenticated_reads_not_an_atomic_snapshot",
       returnedEvents: input.events.length, uniqueEvents: events.length,
       scope: "returned_public_event_snapshot", terminal,
+      recoverySourceJobVersion: job.recovery ? source!.version : null,
       completeness: "Only recorded events are summarized; absent instrumentation is not proof of no work.",
     },
-    progress: job.rolloutProgress,
+    progress: { ...job.rolloutProgress, currentExecution,
+      inherited: { groupsCompleted: inherited.groupsCompleted,
+        optimizerUpdatesApplied: inherited.optimizerUpdatesApplied,
+        optimizerUpdatesSkipped: inherited.optimizerUpdatesSkipped } },
     wall: { elapsedSeconds, inferenceCommands: inference.length, optimizerEvents: optimizer.length },
     throughput: {
       recordedTrajectoriesPerWallHour: hourlyRate(trajectories.length),
       recordedEligibleTrajectoriesPerWallHour: hourlyRate(eligible.length),
-      appliedUpdatesPerWallHour: hourlyRate(job.rolloutProgress.optimizerUpdatesApplied),
+      appliedUpdatesPerWallHour: hourlyRate(currentExecution.optimizerUpdatesApplied),
       recordedOutputTokensPerWallSecond: elapsedSeconds > 0 && outputTokens.total !== null ? outputTokens.total / elapsedSeconds : null,
-      note: "Whole-job throughput includes startup, waits and cleanup; this is not engine decode tokens/second.",
+      note: "Execution throughput includes startup, waits and cleanup, and excludes inherited updates; this is not engine decode tokens/second.",
     },
     trajectories: {
       recorded: trajectories.length, eligible: eligible.length, ineligible: ineligible.length,
@@ -202,7 +228,7 @@ export function buildHostedTrainingReport(input: {
       jobAccruedSpendUsd: job.accruedSpendUsd,
       executionReceiptSpendUsd: outputs.receipt?.spendUsd ?? null,
       perRecordedEligibleTrajectoryUsd: eligible.length ? job.accruedSpendUsd / eligible.length : null,
-      perAppliedUpdateUsd: job.rolloutProgress.optimizerUpdatesApplied ? job.accruedSpendUsd / job.rolloutProgress.optimizerUpdatesApplied : null,
+      perAppliedUpdateUsd: currentExecution.optimizerUpdatesApplied ? job.accruedSpendUsd / currentExecution.optimizerUpdatesApplied : null,
       allocationGpuUsd: statistics([...allocationById.values()].map(event => nonnegative(event.data.accruedGpuUsd))),
       allocationGpuSeconds: statistics([...allocationById.values()].map(event => nonnegative(event.data.accruedGpuSeconds))),
       physicalInvoiceTotalUsd: null,
