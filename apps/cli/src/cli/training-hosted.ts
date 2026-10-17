@@ -160,6 +160,13 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     if (!response.ok) throw new Error(`Hosted job inspection failed (${response.status}).`);
     print(await response.json()); return;
   }
+  if (action === "hosted-recover") {
+    if (!parseBooleanOption(options.yes)) throw new Error("hosted-recover requires --yes for its explicit funded execution request.");
+    const { jobId, ...recovery } = await readInput();
+    if (typeof jobId !== "string" || !jobId) throw new Error("hosted-recover requires jobId in its input JSON.");
+    const recovered = await client.recoverCheckpoint(jobId, recovery);
+    await printAttached(recovered, recovered.id); return;
+  }
   if (action === "hosted-cancel") {
     await printAttached(await cancelHostedTrainingJob(client, target, teamId),target); return;
   }

@@ -8,6 +8,10 @@ const WorkerControlSchema = z.object({
   maximumStorageUsd: z.number().positive().max(10).optional(),
   warmIdleDeadlineAt: z.iso.datetime({ offset: true }).optional(),
   maximumIdleUsd: z.number().positive().max(10).optional(),
+  sessionId: z.string().min(1).max(191).optional(),
+  sessionDeadlineAt: z.iso.datetime({ offset: true }).optional(),
+  maximumSessionUsd: z.number().positive().max(10).optional(),
+  idleGraceSeconds: z.number().int().min(120).max(10800).optional(),
 }).strict();
 
 /** Uses the hosted command's existing account headers and bounded transport. */
@@ -29,13 +33,15 @@ export async function runHostedWorkerCommand(input: {
     path += `/${encodeURIComponent(input.target)}`;
   } else {
     const action = input.action.replace("hosted-worker-", "");
-    if (!["stop", "resume", "retire", "warm-idle"].includes(action)) throw new Error(`Unknown physical worker action: ${action}`);
+    if (!["stop", "resume", "retire", "warm-idle", "retain-session"].includes(action)) throw new Error(`Unknown physical worker action: ${action}`);
     if (!input.confirmed) throw new Error("Worker lifecycle changes require --yes.");
     const { workerId, ...control } = WorkerControlSchema.parse(await input.readInput());
     if (action === "stop" && !control.maximumStorageUsd) throw new Error("Stopping requires maximumStorageUsd for bounded retained storage.");
     if (action === "resume" && !control.jobId) throw new Error("Resuming requires an admitted queued jobId with its own compute budget.");
     if (action === "warm-idle" && (!control.warmIdleDeadlineAt || !control.maximumIdleUsd))
-      throw new Error("Warm idle requires warmIdleDeadlineAt and maximumIdleUsd; the server caps retention at ten minutes.");
+      throw new Error("Warm idle requires warmIdleDeadlineAt and maximumIdleUsd; the server caps retention at three hours.");
+    if (action === "retain-session" && (!control.sessionId || !control.sessionDeadlineAt || !control.maximumSessionUsd || !control.idleGraceSeconds))
+      throw new Error("Session retention requires sessionId, sessionDeadlineAt, maximumSessionUsd, and idleGraceSeconds; its deadline and active-plus-idle execution budget cannot be renewed; reserve cleanup costs separately.");
     path += `/${encodeURIComponent(workerId)}/control`;
     body = JSON.stringify({ ...control, action });
   }

@@ -25,6 +25,9 @@ const Raw = z
               .passthrough()
               .optional(),
             executionIntent: z.object({ purpose: z.string() }).passthrough().optional(),
+            recovery: z.object({ sourceJobId: z.string(), checkpointId: z.string(),
+              checkpointPolicyVersion: z.number().int().positive(), completedGroups: z.number().int().positive(),
+            }).passthrough().optional(),
           })
           .passthrough()
           .optional(),
@@ -127,6 +130,8 @@ export function hostedRunStageEvidence(
     throw new Error("Flow evidence belongs to a different training run.");
   const live = !["completed", "cancelled", "failed", "budget_exhausted"].includes(job.state);
   const qualification = job.inputBundle?.executionIntent?.purpose === "collection";
+  const inheritedUpdates = job.inputBundle?.recovery?.checkpointPolicyVersion ?? 0;
+  const newUpdates = Math.max(0, job.optimizerUpdatesApplied - inheritedUpdates);
   const candidateEvaluationStarted = !qualification && detail.evaluations.some((item) => item.kind === "candidate");
   const baseline = qualification ? undefined : detail.evaluations.find((item) => item.kind === "baseline");
   const baselineCount = baseline?.metrics?.taskCount;
@@ -178,7 +183,7 @@ export function hostedRunStageEvidence(
       label: "Grade",
       done:
         job.targetGroups > 0 &&
-        detail.rolloutGroups.length >= job.targetGroups &&
+        detail.rolloutGroups.length + (job.inputBundle?.recovery?.completedGroups ?? 0) >= job.targetGroups &&
         detail.rolloutGroups.every((group) => ["eligible", "consumed"].includes(group.state)),
       active:
         detail.rolloutGroups.some((group) => group.state === "scoring") ||
@@ -188,11 +193,11 @@ export function hostedRunStageEvidence(
     },
     {
       label: "Update adapter",
-      done: job.optimizerUpdatesApplied > 0,
+      done: newUpdates > 0,
       active: job.state === "update_phase",
       inLoop: true,
       skip: qualification,
-      detail: `${job.optimizerUpdatesApplied} updates`,
+      detail: `${newUpdates} new updates${inheritedUpdates ? `; ${inheritedUpdates} reused` : ""}`,
     },
     {
       label: "Save checkpoint",
@@ -225,6 +230,14 @@ export function hostedRunStageEvidence(
   const rewards = new Map(detail.trajectories.map((item) => [item.rolloutId, number(item.reward)]));
   const groups = [...detail.rolloutGroups].sort((a, b) => a.groupIndex - b.groupIndex).slice(-50);
   const count = Math.max(job.targetGroups, ...groups.map((group) => group.groupIndex + 1), 0);
+  const recovery = job.inputBundle?.recovery;
+  const displayedGroups = Array.from({ length: Math.min(count, 50) }, (_, offset) => {
+    const index = Math.max(0, count - 50) + offset;
+    return groups.find(group => group.groupIndex === index) ?? {
+      id: "", groupIndex: index,
+      state: recovery && index < recovery.completedGroups ? "reused" : "planned", rewardMean: null,
+    };
+  });
   return RunStageEvidenceSchema.parse({
     jobId: job.id,
     teamId: job.teamId,
@@ -234,6 +247,10 @@ export function hostedRunStageEvidence(
     groupsCompleted: job.completedGroups,
     groupsTarget: job.targetGroups,
     live,
+    ...(recovery ? { recovery: { sourceJobId: recovery.sourceJobId, checkpointId: recovery.checkpointId,
+      policyVersion: recovery.checkpointPolicyVersion, completedGroups: recovery.completedGroups,
+      optimizerStateRestored: detail.commands.some(command => command.commandType === "materialize_checkpoint" && command.state === "succeeded"),
+    } } : {}),
     nodes: stages
       .filter((stage) => !stage.skip)
       .map((stage) => ({
@@ -262,8 +279,8 @@ export function hostedRunStageEvidence(
             : {}),
         }
       : null,
-    groups: (groups.length
-      ? groups
+    groups: (displayedGroups.length
+      ? displayedGroups
       : Array.from({ length: Math.min(job.targetGroups, 50) }, (_, index) => ({
           id: "",
           groupIndex: index,
@@ -274,7 +291,7 @@ export function hostedRunStageEvidence(
       index: group.groupIndex,
       state: group.state,
       meanReward: number(group.rewardMean),
-      plannedSlots: job.inputBundle?.recipe?.rolloutGroupSize ?? 0,
+      plannedSlots: group.state === "reused" ? 0 : job.inputBundle?.recipe?.rolloutGroupSize ?? 0,
       attempts: detail.rollouts
         .filter((item) => item.groupId === group.id)
         .slice(-1000)

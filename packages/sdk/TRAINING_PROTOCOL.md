@@ -263,3 +263,16 @@ resolve the repository under the caller's workspace/permissions, verify the
 internal Profile ID and all selected immutable identities, and fail admission
 when they no longer match. Project association does not grant repository access
 or permission to execute a Profile's connected applications.
+
+
+## Exact recovery after a committed training group
+
+`POST /v1/training/jobs/{sourceJobId}/recover` creates a linked execution attempt after a cancelled or failed run has completed native allocation/capability/checkpoint cleanup. It requires a ready canonical checkpoint at the source's current policy, verified optimizer state, committed update evidence, completed original baseline, and the source owner. It does not accept replacement rewards, rollout batches or file URLs.
+
+Use `client.recoverCheckpoint(sourceJobId, { expectedVersion, checkpointId, idempotencyKey, maximumSpendUsd, maximumWallSeconds })`. The requested spend/time must fit retained source authority and current account funding. Retrying the exact idempotency key reconciles the same admitted run; a different key cannot create a second replacement from the same boundary. Reconcile an uncertain submission by its idempotency key before attempting another operation.
+
+Recovery restores the original adapter block and Adam state, retains original tasks, recipe, splits, graders and baseline, and starts the next unfinished group. It does not reapply a completed update or use a new residual block. Public run readback includes `recovery: { sourceJobId, checkpointId, policyVersion, completedGroups, optimizerMode: "continue" }`. Completed-group and applied-update totals include inherited work; the overview marks inherited groups Reused and separately counts new updates. Per-task baseline evidence retains its original trace identity. Native job cleanup receipts bind the exact recovery input and saved checkpoint; physical GPU retirement still requires independent verification.
+
+This operation differs from continual training with an optimizer reset. An isolated optimizer diagnostic replay discards its weights and is never a training parent or a completed group.
+
+CLI: `openpond training hosted-recover recovery.json --team-id <id> --home ~/.openpond/openpond-app-dev --yes --json`, where the file contains `jobId` plus the six request fields above. `--yes` confirms the explicit funded CLI operation; the command does not silently retry paid admission.

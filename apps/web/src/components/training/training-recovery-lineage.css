@@ -1,0 +1,8 @@
+.training-recovery-lineage {
+  margin: 14px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.training-recovery-lineage a { color: var(--accent-primary); }

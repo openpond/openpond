@@ -13,6 +13,7 @@ import {
 import { PostTrainingSummarySchema, postTrainingActive } from "openpond-sdk/post-training";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
+import { TrainingRecoveryLineage } from "../training/TrainingRecoveryLineage";
 import "./hosted-training-run.css";
 
 const Detail = z
@@ -198,6 +199,7 @@ export function LabHostedTrainingRunDetail({
         <p role="status">Loading training run…</p>
       ) : !diagnostics ? (
         <>
+          <TrainingRecoveryLineage recovery={value.flow?.recovery} />
           <dl>
             <dt>Status</dt>
             <dd>{value.job.state}</dd>
@@ -208,7 +210,9 @@ export function LabHostedTrainingRunDetail({
               {value.job.rolloutProgress.groupsCompleted} / {value.job.rolloutProgress.groupsTarget}
             </dd>
             <dt>Applied optimizer updates</dt>
-            <dd>{value.job.rolloutProgress.optimizerUpdatesApplied}</dd>
+            <dd>{value.flow?.recovery
+              ? `${Math.max(0, value.job.rolloutProgress.optimizerUpdatesApplied - value.flow.recovery.policyVersion)} new · ${value.flow.recovery.policyVersion} reused`
+              : value.job.rolloutProgress.optimizerUpdatesApplied}</dd>
             <dt>Accrued spend</dt>
             <dd>${value.job.accruedSpendUsd.toFixed(6)}</dd>
           </dl>

@@ -156,6 +156,14 @@
   background: var(--status-danger-fill);
   border-color: transparent;
 }
+.training-rollout-cell.reused {
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-secondary);
+  border-style: double;
+  font-size: 10px;
+  line-height: 1;
+}
 @keyframes run-flow-stream {
   to {
     stroke-dashoffset: -12;

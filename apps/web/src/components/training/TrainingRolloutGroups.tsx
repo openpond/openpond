@@ -30,6 +30,7 @@ export function TrainingRolloutGroups({ evidence }: { evidence: RunStageEvidence
       </header>
       <ol>
         {evidence.groups.map((group) => {
+          const reused = group.state === "reused";
           const occupied = new Set(group.attempts.map((item) => item.slot));
           const pending = Array.from(
             { length: Math.min(1000, group.plannedSlots) },
@@ -39,6 +40,9 @@ export function TrainingRolloutGroups({ evidence }: { evidence: RunStageEvidence
             <li key={group.index}>
               <span>Group {group.index + 1}</span>
               <div>
+                {reused ? <span role="img" className="training-rollout-cell reused"
+                  title={`Reused from the source run · policy v${evidence.recovery?.policyVersion}`}
+                  aria-label={`Group ${group.index + 1}: reused from the source run`}>✓</span> : null}
                 {group.attempts.map((attempt) => {
                   const failed =
                     attempt.state.endsWith("failed") ||
@@ -76,7 +80,7 @@ export function TrainingRolloutGroups({ evidence }: { evidence: RunStageEvidence
                 ))}
               </div>
               <span>
-                {group.meanReward === null ? group.state : `avg ${group.meanReward.toFixed(3)}`}
+                {reused ? `Reused · v${evidence.recovery?.policyVersion}` : group.meanReward === null ? group.state : `avg ${group.meanReward.toFixed(3)}`}
               </span>
             </li>
           );

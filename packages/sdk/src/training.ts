@@ -347,6 +347,14 @@ export async function parseAndVerifyTrainingJobSubmission(
   return parsed;
 }
 
+export const TrainingJobRecoverySchema = z.object({
+  sourceJobId: IdSchema,
+  checkpointId: IdSchema,
+  policyVersion: z.number().int().positive(),
+  completedGroups: z.number().int().positive(),
+  optimizerMode: z.literal("continue"),
+}).strict();
+
 export const TrainingJobSchema = z
   .object({
     schemaVersion: z.literal("openpond.trainingJob.v2"),
@@ -354,6 +362,7 @@ export const TrainingJobSchema = z
     teamId: IdSchema,
     kind: TrainingJobKindSchema,
     executionMode: z.literal("qualification").optional(),
+    recovery: TrainingJobRecoverySchema.optional(),
     modelProjectId: IdSchema,
     portableProjectId: IdSchema,
     sourceProjectRevision: z.number().int().positive(),
@@ -414,6 +423,15 @@ export const TrainingJobLogSchema = z
 export const TrainingJobControlRequestSchema = z
   .object({ expectedVersion: z.number().int().nonnegative() })
   .strict();
+
+/** Exact execution recovery; a continual-training optimizer reset is separate. */
+export const TrainingCheckpointRecoveryRequestSchema = z.object({
+  expectedVersion: z.number().int().positive(),
+  checkpointId: IdSchema,
+  idempotencyKey: z.string().trim().min(16).max(191),
+  maximumSpendUsd: z.number().positive().finite(),
+  maximumWallSeconds: z.number().int().positive().max(10800),
+}).strict();
 
 export const TrainingJobOutputSchema = z
   .object({
@@ -777,6 +795,13 @@ export function createTrainingClient(input: {
           "job",
         ),
       );
+    },
+    async recoverCheckpoint(jobId: string, input: z.input<typeof TrainingCheckpointRecoveryRequestSchema>) {
+      const recovery = TrainingCheckpointRecoveryRequestSchema.parse(input);
+      return TrainingJobSchema.parse(unwrapObject(await request(
+        `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/recover`,
+        { method: "POST", body: JSON.stringify(recovery) },
+      ), "job"));
     },
     async events(jobId: string) {
       return z

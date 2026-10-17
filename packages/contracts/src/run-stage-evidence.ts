@@ -22,6 +22,11 @@ export const RunStageEvidenceSchema = z
     groupsCompleted: z.number().int().nonnegative(),
     groupsTarget: z.number().int().nonnegative(),
     live: z.boolean(),
+    recovery: z.object({
+      sourceJobId: z.string(), checkpointId: z.string(),
+      policyVersion: z.number().int().positive(), completedGroups: z.number().int().positive(),
+      optimizerStateRestored: z.boolean(),
+    }).strict().optional(),
     nodes: z.array(Node).max(10),
     inference: Node.nullable(),
     groups: z

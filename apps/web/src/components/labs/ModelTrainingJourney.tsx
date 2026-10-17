@@ -14,6 +14,7 @@ import { hostedTrainingMetricSeries } from "../training/hosted-training-metrics"
 import { RunStageEvidenceSchema } from "@openpond/contracts";
 import { ConsoleRunFlowDiagram, RunFlowDiagram } from "../training/RunFlowDiagram";
 import { TrainingRolloutGroups } from "../training/TrainingRolloutGroups";
+import { TrainingRecoveryLineage } from "../training/TrainingRecoveryLineage";
 
 const Detail = z.object({
   job: TrainingJobSchema,
@@ -127,6 +128,7 @@ export function ModelTrainingJourney({
       </div>
       {detail?.flow ? (
         <>
+          <TrainingRecoveryLineage recovery={detail.flow.recovery} />
           <FlowDiagram
             nodes={detail.flow.nodes}
             inference={detail.flow.inference}
@@ -147,7 +149,7 @@ export function ModelTrainingJourney({
           {typeof recordedGroup === "number" ? ` · latest recorded group ${recordedGroup + 1}` : ""}
         </span>
         <span>
-          <b>{progress?.optimizerUpdatesApplied ?? "—"}</b> weight updates
+          <b>{progress ? Math.max(0, progress.optimizerUpdatesApplied - (detail?.flow?.recovery?.policyVersion ?? 0)) : "—"}</b> {detail?.flow?.recovery ? "new weight updates" : "weight updates"}
         </span>
         <span>
           <b>{progress?.optimizerUpdatesSkipped ?? "—"}</b> updates skipped
