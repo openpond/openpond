@@ -20,6 +20,8 @@ test("resolves an omitted GRPO GPU cap before approval and preserves explicit li
   expect(prepare(1_800_000)).toBe(1_800);
   expect(prepare(24 * 60 * 60 * 1_000)).toBe(10_800);
   expect(prepare(1_800_000, 600)).toBe(600);
+  expect(prepare(21_600_000, 21_600)).toBe(21_600);
+  expect(() => prepare(21_600_000, 21_601)).toThrow();
   expect(() => prepare(1_800_000, 0)).toThrow();
 });
 
