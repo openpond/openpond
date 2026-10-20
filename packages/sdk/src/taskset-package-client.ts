@@ -66,7 +66,13 @@ export class OpenPondTasksetPackageClient {
     const request = TasksetPackagePublicationSchema.parse(input);
     validateTasksetPackage(request.package);
     if (request.evaluationPackage) validateTasksetPackage(request.evaluationPackage);
-    const receipt = TasksetPackageReceiptSchema.parse(await this.#request("", "POST", request, options.signal));
+    // A shared training/evaluation release needs one complete byte graph. Keep
+    // the original request for exact evaluation receipt validation; the server
+    // resolves an identical selected evaluation from the training package.
+    const { evaluationPackage, ...trainingPublication } = request;
+    const transport = evaluationPackage?.contentHash === request.package.contentHash
+      ? trainingPublication : request;
+    const receipt = TasksetPackageReceiptSchema.parse(await this.#request("", "POST", transport, options.signal));
     const release = request.package.taskset;
     if (receipt.teamId !== this.#options.teamId || receipt.modelProjectId !== request.modelProjectId || receipt.operationId !== request.operationId
       || receipt.packageHash !== request.package.contentHash || receipt.taskset.id !== release.id || receipt.taskset.revision !== release.revision || receipt.taskset.contentHash !== release.contentHash) {

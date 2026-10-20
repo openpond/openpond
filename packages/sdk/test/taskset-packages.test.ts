@@ -346,8 +346,14 @@ it("binds the complete evaluation package to the selected reference and receipt"
   let evaluation: unknown = expected;
   let returnedProject: unknown = project;
   let requests = 0;
-  const client = new OpenPondTasksetPackageClient({ baseUrl: "https://api.example.test", apiKey: "key", teamId: "team-a", fetch: async () => {
+  const client = new OpenPondTasksetPackageClient({ baseUrl: "https://api.example.test", apiKey: "key", teamId: "team-a", fetch: async (_url, options) => {
     requests++;
+    const wire = JSON.parse(String(options?.body));
+    // Duplicating a shared 35MiB graph made a valid package exceed the 64MiB
+    // envelope; its evaluation selection and receipt must still be required.
+    expect(wire).not.toHaveProperty("evaluationPackage");
+    expect(wire.package).toEqual(value);
+    expect(wire.modelConfiguration.trainingSetup.evaluationTasksetRef).toEqual(ref);
     return Response.json({ schemaVersion: "openpond.tasksetPackageReceipt.v1", teamId: "team-a", modelProjectId: "model-a", operationId: "evaluation-create", taskset: ref, packageHash: value.contentHash, hostedTasksetId: "hosted-training", projectEtag: project.etag, project: returnedProject, evaluation });
   } });
   const publication: TasksetPackagePublication = { schemaVersion: "openpond.tasksetPackagePublication.v1", operationId: "evaluation-create", modelProjectId: "model-a", expectedProjectEtag: null, name: "Training", description: "", buildIntent: "discovery", methodHint: null, package: value, evaluationPackage: value, modelConfiguration };
@@ -363,6 +369,17 @@ it("binds the complete evaluation package to the selected reference and receipt"
   await expect(client.publish({ ...publication, modelConfiguration: { ...modelConfiguration, trainingSetup: { ...modelConfiguration.trainingSetup, evaluationTasksetRef: { ...ref, contentHash: "c".repeat(64) } } } })).rejects.toThrow();
   await expect(client.publish({ ...publication, modelConfiguration: undefined })).rejects.toThrow();
   expect(requests).toBe(before);
+  // An independent evaluation release still needs its complete private graph.
+  const { contentHash: _packageHash, ...packageContent } = value;
+  const { contentHash: _releaseHash, ...releaseContent } = value.taskset;
+  const distinct = createTasksetPackage({ ...packageContent, taskset: sealLearningContent({ ...releaseContent, revision: releaseContent.revision + 1 }) });
+  const distinctClient = new OpenPondTasksetPackageClient({ baseUrl: "https://api.example.test", apiKey: "key", teamId: "team-a", fetch: async (_url, options) => {
+    expect(JSON.parse(String(options?.body)).evaluationPackage).toEqual(distinct);
+    return Response.json({ code: "distinct_evaluation_retained", message: "Transport proof" }, { status: 409 });
+  } });
+  await expect(distinctClient.publish({ ...publication, evaluationPackage: distinct,
+    modelConfiguration: { ...modelConfiguration, trainingSetup: { ...modelConfiguration.trainingSetup, evaluationTasksetRef: learningRef(distinct.taskset) } } }))
+    .rejects.toMatchObject({ code: "distinct_evaluation_retained" });
 });
 
 
