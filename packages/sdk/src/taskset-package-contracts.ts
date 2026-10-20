@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { resolveStructuredOutput, contentHash, type ImmutableAssetRef } from "@openpond/harness";
+import { resolveStructuredOutput, resolveStructuredSamplingSchema, structuredSamplingSchemaDeclaration, contentHash, type ImmutableAssetRef } from "@openpond/harness";
 import { EnvironmentReleaseSchema, VerifierSetReleaseSchema, verifyEnvironmentRelease, verifyVerifierSetRelease } from "@openpond/evals";
 import { assertTasksetRelease, TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
@@ -71,10 +71,17 @@ export function validateTasksetPackage(value: unknown, maximumBytes = MAX_TASKSE
   for (const task of taskset.tasks) {
     for (const asset of task.artifactRefs) requireAsset(asset);
     for (const output of task.requiredOutputs ?? []) {
+      const sampling = structuredSamplingSchemaDeclaration(output.metadata);
+      if (sampling && output.submissionMode !== "structured_json") throw new Error("Sampling schema requires a structured output.");
       if (output.schemaRef) requireAsset(output.schemaRef);
       if (output.submissionMode === "structured_json") {
         if (!output.schemaRef || output.schemaRef.visibility !== "policy" || output.mediaType !== "application/json" || environment.contract.kind !== "work") throw new Error("Structured output requires a policy-visible JSON schema in Work.");
-        resolveStructuredOutput(decodeTasksetPackageFile(files.get(output.schemaRef.id)!), output.schemaRef.contentHash);
+        const full = resolveStructuredOutput(decodeTasksetPackageFile(files.get(output.schemaRef.id)!), output.schemaRef.contentHash);
+        if (sampling) {
+          requireAsset(sampling.schemaRef);
+          if (!task.artifactRefs.some(ref => same(ref, sampling.schemaRef))) throw new Error("Sampling schema must be an ordinary declared policy artifact.");
+          resolveStructuredSamplingSchema(full, sampling, decodeTasksetPackageFile(files.get(sampling.schemaRef.id)!));
+        }
       }
     }
     if (task.privilegedContextRef && files.get(task.privilegedContextRef)?.asset.visibility !== "host_private") {
@@ -138,5 +145,10 @@ export function resolveTasksetWorkOutputs(input: unknown, taskId: string) {
   if (!task || value.environment.contract.kind !== "work") throw new Error("Work Taskset task not found.");
   return (task.requiredOutputs ?? []).map(output => ({ path: output.path, mediaType: output.mediaType, maxBytes: output.maxBytes,
     ...(output.submissionMode === "structured_json" ? { submissionMode: "structured_json" as const,
-      structuredOutput: resolveStructuredOutput(decodeTasksetPackageFile(value.files.find(file => file.asset.id === output.schemaRef!.id)!), output.schemaRef!.contentHash) } : {}) }));
+      structuredOutput: (() => {
+        const full = resolveStructuredOutput(decodeTasksetPackageFile(value.files.find(file => file.asset.id === output.schemaRef!.id)!), output.schemaRef!.contentHash);
+        const sampling = structuredSamplingSchemaDeclaration(output.metadata);
+        return sampling ? { ...full, sampling: resolveStructuredSamplingSchema(full, sampling,
+          decodeTasksetPackageFile(value.files.find(file => file.asset.id === sampling.schemaRef.id)!)) } : full;
+      })() } : {}) }));
 }

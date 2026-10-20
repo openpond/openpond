@@ -2,9 +2,11 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { sha256Hex as sha256 } from "./sha256.js";
 import { canonicalJson } from "./common.js";
 import { structuredOutputDiagnostic } from "./structured-output-diagnostics.js";
+import { assertStructuredSamplingSchema, structuredSamplingSchemaAssertions, type StructuredSamplingSchemaContract } from "./structured-output-sampling.js";
+export * from "./structured-output-sampling.js";
 
 export const STRUCTURED_OUTPUT_CAPABILITY = "work.structured-output.v1";
-export type StructuredOutputContract = { schema: Record<string, unknown>; schemaHash: string; schemaSource: string };
+export type StructuredOutputContract = { schema: Record<string, unknown>; schemaHash: string; schemaSource: string; sampling?: StructuredSamplingSchemaContract };
 export type WorkRequiredOutput = { path: string; mediaType: string; maxBytes?: number | null; submissionMode?: "structured_json"; structuredOutput?: StructuredOutputContract };
 export type ValidationIssue = { path: string; message: string; keyword: string; schemaPath: string };
 const keywords = new Set(["$schema", "$id", "$defs", "$ref", "title", "description", "type", "properties", "required", "additionalProperties", "items", "minItems", "maxItems", "minLength", "maxLength", "minimum", "maximum", "enum", "const", "allOf", "anyOf", "oneOf", "not", "if", "then", "else", "uniqueItems", "pattern", "multipleOf", "exclusiveMinimum", "exclusiveMaximum", "minProperties", "maxProperties"]);
@@ -68,6 +70,7 @@ export function assertStructuredOutputContract(contract: StructuredOutputContrac
   assertStructuredOutputSchema(contract.schema);
   if (sha256(new TextEncoder().encode(contract.schemaSource)) !== contract.schemaHash || canonicalJson(JSON.parse(contract.schemaSource)) !== canonicalJson(contract.schema)) throw new Error("structured_schema_contract_changed");
   if (!/^[a-f0-9]{64}$/.test(contract.schemaHash)) throw new Error("structured_schema_hash_invalid");
+  if (contract.sampling !== undefined) assertStructuredSamplingSchema(contract, contract.sampling);
 }
 export function structuredOutputTools(outputs: WorkRequiredOutput[]) {
   const paths = new Set<string>();
@@ -77,7 +80,7 @@ export function structuredOutputTools(outputs: WorkRequiredOutput[]) {
     if (output.submissionMode !== "structured_json") { if (output.structuredOutput) throw new Error("structured_output_opt_in_missing"); return []; }
     if (output.mediaType !== "application/json" || !output.structuredOutput) throw new Error("structured_output_contract_missing");
     assertStructuredOutputContract(output.structuredOutput);
-    return [{ type: "function" as const, function: { name: `work_submit_output_${index + 1}`, description: `Validate and save ${output.path}. Supply the output fields directly; validation errors can be corrected and resubmitted.`, parameters: output.structuredOutput.schema } }];
+    return [{ type: "function" as const, function: { name: `work_submit_output_${index + 1}`, description: `Validate and save ${output.path}. Supply the output fields directly; validation errors can be corrected and resubmitted.${output.structuredOutput.sampling ? " Full validation also enforces the postValidationOnly limits listed in requiredOutputs; a generated call can fail those submission limits." : ""}`, parameters: output.structuredOutput.sampling ? JSON.parse(output.structuredOutput.sampling.schemaSource) as Record<string, unknown> : output.structuredOutput.schema } }];
   });
 }
 export function structuredToolOutput(outputs: WorkRequiredOutput[], name: string) {
@@ -104,7 +107,11 @@ export function validateOutputBytes(output: WorkRequiredOutput, bytes: Uint8Arra
   catch { throw new Error("structured_output_invalid_json"); }
   const errors = validateStructuredOutput(output.structuredOutput.schema, data);
   if (errors.length) throw new Error("structured_output_invalid:" + JSON.stringify(errors));
-  return { status: "passed" as const, schemaHash: output.structuredOutput.schemaHash, artifactHash: sha256(bytes), capability: STRUCTURED_OUTPUT_CAPABILITY };
+  return { status: "passed" as const, schemaHash: output.structuredOutput.schemaHash,
+    ...(output.structuredOutput.sampling ? { samplingSchemaHash: output.structuredOutput.sampling.schemaHash,
+      samplingSchemaDeclaration: output.structuredOutput.sampling.declaration,
+      postValidationOnly: structuredSamplingSchemaAssertions(output.structuredOutput, output.structuredOutput.sampling) } : {}),
+    artifactHash: sha256(bytes), capability: STRUCTURED_OUTPUT_CAPABILITY };
 }
 export function serializeStructuredOutput(output: WorkRequiredOutput, data: unknown) {
   const bytes = new TextEncoder().encode(JSON.stringify(data, null, 2) + "\n");
