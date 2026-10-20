@@ -3,7 +3,7 @@ import { contentHash, sha256 } from "@openpond/harness";
 import { bindTasksetExecutionReleases, createEnvironmentRelease, createVerifierSetRelease } from "@openpond/evals";
 import { TasksetReleaseSchema } from "@openpond/evals/tasksets";
 import { createTasksetPackage, decodeTasksetPackageFile, validateTasksetPackage, OpenPondTasksetPackageClient, TasksetPackageModelConfigurationSchema, type TasksetPackagePublication } from "../src/taskset-packages.js";
-import { HostedModelProjectTrainingSetupSchema } from "../src/model-projects.js";
+import { HostedModelProjectTrainingSetupSchema, ModelProjectSchema } from "../src/model-projects.js";
 import { prepareModelTasksetDraft, publishModelTasksetDraftPackage, ModelTasksetAuthoringSchema } from "../src/taskset-packages.js";
 import { createLearningTextAsset, learningRef, sealLearningContent } from "@openpond/evals/learning";
 import { compileBoundGraders, createRewardBinding, RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
@@ -13,6 +13,10 @@ import { createJavaScriptEnvironmentSession } from "@openpond/evals/javascript-e
 import { executeJavaScriptEnvironmentInWorker } from "@openpond/evals/javascript-environment/node";
 import { resolveTasksetPackageExecution } from "../src/taskset-packages.js";
 import { ordinaryToolTaskset } from "./fixtures/ordinary-tool-taskset.js";
+import { prepareImportedTasksetPackage } from "../src/taskset-package-projection.js";
+import { buildTasksetTrainingBundle } from "../src/training-bundle.js";
+import { computeTasksetHash } from "../src/taskset-authored-validation.js";
+import { materializePortableTasksetRelease } from "../src/taskset-authored-portable-release.js";
 
 // Ordinary executable packages must close their private graph at admission,
 // and owned revisions must execute changed code without altering the source.
@@ -102,19 +106,29 @@ it("retains private package closure and rejects substituted independent release 
   await expect(client.getByRelease(release)).rejects.toMatchObject({ code: "package_readback_mismatch" });
 });
 
-// Selecting a reusable Reward must not rewrite requests, lose binary/private
-// assets, mutate shared history, or claim the old checker's qualification.
+// Failure story: a bound package can retain a skill file yet silently omit it
+// from the actual trainer mounts. Follow public resources into the real bundle
+// while keeping original source references and private files out of mounts.
 it("binds ordinary packages while retaining exact task and execution data", () => {
   const asset = createLearningTextAsset({ path: "graders/selected.js", mediaType: "application/javascript", visibility: "verifier", text: "export function verify() { return { score: 1, passed: true }; }" });
   const reward = RewardReleaseSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardRelease.v1", id: "selected-reward", revision: 1, name: "Selected", description: "", implementation: { kind: "custom_verifier", verifierRef: asset.asset, exportName: "verify", timeoutMs: 1_000, networkPolicy: "none" }, rawScore: { minimum: 0, maximum: 1 }, assets: [asset.asset] }));
   const rewardBinding = RewardBindingSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardBinding.v1", id: "selected-binding", revision: 1, name: "Selected", description: "", sources: [{ graderId: "selected", reward: learningRef(reward), role: "training", normalization: { kind: "identity" }, weight: 1, required: true, hardGate: true, privileged: true, fixtureRefs: [] }], aggregation: "weighted_mean", unscorable: "exclude_optional_require_all_required" }));
   const owner = { scopeId: "profile-a", modelId: "model-a" };
+  const shared = [
+    createLearningTextAsset({ path: "skills/quoting/SKILL.md", mediaType: "text/markdown", visibility: "policy", text: "Use the supplied offline workbook helper." }),
+    { asset: { id: "offline-wheel", path: "skills/quoting/runtime/dependency.whl", mediaType: "application/zip", visibility: "policy" as const,
+      sizeBytes: 4, contentHash: sha256(new Uint8Array([0, 255, 128, 10])) }, base64: Buffer.from([0, 255, 128, 10]).toString("base64") },
+  ].map(file => "base64" in file ? file : { asset: file.asset, base64: Buffer.from(file.text).toString("base64") });
   for (const original of [fixture(), ordinaryToolTaskset()]) {
     const { contentHash: _packageHash, ...packageContent } = original;
     const { contentHash: _taskHash, ...taskContent } = original.taskset;
-    const source = createTasksetPackage({ ...packageContent, taskset: sealLearningContent({ ...taskContent,
+    const privateFile = original.files.find(file => file.asset.visibility === "verifier")!;
+    const declarations = [...shared.map(file => ({ id: file.asset.id, kind: "file", path: file.asset.path, visibility: "policy_visible", required: true, metadata: {} })),
+      { id: privateFile.asset.id, kind: "file", path: privateFile.asset.path, visibility: "privileged", required: true, metadata: {} }];
+    const source = createTasksetPackage({ ...packageContent, files: [...original.files, ...shared], taskset: sealLearningContent({ ...taskContent,
       metadata: { ...taskContent.metadata, ordinaryAuthoring: { instructions: "Follow each task request." }, qualification: { passed: true },
-        workAssetStagingPaths: { [taskContent.tasks[0]!.id]: { "binary-input": "inputs/original.bin" } },
+        environmentResources: declarations,
+        workAssetStagingPaths: { [taskContent.tasks[0]!.id]: { "binary-input": "inputs/binary-input" } },
         tasksetOutputContract: { mode: "json_schema", jsonSchema: { type: "object", required: ["answer"] } } },
     }) });
     const before = JSON.stringify(source);
@@ -127,6 +141,7 @@ it("binds ordinary packages while retaining exact task and execution data", () =
     expect(bound.environment).toEqual(source.environment);
     expect(bound.taskset.metadata.workAssetStagingPaths).toEqual(source.taskset.metadata.workAssetStagingPaths);
     expect(bound.taskset.metadata.tasksetOutputContract).toEqual(source.taskset.metadata.tasksetOutputContract);
+    expect(bound.taskset.metadata.environmentResources).toEqual(declarations);
     for (const file of source.files) expect(bound.files).toContainEqual(file);
     expect(bound.modelResources?.instructionMode).toBe("per_task");
     expect(bound.taskset.metadata.modelTasksetDerivation).toMatchObject({ owner, root: learningRef(source.taskset), parent: learningRef(source.taskset) });
@@ -143,6 +158,58 @@ it("binds ordinary packages while retaining exact task and execution data", () =
     expect(() => bindOrdinaryModelTasksetReward({ ...intent, assets: [] })).toThrow(/private asset/);
     expect(() => bindOrdinaryModelTasksetReward({ ...intent, source: bound })).toThrow(/ordinary source/);
     expect(JSON.stringify(source)).toBe(before);
+
+    const imported = prepareImportedTasksetPackage({ package: bound, profileId: owner.scopeId, name: "Resource boundary", createdAt: "2026-10-16T00:00:00.000Z" }).taskset;
+    // A current response schema must survive publication even when an imported
+    // release retains older metadata. Losing it silently removes typed tools.
+    for (const responseContract of [
+      { mode: "structured_json", jsonSchema: { type: "object", properties: { answer: { type: "integer" } }, required: ["answer"] } },
+      { mode: "artifacts", requiredOutputSource: "task.requiredOutputs", responsePath: "results/answer.json" },
+    ]) {
+      for (const derivedPortableMetadata of [imported.metadata.derivedPortableMetadata, undefined]) {
+        const republished = materializePortableTasksetRelease({ taskset: { ...imported, metadata: { ...imported.metadata, derivedPortableMetadata, tasksetOutputContract: responseContract } }, adapterId: "response-boundary" });
+        expect(republished.tasksetRelease.metadata.tasksetOutputContract).toEqual(responseContract);
+      }
+    }
+    for (const task of imported.tasks) {
+      expect(task.metadata.portableTaskRecord).toEqual(bound.taskset.tasks.find(original => original.id === task.id));
+      for (const file of shared) expect(task.assets).toContainEqual(expect.objectContaining({ id: file.asset.id, artifactRef: file.asset.path,
+        stagingPath: file.asset.path, sha256: file.asset.contentHash, sizeBytes: file.asset.sizeBytes, split: task.split }));
+      expect(task.assets?.some(asset => asset.id === privateFile.asset.id)).toBe(false);
+    }
+    const portable = materializePortableTasksetRelease({ taskset: imported, adapterId: "resource-fixture" });
+    expect(portable.tasksetRelease.tasks).toEqual(bound.taskset.tasks);
+    expect(portable.tasksetRelease.metadata.environmentResources).toEqual(declarations);
+    // Exercise the same serialized dataset/asset inventory consumed by portable
+    // native conversion, without manually unioning Environment resource files.
+    const train = structuredClone(imported);
+    train.tasks = train.tasks.map(task => ({ ...task, split: "train", assets: task.assets?.map(asset => ({ ...asset, split: "train" })) }));
+    train.contentHash = computeTasksetHash(train);
+    const base = { schemaVersion: "openpond.baseModelPreference.v1", modelId: "fixture", revision: "revision", tokenizerRevision: "tokenizer", chatTemplateHash: "a".repeat(64), modelAssetId: null, source: "local" };
+    const project = ModelProjectSchema.parse({ schemaVersion: "openpond.modelProject.v2", id: "resource-model", profileId: owner.scopeId, name: "Resources", objective: null,
+      defaultDestinationId: "openpond_managed", defaultBaseModel: base,
+      trainingSetup: { tasksetRef: learningRef(train), baseModel: base, method: "sft", recipe: { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora" } },
+      createdAt: train.createdAt, updatedAt: train.updatedAt });
+    const assetBytes = new Map(train.tasks.flatMap(task => (task.assets ?? []).map(asset => [asset.artifactRef,
+      decodeTasksetPackageFile(bound.files.find(file => file.asset.id === asset.id)!)] as const)));
+    const hash = "b".repeat(64);
+    const bundle = buildTasksetTrainingBundle({ taskset: train, modelProject: project, modelRunId: "resource-run",
+      runtime: { adapterId: "fixture", placement: "remote", capabilityReceipt: hash, runtimeVersion: "1", dataPlane: null },
+      compute: { adapterId: "fixture", kind: "managed", deviceOrPool: "fixture", capabilityReceipt: hash, provider: null },
+      engine: { adapterId: "fixture", workerVersion: "1", workerImageDigest: null, upstreamRevision: "fixture", capabilityReceipt: hash },
+      approval: { approvalHash: hash, approvedAt: train.updatedAt, maximumSpendUsd: 1 }, openpondRelease: "fixture", workerProtocol: "fixture",
+      harnessRelease: { id: "fixture-harness", contentHash: hash }, tasksetRelease: { id: bound.taskset.id, contentHash: bound.taskset.contentHash }, tasksetAssetBytes: assetBytes,
+      rewardExecution: { binding: rewardBinding, rewards: [reward] }, verifierAssets: bound.modelResources!.assets.filter(candidate => candidate.id === asset.id) });
+    for (const file of shared) expect(bundle.assets.get(file.asset.path)).toEqual(decodeTasksetPackageFile(file));
+    const dataset = JSON.parse(new TextDecoder().decode(bundle.assets.get("dataset/train.json")));
+    expect(dataset.tasks[0].assets.map((asset: { artifactRef: string }) => asset.artifactRef)).toEqual(train.tasks[0]!.assets!.map(asset => asset.artifactRef));
+    expect(bundle.assets.has(privateFile.asset.path)).toBe(false);
+    const { contentHash: _boundHash, ...boundContent } = bound;
+    const { contentHash: _releaseHash, ...releaseContent } = bound.taskset;
+    const privateAlias = createTasksetPackage({ ...boundContent, taskset: sealLearningContent({ ...releaseContent, metadata: {
+      ...releaseContent.metadata, environmentResources: declarations.map(resource => resource.id === privateFile.asset.id ? { ...resource, visibility: "policy_visible" } : resource),
+    } }) });
+    expect(() => prepareImportedTasksetPackage({ package: privateAlias, profileId: owner.scopeId, name: "Private alias", createdAt: train.createdAt })).toThrow(/public package file/);
   }
 });
 

@@ -13,6 +13,8 @@ export {
   type TrainingAcceptanceTarget,
 } from "./training-acceptance.js";
 import { z } from "zod";
+import { TrainingPhysicalPlacementSchema } from "./training-physical-placement.js";
+export { TrainingPhysicalPlacementSchema, type TrainingPhysicalPlacement } from "./training-physical-placement.js";
 import { createTrainingPreparationClient } from "./training-preparations.js";
 export {
   TrainingPreparationRequestSchema,
@@ -287,6 +289,7 @@ export const TrainingJobSubmissionSchema = z
     job: TrainingJobRequestSchema,
     requestedCapabilities: z.array(TrainingCapabilityRequirementSchema).max(1_000),
     placementObjective: z.enum(["fast", "balanced", "economical"]),
+    physicalPlacement: TrainingPhysicalPlacementSchema.optional(),
     budget: z
       .object({
         maximumSpendUsd: z.number().nonnegative(),
@@ -298,6 +301,10 @@ export const TrainingJobSubmissionSchema = z
   })
   .strict()
   .superRefine((submission, context) => {
+    if (submission.physicalPlacement && (submission.job.kind !== "policy_optimize" ||
+      submission.job.resumeFrom || submission.job.executionMode || submission.job.recipe.continuation !== undefined)) {
+      context.addIssue({ code: "custom", path: ["physicalPlacement"], message: "Reuse-only placement requires fresh-base policy training without continuation." });
+    }
     if (submission.job.kind === "policy_optimize" && submission.job.executionMode === "qualification") {
       const job = submission.job;
       if (!TrainingQualificationBaseModelSchema.safeParse(job.baseModel).success) {
@@ -348,6 +355,8 @@ export async function parseAndVerifyTrainingJobSubmission(
 }
 
 export const TrainingJobRecoverySchema = z.object({
+  mode: z.literal("evaluation_only").optional(),
+  trainingWorkloadComplete: z.boolean().optional(),
   sourceJobId: IdSchema,
   checkpointId: IdSchema,
   policyVersion: z.number().int().positive(),
@@ -426,12 +435,19 @@ export const TrainingJobControlRequestSchema = z
 
 /** Exact execution recovery; a continual-training optimizer reset is separate. */
 export const TrainingCheckpointRecoveryRequestSchema = z.object({
+  /** Opt in to finish a stopped partial workload's exact frozen panel only. */
+  mode: z.literal("evaluation_only").optional(),
+  /** Exact owner-approved evaluation shape; omitted keeps the original GPU. */
+  evaluationGpuType: z.enum(["NVIDIA A100 80GB PCIe", "NVIDIA A100-SXM4-80GB", "NVIDIA H100 80GB HBM3"]).optional(),
   expectedVersion: z.number().int().positive(),
   checkpointId: IdSchema,
   idempotencyKey: z.string().trim().min(16).max(191),
   maximumSpendUsd: z.number().positive().finite(),
   maximumWallSeconds: z.number().int().positive().max(10800),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.evaluationGpuType && value.mode !== "evaluation_only")
+    context.addIssue({ code: "custom", path: ["evaluationGpuType"], message: "GPU substitution requires explicit evaluation-only recovery" });
+});
 
 export const TrainingJobOutputSchema = z
   .object({

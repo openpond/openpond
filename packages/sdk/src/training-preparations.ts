@@ -2,6 +2,7 @@ import { TrainingHandoffOriginSchema } from "./post-training.js";
 import { z } from "zod";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { TrainingJobSourceSchema } from "./training.js";
+import { TrainingPhysicalPlacementSchema } from "./training-physical-placement.js";
 import { canonicalSha256, OpenPondProtocolError } from "./protocol.js";
 
 const Id = z.string().trim().min(1).max(191);
@@ -21,6 +22,7 @@ export const TrainingPreparationRequestSchema = z
     batch: ModelProjectVersionedRefSchema,
     name: z.string().trim().min(1).max(191),
     maximumSpendUsd: z.number().finite().positive().max(1_000_000),
+    physicalPlacement: TrainingPhysicalPlacementSchema.optional(),
   })
   .strict();
 export const TrainingPreparationPlanContentSchema = z

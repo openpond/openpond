@@ -10,7 +10,7 @@ const WorkerControlSchema = z.object({
   maximumIdleUsd: z.number().positive().max(10).optional(),
   sessionId: z.string().min(1).max(191).optional(),
   sessionDeadlineAt: z.iso.datetime({ offset: true }).optional(),
-  maximumSessionUsd: z.number().positive().max(10).optional(),
+  maximumSessionUsd: z.number().positive().max(30).optional(),
   idleGraceSeconds: z.number().int().min(120).max(10800).optional(),
 }).strict();
 

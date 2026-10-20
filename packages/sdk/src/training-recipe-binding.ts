@@ -110,6 +110,8 @@ export function withAuthoritativeRecipeHashes(
   const maxPromptTokens = positiveInteger(dataset.maxPromptTokens, 1);
   const maxSteps = positiveInteger(optimizer.maxSteps, 1);
   const optimizerIterations = positiveInteger(optimizer.iterations, 2);
+  const maxRollouts = positiveInteger(resourceLimits.maxRollouts, maxSteps * groupSize);
+  const maxTurns = positiveInteger(rollout.maxTurns, 1);
   return {
     ...candidate,
     resourceLimits: {
@@ -158,10 +160,12 @@ export function withAuthoritativeRecipeHashes(
         referenceConstraint: "fixed_reference",
       },
       budgets: {
-        maxRollouts: positiveInteger(resourceLimits.maxRollouts, maxExamples * groupSize),
-        maxEnvironmentExecutions: positiveInteger(resourceLimits.maxRollouts, maxExamples * groupSize),
-        maxInputTokens: maxExamples * groupSize * maxPromptTokens,
-        maxOutputTokens: maxExamples * groupSize * maxOutputTokens,
+        maxRollouts,
+        maxEnvironmentExecutions: maxRollouts,
+        // Tasks can be sampled over multiple groups, and every tool turn can
+        // generate another policy request within the same rollout.
+        maxInputTokens: maxRollouts * maxTurns * maxPromptTokens,
+        maxOutputTokens: maxRollouts * maxTurns * maxOutputTokens,
         maxOptimizerSteps: maxSteps * optimizerIterations,
         wallTimeMs: positiveInteger(resourceLimits.wallTimeMs, 180_000),
         maximumCostUsd: null,
@@ -202,4 +206,3 @@ function positiveInteger(value: unknown, fallback: number): number {
     ? value
     : fallback;
 }
-

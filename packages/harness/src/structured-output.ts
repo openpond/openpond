@@ -1,11 +1,12 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import { sha256Hex as sha256 } from "./sha256.js";
 import { canonicalJson } from "./common.js";
+import { structuredOutputDiagnostic } from "./structured-output-diagnostics.js";
 
 export const STRUCTURED_OUTPUT_CAPABILITY = "work.structured-output.v1";
 export type StructuredOutputContract = { schema: Record<string, unknown>; schemaHash: string; schemaSource: string };
 export type WorkRequiredOutput = { path: string; mediaType: string; maxBytes?: number | null; submissionMode?: "structured_json"; structuredOutput?: StructuredOutputContract };
-export type ValidationIssue = { path: string; message: string };
+export type ValidationIssue = { path: string; message: string; keyword: string; schemaPath: string };
 const keywords = new Set(["$schema", "$id", "$defs", "$ref", "title", "description", "type", "properties", "required", "additionalProperties", "items", "minItems", "maxItems", "minLength", "maxLength", "minimum", "maximum", "enum", "const", "allOf", "anyOf", "oneOf", "not", "if", "then", "else", "uniqueItems", "pattern", "multipleOf", "exclusiveMinimum", "exclusiveMaximum", "minProperties", "maxProperties"]);
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const validators = new Map<string, ReturnType<Ajv2020["compile"]>>();
@@ -91,7 +92,7 @@ export function validateStructuredOutput(schema: Record<string, unknown>, data: 
   bound(data, 0);
   const validator = compiled(schema);
   if (validator(data)) return [];
-  return (validator.errors ?? []).slice(0, 20).map(error => ({ path: error.instancePath + (error.keyword === "required" ? "/" + String(error.params.missingProperty).replaceAll("~", "~0").replaceAll("/", "~1") : ""), message: error.message ?? "Schema assertion failed" }));
+  return (validator.errors ?? []).slice(0, 20).map(error => structuredOutputDiagnostic(schema, data, error));
 }
 export function validateOutputBytes(output: WorkRequiredOutput, bytes: Uint8Array) {
   if (bytes.byteLength > (output.maxBytes ?? 10000000)) throw new Error("work_output_too_large");

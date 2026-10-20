@@ -7,6 +7,7 @@ import { buildTasksetTrainingBundle } from "./training-bundle.js";
 import { prepareManagedTrainingSubmission, type ManagedTrainingPreparationInput } from "./managed-training-preparation.js";
 import { deterministicTrainingRewardSource } from "./training-grading-plan.js";
 import { TrainingCapabilitiesSchema, type TrainingCapabilities } from "./training.js";
+import { qualificationVerifierAssets } from "./training-verifier-assets.js";
 
 export type OrdinaryTasksetQualificationInput = Omit<Parameters<typeof buildTasksetTrainingBundle>[0],
   "taskset" | "executionMode" | "qualificationSource" | "tasksetRelease" | "rewardExecution" | "verifierAssets" | "tasksetAssetBytes" | "evaluationSource" | "approval"> & {
@@ -35,7 +36,7 @@ export async function prepareOrdinaryTasksetQualification(input: OrdinaryTaskset
   if (source.taskset.tasks.some(task => task.privilegedContextRef !== null || task.artifactRefs.some(asset => asset.visibility !== "policy"))) {
     throw new Error("Qualification runtime requires private targets in expectedOutput and policy-only task assets.");
   }
-  const rewards = source.taskset.graders.map(grader => {
+  const rewards = await Promise.all(source.taskset.graders.map(async grader => {
     const { id, version, weight: _weight, hardGate: _gate, rewardEligible: _eligible, privileged: _private, taskIds: _tasks, ...implementation } = grader;
     const revision = Number(version);
     if (!Number.isSafeInteger(revision) || revision < 1 || String(revision) !== version
@@ -44,8 +45,8 @@ export async function prepareOrdinaryTasksetQualification(input: OrdinaryTaskset
     }
     return createRewardRelease({ schemaVersion: "openpond.rewardRelease.v1", id: `qualification-${contentHash({ source: source.contentHash, id }).slice(0, 40)}`,
       revision, name: id, description: "Exact ordinary package grader for no-update qualification.", implementation,
-      rawScore: { minimum: 0, maximum: 1 }, assets: implementation.kind === "custom_verifier" ? [implementation.verifierRef] : [] });
-  });
+      rawScore: { minimum: 0, maximum: 1 }, assets: implementation.kind === "custom_verifier" ? await qualificationVerifierAssets(source, implementation.verifierRef) : [] });
+  }));
   const binding = createRewardBinding({ schemaVersion: "openpond.rewardBinding.v1", id: `qualification-${source.contentHash.slice(0, 40)}`, revision: 1,
     sources: source.taskset.graders.map((grader, index) => ({ graderId: grader.id, ...(grader.taskIds ? { taskIds: grader.taskIds } : {}),
       reward: { id: rewards[index]!.id, revision: rewards[index]!.revision, contentHash: rewards[index]!.contentHash },

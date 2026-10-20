@@ -67,6 +67,9 @@ export const TasksetDraftReviewPolicySchema = z.object({
 export const TasksetDraftOutputContractSchema = z.object({
   mode: z.enum(["text", "structured_json", "artifacts"]),
   jsonSchema: z.record(z.string(), z.unknown()).nullable(),
+  requiredOutputSource: z.literal("task.requiredOutputs").optional(),
+  responsePath: z.string().trim().min(1).max(1_000)
+    .refine(safeRelativeFilePath, "Response paths must name a safe relative output path.").optional(),
   renderer: z.object({
     module: z.string().trim().min(1).max(1_000)
       .refine(safeRelativeFilePath, "Renderer modules must use a safe relative path."),
@@ -77,6 +80,13 @@ export const TasksetDraftOutputContractSchema = z.object({
       .default(null),
   }).nullable(),
 }).superRefine((output, context) => {
+  if (output.responsePath !== undefined && (output.mode !== "artifacts" || output.requiredOutputSource !== "task.requiredOutputs")) {
+    context.addIssue({ code: "custom", path: ["responsePath"],
+      message: "An artifact response path requires artifacts mode and task.requiredOutputs." });
+  }
+  if (output.requiredOutputSource !== undefined && output.mode !== "artifacts") {
+    context.addIssue({ code: "custom", path: ["requiredOutputSource"], message: "Required output sources belong to artifacts mode." });
+  }
   if (output.mode === "structured_json" && !output.jsonSchema) {
     context.addIssue({
       code: "custom",
