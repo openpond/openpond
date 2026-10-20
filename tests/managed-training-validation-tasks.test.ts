@@ -6,6 +6,7 @@ import { computeTasksetHash } from "@openpond/taskset-sdk";
 
 import { resolveManagedValidationTaskSource } from "../apps/server/src/training/managed-training-validation-tasks.js";
 import { dpoRecipeFixture, ppoRecipeFixture, sftRecipeFixture, tasksetFixture } from "./helpers/training-fixtures.js";
+import { managedRftRecipe } from "./helpers/managed-training-fixtures.js";
 
 const entryRef = {
   seriesId: "series-a",
@@ -74,6 +75,13 @@ describe("managed continual-learning validation source", () => {
       trainingPlan: { evaluationTasksetRef: selectedReference }, trainingTaskset: training,
     });
     expect((await resolve(heldOut)).tasks).toEqual(heldOut.tasks);
+    const withRecipe = (recipe: ReturnType<typeof sftRecipeFixture>) => resolveManagedValidationTaskSource({
+      store: { getTasksetRevision: async () => heldOut } as never,
+      trainingPlan: { evaluationTasksetRef: reference, recipe }, trainingTaskset: training,
+    });
+    const frozenRecipe = sftRecipeFixture();
+    await expect(withRecipe(frozenRecipe)).rejects.toThrow(/declared frozen_eval split/);
+    expect((await withRecipe({ ...frozenRecipe, dataset: { ...frozenRecipe.dataset, validationSplit: "validation" } })).tasks).toEqual(heldOut.tasks);
     for (const invalid of [null, { ...heldOut, revision: 3 }, { ...heldOut, profileId: "other-workspace" },
       { ...heldOut, tasks: [{ ...heldOut.tasks[0], clusterKey: training.tasks[0].clusterKey }] },
       { ...heldOut, graders: [{ ...heldOut.graders[0], id: "different-grader" }] },
@@ -87,15 +95,31 @@ describe("managed continual-learning validation source", () => {
     }
     await expect(resolveManagedValidationTaskSource({ store: {} as never, trainingPlan: {}, trainingTaskset: training })).rejects.toThrow("Select a held-out");
   });
-  it("uses validation rows already present in the training Taskset", async () => {
-    const training = taskset("train", ["train", "validation"]);
+  // A declared evaluation split must not silently absorb another held-out panel.
+  it("uses the declared evaluation split without changing the immutable training Taskset", async () => {
+    const training = taskset("train", ["train", "validation", "frozen_eval"]);
     const result = await resolveManagedValidationTaskSource({
       store: {} as never,
       trainingPlan: plan(null),
       trainingTaskset: training,
     });
     expect(result.taskset.id).toBe("train");
-    expect(result.tasks.map((task) => task.id)).toEqual(["train-1"]);
+    expect(result.tasks.map((task) => task.id)).toEqual(["train-1", "train-2"]);
+    for (const recipe of [sftRecipeFixture(), dpoRecipeFixture(), managedRftRecipe()]) {
+      const selected = await resolveManagedValidationTaskSource({ store: {} as never,
+        trainingPlan: { recipe }, trainingTaskset: training });
+      expect(selected.taskset).toBe(training);
+      expect(computeTasksetHash(selected.taskset)).toBe(training.contentHash);
+      expect(selected.tasks).toEqual([training.tasks[2]]);
+      const validation = await resolveManagedValidationTaskSource({ store: {} as never,
+        trainingPlan: { recipe: { ...recipe, dataset: { ...recipe.dataset, validationSplit: "validation" } } }, trainingTaskset: training });
+      expect(validation.tasks).toEqual([training.tasks[1]]);
+    }
+    const ppo = await resolveManagedValidationTaskSource({ store: {} as never,
+      trainingPlan: { recipe: ppoRecipeFixture() }, trainingTaskset: training });
+    expect(ppo.tasks).toEqual(result.tasks);
+    await expect(resolveManagedValidationTaskSource({ store: {} as never,
+      trainingPlan: { recipe: { dataset: { validationSplit: "frozen_eval" } } }, trainingTaskset: training })).rejects.toThrow();
   });
 
   it("resolves the exact sealed development panel for a train-only series release", async () => {
@@ -126,5 +150,9 @@ describe("managed continual-learning validation source", () => {
       "development-1",
       "development-2",
     ]);
+    const selected = await resolveManagedValidationTaskSource({ store: store as never,
+      trainingPlan: { ...plan(entryRef), recipe: managedRftRecipe() }, trainingTaskset: training });
+    expect(selected.taskset).toBe(development);
+    expect(selected.tasks).toEqual([development.tasks[2]]);
   });
 });

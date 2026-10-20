@@ -63,7 +63,7 @@ export function createPortableTrainingServiceSupport(input: {
       const taskset = reference ? await input.store.getTasksetRevision(reference.id, reference.revision, reference.contentHash) : null;
       if (!taskset || taskset.profileId !== modelProject.profileId) throw new Error("The training Taskset revision is unavailable in this workspace.");
       await buildManagedTrainingEvaluationSource({ store: input.store, storeDir: input.storeDir, trainingTaskset: taskset,
-        trainingPlan: { evaluationTasksetRef: modelProject.trainingSetup.evaluationTasksetRef } });
+        trainingPlan: { evaluationTasksetRef: modelProject.trainingSetup.evaluationTasksetRef, recipe: modelProject.trainingSetup.recipe } });
     }
     const trainingCatalog = await catalog();
     return preparePortableModelRun({
