@@ -23,6 +23,24 @@ test("resolves an omitted GRPO GPU cap before approval and preserves explicit li
   expect(prepare(21_600_000, 21_600)).toBe(21_600);
   expect(() => prepare(21_600_000, 21_601)).toThrow();
   expect(() => prepare(1_800_000, 0)).toThrow();
+
+  // A reviewed cold-start allowance must survive canonical authoring and
+  // the SDK's authoritative recipe binding instead of disappearing at parse.
+  const coldRecipe = {
+    ...recipe,
+    resourceLimits: { ...recipe.resourceLimits, warmupDeadlineSeconds: 3_600 },
+  };
+  const resolvedCold = TrainingRecipeSchema.parse(withAuthoritativeRecipeHashes(taskset,
+    TrainingRecipeSchema.parse(JSON.parse(JSON.stringify(coldRecipe)))));
+  if (resolvedCold.method !== "grpo") throw new Error("Expected GRPO recipe");
+  expect(resolvedCold.resourceLimits.warmupDeadlineSeconds).toBe(3_600);
+  expect(resolvedCold.resourceLimits.wallTimeMs).toBe(recipe.resourceLimits.wallTimeMs);
+  for (const warmupDeadlineSeconds of [0, -1, 3_601, 1.5, "3600", null]) {
+    expect(() => TrainingRecipeSchema.parse({
+      ...coldRecipe,
+      resourceLimits: { ...coldRecipe.resourceLimits, warmupDeadlineSeconds },
+    })).toThrow();
+  }
 });
 
 // Reopening or editing visible fields must not expand saved limits or replace unexposed optimizer settings.

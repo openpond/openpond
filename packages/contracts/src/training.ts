@@ -298,6 +298,9 @@ export const RftRecipeSchema = deferredObject(() => ({
       .positive()
       .max(24 * 60 * 60 * 1_000),
     maxGpuSeconds: z.number().int().positive().max(21_600).optional(),
+    // Absolute provider/image/model/inference readiness window; managed
+    // execution still enforces the approved wall-time and spend ceilings.
+    warmupDeadlineSeconds: z.number().int().positive().max(3_600).optional(),
     maxRollouts: z.number().int().positive().max(100_000),
     maxPayloadBytes: z
       .number()
