@@ -599,6 +599,7 @@ export function TrainingStartDialog({
         inlineProviderApproval={approvalPresentation === "inline" ? providerApprovalFields : null}
       />
       <TrainingStartSummary
+        recipe={recipe}
         method={method}
         trainingExamples={trainingExamples}
         availableTrainExamples={availableTrainExamples}

@@ -6,7 +6,7 @@ import {
 } from "openpond-sdk/training";
 import { PostTrainingSummarySchema, PostTrainingControlSchema } from "openpond-sdk/post-training";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
-import { RunStageEvidenceSchema } from "@openpond/contracts";
+import { RunStageEvidenceSchema, RunFeedbackTargetSchema, RunGraderFeedbackSchema } from "@openpond/contracts";
 import { hostedRunStageEvidence } from "./hosted-run-stage-evidence.js";
 
 const Id = z.string().trim().min(1).max(200);
@@ -65,8 +65,37 @@ export function createHostedTrainingRunDetail(input: {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   }
   const path = (id: string) => `/v1/training/jobs/${encodeURIComponent(Id.parse(id))}`;
+  async function readFlow(id: string) {
+    Id.parse(id);
+    const raw = await request(`/v1/managed-rl/jobs/${encodeURIComponent(id)}?view=console`, undefined, 67_108_864);
+    const projectId = z.string().min(1).parse(raw.job?.job?.modelProjectId);
+    const flow = hostedRunStageEvidence(raw.job, { entries: [] }, { jobId: id, teamId: input.teamId, modelProjectId: projectId });
+    await fence();
+    return flow;
+  }
   return {
-    async read(id: string) {
+    readFlow,
+    async feedback(id: string, target: unknown) {
+      Id.parse(id);
+      const reference = RunFeedbackTargetSchema.parse(target);
+      const query = new URLSearchParams({ kind: reference.kind, id: reference.id, ...(reference.taskId ? { taskId: reference.taskId } : {}) });
+      const result = RunGraderFeedbackSchema.parse(await request(`/v1/managed-rl/jobs/${encodeURIComponent(id)}/feedback?${query}`, undefined, 262144));
+      if (result.jobId !== id || result.kind !== reference.kind || result.id !== reference.id || result.taskId !== reference.taskId) throw new Error("Grader feedback belongs to another run or attempt.");
+      return result;
+    },
+    async summary(id: string) {
+      const result = await request(path(id));
+      const job = TrainingJobSchema.parse(result.job);
+      if (job.id !== id || job.teamId !== input.teamId) throw new Error("Training summary belongs to another run.");
+      return job;
+    },
+    async logs(id: string) {
+      Id.parse(id);
+      const raw = await request(`/v1/managed-rl/jobs/${encodeURIComponent(id)}/logs`);
+      const entries = z.object({ entries: z.array(z.object({ id: z.string(), timestamp: z.string(), source: z.string(), message: z.string(), level: z.string() }).passthrough()).max(10000) }).passthrough().parse(raw).entries;
+      return RunStageEvidenceSchema.shape.logs.parse(entries.slice(-200).map(entry => ({ id: entry.id, at: entry.timestamp, source: entry.source.replaceAll("_", " "), message: entry.message, level: entry.level })));
+    },
+    async read(id: string, options: { includeFlow?: boolean } = {}) {
       const base = path(id);
       const [job, events, outputs, evals] = await Promise.all([
         request(base),
@@ -89,16 +118,9 @@ export function createHostedTrainingRunDetail(input: {
         throw new Error("Training evidence belongs to another run.");
       let flow = null,
         flowError = null;
-      try {
-        const [raw, logs] = await Promise.all([
-          request(`/v1/managed-rl/jobs/${encodeURIComponent(id)}`, undefined, 67_108_864),
-          request(`/v1/managed-rl/jobs/${encodeURIComponent(id)}/logs`),
-        ]);
-        flow = hostedRunStageEvidence(raw.job, logs, {
-          jobId: id,
-          teamId: input.teamId,
-          modelProjectId: core.job.modelProjectId,
-        });
+      if (options.includeFlow !== false) try {
+        flow = await readFlow(id);
+        if (flow.modelProjectId !== core.job.modelProjectId) throw new Error("Flow evidence belongs to a different Model Project.");
       } catch (error) {
         flowError =
           error instanceof z.ZodError

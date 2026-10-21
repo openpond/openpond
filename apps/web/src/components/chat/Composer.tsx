@@ -76,6 +76,7 @@ import {
 } from "./ComposerControls";
 import { ComposerGoalStrip } from "./ComposerGoalStrip";
 import { ComposerSteerQueue } from "./ComposerSteerQueue";
+import { ComposerTaskProgress } from "./ComposerTaskProgress";
 import {
   composerSteerDraftsAfterSubmit,
   composerSteerDraftsForScope,
@@ -1693,6 +1694,7 @@ export function Composer({
           onToggleDetails={() => setGoalDetailsOpen((open) => !open)}
         />
       )}
+      <ComposerTaskProgress />
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu

@@ -76,7 +76,9 @@ export function LabsRoute(props: LabsRouteProps) {
   const [hostedResourceTitle, setHostedResourceTitle] = useState<{ key: string; name: string | null } | null>(null);
   const reportHostedResourceName = useCallback((name: string | null) => setHostedResourceTitle(current => current?.key === hostedResourceKey && current.name === name ? current : { key: hostedResourceKey, name }), [hostedResourceKey]);
   const priorWorkspace = useRef(workspaceKey);
-  const workspaceChanged = priorWorkspace.current !== workspaceKey;
+  const workspaceEstablished = useRef(false);
+  const workspaceReady = Boolean(profileView.connection && profileView.payload && state);
+  const workspaceChanged = workspaceEstablished.current && priorWorkspace.current !== workspaceKey;
   useErrorToast(createImprove.error);
   useErrorToast(training.training.error);
   const workproducts = useMemo(() => labWorkproductProjection({ profile, training: state, runs: createImprove.runs }), [profile, state, createImprove.runs]);
@@ -86,7 +88,10 @@ export function LabsRoute(props: LabsRouteProps) {
     return workproducts.filter((item) => item.kind === "model" && ids.has(item.id));
   }, [state, profileId, training.settingsPreferences.defaultTeamId, workproducts]);
   const selected = models.find((model) => model.id === route?.modelId) ?? null;
-  const hostedRefreshError = useHostedModelRefresh(state?.modelProjects.find(model => model.id === selected?.id) ?? null,
+  const refreshModel = route?.resourceId
+    ? models.find(model => model.id === modelResourceOwner(route, state)) ?? null
+    : selected;
+  const hostedRefreshError = useHostedModelRefresh(state?.modelProjects.find(model => model.id === refreshModel?.id) ?? null,
     training.settingsPreferences.defaultTeamId ?? null, props.account?.apiBaseUrl ?? null, training.training);
   const modelRunSyncKey = useMemo(() => trainingModelRunSyncKey(state), [state]);
   const agentRunSyncKey = useMemo(() => computeProfileAgentRunSyncKey(createImprove.runs), [createImprove.runs]);
@@ -98,6 +103,8 @@ export function LabsRoute(props: LabsRouteProps) {
   }, [profileView.connection, profileView.onPayload, profileView.onError, agentRunSyncKey]);
   useEffect(() => { if (modelRunSyncKey) void createImprove.refresh(); }, [modelRunSyncKey, createImprove.refresh]);
   useEffect(() => {
+    if (!workspaceReady) return;
+    if (!workspaceEstablished.current) { workspaceEstablished.current = true; priorWorkspace.current = workspaceKey; return; }
     if (!workspaceChanged) return;
     priorWorkspace.current = workspaceKey;
     setModelCreateOpen(false);
@@ -108,7 +115,7 @@ export function LabsRoute(props: LabsRouteProps) {
     intakeBusy.current = false;
     setRunTarget(null);
     void navigateModelsRoute(modelsLocation(), "replace");
-  }, [workspaceChanged, workspaceKey]);
+  }, [workspaceChanged, workspaceKey, workspaceReady]);
   useEffect(() => {
     props.onSkillSelectionChange(null);
     return () => props.onDetailOpenChange(null);
@@ -194,6 +201,7 @@ export function LabsRoute(props: LabsRouteProps) {
   const unavailable = (message: string, back = () => open(modelsLocation(route?.page ?? "models"))) => <div className="labs-table-empty" role="status"><p>{message}</p><button className="training-button secondary" type="button" onClick={back}>Return to {route ? MODELS_PAGE_LABELS[route.page] : "Models"}</button></div>;
   let page: ReactNode;
   if (workspaceChanged) page = <p role="status">Loading workspace…</p>;
+  else if (route && ["runs", "versions"].includes(route.page) && route.resourceId && (!props.account || !profileView.payload || (!route.resourceId.startsWith("hosted-run:") && training.training.loading))) page = <p role="status">Loading training run…</p>;
   else if (!route) page = unavailable("This Models location is unavailable.");
   else if (route.page === "home") {
     const teamId = training.settingsPreferences.defaultTeamId, actorId = props.account?.profile?.id;
@@ -212,6 +220,7 @@ export function LabsRoute(props: LabsRouteProps) {
     page = profileView.connection && teamId && actorId ? <HostedTrainingRunRoute key={`${workspaceKey}:${route.resourceId}`} connection={profileView.connection} teamId={teamId} actorId={actorId} projectId={route.projectId??null} jobId={route.resourceId.slice(11)} diagnostics={route.detailTab==="diagnostics"} onDiagnostics={value=>open({...route,detailTab:value?"diagnostics":"details"})} onOpenExperiment={id => open(modelsLocation("experiments",null,{resourceId:id,projectId:route.projectId}))} /> : unavailable("Sign in and select a workspace to open this training run.");
   }
   else if (route.modelId && !state) page = <p role="status">Loading model…</p>;
+  else if (route.modelId && !selected && training.training.loading) page = <p role="status">Loading model…</p>;
   else if (route.modelId && !selected) page = unavailable("This model is not available in the active profile and team.");
   else if (route.page === "get-started") {
     page = <div className="labs-flat-body"><ModelStarterCatalog key={workspaceKey} cacheScope={starterCacheScope} actions={training.training.actions} onSelect={(preview) => { setStarterPreview(preview); setEditingModelId(null); setModelCreateOpen(true); }} onImport={setImportSource} onCreate={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }} /></div>;
@@ -282,7 +291,7 @@ export function LabsRoute(props: LabsRouteProps) {
   } else {
     const ownerId = modelResourceOwner(route, state);
     const owner = models.find((model) => model.id === ownerId) ?? null;
-    page = owner ? <>
+    page = !owner && training.training.loading ? <p role="status">Loading training run…</p> : owner ? <>
       <ModelsResourceDetail key={`${workspaceKey}:${owner.id}:${route.page}`} props={props} model={owner} profile={profile} runs={createImprove.runs} route={route} />
     </> : unavailable("This resource is unavailable in the active workspace.", () => open(modelsLocation(route.page, route.modelId)));
   }

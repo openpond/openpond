@@ -169,8 +169,11 @@ export function useLayoutPreferences({
 
   const startDiffPanelResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (diffPanelExpanded) return;
+      if (diffPanelExpanded || event.button !== 0 || !event.isPrimary) return;
       event.preventDefault();
+      const handle = event.currentTarget;
+      const pointerId = event.pointerId;
+      handle.setPointerCapture(pointerId);
       const startX = event.clientX;
       const startWidth = diffPanelWidth;
       let latestWidth = startWidth;
@@ -184,6 +187,9 @@ export function useLayoutPreferences({
       function onPointerUp() {
         window.removeEventListener("pointermove", onPointerMove);
         window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        handle.removeEventListener("lostpointercapture", onPointerUp);
+        if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
         const localChange = recordLayoutWidthPreferenceChange(startWidth, latestWidth);
         if (localChange) diffPanelWidthChangeRef.current = localChange;
         setDiffPanelResizing(false);
@@ -192,6 +198,8 @@ export function useLayoutPreferences({
 
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp, { once: true });
+      window.addEventListener("pointercancel", onPointerUp, { once: true });
+      handle.addEventListener("lostpointercapture", onPointerUp, { once: true });
     },
     [diffPanelExpanded, diffPanelWidth, persistDiffPanelWidth]
   );

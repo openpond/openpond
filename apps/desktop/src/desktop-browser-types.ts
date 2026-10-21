@@ -79,6 +79,10 @@ export type StoredBrowserTab = {
   title: string | null;
   faviconUrl: string | null;
   lastUpdatedAt: number;
+  navigation?: {
+    index: number;
+    entries: { url: string; title: string; pageState?: string }[];
+  };
 };
 
 export type StoredBrowserConversation = {

@@ -32,9 +32,9 @@ describe("chat timeline rows", () => {
     expect(chatTimelineMessages(split)).toEqual([exchanges[0], commentary, exchanges[1]]);
   });
 
-  // The first command anchors one disclosure throughout an agent round trip;
-  // completion must not replace it or duplicate the streamed message details.
-  test("keeps one Ponder work row from the first command through peer exchanges and completion", () => {
+  // Live tool work must remain visible even when peer exchanges are grouped;
+  // the completed turn still retains every streamed message in its disclosure.
+  test("keeps live commands visible and rolls up the whole turn only on completion", () => {
     const user = message("turn:user", "user", "Ask the agent");
     const command: ChatMessage = {id: "first-command", role: "activity_group", turnId: "turn", timestamp: user.timestamp,
       activities: [{id: "tool", label: "Ran", content: "followup", timestamp: user.timestamp}]};
@@ -43,10 +43,14 @@ describe("chat timeline rows", () => {
     const answer = {...message("turn:answer", "assistant", "The result is 4"), finalAnswer: true};
     const stages = [[user, command], [user, command, sent], [user, command, sent, received], [user, command, sent, received, answer]];
     for (const messages of stages) {
-      const rows = buildChatTimelineRows(messages, {groupInProgressWork: true});
-      const work = rows.filter(row => row.type === "work");
-      expect(work).toHaveLength(1);
-      expect(work[0]?.id).toBe("work:first-command");
+      const rows = buildChatTimelineRows(messages);
+      if (messages.at(-1) === answer) {
+        const work = rows.filter(row => row.type === "work");
+        expect(work).toHaveLength(1);
+        expect(work[0]?.id).toBe("work:first-command");
+      } else {
+        expect(rows.some(row => row.type === "message" && row.message === command)).toBe(true);
+      }
       expect(chatTimelineMessages(rows)).toEqual(messages);
     }
   });

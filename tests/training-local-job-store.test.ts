@@ -182,3 +182,29 @@ describe("local training job store", () => {
     }
   }));
 });
+
+// A completed baseline introduces score metrics ahead of earlier progress
+// metrics. Snapshot order must not collide with durable SQLite event positions,
+// including concurrent refreshes or an older response arriving after a newer one.
+test("merges hosted metric snapshots without sequence collisions or stale rollback", async () => withTrainingStore(async ({ store }) => {
+  const metric = (id: string, value: number, timestamp = "2026-10-17T15:00:00.000Z") => TrainingJobEventSchema.parse({
+    schemaVersion: "openpond.trainingJobEvent.v1", id, jobId: "hosted-job", sequence: 0,
+    type: "metric", timestamp, payload: { metricId: id, value },
+  });
+  const baseline = await store.saveHostedTrainingJobEvent(metric("baseline-count", 2));
+  await Promise.all([
+    store.saveHostedTrainingJobEvent(metric("optimizer-loss", 0.12)),
+    store.saveHostedTrainingJobEvent(metric("baseline-score", 0.8)),
+  ]);
+  const complete = metric("baseline-count", 6, "2026-10-17T15:01:00.000Z");
+  await store.saveHostedTrainingJobEvent(complete);
+  await store.saveHostedTrainingJobEvent(metric("baseline-count", 4));
+  await store.saveHostedTrainingJobEvent(complete);
+  const events = await store.listTrainingJobEvents("hosted-job");
+  expect(events).toHaveLength(3);
+  expect(events.map(event => event.sequence)).toEqual([0, 1, 2]);
+  expect(events.find(event => event.id === "baseline-count")).toMatchObject({ sequence: baseline.sequence, payload: { value: 6 }, timestamp: complete.timestamp });
+  await expect(store.saveHostedTrainingJobEvent({ ...complete, jobId: "another-job" })).rejects.toThrow(/different training job/);
+  expect(await store.listTrainingJobEvents("another-job")).toEqual([]);
+  expect((await store.listTrainingJobEvents("hosted-job"))[0]!.payload.value).toBe(6);
+}));

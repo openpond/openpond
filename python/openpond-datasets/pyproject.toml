@@ -22,3 +22,7 @@ packages = ["src/openpond_datasets"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.uv]
+# Requires the bundled CA update for the October 2026 eMudhra incident.
+required-version = ">=0.13.4"

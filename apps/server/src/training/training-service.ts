@@ -620,8 +620,8 @@ export function createTrainingService(deps: {
     }));
   }
 
-  async function state() {
-    const activeState = await activity();
+  async function state(options: { background?: boolean } = {}) {
+    const activeState = await activity(options);
     const [
       plans,
       bundles,

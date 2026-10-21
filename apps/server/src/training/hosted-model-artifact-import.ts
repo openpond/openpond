@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { SqliteStore } from "../store/store.js";
 import { candidateEvaluationArtifact, importPortableModelRunArtifacts } from "./portable-model-run-artifacts.js";
 import { readManagedTrainingRetainedOutputs, type ManagedTrainingOutputAccess } from "./managed-training-retained-outputs.js";
+import type { HostedRecoveryImport } from "./hosted-model-recovery.js";
 
 /** Import hosted candidates into the existing Versions and binding path without a local training launch. */
 export async function importHostedModelArtifacts(input: {
@@ -16,21 +17,35 @@ export async function importHostedModelArtifacts(input: {
   project: ModelProject;
   job: TrainingJob;
   submission: unknown;
+  recovery?: HostedRecoveryImport;
   access: ManagedTrainingOutputAccess;
   fetch?: typeof fetch;
 }): Promise<void> {
   if (input.job.status !== "succeeded") return;
   const submission = await parseAndVerifyTrainingJobSubmission(input.submission);
   const { source } = submission;
+  const executionHash = input.recovery?.executionSubmissionHash ?? submission.contentHash;
   if (source.modelProject.portableProjectId !== input.project.id
     || source.modelProject.id !== input.project.hosted?.projectId
     || source.modelProject.revision !== input.job.metadata.sourceProjectRevision) {
     throw new Error("The hosted artifact submission belongs to a different Model revision.");
   }
   const retained = await readManagedTrainingRetainedOutputs({ ...input, jobId: input.job.id,
-    expectedSubmissionHash: submission.contentHash, expectedManifestHash: source.harnessRunManifest.contentHash });
-  for (const reference of [source.taskset, source.tasksetRelease, source.harnessRelease,
-    ...(source.evaluation ? [source.evaluation.taskset, source.evaluation.dataset] : [])]) {
+    expectedSubmissionHash: executionHash, expectedManifestHash: source.harnessRunManifest.contentHash });
+  const recovery = input.recovery;
+  if (recovery && (retained.job.recovery?.sourceJobId !== recovery.sourceJobId
+    || retained.job.recovery.checkpointId !== recovery.checkpointId
+    || retained.job.recovery.policyVersion !== recovery.checkpointPolicyVersion
+    || retained.job.recovery.completedGroups !== recovery.completedGroups)) {
+    throw new Error("The hosted recovery output lost its exact source and checkpoint lineage.");
+  }
+  const references = recovery ? [source.harnessRunManifest, source.dataset, source.harnessRelease,
+    source.evaluation?.taskset ?? source.taskset,
+    { id: recovery.sourceJobId, contentHash: recovery.sourceInputManifestSha256 },
+    { id: recovery.checkpointId, contentHash: recovery.resumeSha256 },
+  ] : [source.taskset, source.tasksetRelease, source.harnessRelease,
+    ...(source.evaluation ? [source.evaluation.taskset, source.evaluation.dataset] : [])];
+  for (const reference of references) {
     if (!retained.receipt.inputs.some(value => value.id === reference.id && value.contentHash === reference.contentHash)) {
       throw new Error("The hosted execution receipt lost an immutable training or evaluation source.");
     }
@@ -45,7 +60,7 @@ export async function importHostedModelArtifacts(input: {
   const ref = TrainingExecutionRefSchema.parse({
     runId: retained.job.id, providerJobId: retained.job.id, adapterId: "sandbox-managed-rl",
     protocolVersion: "openpond.training.v2", routeFamily: "training_v2", tenantId: input.access.teamId,
-    leaseId: null, manifestHash: retained.receipt.manifestHash, inputBundleHash: submission.contentHash,
+    leaseId: null, manifestHash: retained.receipt.manifestHash, inputBundleHash: executionHash,
     createdAt: retained.job.createdAt,
   });
   const portableContent = { runId: retained.job.id, manifestHash: retained.receipt.manifestHash,
@@ -70,8 +85,8 @@ export async function importHostedModelArtifacts(input: {
       modelId: input.project.id, artifactId: weights.id, jobId: input.job.id,
       tasksetId: snapshot.taskset.id, tasksetHash: snapshot.taskset.contentHash,
       graderHash: z.object({ graderHash: z.string().regex(/^[a-f0-9]{64}$/) }).parse(submission.job.recipe.reward).graderHash,
-      // The immutable public submission is the admitted hosted plan; no local plan or launch is invented.
-      planHash: submission.contentHash, bundleHash: input.job.bundleHash, recipeHash: retained.receipt.recipeHash,
+      // Recovery retains the source approval while its own input manifest binds execution.
+      planHash: executionHash, bundleHash: input.job.bundleHash, recipeHash: retained.receipt.recipeHash,
       workerVersion: retained.receipt.runtimeRelease.id,
       trainerVersion: `sandbox-managed-rl@${retained.receipt.runtimeRelease.contentHash}`,
       importedAt: retained.job.completedAt ?? input.job.updatedAt,
@@ -84,8 +99,9 @@ export async function importHostedModelArtifacts(input: {
   if (!current) throw new Error("The hosted run disappeared before artifact import completed.");
   await input.store.saveTrainingJob({ ...current, metadata: { ...current.metadata,
     hostedServingArtifactsImportedForUpdatedAt: input.job.updatedAt,
-    hostedSubmissionHash: submission.contentHash, hostedSourceManifestHash: retained.receipt.manifestHash,
-    hostedArtifactPlanSource: "public_training_submission", sourceSnapshot: snapshot,
+    hostedSubmissionHash: executionHash, hostedSourceSubmissionHash: submission.contentHash,
+    hostedSourceManifestHash: retained.receipt.manifestHash,
+    hostedArtifactPlanSource: recovery ? "checkpoint_recovery" : "public_training_submission", sourceSnapshot: snapshot,
     importedModelLineageId: lineageId, adapterArtifactLineageId: lineageId,
   } });
 }

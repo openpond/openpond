@@ -1,3 +1,4 @@
+import { useFilePreviewRequests, type FilePreviewOpenOptions } from "../../hooks/useFilePreviewRequests";
 import { ChatTimelineEntry } from "../chat/ChatTimelineEntry";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -124,7 +125,7 @@ export function RightChatPane({
   onOpenPondCommandAccessModeChange: (mode: OpenPondCommandAccessMode) => void;
   onModelChange: (model: string) => void;
   onOpenAttachmentInSidebar: (attachment: ChatAttachmentSummary) => Promise<void>;
-  onOpenFileInSidebar: (path: string) => void;
+  onOpenFileInSidebar: (path: string, options?: FilePreviewOpenOptions) => void;
   onOpenProfileSettings: () => void;
   onOpenSession?: (sessionId: string) => void;
   onOpenPonder?: () => void;
@@ -153,6 +154,7 @@ export function RightChatPane({
   const [chatProjector] = useState(() => new IncrementalChatProjector());
   const stickyToBottomRef = useRef(initialScrollState?.stickyToBottom ?? true);
   const initialScrollRestoredRef = useRef(false);
+  useFilePreviewRequests(runtimeEventStore, panel.runtimeSource === "live" ? panel.sessionId : null, onOpenFileInSidebar);
   const liveSessionSnapshot = useRuntimeEventSession(
     runtimeEventStore,
     panel.runtimeSource === "live" ? panel.sessionId : null,
@@ -309,7 +311,7 @@ export function RightChatPane({
         )} />)}
       </div>
       <div className={`composer-stack dock right-chat-composer ${activePanelView.pendingApproval ? "has-approval" : ""}`}>
-        <ApprovalRequestCard approval={activePanelView.pendingApproval} onResolve={onResolveApproval} />
+        <ApprovalRequestCard connection={connection} showToast={showToast} approval={activePanelView.pendingApproval} onResolve={onResolveApproval} />
         <Composer
           mode="dock"
           prompt={panel.prompt}

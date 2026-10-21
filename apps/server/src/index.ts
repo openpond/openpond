@@ -636,6 +636,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     loadCodexHistoryThread: (sessionId) =>
       readCodexHistoryThreadPayload(sessionId, {
         attachmentRootDir,
+        storageHome: store.home,
         maxEvents: 100_000,
       }),
     authorProposal: (input) =>

@@ -23,6 +23,11 @@ export function localDatasetProjectionPaths(draft:TasksetDraftWorkspace["draft"]
   for (const fixture of draft.graderFixtures) selected.add(fixture.taskId);
   const tasks = draft.tasks.filter(task => selected.has(task.id));
   const paths = new Set(tasks.flatMap(task => (task.assets ?? []).map(asset => asset.artifactRef)));
+  // Shared workflow files belong to the selected environment even when no
+  // individual task lists them as an attachment.
+  for (const resource of draft.environment.resources ?? []) {
+    if (resource.kind === "file") paths.add(resource.path);
+  }
   const inventory = draft.metadata.portableFileInventory;
   const policyPaths = new Set<string>();
   if (Array.isArray(inventory)) for (const entry of inventory) {

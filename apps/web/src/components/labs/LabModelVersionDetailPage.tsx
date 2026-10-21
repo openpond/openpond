@@ -1,10 +1,11 @@
+import { comparisonParentLabel, continuationConfiguration, runConfiguration } from "./model-run-configuration";
 import { Fragment, useMemo, useState } from "react";
 import {
+  RftRecipeSchema,
+  RunStageEvidenceSchema,
   type ModelEvaluationReceipt,
   type ModelEvaluationStopReceipt,
-  type ModelComparisonSeriesEntry,
   type ModelRun,
-  type TrainingStateResponse,
   type TrainingMethod,
 } from "@openpond/contracts";
 
@@ -27,6 +28,8 @@ import {
 } from "../training/training-model-data";
 import { useTrainingRunDetail } from "../training/useTrainingRunDetail";
 import { LabModelRunSummary } from "./LabModelRunSummary";
+import { TrainingRecoveryLineage } from "../training/TrainingRecoveryLineage";
+import { TrainingRunLineage } from "../training/TrainingRunLineage";
 import { EvaluationComparisonCharts } from "./EvaluationComparisonCharts";
 import {
   benchmarkForegroundUsage,
@@ -152,8 +155,17 @@ export function LabModelVersionDetailPage({
       entry.modelRunId === selectedLifecycleRun?.id ||
       entry.modelRunId === selectedJob?.metadata.modelRunId,
   ) ?? null;
-  const selectedBasedOn =
-    typeof selectedJob?.metadata.parentHostedArtifactId === "string"
+  const recoveryResult = RunStageEvidenceSchema.shape.recovery.safeParse(selectedJob?.metadata.hostedRecovery);
+  const hostedRecovery = recoveryResult.success ? recoveryResult.data : undefined;
+  const continuationResult = RftRecipeSchema.shape.continuation.safeParse(selectedJob?.metadata.hostedContinuation);
+  const hostedContinuation = continuationResult.success ? continuationResult.data : undefined;
+  const hostedParentVersion = hostedContinuation
+    ? versions.find((version) => version.lineage.jobId === hostedContinuation.sourceArtifact.jobId)
+    : undefined;
+  const selectedBasedOn = hostedRecovery ? "Recovered checkpoint"
+    : hostedParentVersion ? `Version ${hostedParentVersion.number}`
+    : hostedContinuation ? `Checkpoint ${hostedContinuation.sourceArtifact.checkpointId}`
+    : typeof selectedJob?.metadata.parentHostedArtifactId === "string"
       ? "Prior hosted run"
       : comparisonParentLabel(state, selectedComparisonEntry);
   const runEntries = useMemo(() => {
@@ -207,7 +219,7 @@ export function LabModelVersionDetailPage({
     labModelTasksets(state).find(
       (taskset) =>
         taskset.id ===
-        (selectedLifecycleRun?.taskset.id ?? selectedPlan?.tasksetId)
+        (selectedLifecycleRun?.taskset.id ?? selectedPlan?.tasksetId ?? selectedJob?.metadata.tasksetId)
     ) ??
     null;
   const selectedTasksetName =
@@ -310,6 +322,7 @@ export function LabModelVersionDetailPage({
   )
     ? requestedDetailTab!
     : detailTabs[0]!.id;
+  if (!selectedEntry && !selectedLifecycleRun && training.loading) return <div className="labs-model-version-detail"><ModelProjectPageHeader title="Run details" /><p role="status">Loading training run…</p></div>;
   if (!selectedEntry && !selectedLifecycleRun) {
     return (
       <div className="labs-model-version-detail">
@@ -379,10 +392,13 @@ export function LabModelVersionDetailPage({
         ) : undefined}
         metrics={[
           {
-            label: isGrpo ? "Training tasks" : "Training steps",
+            label: isGrpo && rolloutProgress ? "Training groups" : "Training steps",
             value: progressMetric.value,
           },
-          { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
+          ...(hostedRecovery && rolloutProgress ? [{ label: "Optimizer updates",
+            value: `${Math.max(0, rolloutProgress.optimizerUpdatesApplied - hostedRecovery.policyVersion)} new · ${hostedRecovery.policyVersion} reused`,
+          }] : []),
+          { label: runActive ? "Latest reward" : "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
           { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, terminalRunEnd(selectedLifecycleRun.status, selectedLifecycleRun.completedAt, selectedLifecycleRun.updatedAt)) : selectedJob ? formatDuration(selectedJob.startedAt, terminalRunEnd(selectedJob.status, selectedJob.completedAt, selectedJob.updatedAt)) : "Not recorded" },
           { label: "Output", value: selectedVersion ? `Version ${selectedVersion.number}` : "No version" },
           { label: "Based on", value: selectedBasedOn },
@@ -398,6 +414,8 @@ export function LabModelVersionDetailPage({
           },
         ]}
       />
+      <TrainingRecoveryLineage recovery={hostedRecovery} />
+      {hostedContinuation ? <TrainingRunLineage continuation={{ sourceJobId: hostedContinuation.sourceArtifact.jobId, checkpointId: hostedContinuation.sourceArtifact.checkpointId }} /> : null}
       {runAction && runAction.runId === (selectedLifecycleRun?.id ?? selectedJob?.id)
         ? <p role="status">{runAction.message}</p> : null}
 
@@ -462,7 +480,15 @@ export function LabModelVersionDetailPage({
         }
         failure={selectedJob?.error ?? selectedLifecycleRun?.failure ?? null}
         configuration={[
-          ...continuationConfiguration(state, selectedComparisonEntry),
+          ...(hostedContinuation ? [
+            { label: "Starting checkpoint", value: [
+              hostedParentVersion ? `Version ${hostedParentVersion.number}` : null,
+              hostedContinuation.sourceArtifact.checkpointId,
+            ].filter(Boolean).join(" · ") },
+            { label: "Parent run", value: hostedContinuation.sourceArtifact.jobId },
+            { label: "Parent artifact", value: hostedContinuation.sourceArtifact.artifactId },
+            { label: "Optimizer", value: hostedContinuation.optimizerMode === "reset" ? "Reset" : "Continue" },
+          ] : continuationConfiguration(state, selectedComparisonEntry)),
           ...runConfiguration(selectedPlan),
         ]}
         evidence={managedEvidence}
@@ -871,97 +897,6 @@ function modelRefName(modelId: string) {
 
 function formatMetric(value: number | null): string {
   return value === null ? "Not reported" : value.toFixed(4);
-}
-
-function runConfiguration(
-  plan: ReturnType<typeof labModelPlans>[number] | null,
-): Array<{ label: string; value: string }> {
-  if (!plan) return [];
-  const recipe = plan.recipe;
-  if (recipe.method === "grpo") {
-    return [
-      { label: "LoRA rank", value: String(recipe.lora.rank) },
-      {
-        label: "Learning rate",
-        value: scientificNumber(recipe.optimizer.learningRate),
-      },
-      { label: "Optimizer steps", value: String(recipe.optimizer.maxSteps) },
-      { label: "Rollouts per update", value: String(recipe.rollout.groupSize) },
-      { label: "Rollout concurrency", value: String(recipe.rollout.concurrency) },
-      {
-        label: "Max output tokens",
-        value: recipe.rollout.maxOutputTokens.toLocaleString(),
-      },
-      { label: "Temperature", value: String(recipe.rollout.temperature) },
-      { label: "Top P", value: String(recipe.rollout.topP) },
-    ];
-  }
-  if (recipe.method === "sft" || recipe.method === "dpo") {
-    return [
-      { label: "LoRA rank", value: String(recipe.lora.rank) },
-      {
-        label: "Learning rate",
-        value: scientificNumber(recipe.optimizer.learningRate),
-      },
-      { label: "Optimizer steps", value: String(recipe.optimizer.maxSteps) },
-    ];
-  }
-  return [];
-}
-
-function continuationConfiguration(
-  state: TrainingStateResponse | null,
-  entry: ModelComparisonSeriesEntry | null,
-): Array<{ label: string; value: string }> {
-  if (!state || !entry) return [];
-  if (entry.parent.kind === "base_model") {
-    return [
-      {
-        label: "Starting checkpoint",
-        value: `Frozen base · ${entry.parent.revision}`,
-      },
-      { label: "Optimizer", value: "Fresh" },
-    ];
-  }
-  const parentVersion = state.modelVersions.find(
-    (version) => version.id === entry.parent.id,
-  );
-  const parentEntry = state.comparisonSeriesEntries.find(
-    (candidate) =>
-      candidate.seriesId === entry.seriesId &&
-      candidate.modelVersionId === entry.parent.id,
-  );
-  const checkpoint = [
-    parentEntry?.label ?? null,
-    parentVersion ? `Version ${parentVersion.version}` : entry.parent.id,
-  ].filter((value): value is string => Boolean(value)).join(" · ");
-  return [
-    { label: "Starting checkpoint", value: checkpoint },
-    { label: "Optimizer", value: "Fresh" },
-  ];
-}
-
-function comparisonParentLabel(
-  state: TrainingStateResponse | null,
-  entry: ModelComparisonSeriesEntry | null,
-): string {
-  if (!state || !entry || entry.parent.kind === "base_model") return "Frozen base";
-  const parentEntry = state.comparisonSeriesEntries.find(
-    (candidate) =>
-      candidate.seriesId === entry.seriesId
-      && candidate.modelVersionId === entry.parent.id,
-  );
-  const parentVersion = state.modelVersions.find(
-    (version) => version.id === entry.parent.id,
-  );
-  return [
-    parentEntry?.label ?? "Prior checkpoint",
-    parentVersion ? `Version ${parentVersion.version}` : null,
-  ].filter((value): value is string => Boolean(value)).join(" · ");
-}
-
-function scientificNumber(value: number): string {
-  return value === 0 ? "0" : value.toExponential(2);
 }
 
 function Fact({ label, value }: { label: string; value: string }) {

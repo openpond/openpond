@@ -1,3 +1,4 @@
+import { RetainedRunFeedback } from "./RetainedRunFeedback";
 import { useState } from "react";
 import type { RunStageEvidence } from "@openpond/contracts";
 
@@ -15,10 +16,10 @@ export function TrainingAttemptTable({ groups }: { groups: RunStageEvidence["gro
       <summary>Recorded attempts · {count}</summary>
       {open ? <>
         <div className="training-table-wrap"><table className="training-data-table evaluation-workspace-table">
-          <thead><tr><th>Group / slot</th><th>Attempt</th><th>State</th><th>Reward</th></tr></thead>
+          <thead><tr><th>Group / slot</th><th>Attempt</th><th>State</th><th>Reward</th><th>Retained feedback</th></tr></thead>
           <tbody>{attempts.map((attempt) => <tr key={attempt.id}>
             <td>{attempt.group + 1} / {attempt.slot + 1}</td><td>{attempt.attempt}</td>
-            <td>{attempt.state.replaceAll("_", " ")}</td><td>{attempt.reward === null ? "—" : attempt.reward.toFixed(3)}</td>
+            <td>{attempt.state.replaceAll("_", " ")}</td><td>{attempt.reward === null ? "—" : attempt.reward.toFixed(3)}</td><td><AttemptFeedback attempt={attempt} /></td>
           </tr>)}</tbody>
         </table></div>
         {lastPage > 0 ? <div className="training-rollout-pagination">
@@ -29,4 +30,13 @@ export function TrainingAttemptTable({ groups }: { groups: RunStageEvidence["gro
       </> : null}
     </details>
   );
+}
+
+function AttemptFeedback({ attempt }: { attempt: RunStageEvidence["groups"][number]["attempts"][number] }) {
+  const [open, setOpen] = useState(false);
+  if (!attempt.diagnostics?.length && !attempt.feedback?.length) return <>No grading receipt retained</>;
+  return <details onToggle={event => setOpen(event.currentTarget.open)}><summary>Inspect</summary>{open ? <>
+    <dl>{attempt.diagnostics?.map((fact, index) => <div key={index}><dt>{fact.label}</dt><dd><pre>{fact.value}</pre></dd></div>)}</dl>
+    <RetainedRunFeedback targets={attempt.feedback} />
+  </> : null}</details>;
 }

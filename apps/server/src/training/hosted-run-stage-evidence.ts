@@ -1,9 +1,13 @@
 import { z } from "zod";
+import { inheritedRecoveryGroups, pendingReplayGroups, recoveryReplayOrigins } from "./hosted-run-recovery-evidence.js";
+import { groupStageEvidence } from "./hosted-run-group-evidence.js";
+import { stageDiagnostics, groupDiagnostics, attemptDiagnostics, stageFeedbackTargets } from "./hosted-run-diagnostics.js";
 import { RunStageEvidenceSchema, type RunStageEvidence } from "@openpond/contracts";
 
 const number = (value: unknown) =>
   value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
 const collection = <T extends z.ZodType>(schema: T) => z.array(schema).max(10_000).default([]);
+const RecoveryGroup = z.object({ id: z.string(), groupIndex: z.number().int().nonnegative(), policyVersion: z.number().int().nonnegative(), state: z.literal("consumed"), optimizerDisposition: z.enum(["applied", "skipped_no_signal"]), optimizerEvidence: z.record(z.string(), z.unknown()), sourceJobId: z.string() });
 const Raw = z
   .object({
     job: z
@@ -21,13 +25,22 @@ const Raw = z
         inputBundle: z
           .object({
             recipe: z
-              .object({ rolloutGroupSize: z.number().int().min(0).max(1000) })
+              .object({ rolloutGroupSize: z.number().int().min(0).max(1000), adapter: z.object({ rank: z.number().int().positive() }).passthrough().optional() })
               .passthrough()
               .optional(),
-            executionIntent: z.object({ purpose: z.string() }).passthrough().optional(),
+            executionIntent: z.object({ purpose: z.string().nullish() }).passthrough().nullish(),
             recovery: z.object({ sourceJobId: z.string(), checkpointId: z.string(),
               checkpointPolicyVersion: z.number().int().positive(), completedGroups: z.number().int().positive(),
+              checkpointJobId: z.string().optional(), optimizerUpdatesApplied: z.number().int().nonnegative().optional(), optimizerUpdatesSkipped: z.number().int().nonnegative().optional(),
+              groups: z.array(RecoveryGroup).max(128).optional(),
+              undurableProgress: z.object({completedGroups:z.number(), policyVersion:z.number(), optimizerUpdatesApplied:z.number(),optimizerUpdatesSkipped:z.number(),groups:z.array(RecoveryGroup).max(128)}).optional(),
             }).passthrough().optional(),
+            continuation: z.object({
+              parentJobId: z.string(), parentArtifact: z.object({ id: z.string() }).passthrough(),
+              parentCheckpoint: z.object({ id: z.string() }).passthrough(),
+              optimizerMode: z.enum(["continue", "reset"]),
+              compatibility: z.object({ adapter: z.object({ rank: z.number().int().positive() }).passthrough() }).passthrough().optional(),
+            }).passthrough().nullish(),
           })
           .passthrough()
           .optional(),
@@ -68,7 +81,7 @@ const Raw = z
     ),
     trajectories: collection(
       z
-        .object({ rolloutId: z.string(), reward: z.union([z.string(), z.number()]).nullable() })
+        .object({ id: z.string().optional(), rolloutId: z.string(), reward: z.union([z.string(), z.number()]).nullable() })
         .passthrough(),
     ),
     checkpoints: collection(
@@ -80,6 +93,7 @@ const Raw = z
       errorCode: z.string().nullish(),
       updatedAt: z.string(),
     }).passthrough()),
+    trainingSteps: collection(z.object({ id: z.string(), state: z.string(), groupId: z.string().optional(), inputPolicyVersion: z.number().optional(), outputPolicyVersion: z.number().optional() }).passthrough()),
     policyVersions: collection(
       z.object({ version: z.number().int().nonnegative(), served: z.boolean() }).passthrough(),
     ),
@@ -98,6 +112,7 @@ const Raw = z
     ),
   })
   .passthrough();
+export type HostedStageDetail = z.infer<typeof Raw>;
 const Logs = z
   .object({
     entries: collection(
@@ -130,7 +145,11 @@ export function hostedRunStageEvidence(
     throw new Error("Flow evidence belongs to a different training run.");
   const live = !["completed", "cancelled", "failed", "budget_exhausted"].includes(job.state);
   const qualification = job.inputBundle?.executionIntent?.purpose === "collection";
-  const inheritedUpdates = job.inputBundle?.recovery?.checkpointPolicyVersion ?? 0;
+  const inheritedUpdates = job.inputBundle?.recovery?.optimizerUpdatesApplied ?? 0;
+  const inheritedGroups = inheritedRecoveryGroups(detail);
+  const replayOrigins = recoveryReplayOrigins(detail);
+  const replayByIndex = new Map(replayOrigins.map(group => [group.groupIndex, group]));
+  const inheritedByIndex = new Map([...inheritedGroups, ...pendingReplayGroups(detail)].map(group => [group.index, group]));
   const newUpdates = Math.max(0, job.optimizerUpdatesApplied - inheritedUpdates);
   const candidateEvaluationStarted = !qualification && detail.evaluations.some((item) => item.kind === "candidate");
   const baseline = qualification ? undefined : detail.evaluations.find((item) => item.kind === "baseline");
@@ -144,6 +163,10 @@ export function hostedRunStageEvidence(
   const gpuLive = Boolean(lease?.readyAt && !lease.terminatedAt && live);
   const graded = detail.trajectories.filter((item) => number(item.reward) !== null).length;
   const errors = stageErrors(detail);
+  const continuation = job.inputBundle?.continuation;
+  const materialization = [...detail.commands].filter(command => command.commandType === "materialize_checkpoint")
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const materialized = materialization?.state === "succeeded";
   const stages = [
     {
       label: "Prepare",
@@ -156,6 +179,13 @@ export function hostedRunStageEvidence(
         "provisioning_rollouts",
         "warming",
       ].includes(job.state) && !baseline,
+    },
+    {
+      label: "Load parent adapter",
+      skip: !continuation,
+      done: materialized,
+      active: Boolean(materialization && !materialized && live && !["failed", "cancelled"].includes(materialization.state)),
+      detail: continuation ? `Checkpoint ${continuation.parentCheckpoint.id}; optimizer ${continuation.optimizerMode}` : "",
     },
     {
       label: "Baseline evaluation",
@@ -183,7 +213,7 @@ export function hostedRunStageEvidence(
       label: "Grade",
       done:
         job.targetGroups > 0 &&
-        detail.rolloutGroups.length + (job.inputBundle?.recovery?.completedGroups ?? 0) >= job.targetGroups &&
+        detail.rolloutGroups.length + inheritedGroups.length >= job.targetGroups &&
         detail.rolloutGroups.every((group) => ["eligible", "consumed"].includes(group.state)),
       active:
         detail.rolloutGroups.some((group) => group.state === "scoring") ||
@@ -201,9 +231,9 @@ export function hostedRunStageEvidence(
     },
     {
       label: "Save checkpoint",
-      detail: "Write to storage",
-      done: detail.checkpoints.some((item) => item.adapterSha256),
-      active: false,
+      detail: detail.checkpoints.some(item => item.state === "ready" && item.adapterSha256) ? "Durable checkpoint recorded" : !live && detail.checkpoints.length ? "Upload interrupted · 0 durable" : "Write to storage",
+      done: detail.checkpoints.some((item) => item.state === "ready" && item.adapterSha256),
+      active: live && detail.checkpoints.some(item => item.state === "uploading"),
       inLoop: true,
       skip: qualification,
     },
@@ -235,7 +265,7 @@ export function hostedRunStageEvidence(
     const index = Math.max(0, count - 50) + offset;
     return groups.find(group => group.groupIndex === index) ?? {
       id: "", groupIndex: index,
-      state: recovery && index < recovery.completedGroups ? "reused" : "planned", rewardMean: null,
+      state: "planned", rewardMean: null,
     };
   });
   return RunStageEvidenceSchema.parse({
@@ -247,14 +277,22 @@ export function hostedRunStageEvidence(
     groupsCompleted: job.completedGroups,
     groupsTarget: job.targetGroups,
     live,
-    ...(recovery ? { recovery: { sourceJobId: recovery.sourceJobId, checkpointId: recovery.checkpointId,
-      policyVersion: recovery.checkpointPolicyVersion, completedGroups: recovery.completedGroups,
+    ...(continuation ? { continuation: {
+      sourceJobId: continuation.parentJobId, artifactId: continuation.parentArtifact.id,
+      checkpointId: continuation.parentCheckpoint.id, optimizerMode: continuation.optimizerMode, materialized,
+      parentRank: continuation.compatibility?.adapter.rank, trainableRank: job.inputBundle?.recipe?.adapter?.rank,
+    } } : {}),
+    ...(recovery ? { recovery: { sourceJobId: recovery.sourceJobId, checkpointId: recovery.checkpointId, checkpointJobId: recovery.checkpointJobId ?? recovery.sourceJobId,
+      policyVersion: recovery.checkpointPolicyVersion, completedGroups: recovery.completedGroups, optimizerUpdatesApplied: inheritedUpdates,
+      ...(replayOrigins.length ? {replayGroups:replayOrigins,replayCompleted:replayOrigins.every(group => detail.rolloutGroups.some(native => native.groupIndex === group.groupIndex && native.state === "consumed")),undurablePolicyVersion:recovery.undurableProgress?.policyVersion} : {}),
       optimizerStateRestored: detail.commands.some(command => command.commandType === "materialize_checkpoint" && command.state === "succeeded"),
     } } : {}),
     nodes: stages
       .filter((stage) => !stage.skip)
       .map((stage) => ({
         label: stage.label,
+        diagnostics: stageDiagnostics(detail, stage.label),
+        feedback: stageFeedbackTargets(detail, stage.label),
         state: errors[stage.label] ? "failed" : live && stage.active ? "active" : stage.done ? "done" : live ? "pending" : "missing",
         status:
           errors[stage.label] ? "Error recorded" : live && stage.active
@@ -287,11 +325,18 @@ export function hostedRunStageEvidence(
           state: "planned",
           rewardMean: null,
         }))
-    ).map((group) => ({
+    ).map((group) => {
+      const inherited = !group.id ? inheritedByIndex.get(group.groupIndex) : undefined;
+      if (inherited) return inherited;
+      return ({
       index: group.groupIndex,
+      ...(replayByIndex.has(group.groupIndex) ? {replay:replayByIndex.get(group.groupIndex)} : {}),
+      ...("optimizerDisposition" in group && ["applied", "skipped_no_signal"].includes(String(group.optimizerDisposition)) ? { optimizerDisposition: group.optimizerDisposition } : {}),
+      ...(group.id ? { nodes: groupStageEvidence(detail, group.id, live) } : {}),
       state: group.state,
       meanReward: number(group.rewardMean),
       plannedSlots: group.state === "reused" ? 0 : job.inputBundle?.recipe?.rolloutGroupSize ?? 0,
+      diagnostics: groupDiagnostics(detail, group.id, group.state),
       attempts: detail.rollouts
         .filter((item) => item.groupId === group.id)
         .slice(-1000)
@@ -301,8 +346,10 @@ export function hostedRunStageEvidence(
           attempt: item.attempt,
           state: item.state,
           reward: rewards.get(item.id) ?? null,
+          diagnostics: attemptDiagnostics(detail, item.id),
+          feedback: detail.trajectories.filter(trajectory => trajectory.rolloutId === item.id && typeof trajectory.id === "string").slice(-1).map(trajectory => ({ kind: "trajectory", id: trajectory.id })),
         })),
-    })),
+    }); }),
     groupCount: count,
     logs: Logs.parse(logs)
       .entries.slice(-200)
@@ -326,6 +373,7 @@ function stageErrors(detail: z.infer<typeof Raw>): Record<string, string> {
     start_inference: detail.policyVersions.some(policy => policy.version > 0) ? "Activate policy" : "Prepare",
     score_reward_model: "Grade",
     stop: "Finish",
+    materialize_checkpoint: detail.job.inputBundle?.continuation ? "Load parent adapter" : "Prepare",
   };
   const latest = new Map<string, typeof detail.commands[number]>();
   for (const command of detail.commands) {
@@ -348,5 +396,9 @@ function stageErrors(detail: z.infer<typeof Raw>): Record<string, string> {
   if (checkpoint && !errors["Save checkpoint"]) errors["Save checkpoint"] = checkpoint.id ? `Checkpoint ${checkpoint.id} failed.` : "Checkpoint failed.";
   if (detail.job.state === "failed" && !detail.gpuLeases.some(lease => lease.readyAt)) errors.Prepare = detail.job.terminalReason ?? "Run preparation failed.";
   if (detail.job.canonicalPublishFailureCode) errors.Finish = detail.job.canonicalPublishFailureCode;
+  // A controller failure after worker success belongs to the run, not that command.
+  if (detail.job.state === "failed") errors.Finish = [errors.Finish,
+    detail.job.terminalReason ?? "Run failed; no terminal reason retained.",
+  ].filter(Boolean).join(" · ");
   return errors;
 }

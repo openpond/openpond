@@ -9,6 +9,17 @@ function renderMarkdown(content: string, props: Partial<ComponentProps<typeof Ma
 }
 
 describe("markdown checkbox rendering", () => {
+  // Codex emits this directive in live answers and imported history. It must
+  // open the full literal path, while examples inside code stay untouched.
+  test("renders Codex file citations as file links without interpreting code examples", () => {
+    const directive = ':codex-file-citation{path="/project/docs/OpenPond AI%20deck.pdf" purpose="output"}';
+    const markup = renderMarkdown(`${directive}\n\n\`${directive}\`\n\n\`\`\`text\n${directive}\n\`\`\``, { onOpenFileInSidebar: () => {} });
+    expect(markup).toContain('title="/project/docs/OpenPond AI%20deck.pdf"');
+    expect(markup).toContain('>OpenPond AI%20deck.pdf</a>');
+    expect(markup.match(/class="markdown-file-link"/g)).toHaveLength(1);
+    expect(markup.match(/codex-file-citation/g)).toHaveLength(2);
+  });
+
   // A generated deliverable list must resolve to its declared output directory,
   // including nested formatting; that directory must not leak into later prose.
   test("resolves formatted deliverable links within the declared list only", () => {

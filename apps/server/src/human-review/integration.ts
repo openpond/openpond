@@ -1,3 +1,4 @@
+import { RunFeedbackTargetSchema } from "@openpond/contracts";
 import {HumanRevokeLocalPublicationSchema,HumanLocalPublicationsReadSchema,HumanExportLocalRequestSchema,HumanShareLocalRequestSchema} from "@openpond/evals/human-review";
 import {revokeLocalHumanPublication,shareLocalHumanEvidence,readLocalHumanPublicationRefs} from "./local-sharing.js";
 import {exportLocalHumanEvidence} from "./local-export.js";
@@ -71,12 +72,17 @@ export function createReviewAndActivityTransport(deps: {
       if (body.teamId !== teamId) throw new Error("The active workspace changed. Reload this result.");
       return createHostedExperimentTrainingHandoff({teamId,actorId,access,currentIdentity:async () => ({teamId:await deps.teamId(),actorId:await deps.actorId()})}).read(body.executionId,body.passId);
     }
-    if (action === "hosted_training_detail" || action === "hosted_training_control") {
-      const body = z.object({teamId:z.string().min(1),jobId:z.string().min(1).max(200),action:z.enum(["start","retry","cancel"]).optional(),command:z.unknown().optional()}).strict().parse(payload);
+    if (["hosted_training_detail", "hosted_training_flow", "hosted_training_summary", "hosted_training_logs", "hosted_training_feedback", "hosted_training_control"].includes(action)) {
+      const body = z.object({teamId:z.string().min(1),jobId:z.string().min(1).max(200),includeFlow:z.boolean().optional(),feedbackTarget:RunFeedbackTargetSchema.optional(),action:z.enum(["start","retry","cancel"]).optional(),command:z.unknown().optional()}).strict().parse(payload);
       const [teamId,actorId,access] = await Promise.all([deps.teamId(),deps.actorId(),deps.resolveAccess()]);
       if (body.teamId !== teamId) throw new Error("The active workspace changed. Reload this training run.");
       const detail = createHostedTrainingRunDetail({teamId,actorId,access,currentIdentity:async () => ({teamId:await deps.teamId(),actorId:await deps.actorId()})});
-      return action === "hosted_training_detail" ? detail.read(body.jobId) : detail.control(body.jobId,z.enum(["start","retry","cancel"]).parse(body.action),body.command);
+      return action === "hosted_training_detail" ? detail.read(body.jobId, { includeFlow: body.includeFlow })
+        : action === "hosted_training_flow" ? detail.readFlow(body.jobId)
+        : action === "hosted_training_summary" ? detail.summary(body.jobId)
+        : action === "hosted_training_logs" ? detail.logs(body.jobId)
+        : action === "hosted_training_feedback" ? detail.feedback(body.jobId,body.feedbackTarget)
+        : detail.control(body.jobId,z.enum(["start","retry","cancel"]).parse(body.action),body.command);
     }
     if(action === "execution_activity") return activity(payload);
     if(action !== "human_review") return deps.trainingRequest(action,payload,requestUrl,signal);

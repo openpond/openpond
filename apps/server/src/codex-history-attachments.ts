@@ -7,10 +7,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { promises as fs } from "node:fs";
+import { artifactReference, publishManagedArtifact } from "@openpond/persistence";
 import {
   CHAT_ATTACHMENT_LIMITS,
+  ChatAttachmentSummarySchema,
   countTextLines,
   type ChatAttachmentSummary,
+  type RuntimeEvent,
 } from "@openpond/contracts";
 import {
   CHAT_ATTACHMENT_TEXT_PREVIEW_MAX_BYTES,
@@ -53,7 +57,7 @@ export function codexNativeFileMentions(
   const filesHeader = /^\s*# Files mentioned by the user:\s*$/im.exec(text);
   if (!filesHeader) return [];
   const afterHeader = text.slice(filesHeader.index + filesHeader[0].length);
-  const requestHeader = /^\s*## My request for Codex:\s*$/im.exec(afterHeader);
+  const requestHeader = /^\s*## My request(?: for Codex)?:\s*$/im.exec(afterHeader);
   if (!requestHeader) return [];
   const mentions: CodexNativeFileMention[] = [];
   const seenPaths = new Set<string>();
@@ -75,6 +79,50 @@ export function codexNativeFileMentions(
     }
   }
   return mentions;
+}
+
+/** Finish importing before returning preview refs to the HTTP media endpoint. */
+export async function publishCodexHistoryAttachments(input: {
+  storageHome: string;
+  attachmentRootDir: string;
+  events: RuntimeEvent[];
+}): Promise<void> {
+  for (const event of input.events) {
+    if (event.name !== "turn.started" || !Array.isArray(event.args?.attachments)) continue;
+    const summaries = event.args.attachments;
+    for (const [index, value] of summaries.entries()) {
+      const parsed = ChatAttachmentSummarySchema.safeParse(value);
+      if (!parsed.success) continue;
+      const attachment = parsed.data;
+      const preview = attachment.imagePreview ?? attachment.filePreview;
+      if (!preview) continue;
+      const unavailable = () => {
+        delete attachment.imagePreview;
+        delete attachment.filePreview;
+        summaries[index] = attachment;
+      };
+      if (preview.sessionId !== event.sessionId) { unavailable(); continue; }
+      const owner = { domain: "chat_attachment" as const,
+        id: JSON.stringify([preview.sessionId, preview.turnId, preview.storageName]) };
+      if (artifactReference(input.storageHome, owner)) continue;
+      const turnDir = path.resolve(input.attachmentRootDir, safeChatAttachmentPathSegment(preview.sessionId), safeChatAttachmentPathSegment(preview.turnId));
+      const sourceFile = path.resolve(turnDir, preview.storageName);
+      if (!sourceFile.startsWith(`${turnDir}${path.sep}`)) { unavailable(); continue; }
+      // Imported files must be ordinary files under the attachment root; never
+      // follow a substituted symlink when publishing a durable reference.
+      const source = await Promise.all([
+        fs.lstat(sourceFile), fs.realpath(sourceFile), fs.realpath(input.attachmentRootDir),
+      ]).catch(error => {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
+      });
+      if (!source) { unavailable(); continue; }
+      const [stat, realSource, realRoot] = source;
+      if (!stat.isFile() || realSource !== path.join(realRoot, path.relative(path.resolve(input.attachmentRootDir), sourceFile))
+        || stat.size > CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes) { unavailable(); continue; }
+      await publishManagedArtifact(input.storageHome, { owner, sourceFile, displayName: attachment.name, mediaType: attachment.mediaType });
+    }
+  }
 }
 
 export function mergeCodexNativeImageReferences(

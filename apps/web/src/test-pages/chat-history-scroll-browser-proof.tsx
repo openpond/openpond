@@ -227,6 +227,56 @@ async function run() {
   await frames(40);
   check(thread().scrollHeight - thread().clientHeight - thread().scrollTop < 1,
     "Jumping to latest did not keep following streamed content.");
-  result.textContent = "PASS: history pagination preserves reading position; returning to a streaming response releases reserved space and resumes following through concurrent layout changes.";
+  // A normal response must graduate from the sent-request anchor to bottom
+  // following once it fills the viewport, without requiring a scroll gesture.
+  conversation = "normal-streaming";
+  answerHeight = 40;
+  messages = [message("history")];
+  render();
+  await frames();
+  messages = [...messages, message("request"), {
+    ...message("answer"), role: "assistant", content: "Normal streaming response",
+  }];
+  submission++;
+  render();
+  await frames(40);
+  check(Number.parseFloat(thread().style.getPropertyValue("--chat-sent-message-space")) > 0,
+    "Normal streaming fixture did not anchor the newly sent request.");
+  const normalRequestTop = thread().scrollTop;
+  answerHeight += 20;
+  render();
+  await frames();
+  check(Math.abs(thread().scrollTop - normalRequestTop) < 1,
+    "A short normal response moved the sent request.");
+  answerHeight += 350;
+  render();
+  await frames(40);
+  check(thread().scrollHeight - thread().clientHeight - thread().scrollTop < 1,
+    "A normal streaming response grew below the viewport while still pinned to the sent request.");
+  check(!thread().style.getPropertyValue("--chat-sent-message-space"),
+    "A long normal response retained its sent-request spacer.");
+  thread().dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+  thread().scrollTop -= 100;
+  await frames(2);
+  const normalReadingTop = thread().scrollTop;
+  answerHeight += 150;
+  render();
+  await frames(40);
+  check(Math.abs(thread().scrollTop - normalReadingTop) < 1,
+    "Automatic bottom following interrupted the reader after scrolling away.");
+  conversation = "fast-normal-response";
+  messages = [message("history")];
+  render();
+  await frames();
+  answerHeight = 500;
+  messages = [...messages, message("request"), {
+    ...message("answer"), role: "assistant", content: "Response arriving during the send animation",
+  }];
+  submission++;
+  render();
+  await frames(40);
+  check(thread().scrollHeight - thread().clientHeight - thread().scrollTop < 1,
+    "A response arriving during the send animation remained pinned to the request.");
+  result.textContent = "PASS: normal responses follow the bottom after filling the viewport; history pagination and manual reading positions remain stable through streaming and layout changes.";
 }
 void run().catch((error) => { result.textContent = `FAIL: ${error instanceof Error ? error.message : String(error)}`; });

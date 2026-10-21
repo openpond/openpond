@@ -71,12 +71,14 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     }, requestUrl));
     return true;
   }
-  const hostedJob = /^\/v1\/training\/hosted-jobs\/([^/]+)(?:\/post-training\/(start|retry|cancel))?$/.exec(requestUrl.pathname);
-  if (hostedJob && (request.method === "GET" && !hostedJob[2] || request.method === "POST" && hostedJob[2])) {
+  const hostedJob = /^\/v1\/training\/hosted-jobs\/([^/]+)(?:\/(flow|summary|logs|feedback)|\/post-training\/(start|retry|cancel))?$/.exec(requestUrl.pathname);
+  if (hostedJob && (request.method === "GET" && !hostedJob[3] || request.method === "POST" && hostedJob[3])) {
     response.setHeader("Cache-Control", "no-store");
     const payload = {teamId:requestUrl.searchParams.get("teamId"),jobId:decodeURIComponent(hostedJob[1]!),
-      ...(hostedJob[2] ? {action:hostedJob[2],command:await readJson(request,{maxBytes:65_536})} : {})};
-    sendJson(response,200,await deps.trainingPayload(hostedJob[2] ? "hosted_training_control" : "hosted_training_detail",payload,requestUrl));
+      ...(hostedJob[2] === "feedback" ? { feedbackTarget: { kind: requestUrl.searchParams.get("kind"), id: requestUrl.searchParams.get("id"), ...(requestUrl.searchParams.has("taskId") ? { taskId: requestUrl.searchParams.get("taskId") } : {}) } } : {}),
+      ...(hostedJob[3] ? {action:hostedJob[3],command:await readJson(request,{maxBytes:65_536})} : {}),
+      ...(!hostedJob[2] && !hostedJob[3] ? { includeFlow: requestUrl.searchParams.get("graph") !== "false" } : {})};
+    sendJson(response,200,await deps.trainingPayload(hostedJob[3] ? "hosted_training_control" : hostedJob[2] ? `hosted_training_${hostedJob[2]}` : "hosted_training_detail",payload,requestUrl));
     return true;
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/training/execution-activity") {
@@ -405,7 +407,10 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
       ...(item.action === "model_comparison_attempt_evidence" ? { kind: requestUrl.searchParams.get("kind") } : {}),
       ...(item.action === "managed_candidate_review" ? { refresh: requestUrl.searchParams.get("refresh") === "true" } : {}),
       ...(item.action === "managed_candidate_review_history" ? { decisionId: requestUrl.searchParams.get("decisionId"), decisionHash: requestUrl.searchParams.get("decisionHash") } : {}),
-      ...(item.action === "run_detail" ? { includeEvaluation: requestUrl.searchParams.get("evaluation") !== "false" } : {}),
+      ...(item.action === "run_detail" ? {
+        includeEvaluation: requestUrl.searchParams.get("evaluation") !== "false",
+        refresh: requestUrl.searchParams.get("refresh") !== "false",
+      } : {}),
       ...(item.action === "managed_evaluation_tasks" ? { cursor: requestUrl.searchParams.get("cursor") ?? undefined, limit: requestUrl.searchParams.has("limit") ? Number(requestUrl.searchParams.get("limit")) : undefined } : {}),
     };
     const controller = new AbortController();

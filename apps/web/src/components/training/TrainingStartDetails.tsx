@@ -2,7 +2,9 @@ import {
   type RftLossMethod,
   type TrainingCatalog,
   type TrainingPreparedStart,
+  type TrainingRecipe,
 } from "@openpond/contracts";
+import { TrainingParameterSummary } from "./TrainingParameterSummary";
 import {
   trainingMethodLabel,
   trainingMethodName,
@@ -53,6 +55,7 @@ export function TrainingMethodTabs({
 }
 
 export function TrainingStartSummary({
+  recipe,
   method,
   trainingExamples,
   availableTrainExamples,
@@ -65,6 +68,7 @@ export function TrainingStartSummary({
   providerManaged,
   storagePath,
 }: {
+  recipe: TrainingRecipe;
   method: TrainingMethod;
   trainingExamples: number;
   availableTrainExamples: number;
@@ -93,6 +97,7 @@ export function TrainingStartSummary({
         : "Provided before approval";
   return (
     <dl className="training-start-summary">
+      <TrainingParameterSummary recipe={recipe} />
       <div>
         <dt>Training data</dt>
         <dd>{trainingData}</dd>
@@ -166,6 +171,7 @@ export function TrainingPreparedConfirmation({
           <dt>Method</dt>
           <dd>{methodLabel}</dd>
         </div>
+        <TrainingParameterSummary recipe={recipe} />
         <div>
           <dt>Quote</dt>
           <dd>

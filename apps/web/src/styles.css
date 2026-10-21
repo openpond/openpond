@@ -27,6 +27,7 @@
 @import "./styles/chat/right-chat-panel.css";
 @import "./styles/chat/composer.css";
 @import "./styles/chat/approval-request.css";
+@import "./styles/chat/native-questions.css";
 @import "./styles/chat/composer-workspace.css";
 @import "./styles/chat/composer-footer.css";
 @import "./styles/chat/composer-model-menu.css";

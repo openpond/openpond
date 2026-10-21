@@ -48,7 +48,7 @@
 .right-chat-pane {
   position: relative;
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -57,7 +57,7 @@
 
 .right-chat-thread {
   grid-row: 1;
-  padding: 16px 16px 112px;
+  padding: 16px;
 }
 
 .workspace-diff-tab.right-chat-tab {
@@ -91,6 +91,8 @@
 }
 
 .right-chat-composer.composer-stack.dock {
+  position: relative;
+  grid-row: 2;
   width: 100%;
   padding-inline: 11px;
 }

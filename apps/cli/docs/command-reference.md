@@ -973,12 +973,17 @@ Usage:
   openpond training hosted-worker-stop|hosted-worker-resume|hosted-worker-retire|hosted-worker-warm-idle|hosted-worker-retain-session <control.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-model <model-project-id> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-sync-model <input.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-publish-taskset <publication.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-evaluate-checkpoint <request.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-prepare|hosted-start|hosted-stage|hosted-submit <input.json> --team-id <id> [--api-base-url <url>] [--yes] [--json]
   openpond training hosted-qualify <input.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-trajectory <job-id> --trajectory-id <receipt-id> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-feedback <job-id> --trajectory-id <receipt-id> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-feedback <job-id> --evaluation-id <id> --task-id <id> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-status|hosted-inspect|hosted-report|hosted-watch|hosted-cancel|hosted-artifacts|hosted-logs|hosted-events <job-id> --team-id <id> [--api-base-url <url>] [--interval-ms <ms>] [--json]
   openpond training hosted-recover <input.json> --team-id <id> --yes [--api-base-url <url>] [--json]
-  openpond training hosted-evaluation-tasks <job-id> --evaluation-id <id> --team-id <id> [--cursor <cursor>] [--api-base-url <url>] [--json]
+  openpond training hosted-stop-after-group <job-id> --team-id <id> [--api-base-url <url>] --yes [--json]
+  openpond training hosted-evaluation-tasks <job-id> --evaluation-id <id> --team-id <id> [--cursor <cursor>] [--limit <1..100>] [--api-base-url <url>] [--json]
   openpond training hosted-watch <job-id> --team-id <id> [--deadline-at <ISO-time>] [--cleanup-reserve-ms <ms>] [--wait-for-cleanup] [--cancel-on-infrastructure-error] [--cleanup-timeout-ms <ms>] [--interval-ms <ms>] [--json]
   openpond training status <run-id> [--json]
   openpond training watch <run-id> [--interval-ms <ms>] [--json]
@@ -1021,6 +1026,7 @@ Options:
   --rollout-placement <string>
   --run-preset <string>
   --snapshot-file <string>
+  --task-id <string>
   --team-id <string>
   --trajectory-id <string>
   --wait-for-cleanup

@@ -88,6 +88,9 @@ export async function runTrainingCommand(
       dependencies.request ??
       await createLocalAuthenticatedRequest(baseUrl, {
         maximumResponseBytes: LOCAL_TRAINING_RESPONSE_LIMIT,
+        // Pull verifies and persists an immutable source package (up to 64 MiB)
+        // and imports hosted run evidence before returning its receipt.
+        timeoutMs: subcommand === "pull-project" ? 300_000 : 60_000,
       }),
   });
   const json = parseBooleanOption(options.json);

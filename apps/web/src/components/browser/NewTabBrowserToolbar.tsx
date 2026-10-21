@@ -9,10 +9,10 @@ export function NewTabBrowserToolbar({ conversationId, onOpenBrowser }: { conver
   return <BrowserToolbar activeTab={null} available={browser.available}
     onBack={() => {}} onForward={() => {}} onReload={() => {}} onStop={() => {}} onOpenExternal={() => {}}
     onClearData={() => {
-      if (window.confirm("Clear browser data for this conversation? Tabs, cookies, cache, and local storage will be removed.")) void browser.clearData();
+      if (window.confirm("Clear shared browser data? Cookies, logins, cache, and site storage will be removed for all chats. This chat's browser tabs will also close.")) void browser.clearData();
     }}
     onNavigate={url => {
-      void browser.open(url, { explicitFile: true }).then(opened => { if (opened) onOpenBrowser(); })
+      void browser.open(url, { explicitFile: true, newTab: true }).then(opened => { if (opened) onOpenBrowser(); })
         .catch(error => toast?.(error instanceof Error ? error.message : "Could not open browser.", "error"));
     }} />;
 }

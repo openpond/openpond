@@ -4,9 +4,9 @@ import { loadOpenPondAccountContext } from "@openpond/runtime";
 import { createTrainingClient, parseAndVerifyTrainingJobSubmission, parseAndVerifyTrainingPreparationReceipt, TrainingPreparationRequestSchema, type TrainingInputArtifactUpload } from "openpond-sdk/training";
 import { createModelProjectsClient, HostedModelProjectSyncSchema } from "openpond-sdk/model-projects";
 import { OpenPondLearningClient } from "openpond-sdk/learning";
-import { optionString, parseBooleanOption } from "./common/options";
+import { optionString, parseBooleanOption, parseIntegerOption } from "./common/options";
 import { resolveApiBaseUrlOption } from "./common/urls";
-import { cancelHostedTrainingJob, parseHostedWatchOptions, watchHostedTrainingJob } from "./training-hosted-lifecycle";
+import { cancelHostedTrainingJob, parseHostedWatchOptions, stopHostedTrainingJobAfterGroup, watchHostedTrainingJob } from "./training-hosted-lifecycle";
 
 type Options = Record<string, string | boolean>;
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
@@ -47,12 +47,33 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     if (bytes.byteLength > 64 * 1024 * 1024) throw new Error("Hosted training input exceeds 64 MiB.");
     return JSON.parse(bytes.toString("utf8"));
   };
+  const readNativeInspection = async (jobId: string): Promise<unknown> => {
+    const response = await request(new URL(`/v1/managed-rl/jobs/${encodeURIComponent(jobId)}`, baseUrl), { headers });
+    if (!response.ok) throw new Error(`Hosted job inspection failed (${response.status}).`);
+    return response.json();
+  };
   if (rest.length > 2) throw new Error(`${action} accepts at most one identifier or input file.`);
   if (["hosted-serving-pools", "hosted-base-serving-prepare", "hosted-serving-pool-retire"].includes(action ?? "")) {
     print(await (await import("./training-hosted-serving")).runHostedServingCommand({
       action: action!, target, baseUrl, headers, request, readInput,
       confirmed: parseBooleanOption(options.yes),
     })); return;
+  }
+  if (action === "hosted-evaluate-checkpoint") {
+    if (!parseBooleanOption(options.yes)) throw new Error("Paid checkpoint evaluation requires --yes.");
+    const input = (await import("./training-hosted-checkpoint-evaluation")).parseCheckpointEvaluationRequest(await readInput());
+    const jsonHeaders = new Headers(headers);
+    jsonHeaders.set("content-type", "application/json");
+    const response = await request(new URL("/v1/managed-rl/serving-soaks", baseUrl), {
+      method: "POST", headers: jsonHeaders, body: JSON.stringify(input),
+    });
+    const value: unknown = await response.json();
+    if (!response.ok) {
+      const code = value && typeof value === "object" && "error" in value ? String(value.error) : "checkpoint_evaluation_failed";
+      throw new Error(`Checkpoint evaluation failed (${response.status}): ${code}. Reconcile hosted-jobs before retrying the same immutable request.`);
+    }
+    const result = (await import("./training-hosted-checkpoint-evaluation")).parseCheckpointEvaluationResponse(value, input);
+    await printAttached(result, result.job.id); return;
   }
   if (action === "hosted-provider" || action === "hosted-quotes") {
     if (target) throw new Error(`${action} does not accept an identifier.`);
@@ -78,6 +99,11 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   if (action === "hosted-sync-model") {
     const input = HostedModelProjectSyncSchema.parse(await readInput());
     print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).upsert(input)); return;
+  }
+  if (action === "hosted-publish-taskset") {
+    const { OpenPondTasksetPackageClient, TasksetPackagePublicationSchema } = await import("openpond-sdk/taskset-packages");
+    const input = TasksetPackagePublicationSchema.parse(await readInput());
+    print(await new OpenPondTasksetPackageClient({ baseUrl, apiKey: context.token, teamId, fetch: request }).publish(input)); return;
   }
   if (action === "hosted-capabilities") { print(await client.capabilities()); return; }
   if (action === "hosted-batches") {
@@ -132,9 +158,12 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
       throw new Error("Hosted report status identity mismatch.");
     }
     const recoverySourceJob = job.recovery ? await client.getJob(job.recovery.sourceJobId) : undefined;
+    const servingEvidence = job.rolloutProgress.groupsTarget === 0
+      ? (await import("./training-hosted-serving-report")).parseHostedServingReportEvidence(await readNativeInspection(target), job)
+      : undefined;
     const { buildHostedTrainingReport } = await import("./training-hosted-report");
     await printAttached(buildHostedTrainingReport({
-      job, events, outputs, recoverySourceJob, versionBeforeRead: before.version, generatedAt: new Date().toISOString(),
+      job, events, outputs, recoverySourceJob, servingEvidence, versionBeforeRead: before.version, generatedAt: new Date().toISOString(),
     }), target);
     return;
   }
@@ -146,6 +175,7 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     if (!evaluation) throw new Error("Evaluation does not belong to this job's retained outputs.");
     print(await client.evaluationTasks(target, { id: evaluation.id, contentHash: evaluation.contentHash }, {
       cursor: optionString(options, "cursor") || undefined,
+      limit: parseIntegerOption(options.limit, "--limit"),
     }));
     return;
   }
@@ -156,10 +186,18 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     if (!response.ok) throw new Error(`Hosted trajectory read failed (${response.status}).`);
     print(await response.json()); return;
   }
+  if (action === "hosted-feedback") {
+    const { readHostedGraderFeedback } = await import("./training-hosted-feedback");
+    print(await readHostedGraderFeedback({
+      jobId: target, baseUrl, headers, request,
+      trajectoryId: optionString(options, "trajectoryId") || undefined,
+      evaluationId: optionString(options, "evaluationId") || undefined,
+      taskId: optionString(options, "taskId") || undefined,
+    }));
+    return;
+  }
   if (action === "hosted-inspect") {
-    const response = await request(new URL(`/v1/managed-rl/jobs/${encodeURIComponent(target)}`, baseUrl), { headers });
-    if (!response.ok) throw new Error(`Hosted job inspection failed (${response.status}).`);
-    print(await response.json()); return;
+    print(await readNativeInspection(target)); return;
   }
   if (action === "hosted-recover") {
     if (!parseBooleanOption(options.yes)) throw new Error("hosted-recover requires --yes for its explicit funded execution request.");
@@ -170,6 +208,10 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   }
   if (action === "hosted-cancel") {
     await printAttached(await cancelHostedTrainingJob(client, target, teamId),target); return;
+  }
+  if (action === "hosted-stop-after-group") {
+    if (!parseBooleanOption(options.yes)) throw new Error("hosted-stop-after-group requires --yes to shorten the admitted training schedule.");
+    await printAttached(await stopHostedTrainingJobAfterGroup(client, target, teamId),target); return;
   }
   if (action === "hosted-artifacts") { await printAttached(await client.outputs(target),target); return; }
   if (action === "hosted-logs") { await printAttached(await client.logs(target),target); return; }

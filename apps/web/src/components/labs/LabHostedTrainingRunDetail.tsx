@@ -1,32 +1,17 @@
 import { ErrorToast } from "../common/ErrorToast";
 import { TrainingRunDiagnostics } from "./workspace/TrainingRunDiagnostics";
-import { RunStageEvidenceSchema } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import { PostTrainingControlSchema } from "openpond-sdk/post-training";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import {
-  TrainingJobSchema,
-  TrainingJobEventSchema,
-  TrainingJobOutputsSchema,
-} from "openpond-sdk/training";
 import { PostTrainingSummarySchema, postTrainingActive } from "openpond-sdk/post-training";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { TrainingRecoveryLineage } from "../training/TrainingRecoveryLineage";
 import "./hosted-training-run.css";
+import { useHostedTrainingRun } from "./use-hosted-training-run";
+import { TrainingRunLineage, ContinualLearningStatus } from "../training/TrainingRunLineage";
 
-const Detail = z
-  .object({
-    job: TrainingJobSchema,
-    events: z.array(TrainingJobEventSchema).max(10_000),
-    outputs: TrainingJobOutputsSchema,
-    evals: PostTrainingSummarySchema.nullable(),
-    flow:RunStageEvidenceSchema.nullable(),
-    flowError:z.string().nullable(),
-  })
-  .strict();
-type Value = z.infer<typeof Detail>;
 export function LabHostedTrainingRunDetail({
   connection,
   teamId,
@@ -49,11 +34,9 @@ export function LabHostedTrainingRunDetail({
   jobId: string;
   onOpenExperiment: (id: string) => void;
 }) {
-  const [refreshVersion,setRefreshVersion]=useState(0);
   const scope = JSON.stringify([connection.serverUrl, connection.token, teamId, actorId, jobId]);
-  const [retained, setRetained] = useState<{ scope: string; value: Value } | null>(null),
-    [error, setError] = useState<string | null>(null),
-    [busy, setBusy] = useState(false);
+  const { detail: value, summary, flow, error: readError, refresh, setDetail } = useHostedTrainingRun(connection, teamId, jobId);
+  const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false);
   const activeScope = useRef(scope);
   activeScope.current = scope;
   const recoveryKey = `openpond:run-eval-control:${contentHash({ apiOrigin: connection.serverUrl, teamId, actorId, jobId })}`;
@@ -84,41 +67,10 @@ export function LabHostedTrainingRunDetail({
       activeScope.current = "unmounted";
     };
   }, [scope, recoveryKey]);
-  const value = retained?.scope === scope ? retained.value : null;
-  const path = `/v1/training/hosted-jobs/${encodeURIComponent(jobId)}`;
   useEffect(() => {
-    let stopped = false,
-      timer: ReturnType<typeof setTimeout>;
-    setError(null);
-    const read = async () => {
-      try {
-        const next = Detail.parse(
-          await apiFetch(connection, `${path}?teamId=${encodeURIComponent(teamId)}`),
-        );
-        if (next.job.id !== jobId || next.job.teamId !== teamId)
-          throw new Error("Training run scope changed.");
-        if (!stopped) {
-          setRetained({ scope, value: next });
-          setError(null);
-          const active =
-            !["completed", "failed", "cancelled", "budget_exhausted"].includes(next.job.state) ||
-            postTrainingActive(next.evals) ||
-            next.evals?.state === "waiting_for_training";
-          timer = setTimeout(read, active ? 3000 : 10000);
-        }
-      } catch (reason) {
-        if (!stopped) {
-          setError(reason instanceof Error ? reason.message : "Training run is unavailable.");
-          timer = setTimeout(read, 5000);
-        }
-      }
-    };
-    void read();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [connection.serverUrl, connection.token, path, scope, teamId, actorId, jobId,refreshVersion]);
+    if (value && window.location.hash === "#outputs") document.getElementById("outputs")?.scrollIntoView();
+  }, [value, jobId]);
+  const path = `/v1/training/hosted-jobs/${encodeURIComponent(jobId)}`;
   async function control(action: "start" | "retry" | "cancel") {
     if (!value?.evals || busy) return;
     const callScope = scope,
@@ -175,7 +127,7 @@ export function LabHostedTrainingRunDetail({
       fence();
       localStorage.removeItem(recoveryKey);
       pending.current = null;
-      setRetained({ scope, value: { ...value, evals } });
+      setDetail({ ...value, evals });
       setError(null);
     } catch (reason) {
       if (activeScope.current === callScope)
@@ -186,36 +138,27 @@ export function LabHostedTrainingRunDetail({
   }
   return (
     <div className="labs-flat-body labs-resource-page">
-      <ModelProjectPageHeader title="Training run" description={jobId} />
+      <ModelProjectPageHeader title="Training run" titleAside={<TrainingRunLineage continuation={flow?.continuation} recovery={flow?.recovery} compact />} description={jobId} metrics={summary ? [
+        { label: "Status", value: <>{summary.state}<small className="training-continual-status"><ContinualLearningStatus enabled={flow ? !!flow.continuation : undefined} />{flow?.recovery ? " · Checkpoint recovery" : null}</small></>, hint: summary.phase },
+        { label: "Phase", value: summary.phase },
+        { label: "Rollout groups", value: `${summary.rolloutProgress.groupsCompleted} / ${summary.rolloutProgress.groupsTarget}` },
+        { label: "Weight updates", value: summary.rolloutProgress.optimizerUpdatesApplied },
+        { label: "Skipped updates", value: summary.rolloutProgress.optimizerUpdatesSkipped },
+        { label: "Accrued spend", value: `$${summary.accruedSpendUsd.toFixed(6)}` },
+      ] : []} />
       <nav className="evaluation-workspace-tabs" aria-label="Training sections"><button aria-selected={!diagnostics} onClick={()=>onDiagnostics?.(false)}>Overview</button><button aria-selected={diagnostics} onClick={()=>onDiagnostics?.(true)}>Diagnostics</button></nav>
-      {error ? <ErrorToast error={error} /> : null}
+      <ErrorToast error={error ?? readError} />
       {pending.current ? (
         <button type="button" disabled={busy} onClick={() => void control(pending.current!.action)}>
           Retry retained {pending.current.action} action
         </button>
       ) : null}
-      {value && diagnostics ? <TrainingRunDiagnostics job={value.job} events={value.events} onRefresh={()=>setRefreshVersion(version=>version+1)}/> : null}
+      {value && diagnostics ? <TrainingRunDiagnostics job={value.job} events={value.events} onRefresh={()=>void refresh()}/> : null}
       {!value ? (
         <p role="status">Loading training run…</p>
       ) : !diagnostics ? (
         <>
           <TrainingRecoveryLineage recovery={value.flow?.recovery} />
-          <dl>
-            <dt>Status</dt>
-            <dd>{value.job.state}</dd>
-            <dt>Phase</dt>
-            <dd>{value.job.phase}</dd>
-            <dt>Completed rollout groups</dt>
-            <dd>
-              {value.job.rolloutProgress.groupsCompleted} / {value.job.rolloutProgress.groupsTarget}
-            </dd>
-            <dt>Applied optimizer updates</dt>
-            <dd>{value.flow?.recovery
-              ? `${Math.max(0, value.job.rolloutProgress.optimizerUpdatesApplied - value.flow.recovery.policyVersion)} new · ${value.flow.recovery.policyVersion} reused`
-              : value.job.rolloutProgress.optimizerUpdatesApplied}</dd>
-            <dt>Accrued spend</dt>
-            <dd>${value.job.accruedSpendUsd.toFixed(6)}</dd>
-          </dl>
           {value.job.terminalReason ? <p>{value.job.terminalReason}</p> : null}
           <section>
             <h3>Evals</h3>
@@ -278,7 +221,7 @@ export function LabHostedTrainingRunDetail({
             </ol>
           </section>
           <section>
-            <h3>Outputs</h3>
+            <h3 id="outputs">Outputs</h3>
             {value.outputs.outputs.length ? (
               <ul>
                 {value.outputs.outputs.map((output) => (

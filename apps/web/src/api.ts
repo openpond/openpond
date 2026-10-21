@@ -752,13 +752,14 @@ export const api = {
   trainingRunDetail: (
     connection: ClientConnection,
     jobId: string,
-    options: { includeEvaluation?: boolean } = {},
+    options: { includeEvaluation?: boolean; refresh?: boolean; signal?: AbortSignal } = {},
   ) =>
     apiFetch<TrainingRunDetail>(
       connection,
       `/v1/training/jobs/${encodeURIComponent(jobId)}/detail?evaluation=${
         options.includeEvaluation === false ? "false" : "true"
-      }`
+      }&refresh=${options.refresh === false ? "false" : "true"}`,
+      { signal: options.signal },
     ),
   candidateReview: (connection: ClientConnection, id: string, refresh = false, scope: "models" | "jobs" = "models") => apiFetch<ManagedCandidateReview | null>(connection, `/v1/training/${scope}/${encodeURIComponent(id)}/candidate-decision?refresh=${refresh}`),
   recordCandidateReview: (connection: ClientConnection, id: string, review: TrainingCandidateDecisionRequest, scope: "models" | "jobs" = "models") => apiFetch<ManagedCandidateReview>(connection, `/v1/training/${scope}/${encodeURIComponent(id)}/candidate-decision`, { method: "POST", body: JSON.stringify(review) }),

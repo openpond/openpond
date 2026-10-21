@@ -31,7 +31,7 @@ export function BrowserToolbar({
 
   useEffect(() => {
     setDraftUrl(documentName ?? activeTab?.url ?? "");
-  }, [activeTab?.url, documentName]);
+  }, [activeTab?.id, activeTab?.url, documentName]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

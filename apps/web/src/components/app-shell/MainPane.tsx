@@ -1,3 +1,4 @@
+import { useFilePreviewRequests } from "../../hooks/useFilePreviewRequests";
 import { PonderAgentsView } from "../ponder/PonderAgentsView";
 import { AGENTS_OVERVIEW_TAB_ID } from "../workspace-diff/workspace-diff-panel-model";
 import { useTrainingSidebarContext } from "../../hooks/useTrainingSidebarContext";
@@ -1105,6 +1106,7 @@ export function MainPane({
     workspaceRootPath,
     setOpenDiffFileRequest,
   });
+  useFilePreviewRequests(runtimeEventStore, view === "chat" ? liveSessionId : null, handleOpenFileInSidebar);
   const handleOpenAttachmentInSidebar = useCallback(
     async (attachment: ChatAttachmentSummary) => {
       if (
@@ -1753,7 +1755,7 @@ export function MainPane({
                 </Suspense>
               ) : null}
               {trainingChatHandoffBar}
-              <ApprovalRequestCard
+              <ApprovalRequestCard connection={connection} showToast={showToast}
                 approval={pendingApproval}
                 onResolve={resolveApproval}
               />
@@ -1847,7 +1849,7 @@ export function MainPane({
             </div>
             <div className="composer-stack start">
               {trainingChatHandoffBar}
-              <ApprovalRequestCard
+              <ApprovalRequestCard connection={connection} showToast={showToast}
                 approval={pendingApproval}
                 onResolve={resolveApproval}
               />

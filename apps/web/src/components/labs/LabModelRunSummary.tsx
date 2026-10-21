@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 
 import { ChevronRight } from "../icons";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { isActiveRunStatus } from "./LabRunStatusBadge";
 
 export function LabModelRunSummary({
   title,
@@ -88,7 +89,7 @@ export function LabModelRunSummary({
             value={cost === null ? "Not reported" : `$${cost.toFixed(4)}`}
           />
           <DetailFact
-            label="Final reward"
+            label={isActiveRunStatus(statusValue) ? "Latest reward" : "Final reward"}
             value={reward === null ? "Not reported" : reward.toFixed(4)}
           />
           {configuration.map((fact) => (

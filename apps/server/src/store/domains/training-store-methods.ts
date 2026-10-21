@@ -81,6 +81,7 @@ export function trainingStoreMethods(context: SqliteDomainContext, lifecycle: St
       "readTrainingExecutionActivity",
       "listTrainingJobs",
       "saveTrainingJobEvent",
+      "saveHostedTrainingJobEvent",
       "listTrainingJobEvents",
       "saveTrainingArtifact",
       "listTrainingArtifacts",

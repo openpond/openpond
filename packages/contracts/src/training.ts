@@ -322,6 +322,7 @@ export const RftRecipeSchema = deferredObject(() => ({
         })
         .strict(),
       optimizerMode: z.enum(["continue", "reset"]),
+      adapterMode: z.enum(["residual_append", "shared", "sequential_merge"]).optional(),
     })
     .strict()
     .optional(),

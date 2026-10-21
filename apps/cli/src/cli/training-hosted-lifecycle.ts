@@ -1,5 +1,6 @@
 import {
   OpenPondTrainingApiError,
+  OpenPondProtocolError,
   assertTrainingQualificationReceipt,
   type TrainingJob,
   type createTrainingClient,
@@ -63,6 +64,26 @@ export async function cancelHostedTrainingJob(client: Client, jobId: string, tea
     }
   }
   throw new Error("Hosted cancellation could not reconcile the current Job version.");
+}
+
+/** Finish the admitted group through normal evaluation/checkpoint finalization.
+ * Only explicit stale-version responses are retried; an unknown POST outcome
+ * remains unknown and must be reconciled before another control request. */
+export async function stopHostedTrainingJobAfterGroup(client: Client, jobId: string, teamId: string): Promise<TrainingJob> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const current = await client.getJob(jobId);
+    assertJobIdentity(current, jobId, teamId);
+    if (terminal.has(current.state) || current.state === "cancelling") return current;
+    try {
+      const stopped = await client.stopAfterGroup(jobId, current.version);
+      assertJobIdentity(stopped, jobId, teamId, current.submissionHash);
+      return stopped;
+    } catch (error) {
+      if (!(error instanceof OpenPondTrainingApiError) || error.status !== 409
+        || error.code !== "stale_version" || attempt === 3) throw error;
+    }
+  }
+  throw new Error("Hosted graceful stop could not reconcile the current Job version.");
 }
 
 export async function watchHostedTrainingJob(input: {
@@ -141,6 +162,9 @@ function assertJobIdentity(job: TrainingJob, jobId: string, teamId: string, subm
 
 function isTransient(error: unknown): boolean {
   if (error instanceof OpenPondTrainingApiError) return error.status === 429 || error.status >= 500;
+  // The SDK preserves malformed upstream error envelopes as protocol errors
+  // after its bounded read retries. Keep the watchdog alive until its deadline.
+  if (error instanceof OpenPondProtocolError) return error.code === "invalid_error_response" || error.code === "invalid_json";
   return error instanceof TypeError || error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
 }
 

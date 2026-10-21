@@ -29,6 +29,7 @@ import {
   codexNativeFileAttachments,
   codexNativeFileMentions,
   mergeCodexNativeImageReferences,
+  publishCodexHistoryAttachments,
 } from "./codex-history-attachments.js";
 import {
   loadCodexHistoryFileIndex,
@@ -168,6 +169,7 @@ export async function readCodexHistoryThreadPayload(
   sessionId: string,
   options: {
     attachmentRootDir?: string;
+    storageHome?: string;
     codexHome?: string;
     maxEvents?: number;
     tail?: boolean;
@@ -191,6 +193,9 @@ export async function readCodexHistoryThreadPayload(
         maxBytes: options.tailBytes ?? threadTailBytes(),
       })
     : await parseCodexSessionFile(parseInput);
+  if (options.storageHome && options.attachmentRootDir) {
+    await publishCodexHistoryAttachments({ storageHome: options.storageHome, attachmentRootDir: options.attachmentRootDir, events: parsed.events });
+  }
   return {
     session: {
       ...thread.session,
@@ -1435,7 +1440,7 @@ const CODEX_IMAGE_CLOSE_TAG_PATTERN = /<\/image>/gi;
 const CODEX_FILES_MENTIONED_HEADER_PATTERN =
   /^\s*# Files mentioned by the user:\s*$/im;
 const CODEX_USER_REQUEST_HEADER_PATTERN =
-  /^\s*## My request for Codex:\s*$/im;
+  /^\s*## My request(?: for Codex)?:\s*$/im;
 const CODEX_GIT_DIRECTIVE_PATTERN =
   /^\s*::git-(?:stage|commit|create-branch|push|create-pr)\{[^\r\n]*\}\s*$/;
 const DATA_IMAGE_URL_PATTERN = /^data:([^;,]+);base64,([a-zA-Z0-9+/=\s]+)$/;

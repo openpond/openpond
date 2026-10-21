@@ -141,6 +141,7 @@ describe("Model Project hosting", () => {
         },
       },
     };
+    let indexedProjectId = hosted.id;
     const request = vi.fn(async (urlValue: string | URL | Request, init?: RequestInit) => {
       expect(new Headers(init?.headers).get("x-openpond-team-id")).toBe("team_1");
       const url = String(urlValue);
@@ -203,8 +204,15 @@ describe("Model Project hosting", () => {
           },
         });
       }
-      if (url.includes("/v1/managed-rl/jobs")) {
-        return Response.json({ jobs: [hostedJob] });
+      if (new URL(url).pathname === "/v1/training/jobs") {
+        expect(new URL(url).searchParams.get("modelProjectId")).toBe(hosted.id);
+        return Response.json({ schemaVersion: "openpond.trainingJobPage.v2", nextCursor: null, jobs: [{
+          schemaVersion: "openpond.trainingJob.v2", id: hostedJob.id, teamId: hostedJob.teamId, kind: "policy_optimize",
+          modelProjectId: indexedProjectId, portableProjectId: hostedJob.portableProjectId, sourceProjectRevision: hostedJob.sourceProjectRevision,
+          submissionHash: hostedJob.publicSubmissionHash, state: "succeeded", phase: "completed", version: 1, progress: 1,
+          rolloutProgress: { groupsCompleted: 10, groupsTarget: 10, optimizerUpdatesApplied: 8, optimizerUpdatesSkipped: 2 },
+          accruedSpendUsd: 4.25, terminalReason: null, createdAt: hostedJob.createdAt, updatedAt: hostedJob.updatedAt, completedAt: hostedJob.completedAt,
+        }] });
       }
       return Response.json({
         project: hosted,
@@ -228,7 +236,7 @@ describe("Model Project hosting", () => {
         getTrainingJob: vi.fn(async () => null),
         saveModelProjectHosting,
         saveTrainingJob,
-        saveTrainingJobEvent,
+        saveHostedTrainingJobEvent: saveTrainingJobEvent,
         getCacheEntry: vi.fn(async () => null),
         setCacheEntry: vi.fn(async (_type, _key, payload) => ({
           payload,
@@ -312,12 +320,24 @@ describe("Model Project hosting", () => {
     const requestsBeforeOpen = request.mock.calls.length;
     await expect(service.openProject({ ...openScope, teamId: "other" })).rejects.toThrow("active connection");
     expect(request.mock.calls).toHaveLength(requestsBeforeOpen);
+    indexedProjectId = "foreign-model";
+    await expect(service.openProject(openScope)).rejects.toThrow("selected Model or workspace");
+    indexedProjectId = hosted.id;
     const opened = await service.openProject(openScope);
     expect(opened.importedJobCount).toBe(1);
     expect(opened.importedMetricCount).toBe(6);
     expect(opened.project.trainingSetup.tasksetRef?.id).toBe("remote-package");
     expect(opened.project.hosted?.tasksets).toEqual([]);
     expect(request.mock.calls.slice(requestsBeforeOpen).some(([url]) => String(url).includes("taskset-packages"))).toBe(false);
+
+    // Failed event persistence must leave the job's imported-through marker
+    // untouched, otherwise a completed run can never retry its missing metrics.
+    const jobWritesBeforeFailure = saveTrainingJob.mock.calls.length;
+    const eventWriteFailure = new Error("event persistence unavailable");
+    saveTrainingJobEvent.mockRejectedValueOnce(eventWriteFailure);
+    await expect(service.openProject(openScope)).rejects.toBe(eventWriteFailure);
+    expect(saveTrainingJob).toHaveBeenCalledTimes(jobWritesBeforeFailure);
+    await service.openProject(openScope);
 
     const conflictingService = createModelProjectHostingService({
       store: {
@@ -328,7 +348,7 @@ describe("Model Project hosting", () => {
         saveModelProjectHosting,
         saveTrainingJob: vi.fn(async (value: unknown) => value),
         getTrainingJob: vi.fn(async () => null),
-        saveTrainingJobEvent: vi.fn(async (value: unknown) => value),
+        saveHostedTrainingJobEvent: vi.fn(async (value: unknown) => value),
       } as never,
       resolveAccess: async () => ({
         apiBaseUrl: "https://hosted.example.test",
@@ -425,8 +445,8 @@ describe("Model Project hosting", () => {
       return value;
     });
     const request = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      if (new URL(String(url)).pathname === "/v1/managed-rl/jobs") {
-        return Response.json({ jobs: [] });
+      if (new URL(String(url)).pathname === "/v1/training/jobs") {
+        return Response.json({ schemaVersion: "openpond.trainingJobPage.v2", jobs: [], nextCursor: null });
       }
       if (init?.method !== "PUT") {
         return Response.json({ project: hosted, resources: [], jobCount: 0, latestJobIds: [] });

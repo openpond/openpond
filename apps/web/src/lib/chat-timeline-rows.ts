@@ -35,7 +35,7 @@ export function chatTimelineMessages(rows: ChatTimelineRow[]): ChatMessage[] {
 
 export function buildChatTimelineRows(
   messages: ChatMessage[],
-  options: { showThinkingIndicator?: boolean; groupInProgressWork?: boolean } = {},
+  options: { showThinkingIndicator?: boolean } = {},
 ): ChatTimelineRow[] {
   const rows: ChatTimelineRow[] = [];
   let pending: ChatTimelineMessageRow[] = [];
@@ -50,8 +50,6 @@ export function buildChatTimelineRows(
   let turnId: string | undefined;
   const flush = (label?: string | ((count: number) => string)) => {
     if (pending.length === 0) return;
-    if (!label && options.groupInProgressWork && pending.some(entry =>
-      entry.message.role === "activity_group" || entry.message.role === "task_message")) label = "Worked";
     if (label) rows.push({ id: `work:${pending[0]!.message.id}`, type: "work",
       label: typeof label === "function" ? label(pending.length) : label, messages: pending });
     else {

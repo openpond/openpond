@@ -20,6 +20,9 @@ export function ModelsResourceDetail({ props, model, profile, runs, route }: {
       segments: location.segments?.filter((segment, index) => index !== 0 || segment.label !== label),
     });
   }, [props.onDetailOpenChange, route.page, route.modelId, model.id, model.name]);
+  const closeDetail = useCallback(() => {
+    void navigateModelsRoute(modelsLocation(route.page, route.modelId));
+  }, [route.page, route.modelId]);
   const openDataset = (id: string) => { void navigateModelsRoute(modelsLocation("tasksets", route.modelId, { resourceId: id })); };
   const openEntry = (ref: string | null) => {
     const page = ref?.startsWith("version:") ? "versions" : route.page === "versions" ? "versions" : "runs";
@@ -36,7 +39,7 @@ export function ModelsResourceDetail({ props, model, profile, runs, route }: {
     onChatWithModel={training.onChatWithModel} onOpenPullRequest={props.onOpenPullRequest} onOpenCandidateFiles={props.onOpenCandidateFiles}
     onOpenConversation={props.onOpenRunConversation}
     onOpenComparison={(id) => { void navigateModelsRoute(modelsLocation("runs", route.modelId, { collection: "series", resourceId: id })); }}
-    onClose={() => { void navigateModelsRoute(modelsLocation(route.page, route.modelId)); }}
+    onClose={closeDetail}
     onLocationChange={onLocationChange} onRenameAgent={() => undefined} onOpenDataset={openDataset}
     onPause={props.onPause} onReconcilePullRequest={props.onReconcilePullRequest} onRejectCandidate={props.onRejectCandidate} onResume={props.onResume} onRevise={props.onRevise}
     onNewModelRun={(initialTasksetId) => { props.onNewModel(initialTasksetId ?? undefined, null, model.id); void navigateModelsRoute(modelsLocation("runs", model.id, { collection: "new", resourceId: model.id })); }}

@@ -76,7 +76,7 @@ export function LabModelProjectOverview({
           {
             label: "Current run",
             value: currentRun
-              ? <LabRunStatusBadge status={currentRun.status} />
+              ? <span><LabRunStatusBadge status={currentRun.status} />{currentRun.continuation ? <small className="training-continual-status">Continual learning on</small> : null}</span>
               : "Not started",
             hint: currentRun
               ? `${currentRun.label} · ${formatDateTime(currentRun.updatedAt)}`
@@ -105,6 +105,7 @@ export function LabModelProjectOverview({
         key={`${modelProject.hosted.projectId}:${currentRun.hostedJobId}`}
         connection={connection} teamId={modelProject.hosted.teamId} projectId={modelProject.hosted.projectId}
         jobId={currentRun.hostedJobId} onOpenRun={() => onOpenRun(currentRun.key)}
+        initialStatus={currentRun.status}
       /> : null}
       <LabProjectMetricCharts runs={modelRuns} />
       <LabContinualLearningSeries

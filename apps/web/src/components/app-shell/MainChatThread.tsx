@@ -1,5 +1,3 @@
-import { latestChatPlan } from "../../lib/chat-task-progress";
-import { ActivityPlanCard } from "../chat/ActivityPlanCard";
 import { lazy, Suspense, useMemo, type ComponentProps, type Ref, type UIEvent, type ReactNode } from "react";
 import type { TaskCreationSnapshot } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
@@ -84,7 +82,6 @@ export function MainChatThread({
   usageSessionId?: string | null;
 }) {
   const messages = useMemo(() => chatTimelineMessages(rows), [rows]);
-  const currentPlan = useMemo(() => latestChatPlan(messages), [messages]);
   const newMessageIds = useNewMessageIds(messages, conversationKey);
   const latestTurnId = latestMessageTurnId(messages);
   const turnCache = useSessionTurnCache({
@@ -163,11 +160,6 @@ export function MainChatThread({
           </Suspense>
         ) : null}
       </section>
-      {turnRunning && currentPlan?.length ? (
-        <aside className="chat-plan-dock" aria-label="Current task progress">
-          <ActivityPlanCard entries={currentPlan} initiallyExpanded={false} />
-        </aside>
-      ) : null}
     </>
   );
 }

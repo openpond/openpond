@@ -3,6 +3,7 @@ import { Download } from "../icons";
 import { FileBreadcrumbs, workspaceFileDisplayName } from "./WorkspaceFileLocation";
 
 const WordPreview = lazy(() => import("./FilePagePreview"));
+const PdfPreview = lazy(() => import("./WorkspacePdfPreview"));
 
 export function WorkspaceDocumentPreview({ path, contentBase64 }: { path: string; contentBase64: string }) {
   const filename = workspaceFileDisplayName(path);
@@ -42,7 +43,9 @@ export function WorkspaceDocumentPreview({ path, contentBase64 }: { path: string
     </div>
     {/\.docx$/i.test(path) ? <Suspense fallback={<div role="status">Loading document…</div>}>
       <WordPreview thumbnail={false} file={{ path, content: contentBase64, contentEncoding: "base64", status: "", additions: 0, deletions: 0, patch: "" }} />
-    </Suspense> : <iframe src={objectUrl} title={`${path} preview`} />}
+    </Suspense> : <Suspense fallback={<div role="status">Loading document…</div>}>
+      <PdfPreview contentBase64={contentBase64} />
+    </Suspense>}
   </div>;
 }
 

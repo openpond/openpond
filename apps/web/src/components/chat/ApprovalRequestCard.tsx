@@ -3,12 +3,16 @@ import { BadgeCheck, Ban, Check, X } from "../icons";
 import type { Approval, ResolveApprovalRequest } from "@openpond/contracts";
 import type { NativeAgentQuestion } from "@openpond/agent-runtime";
 import { MarkdownText } from "./MarkdownText";
-import { NativeQuestionFields } from "./NativeQuestionFields";
+import { NativeQuestionRequest } from "./NativeQuestionRequest";
+import type { ClientConnection } from "../../api";
+import type { ShowAppToast } from "../../app/app-state";
 
 type ApprovalDecision = ResolveApprovalRequest["decision"];
 
 type ApprovalRequestCardProps = {
   approval: Approval | null;
+  connection: ClientConnection | null;
+  showToast: ShowAppToast;
   onResolve: (
     approvalId: string,
     decision: ApprovalDecision,
@@ -16,13 +20,11 @@ type ApprovalRequestCardProps = {
   ) => Promise<void>;
 };
 
-export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCardProps) {
+export function ApprovalRequestCard({ approval, onResolve, connection, showToast }: ApprovalRequestCardProps) {
   const [pendingDecision, setPendingDecision] = useState<ApprovalDecision | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setPendingDecision(null);
-    setAnswers({});
   }, [approval?.id]);
 
   if (!approval || approval.kind === "create_plan") return null;
@@ -50,6 +52,12 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
       /* Invalid native details never expose a broader grant. */
     }
   }
+  if (questions.length) return (
+    <NativeQuestionRequest key={approval.id} approval={approval} questions={questions}
+      canAccept={choices.some(option => option.kind === "allow_once")}
+      canSkip={choices.some(option => option.kind === "reject_once")}
+      connection={connection} showToast={showToast} onResolve={onResolve} />
+  );
   const supportsSessionApproval = native
     ? choices.some((option) => option.kind === "allow_always")
     : approval.kind !== "subagent_patch_apply";
@@ -59,11 +67,7 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
     if (!approval || pendingDecision) return;
     setPendingDecision(decision);
     try {
-      await onResolve(
-        approval.id,
-        decision,
-        decision === "accept" && questions.length ? answers : undefined,
-      );
+      await onResolve(approval.id, decision);
     } catch {
       setPendingDecision(null);
     }
@@ -72,7 +76,7 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
   return (
     <div
       data-notification-approval={approval.id}
-      className={`approval-request-shell ${questions.length || plan !== null ? "native-input-shell" : ""}`}
+      className={`approval-request-shell ${plan !== null ? "native-input-shell" : ""}`}
       role="status"
       aria-live="polite"
     >
@@ -81,9 +85,7 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
         aria-label={
           plan !== null
             ? "Plan review"
-            : questions.length
-              ? "Questions from agent"
-              : `${approvalKindLabel(approval.kind)} approval request`
+            : `${approvalKindLabel(approval.kind)} approval request`
         }
       >
         <div className="approval-request-copy">
@@ -91,17 +93,15 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
             <span>
               {plan !== null
                 ? "Plan review"
-                : questions.length
-                  ? "Input needed"
-                  : approvalKindLabel(approval.kind)}
+                : approvalKindLabel(approval.kind)}
             </span>
           </div>
-          {!questions.length && plan === null ? (
+          {plan === null ? (
             <code className="approval-request-title" title={approval.title}>
               {approval.title}
             </code>
           ) : null}
-          {!questions.length && plan === null && detail && detail !== approval.title && (
+          {plan === null && detail && detail !== approval.title && (
             <details className="approval-request-details">
               <summary>Details</summary>
               <pre>{detail}</pre>
@@ -119,15 +119,6 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
               )}
             </div>
           ) : null}
-          {questions.length ? (
-            <NativeQuestionFields
-              key={approval.id}
-              questions={questions}
-              answers={answers}
-              disabled={Boolean(pendingDecision)}
-              onChange={setAnswers}
-            />
-          ) : null}
         </div>
         <div className="approval-request-actions">
           <button
@@ -135,7 +126,6 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
             className="approval-action primary"
             disabled={
               Boolean(pendingDecision) ||
-              questions.some((question) => !answers[question.question]?.trim()) ||
               (native && !choices.some((option) => option.kind === "allow_once"))
             }
             onClick={() => void resolve("accept")}
@@ -144,11 +134,9 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
             <span>
               {pendingDecision === "accept"
                 ? "Sending"
-                : questions.length
-                  ? "Submit answers"
-                  : plan !== null
-                    ? "Approve plan"
-                    : "Approve"}
+                : plan !== null
+                  ? "Approve plan"
+                  : "Approve"}
             </span>
           </button>
           {supportsSessionApproval ? (
@@ -182,11 +170,9 @@ export function ApprovalRequestCard({ approval, onResolve }: ApprovalRequestCard
             <span>
               {pendingDecision === "decline"
                 ? "Sending"
-                : questions.length
-                  ? "Skip questions"
-                  : plan !== null
-                    ? "Keep planning"
-                    : "Deny"}
+                : plan !== null
+                  ? "Keep planning"
+                  : "Deny"}
             </span>
           </button>
           <button

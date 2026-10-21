@@ -18,12 +18,23 @@
   overflow: auto;
   overflow-anchor: auto;
   padding: 22px var(--chat-thread-inline-padding) calc(var(--chat-composer-reserve) + 28px + var(--chat-sent-message-space, 0px));
-  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-color: transparent transparent;
   scrollbar-width: thin;
+}
+
+/* End the scroll viewport above the entire dock, including tasks and steering. */
+.chat-column > .chat-thread {
+  margin-bottom: var(--chat-composer-reserve);
+  padding-bottom: calc(28px + var(--chat-sent-message-space, 0px));
 }
 
 .main-pane.diff-open .chat-column {
   --chat-thread-inline-padding: clamp(24px, calc((100% - 736px) / 2), 64px);
+}
+
+.chat-thread:hover,
+.chat-thread:focus-within {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .chat-thread::-webkit-scrollbar {
@@ -37,8 +48,13 @@
 .chat-thread::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: var(--scrollbar-thumb);
+  background: transparent;
   background-clip: padding-box;
+}
+
+.chat-thread:hover::-webkit-scrollbar-thumb,
+.chat-thread:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
 }
 
 .chat-thread::-webkit-scrollbar-thumb:hover {

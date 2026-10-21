@@ -14,6 +14,7 @@ import type { HtmlVisualSnapshotHandle } from "../visuals/useHtmlVisualSnapshot"
 import { BrowserSnapshotMenu } from "./BrowserSnapshotMenu";
 import { BrowserSnapshotPreview } from "./BrowserSnapshotPreview";
 import { useBrowserCapture } from "./useBrowserCapture";
+import { useAppToast } from "../../app/AppToastContext";
 
 export function BrowserSidebar({
   conversationId,
@@ -29,6 +30,7 @@ export function BrowserSidebar({
   visualTabs?: ReturnType<typeof useHtmlVisualTabs>;
 }) {
   const browser = useBrowserSidebar(conversationId);
+  const toast = useAppToast();
   const [reloadVersions, setReloadVersions] = useState<Record<string, number>>({});
   const activeVisual = visualTabs?.tabs.find((tab) => tab.publicationId === visualTabs.activeId);
   const visualSnapshot = useRef<HtmlVisualSnapshotHandle | null>(null);
@@ -59,15 +61,16 @@ export function BrowserSidebar({
   const navigate = useCallback(
     (url: string) => {
       visualTabs?.showBrowser();
-      void browser.open(url, { explicitFile: true });
+      void browser.open(url, { explicitFile: true }).catch((error) =>
+        toast?.(error instanceof Error ? error.message : "Could not open browser.", "error"));
     },
-    [browser, visualTabs],
+    [browser, visualTabs, toast],
   );
 
   const clearData = useCallback(() => {
     if (
       !window.confirm(
-        "Clear browser data for this conversation? Tabs, cookies, cache, and local storage for this conversation will be removed.",
+        "Clear shared browser data? Cookies, logins, cache, and site storage will be removed for all chats. This chat's browser tabs will also close.",
       )
     ) {
       return;

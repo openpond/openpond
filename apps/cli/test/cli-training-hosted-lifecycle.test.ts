@@ -119,6 +119,37 @@ describe("hosted training lifecycle over the public SDK", () => {
     expect(printed.at(-1)).toMatchObject({ jobId: "job-1", cleanup: { scope: "job", complete: true, receipt } });
   });
 
+  // A temporary unversioned upstream 500 can outlast SDK read retries. The
+  // paid-job watchdog must survive it without cancelling healthy queued work.
+  test.each(["json", "html"])("survives malformed %s upstream errors without cancellation", async format => {
+    let reads = 0, cancellations = 0;
+    const printed: unknown[] = [];
+    await withApi((request, response) => {
+      if (request.method === "POST") cancellations++;
+      if (request.method === "GET" && request.url === "/v1/training/jobs/job-1") {
+        if (++reads <= 3) {
+          if (format === "json") return reply(response, { error: "upstream unavailable" }, 500);
+          response.writeHead(502, { "content-type": "text/html" });
+          response.end("<html>upstream unavailable</html>");
+          return;
+        }
+        return reply(response, { job: job("succeeded", 2) });
+      }
+      if (request.url === "/v1/training/jobs/job-1/outputs")
+        return reply(response, { schemaVersion: "openpond.trainingJobOutputs.v2", outputs: [], receipt });
+      reply(response, { unexpected: request.url }, 500);
+    }, async client => {
+      await watchHostedTrainingJob({ client, jobId: "job-1", teamId: "team-1", print: value => printed.push(value),
+        options: { intervalMs: 250, deadlineAt: Date.now() + 5000, cancelAt: Date.now() + 4000,
+          waitForCleanup: true, cleanupTimeoutMs: 1000, cancelOnInfrastructureError: false },
+        requestBound: { deadlineAt: null },
+      });
+    });
+    expect(reads).toBe(4);
+    expect(cancellations).toBe(0);
+    expect(printed.at(-1)).toMatchObject({ cleanup: { complete: true } });
+  });
+
   // Public successful Jobs use 'succeeded'; treating only internal 'completed'
   // as terminal used to leave the CLI polling indefinitely.
   test("recognizes public success and refuses another workspace before cancellation", async () => {
