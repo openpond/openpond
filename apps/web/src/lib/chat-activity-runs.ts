@@ -1,7 +1,7 @@
 import type { ChatMessage } from "./app-models";
 import type { ChatTimelineMessageRow } from "./chat-timeline-rows";
 
-/** Restore one ordinary tool disclosure across peer exchanges, until dialogue resumes. */
+/** Combine adjacent tool groups; conversation and peer messages separate runs. */
 export function groupActivityRuns(rows: readonly ChatTimelineMessageRow[]): ChatTimelineMessageRow[] {
   const result: ChatTimelineMessageRow[] = [];
   let run: ChatTimelineMessageRow[] = [];
@@ -28,7 +28,7 @@ export function groupActivityRuns(rows: readonly ChatTimelineMessageRow[]): Chat
     const message = row.message;
     const ordinaryActivity = message.role === "activity_group" && !message.deliverables?.length
       && !message.userQuestion;
-    if (ordinaryActivity || message.role === "task_message") run.push(row);
+    if (ordinaryActivity) run.push(row);
     else { flush(); result.push(row); }
   }
   flush();

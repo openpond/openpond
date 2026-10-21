@@ -10,9 +10,9 @@ import {
 
 describe("chat timeline rows", () => {
 
-  // Late peer receipts used to leak into the main conversation after completion.
-  // Keep them ordered and reachable while preserving ordinary response rows.
-  test("rolls late sent/received exchanges into existing work disclosures without changing direct conversation", () => {
+  // A completed turn or late delivery must never hide peer communication.
+  // Preserve every message and its position as the transcript grows.
+  test("keeps late sent/received exchanges visible after completion", () => {
     const user = message("turn:user", "user", "Request");
     const final = {...message("turn:answer", "assistant", "Done"), finalAnswer: true};
     const exchanges: ChatMessage[] = Array.from({length: 1001}, (_, index) => ({
@@ -21,56 +21,67 @@ describe("chat timeline rows", () => {
     }));
     const next = message("next:user", "user", "Next question");
     const rows = buildChatTimelineRows([user, final, ...exchanges, next]);
-    expect(rows.map(row => row.type)).toEqual(["message", "message", "work", "message"]);
+    expect(rows.every(row => row.type === "message")).toBe(true);
     expect(chatTimelineMessages(rows)).toEqual([user, final, ...exchanges, next]);
     const partial = buildChatTimelineRows([user, final, exchanges[0]!]);
     expect(rows[2]?.id).toBe(partial[2]?.id);
-    expect(rows[2]?.type === "work" && rows[2].messages.map(row => row.message)).toEqual(exchanges);
+    expect(rows.slice(2, -1).map(row => row.type === "message" && row.message)).toEqual(exchanges);
     const commentary = message("turn:commentary", "assistant", "A direct update");
     const split = buildChatTimelineRows([exchanges[0]!, commentary, exchanges[1]!]);
-    expect(split.map(row => row.type)).toEqual(["work", "message", "work"]);
+    expect(split.map(row => row.type)).toEqual(["message", "message", "message"]);
     expect(chatTimelineMessages(split)).toEqual([exchanges[0], commentary, exchanges[1]]);
   });
 
-  // Live tool work must remain visible even when peer exchanges are grouped;
-  // the completed turn still retains every streamed message in its disclosure.
-  test("keeps live commands visible and rolls up the whole turn only on completion", () => {
+  // Completing or steering a turn can collapse work, but must leave both
+  // directions of peer communication visible in their original positions.
+  test("keeps peer messages visible through live work, completion, and steering", () => {
     const user = message("turn:user", "user", "Ask the agent");
     const command: ChatMessage = {id: "first-command", role: "activity_group", turnId: "turn", timestamp: user.timestamp,
       activities: [{id: "tool", label: "Ran", content: "followup", timestamp: user.timestamp}]};
     const sent: ChatMessage = {id: "sent", role: "task_message", timestamp: user.timestamp, content: "Calculate 2+2"};
     const received: ChatMessage = {...sent, id: "received", turnId: "turn", content: "4"};
+    const after: ChatMessage = {...command, id: "after-command"};
     const answer = {...message("turn:answer", "assistant", "The result is 4"), finalAnswer: true};
-    const stages = [[user, command], [user, command, sent], [user, command, sent, received], [user, command, sent, received, answer]];
+    const steer: ChatMessage = {...message("turn:steer", "user", "Continue"), interactionKind: "steer"};
+    const stages = [[user, command], [user, command, sent], [user, command, sent, received],
+      [user, command, sent, received, after, answer], [user, command, sent, received, after, steer],
+      [user, command, sent, received, after, message("next:user", "user", "Next")]];
     for (const messages of stages) {
       const rows = buildChatTimelineRows(messages);
-      if (messages.at(-1) === answer) {
+      if (messages.at(-1) === answer || messages.at(-1) === steer) {
         const work = rows.filter(row => row.type === "work");
-        expect(work).toHaveLength(1);
+        expect(work).toHaveLength(2);
         expect(work[0]?.id).toBe("work:first-command");
       } else {
         expect(rows.some(row => row.type === "message" && row.message === command)).toBe(true);
+      }
+      for (const peer of [sent, received].filter(peer => messages.includes(peer))) {
+        expect(rows.some(row => row.type === "message" && row.message === peer)).toBe(true);
+        expect(groupActivityRuns(rows.flatMap(row => row.type === "message" ? [row] : []))
+          .some(row => row.message === peer)).toBe(true);
       }
       expect(chatTimelineMessages(rows)).toEqual(messages);
     }
   });
 
-  // Peer receipts must not split a continuous tool run; real assistant dialogue must.
-  test("combines consecutive tool groups and peer messages while preserving original detail order", () => {
+  // A tool run must stop at a peer message so its details cannot swallow the receipt.
+  test("combines only adjacent tool groups and preserves peer rows between them", () => {
     const tool = (id: string): ChatMessage => ({id, role: "activity_group", timestamp: "2026-07-01T10:00:00Z",
       activities: [{id: `${id}-call`, label: "Ran command", content: id, timestamp: "2026-07-01T10:00:00Z"}]});
     const peer: ChatMessage = {id: "peer", role: "task_message", timestamp: "2026-07-01T10:00:00Z", content: "Result"};
     const original = [tool("one"), peer, tool("two"), tool("three")];
     const rows = original.map(message => ({id: `message:${message.id}`, type: "message" as const, message, showFooter: false}));
     const grouped = groupActivityRuns(rows);
-    expect(grouped).toHaveLength(1);
+    expect(grouped).toHaveLength(3);
     expect(grouped[0]?.id).toBe(rows[0]?.id);
-    expect(grouped[0]?.message.activities?.map(activity => activity.id)).toEqual(["one-call", "two-call", "three-call"]);
-    expect(grouped[0]?.message.activityMessages).toEqual(original);
+    expect(grouped[0]?.message).toBe(original[0]);
+    expect(grouped[1]?.message).toBe(peer);
+    expect(grouped[2]?.message.activities?.map(activity => activity.id)).toEqual(["two-call", "three-call"]);
+    expect(grouped[2]?.message.activityMessages).toEqual(original.slice(2));
     expect(original[0]?.activityMessages).toBeUndefined();
     expect(groupActivityRuns(rows.slice(0, 2))[0]?.id).toBe(grouped[0]?.id);
     const response = {id: "message:response", type: "message" as const, message: message("turn:response", "assistant", "A direct update"), showFooter: false};
-    expect(groupActivityRuns([...rows, response, ...rows]).map(row => row.id)).toEqual([rows[0]?.id, response.id, rows[0]?.id]);
+    expect(groupActivityRuns([...rows, response, ...rows]).map(row => row.id)).toEqual([rows[0]?.id, rows[1]?.id, rows[2]?.id, response.id, rows[0]?.id, rows[1]?.id, rows[2]?.id]);
   });
 
   test("derives stable message row ids before rendering", () => {
