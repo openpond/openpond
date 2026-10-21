@@ -110,6 +110,9 @@ export function prepareModelTasksetSave(db: OpenPondSqliteConnection, raw: Model
   } });
   // Reward edits preserve the exact source metric, including its absence.
   published.metrics = derived.taskset.metrics;
+  // Draft editor defaults must not alter the pinned portable release metadata.
+  if (derived.taskset.metadata.tasksetOutputContract === undefined) delete published.metadata.tasksetOutputContract;
+  else published.metadata.tasksetOutputContract = derived.taskset.metadata.tasksetOutputContract;
   published.contentHash = computeTasksetHash(published);
   if (published.revision !== derived.taskset.revision) throw new Error("Derived local and portable Taskset revisions differ.");
   return { taskset: published, generatedFiles, directoryId, source, sourcePackage, derived };
