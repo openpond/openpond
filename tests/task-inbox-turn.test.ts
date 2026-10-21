@@ -17,6 +17,7 @@ test.runIf(process.env.OPENPOND_QUALIFY_LOCAL_MESSAGING === "1").each(["claude-c
 );
 
 function gate() { let resolve!: () => void; const promise = new Promise<void>((done) => { resolve = done; }); return { promise, resolve }; }
+const steeringImage = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ8kAAAAASUVORK5CYII=";
 
 // Failure story: a background Harness review holds the same session's queue
 // slot, so successful completion leaves user follow-ups waiting for its timeout.
@@ -105,9 +106,11 @@ test("steering preserves an admitted tool and the assignment across request repl
   const turnPromise = harness.runner.sendTurn("session_test", { prompt: "Compare the approaches and deliver the chosen implementation.", modelRef: { providerId: "openrouter", modelId: "test/model" } });
   await generating.promise;
   const turnId = harness.state.turns[0]!.id;
-  await harness.runner.steerSessionTurn("session_test", { prompt: "Preserve the public API.", expectedTurnId: turnId, idempotencyKey: "first" });
+  await harness.runner.steerSessionTurn("session_test", { prompt: "Preserve the public API.", expectedTurnId: turnId, idempotencyKey: "first",
+    attachments: [{ id: "pasted", name: "instructions.txt", kind: "text", mediaType: "text/plain", sizeBytes: 32, text: "The attached migration constraints must survive compaction." }] });
   await toolStarted.promise;
-  await harness.runner.steerSessionTurn("session_test", { prompt: "Use the existing data format.", expectedTurnId: turnId, idempotencyKey: "second" });
+  await harness.runner.steerSessionTurn("session_test", { prompt: "Use the existing data format.", expectedTurnId: turnId, idempotencyKey: "second",
+    attachments: [{ id: "image", name: "example.png", kind: "image", mediaType: "image/png", sizeBytes: Buffer.from(steeringImage, "base64").length, contentsBase64: steeringImage }] });
   expect(toolSignal?.aborted).toBe(false);
   releaseTool.resolve();
   expect(await turnPromise).toMatchObject({ id: turnId, status: "completed" });
@@ -116,7 +119,9 @@ test("steering preserves an admitted tool and the assignment across request repl
   expect(harness.state.events.filter((event) => event.name === "session.compaction.completed")).toHaveLength(1);
   expect(requests[3]).toContain("Compare the approaches and deliver the chosen implementation.");
   expect(requests[3]).toContain("Preserve the public API.");
+  expect(requests[3]).toContain("The attached migration constraints must survive compaction.");
   expect(requests[3]).toContain("Use the existing data format.");
+  expect(requests[3]).toContain(`data:image/png;base64,${steeringImage}`);
   expect(requests[2]).toContain("durable tool result");
   expect(requests[2]).toContain("pending_user_steer");
   expect((await harness.runner.readTaskInbox("session_test")).inputs.map((input) => input.state)).toEqual(["resolved", "resolved"]);
@@ -259,7 +264,7 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
   return;
  }
  if (!claude) {
-  if (request.method==='initialize') { send({jsonrpc:'2.0',id:request.id,result:{protocolVersion:1,agentCapabilities:{loadSession:true},authMethods:[]}}); return; }
+  if (request.method==='initialize') { send({jsonrpc:'2.0',id:request.id,result:{protocolVersion:1,agentCapabilities:{loadSession:true,promptCapabilities:{image:true}},authMethods:[]}}); return; }
   if (request.method==='session/new' || request.method==='session/load') {
    session = request.params.sessionId || 'exact-native-session';
    send({jsonrpc:'2.0',id:request.id,result:{sessionId:session}}); return;
@@ -270,7 +275,8 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
  if (claude && request.type!=='user') return;
  active = request; count++;
  session = claude ? request.session_id : request.params.sessionId;
- fs.appendFileSync(${JSON.stringify(trace)}, JSON.stringify({session, prompt:claude?request.message.content[0].text:request.params.prompt[0].text})+'\\n');
+ fs.appendFileSync(${JSON.stringify(trace)}, JSON.stringify({session, prompt:claude?request.message.content[0].text:request.params.prompt[0].text,
+ images:(claude?request.message.content:request.params.prompt).filter(part=>part.type==='image').map(part=>part.source?.data||part.data)})+'\\n');
  if(claude) {
   send({type:'stream_event',session_id:session,event:{type:'message_start',message:{id:'reply-'+count}}});
   send({type:'stream_event',session_id:session,event:{type:'content_block_delta',delta:{type:'text_delta',text:'Working on request '+count}}});
@@ -278,23 +284,28 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
  timer = setInterval(() => { if(fs.existsSync(${JSON.stringify(release)})) finish(false); }, 10);
 });
 `, { mode: 0o700 });
-    const readRequests = async (): Promise<Array<{ session: string; prompt: string }>> => (await readFile(trace, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    const readRequests = async (): Promise<Array<{ session: string; prompt: string; images: string[] }>> => (await readFile(trace, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
     const pending = harness.runner.sendTurn(sessionId, { prompt: "Implement the original feature and preserve completed work." });
     await vi.waitFor(async () => {
       if (harness.state.turns[0]?.status === "failed") throw new Error(harness.state.turns[0].error ?? "Native turn failed");
       expect(await readRequests()).toHaveLength(1);
     }, { timeout: 10_000 });
     const turnId = harness.state.turns[0]!.id;
-    const queued = await harness.runner.queueTaskInput(sessionId, { prompt: "Use the cyan branding." }, "queued-steer");
+    const queued = await harness.runner.queueTaskInput(sessionId, { prompt: "Use the cyan branding.", attachments: [{ id: "brand", name: "brand.txt", kind: "text", mediaType: "text/plain", sizeBytes: 12, text: "Brand cyan: #00ffff" }] }, "queued-steer");
     expect(await readRequests()).toHaveLength(1);
     expect(queued).toMatchObject({ kind: "queued", state: "pending", turnId: null });
     await harness.runner.updateTaskInput(sessionId, queued.id, { action: "steer", expectedRevision: queued.revision, expectedTurnId: turnId });
     await vi.waitFor(async () => expect(await readRequests()).toHaveLength(2), { timeout: 10_000 });
-    const correction = { prompt: "Keep the existing layout.", expectedTurnId: turnId, idempotencyKey: "second-steer" };
+    const correction = { prompt: "Keep the existing layout.", expectedTurnId: turnId, idempotencyKey: "second-steer",
+      attachments: [{ id: "layout", name: "layout.txt", kind: "text" as const, mediaType: "text/plain", sizeBytes: 12, text: "Retain the original grid geometry." },
+        { id: "image", name: "layout.png", kind: "image" as const, mediaType: "image/png", sizeBytes: Buffer.from(steeringImage, "base64").length, contentsBase64: steeringImage }] };
     const second = await harness.runner.steerSessionTurn(sessionId, correction);
     await vi.waitFor(async () => expect(await readRequests()).toHaveLength(3), { timeout: 10_000 });
     expect((await readRequests())[2]!.prompt).toContain(queued.body);
     expect((await readRequests())[2]!.prompt).toContain(correction.prompt);
+    expect((await readRequests())[2]!.prompt).toContain("Brand cyan: #00ffff");
+    expect((await readRequests())[2]!.prompt).toContain("Retain the original grid geometry.");
+    expect((await readRequests())[2]!.images).toEqual([steeringImage]);
     expect((await harness.runner.steerSessionTurn(sessionId, correction)).id).toBe(second.id);
     await expect(harness.runner.steerSessionTurn(sessionId, { ...correction, expectedTurnId: "stale-turn", idempotencyKey: "stale" })).rejects.toThrow();
     expect(await readRequests()).toHaveLength(3);

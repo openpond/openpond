@@ -13,6 +13,7 @@ import { nativeToolMcpResult } from "../openpond/native-tool-calls.js";
 import { createCommandModelToolDefinition, createOpenPondProfileSkillModelToolDefinitions } from "../openpond/model-tool-registry.js";
 import { materializeNativeEvaluationSkills } from "../harness/native-evaluation-skill-runtime.js";
 import { nativeImageContent } from "./native-agents/attachments.js";
+import { createTaskInputAttachmentPreparation, taskInputImages } from "./task-inbox/attachments.js";
 import { assertPonderDesktopExecution } from "../store/ponder-desktop-input.js";
 import { assertRemoteExecution } from "../remote-relay/session-ownership.js";
 import {admitStoredTurn,type StoredTurnAdmission} from "./turns/privileged-admission.js";
@@ -209,6 +210,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   const hostedToolFlags = resolveHostedToolRolloutFlags(deps.hostedToolFlags);
   const activeTurns = new ActiveTurnRegistry();
   const taskInbox = createTaskInboxRuntime({
+    prepareInputAttachments: createTaskInputAttachmentPreparation({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir }),
     store: inboxStore, getSession, listSessions: () => store.sessionShells(),
     getTurn: (id) => store.getTurn(id), latestTurn: (id) => store.latestTurnForSession(id),
     recoverInterruptedTurn: async (sessionId, turnId) => {
@@ -1821,6 +1823,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const providerTurn = await runtime.client.startTurn({
         threadId: runtime.threadId,
         prompt: codexPromptWithHarnessContext([providerPrompt, ...initialInputs.filter(input => input.id !== turn.metadata?.taskInputId).map(taskInputModelText)].join("\n\n"), [TASK_COORDINATION_INSTRUCTIONS, personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")),
+        images: initialInputs.filter(input => input.id !== turn.metadata?.taskInputId).flatMap(input => taskInputImages(input).map(image => image.url)),
         cwd: turnCwd ?? session.cwd,
         model: codexModel,
         approvalPolicy: turnPermissions.approvalPolicy,

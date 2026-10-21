@@ -16,6 +16,7 @@ import {
   subscribeVoiceSubmitRequest,
   subscribeVoiceTranscription,
   voiceTranscriptionActive,
+  voiceTranscriptionSubmitRequested,
 } from "../../lib/voice-transcription-job";
 import {
   appendVoiceWaveformLevel,
@@ -39,6 +40,7 @@ type VoiceInputButtonProps = {
     options: { submit: boolean },
   ) => Promise<void> | void;
   transcriptionChannelKey: string;
+  submitLabel?: string;
 };
 
 const MAX_RECORDING_MS = 120_000;
@@ -57,6 +59,7 @@ export function VoiceInputButton({
   showToast,
   onTranscript,
   transcriptionChannelKey,
+  submitLabel = "Send",
 }: VoiceInputButtonProps) {
   const recorderRef = useRef<VoiceRecorder | null>(null);
   const stopTimerRef = useRef<number | null>(null);
@@ -87,6 +90,18 @@ export function VoiceInputButton({
     getTranscriptionSnapshot,
     getTranscriptionSnapshot,
   );
+  const getSubmitRequestedSnapshot = useCallback(
+    () => voiceTranscriptionSubmitRequested(transcriptionChannelKey),
+    [transcriptionChannelKey],
+  );
+  const submitRequested = useSyncExternalStore(
+    subscribeToTranscription,
+    getSubmitRequestedSnapshot,
+    getSubmitRequestedSnapshot,
+  );
+  const transcriptionLabel = submitRequested
+    ? `Transcribing · ${submitLabel.toLowerCase()} when ready`
+    : "Transcribing";
   const busy = transcribing;
   const starting = phase === "starting";
   const recording = phase === "recording";
@@ -134,13 +149,9 @@ export function VoiceInputButton({
         signal,
       });
       if (signal.aborted) return;
-      void Promise.resolve(
-        onTranscript(response.text, { submit: submitRequested() }),
-      ).catch((error) => {
-        showToast(voiceErrorMessage(error), "error");
-      });
+      await onTranscript(response.text, { submit: submitRequested() });
     },
-    [language, onTranscript, showToast],
+    [language, onTranscript],
   );
 
   const cancelTranscription = useCallback(() => {
@@ -271,7 +282,7 @@ export function VoiceInputButton({
       {active ? (
         <span className="voice-recording-strip">
           <span className="sr-only" role="status">
-            {transcribing ? "Transcribing audio" : "Recording voice"}
+            {transcribing ? transcriptionLabel : "Recording voice"}
           </span>
           <button
             type="button"
@@ -287,7 +298,7 @@ export function VoiceInputButton({
           {transcribing ? (
             <>
               <span className="voice-transcribing-label" aria-hidden="true">
-                Transcribing
+                {transcriptionLabel}
                 <span className="voice-transcribing-dots">
                   <span>.</span>
                   <span>.</span>

@@ -78,9 +78,19 @@
 
 .composer-steer-row-icon {
   display: inline-flex;
+  width: 13px;
+  height: 13px;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
+}
+
+.composer-steer-attachment-preview {
+  display: block;
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+  object-fit: cover;
 }
 
 .composer-steer-row-text {

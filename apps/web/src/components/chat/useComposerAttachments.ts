@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CHAT_ATTACHMENT_LIMITS } from "@openpond/contracts";
+import { CHAT_ATTACHMENT_LIMITS, type ChatAttachment } from "@openpond/contracts";
 import {
   composerAttachmentKind,
   createAttachmentId,
   formatBytes,
   type ComposerAttachmentDraft,
+  readComposerAttachmentPayload,
 } from "./ComposerAttachments";
 
 export function useComposerAttachments() {
@@ -159,6 +160,28 @@ export function useComposerAttachments() {
     []
   );
 
+  const prepareAttachmentsForSubmit = useCallback(async () => {
+    const staged = stageAttachmentsForSubmit();
+    try {
+      const payloads = await Promise.all(staged.map(readComposerAttachmentPayload));
+      return { attachments: payloads, settle: (accepted: boolean) => settleStagedAttachments(staged, accepted ? "dispose" : "restore") };
+    } catch (error) {
+      settleStagedAttachments(staged, "restore");
+      throw error;
+    }
+  }, [stageAttachmentsForSubmit, settleStagedAttachments]);
+
+  const restoreAttachmentPayloads = useCallback((payloads: ChatAttachment[]) => {
+    addFiles(payloads.map(attachment => {
+      const bytes = attachment.contentsBase64
+        ? Uint8Array.from(atob(attachment.contentsBase64), character => character.charCodeAt(0))
+        : new TextEncoder().encode(attachment.text ?? "");
+      const file = new File([bytes], attachment.name, { type: attachment.mediaType });
+      if (attachment.relativePath) Object.defineProperty(file, "webkitRelativePath", { value: attachment.relativePath });
+      return file;
+    }));
+  }, [addFiles]);
+
   return {
     attachmentError,
     attachments,
@@ -168,6 +191,8 @@ export function useComposerAttachments() {
     settleStagedAttachments,
     setAttachmentError,
     stageAttachmentsForSubmit,
+    prepareAttachmentsForSubmit,
+    restoreAttachmentPayloads,
   };
 }
 

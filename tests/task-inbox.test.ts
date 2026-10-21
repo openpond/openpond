@@ -1,5 +1,6 @@
 import { retainedTaskInputAcknowledgement } from "../apps/web/src/lib/task-input-acknowledgement";
-import { mkdtemp, rm } from "node:fs/promises";
+import { taskInboxWithReceipt } from "../apps/web/src/lib/task-inbox-receipts";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -18,6 +19,8 @@ import { createSubagentCompletionRuntime } from "../apps/server/src/runtime/suba
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import { restoreQueuedTaskInput } from "../apps/web/src/components/chat/TaskInboxPanel";
 import { taskInputModelText } from "@openpond/contracts/task-inbox";
+import { createTaskInputAttachmentPreparation } from "../apps/server/src/runtime/task-inbox/attachments";
+import { projectTaskAssignment } from "../apps/server/src/runtime/task-inbox/model-context";
 
 const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => { for (const dispose of cleanup.splice(0).reverse()) await dispose(); });
@@ -34,7 +37,7 @@ async function fixture() {
   const turn = TurnSchema.parse({ id: "turn-a", sessionId: "a", providerTurnId: null, prompt: "Original assignment",
     startedAt: "2026-09-20T00:00:00Z", completedAt: null, status: "in_progress", error: null });
   await store.insertTurn(turn);
-  return { get store() { return store; }, turn, async reopen() { await store.close(); store = new SqliteStore(home); } };
+  return { home, get store() { return store; }, turn, async reopen() { await store.close(); store = new SqliteStore(home); } };
 }
 
 function input(overrides: Partial<TaskInputAdmission> = {}): TaskInputAdmission {
@@ -48,6 +51,7 @@ test("steering retains bounded resource references through durable admission and
   const f = await fixture();
   await f.store.openTaskInboxTurn("a", "turn-a", "owner");
   const runtime = createTaskInboxRuntime({ store: f.store,
+    prepareInputAttachments: createTaskInputAttachmentPreparation({ storageHome: f.home, attachmentRootDir: path.join(f.home, "chat-attachments") }),
     getSession: async id => (await f.store.getSession(id))!, listSessions: () => f.store.sessionShells(),
     getTurn: id => f.store.getTurn(id), latestTurn: id => f.store.latestTurnForSession(id),
     getSubagentRun: async () => null, getActiveTurn: () => undefined, recoverInterruptedTurn: async () => {},
@@ -56,11 +60,14 @@ test("steering retains bounded resource references through durable admission and
   });
   const training = [{location:"local",jobId:"job",owner:{teamId:"team",actorId:"actor"},modelRunId:"model-run",modelId:"model",modelVersionId:null,adapterArtifactLineageId:null}];
   const resourceContexts = [{scopeId:"scope-one",selectionVersion:4,evaluationModel:"codex/model-a",executionLocation:"local",resources:[{kind:"dataset",id:"quotes",revision:3}],training}];
-  const request = {prompt:"Test this dataset.",expectedTurnId:"turn-a",idempotencyKey:"resource-action",resourceContexts};
+  const attachments = [{ id: "evidence", name: "evidence.txt", kind: "text" as const, mediaType: "text/plain", sizeBytes: 8,
+    text: "Evidence", contentsBase64: Buffer.from("Evidence").toString("base64") }];
+  const request = {prompt:"Test this dataset.",expectedTurnId:"turn-a",idempotencyKey:"resource-action",resourceContexts,attachments};
   let receipt;
   try {
     receipt = await runtime.steer("a", request);
     expect((await runtime.steer("a", request)).id).toBe(receipt.id);
+    await expect(runtime.steer("a", { ...request, attachments: [{ ...attachments[0]!, text: "Different evidence" }] })).rejects.toThrow("different content");
     await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],resources:[{kind:"dataset",id:"quotes",revision:4}]}]})).rejects.toThrow("different content");
     await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],evaluationModel:"openpond/model-b"}]})).rejects.toThrow("different content");
     await expect(runtime.steer("a", {...request,resourceContexts:[{...resourceContexts[0],executionLocation:"cloud"}]})).rejects.toThrow("different content");
@@ -71,9 +78,21 @@ test("steering retains bounded resource references through durable admission and
     const serialized = JSON.stringify(TaskResourceContextsSchema.parse(resourceContexts));
     expect(taskInputModelText(included[0]!)).toContain(serialized);
     expect(taskInputModelText({...included[0]!,senderKind:"task"})).not.toContain(serialized);
+    const prepare = createTaskInputAttachmentPreparation({ storageHome: f.home, attachmentRootDir: path.join(f.home, "chat-attachments") });
+    const prepared = await prepare(included[0]!);
+    const prompt = taskInputModelText(prepared);
+    expect(prompt).toContain("evidence.txt");
+    expect(prompt).toContain("Evidence");
+    expect(prompt).not.toContain(attachments[0]!.contentsBase64);
+    const filePath = /Saved locally at: (.+)/.exec(prompt)?.[1];
+    expect(await readFile(filePath!, "utf8")).toBe("Evidence");
+    expect((await prepare(included[0]!)).payload.attachmentContext).toBe(prepared.payload.attachmentContext);
+    const messages: Parameters<typeof projectTaskAssignment>[0] = [];
+    projectTaskAssignment(messages, [prepared]);
+    expect(JSON.stringify(messages)).toContain("Evidence");
   } finally { await runtime.close(); }
   await f.reopen();
-  expect((await f.store.getTaskInput(receipt!.id))?.payload).toEqual({metadata:{chatResourceContexts:resourceContexts}});
+  expect((await f.store.getTaskInput(receipt!.id))?.payload).toEqual({metadata:{chatResourceContexts:resourceContexts},attachments});
 });
 
 // Failure story: editing a queued message puts it in the composer while the
@@ -81,7 +100,8 @@ test("steering retains bounded resource references through durable admission and
 test("editing a queued message restores it only after cancelling its saved revision", async () => {
   const f = await fixture();
   const contexts = [{scopeId:"original-scope",selectionVersion:2,resources:[{kind:"dataset",id:"quotes",revision:3}]}];
-  const queued = await f.store.admitTaskInput(input({ kind: "queued", expectedTurnId: null, payload: {metadata:{chatResourceContexts:contexts}} }));
+  const attachments = [{ id: "file", name: "notes.txt", kind: "text", mediaType: "text/plain", sizeBytes: 8, text: "Evidence", contentsBase64: "RXZpZGVuY2U=" }];
+  const queued = await f.store.admitTaskInput(input({ kind: "queued", expectedTurnId: null, payload: {metadata:{chatResourceContexts:contexts},attachments} }));
   const restore = vi.fn();
   const inbox = {
     mutate: async (row: typeof queued, change: Parameters<typeof f.store.mutateTaskInput>[2]) => {
@@ -102,9 +122,22 @@ test("editing a queued message restores it only after cancelling its saved revis
   expect(restore).not.toHaveBeenCalled();
   expect((await f.store.taskInboxSnapshot("a")).inputs[0]).toMatchObject({state:"pending"});
   await restoreQueuedTaskInput(inbox, edited, restore);
-  expect(restore).toHaveBeenCalledExactlyOnceWith(edited.body, contexts);
+  expect(restore).toHaveBeenCalledExactlyOnceWith(edited.body, contexts, attachments);
   expect((await f.store.taskInboxSnapshot("a")).inputs[0]).toMatchObject({ state: "cancelled" });
   expect(await f.store.reserveTaskFollowup("a", "next-turn", "owner")).toBeNull();
+});
+
+// Failure story: Queue completes before the first inbox GET, so its receipt is
+// dropped; a late pending receipt can also resurrect an entry removed by Edit.
+test("publishes a queue receipt before initial loading and keeps newer cancellation receipts", () => {
+  const receipt = TaskInputSchema.parse({ ...input({kind: "queued", expectedTurnId: null}), sequence: 1, state: "pending", turnId: null,
+    requestIds: [], revision: 1, createdAt: "2026-10-21T12:00:00Z", updatedAt: "2026-10-21T12:00:00Z", error: null });
+  const accepted = taskInboxWithReceipt(undefined, receipt.sessionId, receipt);
+  expect(accepted.inputs).toEqual([receipt]);
+  const removed = taskInboxWithReceipt(accepted, receipt.sessionId, { ...receipt, state: "cancelled", revision: 2 });
+  expect(removed.inputs).toHaveLength(1);
+  expect(removed.inputs[0]).toMatchObject({ state: "cancelled", revision: 2 });
+  expect(taskInboxWithReceipt(removed, receipt.sessionId, receipt)).toBe(removed);
 });
 
 // Failure story: a remote/unauthenticated request bypasses desktop Send, or an

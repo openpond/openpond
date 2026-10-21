@@ -22,6 +22,7 @@ export function ComposerSteerQueue({
         <ComposerSteerRow
           key={draft.id}
           prompt={draft.prompt}
+          attachments={draft.attachments}
           sending={sendingDraftId === draft.id}
           onSend={() => onSteerDraft(draft.id)}
           onDelete={() => onDeleteDraft(draft.id)}

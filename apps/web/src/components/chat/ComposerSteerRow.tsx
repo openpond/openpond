@@ -1,8 +1,14 @@
 import { ArrowUpRight, Reply, Trash2 } from "../icons";
 import { composerSteerPreview } from "./composer-steer-queue";
+import type { ChatAttachment } from "@openpond/contracts";
+import { useMemo, useState } from "react";
+import { AttachmentTypeIcon } from "./AttachmentTypeIcon";
+
+type SteerAttachment = Pick<ChatAttachment, "name" | "kind" | "mediaType" | "contentsBase64">;
 
 export function ComposerSteerRow({
   prompt,
+  attachments = [],
   sending = false,
   disabled = false,
   actionLabel = "Steer",
@@ -12,6 +18,7 @@ export function ComposerSteerRow({
   onEdit,
 }: {
   prompt: string;
+  attachments?: readonly SteerAttachment[];
   sending?: boolean;
   disabled?: boolean;
   actionLabel?: string;
@@ -20,12 +27,16 @@ export function ComposerSteerRow({
   onDelete(): void;
   onEdit(): void;
 }) {
+  const preview = attachments.find(file => file.kind === "image" && file.contentsBase64) ?? attachments[0];
+  const attachmentNames = attachments.map(file => file.name).join(", ");
   return (
     <div className={`composer-steer-row ${sending ? "sending" : ""}`}>
-      <span className="composer-steer-row-icon" aria-hidden="true">
-        <Reply size={13} />
+      <span className="composer-steer-row-icon" aria-hidden={preview ? undefined : true}
+        role={preview ? "img" : undefined} aria-label={preview ? `Attachments: ${attachmentNames}` : undefined}
+        title={preview ? attachmentNames : undefined}>
+        {preview ? <SteerAttachmentPreview attachment={preview} /> : <Reply size={13} />}
       </span>
-      <span className="composer-steer-row-text" title={prompt}>
+      <span className="composer-steer-row-text" title={[prompt, ...attachments.map(file => file.name)].join("\n")}>
         {composerSteerPreview(prompt)}
       </span>
       <button
@@ -60,4 +71,15 @@ export function ComposerSteerRow({
       </button>
     </div>
   );
+}
+
+function SteerAttachmentPreview({ attachment }: { attachment: SteerAttachment }) {
+  const { kind, mediaType, contentsBase64 } = attachment;
+  const source = useMemo(() => kind === "image" && mediaType.startsWith("image/") && contentsBase64
+    ? `data:${mediaType};base64,${contentsBase64}` : null, [kind, mediaType, contentsBase64]);
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  return source && source !== failedSource
+    ? <img className="composer-steer-attachment-preview" src={source} alt="" width={13} height={13}
+        loading="lazy" decoding="async" onError={() => setFailedSource(source)} />
+    : <AttachmentTypeIcon attachment={attachment} size={13} />;
 }

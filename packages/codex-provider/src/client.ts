@@ -171,6 +171,7 @@ export class CodexAppServerClient {
   async startTurn(params: {
     threadId: string;
     prompt: string;
+    images?: string[];
     cwd?: string | null;
     model?: string | null;
     approvalPolicy?: "untrusted" | "on-failure" | "on-request" | "never";
@@ -179,7 +180,7 @@ export class CodexAppServerClient {
   }): Promise<{ turnId: string; response: unknown }> {
     const response = (await this.request("turn/start", {
       threadId: params.threadId,
-      input: [{ type: "text", text: params.prompt, text_elements: [] }],
+      input: [{ type: "text", text: params.prompt, text_elements: [] }, ...(params.images ?? []).map(url => ({ type: "image", url }))],
       cwd: params.cwd ?? null,
       model: params.model ?? null,
       approvalPolicy: params.approvalPolicy ?? "on-request",
@@ -213,10 +214,10 @@ export class CodexAppServerClient {
     }
   }
 
-  async steerTurn(params: { threadId: string; expectedTurnId: string; prompt: string }): Promise<{ turnId: string }> {
+  async steerTurn(params: { threadId: string; expectedTurnId: string; prompt: string; images?: string[] }): Promise<{ turnId: string }> {
     const response = await this.request("turn/steer", {
       threadId: params.threadId, expectedTurnId: params.expectedTurnId,
-      input: [{ type: "text", text: params.prompt, text_elements: [] }],
+      input: [{ type: "text", text: params.prompt, text_elements: [] }, ...(params.images ?? []).map(url => ({ type: "image", url }))],
     }) as { turnId?: string };
     if (response.turnId !== params.expectedTurnId) throw new Error("Codex steering did not acknowledge the expected active turn.");
     return { turnId: response.turnId };

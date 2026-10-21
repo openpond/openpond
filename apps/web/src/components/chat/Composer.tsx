@@ -82,7 +82,6 @@ import {
   composerSteerDraftsForScope,
   createComposerSteerDraft,
   removeComposerSteerDraft,
-  replaceComposerSteerDraftForEdit,
   updateComposerSteerDraftScope,
   type ComposerSteerDraft,
   type ComposerSteerDraftScopeState,
@@ -239,6 +238,7 @@ export function Composer({
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
+  const originDraftScopeKey = composerDraftStore?.getScopeKey();
   const useActiveSteering = steerActiveResponses;
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
   const contextSelection = useChatContextSelection(surface === "chat" && enableResourceContext ? connection : null, taskSessionId ?? null);
@@ -317,6 +317,8 @@ export function Composer({
     settleStagedAttachments,
     setAttachmentError,
     stageAttachmentsForSubmit,
+    prepareAttachmentsForSubmit,
+    restoreAttachmentPayloads,
   } = useComposerAttachments();
   const attachmentRequestAppliedRef = useRef(0);
   useEffect(() => {
@@ -1278,7 +1280,13 @@ export function Composer({
     running, scope: submissionScopeKey, inbox: taskInbox,
     getPrompt: () => inputRef.current?.getPrompt() ?? prompt,
     getResourceContexts: currentResourceContexts,
-    hasFilesOrActions: Boolean(attachments.length || selectedAction || selectedCommand),
+    hasActions: Boolean(selectedAction || selectedCommand),
+    attachmentCount: attachments.length,
+    prepareAttachments: async () => {
+      setSerializingAttachmentScopeKey(attachments.length ? submissionScopeKey : null);
+      try { return await prepareAttachmentsForSubmit(); }
+      finally { clearSerializingAttachmentsForScope(submissionScopeKey); }
+    },
     provider, model, codexPermissionMode, codexReasoningEffort, openPondCommandAccessMode,
     getCurrentSubmissionScopeKey, onSubmit, showToast,
     begin: (scope) => {
@@ -1288,8 +1296,8 @@ export function Composer({
     },
     finish: (scope) => { taskInputSubmissionScopesRef.current.delete(scope); },
     clear: clearComposerPrompt, setError: setAttachmentError,
-    stageLocal: (body, contexts) => {
-      updateSteerDraftsForScope(submissionScopeKey, (current) => [...current, createComposerSteerDraft(body, { resourceContexts: contexts })]);
+    stageLocal: (body, contexts, files) => {
+      updateSteerDraftsForScope(submissionScopeKey, (current) => [...current, createComposerSteerDraft(body, { resourceContexts: contexts, attachments: files })]);
       window.requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(0));
     },
   });
@@ -1307,7 +1315,7 @@ export function Composer({
     setAttachmentError(null);
     try {
       const steeringActiveTurn = running;
-      const sent = await onSubmit([], null, null, {
+      const sent = await onSubmit(draft.attachments ?? [], null, null, {
         preservePrompt: true,
         promptOverride: draft.prompt,
         turnMetadata: {...composerResourceMetadata(draft.resourceContexts ?? []), ...steeringActiveTurn ? {interactionKind:"steer"} : {}},
@@ -1339,21 +1347,33 @@ export function Composer({
 
   function editQueuedSteerDraft(draft: ComposerSteerDraft) {
     if (sendingSteerDraftId === draft.id) return;
-    if (attachments.length > 0 || selectedActionId || selectedCommandId) {
+    if (selectedActionId || selectedCommandId) {
       showToast(
         "Finish the current composer before editing a queued message.",
         "info"
       );
       return;
     }
-    updateSteerDraftsForScope(submissionScopeKey, (current) =>
-      replaceComposerSteerDraftForEdit(current, draft.id, prompt, currentResourceContexts())
-    );
-    resourceDrafts.current.set(submissionScopeKey, draft.resourceContexts ?? []);
-    onPromptChange(draft.prompt);
-    setCursorIndex(draft.prompt.length);
+    if (attachments.length + (draft.attachments?.length ?? 0) > CHAT_ATTACHMENT_LIMITS.maxAttachments) {
+      showToast(`Remove some attachments before editing this message (maximum ${CHAT_ATTACHMENT_LIMITS.maxAttachments}).`, "info");
+      return;
+    }
+    let contexts: ReturnType<typeof currentResourceContexts>;
+    try {
+      contexts = mergeComposerResourceContexts(currentResourceContexts(), draft.resourceContexts ?? []);
+    } catch {
+      showToast("Send or clear the current resource actions before editing this queued message.", "info");
+      return;
+    }
+    const currentPrompt = inputRef.current?.getPrompt() ?? prompt;
+    const restoredPrompt = currentPrompt.trim() ? `${currentPrompt}\n\n${draft.prompt}` : draft.prompt;
+    updateSteerDraftsForScope(submissionScopeKey, (current) => removeComposerSteerDraft(current, draft.id));
+    resourceDrafts.current.set(submissionScopeKey, contexts);
+    restoreAttachmentPayloads(draft.attachments ?? []);
+    onPromptChange(restoredPrompt);
+    setCursorIndex(restoredPrompt.length);
     window.requestAnimationFrame(() => {
-      inputRef.current?.focusAtPromptIndex(draft.prompt.length);
+      inputRef.current?.focusAtPromptIndex(restoredPrompt.length);
     });
   }
 
@@ -1430,6 +1450,9 @@ export function Composer({
   }
 
   async function submitComposer() {
+    // Voice owns this submission until both transcription and delivery finish.
+    // This also covers Enter/form submission while dictation is in progress.
+    if (requestVoiceInputSubmit(voiceInputChannelKey)) return;
     if (running) {
       if (useActiveSteering) await submitImmediateSteer();
       else await stageCurrentSteerDraft();
@@ -1453,11 +1476,6 @@ export function Composer({
     }
     if (sendDisabled) return;
     await submitComposerPayload();
-  }
-
-  function submitComposerOrVoice() {
-    if (requestVoiceInputSubmit(voiceInputChannelKey)) return;
-    void submitComposer();
   }
 
   async function submitIssueForm(
@@ -1495,7 +1513,13 @@ export function Composer({
     text: string,
     options: { submit: boolean },
   ) {
-    const currentPrompt = inputRef.current?.getPrompt() ?? prompt;
+    const currentScopeKey = getCurrentSubmissionScopeKey?.() ?? submissionScopeKey;
+    const originDraft = currentScopeKey !== submissionScopeKey && originDraftScopeKey
+      ? composerDraftStore?.getDrafts()[originDraftScopeKey]
+      : undefined;
+    const currentPrompt = currentScopeKey === submissionScopeKey
+      ? inputRef.current?.getPrompt() ?? prompt
+      : typeof originDraft === "string" ? originDraft : originDraft?.prompt ?? (composerDraftStore ? "" : prompt);
     const cursor = Math.max(
       0,
       Math.min(cursorIndexRef.current, currentPrompt.length),
@@ -1507,39 +1531,33 @@ export function Composer({
     );
     const delivery = await deliverVoiceTranscript({
       appendToEnd: options.submit,
-      currentScopeKey: getCurrentSubmissionScopeKey?.() ?? submissionScopeKey,
+      currentScopeKey,
       cursorIndex: cursor,
       originScopeKey: submissionScopeKey,
       prompt: currentPrompt,
       setOriginDraft: (value) => onPromptChange(value),
-      submitFromOrigin: (promptOverride) =>
-        submitComposerPayload({
+      submit: options.submit,
+      submitFromOrigin: (promptOverride) => running
+        ? useActiveSteering
+          ? submitImmediateSteer(promptOverride)
+          : stageCurrentSteerDraft(promptOverride)
+        : submitComposerPayload({
           preservePrompt: true,
           promptOverride,
         }),
       transcript: text,
     });
     if (delivery === "retained") {
-      showToast(
-        "The voice message couldn't be sent. It is saved in the original chat draft.",
-        "error",
-      );
+      // Submission owns its error toast; the transcript stays in the origin draft.
       return;
     }
     if (delivery === "submitted") {
-      showToast(
-        "Voice message sent to the chat where recording started.",
+      if (currentScopeKey !== submissionScopeKey) showToast(
+        running && !useActiveSteering
+          ? "Voice message queued in the chat where recording started."
+          : "Voice message sent to the chat where recording started.",
         "success",
       );
-      return;
-    }
-    if (options.submit) {
-      if (running) {
-        if (useActiveSteering) await submitImmediateSteer(next.value);
-        else await stageCurrentSteerDraft(next.value);
-        return;
-      }
-      await submitComposerPayload({ promptOverride: next.value });
       return;
     }
     setCursorIndex(next.cursorIndex);
@@ -1652,14 +1670,19 @@ export function Composer({
           <ComposerCreateImproveStrip runtime={createImproveRuntime} />
         </Suspense>
       ) : null}
-      {taskInbox.enabled ? <TaskInboxPanel inbox={taskInbox} canRestore={contexts => {
+      {taskInbox.enabled ? <TaskInboxPanel inbox={taskInbox} canRestore={(contexts, files) => {
+        if (attachments.length + files.length > CHAT_ATTACHMENT_LIMITS.maxAttachments) {
+          showToast(`Remove some attachments before editing this message (maximum ${CHAT_ATTACHMENT_LIMITS.maxAttachments}).`, "info");
+          return false;
+        }
         try { mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], contexts); return true; }
         catch { showToast("Send or clear the current resource actions before editing this queued message.", "info"); return false; }
-      }} onRestore={(body, contexts) => {
+      }} onRestore={(body, contexts, files) => {
         const currentScope = !getCurrentSubmissionScopeKey || getCurrentSubmissionScopeKey() === submissionScopeKey;
         const currentPrompt = currentScope ? inputRef.current?.getPrompt() ?? prompt : prompt;
         resourceDrafts.current.set(submissionScopeKey, mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], contexts));
         onPromptChange(currentPrompt.trim() ? `${currentPrompt}\n\n${body}` : body);
+        restoreAttachmentPayloads(files);
         if (currentScope) inputRef.current?.focusAtPromptIndex(0);
       }} /> : <ComposerSteerQueue
         drafts={steerDrafts}
@@ -1898,7 +1921,7 @@ export function Composer({
           onOpenFilePicker={openFilePicker}
           onProviderChange={onProviderChange}
           onProviderSetupOpen={onProviderSetupOpen}
-          onSend={submitComposerOrVoice}
+          onSend={() => void submitComposer()}
           onStop={stopCurrentTurn}
           onToggleAddMenu={() => {
             const nextCursor = Math.max(

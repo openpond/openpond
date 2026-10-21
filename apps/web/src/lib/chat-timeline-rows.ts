@@ -50,26 +50,25 @@ export function buildChatTimelineRows(
   let turnId: string | undefined;
   const flush = (label?: string | ((count: number) => string)) => {
     if (pending.length === 0) return;
-    if (label) rows.push({ id: `work:${pending[0]!.message.id}`, type: "work",
-      label: typeof label === "function" ? label(pending.length) : label, messages: pending });
-    else {
-      // Peer exchanges can arrive after a final answer or outside a turn.
-      // Keep those under the same existing work disclosure, without changing
-      // how ordinary conversation or other activity is presented.
-      let exchanges: ChatTimelineWorkRow | undefined;
-      for (const entry of pending) {
-        if (entry.message.role === "task_message") {
-          if (!exchanges) {
-            exchanges = {id: `work:${entry.message.id}`, type: "work", label: "Worked", messages: []};
-            rows.push(exchanges);
-          }
-          exchanges.messages.push(entry);
-        } else {
-          exchanges = undefined;
-          rows.push(entry);
-        }
+    let work: ChatTimelineMessageRow[] = [];
+    const flushWork = () => {
+      if (!work.length) return;
+      if (label) rows.push({ id: `work:${work[0]!.message.id}`, type: "work",
+        label: typeof label === "function" ? label(work.length) : label, messages: work });
+      else rows.push(...work);
+      work = [];
+    };
+    // Peer messages stay visible in order, even when the surrounding work is
+    // collapsed after completion or a steer. Late receipts use the same rows.
+    for (const entry of pending) {
+      if (entry.message.role === "task_message") {
+        flushWork();
+        rows.push(entry);
+      } else {
+        work.push(entry);
       }
     }
+    flushWork();
     pending = [];
   };
   for (const message of messages) {

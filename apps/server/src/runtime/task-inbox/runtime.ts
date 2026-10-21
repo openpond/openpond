@@ -11,6 +11,7 @@ import type { ActiveTurn } from "../turns/ports.js";
 import { taskWorkspaceIdentity, workspaceRelationship } from "./workspace-identity.js";
 import { canCoordinateTasks } from "./scope.js";
 import { PonderDesktopInputSchema } from "../../store/ponder-desktop-input.js";
+import { taskInputImages } from "./attachments.js";
 
 export function createTaskInboxRuntime(deps: {
   store: TaskInboxRepository;
@@ -25,6 +26,7 @@ export function createTaskInboxRuntime(deps: {
   appendRuntimeEvent(event: RuntimeEvent): Promise<void>;
   yieldWhileWaiting<T>(work: () => Promise<T>): Promise<T>;
   dispatchFollowup(sessionId: string, work: () => Promise<void>): Promise<void>;
+  prepareInputAttachments?(input: TaskInput): Promise<TaskInput>;
 }) {
   const ownerId = randomUUID();
   const signals = new TaskSignals();
@@ -40,6 +42,7 @@ export function createTaskInboxRuntime(deps: {
       // Admission and provider settlement can race. Publish the durable current
       // receipt, never a stale pending snapshot after its completion event.
       input = await deps.store.getTaskInput(input.id) ?? input;
+      if (input.turnId) input = await prepareInput(input);
       if (input.turnId && (input.state === "pending" || (input.state === "included" && !input.error))) {
         const ids = recordedInputsByTurn.get(input.turnId) ?? new Set<string>();
         ids.add(input.id);
@@ -91,7 +94,10 @@ export function createTaskInboxRuntime(deps: {
   async function steer(sessionId: string, payload: unknown): Promise<TaskInput> {
     const input = SteerTurnRequestSchema.parse(payload);
     return admit({ id: randomUUID(), sessionId, senderSessionId: null, senderKind: "user", kind: "steer",
-      body: input.prompt, payload: input.resourceContexts ? { metadata: { chatResourceContexts: input.resourceContexts } } : {},
+      body: input.prompt, payload: {
+        ...(input.resourceContexts ? { metadata: { chatResourceContexts: input.resourceContexts } } : {}),
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      },
       idempotencyKey: input.idempotencyKey, replyTo: null, expectedTurnId: input.expectedTurnId });
   }
 
@@ -173,7 +179,13 @@ export function createTaskInboxRuntime(deps: {
     }
     const inputs = await deps.store.includeTaskInputs(sessionId, turnId, ownerId, requestId);
     for (const input of inputs) await record(input);
-    return inputs;
+    return Promise.all(inputs.map(prepareInput));
+  }
+
+  async function prepareInput(input: TaskInput): Promise<TaskInput> {
+    if (deps.prepareInputAttachments) return deps.prepareInputAttachments(input);
+    if (Array.isArray(input.payload.attachments) && input.payload.attachments.length) throw new Error("Task attachment storage is unavailable.");
+    return input;
   }
 
   async function deliverCodex(active: ActiveTurn): Promise<void> {
@@ -186,7 +198,8 @@ export function createTaskInboxRuntime(deps: {
       if (!inputs.length) return;
       try {
         await active.codexRuntime.client.steerTurn({ threadId: active.codexRuntime.threadId,
-          expectedTurnId: active.codexTurnId, prompt: inputs.map(taskInputModelText).join("\n\n") });
+          expectedTurnId: active.codexTurnId, prompt: inputs.map(taskInputModelText).join("\n\n"),
+          images: inputs.flatMap(input => taskInputImages(input).map(image => image.url)) });
         await deps.store.settleTaskInputRequest(requestId, "resolved");
         for (const input of inputs) { const current = await deps.store.getTaskInput(input.id); if (current) await record(current); }
       } catch (error) {
@@ -287,7 +300,7 @@ export function createTaskInboxRuntime(deps: {
         try {
           if (input.senderSessionId) await authorize(input.senderSessionId, sessionId);
           const turn = await deps.startFollowup(sessionId, { ...input.payload, prompt: input.senderKind === "user" ? input.body : taskInputModelText(input),
-            metadata: { ...((input.payload.metadata as Record<string, unknown> | undefined) ?? {}), taskInputId: input.id } }, turnId, input);
+            metadata: { ...(input.payload.metadata as Record<string, unknown> | undefined), taskInputId: input.id } }, turnId, input);
           if (turn.status !== "completed") return;
         } catch (error) {
           await deps.store.closeTaskInboxTurn(sessionId, turnId, ownerId, "failed");
@@ -308,6 +321,7 @@ export function createTaskInboxRuntime(deps: {
 
   return {
     ownerId, signals, steer, queue, mutate, send, sendMany, list, wait, include, deliverCodex,
+    assignment: async (turnId: string) => Promise.all((await deps.store.taskAssignmentInputs(turnId)).map(prepareInput)),
     async declareWork(sessionId: string, turnId: string, areas: string[]) {
       await deps.store.declareTaskWork(sessionId, turnId, ownerId, areas);
       return { workAreas: areas, advisory: true };

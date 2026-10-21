@@ -1,5 +1,6 @@
 import { taskInputModelText, type TaskInput } from "@openpond/contracts/task-inbox";
 import type { HostedMessages } from "../turns/ports.js";
+import { taskInputImages } from "./attachments.js";
 
 const ASSIGNMENT_PREFIX = "OpenPond active assignment revisions (oldest first; newer user corrections supersede conflicts):\n";
 
@@ -11,13 +12,13 @@ export function projectTaskAssignment(messages: HostedMessages, inputs: TaskInpu
   }
   const originalStillPresent = originalPrompt && messages.some(message =>
     message.role === "user" && message.content === originalPrompt);
-  if (inputs.length || (originalPrompt && !originalStillPresent)) messages.push({ role: "user", content: ASSIGNMENT_PREFIX + (originalPrompt ? `Original assignment:\n${originalPrompt}\n\n` : "") + inputs.map(taskInputModelText).join("\n\n") });
+  if (inputs.length || (originalPrompt && !originalStillPresent)) messages.push({ role: "user", content: ASSIGNMENT_PREFIX + (originalPrompt ? `Original assignment:\n${originalPrompt}\n\n` : "") + inputs.map(taskInputModelText).join("\n\n"), images: inputs.flatMap(taskInputImages) });
 }
 
 export function appendTaskInputContext(messages: HostedMessages, inputs: TaskInput[]): void {
   for (const input of inputs) {
     if (input.kind === "steer") continue;
     const content = taskInputModelText(input);
-    if (!messages.some((message) => message.role === "user" && message.content === content)) messages.push({ role: "user", content });
+    if (!messages.some((message) => message.role === "user" && message.content === content)) messages.push({ role: "user", content, images: taskInputImages(input) });
   }
 }

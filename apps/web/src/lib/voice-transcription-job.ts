@@ -16,6 +16,10 @@ export function voiceTranscriptionActive(channelKey: string): boolean {
   return jobs.has(channelKey);
 }
 
+export function voiceTranscriptionSubmitRequested(channelKey: string): boolean {
+  return jobs.get(channelKey)?.submitRequested ?? false;
+}
+
 export function subscribeVoiceTranscription(
   channelKey: string,
   listener: () => void,
@@ -50,7 +54,10 @@ export function subscribeVoiceSubmitRequest(
 export function requestVoiceInputSubmit(channelKey: string): boolean {
   const job = jobs.get(channelKey);
   if (job) {
-    job.submitRequested = true;
+    if (!job.submitRequested) {
+      job.submitRequested = true;
+      publish(channelKey);
+    }
     return true;
   }
   for (const listener of submitRequestListeners.get(channelKey) ?? []) {

@@ -438,7 +438,7 @@ export function createHostedToolLoopRuntime(deps: {
         let providerRound: ProviderRoundResult<HostedChatToolCall, HostedChatContinuation>;
         try {
         const inputs = await deps.taskInbox.include(session.id, params.turn.id, round.requestId);
-        const corrections = await deps.inboxStore.taskAssignmentInputs(params.turn.id);
+        const corrections = await deps.taskInbox.assignment(params.turn.id);
         appendTaskInputContext(messages, inputs);
         projectTaskAssignment(messages, corrections, params.userPrompt);
         await appendPendingSubagentAsides();
