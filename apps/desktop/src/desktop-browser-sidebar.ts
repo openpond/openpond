@@ -394,7 +394,7 @@ export class BrowserSidebarManager {
     } else {
       this.focusRuntime(runtime);
     }
-    runtime.view.webContents.insertText(input.text);
+    await runtime.view.webContents.insertText(input.text);
     return {
       ok: true,
       output: `Typed ${input.text.length} character${input.text.length === 1 ? "" : "s"} in browser.`,
