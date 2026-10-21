@@ -12,12 +12,14 @@ export type ModelProjectPageMetric = {
 export function ModelProjectPageHeader({
   title,
   description,
+  titleAside,
   status,
   actions,
   layout = "default",
   metrics = [],
 }: {
   title: string;
+  titleAside?: ReactNode;
   description?: string;
   status?: ReactNode;
   actions?: ReactNode;
@@ -35,12 +37,13 @@ export function ModelProjectPageHeader({
           ))}
         </dl>
       ) : null;
-  return <PageChromeContent title={<h1>{title}</h1>} actions={<>{status}{actions}</>} fallback={
+  return <PageChromeContent title={<div className="model-project-page-title-row"><h1>{title}</h1>{titleAside}</div>} actions={<>{status}{actions}</>} fallback={
     <header className={`model-project-page-header model-project-page-header-${layout}`}>
       <div className="model-project-page-heading">
         <div>
           <div className="model-project-page-title-row">
             <h1>{title}</h1>
+            {titleAside}
             {status}
           </div>
           <p>{description}</p>

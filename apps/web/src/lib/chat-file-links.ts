@@ -7,6 +7,8 @@ export type ChatFilePathMatch = {
 export type ChatFilePathOptions = {
   workspaceRootPath?: string | null;
   fileBasePath?: string | null;
+  /** Decode URL escapes only at an explicit Markdown href boundary. */
+  href?: boolean;
 };
 
 export type ChatWorkspaceRootOptions = {
@@ -117,9 +119,9 @@ export function normalizeChatFilePath(
 ): Omit<ChatFilePathMatch, "end"> | null {
   const displayPath = trimTrailingPathPunctuation(value.trim().replace(/^['"`]+|['"`]+$/g, ""));
   if (!displayPath || /^https?:\/\//i.test(displayPath)) return null;
-  const pathWithResourceRef = normalizeFileUrlPath(normalizeResourceFileRefPath(displayPath));
+  const pathWithResourceRef = normalizeFileUrlPath(normalizeResourceFileRefPath(displayPath), options.href);
   const pathWithoutLine = pathWithResourceRef.replace(/:\d+(?::\d+)?$/, "");
-  if (!isLikelyFilePath(pathWithoutLine.replace(/(\.html?)[?#].*$/i, "$1"))) return null;
+  if (!isLikelyFilePath(pathWithoutLine.replace(/(\.html?)[?#].*$/i, "$1"), options.href)) return null;
   return {
     displayPath,
     path: normalizeWorkspacePath(
@@ -141,8 +143,11 @@ function normalizeResourceFileRefPath(path: string): string {
   return value;
 }
 
-function normalizeFileUrlPath(path: string): string {
-  if (!/^file:\/\//i.test(path)) return path;
+function normalizeFileUrlPath(path: string, href = false): string {
+  if (!/^file:\/\//i.test(path)) {
+    if (href) { try { return decodeURIComponent(path); } catch { /* Literal percent signs remain valid. */ } }
+    return path;
+  }
   try {
     const url = new URL(path);
     return decodeURIComponent(url.pathname) + (/\.html?$/i.test(url.pathname) ? url.search + url.hash : "");
@@ -157,8 +162,8 @@ function normalizeWorkspacePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\.\/+/, "");
 }
 
-function isLikelyFilePath(path: string): boolean {
-  if (/[\n\r]/.test(path) || /^[^/\\]*\s/.test(path) || /[=;?<>|]/.test(path)) return false;
+function isLikelyFilePath(path: string, href = false): boolean {
+  if (/[\n\r]/.test(path) || (!href && /^[^/\\]*\s/.test(path)) || /[=;?<>|]/.test(path)) return false;
   if (/[\\/]$/.test(path) && /[^.~/\\]/.test(path)) return true;
   const fileName = path.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) ?? path;
   if (EXTENSIONLESS_FILES.has(fileName)) return true;

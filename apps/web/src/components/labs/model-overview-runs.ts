@@ -1,4 +1,4 @@
-import { ManagedTrainingRunEvidenceSchema } from "@openpond/contracts";
+import { ManagedTrainingRunEvidenceSchema, RftRecipeSchema } from "@openpond/contracts";
 import type { RunEntry } from "./LabModelWorkspace";
 import { resolveRunStatus } from "./LabRunStatusBadge";
 
@@ -13,6 +13,7 @@ export type ModelOverviewRun = {
   completion: number | null;
   durationMinutes: number | null;
   spendCeiling: number | null;
+  continuation?: { sourceJobId: string; checkpointId: string; optimizerMode: "continue" | "reset" };
   evaluation: { score: number; baseline: number | null; passRate: boolean; retentionPassed: boolean | null } | null;
 };
 
@@ -32,9 +33,12 @@ export function modelOverviewRuns(entries: RunEntry[]): ModelOverviewRun[] {
     const receipt = run?.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1" ? run.receipt : null;
     const candidate = evidence?.evaluations.find(item => item.kind === "candidate");
     const baseline = evidence?.evaluations.find(item => item.kind === "baseline");
+    const continuation = RftRecipeSchema.shape.continuation.safeParse(job?.metadata.hostedContinuation).data;
     return {
       hostedJobId: typeof job?.metadata.hostedJobId === "string" ? job.metadata.hostedJobId : evidence?.providerRunId,
       key, kind, status: resolveRunStatus({ job, lifecycleRun: run }), updatedAt,
+      ...(continuation ? { continuation: { sourceJobId: continuation.sourceArtifact.jobId,
+        checkpointId: continuation.sourceArtifact.checkpointId, optimizerMode: continuation.optimizerMode } } : {}),
       label: kind === "evaluation" ? "Evaluation" : kind === "rollout_smoke" ? "Preflight rollout" : typeof method === "string" ? `${method.toUpperCase()} training` : "Training",
       reward: run?.reward?.raw ?? evidence?.reward.finalMean ?? null,
       completion: completed !== null && target !== null && target > 0 ? completed / target : null,

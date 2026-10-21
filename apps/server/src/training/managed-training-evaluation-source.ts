@@ -5,13 +5,13 @@ import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import { verifyResolvedTrainingBundle } from "@openpond/training-sdk";
 import { TRAINING_EVALUATION_SOURCE_PATH, TrainingEvaluationSourceSchema, trainingEvaluationSourceRef, type TrainingExecutionReceipt } from "openpond-sdk/training";
 import type { SqliteStore } from "../store/store.js";
-import { resolveManagedValidationTaskSource } from "./managed-training-validation-tasks.js";
+import { resolveManagedValidationTaskSource, type ManagedValidationSourcePlan } from "./managed-training-validation-tasks.js";
 import { resolveTasksetEvaluationAssetBytes } from "./taskset-work-assets.js";
 
 export async function buildManagedTrainingEvaluationSource(input: {
   store: SqliteStore;
   storeDir: string;
-  trainingPlan: Pick<TrainingPlan, "comparisonSeriesEntry" | "evaluationTasksetRef">;
+  trainingPlan: ManagedValidationSourcePlan;
   trainingTaskset: Taskset;
 }) {
   const selection = await resolveManagedValidationTaskSource(input);

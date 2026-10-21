@@ -30,6 +30,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Update Python package trust bundle
+        run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.2"
+
       - name: Resolve package state
         id: package
         shell: bash

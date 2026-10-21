@@ -3,6 +3,7 @@ import { SUBAGENT_RUNTIME_EVENT_NAMES } from "./subagents.js";
 
 export const RuntimeEventNameSchema = z.enum([
   "visual.published",
+  "file.preview_requested",
   "task.inbox",
   "task.input",
   "task.wait",
@@ -69,3 +70,10 @@ export const RuntimeEventSchema = z.object({
 });
 
 export type RuntimeEvent = z.infer<typeof RuntimeEventSchema>;
+
+/** A server-scoped file reveal; model arguments never choose another chat or sandbox. */
+export const FilePreviewRequestSchema = z.discriminatedUnion("target", [
+  z.object({ target: z.literal("local"), path: z.string().min(1), source: z.boolean() }).strict(),
+  z.object({ target: z.literal("sandbox"), path: z.string().min(1), sandboxId: z.string().min(1), source: z.boolean() }).strict(),
+]);
+export type FilePreviewRequest = z.infer<typeof FilePreviewRequestSchema>;

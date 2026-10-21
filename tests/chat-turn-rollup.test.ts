@@ -4,10 +4,33 @@ import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import { buildChatTimelineRows, chatTimelineMessages } from "../apps/web/src/lib/chat-timeline-rows";
+import { currentChatTaskProgress } from "../apps/web/src/lib/chat-task-progress";
 
 function event(id: string, name: string, seconds: number, fields: Partial<RuntimeEvent> = {}): RuntimeEvent {
   return { id, name, sessionId: "chat", turnId: "turn", timestamp: new Date(Date.UTC(2026, 9, 9, 12, 0, seconds)).toISOString(), ...fields };
 }
+
+// A pinned checklist must follow its task through steering, but must not leak
+// into the next user request or survive an explicit plan clear.
+test("task progress follows the active request without rewriting historical plans", () => {
+  const entries = [{ id: "one", content: "Inspect", status: "completed" }, { id: "two", content: "Verify", status: "in_progress" }];
+  const events = [
+    event("start", "turn.started", 0, { args: { prompt: "Inspect the app" } }),
+    event("plan", "tool.completed", 1, { action: "update_plan", data: { plan: entries } }),
+    event("steer", "turn.started", 2, { turnId: "steered", args: { prompt: "Focus here", interactionKind: "steer" } }),
+  ];
+  const messages = buildChatMessages(events);
+  const progress = currentChatTaskProgress(messages)!;
+  expect(progress.entries).toEqual(entries);
+  expect(messages.filter(message => progress.messageIds.has(message.id)).flatMap(message => message.activities ?? []).some(activity => activity.plan?.length === 2)).toBe(true);
+  expect(currentChatTaskProgress(buildChatMessages([...events,
+    event("clear", "tool.completed", 3, { turnId: "steered", action: "update_plan", data: { plan: [] } }),
+  ]))).toBeNull();
+  expect(currentChatTaskProgress(buildChatMessages([...events,
+    event("next", "turn.started", 4, { turnId: "next", args: { prompt: "A new task" } }),
+  ]))).toBeNull();
+  expect(currentChatTaskProgress(messages)?.entries).toEqual(entries);
+});
 
 // One event-to-timeline boundary protects all providers from hidden live work,
 // duplicate final answers, lost reasoning/tool details, and inaccurate duration.

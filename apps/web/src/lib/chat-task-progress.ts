@@ -7,10 +7,32 @@ export function latestActivityPlan(activities: ActivityItem[]): ActivityItem["pl
   return undefined;
 }
 
-export function latestChatPlan(messages: ChatMessage[]): ActivityItem["plan"] {
+export type ChatTaskProgress = {
+  scopeKey: string;
+  entries: NonNullable<ActivityItem["plan"]>;
+  messageIds: ReadonlySet<string>;
+};
+
+/** A fresh request must not inherit the previous task's checklist. Steering
+ * continues the current task, including its earlier plan snapshots. */
+export function currentChatTaskProgress(messages: ChatMessage[]): ChatTaskProgress | null {
+  let start = 0;
   for (let index = messages.length - 1; index >= 0; index--) {
-    const plan = latestActivityPlan(messages[index]?.activities ?? []);
-    if (plan !== undefined) return plan;
+    const message = messages[index]!;
+    if (message.role === "user" && message.interactionKind !== "steer") {
+      start = index;
+      break;
+    }
   }
-  return undefined;
+  let entries: ActivityItem["plan"];
+  const messageIds = new Set<string>();
+  for (let index = start; index < messages.length; index++) {
+    const message = messages[index]!;
+    const plan = latestActivityPlan(message.activities ?? []);
+    if (plan !== undefined) {
+      entries = plan;
+      messageIds.add(message.id);
+    }
+  }
+  return entries?.length ? { scopeKey: messages[start]!.id, entries, messageIds } : null;
 }

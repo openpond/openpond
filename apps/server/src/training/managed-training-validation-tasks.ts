@@ -5,6 +5,7 @@ import type {
   TrainingPlan,
 } from "@openpond/contracts";
 import { computeTasksetHash, contentHash } from "@openpond/taskset-sdk";
+import { TrainingRecipeSchema } from "@openpond/contracts";
 import { assertTrainingEvaluationIsolation, deterministicTrainingRewardSource } from "openpond-sdk/training";
 
 import type { SqliteStore } from "../store/store.js";
@@ -15,16 +16,22 @@ export type ManagedValidationTaskSource = {
   tasks: TaskDataRecord[];
 };
 
+export type ManagedValidationSourcePlan = Pick<TrainingPlan, "comparisonSeriesEntry" | "evaluationTasksetRef"> & {
+  recipe?: unknown;
+};
+
 /**
  * Training-only batches keep their membership. Held-out tasks come from the
  * explicit immutable selection, the source's own split, or a sealed series.
  */
 export async function resolveManagedValidationTaskSource(input: {
   store: SqliteStore;
-  trainingPlan: Pick<TrainingPlan, "comparisonSeriesEntry" | "evaluationTasksetRef">;
+  trainingPlan: ManagedValidationSourcePlan;
   trainingTaskset: Taskset;
   storeDir?: string;
 }): Promise<ManagedValidationTaskSource> {
+  const recipe = input.trainingPlan.recipe == null ? null : TrainingRecipeSchema.parse(input.trainingPlan.recipe);
+  const validationSplit = recipe && "dataset" in recipe ? recipe.dataset.validationSplit : null;
   const explicit = input.trainingPlan.evaluationTasksetRef;
   if (explicit) {
     const taskset = await input.store.getTasksetRevision(explicit.id, explicit.revision, explicit.contentHash);
@@ -34,7 +41,7 @@ export async function resolveManagedValidationTaskSource(input: {
     }
     return verifySource(taskset);
   }
-  const directTasks = validationTasks(input.trainingTaskset);
+  const directTasks = validationTasks(input.trainingTaskset, validationSplit);
   if (directTasks.length) {
     return verifySource(input.trainingTaskset);
   }
@@ -66,8 +73,10 @@ export async function resolveManagedValidationTaskSource(input: {
     if (computeTasksetHash(taskset) !== taskset.contentHash) {
       throw new Error("The held-out Taskset bytes do not match its immutable revision.");
     }
-    const tasks = validationTasks(taskset);
-    if (!tasks.length) throw new Error("The selected Taskset has no held-out evaluation tasks.");
+    const tasks = validationTasks(taskset, validationSplit);
+    if (!tasks.length) throw new Error(validationSplit
+      ? `The selected Taskset has no held-out evaluation tasks in the declared ${validationSplit} split.`
+      : "The selected Taskset has no held-out evaluation tasks.");
     assertTrainingEvaluationIsolation(input.trainingTaskset.tasks.filter(task => task.split === "train"), tasks);
     if (taskset !== input.trainingTaskset) {
       const contract = (source: Taskset) => ({
@@ -92,9 +101,9 @@ export async function resolveManagedValidationTaskSource(input: {
   }
 }
 
-function validationTasks(taskset: Taskset): TaskDataRecord[] {
+function validationTasks(taskset: Taskset, split: "frozen_eval" | "validation" | null): TaskDataRecord[] {
   return taskset.tasks.filter(
-    (task) => task.split === "frozen_eval" || task.split === "validation",
+    (task) => split ? task.split === split : task.split === "frozen_eval" || task.split === "validation",
   );
 }
 

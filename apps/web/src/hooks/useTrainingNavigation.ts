@@ -13,6 +13,8 @@ export function useTrainingNavigation(connection: ClientConnection | null, profi
         { signal },
       ),
     enabled: Boolean(connection),
+    staleTime: 30_000,
+    gcTime: 300_000,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });

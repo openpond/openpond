@@ -487,6 +487,13 @@ export function createTaskEvaluationService(deps: {
       ) ?? null;
     if (
       !graderAudit
+      && taskset.graderFixtures.length > 0
+      // Subsets may retain calibration references outside their task release.
+      // Preserve the existing missing-task/audit advisories instead of throwing
+      // before readiness can report them or fabricating a successful empty audit.
+      && (taskset.datasetArtifact || taskset.graderFixtures.every(
+        fixture => taskset.tasks.some(task => task.id === fixture.taskId),
+      ))
       && !taskset.graders.some((grader) => grader.kind === "model_judge")
     ) {
       graderAudit = (await auditFixtures({ tasksetId, tasksetRef })).report;

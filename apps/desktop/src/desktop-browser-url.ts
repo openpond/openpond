@@ -30,9 +30,9 @@ export async function openUrlExternal(url: string): Promise<void> {
   await shell.openExternal(url);
 }
 
-export function partitionForConversation(conversationId: string): string {
-  return `persist:openpond-browser-${Buffer.from(conversationId).toString("base64url").slice(0, 120)}`;
-}
+// Tabs belong to chats, but website logins belong to the user's browser profile.
+// Electron stores this partition under the current OpenPond home's Chromium data.
+export const BROWSER_PARTITION = "persist:openpond-browser";
 
 function parseUrl(value: string, protocols: string[]): string {
   const url = new URL(value);

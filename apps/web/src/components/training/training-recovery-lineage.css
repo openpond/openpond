@@ -1,4 +1,8 @@
 .training-recovery-lineage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
   margin: 14px 0 0;
   color: var(--text-secondary);
   font-size: 12px;
@@ -6,3 +10,5 @@
   overflow-wrap: anywhere;
 }
 .training-recovery-lineage a { color: var(--accent-primary); }
+
+.training-recovery-lineage.compact { display: inline-flex; margin: 0; }

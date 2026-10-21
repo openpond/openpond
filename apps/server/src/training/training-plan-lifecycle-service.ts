@@ -67,13 +67,13 @@ export function createTrainingPlanLifecycleService(deps: {
     if (input.evaluationTasksetRef && input.destinationId !== "openpond_managed") {
       throw new Error("Separate held-out Tasksets currently require the OpenPond Managed evaluation adapter.");
     }
-    const evaluationSource = input.destinationId === "openpond_managed"
-      ? await buildManagedTrainingEvaluationSource({ store: deps.store, storeDir: deps.storeDir, trainingTaskset: taskset,
-          trainingPlan: { evaluationTasksetRef: input.evaluationTasksetRef, comparisonSeriesEntry: input.comparisonSeriesEntry } })
-      : null;
     const recipe = TrainingRecipeSchema.parse(
       withAuthoritativeRecipeHashes(taskset, input.recipe),
     );
+    const evaluationSource = input.destinationId === "openpond_managed"
+      ? await buildManagedTrainingEvaluationSource({ store: deps.store, storeDir: deps.storeDir, trainingTaskset: taskset,
+          trainingPlan: { evaluationTasksetRef: input.evaluationTasksetRef, comparisonSeriesEntry: input.comparisonSeriesEntry, recipe } })
+      : null;
     const destination = deps.registry.get(input.destinationId);
     const capabilities = await destination.capabilities();
     const initial = createTrainingPlan({

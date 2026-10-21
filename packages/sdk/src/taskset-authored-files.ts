@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { resolveStructuredOutput, contentHash, ImmutableAssetRefSchema, sha256, type ImmutableAssetRef } from "@openpond/harness";
+import { resolveStructuredOutput, resolveStructuredSamplingSchema, structuredSamplingSchemaDeclaration, contentHash, ImmutableAssetRefSchema, sha256, type ImmutableAssetRef } from "@openpond/harness";
 import { TasksetSchema, type GeneratedTaskFile, type Taskset } from "./taskset-authored-contracts.js";
 import { computeTasksetHash } from "./taskset-authored-validation.js";
 import { projectPortableTaskRecord } from "./taskset-authored-portable-release.js";
@@ -17,7 +17,24 @@ export function isGeneratedTasksetPublicationFilePath(path: string): boolean { r
 /** Seal one captured file population; hosts own filesystem or object-store capture. */
 export function prepareAuthoredTasksetSource(tasksetInput: Taskset, sourceFiles: ReadonlyMap<string, Uint8Array>, adapterId: string, maximumBytes = MAX_TASKSET_PACKAGE_BYTES) {
   const taskset = TasksetSchema.parse(tasksetInput);
-  if (taskset.metadata.taskDefinition !== undefined || taskset.metadata.rewardBinding !== undefined) return { taskset, generatedFiles: [] as GeneratedTaskFile[] };
+  for (const task of taskset.tasks) for (const output of task.requiredOutputs ?? []) {
+    if (structuredSamplingSchemaDeclaration(output.metadata) && output.submissionMode !== "structured_json") throw new Error("Sampling schema requires a structured output.");
+  }
+  if (taskset.metadata.taskDefinition !== undefined || taskset.metadata.rewardBinding !== undefined) {
+    for (const task of taskset.tasks) for (const output of projectPortableTaskRecord(task).requiredOutputs ?? []) {
+      const sampling = structuredSamplingSchemaDeclaration(output.metadata);
+      if (!sampling) continue;
+      const ordinary = projectPortableTaskRecord(task).artifactRefs.find(asset => asset.id === sampling.schemaRef.id);
+      if (!ordinary || contentHash(ordinary) !== contentHash(sampling.schemaRef) || !output.schemaRef) throw new Error("Sampling schema must match an ordinary declared policy artifact.");
+      const sourcePath = (id: string, path: string) => task.assets?.find(asset => asset.id === id)?.artifactRef ?? path;
+      const fullBytes = sourceFiles.get(sourcePath(output.schemaRef.id, output.schemaRef.path));
+      const samplingBytes = sourceFiles.get(sourcePath(ordinary.id, ordinary.path));
+      if (!fullBytes || !samplingBytes) throw new Error("Sampling schema source bytes are missing.");
+      const full = resolveStructuredOutput(fullBytes, output.schemaRef.contentHash);
+      resolveStructuredSamplingSchema(full, sampling, samplingBytes);
+    }
+    return { taskset, generatedFiles: [] as GeneratedTaskFile[] };
+  }
   const bytes = new Map<string, Uint8Array>();
   let total = 0;
   for (const [name, data] of sourceFiles) {
@@ -61,6 +78,17 @@ export function prepareAuthoredTasksetSource(tasksetInput: Taskset, sourceFiles:
     const portable = projectPortableTaskRecord(task);
     for (const asset of portable.artifactRefs) add(asset, task.assets?.find(candidate => candidate.id === asset.id)?.artifactRef ?? asset.path);
     for (const output of portable.requiredOutputs ?? []) if (output.schemaRef) add(output.schemaRef);
+    for (const output of portable.requiredOutputs ?? []) {
+      const sampling = structuredSamplingSchemaDeclaration(output.metadata);
+      if (!sampling) continue;
+      const entry = inventory.get(sampling.schemaRef.id);
+      if (!entry || contentHash(entry.asset) !== contentHash(sampling.schemaRef)
+        || !portable.artifactRefs.some(asset => asset.id === sampling.schemaRef.id) || !output.schemaRef) {
+        throw new Error("Sampling schema must match an ordinary declared policy artifact.");
+      }
+      const full = resolveStructuredOutput(bytes.get(inventory.get(output.schemaRef.id)!.sourcePath)!, output.schemaRef.contentHash);
+      resolveStructuredSamplingSchema(full, sampling, bytes.get(entry.sourcePath)!);
+    }
   }
   for (const resource of taskset.environment.resources ?? []) add(ref(resource.id, resource.path, resource.mediaType ?? "application/octet-stream", resource.visibility === "policy_visible" ? "policy" : "host_private"));
   const graders = taskset.graders.map(grader => {

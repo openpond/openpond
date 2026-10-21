@@ -8,9 +8,9 @@ import { describe, expect, test } from "vitest";
 import { TRAINING_EVALUATION_SOURCE_PATH, type TrainingEvaluationSource } from "openpond-sdk/training";
 
 import {
-  buildTasksetTrainingBundle,
   materializeResolvedTrainingBundle,
 } from "../packages/training-sdk/src/index.js";
+import { buildTasksetTrainingBundle } from "../packages/sdk/src/training-bundle.js";
 import { computeTasksetHash, sha256 } from "../packages/taskset-sdk/src/index.js";
 import { publishRunGraph } from "../apps/server/src/training/portable-model-run-service.js";
 import { loadTrainingHarnessSource } from "../apps/server/src/training/training-harness-source.js";
@@ -161,6 +161,22 @@ describe("resolved training bundle release isolation", () => {
     expect(() => build(taskset, undefined, "local", { ...evaluationSource, taskset: { ...evaluationSource.taskset, revision: 2 } })).toThrow("prepared Model");
     modelProject.trainingSetup.evaluationTasksetRef = null;
     const released = build(taskset);
+    // A successful qualification is meaningless if optimizer rollouts lose the
+    // authored instructions. The prompt must survive the hashed bundle, and a
+    // revised objective must change those exact environment bytes.
+    const releasedEnvironment = JSON.parse(new TextDecoder().decode(released.assets.get("environment.json")));
+    expect(releasedEnvironment.environment.metadata.policySystemPrompt).toBe(taskset.objective);
+    const revisedInstructions = structuredClone(taskset);
+    revisedInstructions.objective += " Inspect every supplied source before answering.";
+    revisedInstructions.environment.metadata.policySystemPrompt = "Unselected metadata prompt.";
+    revisedInstructions.contentHash = computeTasksetHash(revisedInstructions);
+    modelProject.trainingSetup.tasksetRef = { ...sharedProjectRef, contentHash: revisedInstructions.contentHash };
+    const revisedBundle = build(revisedInstructions);
+    expect(JSON.parse(new TextDecoder().decode(revisedBundle.assets.get("environment.json"))).environment.metadata.policySystemPrompt)
+      .toBe(revisedInstructions.objective);
+    expect(revisedBundle.assets.get("environment.json")).not.toEqual(released.assets.get("environment.json"));
+    expect(revisedBundle.manifest.resolvedBundleHash).not.toBe(released.manifest.resolvedBundleHash);
+    modelProject.trainingSetup.tasksetRef = sharedProjectRef;
     expect(released.manifest.harnessRelease.id).toBe(
       "harness-release-isolation",
     );

@@ -39,7 +39,6 @@ export function useMainPaneChatScroll({
   chatHistoryHasMore,
   chatHistoryLoading,
   chatMessages,
-  groupInProgressWork = false,
   onLoadMoreChatHistory,
   pendingApproval,
   showChatThread,
@@ -53,7 +52,6 @@ export function useMainPaneChatScroll({
   chatHistoryHasMore: boolean;
   chatHistoryLoading: boolean;
   chatMessages: ChatMessage[];
-  groupInProgressWork?: boolean;
   onLoadMoreChatHistory?: () => Promise<boolean>;
   pendingApproval: MainPaneProps["pendingApproval"];
   showChatThread: boolean;
@@ -101,8 +99,8 @@ export function useMainPaneChatScroll({
   const [userMessageNavigation, setUserMessageNavigation] =
     useState<UserMessageNavigationState>(EMPTY_USER_MESSAGE_NAVIGATION);
   const chatTimelineRows = useMemo(
-    () => buildChatTimelineRows(chatMessages, { showThinkingIndicator, groupInProgressWork }),
-    [chatMessages, showThinkingIndicator, groupInProgressWork]
+    () => buildChatTimelineRows(chatMessages, { showThinkingIndicator }),
+    [chatMessages, showThinkingIndicator]
   );
   const chatColumnStyle = useMemo(
     () =>
@@ -573,7 +571,16 @@ export function useMainPaneChatScroll({
       const anchor = sentMessageAnchorRef.current;
       if (anchor) {
         const target = reserveSentMessageSpace(element, anchor);
-        if (target !== null && anchor.following && smoothChatScrollFrameRef.current === null) element.scrollTop = target;
+        if (target !== null && anchor.following && smoothChatScrollFrameRef.current === null) {
+          // Keep a short answer beneath the newly sent request. Once it fills
+          // the viewport, follow the response instead of leaving it clipped
+          // below the composer until the turn completes.
+          if (element.scrollHeight - element.clientHeight > target + 1) {
+            resumeChatBottomFollowing(element);
+            return;
+          }
+          element.scrollTop = target;
+        }
         updateChatScrollControls(element);
         return;
       }
@@ -584,7 +591,7 @@ export function useMainPaneChatScroll({
       ) return;
       followStreamingChatBottom(element);
     },
-    [followStreamingChatBottom, updateChatScrollControls]
+    [followStreamingChatBottom, resumeChatBottomFollowing, updateChatScrollControls]
   );
   useEffect(() => {
     const element = chatThreadElement;
@@ -668,8 +675,8 @@ export function useMainPaneChatScroll({
     const updateReserve = () => {
       animationFrame = null;
       const nextReserve = Math.max(
-        96,
-        Math.ceil(element.getBoundingClientRect().height + 20)
+        0,
+        Math.ceil(element.getBoundingClientRect().height)
       );
       setChatComposerReservePx((current) =>
         current === nextReserve ? current : nextReserve
@@ -680,7 +687,7 @@ export function useMainPaneChatScroll({
       animationFrame = window.requestAnimationFrame(updateReserve);
     };
 
-    scheduleUpdate();
+    updateReserve();
     const resizeObserver =
       typeof window.ResizeObserver === "undefined"
         ? null
@@ -749,9 +756,13 @@ export function useMainPaneChatScroll({
     sentMessageAnchorRef.current = anchor;
     stickyChatScrollRef.current = false;
     reserveSentMessageSpace(element, anchor);
-    smoothScrollChatTo(element, () => reserveSentMessageSpace(element, anchor) ?? element.scrollTop);
+    smoothScrollChatTo(
+      element,
+      () => reserveSentMessageSpace(element, anchor) ?? element.scrollTop,
+      () => handleChatContentMutation(element),
+    );
     finishInitialChatScroll(conversationKey);
-  }, [chatSubmissionVersion, chatTimelineRows, chatThreadElement, conversationKey, view, showChatThread, cancelScheduledChatBottomScroll, cancelStreamFollow, smoothScrollChatTo, finishInitialChatScroll]);
+  }, [chatSubmissionVersion, chatTimelineRows, chatThreadElement, conversationKey, view, showChatThread, cancelScheduledChatBottomScroll, cancelStreamFollow, smoothScrollChatTo, finishInitialChatScroll, handleChatContentMutation]);
 
   useLayoutEffect(() => {
     const element = chatThreadRef.current;

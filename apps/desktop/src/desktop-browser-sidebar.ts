@@ -5,7 +5,7 @@ import {
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { BrowserSidebarStore } from "./desktop-browser-store.js";
-import { normalizeBrowserUrl, openUrlExternal, partitionForConversation } from "./desktop-browser-url.js";
+import { normalizeBrowserUrl, openUrlExternal, BROWSER_PARTITION } from "./desktop-browser-url.js";
 import { createTabId, ensureStoredTab, runtimeKey, sanitizeBounds } from "./desktop-browser-utils.js";
 import {
   collectBrowserSnapshotTargetsScript,
@@ -76,7 +76,6 @@ type PendingTabPersist = {
 };
 
 type PendingStateEmit = {
-  conversation?: StoredBrowserConversation;
   timer: NodeJS.Timeout;
 };
 
@@ -100,6 +99,7 @@ export class BrowserSidebarManager {
   private readonly evictionTimer: NodeJS.Timeout;
   private cursor = { x: 0, y: 0 };
   private destroyed = false;
+  private attachVersion = 0;
 
   constructor(
     private readonly window: BrowserWindow,
@@ -112,6 +112,7 @@ export class BrowserSidebarManager {
 
   async shutdown(): Promise<void> {
     if (this.destroyed) return;
+    for (const runtime of this.runtimes.values()) this.persistRuntime(runtime);
     this.destroyed = true; clearInterval(this.evictionTimer);
     for (const pending of this.pendingStateEmits.values()) clearTimeout(pending.timer);
     this.pendingStateEmits.clear();
@@ -119,25 +120,25 @@ export class BrowserSidebarManager {
     for (const pending of this.pendingTabPersists.values()) clearTimeout(pending.timer);
     await Promise.all(persistKeys.map((key) => this.flushTabPersist(key, false)));
     for (const runtime of this.runtimes.values()) this.destroyRuntime(runtime.conversationId, runtime.tabId);
+    const session = electronSession.fromPartition(BROWSER_PARTITION);
+    session.flushStorageData();
+    await session.cookies.flushStore();
   }
 
   async open(input: BrowserUrlInput): Promise<void> {
     const url = normalizeBrowserUrl(input.url, input.explicitFile);
-    const conversation = await this.store.conversation(input.conversationId);
-    const tabId = conversation.activeTabId ?? createTabId();
-    const next = ensureStoredTab(conversation, tabId, url);
-    await this.store.saveConversation(input.conversationId, next);
-    await this.loadTab(input.conversationId, tabId, url);
+    const next = await this.store.mutateConversation(input.conversationId, (conversation) =>
+      ensureStoredTab(conversation, conversation.activeTabId ?? createTabId(), url));
+    await this.loadTab(input.conversationId, next.activeTabId!, url);
   }
 
   async newTab(input: BrowserNewTabInput): Promise<void> {
     const url = input.url ? normalizeBrowserUrl(input.url, input.explicitFile) : "";
     const tab: StoredBrowserTab = { id: createTabId(), url, title: null, faviconUrl: null, lastUpdatedAt: Date.now() };
-    const conversation = await this.store.conversation(input.conversationId);
-    await this.store.saveConversation(input.conversationId, {
+    await this.store.mutateConversation(input.conversationId, (conversation) => ({
       activeTabId: tab.id,
       tabs: [...conversation.tabs, tab],
-    });
+    }));
     await this.loadTab(input.conversationId, tab.id, url);
   }
 
@@ -151,18 +152,19 @@ export class BrowserSidebarManager {
   }
 
   async selectTab(input: BrowserTabInput): Promise<void> {
-    const conversation = await this.store.conversation(input.conversationId);
-    if (!conversation.tabs.some((tab) => tab.id === input.tabId)) return;
-    await this.store.saveConversation(input.conversationId, { ...conversation, activeTabId: input.tabId });
+    await this.store.mutateConversation(input.conversationId, (conversation) =>
+      conversation.tabs.some((tab) => tab.id === input.tabId)
+        ? { ...conversation, activeTabId: input.tabId } : conversation);
     await this.attachActive(input.conversationId);
   }
 
   async closeTab(input: BrowserTabInput): Promise<void> {
     this.destroyRuntime(input.conversationId, input.tabId);
-    const conversation = await this.store.conversation(input.conversationId);
-    const tabs = conversation.tabs.filter((tab) => tab.id !== input.tabId);
-    const activeTabId = conversation.activeTabId === input.tabId ? tabs.at(-1)?.id ?? null : conversation.activeTabId;
-    await this.store.saveConversation(input.conversationId, { activeTabId, tabs });
+    await this.store.mutateConversation(input.conversationId, (conversation) => {
+      const tabs = conversation.tabs.filter((tab) => tab.id !== input.tabId);
+      const activeTabId = conversation.activeTabId === input.tabId ? tabs.at(-1)?.id ?? null : conversation.activeTabId;
+      return { activeTabId, tabs };
+    });
     await this.attachActive(input.conversationId);
   }
 
@@ -190,10 +192,15 @@ export class BrowserSidebarManager {
   }
 
   async clearData(input: BrowserConversationInput): Promise<void> {
+    ++this.attachVersion;
     for (const runtime of Array.from(this.runtimes.values())) {
-      if (runtime.conversationId === input.conversationId) this.destroyRuntime(runtime.conversationId, runtime.tabId);
+      if (runtime.conversationId !== input.conversationId) {
+        this.persistRuntime(runtime);
+        await this.flushTabPersist(runtimeKey(runtime.conversationId, runtime.tabId), false);
+      }
+      this.destroyRuntime(runtime.conversationId, runtime.tabId);
     }
-    const partition = partitionForConversation(input.conversationId);
+    const partition = BROWSER_PARTITION;
     await electronSession.fromPartition(partition).clearStorageData();
     await electronSession.fromPartition(partition).clearCache();
     await this.store.deleteConversation(input.conversationId);
@@ -207,6 +214,7 @@ export class BrowserSidebarManager {
   }
 
   async setBounds(input: BrowserBoundsInput): Promise<void> {
+    if (!input.bounds && this.activeConversationId !== input.conversationId) return;
     this.activeConversationId = input.conversationId;
     this.bounds = sanitizeBounds(input.bounds);
     await this.attachActive(input.conversationId);
@@ -725,25 +733,30 @@ export class BrowserSidebarManager {
     const url = rawUrl ? normalizeBrowserUrl(rawUrl, rawUrl.startsWith("file://")) : "";
     const runtime = await this.ensureRuntime(conversationId, tabId, { restoreStoredUrl: false });
     await this.store.updateTab(conversationId, tabId, { url, title: null, faviconUrl: null });
-    if (url) await runtime.view.webContents.loadURL(url);
+    const loading = url ? runtime.view.webContents.loadURL(url) : Promise.resolve();
     await this.attachActive(conversationId);
+    await loading;
   }
 
   private async attachActive(conversationId: string): Promise<void> {
+    this.emitState(conversationId);
+    if (conversationId !== this.activeConversationId) return;
+    const version = ++this.attachVersion;
     const conversation = await this.store.conversation(conversationId);
-    this.activeConversationId = conversationId;
+    if (version !== this.attachVersion || conversationId !== this.activeConversationId) return;
     this.detachAll();
     if (!this.bounds || !conversation.activeTabId) {
-      this.emitState(conversationId, conversation);
+      this.emitState(conversationId);
       return;
     }
     const runtime = await this.ensureRuntime(conversationId, conversation.activeTabId);
+    if (version !== this.attachVersion || conversationId !== this.activeConversationId || !this.bounds) return;
     runtime.lastUsedAt = Date.now();
     this.window.contentView.addChildView(runtime.view);
     runtime.view.setBounds(this.bounds);
     runtime.view.setVisible(true);
     this.enforceMemoryPolicy();
-    this.emitState(conversationId, conversation);
+    this.emitState(conversationId);
   }
 
   private async ensureRuntime(
@@ -756,9 +769,13 @@ export class BrowserSidebarManager {
     if (existing) return existing;
     const runtime = this.createRuntime(conversationId, tabId);
     this.runtimes.set(key, runtime);
-    if (options.restoreStoredUrl !== false) {
-      const tab = await this.tab({ conversationId, tabId });
-      if (tab?.url) void runtime.view.webContents.loadURL(tab.url).catch(() => undefined);
+    const tab = await this.tab({ conversationId, tabId });
+    if (tab?.navigation) {
+      const restoring = runtime.view.webContents.navigationHistory.restore(tab.navigation);
+      if (options.restoreStoredUrl === false) await restoring.catch(() => undefined);
+      else void restoring.catch(() => undefined);
+    } else if (options.restoreStoredUrl !== false && tab?.url) {
+      void runtime.view.webContents.loadURL(tab.url).catch(() => undefined);
     }
     return runtime;
   }
@@ -768,10 +785,11 @@ export class BrowserSidebarManager {
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
-        partition: partitionForConversation(conversationId),
+        partition: BROWSER_PARTITION,
         sandbox: true,
       },
     });
+    view.setVisible(false);
     const runtime: RuntimeTab = { conversationId, tabId, view, loading: false, error: null, lastUsedAt: Date.now() };
     view.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     view.webContents.setWindowOpenHandler(({ url }) => {
@@ -816,6 +834,10 @@ export class BrowserSidebarManager {
     this.scheduleTabPersist(runtime, {
       title: runtime.view.webContents.getTitle() || null,
       url,
+      navigation: {
+        index: runtime.view.webContents.navigationHistory.getActiveIndex(),
+        entries: runtime.view.webContents.navigationHistory.getAllEntries(),
+      },
     });
   }
 
@@ -844,8 +866,8 @@ export class BrowserSidebarManager {
     if (!pending) return;
     clearTimeout(pending.timer);
     this.pendingTabPersists.delete(key);
-    const conversation = await this.store.updateTab(pending.conversationId, pending.tabId, pending.patch);
-    if (emit) this.emitState(pending.conversationId, conversation);
+    await this.store.updateTab(pending.conversationId, pending.tabId, pending.patch);
+    if (emit) this.emitState(pending.conversationId);
   }
 
   private async tab(input: BrowserTabInput): Promise<StoredBrowserTab | null> {
@@ -880,16 +902,13 @@ export class BrowserSidebarManager {
     };
   }
 
-  private emitState(conversationId: string, conversation?: StoredBrowserConversation): void {
+  private emitState(conversationId: string): void {
     if (this.destroyed) return;
     const existing = this.pendingStateEmits.get(conversationId);
-    if (existing) {
-      if (conversation) existing.conversation = conversation;
-      return;
-    }
+    if (existing) return;
     const timer = setTimeout(() => void this.flushStateEmit(conversationId), STATE_EMIT_DEBOUNCE_MS);
     timer.unref?.();
-    this.pendingStateEmits.set(conversationId, { conversation, timer });
+    this.pendingStateEmits.set(conversationId, { timer });
   }
 
   private async flushStateEmit(conversationId: string): Promise<void> {
@@ -898,7 +917,7 @@ export class BrowserSidebarManager {
     if (!pending) return;
     clearTimeout(pending.timer);
     this.pendingStateEmits.delete(conversationId);
-    const next = pending.conversation ?? await this.store.conversation(conversationId);
+    const next = await this.store.conversation(conversationId);
     if (!this.window.isDestroyed()) {
       this.window.webContents.send("openpond:browser:state", this.buildState(conversationId, next));
     }
@@ -955,7 +974,15 @@ export class BrowserSidebarManager {
     const key = runtimeKey(conversationId, tabId);
     const runtime = this.runtimes.get(key);
     if (!runtime) return;
-    if (reason) this.recordEviction(runtime, reason);
+    if (reason) {
+      this.persistRuntime(runtime);
+      void this.flushTabPersist(key, false);
+      this.recordEviction(runtime, reason);
+    } else {
+      const pending = this.pendingTabPersists.get(key);
+      if (pending) clearTimeout(pending.timer);
+      this.pendingTabPersists.delete(key);
+    }
     this.runtimes.delete(key);
     this.detachRuntimeView(runtime);
     try {

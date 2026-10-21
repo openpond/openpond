@@ -133,7 +133,7 @@ export function materializePortableTasksetRelease(input: {
     tasks: tasks.map(projectPortableTaskRecord),
     graders,
     ...(input.taskset.metrics ? { metrics: input.taskset.metrics } : {}),
-    metadata: input.taskset.metadata.derivedPortableMetadata ?? {
+    metadata: { ...(input.taskset.metadata.derivedPortableMetadata ?? {
       sourceTasksetId: input.taskset.id,
       sourceTasksetHash: input.taskset.contentHash,
       sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,
@@ -155,7 +155,9 @@ export function materializePortableTasksetRelease(input: {
       // A sealed batch already pins these resources in learning metadata.
       // Resolving that same binding at admission must not change its release.
       ...(rewardExecution && !learning && (input.rewardExecution || embedded) ? { rewardExecution: { binding: rewardExecution.binding, rewards: rewardExecution.rewards } } : {}),
-    },
+    }), ...(input.taskset.metadata.tasksetOutputContract === undefined ? {} : {
+      tasksetOutputContract: input.taskset.metadata.tasksetOutputContract,
+    }) },
   });
   const draft = input.admittedTasksetRelease
     ? TasksetReleaseSchema.parse(input.admittedTasksetRelease)
@@ -218,7 +220,10 @@ export function projectPortableTaskRecord(task: TaskDataRecord) {
       policyVisibleContext: task.policyVisibleContext,
       privilegedContextRef: task.privilegedContextRef,
       tags: task.tags,
-      artifactRefs: task.assets === undefined ? original.artifactRefs : task.assets.filter(asset => original.artifactRefs.some(item => item.id === asset.id) || !(task.requiredOutputs ?? []).some(output => output.submissionMode === "structured_json" && output.schemaRef === asset.id)).map((asset) => {
+      // Shared execution resources mount with the task, but do not become new
+      // source attachments or change its original qualification/family identity.
+      artifactRefs: task.assets === undefined ? original.artifactRefs : task.assets.filter(asset => original.artifactRefs.some(item => item.id === asset.id)
+        || (asset.metadata.sharedEnvironmentResource === undefined && !(task.requiredOutputs ?? []).some(output => output.submissionMode === "structured_json" && output.schemaRef === asset.id))).map((asset) => {
         const previous = original.artifactRefs.find(item => item.id === asset.id);
         return {
           id: asset.id,

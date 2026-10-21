@@ -52,6 +52,19 @@ outside the Taskset manifest. The 64 MiB limit includes the JSON envelope and
 base64 encoding. Validation does not establish execution readiness or authorize
 access to private resources.
 
+For Work tasks whose response is also a required JSON deliverable, set
+`taskset.metadata.tasksetOutputContract` to
+`{ mode: "artifacts", requiredOutputSource: "task.requiredOutputs", responsePath: "results/answer.json" }`.
+Each executed task must declare exactly one output at that path with
+`mediaType: "application/json"`, `submissionMode: "structured_json"`, and a
+policy-visible `schemaRef`. The host verifies the referenced schema bytes and
+uses that task's schema for both its response and deliverable. Tasks can therefore
+have different schemas without adding a second response submission tool.
+Missing or ambiguous paths, non-JSON outputs and private schemas fail admission.
+Omitting `responsePath` retains the existing artifacts-only response behavior.
+This descriptor requires a host with explicit artifact response-path support;
+confirm support before submitting a paid run.
+
 Authored aggregation is declared by `taskset.metrics` in the shared Evals
 contract. A custom metric's module must appear once in the package at its
 declared path, retain private visibility, match its content hash and stay within

@@ -43,11 +43,11 @@ const output = JSON.parse(outputLine) as {
   node?: string;
   value?: string;
 };
-if (output.electron !== "43.1.1") {
-  throw new Error(`Expected Electron 43.1.1, received ${output.electron ?? "unknown"}`);
+if (output.electron !== "43.8.2") {
+  throw new Error(`Expected Electron 43.8.2, received ${output.electron ?? "unknown"}`);
 }
-if (output.node !== "24.18.0") {
-  throw new Error(`Expected embedded Node 24.18.0, received ${output.node ?? "unknown"}`);
+if (output.node !== "24.22.0") {
+  throw new Error(`Expected embedded Node 24.22.0, received ${output.node ?? "unknown"}`);
 }
 if (output.value !== "electron-node-sqlite") {
   throw new Error(`Electron node:sqlite round-trip failed: ${JSON.stringify(output)}`);

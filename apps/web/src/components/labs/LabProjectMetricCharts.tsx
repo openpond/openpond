@@ -4,6 +4,7 @@ import type { ModelOverviewRun } from "./model-overview-runs";
 type MetricPoint = {
   label: string;
   value: number;
+  continuation?: string;
 };
 
 type MetricChart = {
@@ -78,7 +79,13 @@ function ProjectMetricChart({ chart }: { chart: MetricChart }) {
               className="labs-project-chart-line"
               points={plot.points}
             />
-            {plot.coordinates.map((point, index) => (
+            {plot.coordinates.map((point, index) => chart.points[index]!.continuation ? (
+              <path key={`${chart.points[index]!.label}:${index}`}
+                className="labs-project-chart-point"
+                d={`M${point.x},${point.y - 5} l5,5 l-5,5 l-5,-5 Z`}>
+                <title>{`${chart.points[index]!.label}: ${chart.format(chart.points[index]!.value)} · ${chart.points[index]!.continuation}`}</title>
+              </path>
+            ) : (
               <circle
                 className="labs-project-chart-point"
                 cx={point.x}
@@ -94,6 +101,7 @@ function ProjectMetricChart({ chart }: { chart: MetricChart }) {
             <span>{chart.points[0]!.label}</span>
             <span>{latest!.label}</span>
           </div>
+          {chart.points.some(point => point.continuation) ? <div className="labs-project-chart-axis">◇ Continued from a prior adapter</div> : null}
         </div>
       ) : (
         <div className="labs-project-chart-empty">
@@ -110,11 +118,15 @@ function projectMetricCharts(runs: ModelOverviewRun[]): MetricChart[] {
     .map((run, index) => ({ run, number: trainingRuns.length - index }))
     .slice(0, MAX_POINTS)
     .reverse();
+  const point = (run: ModelOverviewRun, number: number, value: number): MetricPoint => ({
+    label: `Run ${number}`, value,
+    ...(run.continuation ? { continuation: `Continual learning · checkpoint ${run.continuation.checkpointId} · optimizer ${run.continuation.optimizerMode}` } : {}),
+  });
   const evaluationScorePoints = runs.filter(run => run.evaluation)
     .slice(0, MAX_POINTS).reverse().map((run, index) => ({ label: `Eval ${index + 1}`, value: run.evaluation!.score }));
   const spendCeilingPoints = numberedTrainingRuns.flatMap(({ run, number }) =>
     run.spendCeiling !== null
-      ? [{ label: `Run ${number}`, value: run.spendCeiling }]
+      ? [point(run, number, run.spendCeiling)]
       : [],
   );
 
@@ -123,7 +135,7 @@ function projectMetricCharts(runs: ModelOverviewRun[]): MetricChart[] {
       title: "Mean reward",
       description: "Final reported reward",
       points: numberedTrainingRuns.flatMap(({ run, number }) =>
-        run.reward !== null ? [{ label: `Run ${number}`, value: run.reward }] : [],
+        run.reward !== null ? [point(run, number, run.reward)] : [],
       ),
       format: formatDecimal,
     },
@@ -132,7 +144,7 @@ function projectMetricCharts(runs: ModelOverviewRun[]): MetricChart[] {
       description: "Completed groups or attempts",
       points: numberedTrainingRuns.flatMap(({ run, number }) =>
         run.completion !== null
-          ? [{ label: `Run ${number}`, value: run.completion }]
+          ? [point(run, number, run.completion)]
           : [],
       ),
       format: formatPercent,
@@ -141,7 +153,7 @@ function projectMetricCharts(runs: ModelOverviewRun[]): MetricChart[] {
       title: "Run duration",
       description: "Elapsed wall-clock minutes",
       points: numberedTrainingRuns.flatMap(({ run, number }) => run.durationMinutes !== null
-        ? [{ label: `Run ${number}`, value: run.durationMinutes }] : []),
+        ? [point(run, number, run.durationMinutes)] : []),
       format: formatMinutes,
     },
     evaluationScorePoints.length

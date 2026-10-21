@@ -5,6 +5,7 @@ import type { SqliteStore } from "../store/store.js";
 import { importHostedModelArtifacts } from "./hosted-model-artifact-import.js";
 import { assertManagedModelArtifactIntegrity } from "./managed-model-artifact-integrity.js";
 import { createTrainingModelBindingService } from "./training-model-binding-service.js";
+import { HostedRecoveryImportSchema } from "./hosted-model-recovery.js";
 
 const H = "a".repeat(64);
 const NOW = "2026-09-09T12:00:00.000Z";
@@ -76,6 +77,33 @@ async function fixture() {
 }
 
 describe("Hosted Model serving receipts", () => {
+  // Exact recovery has a new execution hash and inherited source approval.
+  // Import must bind both instead of pretending it is the original submission.
+  it("imports a recovered Version only through its exact execution receipt and checkpoint lineage", async () => {
+    const f = await fixture();
+    const executionHash = "b".repeat(64);
+    const lineage = { sourceJobId: "source", checkpointId: "checkpoint", policyVersion: 1, completedGroups: 1, optimizerMode: "continue" as const };
+    Object.assign(f.remote, { recovery: lineage, submissionHash: executionHash });
+    f.receipt.submissionHash = executionHash;
+    f.receipt.inputs = [f.submission.source.harnessRunManifest, f.submission.source.dataset, f.submission.source.harnessRelease,
+      f.submission.source.taskset, { id: "source", contentHash: H }, { id: "checkpoint", contentHash: H }]
+      .map(({ id, contentHash }) => ({ id, contentHash }));
+    f.outputs.outputs[2]!.contentHash = await trainingExecutionReceiptHash(f.receipt);
+    const recovery = HostedRecoveryImportSchema.parse({ sourceJobId: "source", sourceInputManifestSha256: H,
+      checkpointId: "checkpoint", checkpointPolicyVersion: 1, completedGroups: 1, adapterSha256: H, resumeSha256: H,
+      approvedManifest: f.submission.source.harnessRunManifest, evaluationTaskset: f.submission.source.taskset,
+      receiptSha256: H, executionSubmissionHash: executionHash, sourceSubmission: f.submission, optimizerStateRestored: true });
+    await expect(importHostedModelArtifacts({ ...f, fetch: f.request })).rejects.toThrow("completed Model run");
+    expect(f.models.size).toBe(0);
+    await importHostedModelArtifacts({ ...f, recovery, fetch: f.request });
+    expect([...f.models.values()][0]!.planHash).toBe(executionHash);
+    expect((await f.store.getTrainingJob("job"))?.metadata).toMatchObject({
+      hostedSubmissionHash: executionHash, hostedSourceSubmissionHash: f.submission.contentHash, hostedArtifactPlanSource: "checkpoint_recovery",
+    });
+    Object.assign(f.remote, { recovery: { ...lineage, checkpointId: "substituted" } });
+    await expect(importHostedModelArtifacts({ ...f, recovery, fetch: f.request })).rejects.toThrow("exact source and checkpoint");
+    expect(f.models.size).toBe(1);
+  });
   // An API-created Model must be bindable without local weights or a downloaded Taskset,
   // and importing it repeatedly must preserve the same Version and evaluation identity.
   it("imports one exact hosted Version and verifies its remote receipt before binding", async () => {

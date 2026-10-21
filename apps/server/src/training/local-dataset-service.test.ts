@@ -43,7 +43,8 @@ test("grader inspection resolves attached IDs and bounds fixtures and verifier s
 });
 
 // Failure story: a local PDF corpus larger than the hosted envelope must retain
-// all bytes and revisions, while a selected run excludes unrelated PDF inputs.
+// all bytes and revisions, while a selected run excludes unrelated PDF inputs
+// and retains the shared workflow resources needed to execute that selection.
 // The same corpus must still fail the default hosted compilation boundary.
 test("large folder saves stay local and selected runs retain their exact dataset authority",async()=>{
   const home=await mkdtemp(path.join(os.tmpdir(),"openpond-large-local-dataset-"));
@@ -53,11 +54,13 @@ test("large folder saves stay local and selected runs retain their exact dataset
     const first=await service.request({action:"create",operationId:"large-local-create",payload:{name:"Large local corpus"}}) as {record:LocalDatasetRecord};
     const workspace=first.record.workspace;
     const folder=path.join(home,"authored");await mkdir(path.join(folder,"inputs"),{recursive:true});
-    const files=[{name:"small.pdf",bytes:Buffer.from("small source")},{name:"large.pdf",bytes:Buffer.alloc(50*1024*1024,65)}];
-    const inventory=files.map(file=>({asset:{id:file.name,path:`inputs/${file.name}`,contentHash:sha256(file.bytes),sizeBytes:file.bytes.length,mediaType:"application/pdf",visibility:"policy"},sourcePath:`inputs/${file.name}`}));
-    const tasks=inventory.map(({asset})=>({schemaVersion:"openpond.taskData.v1",id:asset.id,clusterKey:asset.id,split:"validation",input:{prompt:"Read the attached source."},expectedOutput:{text:"pond"},policyVisibleContext:{},privilegedContextRef:null,sourceRefs:[],tags:[],metadata:{},
+    const files=[{name:"small.pdf",bytes:Buffer.from("small source")},{name:"large.pdf",bytes:Buffer.alloc(50*1024*1024,65)},
+      {name:"shared.py",bytes:Buffer.from("print('shared workflow')")}];
+    const inventory=files.map(file=>({asset:{id:file.name,path:`inputs/${file.name}`,contentHash:sha256(file.bytes),sizeBytes:file.bytes.length,mediaType:file.name.endsWith(".py")?"text/x-python":"application/pdf",visibility:"policy"},sourcePath:`inputs/${file.name}`}));
+    const tasks=inventory.slice(0,2).map(({asset})=>({schemaVersion:"openpond.taskData.v1",id:asset.id,clusterKey:asset.id,split:"validation",input:{prompt:"Read the attached source."},expectedOutput:{text:"pond"},policyVisibleContext:{},privilegedContextRef:null,sourceRefs:[],tags:[],metadata:{},
       assets:[{id:asset.id,sourceRefId:"source",artifactRef:asset.path,fileName:asset.id,mediaType:asset.mediaType,sha256:asset.contentHash,sizeBytes:asset.sizeBytes,split:"validation",metadata:{portableAsset:asset}}]}));
     await writeFile(path.join(folder,"taskset.json"),JSON.stringify({...workspace.draft,objective:"Read PDF inputs",tasks,
+      environment:{...workspace.draft.environment,resources:[{id:"shared-workflow",kind:"file",path:"inputs/shared.py",mediaType:"text/x-python",visibility:"policy_visible",required:true,metadata:{}}]},
       graders:[{id:"exact",version:"1",label:"Exact",kind:"state",weight:1,hardGate:true,rewardEligible:false,privileged:true,config:{fields:["text"]},metadata:{}}],
       metadata:{...workspace.draft.metadata,portableFileInventory:inventory}}));
     for(const file of files)await writeFile(path.join(folder,"inputs",file.name),file.bytes);
@@ -83,6 +86,7 @@ test("large folder saves stay local and selected runs retain their exact dataset
     expect(selected.taskset.tasks.map(task=>task.id)).toEqual(["small.pdf"]);
     expect(selected.files.some(file=>file.asset.id==="large.pdf")).toBe(false);
     expect(selected.files.find(file=>file.asset.id==="small.pdf")?.asset.contentHash).toBe(inventory[0]!.asset.contentHash);
+    expect(selected.files.find(file=>file.asset.path==="inputs/shared.py")?.asset.contentHash).toBe(inventory[2]!.asset.contentHash);
     const hydrated=await service.packageDataset(workspace.draft.id,2,["small.pdf"]);
     expect(hydrated.package.contentHash).toBe(selected.contentHash);
     expect(hydrated.record.workspace.files.some(file=>file.path==="inputs/large.pdf")).toBe(false);

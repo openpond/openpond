@@ -63,6 +63,8 @@ import {
 import { SquarePen } from "../icons";
 import { LabModelProjectOverview } from "./LabModelProjectOverview";
 import { modelOverviewRuns } from "./model-overview-runs";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
+import { LabRunStatusBadge } from "./LabRunStatusBadge";
 
 const LabModelVersionDetailPage = lazy(() =>
   import("./LabModelVersionDetailPage").then((module) => ({
@@ -571,9 +573,10 @@ export function LabWorkproductDetail({
         {workproduct.kind === "model" && selectedModelEntryKey ? (
           <Suspense
             fallback={
-              <div className="training-run-placeholder">
-                Loading run details…
-              </div>
+              <ModelProjectPageHeader
+                title={selectedModelRunNumber ? `Run ${selectedModelRunNumber}` : "Run details"}
+                status={selectedModelJob ? <LabRunStatusBadge status={selectedModelJob.status} /> : undefined}
+              />
             }
           >
             <LabModelVersionDetailPage

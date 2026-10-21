@@ -147,7 +147,7 @@ export function useChatFileOpen({
     const version = ++requestVersion.current;
     setFileResolution(null);
     if (/^https?:\/\//i.test(requestedPath)) { handleOpenBrowserLink(requestedPath); return; }
-    const explicitLocalPath = Boolean(localFileWorkspaceId(requestedPath))
+    const explicitLocalPath = !options?.sandboxId && Boolean(localFileWorkspaceId(requestedPath))
       && (!rightSidebarUsesSandbox || !/^\/workspace(?:\/|$)/.test(requestedPath));
     if (options?.local || options?.sandboxId || explicitLocalPath || !connection || !activeWorkspaceAppId || rightSidebarUsesSandbox) {
       openResolvedFile(requestedPath, explicitLocalPath ? { ...options, local: true } : options);

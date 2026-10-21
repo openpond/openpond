@@ -30,6 +30,7 @@ export function isCodexInjectedUserMessage(content: string): boolean {
     || trimmed.startsWith("<environment_context>")
     || trimmed.startsWith("<summary>")
     || trimmed.startsWith("<user_info>")
+    || /^<external_codex_apps_open_page>[\s\S]*<\/external_codex_apps_open_page>$/.test(trimmed)
   );
 }
 

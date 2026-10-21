@@ -272,6 +272,32 @@ export class SqliteTrainingJobsStore extends SqliteStoreDomain {
     return event;
   }
 
+  /** Hosted snapshots add metrics as a run advances. Their snapshot-local
+   * order is not the persistent event sequence. Allocate a new position once,
+   * then update that event in place without regressing newer observations. */
+  async saveHostedTrainingJobEvent(eventInput: TrainingJobEvent): Promise<TrainingJobEvent> {
+    const event = TrainingJobEventSchema.parse(eventInput);
+    await this.upsertPayload(
+      `INSERT INTO training_job_events (id, job_id, sequence, payload, created_at)
+       SELECT ?, ?, COALESCE(MAX(sequence), -1) + 1,
+         json_set(?, '$.sequence', COALESCE(MAX(sequence), -1) + 1), ?
+       FROM training_job_events WHERE job_id = ?
+       ON CONFLICT(id) DO UPDATE SET
+         payload = json_set(excluded.payload, '$.sequence', training_job_events.sequence),
+         created_at = excluded.created_at
+       WHERE training_job_events.job_id = excluded.job_id
+         AND julianday(excluded.created_at) >= julianday(training_job_events.created_at)`,
+      [event.id, event.jobId, JSON.stringify(event), event.timestamp, event.jobId],
+    );
+    const saved = await this.getParsedPayload(
+      "SELECT payload FROM training_job_events WHERE id = ?",
+      [event.id],
+      TrainingJobEventSchema.parse,
+    );
+    if (!saved || saved.jobId !== event.jobId) throw new Error("Hosted event belongs to a different training job.");
+    return saved;
+  }
+
   async listTrainingJobEvents(jobId: string): Promise<TrainingJobEvent[]> {
     return this.listParsedPayloads(
       "SELECT payload FROM training_job_events WHERE job_id = ? ORDER BY sequence ASC",

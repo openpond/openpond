@@ -16,6 +16,23 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+.workspace-pdf-preview {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  scrollbar-gutter: stable;
+}
+
+.workspace-pdf-page {
+  position: relative;
+  margin-bottom: 16px;
+  background: var(--surface-raised);
+}
+
+.workspace-pdf-page canvas {
+  display: block;
+}
+
 .workspace-file-preview,
 .workspace-document-preview,
 .workspace-diff-preview {

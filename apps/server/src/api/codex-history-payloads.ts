@@ -65,6 +65,7 @@ export function createCodexHistoryPayloads(input: {
       readCodexHistoryThreadPayload(sessionId, {
         ...codexHistoryThreadReadOptions(requestUrl),
         attachmentRootDir: input.attachmentRootDir,
+        storageHome: input.store.home,
       }),
       loadCodexHistorySidebarPreferences(input.store),
     ]);
@@ -96,6 +97,7 @@ export function createCodexHistoryPayloads(input: {
     PatchSessionRequestSchema.parse(payload);
     const current = await readCodexHistoryThreadPayload(sessionId, {
       attachmentRootDir: input.attachmentRootDir,
+      storageHome: input.store.home,
     });
     await patchCodexHistorySidebarPreference(input.store, sessionId, payload);
     return codexHistorySessionWithLiveStatus(
@@ -114,6 +116,7 @@ export function createCodexHistoryPayloads(input: {
     }
     const current = await readCodexHistoryThreadPayload(sessionId, {
       attachmentRootDir: input.attachmentRootDir,
+      storageHome: input.store.home,
     });
     assertNativeWorkerDirectInput(current.session);
     const threadId = current.session.codexThreadId;

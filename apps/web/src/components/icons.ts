@@ -54,6 +54,7 @@ export { default as Folder } from "lucide-react/dist/esm/icons/folder.js";
 export { default as FolderGit2 } from "lucide-react/dist/esm/icons/folder-git-2.js";
 export { default as FolderOpen } from "lucide-react/dist/esm/icons/folder-open.js";
 export { default as FolderPlus } from "lucide-react/dist/esm/icons/folder-plus.js";
+export { default as Layers } from "lucide-react/dist/esm/icons/layers.js";
 export { default as GitBranch } from "lucide-react/dist/esm/icons/git-branch.js";
 export { default as GitCommit } from "lucide-react/dist/esm/icons/git-commit-horizontal.js";
 export { default as GitCommitHorizontal } from "lucide-react/dist/esm/icons/git-commit-horizontal.js";

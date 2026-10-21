@@ -74,6 +74,9 @@ export function prepareModelStarterTaskset(input: {
   const taskset = publishTasksetDraft({ draft: authored, now: input.createdAt, tasksetId, sourcePackageHash: release.contentHash });
   // A draft's editor default is not an authored policy on the pinned release.
   taskset.metrics = release.metrics;
+  // Draft editor defaults must not alter the pinned portable release metadata.
+  if (release.metadata.tasksetOutputContract === undefined) delete taskset.metadata.tasksetOutputContract;
+  else taskset.metadata.tasksetOutputContract = release.metadata.tasksetOutputContract;
   taskset.contentHash = computeTasksetHash(taskset);
   return { draft: authored, taskset, generatedFiles: files, resources };
 }

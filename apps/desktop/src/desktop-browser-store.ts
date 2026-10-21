@@ -6,12 +6,18 @@ export class BrowserSidebarStore {
   async conversation(conversationId: string): Promise<StoredBrowserConversation> {
     return cloneConversation(getLocalRecord<StoredBrowserConversation>(this.home, "browser_tab_state", conversationId)?.value);
   }
-  async saveConversation(conversationId: string, conversation: StoredBrowserConversation): Promise<void> {
-    putLocalRecord(this.home, "browser_tab_state", conversationId, cloneConversation(conversation));
+  // Keep read/modify/write in one synchronous turn so concurrent tab commands
+  // cannot replace each other's conversation snapshots across an await.
+  async mutateConversation(conversationId: string, update: (current: StoredBrowserConversation) => StoredBrowserConversation): Promise<StoredBrowserConversation> {
+    const saved = getLocalRecord<StoredBrowserConversation>(this.home, "browser_tab_state", conversationId);
+    const next = cloneConversation(update(cloneConversation(saved?.value)));
+    putLocalRecord(this.home, "browser_tab_state", conversationId, next, saved?.revision ?? null);
+    return next;
   }
   async updateTab(conversationId: string, tabId: string, patch: Partial<Omit<StoredBrowserTab, "id">>): Promise<StoredBrowserConversation> {
     const saved = getLocalRecord<StoredBrowserConversation>(this.home, "browser_tab_state", conversationId);
     const conversation = cloneConversation(saved?.value);
+    if (!conversation.tabs.some((tab) => tab.id === tabId)) return conversation;
     const next = { ...conversation, tabs: conversation.tabs.map((tab) => tab.id === tabId ? { ...tab, ...patch, lastUpdatedAt: Date.now() } : tab) };
     putLocalRecord(this.home, "browser_tab_state", conversationId, next, saved?.revision ?? null);
     return next;
@@ -31,6 +37,10 @@ function cloneConversation(conversation: StoredBrowserConversation | undefined):
           title: typeof tab.title === "string" ? tab.title : null,
           faviconUrl: typeof tab.faviconUrl === "string" ? tab.faviconUrl : null,
           lastUpdatedAt: Number.isFinite(tab.lastUpdatedAt) ? tab.lastUpdatedAt : Date.now(),
+          ...(tab.navigation?.entries.length && Number.isInteger(tab.navigation.index)
+            && tab.navigation.index >= 0 && tab.navigation.index < tab.navigation.entries.length
+            ? { navigation: { index: tab.navigation.index, entries: tab.navigation.entries.map((entry) => ({ ...entry })) } }
+            : {}),
         }))
     : [];
   const activeTabId =

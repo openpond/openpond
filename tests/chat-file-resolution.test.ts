@@ -48,6 +48,31 @@ test("grouped project resolves a named output in its second folder and previews 
   } finally { await store.close(); }
 });
 
+// URL escapes must be decoded exactly once at the link boundary. Otherwise
+// spaced filenames fail, or a real literal-%20 filename opens the wrong file.
+test("encoded PDF links preview the right bytes without decoding raw filesystem paths", async () => {
+  const { root, roots, file } = await fixture();
+  const spaced = await file("one/OpenPond AI déck.pdf", "%PDF-1.4\nspaced\n%%EOF");
+  const literal = await file("one/OpenPond%20AI.pdf", "%PDF-1.4\nliteral\n%%EOF");
+  const storeDir = path.join(root, "store");
+  const store = new SqliteStore(storeDir);
+  try {
+    const { project } = await upsertLocalProject(store, { name: "Links", sourceFolders: roots, primaryFolder: roots[0] });
+    const payloads = createServerWorkspacePayloads({ store, storeDir, openPondCacheScope: () => "test",
+      findOpenPondApp: async () => { throw new Error("Not hosted"); },
+      loadAppPreferences: async () => AppPreferencesSchema.parse({}), bootstrapPayload: async () => ({}) as BootstrapPayload });
+    for (const [target, marker] of [[spaced, "spaced"], [literal, "literal"]]) {
+      const linked = normalizeChatFilePath(encodeURI(target!), { href: true })!.path;
+      expect(linked).toBe(target);
+      const preview = await payloads.workspaceFilePayload(project.id, linked);
+      expect(Buffer.from(preview.content!, "base64").toString()).toContain(marker);
+    }
+    expect(normalizeChatFilePath(literal)?.path).toBe(literal);
+    expect(normalizeChatFilePath("OpenPond%20AI%20d%C3%A9ck.pdf", { href: true })?.path).toBe("OpenPond AI déck.pdf");
+    expect(normalizeChatFilePath(`file://${encodeURI(literal)}`, { href: true })?.path).toBe(literal);
+  } finally { await store.close(); }
+});
+
 // Choosing the first basename match can open the wrong project/document. Exact
 // links and useful directory suffixes disambiguate; ties require user choice.
 test("exact links win and duplicate filenames produce choices", async () => {

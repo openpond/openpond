@@ -2,9 +2,12 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Approval, RuntimeEvent } from "@openpond/contracts";
 import { ApprovalRequestCard } from "../components/chat/ApprovalRequestCard";
-import { MainChatThread } from "../components/app-shell/MainChatThread";
+import { ConversationSurface } from "../components/chat/ConversationSurface";
+import { Composer } from "../components/chat/Composer";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { contextWindowStatusFromUsage } from "../lib/context-window";
+import "../styles/theme.css";
 import { buildChatMessages } from "../lib/chat-messages";
-import { buildChatTimelineRows } from "../lib/chat-timeline-rows";
 import "../styles.css";
 
 // Manual boundary proof: questions submit complete answers, multi-select labels
@@ -42,6 +45,12 @@ const questions = [
 function App() {
   const [mode, setMode] = useState<"progress" | "questions" | "plan">("progress");
   const [completed, setCompleted] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [nextRequest, setNextRequest] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [queued, setQueued] = useState(false);
+  const [normalResponseLines, setNormalResponseLines] = useState<number | null>(null);
+  const [submissionVersion, setSubmissionVersion] = useState(0);
   const [receipt, setReceipt] = useState("");
   const events: RuntimeEvent[] = [
     {
@@ -63,9 +72,9 @@ function App() {
             id: "2",
             content: "Implement the cards",
             activeForm: "Implementing the cards",
-            status: completed ? "completed" : "in_progress",
+            status: completed || finished ? "completed" : "in_progress",
           },
-          { id: "3", content: "Review the interface", status: "pending" },
+          { id: "3", content: "Review the interface", status: finished ? "completed" : completed ? "in_progress" : "pending" },
         ],
       },
     },
@@ -73,7 +82,8 @@ function App() {
       ...base,
       id: `text-${index}`,
       name: "assistant.delta",
-      output: `Conversation update ${index + 1}. The pinned planner remains visible while this transcript scrolls.\n\n`,
+      output: `Conversation update ${index + 1}. The task checklist remains connected to the composer while this transcript scrolls.\n\n`,
+      data: { nativeMessageId: `commentary-${index}`, phase: "commentary" },
     })),
     {
       ...base,
@@ -86,6 +96,21 @@ function App() {
       data: { retainedHistory: true, nativeProvider: "claude-code" },
     },
   ];
+  if (finished) events.push(
+    { ...base, id: "answer", name: "assistant.delta", output: "The interface is ready.", data: { nativeMessageId: "answer", phase: "final_answer", nativeMessageSnapshot: true } },
+    { ...base, id: "finished", name: "turn.completed" },
+  );
+  if (nextRequest) events.push({ ...base, turnId: "next", id: "next-request", name: "turn.started", args: { prompt: "Start a fresh task" } });
+  const normal = normalResponseLines !== null;
+  const displayedEvents = normal ? events.filter(event => event.action !== "update_plan" && event.id !== "notification") : events;
+  if (normal) displayedEvents.push(
+    { ...base, id: "normal-request", turnId: "normal", name: "turn.started", args: { prompt: "Check normal chat scrolling while a response streams." } },
+    { ...base, id: "normal-answer", turnId: "normal", name: "assistant.delta",
+      output: Array.from({ length: normalResponseLines }, (_, index) => `Response update ${index + 1}: the newest text should stay above the composer as this response grows.`).join("\n\n"),
+      data: { nativeMessageId: "normal-answer", phase: "commentary" } },
+  );
+  const messages = buildChatMessages(displayedEvents);
+  const running = !finished || nextRequest;
   const approval: Approval | null =
     mode === "progress"
       ? null
@@ -118,58 +143,49 @@ function App() {
           }),
         };
   return (
-    <div className="app-shell" style={{ height: "100vh", display: "block" }}>
-      <nav style={{ display: "flex", gap: 12, padding: 16 }}>
-        <button onClick={() => setMode("progress")}>Progress</button>
+    <div className="app-shell" style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      <nav style={{ display: "flex", flexShrink: 0, flexWrap: "wrap", gap: 12, padding: 16 }}>
+        <button onClick={() => { setMode("progress"); setNormalResponseLines(null); }}>Progress</button>
+        <button onClick={() => { setNormalResponseLines(1); setSubmissionVersion(value => value + 1); setMode("progress"); setQueued(false); }}>Normal response</button>
+        <button disabled={normalResponseLines === null} onClick={() => setNormalResponseLines(value => (value ?? 0) + 8)}>Stream more text</button>
         <button onClick={() => setMode("questions")}>Questions</button>
         <button onClick={() => setMode("plan")}>Plan review</button>
         <button onClick={() => setCompleted((value) => !value)}>Update progress</button>
+        <button onClick={() => setFinished(true)}>Complete turn</button>
+        <button onClick={() => { setFinished(true); setNextRequest(true); }}>New request</button>
+        <button onClick={() => setQueued(value => !value)}>Toggle steer</button>
+        <button onClick={() => { setFinished(false); setNextRequest(false); setCompleted(false); }}>Reset</button>
+        <button onClick={() => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === "light" ? "dark" : "light"; }}>Toggle theme</button>
       </nav>
-      <main
-        className={`chat-column ${approval ? "has-approval" : ""}`}
-        style={{
-          height: "calc(100vh - 64px)",
-          maxWidth: 900,
-          margin: "auto",
-          position: "relative",
-        }}
-      >
-        <MainChatThread
-          accountBaseUrl={null}
-          activeWorkspaceAppId={null}
-          billingOrganizationSlug={null}
-          billingTeamId={null}
-          connection={null}
-          conversationKey="proof"
-          creation={null}
-          onOpenBrowserLink={undefined}
-          onOpenAttachmentInSidebar={undefined}
-          onOpenFileInSidebar={undefined}
-          onOpenProfileSettings={undefined}
-          onResolveUserQuestion={undefined}
-          onOpenSession={undefined}
-          onScroll={() => {}}
-          rows={buildChatTimelineRows(buildChatMessages(events))}
-          sessionId={null}
-          turnRunning={true}
-          userAttachmentDisplay="full"
-          threadRef={null}
-          workspaceRootPath={null}
+      <main style={{ flex: 1, minHeight: 0, width: "100%", maxWidth: 900, margin: "0 auto", display: "grid", gridTemplateRows: "minmax(0, 1fr) auto" }}>
+        <ConversationSurface scroll={{ browserConversationId: "proof", chatSubmissionVersion: submissionVersion,
+          chatMessages: messages, chatHistoryHasMore: false, chatHistoryLoading: false,
+          pendingApproval: approval, showChatThread: true, showThinkingIndicator: false, turnRunning: running, view: "chat" }}
+          hasApproval={Boolean(approval)}
+          thread={{ connection: null }}
+          composerPrefix={<ApprovalRequestCard connection={null} showToast={message => { setReceipt(message); return 1; }} approval={approval} onResolve={async (_id, decision, answers) => {
+            setReceipt(JSON.stringify({ decision, answers })); setMode("progress");
+          }} />}
+          composer={<Composer key={queued ? "steer" : "plain"} mode="dock" prompt={prompt} onPromptChange={setPrompt}
+            busy={false} running={running} connection={null} provider="claude-code" model="default"
+            contextWindowStatus={contextWindowStatusFromUsage({ provider: "claude-code", snapshot: null })}
+            enableResourceContext={false} showProjectFooter={false}
+            projectTarget={{ value: "", label: "Local project", detail: "", options: [], busy: false }}
+            workspaceTarget={{ value: "local", label: "Local", detail: "", options: [], busy: false,
+              action: { value: "local", label: "Local", detail: "", disabled: false } }}
+            codexPermissionMode="full-access" codexReasoningEffort="high" openPondCommandAccessMode="full-access"
+            onProviderChange={() => {}} onProjectTargetChange={() => {}} onWorkspaceTargetChange={() => {}}
+            onModelChange={() => {}} onCodexPermissionModeChange={() => {}} onCodexReasoningEffortChange={() => {}}
+            onOpenPondCommandAccessModeChange={() => {}} showToast={message => { setReceipt(message); return 1; }}
+            onSubmit={async () => true} onStop={() => setFinished(true)}
+            initialSteerDrafts={queued ? [{ id: "steer", createdAt: timestamp, updatedAt: timestamp, prompt: "Focus on the current task first" }] : []}
+          />}
         />
-        <div className="composer-stack dock">
-          <ApprovalRequestCard
-            approval={approval}
-            onResolve={async (_id, decision, answers) => {
-              setReceipt(JSON.stringify({ decision, answers }));
-              setMode("progress");
-            }}
-          />
-          <div className="composer" style={{ minHeight: 100, padding: 16 }}>
-            Message composer<output style={{ display: "block" }}>{receipt}</output>
-          </div>
-        </div>
+        <output aria-label="Proof receipt">{receipt}</output>
       </main>
     </div>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+const root = createRoot(document.getElementById("root")!);
+root.render(<QueryClientProvider client={new QueryClient()}><App /></QueryClientProvider>);
+import.meta.hot?.dispose(() => root.unmount());

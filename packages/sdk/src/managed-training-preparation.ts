@@ -1,6 +1,7 @@
 import { contentHash, sha256 } from "@openpond/harness";
 import { TrainingHandoffOriginSchema, type TrainingHandoffOrigin } from "./post-training.js";
 import { z } from "zod";
+import { TrainingPhysicalPlacementSchema, type TrainingPhysicalPlacement } from "./training-physical-placement.js";
 
 import type { ModelProject } from "./model-projects.js";
 import {
@@ -27,6 +28,7 @@ type PolicyJob = Extract<TrainingJobSubmission["job"], { kind: "policy_optimize"
 export type TrainingPreparationFile = TrainingEvaluationSource["assets"][number];
 
 export interface ManagedTrainingPreparationInput {
+  physicalPlacement?: TrainingPhysicalPlacement;
   origin?: TrainingHandoffOrigin;
   executionMode?: "qualification";
   project: ModelProject;
@@ -57,6 +59,8 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
   const manifest = HarnessRunManifestSchema.parse(input.manifest);
   const bundle = ResolvedTrainingBundleManifestSchema.parse(input.bundleManifest);
   const qualification = input.executionMode === "qualification";
+  const physicalPlacement = input.physicalPlacement
+    ? TrainingPhysicalPlacementSchema.parse(input.physicalPlacement) : undefined;
   const qualificationGroupSize = manifest.qualificationSamples === undefined ? null
     : z.object({ rollout: z.object({ groupSize: z.number().int().min(2).max(32) }).passthrough() }).passthrough().parse(recipe).rollout.groupSize;
   if (manifest.qualificationSamples !== bundle.qualificationSamples || (manifest.qualificationSamples !== undefined && (!qualification || manifest.qualificationSamples > qualificationGroupSize!))) {
@@ -129,6 +133,7 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
     schemaVersion: "openpond.managedRlPortableSubmission.v1" as const,
     ...(qualification ? { executionMode: "qualification" as const } : {}),
     ...(input.origin ? { origin: TrainingHandoffOriginSchema.parse(input.origin) } : {}),
+    ...(physicalPlacement ? { physicalPlacement } : {}),
     sourceRunRef: `openpond:model-run:${manifest.id}`,
     name: `OpenPond Managed · ${project.id}`.slice(0, 191),
     idempotencyKey: input.idempotencyKey ?? `openpond-managed:${manifestHash}`.slice(0, 191),
@@ -195,6 +200,7 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
         : []),
     ],
     placementObjective: project.trainingSetup.managedGpuPlacementObjective,
+    ...(physicalPlacement ? { physicalPlacement } : {}),
     budget: {
       maximumSpendUsd: approval.maximumSpendUsd,
       maximumWallSeconds: Math.ceil(limits.wallTimeMs / 1_000),

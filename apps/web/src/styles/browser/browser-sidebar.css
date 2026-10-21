@@ -144,6 +144,12 @@
   padding: 12px;
 }
 
+/* Native WebContentsView surfaces sit above DOM elements regardless of z-index.
+   Keep the full resize strip outside the reported native browser bounds. */
+.browser-sidebar-panel:not(.expanded) .browser-viewport {
+  left: var(--panel-resize-hit-width);
+}
+
 .browser-viewport {
   position: absolute;
   inset: 0;

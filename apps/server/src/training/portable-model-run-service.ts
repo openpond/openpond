@@ -173,7 +173,7 @@ export function createPortableModelRunService(deps: {
     setup = sourceProject.trainingSetup;
     if (setup.destinationId === "openpond_managed") {
       const evaluationSource = await buildManagedTrainingEvaluationSource({ store: deps.store, storeDir: deps.storeDir,
-        trainingTaskset: taskset, trainingPlan: { evaluationTasksetRef: setup.evaluationTasksetRef, comparisonSeriesEntry } });
+        trainingTaskset: taskset, trainingPlan: { evaluationTasksetRef: setup.evaluationTasksetRef, comparisonSeriesEntry, recipe } });
       sourceProject = { ...sourceProject, trainingSetup: { ...setup, evaluationTasksetRef: evaluationSource.taskset } };
       setup = sourceProject.trainingSetup;
     }

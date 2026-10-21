@@ -38,13 +38,24 @@ export function prepareImportedTasksetPackage(input: {
   const fixtures = GraderFixtureSchema.array().max(100_000).parse(authoring?.graderFixtures ?? []);
   const kind = release.environment.kind === "text" ? "chat" : release.environment.kind === "custom_program" ? "program" : release.environment.kind;
   const stagingPaths = z.record(z.string(), z.record(z.string(), z.string())).parse(release.metadata.workAssetStagingPaths ?? {});
+  const environmentResources = TasksetEnvironmentResourceSchema.array().max(10_000).parse(release.metadata.environmentResources ?? []);
+  // Work mounts TaskData.assets, not resource declarations. Materialize only
+  // declared public files; private verifier/context files stay evaluator-owned.
+  const policyResources = environmentResources.filter(resource => resource.visibility === "policy_visible").map(resource => {
+    const matches = value.files.filter(file => file.asset.path === resource.path);
+    if (matches.length !== 1 || matches[0]!.asset.visibility !== "policy") {
+      throw new Error(`Policy environment resource requires one public package file: ${resource.path}.`);
+    }
+    return matches[0]!.asset;
+  });
+  const sharedResourceIds = new Set(policyResources.map(asset => asset.id));
   const projected = TasksetSchema.parse({
     schemaVersion: "openpond.taskset.v1", id: release.id, revision: release.revision,
     profileId: input.profileId, profileRelease: null, createImproveRunId: null,
     name: input.name, objective: resolveTasksetPackageInstructions(value), status: "needs_review",
     sourceRefs: [source], datasetArtifact: null, policy: release.policy,
     environment: { ...draft.environment, kind, entrypoint: release.environment.entrypoint,
-      resources: TasksetEnvironmentResourceSchema.array().max(10_000).parse(release.metadata.environmentResources ?? []),
+      resources: environmentResources,
       stateful: release.environment.stateful, deterministicSeeds: release.environment.deterministicSeeds,
       toolNames: release.tools.map(tool => tool.name), defaultTimeoutMs: release.environment.defaultTimeoutMs,
       networkPolicy: release.environment.networkPolicy, metadata: {
@@ -57,10 +68,11 @@ export function prepareImportedTasksetPackage(input: {
       rewardKinds: [...new Set(release.graders.map(grader => grader.kind === "human" ? "human" : grader.kind === "model_judge" ? "model_judge" : "deterministic"))],
     },
     tasks: release.tasks.map(task => ({ ...task, schemaVersion: "openpond.taskData.v1", sourceRefs: [source.id],
-      assets: [...new Map([...task.artifactRefs, ...(task.requiredOutputs ?? []).flatMap(output => output.submissionMode === "structured_json" && output.schemaRef ? [output.schemaRef] : [])].map(asset => [asset.id, asset])).values()].map(asset => ({ id: asset.id, sourceRefId: source.id, artifactRef: asset.path,
-        fileName: asset.path.split("/").at(-1)!, ...(stagingPaths[task.id]?.[asset.id] ? { stagingPath: stagingPaths[task.id]![asset.id] } : {}),
+      assets: [...new Map([...task.artifactRefs, ...(task.requiredOutputs ?? []).flatMap(output => output.submissionMode === "structured_json" && output.schemaRef ? [output.schemaRef] : []), ...policyResources].map(asset => [asset.id, asset])).values()].map(asset => ({ id: asset.id, sourceRefId: source.id, artifactRef: asset.path,
+        fileName: asset.path.split("/").at(-1)!, ...(sharedResourceIds.has(asset.id) ? { stagingPath: asset.path } : stagingPaths[task.id]?.[asset.id] ? { stagingPath: stagingPaths[task.id]![asset.id] } : {}),
         mediaType: asset.mediaType, sha256: asset.contentHash,
-        sizeBytes: asset.sizeBytes, split: task.split, metadata: { portableAsset: asset } })),
+        sizeBytes: asset.sizeBytes, split: task.split, metadata: { portableAsset: asset,
+          ...(sharedResourceIds.has(asset.id) ? { sharedEnvironmentResource: { id: environmentResources.find(resource => resource.path === asset.path)!.id, path: asset.path } } : {}) } })),
       ...(task.requiredOutputs ? { requiredOutputs: task.requiredOutputs.map(output => ({ ...output,
         schemaRef: output.schemaRef?.id ?? null, maxBytes: output.maxBytes ?? undefined })) } : {}),
       metadata: { portableTaskRecord: task, exampleOrigin: "imported" },
@@ -75,7 +87,9 @@ export function prepareImportedTasksetPackage(input: {
       sourceCommit: null, repairHistory: [], createdAt: input.createdAt },
     readiness: null, contentHash: "00000000", createdAt: input.createdAt, updatedAt: input.createdAt,
     metadata: { importedPackageHash: value.contentHash,
-      tasksetOutputContract: release.metadata.tasksetOutputContract ?? null,
+      ...(release.metadata.tasksetOutputContract === undefined ? {} : {
+        tasksetOutputContract: release.metadata.tasksetOutputContract,
+      }),
       ...(learning ? { learning } : {}),
       portableFileInventory: value.files.map(file => ({ asset: file.asset, sourcePath: file.asset.path })),
       ...(resources ? { taskDefinition: learningRef(resources.taskDefinition),

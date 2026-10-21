@@ -1,4 +1,5 @@
 import { contentHash } from "@openpond/harness";
+import { publishTasksetDraft } from "@openpond/taskset-sdk";
 import { compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
 import { prepareImportedTasksetPackage } from "openpond-sdk/taskset-packages";
 import { LocalModelProjectPreparationInputSchema, parseLocalModelProjectPreparation, prepareLocalModelProject, type LocalModelProjectPreparationInput } from "../training/local-model-project-preparation.js";
@@ -18,7 +19,9 @@ export class SqliteModelProjectPreparationStore extends SqliteStoreDomain {
     if (record.ownerId !== owner.id || record.workspace.contentHash !== request.source.workspaceHash) throw new Error("Dataset owner or workspace changed since preparation was requested.");
     const source = compileTasksetDraftWorkspace({ workspace: record.workspace, preparation: null,
       adapterId: "openpond-desktop-taskset-authoring-v1", now: record.workspace.draft.updatedAt });
-    return prepareLocalModelProject({ request, source, createdAt: record.workspace.draft.updatedAt, name: record.workspace.draft.name });
+    const reviewedTaskset = publishTasksetDraft({ draft: { ...record.workspace.draft, profileId: request.project.profileId },
+      now: record.workspace.draft.updatedAt });
+    return prepareLocalModelProject({ request, source, reviewedTaskset, createdAt: record.workspace.draft.updatedAt, name: record.workspace.draft.name });
   }
 
   async prepareLocalModelProject(raw: unknown) {
@@ -43,7 +46,9 @@ export class SqliteModelProjectPreparationStore extends SqliteStoreDomain {
       if (this.database.get("SELECT id FROM model_projects WHERE id=?", [receipt.request.project.id])) throw new Error("Model Project already exists with a different preparation.");
       const prepared = prepareImportedTasksetPackage({ package: receipt.package, profileId: receipt.request.project.profileId,
         name: receipt.taskset.name, createdAt: receipt.taskset.createdAt });
-      if (contentHash(prepared.taskset) !== contentHash(receipt.taskset)) throw new Error("Project preparation projection changed.");
+      // Recompilation above verified the complete local review against the pinned
+      // owner/revision and receipt. Do not replace it with generic import defaults.
+      prepared.taskset = current.taskset;
       await materializeImportedTasksetPackage({ home: this.home, ...prepared });
       // No await can split publication. Any resource/model conflict rolls back all rows.
       this.database.exec("BEGIN IMMEDIATE");

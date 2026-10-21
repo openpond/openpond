@@ -6,6 +6,7 @@ OpenPond requires:
 
 - Node.js 24.18.0
 - pnpm 11.13.0
+- uv 0.13.4 or newer for dataset workers and Python tests
 
 Install dependencies from the repository root and start the local app:
 

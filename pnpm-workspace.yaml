@@ -17,6 +17,8 @@ overrides:
 minimumReleaseAgeExclude:
   - '@openpond/harness@0.2.5 || 0.2.6'
   - '@openpond/evals@0.9.2 || 0.10.10'
+  # Verified official security update containing the eMudhra SPKI blocklist.
+  - 'electron@43.8.2'
 
 allowBuilds:
   electron: true

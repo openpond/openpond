@@ -15,11 +15,15 @@ export function useBrowserSidebar(conversationId: string) {
     setState({ conversationId, activeTabId: null, tabs: EMPTY_TABS });
     if (!bridge) return undefined;
     let cancelled = false;
+    let receivedState = false;
     void bridge.getState({ conversationId }).then((nextState) => {
-      if (!cancelled) setState(nextState);
+      if (!cancelled && !receivedState) setState(nextState);
     });
     const unsubscribe = bridge.onState((nextState) => {
-      if (nextState.conversationId === conversationId) setState(nextState);
+      if (nextState.conversationId === conversationId) {
+        receivedState = true;
+        setState(nextState);
+      }
     });
     return () => {
       cancelled = true;
@@ -37,11 +41,10 @@ export function useBrowserSidebar(conversationId: string) {
       if (!bridge) return false;
       const url = normalizeBrowserUrl(rawUrl, { explicitFile: options.explicitFile });
       if (!url) return false;
-      if (options.newTab) {
-        await bridge.newTab({ conversationId, url, explicitFile: options.explicitFile });
-      } else {
-        await bridge.open({ conversationId, url, explicitFile: options.explicitFile });
-      }
+      const result = options.newTab
+        ? await bridge.newTab({ conversationId, url, explicitFile: options.explicitFile })
+        : await bridge.open({ conversationId, url, explicitFile: options.explicitFile });
+      if (!result.ok) throw new Error(result.error || "Could not open browser.");
       return true;
     },
     [bridge, conversationId],

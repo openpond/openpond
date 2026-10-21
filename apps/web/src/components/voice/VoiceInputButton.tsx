@@ -69,7 +69,7 @@ export function VoiceInputButton({
   connectionRef.current = connection;
   disabledRef.current = disabled;
   const [phase, setPhase] = useState<VoiceInputPhase>("idle");
-  const [message, setMessage] = useState<string | null>(null);
+  const mountedRef = useRef(false);
   const [waveformLevels, setWaveformLevels] = useState<number[]>(
     emptyVoiceWaveformLevels,
   );
@@ -145,7 +145,6 @@ export function VoiceInputButton({
 
   const cancelTranscription = useCallback(() => {
     cancelVoiceTranscription(transcriptionChannelKey);
-    setMessage(null);
     setWaveformLevels(emptyVoiceWaveformLevels());
   }, [transcriptionChannelKey]);
 
@@ -155,7 +154,6 @@ export function VoiceInputButton({
     recorderRef.current = null;
     if (!recorder) return;
     setPhase("idle");
-    setMessage(null);
     setWaveformLevels(emptyVoiceWaveformLevels());
     void startVoiceTranscription(
       transcriptionChannelKey,
@@ -172,20 +170,23 @@ export function VoiceInputButton({
   }, [clearStopTimer, showToast, transcribe, transcriptionChannelKey]);
 
   const beginRecording = useCallback(async () => {
-    if (disabledRef.current) return;
+    if (!mountedRef.current || disabledRef.current) return;
     const currentConnection = connectionRef.current;
     if (!currentConnection) {
-      setMessage("Voice input is still connecting.");
+      showToast("Voice input is still connecting.", "error");
       return;
     }
     if (!canRecordVoice()) {
-      setMessage("Voice recording is not available in this browser.");
+      showToast("Voice recording is not available in this browser.", "error");
       return;
     }
-    setMessage(null);
     setPhase("starting");
     try {
       const desktopPermission = await window.openpond?.requestMicrophoneAccess?.();
+      if (!mountedRef.current || disabledRef.current) {
+        await cancelRecording();
+        return;
+      }
       if (desktopPermission === false) throw new Error("Microphone access is denied.");
       const recorder = await startVoiceRecorder({
         onAudioLevel: (level) => {
@@ -194,6 +195,11 @@ export function VoiceInputButton({
           );
         },
       });
+      if (!mountedRef.current || disabledRef.current) {
+        await recorder.cancel();
+        await cancelRecording();
+        return;
+      }
       recorderRef.current = recorder;
       setWaveformLevels(emptyVoiceWaveformLevels());
       setPhase("recording");
@@ -206,10 +212,10 @@ export function VoiceInputButton({
         void stopAndTranscribe(false);
       }, MAX_RECORDING_MS);
     } catch (error) {
-      setMessage(voiceErrorMessage(error));
+      if (mountedRef.current) showToast(voiceErrorMessage(error), "error");
       await cancelRecording();
     }
-  }, [cancelRecording, stopAndTranscribe]);
+  }, [cancelRecording, showToast, stopAndTranscribe]);
 
   const startRecording = useCallback(() => {
     if (setupNoticeAcknowledgedRef.current) {
@@ -253,13 +259,9 @@ export function VoiceInputButton({
   );
 
   useEffect(() => {
-    if (!message || recording || busy) return;
-    const timeout = window.setTimeout(() => setMessage(null), 7000);
-    return () => window.clearTimeout(timeout);
-  }, [busy, message, recording]);
-
-  useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       void cancelRecording();
     };
   }, [cancelRecording]);
@@ -319,11 +321,6 @@ export function VoiceInputButton({
           <Mic size={iconSize} />
         </button>
       )}
-      {message && !active ? (
-        <span className="voice-input-status" role="status">
-          {message}
-        </span>
-      ) : null}
     </span>
   );
 }

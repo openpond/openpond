@@ -156,6 +156,8 @@ jobs:
       - name: Run Python tests
         if: needs.scope.outputs.python == 'true'
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.13.4"
 
       - if: needs.scope.outputs.python == 'true'
         run: pnpm run test:python
@@ -444,6 +446,8 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.13.4"
       - run: uv run --project python/openpond-datasets --frozen pytest python/openpond-datasets/tests
       - run: uv run --project packages/evals/python --with pytest pytest packages/evals/python/tests -q
 

@@ -5,6 +5,7 @@ import type { LocalImageUrlResolver } from "../../hooks/useLocalImageUrl";
 import { useWorkspaceImageResource, useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import type { WorkspaceImageUrlResolver } from "../../hooks/useWorkspaceImageUrl";
 import { matchChatFilePathAt, normalizeChatFilePath } from "../../lib/chat-file-links";
+import { codexFileCitationAt } from "../../lib/codex-file-citations";
 import { publicAssetUrl } from "../../lib/public-assets";
 import { isWorkspaceImagePath, workspaceFileName } from "../../lib/workspace-images";
 import { MarkdownMath } from "./MarkdownMath";
@@ -78,6 +79,16 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
 
   while (index < content.length) {
     const char = content[index];
+    if (char === ":") {
+      const citation = codexFileCitationAt(content, index);
+      if (citation) {
+        flushText(index);
+        nodes.push(renderFileLink(citation.label, citation.path, citation.path, context, nodes.length));
+        index = citation.end;
+        textStart = index;
+        continue;
+      }
+    }
     if (char === "`") {
       const closing = content.indexOf("`", index + 1);
       if (closing > index + 1) {
@@ -272,7 +283,7 @@ function renderLink(label: string, href: string, context: MarkdownContext, key: 
   const external = /^https?:\/\//i.test(cleanHref);
   const browserHref = image?.kind === "url" ? image.src : image?.src ?? cleanHref;
   const filePath = context.onOpenFileInSidebar
-    ? normalizeChatFilePath(cleanHref, { workspaceRootPath: context.workspaceRootPath, fileBasePath: context.fileBasePath })
+    ? normalizeChatFilePath(cleanHref, { href: true, workspaceRootPath: context.workspaceRootPath, fileBasePath: context.fileBasePath })
     : null;
   if (!image && filePath) {
     return renderFileLink(label, filePath.path, filePath.displayPath, context, key);
@@ -621,7 +632,7 @@ function imageLinkForHref(
       return null;
     }
   }
-  const linkedPath = normalizeChatFilePath(cleanHref, { fileBasePath: context.fileBasePath })?.path ?? cleanHref;
+  const linkedPath = normalizeChatFilePath(cleanHref, { href: true, fileBasePath: context.fileBasePath })?.path ?? cleanHref;
   const imagePath = localImagePathFromHref(linkedPath);
   const publicUrl = publicAssetImageUrlFromPath(imagePath ?? cleanHref, context.workspaceRootPath);
   if (publicUrl) {

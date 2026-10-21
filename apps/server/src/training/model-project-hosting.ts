@@ -16,6 +16,8 @@ import {
   type HostedModelProjectDetail,
 } from "openpond-sdk/model-projects";
 import { z } from "zod";
+import { createTrainingClient } from "openpond-sdk/training";
+import { HostedRecoveryImportSchema, resolveHostedModelRecovery } from "./hosted-model-recovery.js";
 import { OpenPondTasksetPackageClient, tasksetPackageRewardBinding } from "openpond-sdk/taskset-packages";
 import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
 import { prepareImportedTasksetPackage, type PreparedImportedTasksetPackage } from "./taskset-package-import.js";
@@ -60,13 +62,23 @@ const HostedProjectSchema = z.object({
   etag: z.string().regex(/^[a-f0-9]{64}$/),
 }).passthrough();
 
+const HostedSubmissionSchema = z.object({
+  job: z.object({
+    recipe: z.object({ method: z.string().min(1) }).passthrough(),
+    baseModel: z.object({ modelId: z.string().min(1) }).passthrough(),
+    resumeFrom: z.object({ id: z.string().min(1) }).passthrough().nullable().optional(),
+  }).passthrough(),
+  source: z.object({ taskset: z.object({ id: z.string().min(1), revision: z.number().int().positive(),
+    contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).passthrough() }).passthrough(),
+}).passthrough();
+
 const HostedManagedJobSchema = z.object({
   id: z.string().min(1),
   teamId: z.string().min(1),
   modelProjectId: z.string().min(1),
   portableProjectId: z.string().min(1),
   sourceProjectRevision: z.number().int().positive(),
-  publicSubmissionHash: z.string().regex(/^[a-f0-9]{64}$/),
+  publicSubmissionHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   approvalHash: z.string().regex(/^[a-f0-9]{64}$/),
   inputBundleSha256: z.string().regex(/^[a-f0-9]{64}$/),
   state: z.string().min(1),
@@ -83,25 +95,9 @@ const HostedManagedJobSchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
   completedAt: z.string().datetime({ offset: true }).nullable(),
-  publicSubmission: z.object({
-    job: z.object({
-      recipe: z.object({ method: z.string().min(1) }).passthrough(),
-      baseModel: z.object({ modelId: z.string().min(1) }).passthrough(),
-      resumeFrom: z.object({ id: z.string().min(1) }).passthrough().nullable().optional(),
-    }).passthrough(),
-    source: z.object({
-      taskset: z.object({
-        id: z.string().min(1),
-        revision: z.number().int().positive(),
-        contentHash: z.string().regex(/^[a-f0-9]{64}$/),
-      }).passthrough(),
-    }).passthrough(),
-  }).passthrough(),
+  publicSubmission: HostedSubmissionSchema.nullable(),
+  recoveryImport: HostedRecoveryImportSchema.optional(),
 }).passthrough();
-
-const HostedManagedJobListSchema = z.object({
-  jobs: z.array(z.unknown()),
-});
 
 const HostedTrainingStepSchema = z.object({
   id: z.string().min(1),
@@ -170,6 +166,7 @@ export function createModelProjectHostingService(input: {
   fetch?: typeof fetch;
 }) {
   const fetchImpl = input.fetch ?? fetch;
+  const loadedJobDetails = new WeakMap<HostedManagedJob, HostedManagedJobDetail>();
 
   async function listProjects(options: { refresh?: boolean } = {}): Promise<{
     teamId: string;
@@ -350,27 +347,36 @@ export function createModelProjectHostingService(input: {
     hostedProjectId: string,
   ): Promise<HostedManagedJob[]> {
     const headers = hostedApiAuthHeaders(access.token);
-    headers.set("accept", "application/json");
     headers.set("x-openpond-team-id", access.teamId);
-    const url = new URL("/v1/managed-rl/jobs", access.apiBaseUrl);
-    url.searchParams.set("modelProjectId", hostedProjectId);
-    url.searchParams.set("limit", "100");
-    const response = await fetchImpl(url, { headers });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(`Hosted run history request failed (${response.status}).`);
-    }
-    return HostedManagedJobListSchema.parse(payload).jobs.flatMap((value) => {
-      const parsed = HostedManagedJobSchema.safeParse(value);
-      if (
-        !parsed.success ||
-        parsed.data.teamId !== access.teamId ||
-        parsed.data.modelProjectId !== hostedProjectId
-      ) {
-        return [];
+    const client = createTrainingClient({ baseUrl: access.apiBaseUrl, headers, fetch: fetchImpl });
+    const jobs: HostedManagedJob[] = [];
+    let cursor: string | undefined;
+    const seenCursors = new Set<string>();
+    do {
+      // The versioned index filters before reading results. The native legacy
+      // list ignores this filter and transfers the team's full input bundles.
+      const page = await client.listJobs({ modelProjectId: hostedProjectId, limit: 100, ...(cursor ? { cursor } : {}) });
+      const changed = await mapWithConcurrency(page.jobs, 4, async summary => {
+        if (summary.teamId !== access.teamId || summary.modelProjectId !== hostedProjectId) {
+          throw new Error("Hosted run index differs from the selected Model or workspace.");
+        }
+        const existing = await input.store.getTrainingJob(summary.id);
+        const metricsCurrent = existing?.metadata.hostedMetricsImportedForUpdatedAt === summary.updatedAt;
+        const artifactsCurrent = summary.state !== "succeeded" || summary.executionMode === "qualification"
+          || existing?.metadata.hostedServingArtifactsImportedForUpdatedAt === summary.updatedAt;
+        if (metricsCurrent && artifactsCurrent) return null;
+        const detail = await getHostedJobDetail(access, summary);
+        loadedJobDetails.set(detail.job, detail);
+        return detail.job;
+      });
+      jobs.push(...changed.filter((job): job is HostedManagedJob => job !== null));
+      cursor = page.nextCursor ?? undefined;
+      if (cursor) {
+        if (seenCursors.has(cursor)) throw new Error("Hosted run index repeated its pagination cursor.");
+        seenCursors.add(cursor);
       }
-      return [parsed.data];
-    });
+    } while (cursor);
+    return jobs;
   }
 
   async function importHostedJobs(
@@ -392,7 +398,7 @@ export function createModelProjectHostingService(input: {
     const details = await mapWithConcurrency(
       pendingDetails,
       4,
-      (job) => getHostedJobDetail(access, job),
+      async (job) => loadedJobDetails.get(job) ?? getHostedJobDetail(access, job),
     );
     const detailByJobId = new Map(
       details.map((detail) => [detail.job.id, detail] as const),
@@ -406,6 +412,11 @@ export function createModelProjectHostingService(input: {
       importedMetricCount += events.filter(
         (event) => event.type === "metric",
       ).length;
+      // Advance the imported-through marker only after all metric snapshots
+      // are durable, so an interrupted import remains eligible for retry.
+      for (const event of events) {
+        await input.store.saveHostedTrainingJobEvent(event);
+      }
       const importedJob = await input.store.saveTrainingJob(hostedTrainingJob(
         project,
         hostedJob,
@@ -413,12 +424,9 @@ export function createModelProjectHostingService(input: {
         detail,
         existing,
       ));
-      for (const event of events) {
-        await input.store.saveTrainingJobEvent(event);
-      }
       if (importedJob.status === "succeeded" && hostedJob.canonicalAdapterArtifactId) {
         await importHostedModelArtifacts({ store: input.store, project, job: importedJob,
-          submission: hostedJob.publicSubmission, access, fetch: fetchImpl });
+          submission: hostedSubmission(hostedJob), recovery: hostedJob.recoveryImport, access, fetch: fetchImpl });
       }
     }
     return importedMetricCount;
@@ -426,8 +434,11 @@ export function createModelProjectHostingService(input: {
 
   async function getHostedJobDetail(
     access: HostedAccess,
-    summary: HostedManagedJob,
+    summary: Pick<HostedManagedJob, "id" | "modelProjectId">,
+    ancestors = new Set<string>(),
   ): Promise<HostedManagedJobDetail> {
+    if (ancestors.has(summary.id) || ancestors.size >= 16) throw new Error("Hosted recovery source chain is cyclic or too deep.");
+    const visited = new Set([...ancestors, summary.id]);
     const headers = hostedApiAuthHeaders(access.token);
     headers.set("accept", "application/json");
     headers.set("x-openpond-team-id", access.teamId);
@@ -442,7 +453,15 @@ export function createModelProjectHostingService(input: {
         `Hosted run ${summary.id} detail request failed (${response.status}).`,
       );
     }
-    const detail = HostedManagedJobDetailSchema.parse(payload).job;
+    const raw = z.object({ job: z.object({ job: z.object({ id: z.string(), teamId: z.string(),
+      modelProjectId: z.string() }).passthrough(), commands: z.array(z.unknown()).default([]),
+    }).passthrough() }).parse(payload).job;
+    if (raw.job.id !== summary.id || raw.job.teamId !== access.teamId || raw.job.modelProjectId !== summary.modelProjectId) {
+      throw new Error(`Hosted run ${summary.id} detail did not match its summary.`);
+    }
+    const resolved = await resolveHostedModelRecovery({ job: raw.job, commands: raw.commands,
+      resolveSource: id => getHostedJobDetail(access, { id, modelProjectId: summary.modelProjectId }, visited) });
+    const detail = HostedManagedJobDetailSchema.parse({ job: { ...raw, job: resolved } }).job;
     if (
       detail.job.id !== summary.id ||
       detail.job.teamId !== access.teamId ||
@@ -621,6 +640,10 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+function hostedSubmission(job: HostedManagedJob) {
+  return HostedSubmissionSchema.parse(job.publicSubmission ?? job.recoveryImport?.sourceSubmission);
+}
+
 function hostedTrainingJobEvents(
   detail: HostedManagedJobDetail,
 ): TrainingJobEvent[] {
@@ -643,7 +666,7 @@ function hostedTrainingJobEvents(
     }));
   };
 
-  const method = detail.job.publicSubmission.job.recipe.method;
+  const method = hostedSubmission(detail.job).job.recipe.method;
   const representedMetrics = new Set([
     "learningRate",
     "loss",
@@ -798,7 +821,7 @@ function hostedTrainingJob(
   detail: HostedManagedJobDetail | null,
   existing: TrainingJob | null,
 ): TrainingJob {
-  const submission = hosted.publicSubmission;
+  const submission = hostedSubmission(hosted);
   const taskset = submission.source.taskset;
   const method = submission.job.recipe.method;
   const status = hostedTrainingJobStatus(hosted.state);
@@ -852,6 +875,14 @@ function hostedTrainingJob(
       canonicalPublishState: hosted.canonicalPublishState,
       canonicalAdapterArtifactId: hosted.canonicalAdapterArtifactId,
       parentHostedArtifactId: submission.job.resumeFrom?.id ?? null,
+      hostedContinuation: submission.job.recipe.method === "grpo"
+        ? submission.job.recipe.continuation ?? null
+        : null,
+      ...(hosted.recoveryImport ? { hostedRecovery: {
+        sourceJobId: hosted.recoveryImport.sourceJobId, checkpointId: hosted.recoveryImport.checkpointId,
+        policyVersion: hosted.recoveryImport.checkpointPolicyVersion, completedGroups: hosted.recoveryImport.completedGroups,
+        optimizerStateRestored: hosted.recoveryImport.optimizerStateRestored,
+      }, hostedExecutionSubmissionHash: hosted.recoveryImport.executionSubmissionHash } : {}),
       importedAt: new Date().toISOString(),
       ...(detail ? {
         hostedMetricsImportedForUpdatedAt: hosted.updatedAt,

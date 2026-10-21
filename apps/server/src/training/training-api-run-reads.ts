@@ -39,7 +39,7 @@ export async function handleTrainingRunRead(input: {
       limit: z.number().optional().parse(input.payload.limit),
     });
   }
-  await input.training.refreshManagedRunEvidence(jobId);
+  if (input.payload.refresh !== false) await input.training.refreshManagedRunEvidence(jobId);
   return trainingRunDetail(input.store, jobId, {
     includeEvaluation: input.payload.includeEvaluation !== false,
   });

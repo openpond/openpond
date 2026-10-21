@@ -1,4 +1,5 @@
 import type { TrainingJob, TrainingJobEvent, TrainingJobOutputs } from "openpond-sdk/training";
+import type { HostedServingReportEvidence } from "./training-hosted-serving-report";
 import { code, counts, distributionStatistics, finite, nonnegative, populationStd, record, statistics, timingStatistics } from "./training-report-metrics";
 
 const INFERENCE_TIMINGS = [
@@ -15,7 +16,7 @@ const OPTIMIZER_TIMINGS = [
   "optimizerStateSerializationSeconds", "deferredDiagnosticsSerializationSeconds", "totalTrainStepSeconds",
 ] as const;
 
-/** Aggregate only existing public, team-scoped evidence. The report does not
+/** Aggregate existing team-scoped evidence, including owner-checked serving metadata. The report does not
  * fetch trajectories, print event messages, infer physical bills, or add
  * overlapping phase durations to wall time. */
 export function buildHostedTrainingReport(input: {
@@ -23,13 +24,30 @@ export function buildHostedTrainingReport(input: {
   events: TrainingJobEvent[];
   outputs: TrainingJobOutputs;
   recoverySourceJob?: TrainingJob;
+  servingEvidence?: HostedServingReportEvidence;
   versionBeforeRead: number;
   generatedAt: string;
 }) {
   const { job, outputs } = input;
+  const serving = input.servingEvidence;
+  if (serving && (serving.jobId !== job.id || serving.teamId !== job.teamId)) {
+    throw new Error("Hosted serving report evidence belongs to a different job or workspace.");
+  }
+  if (serving && Object.values(job.rolloutProgress).some(count => count !== 0)) {
+    throw new Error("Hosted serving report cannot contain training progress.");
+  }
+  const cleanupComplete = serving?.cleanupComplete === null || !serving
+    ? outputs.receipt?.cleanupComplete ?? null
+    : serving.cleanupComplete && outputs.receipt?.cleanupComplete !== false;
   const source = input.recoverySourceJob;
+  // Native recovery authorizes a completed bounded stop too. Public jobs expose
+  // its succeeded/completed partial boundary, but do not expose the stop flag.
+  const completedPartialSource = source?.state === "succeeded" && source.phase === "completed" &&
+    source.rolloutProgress.groupsCompleted > 0 &&
+    source.rolloutProgress.groupsCompleted < source.rolloutProgress.groupsTarget &&
+    source.rolloutProgress.groupsTarget === job.rolloutProgress.groupsTarget;
   if (job.recovery && (!source || source.id !== job.recovery.sourceJobId || source.teamId !== job.teamId ||
-      !source.completedAt || !["failed", "cancelled"].includes(source.state) ||
+      !source.completedAt || (!["failed", "cancelled"].includes(source.state) && !completedPartialSource) ||
       source.rolloutProgress.groupsCompleted !== job.recovery.completedGroups ||
       source.rolloutProgress.optimizerUpdatesApplied + source.rolloutProgress.optimizerUpdatesSkipped !== job.recovery.completedGroups)) {
     throw new Error("Hosted recovery report requires the unchanged terminal source run's progress.");
@@ -75,15 +93,20 @@ export function buildHostedTrainingReport(input: {
   if (job.recovery) add("checkpoint_recovery_reuses_progress", "Cumulative progress includes the source run; throughput and per-update cost use only this execution's new updates.");
   const jobRevisionStableDuringRead = input.versionBeforeRead === job.version;
   if (!jobRevisionStableDuringRead) add("job_changed_during_read", "The job changed during these reads; rerun for a stable snapshot.");
-  if (!trajectories.length) add("no_recorded_trajectories", "No trajectory evidence is present; this report cannot assess model quality or learning.");
+  if (!trajectories.length && !serving) add("no_recorded_trajectories", "No trajectory evidence is present; this report cannot assess model quality or learning.");
   if (ineligible.length) add("ineligible_trajectories", "Infrastructure-ineligible trajectories are excluded from reward statistics.");
   if (eligible.length !== scored.length) add("eligible_rewards_pending", "Some eligible trajectories have no finite grade yet.");
   if (skipped.length) add("no_signal_groups", "Recorded groups produced zero standardized advantage and skipped optimization; inspect reward/task quality before increasing the budget.");
   const qualification = job.executionMode === "qualification";
   if (qualification) add("qualification_only", "This run collects original-model evidence; optimizer updates were not requested.");
-  if (job.terminalReason) add("terminal_reason_present", "The job has a terminal reason; inspect official status/logs for its details.");
-  if (!outputs.receipt) add("execution_receipt_unavailable", "No final execution receipt is available; cleanup and reconciled execution evidence remain unverified here.");
-  if (outputs.receipt && !outputs.receipt.cleanupComplete) add("cleanup_incomplete", "The execution receipt does not attest completed cleanup.");
+  if (serving) add("serving_only", "This run serves an existing checkpoint; optimizer work and model publication were not requested.");
+  if (serving?.executionMode === "frozen_evaluation" && job.terminalReason === "checkpoint_evaluation_complete") {
+    add("checkpoint_evaluation_complete", "The frozen evaluation finished and entered its ordinary cancellation/cleanup lifecycle.");
+  } else if (job.terminalReason) add("terminal_reason_present", "The job has a terminal reason; inspect official status/logs for its details.");
+  if (!outputs.receipt && serving?.cleanupAttestation) {
+    add("public_execution_receipt_unavailable", "Native custody is reported from the owner attestation; no public final execution receipt or reconciled invoice is available.");
+  } else if (!outputs.receipt) add("execution_receipt_unavailable", "No final execution receipt is available; cleanup and reconciled execution evidence remain unverified here.");
+  if (cleanupComplete === false) add("cleanup_incomplete", "Recorded cleanup evidence does not attest completed cleanup.");
 
   const groups = new Map<string, TrainingJobEvent[]>();
   for (const event of eligible) {
@@ -148,17 +171,19 @@ export function buildHostedTrainingReport(input: {
     generatedAt: input.generatedAt,
     job: {
       id: job.id, teamId: job.teamId, submissionHash: job.submissionHash,
-      kind: job.kind, executionMode: qualification ? "qualification" : "training",
+      kind: job.kind, executionMode: serving?.executionMode ?? (qualification ? "qualification" : "training"),
       state: job.state, phase: job.phase, version: job.version,
       terminalReasonPresent: job.terminalReason !== null,
       createdAt: job.createdAt, completedAt: job.completedAt,
       ...(job.recovery ? { recovery: job.recovery } : {}),
+      ...(serving ? { serving: serving.source } : {}),
     },
     evidence: {
       jobRevisionStableDuringRead, versionBeforeRead: input.versionBeforeRead, versionAfterRead: job.version,
       readModel: "independent_authenticated_reads_not_an_atomic_snapshot",
       returnedEvents: input.events.length, uniqueEvents: events.length,
-      scope: "returned_public_event_snapshot", terminal,
+      scope: serving ? "public_events_and_authenticated_native_serving_metadata" : "returned_public_event_snapshot", terminal,
+      ...(serving ? { nativeServingJobVersion: serving.nativeJobVersion } : {}),
       recoverySourceJobVersion: job.recovery ? source!.version : null,
       completeness: "Only recorded events are summarized; absent instrumentation is not proof of no work.",
     },
@@ -234,7 +259,9 @@ export function buildHostedTrainingReport(input: {
       physicalInvoiceTotalUsd: null,
       note: "Job, receipt and allocation amounts are overlapping accounting views, not additive charges. Physical startup/idle/storage and provider settlement are not established by this report.",
     },
-    cleanup: { executionReceiptAvailable: outputs.receipt !== null, complete: outputs.receipt?.cleanupComplete ?? null },
+    cleanup: { executionReceiptAvailable: outputs.receipt !== null, complete: cleanupComplete,
+      ...(serving ? { nativeAttestationAvailable: serving.cleanupAttestation !== null,
+        nativeCustody: serving.cleanupAttestation } : {}) },
     findings,
   };
 }

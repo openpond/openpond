@@ -1,4 +1,5 @@
 .workspace-diff-panel {
+  --panel-resize-hit-width: 12px;
   position: relative;
   display: grid;
   grid-template-rows: 41px minmax(0, 1fr);
@@ -17,7 +18,8 @@
   z-index: 50;
   display: grid;
   place-items: center;
-  width: 12px;
+  width: var(--panel-resize-hit-width);
+  touch-action: none;
   cursor: col-resize;
   color: var(--text-muted);
 }

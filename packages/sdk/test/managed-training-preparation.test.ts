@@ -1,4 +1,7 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { contentHash, sha256 } from "@openpond/harness";
 import { expect, test } from "vitest";
 
@@ -46,12 +49,18 @@ test("prepares one immutable manual/hosted submission and rejects changed inputs
 });
 
 // Failure story: a validation-only qualification must retain its private grader
-// and exact selected source task, and cannot be replayed as optimizer work.
+// and its transitive private modules, and cannot be replayed as optimizer work.
 test("qualifies an ordinary private package without inventing training or held-out data", async () => {
   const ordinary = await fixture();
-  const text = "export function verify(input) { return {score: input.output === input.task.expectedOutput.answer ? 1 : 0, passed: true}; }";
+  const text = "import {matches} from './support/matches.mjs'; export function verify(input) { const passed = matches(input.output, input.task.expectedOutput.answer); return {score: passed ? 1 : 0, passed}; }";
   const asset = { id: "private-verifier", path: "verifiers/answer.mjs", mediaType: "text/javascript", visibility: "verifier" as const,
     sizeBytes: Buffer.byteLength(text), contentHash: sha256(text) };
+  const supportFiles = [
+    ["verifiers/support/matches.mjs", "export {matches} from './compare.mjs';"],
+    ["verifiers/support/compare.mjs", "import {isDeepStrictEqual} from 'node:util'; export const matches=isDeepStrictEqual;"],
+    ["verifiers/unrelated.mjs", "throw new Error('Unrelated module must not be materialized');"],
+  ].map(([path, text]) => ({ asset: { id: path!, path: path!, mediaType: "text/javascript", visibility: "verifier" as const,
+    sizeBytes: Buffer.byteLength(text!), contentHash: sha256(text!) }, base64: Buffer.from(text!).toString("base64") }));
   const taskFiles = ["first", "second"].map(id => ({ asset: {
     id: `${id}-input`, path: `inputs/${id}.txt`, mediaType: "text/plain", visibility: "policy" as const,
     sizeBytes: Buffer.byteLength(id), contentHash: sha256(id),
@@ -69,14 +78,15 @@ test("qualifies an ordinary private package without inventing training or held-o
     tasks: ["first", "second"].map(id => ({ id, clusterKey: "same-family", split: "validation", input: { prompt: id }, expectedOutput: { answer: "private retained answer" },
       policyVisibleContext: {}, privilegedContextRef: null, artifactRefs: [taskFiles.find(file => file.asset.id === `${id}-input`)!.asset], tags: [] })), metadata: { ordinaryAuthoring: { instructions: "Answer the supplied question." } } };
   const taskset = bindTasksetExecutionReleases({ taskset: TasksetReleaseSchema.parse({ ...taskContent, contentHash: contentHash(taskContent) }), environment, verifierSet });
-  const source = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment, verifierSet, files: [{ asset, base64: Buffer.from(text).toString("base64") }, ...taskFiles] });
+  const source = createTasksetPackage({ schemaVersion: "openpond.tasksetPackage.v1", taskset, environment, verifierSet, files: [{ asset, base64: Buffer.from(text).toString("base64") }, ...supportFiles, ...taskFiles] });
   const project = ModelProjectSchema.parse({ ...ordinary.project, trainingSetup: { ...ordinary.project.trainingSetup,
     baseModel: { ...ordinary.project.trainingSetup.baseModel, revision: "a".repeat(40), tokenizerRevision: "a".repeat(40) },
     tasksetRef: { id: taskset.id, revision: taskset.revision, contentHash: taskset.contentHash }, evaluationTasksetRef: null } });
-  const prepared = await prepareOrdinaryTasksetQualification({ package: source, qualificationTaskId: "second", modelProject: project, modelRunId: "qualification",
+  const preparation = { package: source, qualificationTaskId: "second", modelProject: project, modelRunId: "qualification",
     runtime: ordinary.manifest.runtimeTarget, compute: ordinary.manifest.computeTarget, engine: ordinary.manifest.engine,
     harnessRelease: ordinary.manifest.harnessRelease, openpondRelease: "fixture", workerProtocol: "fixture",
-    approval: { ...ordinary.approval, approvedAt: ordinary.manifest.approval.approvedAt } });
+    approval: { ...ordinary.approval, approvedAt: ordinary.manifest.approval.approvedAt } };
+  const prepared = await prepareOrdinaryTasksetQualification(preparation);
   expect(prepared.submission.job).toMatchObject({ executionMode: "qualification", resumeFrom: null });
   expect(prepared.submission.source.taskset).toEqual(project.trainingSetup.tasksetRef);
   expect(prepared.submission.source.evaluation).toBeUndefined();
@@ -85,11 +95,37 @@ test("qualifies an ordinary private package without inventing training or held-o
   expect(dataset.selectedTaskId).toBe("second");
   expect(dataset.tasks.map((task: { metadata: { portableTaskRecord: unknown } }) => task.metadata.portableTaskRecord)).toEqual([taskset.tasks[1]]);
   expect(JSON.parse(Buffer.from(prepared.bundle.assets.get("qualification-source.json")!).toString())).toEqual(source);
+  expect(JSON.parse(Buffer.from(prepared.bundle.assets.get("environment.json")!).toString()).environment.metadata.policySystemPrompt)
+    .toBe(taskContent.metadata.ordinaryAuthoring.instructions);
   expect(prepared.bundle.assets.has("inputs/first.txt")).toBe(false);
   expect(Buffer.from(prepared.bundle.assets.get("inputs/second.txt")!).toString()).toBe("second");
   expect(prepared.bundle.assets.has("dataset/train.json")).toBe(false);
   expect(prepared.bundle.assets.has("evaluation-source.json")).toBe(false);
   expect(JSON.stringify(prepared.submission)).not.toContain("private retained answer");
+  const grading = JSON.parse(Buffer.from(prepared.bundle.assets.get("reward-binding.json")!).toString());
+  expect(grading.assets.map((entry: { asset: { path: string } }) => entry.asset.path).sort()).toEqual([
+    asset.path, supportFiles[0]!.asset.path, supportFiles[1]!.asset.path,
+  ].sort());
+  const directory = await mkdtemp(join(tmpdir(), "qualification-grader-"));
+  try {
+    for (const entry of grading.assets) {
+      expect(sha256(entry.text)).toBe(entry.asset.contentHash);
+      const destination = join(directory, entry.asset.path);
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, entry.text);
+    }
+    const verifier = await import(pathToFileURL(join(directory, asset.path)).href);
+    expect(verifier.verify({ task: taskset.tasks[1], output: "private retained answer" })).toEqual({ score: 1, passed: true });
+    expect(verifier.verify({ task: taskset.tasks[1], output: "wrong" })).toEqual({ score: 0, passed: false });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+  for (const visibility of ["missing", "policy", "host_private"] as const) {
+    const files = source.files.flatMap(file => file.asset.id !== supportFiles[1]!.asset.id ? [file]
+      : visibility === "missing" ? [] : [{ ...file, asset: { ...file.asset, visibility } }]);
+    const { contentHash: _packageHash, ...sourceContent } = source;
+    const changedSource = createTasksetPackage({ ...sourceContent, files });
+    await expect(prepareOrdinaryTasksetQualification({ ...preparation, package: changedSource }))
+      .rejects.toThrow("declared verifier-visible JavaScript asset");
+  }
   const payload = prepared.artifact.payload as { resolvedBundle: { files: ManagedTrainingPreparationInput["files"] } };
   const replay = { ...ordinary, project, manifest: prepared.bundle.manifest, bundleManifest: prepared.bundle.resolvedBundleManifest,
     files: payload.resolvedBundle.files, evaluationSource: undefined };

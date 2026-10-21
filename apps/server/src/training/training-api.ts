@@ -34,7 +34,7 @@ import {
   type PreferenceComparisonRelease,
   type PreferenceReviewer,
 } from "@openpond/evals";
-import { contentHash } from "@openpond/harness";
+import { contentHash, ImmutableReleaseRefSchema } from "@openpond/harness";
 import {
   computeTasksetHash,
   createTasksetDraft,
@@ -1328,12 +1328,14 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
     if (action === "prepare_start") return deps.training.prepareStart({
       modelId: requiredString(input.modelId, "modelId"),
       tasksetId: requiredString(input.tasksetId, "tasksetId"),
+      tasksetRef: input.tasksetRef == null ? undefined : ModelProjectVersionedRefSchema.parse(input.tasksetRef),
       destinationId: TrainingDestinationIdSchema.parse(input.destinationId),
       recipe: input.recipe,
       environmentPlacement: managedRolloutPlacement(input.environmentPlacement),
       exportApproved: input.exportApproved === true,
       retentionDays: nullableNumber(input.retentionDays),
       region: string(input.region),
+      harnessRelease: input.harnessRelease == null ? null : ImmutableReleaseRefSchema.parse(input.harnessRelease),
       comparisonSeriesEntry: optionalComparisonEntryRef(input.comparisonSeriesEntry),
       evaluationTasksetRef: input.evaluationTasksetRef == null ? null : ModelProjectVersionedRefSchema.parse(input.evaluationTasksetRef),
     });

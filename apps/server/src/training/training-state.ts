@@ -54,7 +54,9 @@ export function createTrainingStateReader(
       deps.store.listContinualBenchIssueReviews(),
       deps.store.listContinualLearningDailyBatches(),
       deps.store.listTasksets(),
-      deps.training.state(),
+      // Return the stored snapshot without waiting for remote reconciliation of
+      // unrelated runs. Activity polling picks up its committed result later.
+      deps.training.state({ background: true }),
     ]);
     const [reconciledModelVersions, reconciledModelRuns, reconciledComparisonSeriesEntries] =
       await Promise.all([

@@ -169,7 +169,7 @@ it("pulls complete private packages atomically and exports their exact bytes aft
         if (pathname.startsWith("/v1/taskset-catalog/")) return Response.json({ schemaVersion: "openpond.hostedTasksetSummary.v1",
           id: "remote-taskset", teamId: "team", release: learningRef(selectedPackage.taskset), name: "Imported invoices", description: "Private test package",
           taskCount: value.taskset.tasks.length, buildIntent: "verifiable_reward", methodHint: "sft", packageBytes: null, storedBytes: null, createdAt: original.createdAt });
-        if (pathname === "/v1/managed-rl/jobs") return Response.json({ jobs: [] });
+        if (pathname === "/v1/training/jobs") return Response.json({ schemaVersion: "openpond.trainingJobPage.v2", jobs: [], nextCursor: null });
         return Response.json({ project: { ...hosted, trainingSetup: { ...hosted.trainingSetup, tasksetRef: learningRef(servedPackage.taskset),
           rewardBindingRef: servedPackage.modelResources ? learningRef(servedPackage.modelResources.rewardBinding) : null } }, resources: [], jobCount: 0, latestJobIds: [] });
       },
@@ -281,7 +281,7 @@ it("recovers an explicitly pinned projected snapshot atomically and rejects alte
       resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test", teamId: "team" }),
       fetch: async url => {
         const pathname = new URL(String(url)).pathname;
-        if (pathname === "/v1/managed-rl/jobs") return Response.json({ jobs: [] });
+        if (pathname === "/v1/training/jobs") return Response.json({ schemaVersion: "openpond.trainingJobPage.v2", jobs: [], nextCursor: null });
         if (pathname.startsWith("/v1/taskset-")) throw new Error("Snapshot recovery must not replace supplied evidence with a catalog download.");
         return Response.json({ project: hosted, resources: [], jobCount: 0, latestJobIds: [] });
       } });
@@ -419,8 +419,9 @@ it.each(["code", "process", "judge"] as const)("exports verified private %s Rewa
 // Hosted publication must preserve composition and reject a substituted Reward.
 it("preserves the exact starter Reward binding in the portable release", async () => {
   const input = await starterInput();
-  const { taskset } = prepareModelStarterTaskset(input);
+  const { taskset, resources } = prepareModelStarterTaskset(input);
   const portable = materializePortableTasksetRelease({ taskset, adapterId: "starter-test" });
+  expect(portable.tasksetRelease).toEqual(resources.taskset);
   expect(portable.tasksetRelease.metadata.rewardExecution).toEqual({ binding: input.package.rewardBinding, rewards: input.package.rewards });
   expect(portable.tasksetRelease.metadata.learning).toBeUndefined();
   expect(() => materializePortableTasksetRelease({ taskset: { ...taskset, metadata: { ...taskset.metadata, rewardBinding: { ...input.package.rewardBinding, contentHash: "0".repeat(64) } } }, adapterId: "starter-test" })).toThrow("exact published Reward binding");

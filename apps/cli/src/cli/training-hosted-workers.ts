@@ -10,9 +10,13 @@ const WorkerControlSchema = z.object({
   maximumIdleUsd: z.number().positive().max(10).optional(),
   sessionId: z.string().min(1).max(191).optional(),
   sessionDeadlineAt: z.iso.datetime({ offset: true }).optional(),
-  maximumSessionUsd: z.number().positive().max(10).optional(),
-  idleGraceSeconds: z.number().int().min(120).max(10800).optional(),
-}).strict();
+  maximumSessionUsd: z.number().positive().max(30).optional(),
+  idleGraceSeconds: z.number().int().min(120).max(28800).optional(),
+  preservePhysicalUntilDeadline: z.boolean().optional(),
+}).strict().refine(control => control.preservePhysicalUntilDeadline === true ||
+  control.idleGraceSeconds === undefined || control.idleGraceSeconds <= 10800, {
+  path: ["idleGraceSeconds"], message: "Ordinary session idle grace cannot exceed three hours.",
+});
 
 /** Uses the hosted command's existing account headers and bounded transport. */
 export async function runHostedWorkerCommand(input: {
@@ -36,6 +40,8 @@ export async function runHostedWorkerCommand(input: {
     if (!["stop", "resume", "retire", "warm-idle", "retain-session"].includes(action)) throw new Error(`Unknown physical worker action: ${action}`);
     if (!input.confirmed) throw new Error("Worker lifecycle changes require --yes.");
     const { workerId, ...control } = WorkerControlSchema.parse(await input.readInput());
+    if (control.preservePhysicalUntilDeadline !== undefined && action !== "retain-session")
+      throw new Error("Physical preservation is available only on retain-session with a fixed deadline and budget.");
     if (action === "stop" && !control.maximumStorageUsd) throw new Error("Stopping requires maximumStorageUsd for bounded retained storage.");
     if (action === "resume" && !control.jobId) throw new Error("Resuming requires an admitted queued jobId with its own compute budget.");
     if (action === "warm-idle" && (!control.warmIdleDeadlineAt || !control.maximumIdleUsd))

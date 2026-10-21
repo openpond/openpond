@@ -2,6 +2,7 @@ import { ActivityAgentLinks, createdAgentPeers } from "./ActivityAgentLinks";
 import { TaskMessageRow } from "./TaskMessageRow";
 import { latestActivityPlan } from "../../lib/chat-task-progress";
 import { ActivityPlanCard } from "./ActivityPlanCard";
+import { useDockedTaskProgress } from "./ComposerTaskProgress";
 import { useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   CircleAlert,
@@ -84,6 +85,9 @@ export function ActivityGroup({
     activities.find((activity) => activity.imagePreview)?.imagePreview ?? null;
   const artifacts = message.deliverables ?? [];
   const plan = latestActivityPlan(activities);
+  const dockedProgress = useDockedTaskProgress();
+  const planIsDocked = dockedProgress?.messageIds.has(message.id)
+    || message.activityMessages?.some(item => dockedProgress?.messageIds.has(item.id));
   const openImageSrc = useActivityImageUrl(
     openImage,
     connection,
@@ -170,7 +174,7 @@ export function ActivityGroup({
           {created.length ? <ActivityAgentLinks createdOnly activities={activities}
             messages={message.activityMessages ?? []} connection={connection}
             onOpenSession={onOpenSession} onOpenPonder={onOpenPonder}/> : null}
-          {plan ? <ActivityPlanCard entries={plan} /> : null}
+          {plan && !planIsDocked ? <ActivityPlanCard entries={plan} /> : null}
           {artifacts.length > 0 ? (
             <ActivityArtifacts
               artifacts={artifacts}

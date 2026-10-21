@@ -10,6 +10,7 @@ import type { Taskset } from "./taskset-authored-contracts.js";
 import { computeTasksetHash } from "./taskset-authored-validation.js";
 import { resolvePortableTasksetRewardExecution, type TasksetRewardExecution } from "./taskset-authored-portable-release.js";
 import { TRAINING_EVALUATION_SOURCE_PATH, TrainingEvaluationSourceSchema, assertTrainingEvaluationIsolation, type TrainingEvaluationSource } from "./training-evaluation-source.js";
+import { TasksetDraftOutputContractSchema } from "./taskset-draft-document.js";
 
 export * from "./training-bundle-contracts.js";
 export { materializeLearningBatchTaskset, prepareReviewedLearningBatch } from "./training-learning-batch.js";
@@ -181,9 +182,19 @@ export function buildTasksetTrainingBundle(input: {
   } else if (input.verifierAssets?.length) {
     throw new Error("Private verifier assets require a published Reward binding.");
   }
+  const outputContract = taskset.metadata.tasksetOutputContract;
+  if (outputContract && typeof outputContract === "object" && "responsePath" in outputContract) {
+    // Raw imported metadata also crosses this boundary; do not silently drop
+    // an invalid response-path declaration when text mode becomes null below.
+    TasksetDraftOutputContractSchema.parse({ jsonSchema: null, renderer: null, ...outputContract });
+  }
   addJsonAsset(assets, "environment.json", {
     schemaVersion: "openpond.harnessEnvironment.v1",
-    environment: qualification ? { ...taskset.environment, metadata: { ...taskset.environment.metadata, policySystemPrompt: taskset.objective } } : taskset.environment,
+    // Authored instructions are part of every policy run. Qualification already
+    // binds this value; training must not silently fall back to a generic prompt.
+    // The objective owns this field, while selected Harness source remains a
+    // separate immutable input composed by the runtime.
+    environment: { ...taskset.environment, metadata: { ...taskset.environment.metadata, policySystemPrompt: taskset.objective } },
     capabilities: taskset.capabilities,
     policy: taskset.policy,
     outputContract:

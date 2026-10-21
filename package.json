@@ -1,6 +1,6 @@
 {
   "name": "@openpond/workspace",
-  "version": "0.2.62",
+  "version": "0.2.63",
   "private": true,
   "openpondReleaseVersioned": true,
   "type": "module",
@@ -211,7 +211,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitest/coverage-v8": "4.1.10",
     "dts-bundle-generator": "9.5.1",
-    "electron": "43.1.1",
+    "electron": "43.8.2",
     "electron-builder": "^26.0.12",
     "esbuild": "0.28.1",
     "openpond-agent-sdk": "workspace:*",

@@ -2,10 +2,11 @@ import {lazy, Suspense, type ComponentProps, type ReactNode} from "react";
 import type {MainChatThread as ThreadComponent} from "../app-shell/MainChatThread";
 import {MessageNavigationControls} from "../app-shell/MainPaneControls";
 import {useMainPaneChatScroll} from "../app-shell/useMainPaneChatScroll";
+import {TaskProgressProvider} from "./ComposerTaskProgress";
 
 const MainChatThread = lazy(() => import("../app-shell/MainChatThread").then(module => ({default: module.MainChatThread})));
 
-type ScrollOptions = Omit<Parameters<typeof useMainPaneChatScroll>[0], "groupInProgressWork">;
+type ScrollOptions = Parameters<typeof useMainPaneChatScroll>[0];
 type ThreadOptions = Omit<ComponentProps<typeof ThreadComponent>,
   "rows" | "threadRef" | "onScroll" | "sessionId" | "conversationKey" | "turnRunning">;
 
@@ -18,8 +19,10 @@ export function ConversationSurface({scroll: options, thread, composer, composer
   hasApproval?: boolean;
   className?: string;
 }) {
-  const scroll = useMainPaneChatScroll({...options, groupInProgressWork: true});
-  return <div className={`chat-column ${hasApproval ? "has-approval" : ""} ${className}`} style={scroll.chatColumnStyle}>
+  const scroll = useMainPaneChatScroll(options);
+  return <TaskProgressProvider conversationKey={options.browserConversationId ?? "draft"} messages={options.chatMessages}
+    enabled={Boolean(composer) && options.turnRunning}>
+    <div className={`chat-column ${hasApproval ? "has-approval" : ""} ${className}`} style={scroll.chatColumnStyle}>
     <Suspense fallback={null}><MainChatThread {...thread} rows={scroll.chatTimelineRows} threadRef={scroll.chatThreadRef}
       onScroll={event => scroll.handleChatScroll(event.currentTarget)} sessionId={options.browserConversationId}
       conversationKey={options.browserConversationId ?? "draft"} turnRunning={options.turnRunning}/></Suspense>
@@ -32,5 +35,5 @@ export function ConversationSurface({scroll: options, thread, composer, composer
         onPrevious={() => {if (scroll.userMessageNavigation.canGoPrevious) scroll.goToUserMessage("previous");}}/> : null}
       {composer}
     </div>
-  </div>;
+  </div></TaskProgressProvider>;
 }

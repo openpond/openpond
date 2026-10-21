@@ -4,7 +4,8 @@ import { learningRef, LearningTextAssetSchema, verifyLearningTextAsset } from "@
 import { RewardBindingSchema, RewardReleaseSchema } from "@openpond/evals/rewards";
 import { createModelProjectSaveRequest, ModelProjectEditableSchema, ModelProjectSaveRequestSchema } from "openpond-sdk/model-projects";
 import { bindOrdinaryModelTasksetReward, prepareImportedTasksetPackage, TasksetPackageSchema, validateTasksetPackage, type TasksetPackage } from "openpond-sdk/taskset-packages";
-import { TasksetSchema } from "@openpond/contracts";
+import { TasksetSchema, type Taskset } from "@openpond/contracts";
+import { retainModelTasksetInputReview } from "./model-taskset-review-projection.js";
 
 const id = z.string().trim().min(1).max(500);
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -29,7 +30,7 @@ export type LocalModelProjectPreparation = z.infer<typeof LocalModelProjectPrepa
 
 /** Pure compilation. Publication, qualification and execution have separate owners. */
 export async function prepareLocalModelProject(input: {
-  request: unknown; source: TasksetPackage; createdAt: string; name: string;
+  request: unknown; source: TasksetPackage; reviewedTaskset: Taskset; createdAt: string; name: string;
 }): Promise<LocalModelProjectPreparation> {
   const request = LocalModelProjectPreparationInputSchema.parse(input.request);
   const source = validateTasksetPackage(input.source);
@@ -77,6 +78,9 @@ export async function prepareLocalModelProject(input: {
   if (new Set(verifierAssets.map(asset => asset.asset.path)).size !== verifierAssets.length
     || verifierAssets.some(asset => asset.asset.visibility !== "verifier")) throw new Error("Preparation requires distinct private verifier paths with verifier visibility.");
   const prepared = prepareImportedTasksetPackage({ package: value, profileId: request.project.profileId, name: input.name, createdAt: input.createdAt });
+  // This path compiles the pinned, owner-local Dataset. Keep its existing
+  // input review; generic downloaded packages still default to pending.
+  prepared.taskset = retainModelTasksetInputReview(prepared.taskset, input.reviewedTaskset, source);
   const ref = learningRef(prepared.taskset);
   const saveRequest = await createModelProjectSaveRequest({ ...request.project, trainingSetup: {
     ...request.project.trainingSetup, tasksetRef: ref,

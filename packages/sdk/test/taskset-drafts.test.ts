@@ -12,6 +12,14 @@ it("retains incomplete editor documents and distinguishes publication requiremen
   expect(TasksetDraftSchema.safeParse({ ...draft, status: "published" }).success).toBe(false);
   expect(TasksetDraftSchema.safeParse({ ...draft, purpose: "benchmark" }).success).toBe(false);
   expect(TasksetDraftSchema.safeParse({ ...draft, output: { mode: "structured_json", jsonSchema: null, renderer: null } }).success).toBe(false);
+  const artifactResponse = { mode: "artifacts", jsonSchema: null, renderer: null,
+    requiredOutputSource: "task.requiredOutputs", responsePath: "results/answer.json" };
+  expect(TasksetDraftSchema.parse({ ...draft, output: artifactResponse }).output).toEqual(artifactResponse);
+  for (const output of [{ ...artifactResponse, responsePath: "../answer.json" }, { ...artifactResponse, responsePath: "/answer.json" },
+    { ...artifactResponse, mode: "text" }, { ...artifactResponse, mode: "structured_json", jsonSchema: { type: "object" } },
+    { ...artifactResponse, requiredOutputSource: undefined }]) {
+    expect(TasksetDraftSchema.safeParse({ ...draft, output }).success).toBe(false);
+  }
 });
 
 // Durable snapshots must reject lost updates and forged ownership while retaining
