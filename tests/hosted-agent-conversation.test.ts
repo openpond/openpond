@@ -65,6 +65,7 @@ test("adapts hosted coordinator exchanges without losing remote or local deliver
   expect(result.sources.get("cloud:outputs")).toBe(transcript[1]);
   expect(result.messages.at(-1)?.footerCacheSummary).toEqual({cacheHitRate:0.75});
   const rows=buildChatTimelineRows(result.messages);
-  expect(rows.filter(row=>row.type==="work").flatMap(row=>row.messages).map(row=>row.message.id)).toEqual(["cloud","local"]);
-  expect(rows.filter(row=>row.type==="message").map(row=>row.message.id)).toEqual(["user","answer","cloud:outputs"]);
+  // Hosted and local delivery receipts remain visible outside work disclosures.
+  expect(rows.filter(row=>row.type==="work")).toHaveLength(0);
+  expect(rows.filter(row=>row.type==="message").map(row=>row.message.id)).toEqual(["user","cloud","local","answer","cloud:outputs"]);
 });
