@@ -20,7 +20,7 @@ export function useBeginNewChat({
   setMentionedAppId: Dispatch<SetStateAction<string | null>>;
 }) {
   return useCallback(
-    (app: OpenPondApp | null = null) => {
+    (app: OpenPondApp | null = null, projectId: string | null = null) => {
       onBeginNewChat?.();
       const linkedProjectId = app?.id ? (linkedProjectByAppId.get(app.id) ?? null) : null;
       if (linkedProjectId) {
@@ -32,7 +32,8 @@ export function useBeginNewChat({
         return;
       }
       setMentionedAppId(null);
-      appDispatch({ type: "beginNewChat", appId: app?.id ?? null });
+      appDispatch({ type: "beginNewChat", appId: app?.id ?? null, projectId: app ? null : projectId });
+      if (!app && projectId) expandProject(projectId);
       requestComposerFocus();
     },
     [appDispatch, expandProject, linkedProjectByAppId, onBeginNewChat, requestComposerFocus, setMentionedAppId],

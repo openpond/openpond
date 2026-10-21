@@ -148,7 +148,7 @@ export function createComposerDraftStore(
       }
       if (action.type === "beginNewChat") {
         select(
-          { selectedSessionId: null, selectedAppId: action.appId, selectedProjectId: null },
+          { selectedSessionId: null, selectedAppId: action.appId, selectedProjectId: action.projectId ?? null },
         );
       }
     },

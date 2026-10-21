@@ -1,9 +1,40 @@
 import { expect, test } from "vitest";
+import { appReducer, initialAppState, type AppAction } from "../apps/web/src/app/app-state";
 import { createComposerDraftStore } from "../apps/web/src/lib/composer-draft-store";
 import { restoreDesktopUpdateDrafts, saveDesktopUpdateDrafts } from "../apps/web/src/lib/desktop-update-drafts";
 import { restoreConversationSidebarSnapshot, saveConversationSidebarSnapshot } from "../apps/web/src/lib/conversation-sidebar-storage";
 import { defaultWorkspaceDiffPanelViewState } from "../apps/web/src/components/workspace-diff/workspace-diff-panel-model";
 import { defaultOpenRightSidebarConversationState, rightSidebarWorkspacePanelStateKey } from "../apps/web/src/lib/right-sidebar-conversation-state";
+
+// Inheriting a folder must switch both draft stores atomically, without copying
+// an unsent reply or its training resources into the new task.
+test("new tasks inherit a project while keeping conversation drafts separate", () => {
+  let state = initialAppState;
+  const store = createComposerDraftStore();
+  const apply = (action: AppAction) => {
+    state = appReducer(state, action);
+    store.applyAppAction(action);
+    expect(store.getSnapshot()).toBe(state.prompt);
+  };
+  apply({ type: "beginNewChat", appId: null, projectId: "local:repo" });
+  apply({ type: "field", key: "prompt", value: "Project task draft" });
+  apply({ type: "selectSession", sessionId: "source-chat", projectId: "local:repo" });
+  apply({ type: "field", key: "prompt", value: "Unsent reply" });
+  store.resourceContexts.set("session:source-chat", [{ scopeId: "training", selectionVersion: 1, resources: [] }]);
+  apply({ type: "beginNewChat", appId: null, projectId: "local:repo" });
+  expect(state).toMatchObject({ selectedSessionId: null, selectedProjectId: "local:repo", selectedAppId: null });
+  expect(store.getScopeKey()).toBe("project:local:repo");
+  expect(store.getSnapshot()).toBe("Project task draft");
+  expect(store.resourceContexts.has(store.getScopeKey())).toBe(false);
+  apply({ type: "beginNewChat", appId: null, projectId: "local:repo" });
+  expect(store.getSnapshot()).toBe("Project task draft");
+  apply({ type: "beginNewChat", appId: null });
+  expect(state.selectedProjectId).toBeNull();
+  expect(store.getScopeKey()).toBe("new-chat");
+  apply({ type: "selectSession", sessionId: "source-chat", projectId: "local:repo" });
+  expect(store.getSnapshot()).toBe("Unsent reply");
+  expect(store.resourceContexts.has("session:source-chat")).toBe(true);
+});
 
 // Reload creates fresh stores: inactive drafts and exact tabs must survive,
 // while a sent draft or intentionally closed Training tab must stay cleared.

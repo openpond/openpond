@@ -156,7 +156,7 @@ export type AppAction =
       appId?: string | null;
       projectId?: string | null;
     }
-  | { type: "beginNewChat"; appId: string | null }
+  | { type: "beginNewChat"; appId: string | null; projectId?: string | null }
   | { type: "openCommitDialog"; nextStep: CommitNextStep }
   | { type: "openBranchDialog"; branchName: string }
   | { type: "showToast"; toast: AppToast }
@@ -308,7 +308,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         {
           selectedSessionId: null,
           selectedAppId: action.appId,
-          selectedProjectId: null,
+          selectedProjectId: action.projectId ?? null,
           error: null,
           view: "chat",
         }

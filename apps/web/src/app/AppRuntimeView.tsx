@@ -399,20 +399,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const beginContextualNewChat = useCallback(
     (app: OpenPondApp | null = null) => {
       setPonderMode(null);
-      const sourceProjectId = selectedSessionId
-        ? sidebarProjectIdBySessionId[selectedSessionId] ?? null
-        : null;
-      if (!app && sourceProjectId) {
-        beginProjectChat(sourceProjectId);
-        return;
-      }
-      beginNewChat(app);
+      if (app) beginNewChat(app);
+      else beginNewThread();
     },
     [
       beginNewChat,
-      beginProjectChat,
-      selectedSessionId,
-      sidebarProjectIdBySessionId,
+      beginNewThread,
     ],
   );
   const selectSidebarTeam = useCallback(
