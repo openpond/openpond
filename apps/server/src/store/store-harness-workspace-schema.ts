@@ -33,7 +33,7 @@ export async function createHarnessWorkspaceTables(
 
     CREATE TABLE IF NOT EXISTS harness_workspace_settings (
       workspace_id TEXT PRIMARY KEY,
-      background_review_enabled INTEGER NOT NULL DEFAULT 1,
+      background_review_enabled INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(workspace_id) REFERENCES harness_workspaces(id) ON DELETE RESTRICT
     );

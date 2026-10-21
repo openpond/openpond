@@ -323,13 +323,8 @@ describe("local Harness workspace service", () => {
     });
 
     expect(await store.getHarnessBackgroundReviewSettings(workspace.id)).toEqual({
-      enabled: true,
-      updatedAt: null,
-    });
-    await store.setHarnessBackgroundReviewSettings({
-      workspaceId: workspace.id,
       enabled: false,
-      updatedAt: NOW,
+      updatedAt: null,
     });
     expect(await recordLocalHarnessImprovementBoundary({
       store,

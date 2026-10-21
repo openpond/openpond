@@ -31,6 +31,9 @@ vi.mock("electron", async () => {
         getURL: () => entries[index]?.url ?? "",
         getTitle: () => entries[index]?.title ?? "",
         isDestroyed: () => destroyed,
+        focus() {},
+        insertText: vi.fn(async (_text: string) => {}),
+        sendInputEvent: vi.fn(),
         close: () => { destroyed = true; },
         setWindowOpenHandler() {},
         loadURL: async (url: string) => {
@@ -73,6 +76,9 @@ async function setup(home?: string) {
   }
   const window = Object.assign(new EventEmitter(), {
     isDestroyed: () => false,
+    isVisible: () => true,
+    isMinimized: () => false,
+    focus() {},
     contentView: { addChildView() {}, removeChildView() {} },
     webContents: { send: vi.fn() },
   });
@@ -87,6 +93,36 @@ afterEach(async () => {
   for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true });
   native.views.length = 0;
   native.sessions.clear();
+});
+
+// Failure story: acknowledging asynchronous typing early lets a following Enter
+// submit an empty field, and insertion failures can be reported as success.
+test("browser typing waits for insertion before a following key and propagates insertion errors", async () => {
+  const { manager } = await setup();
+  await manager.setBounds({ conversationId: "typing", bounds });
+  await manager.newTab({ conversationId: "typing", url: "https://example.test/form" });
+  const contents = native.views[0].webContents;
+  const insertion = Promise.withResolvers<void>();
+  let inputValue = "";
+  let submittedValue: string | undefined;
+  contents.insertText.mockImplementationOnce(async (text: string) => {
+    await insertion.promise;
+    inputValue = text;
+  });
+  contents.sendInputEvent.mockImplementation((event: { type: string; keyCode: string }) => {
+    if (event.type === "rawKeyDown" && event.keyCode === "Enter") submittedValue = inputValue;
+  });
+  const typeThenSubmit = manager.harnessTypeText({ conversationId: "typing", text: "native input proof" })
+    .then(() => manager.harnessKey({ conversationId: "typing", key: "Enter" }));
+  await vi.waitFor(() => expect(contents.insertText).toHaveBeenCalledOnce());
+  expect(contents.sendInputEvent).not.toHaveBeenCalled();
+  insertion.resolve();
+  await typeThenSubmit;
+  expect(submittedValue).toBe("native input proof");
+
+  contents.insertText.mockRejectedValueOnce(new Error("Text insertion failed"));
+  await expect(manager.harnessTypeText({ conversationId: "typing", text: "retry" }))
+    .rejects.toThrow("Text insertion failed");
 });
 
 // Failure story: switching chats used separate login stores; evicting a tab or
