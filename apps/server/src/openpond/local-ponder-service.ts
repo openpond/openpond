@@ -17,7 +17,7 @@ export function createLocalPonderService(deps: {
 }) {
   const serial = new TaskSerialExecutor();
   const capabilities = {
-    remoteAccess: {available:false,reason:"Desktop-owned Ponder remote access is not connected yet."},
+    remoteAccess: {available:true,reason:null},
     hostedSandboxes: {available:Boolean(deps.hosted),reason:deps.hosted?null:"Hosted sandbox delegation is not connected yet."},
     hostedCoordinator: {available:false,reason:"Explicit conversation transfer is not connected yet."},
   };

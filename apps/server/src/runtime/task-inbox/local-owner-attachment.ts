@@ -29,6 +29,7 @@ export type LocalOwnerAttachmentInspector = (
 /** A local human may explicitly claim an unowned task. This projection never reaches storage or the wire. */
 export function createLocalOwnerAttachmentInspection(input: {
   owner: DeviceLocalOwner;
+  selectedPonderSessionId?: string;
   providers: ProviderSettings;
   codexStatus(): Promise<CodexStatus>;
   loadProfile(ref: OpenPondProfileRef): Promise<OpenPondProfileState>;
@@ -44,6 +45,11 @@ export function createLocalOwnerAttachmentInspection(input: {
     reason,
   });
   const readiness = createLocalManagedReadiness({
+    managedStatus: async session => {
+      const status = input.providers.statuses[session.provider];
+      return { available: Boolean(status?.enabled && status.available && status.routing.localRuntime),
+        reason: status?.lastError ?? "Enable and connect this task's original managed provider." };
+    },
     configProvider: async (provider) =>
       input.providers.providers[
         provider as keyof typeof input.providers.providers
@@ -121,7 +127,7 @@ export function createLocalOwnerAttachmentInspection(input: {
   }
 
   return async (session) => {
-    if (!localSessionMayResolveOwnership(session))
+    if (!localSessionMayResolveOwnership(session, input.selectedPonderSessionId))
       return unavailable(
         "Only an eligible local task without an existing account owner can be added.",
       );

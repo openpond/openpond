@@ -28,6 +28,7 @@ export function remoteHistoryGeneration(session: Session) {
 /** Protected ownership is mandatory even for read-only historical publication. */
 export async function captureRemoteTaskCatalog(input: {
   owner: DeviceLocalOwner;
+  ponder?: import("../openpond/local-ponder-contract.js").LocalPonderCoordinator | null;
   sessions: Session[];
   inspect(id: string): Promise<LocalManagedMessageTarget>;
   approvals?: import("@openpond/contracts").Approval[];
@@ -35,7 +36,9 @@ export async function captureRemoteTaskCatalog(input: {
 }): Promise<RemoteTask[]> {
   const tasks: RemoteTask[] = [];
   for (const session of input.sessions) {
-    if (!deviceOwnsLocalSession(session, input.owner) || session.systemKind || session.hiddenFromDefaultSidebar
+    const ponder = input.ponder?.remoteAccessEnabled && input.ponder.sessionId === session.id
+      && session.systemKind === "openpond.ponder" && session.metadata?.localPonderCoordinatorId === input.ponder.id;
+    if (!deviceOwnsLocalSession(session, input.owner) || ((!ponder) && (session.systemKind || session.hiddenFromDefaultSidebar))
       || ["sandbox", "sandbox_template", "sandbox_app"].includes(session.workspaceKind ?? "")) continue;
     const target = await input.inspect(session.id);
     const latest = await input.latestTurn?.(session.id);
@@ -45,6 +48,7 @@ export async function captureRemoteTaskCatalog(input: {
       && remoteApprovalSupported(approval));
     tasks.push({ id: session.id, localSessionId: session.id, title: session.title,
       projectId: session.localProjectId ?? null, projectLabel: session.workspaceName ?? null,
+      ...(ponder ? { ponderCoordinatorId: input.ponder!.id } : {}),
       provider: session.provider, revision: remoteTaskRevision(target, session), historyGeneration: remoteHistoryGeneration(session),
       createdAt: session.createdAt, updatedAt: session.updatedAt,
       lastEventSequence: 0, paused: target.paused, latestTurnId: target.latestTurnId, activeTurnId: target.activeTurnId, approvalId: approval?.id ?? null,

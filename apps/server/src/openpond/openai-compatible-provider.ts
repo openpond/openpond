@@ -23,19 +23,9 @@ import {
   hasChatCompletionsReasoningContinuation,
 } from "./reasoning-continuation.js";
 
-export const OPENAI_COMPATIBLE_PROVIDER_IDS = [
-  "openai",
-  "xai",
-  "openrouter",
-  "deepseek",
-  "zai",
-  "moonshot",
-  "together",
-  "groq",
-  "custom-openai-compatible",
-] as const satisfies readonly ProviderId[];
-
-export type OpenAiCompatibleProviderId = (typeof OPENAI_COMPATIBLE_PROVIDER_IDS)[number];
+export { OPENAI_COMPATIBLE_PROVIDER_IDS, isOpenAiCompatibleProviderId } from "./managed-chat-provider-id.js";
+import { isOpenAiCompatibleProviderId, type OpenAiCompatibleProviderId } from "./managed-chat-provider-id.js";
+export type { OpenAiCompatibleProviderId } from "./managed-chat-provider-id.js";
 
 type OpenAiCompatibleReasoningEffort = CodexReasoningEffort | "none";
 
@@ -63,11 +53,6 @@ const PROVIDER_ERROR_BODY_LIMIT_BYTES = 64 * 1024;
 const OPENAI_CODEX_RESPONSES_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 const OPENAI_SUBSCRIPTION_TOKEN_REFRESH_MARGIN_MS = 60_000;
 
-export function isOpenAiCompatibleProviderId(
-  providerId: ProviderId,
-): providerId is OpenAiCompatibleProviderId {
-  return (OPENAI_COMPATIBLE_PROVIDER_IDS as readonly ProviderId[]).includes(providerId);
-}
 
 export function resolveOpenAiCompatibleProvider(input: {
   providerId: ProviderId;

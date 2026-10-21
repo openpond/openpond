@@ -26,6 +26,7 @@ export type RemoteAccessSettingsStatus = {
   supportedProtocolVersion: number;
   device: RemoteDevice | null;
   devices: RemoteDevice[];
+  ponder?: { coordinatorId: string; sessionId: string | null; revision: number; enabled: boolean; canPublish: boolean } | null;
   unresolvedTasks: { id: string; title: string; revision: string }[];
 };
 export type RemoteAccessSettingsAction =
@@ -34,6 +35,8 @@ export type RemoteAccessSettingsAction =
   | "disable"
   | "retry"
   | "attach"
+  | "publish-ponder"
+  | "unpublish-ponder"
   | "rename"
   | "remove"
   | "disable-device";
