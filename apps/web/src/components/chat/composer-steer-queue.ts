@@ -1,5 +1,6 @@
-import type { TaskResourceContext } from "@openpond/contracts";
+import type { ChatAttachment, TaskResourceContext } from "@openpond/contracts";
 export type ComposerSteerDraft = {
+  attachments?: ChatAttachment[];
   resourceContexts?: TaskResourceContext[];
   createdAt: string;
   id: string;
@@ -24,11 +25,12 @@ export function composerSteerPreview(prompt: string, maxLength = 120): string {
 
 export function createComposerSteerDraft(
   prompt: string,
-  options: { id?: string; now?: string; resourceContexts?: TaskResourceContext[] } = {},
+  options: { id?: string; now?: string; resourceContexts?: TaskResourceContext[]; attachments?: ChatAttachment[] } = {},
 ): ComposerSteerDraft {
   const now = options.now ?? new Date().toISOString();
   return {
     ...(options.resourceContexts ? { resourceContexts: structuredClone(options.resourceContexts) } : {}),
+    ...(options.attachments?.length ? { attachments: structuredClone(options.attachments) } : {}),
     createdAt: now,
     id: options.id ?? nextSteerDraftId(),
     prompt,
@@ -41,19 +43,6 @@ export function removeComposerSteerDraft(
   draftId: string,
 ): ComposerSteerDraft[] {
   return drafts.filter((draft) => draft.id !== draftId);
-}
-
-export function replaceComposerSteerDraftForEdit(
-  drafts: ComposerSteerDraft[],
-  draftId: string,
-  displacedComposerPrompt?: string,
-  resourceContexts?: TaskResourceContext[],
-): ComposerSteerDraft[] {
-  const displacedPrompt = displacedComposerPrompt?.trim();
-  return drafts.flatMap((draft) => {
-    if (draft.id !== draftId) return [draft];
-    return displacedPrompt ? [createComposerSteerDraft(displacedPrompt, { resourceContexts })] : [];
-  });
 }
 
 export function composerSteerDraftsAfterSubmit(

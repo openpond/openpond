@@ -1,20 +1,20 @@
 import { ErrorToast } from "../common/ErrorToast";
-import { TaskResourceContextsSchema, type TaskResourceContext, type TaskInput } from "@openpond/contracts";
+import { ChatAttachmentSchema, TaskResourceContextsSchema, type ChatAttachment, type TaskResourceContext, type TaskInput } from "@openpond/contracts";
 import type { TaskInboxController } from "../../hooks/useTaskInbox";
 import { ComposerSteerRow } from "./ComposerSteerRow";
 
 export function TaskInboxPanel({ inbox, onRestore, canRestore }: {
   inbox: TaskInboxController;
-  canRestore?(contexts: TaskResourceContext[]): boolean;
-  onRestore(body: string, contexts: TaskResourceContext[]): void;
+  canRestore?(contexts: TaskResourceContext[], attachments: ChatAttachment[]): boolean;
+  onRestore(body: string, contexts: TaskResourceContext[], attachments: ChatAttachment[]): void;
 }) {
   const snapshot = inbox.snapshot;
   const queued = snapshot?.inputs.filter((input) => input.senderKind === "user" && input.kind === "queued" && input.state === "pending") ?? [];
-  if (!queued.length && !inbox.error) return null;
+  if (!queued.length && !inbox.pendingQueue && !inbox.error) return null;
 
   return <>
     {inbox.error && <ErrorToast error={inbox.error} />}
-    {queued.length > 0 && <div className="composer-steer-stack" aria-label="Queued messages">
+    {(queued.length > 0 || inbox.pendingQueue) && <div className="composer-steer-stack" aria-label="Queued messages">
       {queued.map((input) => {
         const activeTurnId = snapshot?.activeTurnId;
         const starting = Boolean(input.turnId && !snapshot?.paused);
@@ -27,6 +27,7 @@ export function TaskInboxPanel({ inbox, onRestore, canRestore }: {
         return <ComposerSteerRow
           key={input.id}
           prompt={input.body}
+          attachments={inputAttachments(input)}
           disabled={Boolean(inbox.busyId) || starting}
           actionLabel={actionLabel}
           actionDisabledReason={actionDisabledReason}
@@ -37,6 +38,16 @@ export function TaskInboxPanel({ inbox, onRestore, canRestore }: {
           onEdit={() => void restoreQueuedTaskInput(inbox, input, onRestore, canRestore)}
         />;
       })}
+      {inbox.pendingQueue && <ComposerSteerRow
+        key={inbox.pendingQueue.id}
+        prompt={inbox.pendingQueue.body}
+        attachments={inbox.pendingQueue.attachments}
+        disabled
+        actionLabel="Queuing"
+        onSend={() => {}}
+        onDelete={() => {}}
+        onEdit={() => {}}
+      />}
     </div>}
   </>;
 }
@@ -45,14 +56,19 @@ export function TaskInboxPanel({ inbox, onRestore, canRestore }: {
 export async function restoreQueuedTaskInput(
   inbox: Pick<TaskInboxController, "mutate">,
   input: TaskInput,
-  onRestore: (body: string, contexts: TaskResourceContext[]) => void,
-  canRestore?: (contexts: TaskResourceContext[]) => boolean,
+  onRestore: (body: string, contexts: TaskResourceContext[], attachments: ChatAttachment[]) => void,
+  canRestore?: (contexts: TaskResourceContext[], attachments: ChatAttachment[]) => boolean,
 ): Promise<void> {
   const metadata = input.payload.metadata as Record<string, unknown> | undefined;
   const parsed = TaskResourceContextsSchema.safeParse(metadata?.chatResourceContexts);
   const contexts = parsed.success ? parsed.data : [];
-  if (canRestore && !canRestore(contexts)) return;
+  const attachments = inputAttachments(input);
+  if (canRestore && !canRestore(contexts, attachments)) return;
   if (await inbox.mutate(input, { action: "cancel", expectedRevision: input.revision })) {
-    onRestore(input.body, contexts);
+    onRestore(input.body, contexts, attachments);
   }
+}
+
+function inputAttachments(input: TaskInput): ChatAttachment[] {
+  return ChatAttachmentSchema.array().parse(input.payload.attachments ?? []);
 }

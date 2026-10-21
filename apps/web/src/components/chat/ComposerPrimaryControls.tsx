@@ -300,6 +300,7 @@ export function ComposerPrimaryControls({
           showToast={showToast}
           onTranscript={onTranscript}
           transcriptionChannelKey={voiceInputChannelKey}
+          submitLabel={sendTooltip}
         />
         <ComposerSubmissionControls
           running={running}
@@ -461,6 +462,7 @@ export function ComposerPrimaryControls({
         showToast={showToast}
         onTranscript={onTranscript}
         transcriptionChannelKey={voiceInputChannelKey}
+        submitLabel={sendTooltip}
       />
       <ComposerSubmissionControls
         running={running}

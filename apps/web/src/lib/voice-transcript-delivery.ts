@@ -9,6 +9,7 @@ export async function deliverVoiceTranscript({
   originScopeKey,
   prompt,
   setOriginDraft,
+  submit = false,
   submitFromOrigin,
   transcript,
 }: {
@@ -18,6 +19,7 @@ export async function deliverVoiceTranscript({
   originScopeKey: string;
   prompt: string;
   setOriginDraft: (value: string) => void;
+  submit?: boolean;
   submitFromOrigin: (prompt: string) => Promise<boolean>;
   transcript: string;
 }): Promise<VoiceTranscriptDelivery> {
@@ -27,7 +29,7 @@ export async function deliverVoiceTranscript({
     appendToEnd ? prompt.length : cursorIndex,
   );
   setOriginDraft(next.value);
-  if (currentScopeKey === originScopeKey) return "drafted";
+  if (currentScopeKey === originScopeKey && !submit) return "drafted";
 
   const sent = await submitFromOrigin(next.value);
   if (!sent) return "retained";

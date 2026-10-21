@@ -1,6 +1,7 @@
 import { ChatTrainingReferenceSchema } from "./chat-training-reference.js";
 import { z } from "zod";
 import { OpenPondProfileRefSchema } from "./profile-ref.js";
+import { ChatAttachmentSchema, CHAT_ATTACHMENT_LIMITS } from "./requests.js";
 
 export const TASK_INPUT_MAX_CHARS = 32_000;
 export const TASK_INBOX_MAX_PENDING = 128;
@@ -62,6 +63,7 @@ export const SteerTurnRequestSchema = z.object({
   idempotencyKey: z.string().trim().min(1).max(200),
   prompt: z.string().trim().min(1).max(TASK_INPUT_MAX_CHARS),
   resourceContexts: TaskResourceContextsSchema.optional(),
+  attachments: z.array(ChatAttachmentSchema).max(CHAT_ATTACHMENT_LIMITS.maxAttachments).optional(),
 }).strict();
 export type SteerTurnRequest = z.infer<typeof SteerTurnRequestSchema>;
 
@@ -127,6 +129,7 @@ export function taskInputModelText(input: TaskInput): string {
     `Sender: ${input.senderSessionId ?? input.senderKind}`,
     input.replyTo ? `In reply to: ${input.replyTo}` : null,
     input.senderKind === "user" ? taskResourceContextModelText(input.payload.metadata) : null,
+    typeof input.payload.attachmentContext === "string" ? input.payload.attachmentContext : null,
     "Message:",
     input.body,
   ].filter((line) => line !== null).join("\n");

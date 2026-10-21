@@ -80,6 +80,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
       if (parsed.success && parsed.data.senderKind === "user" && parsed.data.kind === "steer" && !displayedTaskInputIds.has(parsed.data.id)) {
         displayedTaskInputIds.add(parsed.data.id);
         messages.push({ id: `task-input:${parsed.data.id}`, role: "user", content: parsed.data.body,
+          attachments: extractAttachments({ attachments: parsed.data.payload.attachmentSummaries ?? parsed.data.payload.attachments }),
           timestamp: item.timestamp, turnId: parsed.data.turnId ?? undefined, interactionKind: "steer" });
       }
       continue;

@@ -4,6 +4,8 @@ import type { Session } from "@openpond/contracts/sessions";
 import type { TaskInboxRuntime } from "../task-inbox/runtime.js";
 import type { TaskInboxRepository } from "../task-inbox/repository.js";
 import type { createNativeAgentRuntime } from "./runtime.js";
+import { taskInputAttachments } from "../task-inbox/attachments.js";
+import type { TaskInput } from "@openpond/contracts/task-inbox";
 
 type NativeRuntime = ReturnType<typeof createNativeAgentRuntime>;
 type NativeInput = Parameters<NativeRuntime["run"]>[0];
@@ -15,7 +17,7 @@ export async function runSteeredNativeTurn({ runtime, inbox, store, getSession, 
   store: TaskInboxRepository;
   getSession(sessionId: string): Promise<Session>;
   taskToolInstructions: string;
-  input: Omit<NativeInput, "preparePrompt" | "settlePrompt" | "requestId" | "requestOrdinal">;
+  input: Omit<NativeInput, "preparePrompt" | "prepareContent" | "settlePrompt" | "requestId" | "requestOrdinal">;
 }): Promise<string> {
   const sessionId = input.session.id;
   for (let ordinal = 0; ; ordinal++) {
@@ -23,6 +25,7 @@ export async function runSteeredNativeTurn({ runtime, inbox, store, getSession, 
     const request = inbox.beginRequest(sessionId, input.signal);
     const requestId = `native-request:${input.turn.id}:${randomUUID()}`;
     let providerTurnId: string;
+    let attachmentInputs: TaskInput[] = [];
     try {
       providerTurnId = await runtime.run({
         ...input,
@@ -34,14 +37,18 @@ export async function runSteeredNativeTurn({ runtime, inbox, store, getSession, 
         signal: request.signal,
         preparePrompt: async (prompt, capabilities) => {
           const included = await inbox.include(sessionId, input.turn.id, requestId);
-          const corrections = await store.taskAssignmentInputs(input.turn.id);
+          const corrections = await inbox.assignment(input.turn.id);
           const messages = included.filter((message) => message.kind !== "steer" && message.id !== input.turn.metadata?.taskInputId);
+          attachmentInputs = [...corrections, ...messages];
           const assignment = ordinal === 0 ? prompt : [
             "Continue the same assignment with the corrections below. Preserve completed work and the original objective unless the user explicitly changes it. Do not repeat completed actions.",
             `Original assignment: ${input.turn.prompt}`,
           ].join("\n\n");
           return [assignment, capabilities.taskTools ? taskToolInstructions : "", ...corrections.map(taskInputModelText), ...messages.map(taskInputModelText)].join("\n\n");
         },
+        prepareContent: async () => attachmentInputs.flatMap(taskInputAttachments)
+          .filter(attachment => attachment.kind === "image" && attachment.contentsBase64)
+          .map(attachment => ({ type: "image", mimeType: attachment.mediaType, data: attachment.contentsBase64! })),
       });
       input.signal.throwIfAborted();
       await store.settleTaskInputRequest(requestId, request.replaced() ? "replaced" : "resolved");
