@@ -48,7 +48,7 @@ export class SqliteHarnessEvaluationReviewSettingsStore extends SqliteStoreDomai
     );
     return row
       ? { enabled: row.background_review_enabled === 1, updatedAt: row.updated_at }
-      : { enabled: true, updatedAt: null };
+      : { enabled: false, updatedAt: null };
   }
 
   async setHarnessBackgroundReviewSettings(input: {

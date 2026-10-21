@@ -63,6 +63,11 @@ describe("Local Harness refinement acceptance", () => {
       workspaceId: created.workspace.id,
       updatedAt: BEFORE,
     });
+    await store.setHarnessBackgroundReviewSettings({
+      workspaceId: created.workspace.id,
+      enabled: true,
+      updatedAt: BEFORE,
+    });
     const runtime = await loadSelectedLocalHarnessRuntime(store);
     if (!runtime) throw new Error("Managed-run Harness runtime was not selected.");
     const admitted = await admitRun({
@@ -145,6 +150,11 @@ describe("Local Harness refinement acceptance", () => {
       updatedAt: BEFORE,
     });
 
+    await store.setHarnessBackgroundReviewSettings({
+      workspaceId: created.workspace.id,
+      enabled: true,
+      updatedAt: BEFORE,
+    });
     const initialRuntime = await loadSelectedLocalHarnessRuntime(store);
     if (!initialRuntime) throw new Error("Initial Local Harness runtime was not selected.");
     const initialInstructions = await readRuntimeInstructions(initialRuntime.release.bundlePath);
@@ -425,6 +435,11 @@ describe("Local Harness refinement acceptance", () => {
       ownerKind: "personal",
       ownerId: "desktop-personal",
       workspaceId: created.workspace.id,
+      updatedAt: BEFORE,
+    });
+    await store.setHarnessBackgroundReviewSettings({
+      workspaceId: created.workspace.id,
+      enabled: true,
       updatedAt: BEFORE,
     });
     const runtime = await loadSelectedLocalHarnessRuntime(store);

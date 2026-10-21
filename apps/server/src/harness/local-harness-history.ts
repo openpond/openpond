@@ -239,7 +239,7 @@ export async function localHarnessHistoryPayload(
   if (!workspace) {
     return {
       workspace: null,
-      backgroundReview: { enabled: true, updatedAt: null },
+      backgroundReview: { enabled: false, updatedAt: null },
       evaluationReviewSchedule: {
         enabled: false,
         activityEnabled: false,
