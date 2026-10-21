@@ -490,14 +490,10 @@ export function Composer({
     const options = allowedModelRefs
       ? [...new Set(allowedModelRefs.map(ref => ref.providerId))].map(value => ({value, label:chatProviderLabel(value,providerSettings), description:undefined}))
       : providerOptionsFromSettings(providerSettings, {enabledOnly:true}).map(option => ({...option,description:undefined}));
-    const experienceOptions =
-      repositoryWork
-        ? options
-        : options.filter((option) => option.value !== "codex");
     const scopedOptions =
       workspaceTarget.value === "cloud" && repositoryWork
-        ? experienceOptions.filter((option) => option.value === "openpond")
-        : experienceOptions;
+        ? options.filter((option) => option.value === "openpond")
+        : options;
     const withCurrent = scopedOptions.some(
       (option) => option.value === provider
     )

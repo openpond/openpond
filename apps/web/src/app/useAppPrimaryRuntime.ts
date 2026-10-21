@@ -706,11 +706,14 @@ export function useAppPrimaryRuntime() {
   });
   const beginNewThread = useCallback(
     () => {
-      setDraftExperience("work");
-      appDispatch({ type: "beginNewChat", appId: null });
-      setView("chat");
+      const projectId =
+        (selectedSessionId ? sidebarProjectIdBySessionId[selectedSessionId] : null)
+        ?? selectedProjectId
+        ?? (selectedProject ? projectSelectionKey("local", selectedProject.id) : null)
+        ?? (selectedCloudProject ? projectSelectionKey("cloud", selectedCloudProject.id) : null);
+      beginNewChat(null, projectId);
     },
-    [appDispatch, setDraftExperience, setView]
+    [beginNewChat, selectedSessionId, sidebarProjectIdBySessionId, selectedProjectId, selectedProject, selectedCloudProject],
   );
   const {
     pendingChatUserMessages,
