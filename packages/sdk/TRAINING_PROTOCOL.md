@@ -281,7 +281,7 @@ When all original training groups are already consumed, the same operation perfo
 
 This operation differs from continual training with an optimizer reset. An isolated optimizer diagnostic replay discards its weights and is never a training parent or a completed group.
 
-CLI: `openpond training hosted-recover recovery.json --team-id <id> --home ~/.openpond/openpond-app-dev --yes --json`, where the file contains `jobId` plus the request fields above and optional `resourceApproval`. `--yes` confirms the explicit funded CLI operation; the command does not silently retry paid admission.
+CLI: `openpond training hosted-recover recovery.json --team-id <id> --home <configured-home> --yes --json`, where the file contains `jobId` plus the request fields above and optional `resourceApproval`. `--yes` confirms the explicit funded CLI operation; the command does not silently retry paid admission.
 
 ## Managed Work policy transport
 

@@ -72,7 +72,7 @@ Use that supplied prefix directly. Do not spend a command printing or probing it
 
 Use `datasets context --local --json` to inspect the current scope; `datasets select <id> --local --expected-revision <revision>` selects an existing dataset. `datasets new-experiment --local --operation-id <stable-id>` creates a configuration scope without compute. Scope selection/rename use `select-experiment` and `rename-experiment`; check their current help. These commands require app-supplied context. Mere `datasets list` discovery does not attach all records.
 
-Use the application's supplied local server context and OpenPond home when present. Pass that home with `--home`; the standard development desktop uses `~/.openpond/openpond-app-dev`. Check this context before diagnosing missing authentication. Do not guess a second installation, scrape credentials, or switch teams to get an operation to succeed. Local dataset commands use `--local`; hosted operations have their own explicit destination/account options. Local experiment execution may still call a paid remote inference provider.
+Use the application's supplied local server context and OpenPond home when present. Pass that configured home with `--home <selected-home>`. Check this context before diagnosing missing authentication. Do not guess a second installation, scrape credentials, or switch teams to get an operation to succeed. Local dataset commands use `--local`; hosted operations have their own explicit destination/account options. Local experiment execution may still call a paid remote inference provider.
 
 For Diagnose, Improve, or grader repair, read [Diagnose and improve](diagnose-and-improve.md).
 

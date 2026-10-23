@@ -209,7 +209,7 @@ describe("Training SDK contracts", () => {
       spendUsd: 0.5,
       durationSeconds: 60,
       cleanupComplete: true,
-      issuer: "sandbox-managed-training",
+      issuer: "test-training-issuer",
       issuedAt: NOW,
       signature: null,
     };
@@ -418,7 +418,7 @@ describe("Training SDK contracts", () => {
       durationSeconds: 60,
       cleanupComplete: true,
       qualification,
-      issuer: "sandbox-managed-training",
+      issuer: "test-training-issuer",
       issuedAt: NOW,
       signature: null,
     };

@@ -20,8 +20,8 @@ the evaluated model and the training base/checkpoint are separate selections.
 ## Standalone setup
 
 For a terminal outside the app, first check whether the running desktop already
-has an account. Use its home with `--home` (development normally uses
-`~/.openpond/openpond-app-dev`) before diagnosing missing authentication. The
+has an account. Use its configured home with `--home <selected-home>` before diagnosing
+missing authentication. The
 following setup is for a new installation:
 
 - Install: `npm i -g openpond` (or `npx --package openpond openpond <cmd>`)
