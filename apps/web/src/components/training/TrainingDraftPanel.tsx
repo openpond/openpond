@@ -16,7 +16,7 @@ export function TrainingDraftPanel({ training, sessionId, expanded, onOpenTraini
       <dl className="training-definition"><div><dt>Sources</dt><dd>{sources.length}</dd></div><div><dt>Status</dt><dd>{creation?.state.replaceAll("_", " ") ?? "No draft"}</dd></div><div><dt>Method</dt><dd>{creation?.proposal?.proposedMethod ?? "Pending"}</dd></div></dl>
       {creation?.proposal ? <><h3>{creation.proposal.name}</h3><p>{creation.proposal.objective}</p></> : <p>Add this chat with the sidebar action or run <code>/train</code>.</p>}
       {creation?.blockedReason ? <p className="training-draft-warning">{creation.blockedReason}</p> : null}
-      <button className="training-button secondary" type="button" onClick={onOpenTraining}>Open Training</button>
+      <button className="training-button secondary" type="button" onClick={onOpenTraining}>Open Ponder</button>
     </div>
   </aside>;
 }

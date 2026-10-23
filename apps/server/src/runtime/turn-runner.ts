@@ -1956,7 +1956,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const worker=await getSession(relationship.sessionId);
       await taskInbox.send({senderSessionId:worker.id,sessionId:relationship.coordinatorSessionId,runtimeNotice:true,
         body:relationship.owner === "user" ? `The user took control of ${worker.title} (${worker.id}). Stop autonomous instructions; observe results only until explicitly returned.`
-          : `The user explicitly returned ${worker.title} (${worker.id}) to Ponder. Inspect its current transcript and execution state before issuing a fresh assignment. Control revision: ${relationship.revision}.`,
+          : `The user explicitly returned ${worker.title} (${worker.id}) to Pal. Inspect its current transcript and execution state before issuing a fresh assignment. Control revision: ${relationship.revision}.`,
         idempotencyKey:`local-ponder-control:${worker.id}:${relationship.revision}`});
     },
     admitUserLocalMessage: taskInbox.admitUserLocalMessage,

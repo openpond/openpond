@@ -64,12 +64,12 @@ export function PonderAgentsPanel({connection, accountScopeKey, agents, hostedAg
     if (["failed", "waiting_approval", "waiting", "paused", "interrupted", "unknown", "needs_attention"].includes(status)) return "Needs attention";
     return "Done";
   }
-  return <section className="ponder-agents-view" aria-label="Ponder agents">
+  return <section className="ponder-agents-view" aria-label="Pal agents">
     <header>{selected || selectedHosted ? <button ref={backButton} type="button" aria-label="Back to agents" onClick={() => setSelection(null)}><ArrowLeft size={16}/></button> : null}
       <h2>{selectedHosted?.title ?? selected?.session.title ?? "Agents"}</h2></header>
     {selectedHosted ? <HostedAgentDetails connection={connection} accountScopeKey={accountScopeKey} assignment={selectedHosted}/> : selected ? <>
-      <div className="ponder-agent-assignment">{selected.session.metadata?.nativeWorkerCanResume === false ? <span>Controlled by its parent conversation · Read-only transcript</span> : null}{selected.owner ? <><span>{selected.owner === "user" ? "You are directing this agent" : "Ponder is directing this agent"}</span>
-        <button type="button" disabled={busy} onClick={() => void control(selected, selected.owner === "ponder" ? "user" : "ponder")}>{selected.owner === "ponder" ? "Take control" : "Return to Ponder"}</button></> : <button type="button" disabled={busy} onClick={() => void openChat(selected)}>{selected.session.metadata?.nativeWorkerCanResume === false ? "Open transcript" : "Open chat"}</button>}</div>
+      <div className="ponder-agent-assignment">{selected.session.metadata?.nativeWorkerCanResume === false ? <span>Controlled by its parent conversation · Read-only transcript</span> : null}{selected.owner ? <><span>{selected.owner === "user" ? "You are directing this agent" : "Pal is directing this agent"}</span>
+        <button type="button" disabled={busy} onClick={() => void control(selected, selected.owner === "ponder" ? "user" : "ponder")}>{selected.owner === "ponder" ? "Take control" : "Return to Pal"}</button></> : <button type="button" disabled={busy} onClick={() => void openChat(selected)}>{selected.session.metadata?.nativeWorkerCanResume === false ? "Open transcript" : "Open chat"}</button>}</div>
       <AgentConversation connection={connection} conversationId={selected.session.id} messages={history.messages} loading={history.loading}
         running={history.running} hasMore={history.hasMore} loadOlder={async () => (await history.loadOlder()) !== false}/>
     </> : <div className="ponder-agent-list">{agents.length || hostedAgents.length ? ["Active", "Needs attention", "Done"].map(label => {

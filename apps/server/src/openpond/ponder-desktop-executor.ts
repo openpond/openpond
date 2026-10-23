@@ -84,7 +84,7 @@ export function createPonderDesktopExecutor(deps: {
           const interrupted = await deps
             .interrupt(
               stop.receipt.sessionId,
-              "Stopped by Ponder at the user's request.",
+              "Stopped by Pal at the user's request.",
               stop.receipt.turnId!,
             )
             .catch((error) => {

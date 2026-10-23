@@ -24,7 +24,7 @@ function retryKey(action: string, value: unknown): string {
 
 function hostedInput(input: TaskInputAdmission) {
   if (input.senderKind === "ponder" || input.payload.ponderDesktop !== undefined) {
-    throw new Error("A desktop Ponder operation must be admitted on its originating local installation.");
+    throw new Error("A desktop Pal operation must be admitted on its originating local installation.");
   }
   return { ...input, senderKind: input.senderKind };
 }

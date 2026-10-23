@@ -6,12 +6,12 @@ export function PonderRecommendations({ items, busy, editingId, onEdit, onSend, 
   onDismiss(item: PonderRecommendation): void; onOpen(conversationId: string): void;
 }) {
   if (!items.length) return null;
-  return <section className="ponder-recommendations" aria-label="Ponder recommendations">
+  return <section className="ponder-recommendations" aria-label="Pal recommendations">
     {items.map(item => <article key={item.id} className="ponder-recommendation" data-state={item.state}>
       <button type="button" className="ponder-recommendation-target" onClick={() => onOpen(item.target.conversationId)}>{item.target.title}</button>
       <p>{item.summary}</p>
       {item.submittedText || item.proposedText ? <blockquote>{item.submittedText ?? item.proposedText}</blockquote> : null}
-      <details><summary>Why Ponder suggested this</summary>{item.evidence.map(evidence => <p key={evidence.id}>{evidence.excerpt}</p>)}</details>
+      <details><summary>Why Pal suggested this</summary>{item.evidence.map(evidence => <p key={evidence.id}>{evidence.excerpt}</p>)}</details>
       {["proposed", "failed", "stale", "submitting"].includes(item.state) ? <div className="ponder-recommendation-actions">
         {item.state === "proposed" && item.proposedText ? <><button type="button" disabled={Boolean(busy)} onClick={() => onEdit(item)}>{editingId === item.id ? "Editing below" : "Edit"}</button>
           <button type="button" disabled={Boolean(busy) || hostedRecommendationSendBlocked(item)} onClick={() => onSend(item)}>{busy === item.id ? "Sending…" : editingId === item.id ? "Send edited message" : "Send"}</button></> : null}

@@ -17,7 +17,7 @@ export function createLocalPonderService(deps: {
 }) {
   const serial = new TaskSerialExecutor();
   const capabilities = {
-    remoteAccess: {available:false,reason:"Desktop-owned Ponder remote access is not connected yet."},
+    remoteAccess: {available:false,reason:"Desktop-owned Pal remote access is not connected yet."},
     hostedSandboxes: {available:Boolean(deps.hosted),reason:deps.hosted?null:"Hosted sandbox delegation is not connected yet."},
     hostedCoordinator: {available:false,reason:"Explicit conversation transfer is not connected yet."},
   };
@@ -85,7 +85,7 @@ export function createLocalPonderService(deps: {
       // Persist the identity before creation. A crash retries the exact reserved session.
       await deps.store.saveLocalPonderState({...coordinator,sessionId,modelRef:input.modelRef});
       const creationPayload={experience:"work",provider:input.modelRef.providerId,modelRef:input.modelRef,
-        systemKind:"openpond.ponder",hiddenFromDefaultSidebar:true,title:"Ponder",currentProfile:null,
+        systemKind:"openpond.ponder",hiddenFromDefaultSidebar:true,title:"Pal",currentProfile:null,
         metadata:{localPonderCoordinatorId:coordinator.id},cwd:null};
       await deps.createReservedSession(creationPayload,{sessionId,operationId:`local-ponder:${coordinator.id}`,
         payloadHash:createHash("sha256").update(JSON.stringify(creationPayload)).digest("hex")});
@@ -97,7 +97,7 @@ export function createLocalPonderService(deps: {
       const {relationship,session} = await deps.store.controlLocalPonderAgent(sessionId,input.owner,input.revision);
       if (session) await deps.appendRuntimeEvent(event({sessionId,name:"session.updated",source:"server",data:{session}}));
       await deps.appendRuntimeEvent(event({sessionId:relationship.coordinatorSessionId,name:"diagnostic",source:"server",status:"completed",
-        output:input.owner === "user" ? `The user took control of ${session?.title ?? sessionId}. Autonomous instructions are blocked.` : `The user returned ${session?.title ?? sessionId} to Ponder. Inspect its latest state before assigning more work.`,data:{localPonderControl:relationship}}));
+        output:input.owner === "user" ? `The user took control of ${session?.title ?? sessionId}. Autonomous instructions are blocked.` : `The user returned ${session?.title ?? sessionId} to Pal. Inspect its latest state before assigning more work.`,data:{localPonderControl:relationship}}));
       try { await deps.notifyControl?.(relationship); }
       catch(error) {
         // The ownership transaction has committed; a notification failure must not imply rollback.

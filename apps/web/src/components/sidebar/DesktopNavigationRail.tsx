@@ -14,7 +14,7 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
   const connectionStatus = useConnectionStatus(sidebar.connection);
   const destinations = [
     { view: "chat", label: "Home", Icon: Home },
-    { view: "training", label: "Training", Icon: PanelsTopLeft },
+    { view: "training", label: "Ponder", Icon: PanelsTopLeft },
     { view: "scheduled", label: "Workflows", Icon: CalendarClock },
     { view: "outputs", label: "Outputs", Icon: FileOutput },
     { view: "apps", label: "Apps", Icon: Shapes },

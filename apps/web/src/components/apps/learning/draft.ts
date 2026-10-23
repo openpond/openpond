@@ -198,7 +198,7 @@ export async function submitLearningDraft(
     };
   }
   if (draft.mode === "activate" && !serving?.targetId)
-    throw new Error("Choose a serving target, or enable the policy to register hosted Ponder.");
+    throw new Error("Choose a serving target, or enable the policy to register hosted Pal.");
   const {
     sourceKeys: _keys,
     configurationId: _configuration,

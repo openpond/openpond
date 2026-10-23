@@ -54,7 +54,7 @@ export function AgentConnectionCard({
           <small>
             {account?.state === "signed_in" ? "Connected to OpenPond" : "Sign in to OpenPond"}
           </small>
-          <p>Use Ponder Pal from the sidebar.</p>
+          <p>Use Pal from the sidebar.</p>
           <button
             type="button"
             className="agent-account-link"

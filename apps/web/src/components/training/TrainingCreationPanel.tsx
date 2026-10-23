@@ -47,7 +47,7 @@ export function TrainingCreationPanel({
           <div className={compact ? "composer-create-actions" : "training-inline-actions"}>
             <button className={compact ? undefined : "training-button"} disabled={pending} onClick={() => void training.actions.approveDisclosure(creation.id, true)}><Check size={13}/><span>Approve evidence</span></button>
             <button className={compact ? undefined : "training-button secondary"} disabled={pending} onClick={() => void training.actions.approveDisclosure(creation.id, false)}><X size={13}/><span>Decline</span></button>
-            {compact && onOpenTraining ? <button disabled={pending} onClick={onOpenTraining}><FileText size={13}/><span>Open Training</span></button> : null}
+            {compact && onOpenTraining ? <button disabled={pending} onClick={onOpenTraining}><FileText size={13}/><span>Open Ponder</span></button> : null}
           </div>
         </div>
       ) : state === "awaiting_materialization_approval" && creation.proposal ? (
@@ -81,7 +81,7 @@ export function TrainingCreationPanel({
       ) : (
         <div className={compact ? "composer-create-status-body" : "training-creation-content"}>
           <p>{trainingCreationStatus(creation)}</p>
-          {compact && onOpenTraining ? <div className="composer-create-actions"><button onClick={onOpenTraining}><FileText size={13}/><span>Open Training</span></button></div> : null}
+          {compact && onOpenTraining ? <div className="composer-create-actions"><button onClick={onOpenTraining}><FileText size={13}/><span>Open Ponder</span></button></div> : null}
         </div>
       )}
     </section>

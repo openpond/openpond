@@ -18,7 +18,7 @@ export type AgentSource = {
   provider?: ChatProvider;
 };
 export const AGENT_SOURCES: AgentSource[] = [
-  { id: "openpond_chat", name: "Ponder Pal", icon: OPENPOND_ICON_URL },
+  { id: "openpond_chat", name: "Pal", icon: OPENPOND_ICON_URL },
   {
     id: "codex",
     name: "Codex",

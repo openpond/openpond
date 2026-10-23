@@ -43,7 +43,7 @@ export function ComposerResourceContext({ context, resources, sessionId, busy }:
       if (!id) return select(null);
       const target = context.catalog.data?.options.find(item => item.target.kind === kind && item.target.id === id && (revision === undefined || item.target.revision === revision))?.target;
       const record = [...resources.datasets, ...resources.experiments].find(item => item.kind === kind && item.id === id && (revision === undefined || item.revision === revision));
-      if (!target && !record) { setError("This resource is no longer available. Choose it again from Training."); return Promise.resolve(false); }
+      if (!target && !record) { setError("This resource is no longer available. Choose it again from Ponder."); return Promise.resolve(false); }
       return select(target ?? { kind, id, revision, location: record!.location ?? "local" });
     },
   };

@@ -849,7 +849,7 @@ export function SidebarSectionList({
       {onOpenPonder ? (
         <button type="button" className="sidebar-row sidebar-task-row sidebar-ponder-entry" onClick={onOpenPonder}>
           <span className="conversation-source-icon" aria-hidden="true"><img src={OPENPOND_ICON_URL} alt="" /></span>
-          <span>Ponder Pal</span>
+          <span>Pal</span>
         </button>
       ) : null}
       {visiblePinnedRows.length > 0 || pinnedWorkflowRows.length > 0 ? (

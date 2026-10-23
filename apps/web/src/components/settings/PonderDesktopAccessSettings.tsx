@@ -12,16 +12,16 @@ export function PonderDesktopAccessSettings({ connection }: { connection: Client
     { value: "", label: "Choose a local project" },
     ...(access?.projects ?? []).map(item => ({
       value: item.id, label: item.name,
-      description: item.shared ? "Shared with Ponder" : item.available ? item.cwd ?? undefined : "Folder unavailable",
+      description: item.shared ? "Shared with Pal" : item.available ? item.cwd ?? undefined : "Folder unavailable",
     })),
   ];
-  return <section className="remote-access-settings" aria-label="Ponder desktop access">
+  return <section className="remote-access-settings" aria-label="Pal desktop access">
     <h2>Desktop access</h2>
-    <p>Share a local project so Ponder can start tasks with the agents configured on this computer.</p>
+    <p>Share a local project so Pal can start tasks with the agents configured on this computer.</p>
     <div className="account-summary remote-access-summary">
       <div className="account-summary-main"><div>
         <strong>This computer</strong>
-        <small role="status">{busy ? "Checking desktop access…" : connected ? "Connected to Ponder" : access?.desktop.ownerScope
+        <small role="status">{busy ? "Checking desktop access…" : connected ? "Connected to Pal" : access?.desktop.ownerScope
           ? "Desktop connection unavailable" : error ? "Unable to load desktop access" : "Sign in and select a workspace"}</small>
       </div></div>
       <button type="button" className="settings-secondary" disabled={busy || !connection}
@@ -31,20 +31,20 @@ export function PonderDesktopAccessSettings({ connection }: { connection: Client
       <div className="account-list-heading"><span>Local project</span><small>Current account and workspace</small></div>
       <div className="account-summary">
         <div className="account-summary-main"><div>
-          <DropdownSelect value={project ? projectId : ""} options={options} label="Local project for Ponder"
+          <DropdownSelect value={project ? projectId : ""} options={options} label="Local project for Pal"
             disabled={busy || !connected} searchable onChange={setProjectId} />
           {project?.cwd && <small>{project.cwd}</small>}
-          {project && <small>{project.shared ? "Shared with Ponder" : project.previouslyShared
-            ? "Share again for this connection" : "Not shared with Ponder"}</small>}
+          {project && <small>{project.shared ? "Shared with Pal" : project.previouslyShared
+            ? "Share again for this connection" : "Not shared with Pal"}</small>}
         </div></div>
         <button type="button" className="settings-secondary"
           disabled={busy || !project || !connected || (!project.shared && (!project.available || !project.revision))}
           onClick={() => project && void change(project, !project.shared)}>
-          {project?.shared ? "Stop sharing" : "Share with Ponder"}
+          {project?.shared ? "Stop sharing" : "Share with Pal"}
         </button>
       </div>
     </div>
-    <p>Sharing lets Ponder request local work in this project and receive the requested results. Tasks use your existing agent permissions. Stop sharing here to remove it from discovery.</p>
+    <p>Sharing lets Pal request local work in this project and receive the requested results. Tasks use your existing agent permissions. Stop sharing here to remove it from discovery.</p>
     {connected && access?.projects.length === 0 && <p>No saved local projects are available. Add a project in the app, then refresh.</p>}
     {notice && <p role="status">{notice}</p>}
     {error && <p>Desktop access could not be loaded. Refresh to try again.</p>}

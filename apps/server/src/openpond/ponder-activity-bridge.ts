@@ -52,7 +52,7 @@ export function createPonderActivityBridge(input: {
   let tail: Promise<void> = Promise.resolve();
   const queue = (fn: () => Promise<void>) => {
     if (closed) return;
-    tail = tail.then(fn).catch(() => input.warn("Ponder Pal activity sync will retry."));
+    tail = tail.then(fn).catch(() => input.warn("Pal activity sync will retry."));
   };
   async function scope() {
     const context = await loadAuthenticatedOpenPondAccountContext();
@@ -159,7 +159,7 @@ export function createPonderActivityBridge(input: {
     if ((await scope())?.key !== owner.key) return;
     const settings = payload.settings as Settings;
     const bindingId = payload.bindingId;
-    if (typeof bindingId !== "string") throw new Error("Ponder Pal binding missing.");
+    if (typeof bindingId !== "string") throw new Error("Pal binding missing.");
     const state = await read(owner.file);
     if (!settings.watchLocalThreads) {
       state.pending = [];

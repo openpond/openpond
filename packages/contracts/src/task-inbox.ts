@@ -122,7 +122,7 @@ export const TASK_COORDINATION_INSTRUCTIONS = [
 
 export function taskInputModelText(input: TaskInput): string {
   return [
-    input.senderKind === "user" ? "User update to the current assignment:" : input.senderKind === "runtime" ? "Runtime coordination notice:" : input.senderKind === "ponder" ? "Ponder message carrying the originating user's bounded instruction:" : "Peer coordination message:",
+    input.senderKind === "user" ? "User update to the current assignment:" : input.senderKind === "runtime" ? "Runtime coordination notice:" : input.senderKind === "ponder" ? "Pal message carrying the originating user's bounded instruction:" : "Peer coordination message:",
     `Message type: ${input.kind.toUpperCase()}`,
     `Message ID: ${input.id}`,
     `Recipient: ${input.sessionId}`,

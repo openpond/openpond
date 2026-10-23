@@ -56,10 +56,10 @@ export function ChatContextPicker({ context, disabled = false, placement = "bott
   }
   return <div ref={menuRef} className={`chat-context-picker codex-model-reasoning${placement === "top" ? " open-up" : ""}`}>
     <button ref={triggerRef} type="button" className={`composer-project-trigger chat-training-trigger${open ? " active" : ""}`}
-      aria-label="Training" aria-haspopup="dialog" aria-expanded={open} disabled={unavailable}
-      title={selected ? `${selected.label}: ${selected.detail}` : "Training"}
+      aria-label="Ponder" aria-haspopup="dialog" aria-expanded={open} disabled={unavailable}
+      title={selected ? `${selected.label}: ${selected.detail}` : "Ponder"}
       onClick={() => { setDraftType(null); setOpen(value => !value); }}>
-      <span>{selected?.target.kind === "dataset" ? `Experiment draft · ${selected.label}` : selected?.model?.name ?? selected?.label ?? "Training"}</span><ChevronDown size={14} />
+      <span>{selected?.target.kind === "dataset" ? `Experiment draft · ${selected.label}` : selected?.model?.name ?? selected?.label ?? "Ponder"}</span><ChevronDown size={14} />
     </button>
     {open ? <div className="codex-model-menu chat-training-menu" role="dialog" aria-label="Training context">
       <DropdownSelect compact floating label="Training type" value={type}

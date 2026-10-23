@@ -69,7 +69,7 @@ export function localPonderTools(deps:{store:TaskInboxRepository;inbox:TaskInbox
       const {taskId,beforeSequence}=z.object({taskId:z.string(),beforeSequence:z.number().int().positive().optional()}).parse(context.args);const relationship=await target(context,taskId);
       return {relationship,session:await deps.getSession(taskId),transcript:await deps.transcript(taskId,beforeSequence)};
     }),
-    tool("openpond_stop_agent","Stop an associated Ponder-controlled worker. User-controlled workers require the user to stop them directly.",z.object({taskId:z.string()}).strict(),async context=>{
+    tool("openpond_stop_agent","Stop an associated Pal-controlled worker. User-controlled workers require the user to stop them directly.",z.object({taskId:z.string()}).strict(),async context=>{
       const {taskId}=z.object({taskId:z.string()}).parse(context.args);const relationship=await target(context,taskId);
       if(relationship.owner!=="ponder") throw new Error("local_ponder_control_changed");
       // This is the stop admission boundary. Takeover after admission cannot undo it.

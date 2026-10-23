@@ -226,7 +226,7 @@ export function createPonderDesktopRuntime(deps: {
     for (const operation of [...operations.values()]) {
       if (stopped) return;
       try { await processOperation(operation); }
-      catch (error) { deps.warn(`Ponder desktop operation ${operation.id}: ${String(error)}`); }
+      catch (error) { deps.warn(`Pal desktop operation ${operation.id}: ${String(error)}`); }
     }
     pollingNeeded = cloudObligations || operations.size > 0 || wakeGeneration !== startedGeneration;
   }
@@ -236,7 +236,7 @@ export function createPonderDesktopRuntime(deps: {
     timer = setTimeout(() => {
       timer = null;
       running = tick()
-        .catch((error) => deps.warn(`Ponder desktop connection: ${String(error)}`))
+        .catch((error) => deps.warn(`Pal desktop connection: ${String(error)}`))
         .finally(() => {
           running = null;
           schedule();
@@ -253,7 +253,7 @@ export function createPonderDesktopRuntime(deps: {
     if (attachment)
       await deps.client
         .request("revoke", {}, attachment.epoch)
-        .catch((error) => deps.warn(`Ponder desktop revocation: ${String(error)}`));
+        .catch((error) => deps.warn(`Pal desktop revocation: ${String(error)}`));
   }
 
   return {
