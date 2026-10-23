@@ -24,17 +24,12 @@
       "import": "./dist/index.js"
     }
   },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "scripts": {
     "build": "node ../../scripts/run-typescript.mjs tsc -p tsconfig.json",
     "typecheck": "node ../../scripts/run-typescript.mjs tsc -p tsconfig.json --noEmit",
     "test": "node --test test/protocol-boundary.test.mjs",
-    "check:consumer": "node scripts/check-published-consumer.mjs",
-    "check": "pnpm run build && pnpm run test && pnpm run check:consumer",
-    "publish:check": "pnpm run check"
+    "check:consumer": "node scripts/check-installed-consumer.mjs",
+    "check": "pnpm run build && pnpm run test && pnpm run check:consumer"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
@@ -47,5 +42,6 @@
   },
   "engines": {
     "node": ">=22.14.0 <25"
-  }
+  },
+  "private": true
 }

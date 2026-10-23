@@ -1,6 +1,6 @@
 # @openpond/mcp
 
-Open-source typed MCP tools for supported hosted OpenPond CLI/API workflows. Ponder is OpenPond's model training product. The package provides the tool catalog, public SDK adapters, validation, structured results and errors, and stateless Streamable HTTP transport.
+Internal adapter for OpenPond's hosted OAuth MCP connection over supported OpenPond CLI/API workflows. Ponder is OpenPond's model training product. This workspace package provides the tool catalog, public SDK adapters, validation, structured results and errors, and stateless Streamable HTTP transport. It is delivered with the hosted application or as an exact internal build artifact; it has no independent npm publication or version-release requirement. The existing MIT license and attribution remain in [LICENSE](LICENSE).
 
 The exported request handler can be embedded in an MCP host. Configure its URL and authentication through your MCP client. A host supplies the transport adapter and authorization; the package does not configure clients automatically.
 
@@ -24,7 +24,7 @@ For example, OpenCode uses a remote server configuration:
 
 The example uses the production API host. Follow the published availability and tested-client instructions before connecting. Keep access tokens and API keys out of shared configuration and prompts.
 
-This npm package is the reusable server implementation for operators embedding the hosted route. OpenPond Desktop uses its bundled CLI and workflow skills for its own operations; it does not need to connect to its own MCP.
+This private workspace package implements the hosted route and supports reviewed internal host integrations. OpenPond Desktop uses its bundled CLI and workflow skills for its own operations; it does not need to connect to its own MCP.
 
 ## Hosting contract
 
@@ -33,7 +33,7 @@ import { handleOpenPondMcpRequest } from '@openpond/mcp';
 
 // `verified` must come from the host's OAuth resource/grant verifier.
 const response = await handleOpenPondMcpRequest(request, {
-  baseUrl: 'https://api.openpond.ai',
+  baseUrl: configuredApiBaseUrl,
   context: {
     userId: verified.userId,
     teamId: verified.teamId,
@@ -44,7 +44,7 @@ const response = await handleOpenPondMcpRequest(request, {
 });
 ```
 
-The hosting application must verify issuer, exact resource audience, expiry, active grant, current workspace membership and operation scopes before dispatch and in `authorize` on every discovery/call. Do not exchange a customer grant for an operator credential. An API-key adapter is useful for authorized self-hosting but does not implement the hosted OAuth connection contract.
+The hosting application must verify issuer, exact resource audience, expiry, active grant, current workspace membership and operation scopes before dispatch and in `authorize` on every discovery/call. Do not exchange a customer grant for an operator credential. An API-key adapter supports reviewed host integrations but does not implement the hosted OAuth connection contract.
 
 A first-party host may instead supply an authenticated `fetch` adapter. Without `apiKey`, the package removes the SDK's compatibility authorization marker before calling that adapter; there is no implicit unauthenticated network fallback. The host must revalidate each request, bind its workspace, allow only reviewed public API routes, and run the same underlying resource/domain permissions and spend admission. OAuth bearer passthrough is not supported.
 
@@ -85,18 +85,19 @@ These mappings follow the checked-in CLI command reference; the MCP accepts its 
 | `openpond training hosted-evaluation-tasks/hosted-corrections/hosted-learning-inspect` | `training_evaluation_tasks`, `learning_correction_metrics`, policy list/inspection and task queue inspection. |
 | Public post-training evaluation SDK | `training_post_evaluation_attach/get/start/retry/cancel`; evaluation never implicitly reruns training. |
 
-## Boundaries and release gates
+## Boundaries and delivery checks
 
-The package requires `openpond-sdk@^0.12.7` for its public learning-command, correction-metrics, queue and checkpoint-recovery contracts. Publish the compatible Evals/SDK cohort before MCP, then verify a clean installation using published dependencies. See [release preparation and first-publication setup](RELEASING.md).
+The adapter requires `openpond-sdk@^0.12.7` for its public learning-command, correction-metrics, queue and checkpoint-recovery contracts. Preserve that compatible dependency floor and verify the exact internal archive in an isolated consumer. The dependency cohort can come from its supported registry releases or explicit local archives; MCP itself needs no npm publication. See [internal delivery and artifact integration](RELEASING.md).
 
 The tool catalog excludes local filesystem access, shell execution, desktop-session management and account or infrastructure administration. Asset uploads accept the existing typed hash-verified upload/package contracts, never a path interpreted on the MCP host. Profiles/Skills/Harness authoring and published organization actions remain under their existing separate interfaces; released Harness evaluation targets are supported here.
 
 Hosts must implement OAuth discovery, token refresh and revocation, and verify workspace isolation and client interoperability before offering a connection. Keep authorization checks and approved budgets in force for every operation.
 
-Build and check the focused package:
+From the repository root, build and check the focused adapter and its installed artifact:
 
 ```sh
 node scripts/run-typescript.mjs tsc -p packages/mcp/tsconfig.json
 node --test packages/mcp/test/protocol-boundary.test.mjs
-npm pack ./packages/mcp --dry-run
+node packages/mcp/scripts/check-installed-consumer.mjs --local-dependencies
+npm pack ./packages/mcp --dry-run --ignore-scripts
 ```

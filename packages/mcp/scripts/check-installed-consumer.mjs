@@ -10,7 +10,7 @@ try {
   const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
   for (const [name, range] of Object.entries(manifest.dependencies)) {
     if (/^(?:workspace|file|link):/.test(range)) {
-      throw new Error(`Published dependency ${name} uses non-registry range ${range}.`);
+      throw new Error(`Runtime dependency ${name} uses non-registry range ${range}.`);
     }
   }
   const dependencies = [];

@@ -6,7 +6,6 @@ export const releasePackages = {
   evals: "@openpond/evals",
   harness: "@openpond/harness",
   sdk: "openpond-sdk",
-  mcp: "@openpond/mcp",
   "agent-sdk": "openpond-agent-sdk",
 };
 export const packageReleaseManifest = (key) => key === "cli" ? "apps/cli/package.json" : `packages/${key}/package.json`;

@@ -11,7 +11,6 @@ const packages = {
   evals: { name: "@openpond/evals", prerequisite: "harness" },
   harness: { name: "@openpond/harness", prerequisite: null },
   sdk: { name: "openpond-sdk", prerequisite: null },
-  mcp: { name: "@openpond/mcp", prerequisite: "sdk" },
   "agent-sdk": { name: "openpond-agent-sdk", prerequisite: null },
 } as const;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
