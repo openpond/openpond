@@ -1,3 +1,4 @@
+import { loadBuiltInSkill, loadBuiltInSkillCatalog } from "../runtime/built-in-skill-catalog.js";
 import { resolveNativeWorkerParents } from "../native-worker-sessions.js";
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { z } from "zod";
@@ -788,10 +789,15 @@ export function createServerPayloads(deps: {
   }
 
   async function skillSourceFilePayload(
-    scope: "codex" | "profile" | "extension",
+    scope: "codex" | "profile" | "extension" | "builtin",
     skillName: string,
     filePath: string
   ) {
+    if (scope === "builtin") {
+      const skill = await loadBuiltInSkill(skillName);
+      if (!["SKILL.md", ...skill.resourceFiles].includes(filePath)) throw new Error("Unknown built-in skill file.");
+      return readSkillSourceFile({ skillName, scope, packageRoot: skill.sourcePath, relativeFilePath: filePath });
+    }
     if (scope === "codex") {
       return readCodexPersonalSkillFile(skillName, filePath);
     }
@@ -899,6 +905,7 @@ export function createServerPayloads(deps: {
       profile,
       profileLibrary,
       codexPersonalSkills,
+      builtInSkills,
       extensionCatalog,
     ] = await Promise.all([
       store.sessionShells(),
@@ -912,6 +919,7 @@ export function createServerPayloads(deps: {
       loadBootstrapProfile(Boolean(bootstrapOptions.ensureProfile)),
       loadOpenPondProfileLibrary(),
       loadCodexPersonalSkills(),
+      loadBuiltInSkillCatalog(),
       extensionManager.list(),
     ]);
     const codex = getCodexStatus();
@@ -981,6 +989,7 @@ export function createServerPayloads(deps: {
       profile: profileStateForClient(profile),
       profileLibrary: profileLibraryForClient(profileLibrary),
       codexPersonalSkills,
+      builtInSkills,
       extensionCatalog,
       codexHistorySessions: validBootstrapSessions(
         codexHistorySessionsWithLiveStatus(

@@ -41,6 +41,8 @@ openpond login --account production --api-key opk_prod_...
 openpond login --account secondary --api-key opk_secondary_...
 ```
 
+Desktop includes the five maintained OpenPond workflow skills automatically: `openpond-cli`, `openpond-taskset-authoring`, `openpond-agent-authoring`, `openpond-skill-authoring`, and `openpond-refiner-authoring`. Inspect their readiness, instructions, and bundled reference files in **Settings → Skills → OpenPond skills**. They belong to the app's runtime and do not require installation into your personal Codex skills directory.
+
 Commands:
 
 ```bash

@@ -14,6 +14,7 @@ import { addExperiments } from "./experiments.js";
 import { addTraining } from "./training.js";
 import { addLearning } from "./learning.js";
 import { Empty } from "./common.js";
+import { normalizeOptionalNulls } from "./input-normalization.js";
 import {
   OPENPOND_APP_MCP_SCOPES,
   OpenPondMcpAuthorizationError,
@@ -155,7 +156,9 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
       if (!tool.scopes.every((scope) => options.context.scopes.includes(scope)))
         throw new OpenPondMcpAuthorizationError("insufficient_scope", tool.scopes);
       await options.context.authorize(tool.scopes);
-      const input = tool.input.parse(request.params.arguments ?? {});
+      const input = tool.input.parse(
+        normalizeOptionalNulls(tool.input, request.params.arguments ?? {}),
+      );
       const result = await tool.run(input as never);
       if (tool.output) tool.output.parse(result);
       const structuredContent = JSON.parse(JSON.stringify({ result })) as Record<string, unknown>;

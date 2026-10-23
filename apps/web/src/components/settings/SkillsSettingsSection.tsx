@@ -1,3 +1,4 @@
+import { BuiltInSkillsSettings } from "./BuiltInSkillsSettings";
 import {
   CONNECTED_APP_INTEGRATION_SKILLS,
   connectedAppBundleByProvider,
@@ -15,6 +16,7 @@ export function SkillsSettingsSection({
   onOpenSkill,
   onOpenExtension,
   personalSkills,
+  builtInSkills,
   extensionCatalog,
   connection,
   onExtensionCatalog,
@@ -24,6 +26,7 @@ export function SkillsSettingsSection({
   onOpenSkill: (skill: SkillSourceDocument) => void;
   onOpenExtension: (extension: OpenPondExtension) => void;
   personalSkills: CodexPersonalSkill[];
+  builtInSkills: import("@openpond/contracts").OpenPondProfileSkill[];
   extensionCatalog: OpenPondExtensionCatalog;
   connection: ClientConnection | null;
   onExtensionCatalog: (catalog: OpenPondExtensionCatalog) => void;
@@ -40,6 +43,8 @@ export function SkillsSettingsSection({
           </p>
         </div>
       </header>
+
+      <BuiltInSkillsSettings skills={builtInSkills} connection={connection} onOpenSkill={onOpenSkill} />
 
       <GithubExtensionsSettings
         catalog={extensionCatalog}

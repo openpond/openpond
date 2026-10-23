@@ -69,6 +69,148 @@ test("MCP discovery, calls and reconnect retain the authorization boundary", asy
   }
 });
 
+// Strict function-calling clients represent omitted optional fields as null.
+// Prove the real protocol/SDK adapter accepts that form without changing
+// explicit nullable values, repairing unions, or weakening required inputs.
+test("strict-client optional nulls retain the API validation boundary", async () => {
+  const teamId = "qualification-workspace";
+  const observed = [];
+  const server = createOpenPondMcpServer({
+    baseUrl: "https://api.openpond.ai",
+    context: {
+      userId: "qualification-user",
+      teamId,
+      scopes: ["app:read", "app:write"],
+      authorize: async () => {},
+    },
+    fetch: async (request) => {
+      const url = new URL(request.url);
+      const body = request.method === "PUT" ? await request.json() : undefined;
+      observed.push({ method: request.method, url, body });
+      if (url.pathname === "/v1/training-projects" && request.method === "GET") {
+        assert.equal(url.searchParams.has("cursor"), false);
+        return Response.json({ teamId, projects: [], nextCursor: null });
+      }
+      if (url.pathname === "/v1/dataset-workspaces" && request.method === "GET") {
+        assert.equal(url.searchParams.get("limit"), "100");
+        assert.equal(url.searchParams.get("sort"), "id");
+        assert.equal(url.searchParams.has("cursor"), false);
+        return Response.json({ teamId, datasets: [], nextCursor: null });
+      }
+      assert.equal(request.method, "PUT");
+      assert.equal(url.pathname, "/v1/training-projects/qualification-project");
+      return Response.json({
+        schemaVersion: "openpond.trainingProject.v1",
+        id: body.id,
+        teamId,
+        creatorUserId: "qualification-user",
+        revision: body.expectedRevision + 1,
+        content: body.content,
+        archived: false,
+        createdAt: "2026-10-23T00:00:00Z",
+        updatedAt: "2026-10-23T00:00:00Z",
+      });
+    },
+  });
+  const client = new Client({ name: "strict-client-qualification", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(b), client.connect(a)]);
+  try {
+    const cursorInput = Object.freeze({ cursor: null });
+    const listed = await client.callTool({ name: "projects_list", arguments: cursorInput });
+    assert.notEqual(listed.isError, true);
+    assert.deepEqual(listed.structuredContent.result, { teamId, projects: [], nextCursor: null });
+    assert.deepEqual(cursorInput, { cursor: null });
+    const datasets = await client.callTool({
+      name: "datasets_list",
+      arguments: {
+        cursor: null,
+        projectId: null,
+        search: null,
+        sort: null,
+        limit: null,
+      },
+    });
+    assert.notEqual(datasets.isError, true);
+    const input = {
+      operationId: "qualification-operation",
+      id: "qualification-project",
+      expectedRevision: 0,
+      ownerScope: null,
+      content: {
+        name: "Qualification",
+        description: "",
+        targets: [],
+        defaultTargetId: null,
+        resources: [
+          { kind: "dataset", resourceId: "qualification-dataset", role: "training", release: null },
+        ],
+      },
+    };
+    const original = structuredClone(input);
+    const saved = await client.callTool({ name: "projects_save", arguments: input });
+    assert.notEqual(saved.isError, true);
+    assert.equal(Object.hasOwn(observed.at(-1).body, "ownerScope"), false);
+    assert.equal(observed.at(-1).body.content.defaultTargetId, null);
+    assert.equal(observed.at(-1).body.content.resources[0].release, null);
+    assert.deepEqual(input, original);
+    const source = {
+      profileId: "qualification-profile",
+      sourceRevision: "revision",
+      harnessRelease: { id: "qualification-harness", contentHash: "a".repeat(64) },
+      catalogHash: "b".repeat(64),
+      definitionId: "qualification-definition",
+      definitionHash: "c".repeat(64),
+      target: { kind: "profile" },
+      environmentHash: "d".repeat(64),
+    };
+    const unionInput = structuredClone(input);
+    unionInput.content.targets = [
+      {
+        id: "qualification-target",
+        name: "Target",
+        target: { kind: "harness", profileRepositoryId: "qualification-profile", source },
+      },
+    ];
+    assert.notEqual(
+      (await client.callTool({ name: "projects_save", arguments: unionInput })).isError,
+      true,
+    );
+    const requestsBeforeRejection = observed.length;
+    for (const [name, args] of [
+      ["projects_get", { id: null }],
+      ["projects_save", { ...input, expectedRevision: null }],
+      ["projects_list", { cursor: null, unknown: null }],
+      [
+        "projects_save",
+        {
+          ...unionInput,
+          content: {
+            ...unionInput.content,
+            targets: [
+              {
+                ...unionInput.content.targets[0],
+                target: {
+                  ...unionInput.content.targets[0].target,
+                  source: { ...source, sourceCandidate: null },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    ]) {
+      const denied = await client.callTool({ name, arguments: args });
+      assert.equal(denied.isError, true);
+      assert.equal(JSON.parse(denied.content[0].text).code, "invalid_input_or_response");
+    }
+    assert.equal(observed.length, requestsBeforeRejection);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
 // Scope-specific regressions previously allowed a cancellation grant to release
 // a prepared dataset, or a review grant to cancel attached execution. Prove the
 // public MCP boundary rejects those calls before parsing or reaching the API.

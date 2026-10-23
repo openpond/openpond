@@ -8,6 +8,7 @@ import { RuntimeEventSchema } from "./runtime.js";
 import { ApprovalSchema } from "./approvals.js";
 import { PlaceholderPaneSchema } from "./placeholders.js";
 import {
+  OpenPondProfileSkillSchema,
   OpenPondProfileLibrarySchema,
   OpenPondProfileStateSchema,
   emptyOpenPondProfileLibrary,
@@ -45,6 +46,7 @@ export const BootstrapPayloadSchema = z.object({
   profile: OpenPondProfileStateSchema.optional().default(emptyOpenPondProfileState),
   profileLibrary: OpenPondProfileLibrarySchema.optional().default(emptyOpenPondProfileLibrary),
   codexPersonalSkills: z.array(CodexPersonalSkillSchema).optional().default([]),
+  builtInSkills: z.array(OpenPondProfileSkillSchema).optional().default([]),
   extensionCatalog: OpenPondExtensionCatalogSchema.optional().default({
     rootPath: "",
     registryPath: "",
