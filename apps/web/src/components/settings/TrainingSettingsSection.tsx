@@ -87,7 +87,7 @@ export function TrainingSettingsSection({
 
   return (
     <section className={`account-settings training-settings${embedded ? " embedded" : ""}`}>
-      {embedded ? null : <h1>Training</h1>}
+      {embedded ? null : <h1>Ponder settings</h1>}
       <form className="provider-settings-form" onSubmit={(event) => void save(event)}>
         <div className="account-list-heading">
           <span>Taskset authoring</span>

@@ -58,7 +58,7 @@ export function createTaskInboxRuntime(deps: {
         name: "task.input", source: "server", status: input.state === "rejected" ? "failed" : input.state === "pending" ? "pending" : "completed",
         output: input.error ?? `${input.senderKind === "user" ? "Input" : "Peer message"} ${input.state}.`,
         data: { input, ...(ponderOrigin ? { delivery: { direction: "received", peer: {
-          kind: "ponder", bindingId: ponderOrigin.scope.bindingId, title: "Ponder Pal", provider: "openpond",
+          kind: "ponder", bindingId: ponderOrigin.scope.bindingId, title: "Pal", provider: "openpond",
           ponderScope: ponderOrigin.scope,
         } } } : sender ? { delivery: { direction: "received", peer: peer(sender) } } : {}) },
       }));
@@ -391,7 +391,7 @@ export function createTaskInboxRuntime(deps: {
     },
     admitPonderLocalMessage(input: TaskInputAdmission) {
       if (input.senderKind !== "ponder" || input.senderSessionId !== null || !input.payload.ponderDesktop) {
-        throw new Error("Ponder local admission requires a qualified desktop operation.");
+        throw new Error("Pal local admission requires a qualified desktop operation.");
       }
       return admit(input);
     },

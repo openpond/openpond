@@ -104,8 +104,8 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
   return (
     <section className="account-settings">
       <header className="section-heading">
-        <h2>Ponder Pal</h2>
-        <p>Use your deployed model and keep track of your conversations and workflows.</p>
+        <h2>Pal</h2>
+        <p>Pal stands for Ponder Assisted Learning. Use your deployed model and keep track of your conversations and workflows.</p>
       </header>
       <PonderDesktopAccessSettings connection={connection} />
       {error && <ErrorToast error={error} />}
@@ -136,7 +136,7 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
               });
             }}
           >
-            <option value="default">Ponder model — shared Qwen, then your accepted version</option>
+            <option value="default">Pal model — shared Qwen, then your accepted version</option>
             {payload?.models.map((model) => (
               <option
                 key={`${model.providerId}|${model.modelId}`}
@@ -190,7 +190,7 @@ export function PonderSettingsSection({ connection }: { connection: ClientConnec
           </label>
         ))}
         <p>
-          Activity gives Ponder Pal context. It does not automatically message or change your tasks.
+          Activity gives Pal context. It does not automatically message or change your tasks.
         </p>
         <label>
           <input type="checkbox" checked={draft.supervision.mode === "recommend"}

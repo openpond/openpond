@@ -54,9 +54,9 @@ export function LearningSourcesFields({ draft, options, loading, onChange }: Dra
             );
             const name =
               source.origin === "native_chat"
-                ? "Ponder Pal Chat"
+                ? "Pal Chat"
                 : source.origin === "native_work"
-                  ? "Ponder Pal Work"
+                  ? "Pal Work"
                   : (catalog?.name ?? source.name);
             return (
               <label key={key} className="agent-learning-option">

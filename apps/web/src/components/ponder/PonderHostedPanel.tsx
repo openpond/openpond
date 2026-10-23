@@ -35,13 +35,13 @@ export type SharedComposerProps = Pick<ComposerProps,
 function displayError(cause: unknown): string {
   if (cause instanceof ApiRequestError &&
       (cause.message === "public_api_route_not_found" || cause.message === "product_route_not_found")) {
-    return "Ponder Pal is available in this app, but the connected OpenPond service has not been updated yet.";
+    return "Pal is available in this app, but the connected OpenPond service has not been updated yet.";
   }
   const message = cause instanceof Error ? cause.message : String(cause);
   if (/<(?:!doctype|html|head|body)\b/i.test(message) || /\b50[234]\b/.test(message)) {
-    return "Ponder Pal is temporarily unavailable. Please try again.";
+    return "Pal is temporarily unavailable. Please try again.";
   }
-  return message.length > 240 ? "Ponder Pal couldn’t complete this action. Please try again." : message;
+  return message.length > 240 ? "Pal couldn’t complete this action. Please try again." : message;
 }
 
 export function PonderHostedPanel({ connection, accountScopeKey, localSessions, composer, onOpenWork, onOpenLocalWork, navigationVersion = 0 }: {
@@ -69,7 +69,7 @@ export function PonderHostedPanel({ connection, accountScopeKey, localSessions, 
   const recommendations = usePonderRecommendations(connection, binding?.bindingId ?? null);
   useErrorToast(recommendations.error ? displayError(recommendations.error) : null);
   useErrorToast(conversation?.activeTurn?.status === "failed"
-    ? displayError(conversation.activeTurn.errorText ?? "Ponder couldn’t complete this request. Please try again.")
+    ? displayError(conversation.activeTurn.errorText ?? "Pal couldn’t complete this request. Please try again.")
     : null);
   const [editingRecommendation, setEditingRecommendation] = useState<PonderRecommendation | null>(null);
   const currentEditingRecommendation = editingRecommendation ? recommendations.items.find(item => item.id === editingRecommendation.id) : null;
@@ -249,7 +249,7 @@ export function PonderHostedPanel({ connection, accountScopeKey, localSessions, 
   return <ConversationSurface scroll={{navigationVersion,browserConversationId:conversation?.id ?? null,chatSubmissionVersion:submissionVersion,
     chatMessages:transcript.messages,chatHistoryHasMore:false,chatHistoryLoading:false,
     pendingApproval:null,showChatThread:true,showThinkingIndicator:running,turnRunning:discussionActive,view:"chat"}}
-    thread={{connection,usageSessionId:null,label:"Ponder conversation",loading:!conversation,
+    thread={{connection,usageSessionId:null,label:"Pal conversation",loading:!conversation,
       onOpenSession:id=>{const local=transcript.localPeers.get(id);if(local)void openLocalWork(local);else onOpenWork(id);},
       renderMessage:entry=>{const source=transcript.sources.get(entry.message.id);return source ? <PonderTranscriptOutputs
         message={source} work={linkedWork} onOpenOutput={id=>void openOutput(id)}
@@ -280,7 +280,7 @@ export function PonderHostedPanel({ connection, accountScopeKey, localSessions, 
             ? conversation.activeTurn.wait.options.map((option) => <button key={option} type="button"
                 onClick={() => void resolveWait(conversation.activeTurn!, { value: option })}>{option}</button>)
             : <form onSubmit={(event) => { event.preventDefault(); void resolveWait(conversation.activeTurn!, { value: waitResponse }); }}>
-                <input aria-label="Response to Ponder Pal" value={waitResponse} onChange={(event) => setWaitResponse(event.target.value)} />
+                <input aria-label="Response to Pal" value={waitResponse} onChange={(event) => setWaitResponse(event.target.value)} />
                 <button type="submit" disabled={!waitResponse.trim()}>Send response</button>
               </form>}
       </section>}
@@ -289,7 +289,7 @@ export function PonderHostedPanel({ connection, accountScopeKey, localSessions, 
         : <button key={output.id} type="button" onClick={() => void openOutput(output.id)}>{output.name}</button>)}
       </>}} composerPrefix={<>
       {editingRecommendation ? <div className="ponder-message-destination" role="status">
-        <span>Message to {editingRecommendation.target.title}{editingUnavailable ? " — review the latest task state before sending" : ""}</span><button type="button" onClick={returnToChat}>Return to Ponder chat</button>
+        <span>Message to {editingRecommendation.target.title}{editingUnavailable ? " — review the latest task state before sending" : ""}</span><button type="button" onClick={returnToChat}>Return to Pal chat</button>
       </div> : null}
       </>} composer={<Composer {...composer} experience="chat" mode="dock" showProjectFooter={false} hideModelControls
         connection={connection} prompt={draft} onPromptChange={setDraft}

@@ -36,18 +36,18 @@ export function PonderConnections({state, connection, accountScopeKey, onSetup}:
     return () => {window.removeEventListener("resize",place);window.removeEventListener("scroll",place,true);};
   },[open]);
   return <>
-    <button ref={trigger} type="button" className="ponder-execution-control" popoverTarget={id}>Ponder</button>
-    <div id={id} popover="auto" className="ponder-connections" style={position} onToggle={event => setOpen(event.newState === "open")} role="dialog" aria-label="Ponder connections">
+    <button ref={trigger} type="button" className="ponder-execution-control" popoverTarget={id}>Pal</button>
+    <div id={id} popover="auto" className="ponder-connections" style={position} onToggle={event => setOpen(event.newState === "open")} role="dialog" aria-label="Pal connections">
       <h3>Connections</h3>
       <section className="ponder-access-section" aria-label="Desktop and remote access">
-        <label><span>This desktop<small>{state?.session ? "Ponder runs here" : "Set up Ponder to start"}</small></span><input type="checkbox" role="switch" aria-label="This desktop execution" checked={Boolean(state?.session)} readOnly disabled/></label>
+        <label><span>This desktop<small>{state?.session ? "Pal runs here" : "Set up Pal to start"}</small></span><input type="checkbox" role="switch" aria-label="This desktop execution" checked={Boolean(state?.session)} readOnly disabled/></label>
         {(["Web access", "iOS access"] as const).map(title => <div key={title} className="ponder-connection-card" role="group" aria-label={title}>
           <span>{title}<small>{remoteLabel}</small></span><span className={`ponder-connection-dot${remote.data?.state === "connected" ? " connected" : ""}`} role="img" aria-label={`${title}: ${remoteLabel}`} title="Shared desktop relay connection"/>
         </div>)}
       </section>
       <label className="ponder-hosted-sandboxes"><span>Hosted sandboxes<small>{hosted.loading ? "Checking availability…" : hosted.state?.enabled ? "Selected assignments may run in hosted Work." : hosted.state?.reason ?? "Allow selected assignments and required project context to run in hosted Work. Usage may incur charges."}</small></span><input type="checkbox" role="switch" aria-label="Hosted sandboxes enabled" checked={hosted.state?.enabled ?? false}
         disabled={!hosted.state || hosted.saving || (!hosted.state.available && !hosted.state.enabled)} onChange={event => hosted.setEnabled(event.currentTarget.checked)}/></label>
-      <button type="button" onClick={onSetup}>Ponder settings</button>
+      <button type="button" onClick={onSetup}>Pal settings</button>
     </div>
   </>;
 }

@@ -1944,7 +1944,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   await turnRunner.recoverTaskInbox();
   hostedPonder.startMonitoring();
   workSandboxLifecycle.start();
-  void ponderDesktopManager.start().catch(error => logger.warn("Ponder desktop initialization failed", { error: String(error) }));
+  void ponderDesktopManager.start().catch(error => logger.warn("Pal desktop initialization failed", { error: String(error) }));
   void remoteRelayManager.start().catch(error => logger.warn("Remote relay initialization failed", { error: String(error) }));
   if (options.httpEnabled !== false) {
     schedules.start();

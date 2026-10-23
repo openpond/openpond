@@ -1098,7 +1098,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         topBar={{
           sidebarOpen: visibleSidebarOpen,
           sidebarAvailable,
-          title: view === "chat" && ponderMode ? "Ponder Pal" : title,
+          title: view === "chat" && ponderMode ? "Pal" : title,
           backAction: labDetailNavigation.backAction,
           breadcrumbs: labDetailNavigation.breadcrumbs,
           workspaceName: viewWorkspaceName,

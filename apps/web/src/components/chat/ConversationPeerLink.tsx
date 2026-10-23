@@ -29,13 +29,13 @@ export function ConversationPeerLink({peer, connection, onOpenSession, onOpenPon
     if (!connection || !onOpenPonder) return;
     const current = scope.current;
     try {
-      if (!peer.ponderScope) throw new Error("This message has no verified Ponder source.");
+      if (!peer.ponderScope) throw new Error("This message has no verified Pal source.");
       await assertOriginalPonderDesktop(connection, peer.ponderScope);
       const binding = await apiFetch<{ bindingId: string }>(connection, "/v1/ponder", { method: "POST", body: "{}" });
       if (current !== scope.current) return;
       if (binding.bindingId !== peer.bindingId)
         throw new Error(
-          "This task's original Ponder conversation is no longer active.",
+          "This task's original Pal conversation is no longer active.",
         );
       setError(null);
       onOpenPonder();

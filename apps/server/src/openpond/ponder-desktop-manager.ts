@@ -267,14 +267,14 @@ export function createPonderDesktopManager(deps: {
     active = connection;
     await connection.runtime
       .start()
-      .catch((error) => deps.warn(`Ponder desktop startup: ${String(error)}`));
+      .catch((error) => deps.warn(`Pal desktop startup: ${String(error)}`));
   }
   function schedule() {
     if (closed) return;
     timer = setTimeout(
       () =>
         void serial(reconcile)
-          .catch((error) => deps.warn(`Ponder desktop: ${String(error)}`))
+          .catch((error) => deps.warn(`Pal desktop: ${String(error)}`))
           .finally(schedule),
       15_000,
     );
@@ -307,7 +307,7 @@ export function createPonderDesktopManager(deps: {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       await serial(reconcile).catch((error) =>
-        deps.warn(`Ponder desktop startup: ${String(error)}`),
+        deps.warn(`Pal desktop startup: ${String(error)}`),
       );
       schedule();
     },
@@ -336,7 +336,7 @@ export function createPonderDesktopManager(deps: {
     },
     afterAuthorityChange() {
       authorityChanging = false;
-      void serial(reconcile).catch(error => deps.warn(`Ponder desktop: ${String(error)}`));
+      void serial(reconcile).catch(error => deps.warn(`Pal desktop: ${String(error)}`));
     },
     async connection(action: "status" | "link" | "unlink") {
       return serial(async () => {
@@ -377,7 +377,7 @@ export function createPonderDesktopManager(deps: {
             throw new Error("ponder_desktop_project_authority_changed");
           return { ...result, discovery: "current" as const };
         } catch (error) {
-          deps.warn(`Ponder project discovery refresh: ${String(error)}`);
+          deps.warn(`Pal project discovery refresh: ${String(error)}`);
           return { ...result, discovery: "pending" as const };
         }
       });
@@ -420,7 +420,7 @@ export function createPonderDesktopManager(deps: {
       return serial(async () => {
         await reconcile();
         const selected = await current();
-        if (!selected) throw new Error("Sign in and select a workspace before using Ponder.");
+        if (!selected) throw new Error("Sign in and select a workspace before using Pal.");
         if (request.path === "/ponder/desktop/outputs" && request.method === "POST") {
           const connection = active;
           const scope = connection?.runtime.status().scope;

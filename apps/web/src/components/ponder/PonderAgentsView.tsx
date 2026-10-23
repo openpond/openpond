@@ -58,7 +58,7 @@ export function PonderAgentsView({connection, ponder, accountScopeKey, parentSes
   }));
   async function control(item:AgentPanelItem,owner:"user"|"ponder") {
     const current=agents.find(agent=>agent.session.id===item.session.id);
-    if(!current)throw new Error("This agent has no Ponder control relationship.");
+    if(!current)throw new Error("This agent has no Pal control relationship.");
     const updated=await apiFetch<LocalPonderAgent>(connection,`/v1/ponder/local/agents/${encodeURIComponent(item.session.id)}/control`,{
       method:"POST",body:JSON.stringify({owner,revision:current.revision}),
     });

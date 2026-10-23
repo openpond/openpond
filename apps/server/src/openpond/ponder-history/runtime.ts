@@ -45,7 +45,7 @@ export function createPonderHistoryRuntime(store: TurnRepository) {
         const existing = queued.get(sessionId);
         if (existing)
             return existing;
-        const receipt = summaryQueue.enqueue({ label: "Ponder semantic history summaries", metadata: { sessionId } }, async () => {
+        const receipt = summaryQueue.enqueue({ label: "Pal semantic history summaries", metadata: { sessionId } }, async () => {
             if (!store.readPonderHistory)
                 throw new Error("ponder_history_storage_unavailable");
             let state = await store.readPonderHistory(sessionId);

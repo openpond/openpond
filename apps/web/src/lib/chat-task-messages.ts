@@ -40,7 +40,7 @@ export function taskMessageFromEvent(event: RuntimeEvent): ChatMessage | null {
         bindingId: operation.data.origin.scope.bindingId,
         ponderScope: operation.data.origin.scope,
           sessionId: "",
-          title: "Ponder Pal",
+          title: "Pal",
           provider: "openpond",
         },
       },

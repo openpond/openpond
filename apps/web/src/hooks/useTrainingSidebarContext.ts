@@ -17,5 +17,5 @@ export function useTrainingSidebarContext({ connection, sessionId, accountScope,
     return () => window.removeEventListener(CHAT_CONTEXT_SELECTED, selected);
   }, [active, sessionId, context.scope, onOpen]);
   return context.selection?.target.kind === "dataset" ? "Experiment draft"
-    : context.selection?.model?.name ?? context.selection?.label ?? "Training";
+    : context.selection?.model?.name ?? context.selection?.label ?? "Ponder";
 }

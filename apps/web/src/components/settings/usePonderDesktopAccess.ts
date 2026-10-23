@@ -22,7 +22,7 @@ function accessError(cause: unknown): string {
   if (message === "ponder_desktop_project_changed")
     return "The project folders changed. Refresh and review the project before sharing.";
   if (message.length > 240 || /<(?:!doctype|html|body|head)\b/i.test(message))
-    return "Ponder desktop access is temporarily unavailable. Please refresh to try again.";
+    return "Pal desktop access is temporarily unavailable. Please refresh to try again.";
   return message;
 }
 
@@ -107,8 +107,8 @@ export function usePonderDesktopAccess(connection: ClientConnection | null) {
       // A mutation can commit even if the following discovery refresh fails.
       setAccess(null);
       setNotice(response.discovery === "pending"
-        ? "Project access was saved. Refresh to check whether Ponder has received the updated targets."
-        : shared ? `${project.name} is shared with Ponder.` : `${project.name} is no longer shared with Ponder.`);
+        ? "Project access was saved. Refresh to check whether Pal has received the updated targets."
+        : shared ? `${project.name} is shared with Pal.` : `${project.name} is no longer shared with Pal.`);
       const value = await load();
       if (generation.current === version) setAccess(value);
     } catch (cause) {

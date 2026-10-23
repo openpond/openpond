@@ -285,12 +285,12 @@ export function LearningPreparationFields({ draft, options, loading, onChange }:
                 })
               }
             >
-              <option value="">Ponder in this Project</option>
+              <option value="">Pal in this Project</option>
               {options?.servingTargets
                 .filter((item) => item.projectId === draft.projectId && item.enabled)
                 .map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.hostedPonder ? "Hosted Ponder" : `${item.role} / ${item.roleTargetId}`}
+                    {item.hostedPonder ? "Hosted Pal" : `${item.role} / ${item.roleTargetId}`}
                   </option>
                 ))}
             </select>
