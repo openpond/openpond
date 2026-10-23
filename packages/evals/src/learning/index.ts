@@ -38,3 +38,5 @@ export * from "./acceptance-plan.js";
 export * from "./acceptance-group.js";
 
 export { TrainingHandoffOriginSchema, type TrainingHandoffOrigin } from "./training-handoff.js";
+export * from "./correction-metrics.js";
+export * from "./continuation-mode.js";

@@ -955,15 +955,20 @@ Options:
 
 ```text
 Usage:
-  openpond training <projects|inspect-project|create-project|prepare-project|pull-project|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]
+  openpond training <projects|inspect-project|create-project|prepare-project|pull-project|estimate|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]
+  openpond training estimate <hosted-model-project-id> --team-id <id> [--batch-id <id>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--api-base-url <url>] [--json]
+  openpond training hosted-estimate <input.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training prepare-project <input.json> [--dry-run] [--output <receipt.json>] [--json]
   openpond training prepare-project <reviewed-receipt.json> --apply [--output <saved.json>] [--json]
   openpond training pull-project <hosted-model-project-id> --profile <local-profile-id> [--snapshot-file <verified-package-and-projection.json>] [--json]
   openpond training projects [--profile <local-profile-id>] [--json]
   openpond training inspect-project <local-model-project-id> [--profile <local-profile-id>] [--json]
   openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]
+  openpond training start <hosted-model-project-id> --team-id <id> --batch-id <id> [--max-spend <usd>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--yes] [--detach] [--json]
   openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
-  openpond training hosted-models|hosted-batches|hosted-preparations|hosted-capabilities --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-models|hosted-batches|hosted-preparations|hosted-jobs|hosted-capabilities|hosted-gpu-catalog --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-learning-inspect <model-project-id> --team-id <id> [--cursor <id>] [--limit <1..100>] [--api-base-url <url>] [--json]
+  openpond training hosted-corrections <model-project-id> --team-id <id> [--run-id <id>] [--api-base-url <url>] [--json]
   openpond training hosted-workers --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-serving-pools --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-base-serving-prepare <base-profile.json> --team-id <id> [--api-base-url <url>] --yes [--json]
@@ -997,6 +1002,8 @@ Options:
   --account <string>
   --api-base-url <string>
   --apply
+  --availability-id <string>
+  --batch-id <string>
   --cancel-on-infrastructure-error
   --cleanup-reserve-ms <integer>
   --cleanup-timeout-ms <integer>
@@ -1009,13 +1016,16 @@ Options:
   --evaluation-id <string>
   --export-approved
   --gpu-placement-objective <string>
+  --gpu-type <string>
   --interval-ms <integer>
   --json
+  --limit <integer>
   --manifest <string>
   --max-spend <number>
   --model <string>
   --name <string>
   --objective <string>
+  --operation-id <string>
   --output <string>
   --profile <string>
   --project-id <string>
@@ -1024,6 +1034,7 @@ Options:
   --recipe <string>
   --retention-days <integer>
   --rollout-placement <string>
+  --run-id <string>
   --run-preset <string>
   --snapshot-file <string>
   --task-id <string>

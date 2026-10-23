@@ -44,6 +44,9 @@
       "path": "packages/sdk/tsconfig.build.json"
     },
     {
+      "path": "packages/mcp"
+    },
+    {
       "path": "packages/taskset-sdk"
     },
     {

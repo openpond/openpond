@@ -2,6 +2,12 @@ import { z } from "zod";
 
 const RequestSchema = z.object({
   mode: z.literal("frozen_evaluation"),
+  evaluationPanel: z.object({
+    sourceManifest: z.object({ id: z.string().trim().min(1).max(2000), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+    populationSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    shardSize: z.number().int().min(1).max(128),
+    shardIndex: z.number().int().nonnegative(),
+  }).strict().optional(),
   target: z.enum(["checkpoint", "base_model"]),
   representation: z.enum(["adapter", "merged_backbone"]).optional(),
   checkpointId: z.string().min(8).max(191),

@@ -41,6 +41,54 @@ function reply(response: ServerResponse, value: unknown, status = 200) {
 }
 
 describe("hosted training lifecycle over the public SDK", () => {
+  // Read-only jobs have no training receipt. Never hang after native cleanup,
+  // close while a sandbox is live, or accept another owner's/optimizer evidence.
+  test.each(["owned", "foreign", "optimizer"])("verifies %s read-only cleanup without a training receipt", async mode => {
+    let nativeReads = 0, posts = 0;
+    const printed: unknown[] = [];
+    const evaluation = { ...job("cancelled", 3), terminalReason: "checkpoint_evaluation_complete",
+      rolloutProgress: { groupsCompleted: 0, groupsTarget: 0, optimizerUpdatesApplied: 0, optimizerUpdatesSkipped: 0 } };
+    await withApi((request, response) => {
+      if (request.method !== "GET") posts++;
+      if (request.url === "/v1/training/jobs/job-1") return reply(response, { job: evaluation });
+      if (request.url === "/v1/training/jobs/job-1/outputs")
+        return reply(response, { schemaVersion: "openpond.trainingJobOutputs.v2", outputs: [], receipt: null });
+      reply(response, {}, 500);
+    }, async client => {
+      const observe = () => watchHostedTrainingJob({ client, jobId: "job-1", teamId: "team-1",
+        options: { intervalMs: 250, deadlineAt: Date.now() + 5000, cancelAt: Date.now() + 4000,
+          waitForCleanup: true, cleanupTimeoutMs: 2000, cancelOnInfrastructureError: false },
+        requestBound: { deadlineAt: null }, print: value => printed.push(value),
+        readNativeInspection: async () => {
+          nativeReads++;
+          return { job: { job: { id: "job-1", teamId: mode === "foreign" ? "another-team" : "team-1",
+            version: nativeReads + 3, targetGroups: 0, completedGroups: 0,
+            optimizerUpdatesApplied: 0, optimizerUpdatesSkipped: 0, currentPolicyVersion: 0,
+            canonicalPublishState: "skipped", publicSubmission: null,
+            cleanupAttestation: { attestedAt: timestamp, receiptSha256: hash, activeClaims: 0,
+              liveSandboxes: nativeReads === 1 ? 1 : 0, activeCapabilities: 0,
+              activeReservations: 0, liveProviderStorage: 0, liveProviderWorkers: 0 } },
+            resources: [{ kind: "worker_command", externalId: "serving-soak-source", metadata: {
+              mode: "frozen_evaluation", target: "base_model", sourceJobId: "parent", checkpointId: "checkpoint",
+              policyVersion: 0, adapterSha256: null } }],
+            trainingSteps: mode === "optimizer" ? [{}] : [], rolloutGroups: [], checkpoints: [], artifacts: [] } };
+        },
+      });
+      if (mode === "owned") await observe();
+      else await expect(observe()).rejects.toThrow();
+    });
+    expect(posts).toBe(0);
+    if (mode === "owned") {
+      expect(nativeReads).toBe(2);
+      expect(printed.at(-1)).toMatchObject({ cleanup: { scope: "job", complete: true,
+        evidence: "native_read_only_attestation", attestation: { liveSandboxes: 0 } } });
+      expect(printed.at(-1)).not.toHaveProperty("cleanup.receipt");
+    } else {
+      expect(nativeReads).toBe(1);
+      expect(printed).not.toContainEqual(expect.objectContaining({ cleanup: expect.anything() }));
+    }
+  });
+
   // An unscored infrastructure failure must release a paid allocation early;
   // an eligible zero-reward policy response must not trigger that cancellation.
   test("cancels on infrastructure failure and waits for cleanup, preserving zero-reward work", async () => {

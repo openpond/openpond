@@ -6,6 +6,7 @@ import {
   type createTrainingClient,
 } from "openpond-sdk/training";
 import { optionString, parseBooleanOption, parseIntegerOption } from "./common/options";
+import { parseHostedServingReportEvidence } from "./training-hosted-serving-report";
 
 type Client = ReturnType<typeof createTrainingClient>;
 type Options = Record<string, string | boolean>;
@@ -94,6 +95,8 @@ export async function watchHostedTrainingJob(input: {
   print(value: unknown): void;
   /** The request wrapper consults this bound before every SDK transport. */
   requestBound: { deadlineAt: number | null };
+  /** Read-only serving jobs attest native cleanup without a training receipt. */
+  readNativeInspection?(jobId: string): Promise<unknown>;
 }): Promise<void> {
   const { client, options, jobId, teamId } = input;
   let cleanupDeadline: number | null = null;
@@ -135,6 +138,14 @@ export async function watchHostedTrainingJob(input: {
           if (receipt.cleanupComplete) {
             if (qualificationSucceeded) await assertTrainingQualificationReceipt(receipt, { submissionHash, outputs });
             input.print({ jobId, cleanup: { scope: "job", complete: true, receipt } });
+            return;
+          }
+        } else if (job.rolloutProgress.groupsTarget === 0 && input.readNativeInspection) {
+          const evidence = parseHostedServingReportEvidence(await input.readNativeInspection(jobId), job);
+          if (evidence.cleanupComplete) {
+            input.print({ jobId, cleanup: { scope: "job", complete: true,
+              evidence: "native_read_only_attestation", nativeJobVersion: evidence.nativeJobVersion,
+              attestation: evidence.cleanupAttestation } });
             return;
           }
         }

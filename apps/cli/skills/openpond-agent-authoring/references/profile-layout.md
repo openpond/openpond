@@ -1,6 +1,6 @@
 # Profile and Agent Layout
 
-`get_profile` owns absolute path authority. Use this reference only for relative structure beneath the returned Profile source.
+`get_profile` in OpenPond, or `openpond profile current --json` externally, owns absolute path authority. Use this reference only for relative structure beneath the returned Profile source.
 
 ```text
 openpond-profile.json

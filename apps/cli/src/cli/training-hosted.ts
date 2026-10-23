@@ -1,12 +1,13 @@
 import { attachHostedTrainingToChat } from "./training-chat-attachment";
 import { readFile } from "node:fs/promises";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
-import { createTrainingClient, parseAndVerifyTrainingJobSubmission, parseAndVerifyTrainingPreparationReceipt, TrainingPreparationRequestSchema, type TrainingInputArtifactUpload } from "openpond-sdk/training";
+import { createTrainingClient, OpenPondTrainingApiError, parseAndVerifyTrainingJobSubmission, parseAndVerifyTrainingPreparationReceipt, TrainingPreparationRequestSchema, type TrainingInputArtifactUpload } from "openpond-sdk/training";
 import { createModelProjectsClient, HostedModelProjectSyncSchema } from "openpond-sdk/model-projects";
-import { OpenPondLearningClient } from "openpond-sdk/learning";
+import { OpenPondCorrectionMetricsClient, OpenPondLearningClient } from "openpond-sdk/learning";
 import { optionString, parseBooleanOption, parseIntegerOption } from "./common/options";
 import { resolveApiBaseUrlOption } from "./common/urls";
 import { cancelHostedTrainingJob, parseHostedWatchOptions, stopHostedTrainingJobAfterGroup, watchHostedTrainingJob } from "./training-hosted-lifecycle";
+import { printTrainingEstimate } from "./training-estimate-output";
 
 type Options = Record<string, string | boolean>;
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
@@ -49,7 +50,11 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   };
   const readNativeInspection = async (jobId: string): Promise<unknown> => {
     const response = await request(new URL(`/v1/managed-rl/jobs/${encodeURIComponent(jobId)}`, baseUrl), { headers });
-    if (!response.ok) throw new Error(`Hosted job inspection failed (${response.status}).`);
+    if (!response.ok) throw new OpenPondTrainingApiError(response.status, {
+      schemaVersion: "openpond.trainingApiError.v2", code: "inspection_failed",
+      message: `Hosted job inspection failed (${response.status}).`,
+      retryable: response.status === 429 || response.status >= 500, requestId: null, details: {},
+    });
     return response.json();
   };
   if (rest.length > 2) throw new Error(`${action} accepts at most one identifier or input file.`);
@@ -96,6 +101,15 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     if (!target) throw new Error("hosted-model requires a Model Project ID.");
     print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).get(target)); return;
   }
+  if (action === "hosted-corrections" || action === "hosted-learning-inspect") {
+    if (!target) throw new Error(`${action} requires a hosted Model Project ID.`);
+    const { project } = await createModelProjectsClient({ baseUrl, headers, fetch: request }).get(target);
+    print(await (await import("./training-hosted-learning")).inspectHostedLearning({
+      action, options, teamId, model: project,
+      learning: new OpenPondLearningClient({ baseUrl, apiKey: context.token, scope: teamId, fetch: request }),
+      corrections: new OpenPondCorrectionMetricsClient({ baseUrl, apiKey: context.token, fetch: request }),
+    })); return;
+  }
   if (action === "hosted-sync-model") {
     const input = HostedModelProjectSyncSchema.parse(await readInput());
     print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).upsert(input)); return;
@@ -106,6 +120,44 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     print(await new OpenPondTasksetPackageClient({ baseUrl, apiKey: context.token, teamId, fetch: request }).publish(input)); return;
   }
   if (action === "hosted-capabilities") { print(await client.capabilities()); return; }
+  if (action === "hosted-gpu-catalog") { print(await client.gpuCatalog()); return; }
+  if (action === "hosted-start-model") {
+    if (!target) throw new Error("training start requires a saved hosted Model Project ID.");
+    const result = await (await import("./training-model-start")).startHostedModel({
+      options, modelId: target, teamId, client,
+      models: createModelProjectsClient({ baseUrl, headers, fetch: request }),
+      learning: new OpenPondLearningClient({ baseUrl, apiKey: context.token, scope: teamId, fetch: request }),
+    });
+    print(result);
+    if (result.preparation.jobId) await attach(result.preparation.jobId);
+    if (result.preparation.jobId && !parseBooleanOption(options.detach)) {
+      await watchHostedTrainingJob({ client, jobId: result.preparation.jobId, teamId,
+        options: parseHostedWatchOptions(options), print, requestBound, readNativeInspection });
+    }
+    return;
+  }
+  if (action === "hosted-estimate-model") {
+    if (!target) throw new Error("training estimate requires a hosted Model Project ID.");
+    const { project } = await createModelProjectsClient({ baseUrl, headers, fetch: request }).get(target);
+    const batchId = optionString(options, "batchId");
+    const batch = batchId ? await new OpenPondLearningClient({ baseUrl, apiKey: context.token, scope: teamId, fetch: request }).get("batch", batchId) : null;
+    const { trainingGpuChoice } = await import("./training-model-start");
+    const gpuSelection = trainingGpuChoice(options) ?? project.trainingSetup.managedGpuSelection;
+    printTrainingEstimate(await client.estimate({
+      schemaVersion: "openpond.trainingEstimateRequest.v1", teamId,
+      source: { kind: "configuration", id: project.id, expectedRevision: project.revision, expectedEtag: project.etag,
+        batch: batch ? { id: batch.id, revision: batch.revision, contentHash: batch.contentHash } : null },
+      ...(gpuSelection ? { gpuSelection } : {}),
+    }), parseBooleanOption(options.json));
+    return;
+  }
+  if (action === "hosted-estimate") {
+    const { TrainingEstimateRequestSchema } = await import("openpond-sdk/training");
+    const input = TrainingEstimateRequestSchema.parse(await readInput());
+    if (input.teamId !== teamId) throw new Error("Estimate input belongs to a different workspace.");
+    printTrainingEstimate(await client.estimate(input), parseBooleanOption(options.json));
+    return;
+  }
   if (action === "hosted-batches") {
     const learning = new OpenPondLearningClient({ baseUrl, apiKey: context.token, scope: teamId, fetch: request });
     print(await learning.list("batch", { limit: 100 })); return;
@@ -120,8 +172,11 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   if (action === "hosted-start") {
     const receipt = await parseAndVerifyTrainingPreparationReceipt(await readInput());
     if (receipt.plan.request.teamId !== teamId) throw new Error("Preparation belongs to a different workspace.");
+    const estimate = await client.estimate({ schemaVersion: "openpond.trainingEstimateRequest.v1", teamId,
+      source: { kind: "preparation", id: receipt.plan.id, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision } });
+    if (!parseBooleanOption(options.json)) printTrainingEstimate(estimate, false);
     if (!parseBooleanOption(options.yes)) throw new Error("Starting paid hosted training requires --yes.");
-    const submitted = await client.startPreparation(receipt.plan.id, { teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision });
+    const submitted = await client.startPreparation(receipt.plan.id, { teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision, estimateReview: estimate.review });
     print(submitted);
     if (submitted.jobId) await attach(submitted.jobId);
     return;
@@ -218,7 +273,7 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   if (action === "hosted-events") { await printAttached(await client.events(target),target); return; }
   if (action === "hosted-watch" && watchOptions) {
     await attach(target);
-    await watchHostedTrainingJob({ client, jobId: target, teamId, options: watchOptions, print, requestBound });
+    await watchHostedTrainingJob({ client, jobId: target, teamId, options: watchOptions, print, requestBound, readNativeInspection });
     return;
   }
   throw new Error(`Unknown hosted training command: ${action}`);

@@ -33,6 +33,14 @@ const ServingSource = z.object({
   policyVersion: z.number().int().nonnegative(),
   adapterSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   artifact: z.object({ id: z.string().min(1), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).optional(),
+  evaluationPanel: z.object({
+    schemaVersion: z.literal("openpond.frozenEvaluationPanel.v1"),
+    sourceManifest: z.object({ id: z.string(), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    sourceTaskset: z.object({ id: z.string(), revision: z.number().int().positive(), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    populationSha256: z.string().regex(/^[a-f0-9]{64}$/), populationCount: z.number().int().positive(),
+    shardIndex: z.number().int().nonnegative(), shardSize: z.number().int().positive(), shardCount: z.number().int().positive(),
+    selectedTasksSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  }).optional(),
   derivedBackbone: z.object({
     planSha256: z.string().regex(/^[a-f0-9]{64}$/),
     plan: z.object({ deltas: z.array(z.object({
@@ -58,7 +66,9 @@ export function parseHostedServingReportEvidence(value: unknown, expected: Pick<
     lastDelta.artifact.id === source.artifact?.id && lastDelta.artifact.contentHash === source.artifact?.contentHash;
   if (source.policyVersion !== job.currentPolicyVersion ||
       (source.derivedBackbone ? !mergedIdentityMatches :
-        source.mode === "frozen_evaluation" && (source.target !== "checkpoint" || !source.adapterSha256))) {
+        source.mode === "frozen_evaluation" && (source.target === "base_model"
+          ? source.policyVersion !== 0 || source.adapterSha256 !== null
+          : !source.adapterSha256))) {
     throw new Error("Hosted serving report checkpoint identity mismatch.");
   }
   const custody = job.cleanupAttestation;

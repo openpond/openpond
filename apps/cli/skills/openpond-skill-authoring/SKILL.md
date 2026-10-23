@@ -7,9 +7,13 @@ description: Create, copy, adapt, review, or update OpenPond Profile skill packa
 
 Create durable Profile skills through a normal model turn. The skill package is the source of truth; do not create a Goal, invoke an authoring executor, or substitute a generic template for source that the user asked to copy or adapt.
 
+## Execution interface
+
+Inside OpenPond, resolve the selected source with `get_profile`. External coding agents use `openpond profile current --json` and its `sourcePath`; inspect `openpond profile catalog --json` for nearby skills. If no editable Profile is selected, resolve the user's intended source before writing. Use ordinary file tools and the packaged Node validator in either environment. There is no dependency on an app-only authoring executor. Clarify through the client's normal question mechanism.
+
 ## Workflow
 
-1. Call `get_profile` before reading or writing Profile source. Use only its selected, editable Profile root.
+1. Resolve the Profile through the execution interface above before reading or writing source. Use only its selected, editable Profile root.
 2. Determine whether the request is create, edit, copy, or adapt. Treat an explicit skill name or source path as target authority.
 3. Inspect nearby Profile skills for local conventions.
 4. When an existing source package is named, inventory and read its complete relevant package: `SKILL.md`, referenced files, scripts, assets, and metadata. Do not infer its behavior from the directory name.

@@ -1,0 +1,47 @@
+{
+  "name": "@openpond/mcp",
+  "version": "0.1.0",
+  "description": "Typed OpenPond hosted workflow tools for Model Context Protocol servers",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openpond/openpond.git",
+    "directory": "packages/mcp"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "node ../../scripts/run-typescript.mjs tsc -p tsconfig.json",
+    "typecheck": "node ../../scripts/run-typescript.mjs tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/protocol-boundary.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "openpond-sdk": "^0.12.5",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.14.0 <25"
+  }
+}

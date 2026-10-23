@@ -1,8 +1,6 @@
 ---
 name: openpond-cli
 description: Use the OpenPond CLI for datasets, graders, experiments, model training, repos, deployments, and tools.
-metadata:
-  short-description: OpenPond CLI workflows
 ---
 
 # OpenPond CLI
@@ -27,8 +25,14 @@ has an account. Use its home with `--home` (development normally uses
 following setup is for a new installation:
 
 - Install: `npm i -g openpond` (or `npx --package openpond openpond <cmd>`)
-- Auth: run `openpond login` or set `OPENPOND_API_KEY`
-- Non-interactive login: `openpond login --api-key opk_...`
+- Check local context: `openpond --home <selected-home> home`, then `openpond --home <selected-home> profiles list`. The account listing reports credential presence, not successful authentication.
+- Verify cloud access only when needed: `openpond --home <selected-home> account`. Use workspace IDs returned by the account or supplied by the Console; do not pick another workspace silently.
+- If credentials are missing in the correct home, run interactive `openpond --home <selected-home> login` in a private terminal, or provide `OPENPOND_API_KEY` through the execution environment. Never put a real key in a prompt, command example, or source file.
+- Local Profile inspection, source authoring, and validation do not require cloud login. Do not force cloud setup for local-only work.
+
+External coding agents use their ordinary command/file tools and the installed `openpond` binary; app-only executors, environment prefixes, and resource attachments are available only inside OpenPond. Use `openpond profile current --json` for the selected Profile source, `openpond profile catalog --json` for its contents, and the authoring skill's external interface guidance. Do not invent app tool calls in an external client.
+
+The canonical [setup guide](https://openpond.ai/agent-setup.md) covers client installation, updates, removal, and separate verification of skills, CLI, account, and workspace. Do not start inference, evaluations, training, publishing, or deployments as a setup check.
 
 ## Common workflows
 
@@ -61,4 +65,4 @@ Use the CLI to run OpenTool commands via `npx`:
 ## Config and URLs
 
 - Optional env vars: `OPENPOND_BASE_URL`, `OPENPOND_API_URL`, `OPENPOND_TOOL_URL`, `OPENPOND_API_KEY`
-- Cache file: `~/.openpond/cache.json` (auto-refreshes on next use)
+- Home: stable defaults to `~/.openpond`; nightly to `~/.openpond-nightly`. `--home` or `OPENPOND_HOME` selects another home. Credentials are managed by the encrypted store; configuration lives in `config.toml` and disposable discovery caches in `cache/cache.sqlite`. Do not inspect or edit credential files directly.

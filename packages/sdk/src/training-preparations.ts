@@ -4,6 +4,7 @@ import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { TrainingJobSourceSchema } from "./training.js";
 import { TrainingPhysicalPlacementSchema } from "./training-physical-placement.js";
 import { canonicalSha256, OpenPondProtocolError } from "./protocol.js";
+import { TrainingEstimateReviewSchema, TrainingGpuSelectionSchema } from "./training-compute-selection.js";
 
 const Id = z.string().trim().min(1).max(191);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -22,6 +23,7 @@ export const TrainingPreparationRequestSchema = z
     batch: ModelProjectVersionedRefSchema,
     name: z.string().trim().min(1).max(191),
     maximumSpendUsd: z.number().finite().positive().max(1_000_000),
+    gpuSelection: TrainingGpuSelectionSchema.optional(),
     physicalPlacement: TrainingPhysicalPlacementSchema.optional(),
   })
   .strict();
@@ -62,6 +64,7 @@ export const TrainingPreparationControlSchema = z
     teamId: Id,
     planHash: Hash,
     expectedRevision: z.number().int().positive(),
+    estimateReview: TrainingEstimateReviewSchema.optional(),
   })
   .strict();
 export const TrainingPreparationListQuerySchema = z

@@ -640,6 +640,25 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/mcp:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 1.32.1
+        version: 1.32.1(zod@4.4.3)
+      openpond-sdk:
+        specifier: ^0.12.5
+        version: link:../sdk
+      zod:
+        specifier: ^4.1.13
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/persistence:
     dependencies:
       '@openpond/harness':

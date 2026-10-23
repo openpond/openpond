@@ -9,6 +9,10 @@ Update the separately versioned Review Profile through a normal Work turn. The a
 
 Invoke this Skill explicitly with `$openpond-refiner-authoring` followed by the requested change. It uses the same profile-skill loading path as every other shipped Skill; it is not a slash command or a separate authoring mode.
 
+## Execution interface
+
+The `refiner_profile_inspect` and `refiner_profile_update` tools below are supplied by OpenPond Desktop. The public CLI currently has no equivalent Review Profile inspect/update/activation commands. External agents may review or edit an explicitly supplied `openpond.review.json` draft using the contract reference, but must report managed inspection, server validation, release, and activation as unavailable until those supported tools are connected. A local JSON edit is not a managed release. Do not invent CLI aliases, call private endpoints, or edit managed app-data paths to bypass this boundary.
+
 ## Workflow
 
 1. Call `refiner_profile_inspect` before proposing any change.

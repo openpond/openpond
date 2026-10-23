@@ -13,9 +13,30 @@ export {
   type TrainingAcceptanceTarget,
 } from "./training-acceptance.js";
 import { z } from "zod";
+import { TrainingCheckpointRecoveryRequestSchema, TrainingCheckpointRecoveryResourceApprovalSchema } from "./training-recovery.js";
+export { TrainingCheckpointRecoveryRequestSchema, TrainingCheckpointRecoveryResourceApprovalSchema,
+  createTrainingCheckpointRecoveryResourceApproval } from "./training-recovery.js";
 import { TrainingPhysicalPlacementSchema } from "./training-physical-placement.js";
 export { TrainingPhysicalPlacementSchema, type TrainingPhysicalPlacement } from "./training-physical-placement.js";
 import { createTrainingPreparationClient } from "./training-preparations.js";
+import { createTrainingEstimateClient } from "./training-estimates.js";
+import { TrainingGpuSelectionSchema, TrainingGpuCatalogSchema } from "./training-compute-selection.js";
+export { TrainingGpuCatalogSchema, type TrainingGpuCatalog } from "./training-compute-selection.js";
+import { TrainingQueueStatusSchema } from "./training-queue.js";
+export { TrainingQueueStatusSchema, type TrainingQueueStatus } from "./training-queue.js";
+export {
+  TrainingGpuSelectionSchema,
+  TrainingEstimateSourceSchema,
+  TrainingEstimateRequestSchema,
+  TrainingEstimateComponentSchema,
+  TrainingEstimateReviewSchema,
+  TrainingEstimateSchema,
+  trainingEstimateSourceIdentity,
+  type TrainingGpuSelection,
+  type TrainingEstimateRequest,
+  type TrainingEstimate,
+  type TrainingEstimateReview,
+} from "./training-estimates.js";
 export {
   TrainingPreparationRequestSchema,
   TrainingPreparationPlanContentSchema,
@@ -289,6 +310,7 @@ export const TrainingJobSubmissionSchema = z
     job: TrainingJobRequestSchema,
     requestedCapabilities: z.array(TrainingCapabilityRequirementSchema).max(1_000),
     placementObjective: z.enum(["fast", "balanced", "economical"]),
+    gpuSelection: TrainingGpuSelectionSchema.optional(),
     physicalPlacement: TrainingPhysicalPlacementSchema.optional(),
     budget: z
       .object({
@@ -355,6 +377,7 @@ export async function parseAndVerifyTrainingJobSubmission(
 }
 
 export const TrainingJobRecoverySchema = z.object({
+  resourceApproval: TrainingCheckpointRecoveryResourceApprovalSchema.optional(),
   mode: z.literal("evaluation_only").optional(),
   trainingWorkloadComplete: z.boolean().optional(),
   sourceJobId: IdSchema,
@@ -377,6 +400,7 @@ export const TrainingJobSchema = z
     sourceProjectRevision: z.number().int().positive(),
     submissionHash: HashSchema,
     state: TrainingJobStateSchema,
+    queue: TrainingQueueStatusSchema.optional(),
     phase: z.string().trim().min(1).max(200),
     version: z.number().int().nonnegative(),
     progress: z.number().min(0).max(1),
@@ -432,22 +456,6 @@ export const TrainingJobLogSchema = z
 export const TrainingJobControlRequestSchema = z
   .object({ expectedVersion: z.number().int().nonnegative() })
   .strict();
-
-/** Exact execution recovery; a continual-training optimizer reset is separate. */
-export const TrainingCheckpointRecoveryRequestSchema = z.object({
-  /** Opt in to finish a stopped partial workload's exact frozen panel only. */
-  mode: z.literal("evaluation_only").optional(),
-  /** Exact owner-approved evaluation shape; omitted keeps the original GPU. */
-  evaluationGpuType: z.enum(["NVIDIA A100 80GB PCIe", "NVIDIA A100-SXM4-80GB", "NVIDIA H100 80GB HBM3"]).optional(),
-  expectedVersion: z.number().int().positive(),
-  checkpointId: IdSchema,
-  idempotencyKey: z.string().trim().min(16).max(191),
-  maximumSpendUsd: z.number().positive().finite(),
-  maximumWallSeconds: z.number().int().positive().max(10800),
-}).strict().superRefine((value, context) => {
-  if (value.evaluationGpuType && value.mode !== "evaluation_only")
-    context.addIssue({ code: "custom", path: ["evaluationGpuType"], message: "GPU substitution requires explicit evaluation-only recovery" });
-});
 
 export const TrainingJobOutputSchema = z
   .object({
@@ -614,6 +622,35 @@ export class OpenPondTrainingApiError extends Error {
   }
 }
 
+export const TrainingPolicyLoraCapabilitiesSchema = z.object({
+  workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  envelopeRank: z.number().int().positive().max(256),
+  supportedRanks: z.array(z.number().int().positive().max(256)).max(256),
+  qualification: z.object({ evidenceRef: z.string().min(1), evidenceSha256: HashSchema }).strict().nullable(),
+  continuation: z.object({
+    sharedRequiresSameRank: z.literal(true),
+    mergedRequiresSameRank: z.literal(true),
+    residualAppendRequiresFreeCapacity: z.literal(true),
+    stageOptimizer: z.literal("reset"),
+    interruptedRecoveryOptimizer: z.literal("restore"),
+  }).strict(),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.supportedRanks).size !== value.supportedRanks.length || value.supportedRanks.some(rank => rank > value.envelopeRank))
+    context.addIssue({ code: "custom", path: ["supportedRanks"], message: "Supported ranks must be unique and fit the physical adapter envelope." });
+  if (value.supportedRanks.length && !value.qualification)
+    context.addIssue({ code: "custom", path: ["qualification"], message: "Advertised ranks require immutable image qualification evidence." });
+});
+export type TrainingPolicyLoraCapabilities = z.infer<typeof TrainingPolicyLoraCapabilitiesSchema>;
+
+export function supportsTrainingPolicyLoraRank(capabilities: TrainingPolicyLoraCapabilities, rank: number,
+  continuation?: { mode: "shared" | "sequential_merge" | "residual_append"; parentEnabledRank: number }): boolean {
+  if (!capabilities.supportedRanks.includes(rank)) return false;
+  if (!continuation) return true;
+  return continuation.mode === "residual_append"
+    ? continuation.parentEnabledRank + rank <= capabilities.envelopeRank
+    : continuation.parentEnabledRank === rank;
+}
+
 export const TrainingCapabilitiesSchema = z
   .object({
     schemaVersion: z.literal("openpond.trainingCapabilities.v2"),
@@ -621,6 +658,7 @@ export const TrainingCapabilitiesSchema = z
     jobKinds: z.array(TrainingJobKindSchema),
     methods: z.array(z.string().trim().min(1).max(200)),
     executionModes: z.array(z.enum(["training", "qualification"])).optional(),
+    policyLora: TrainingPolicyLoraCapabilitiesSchema.optional(),
     structuredOutputs: z.object({
       capability: z.literal("work.structured-output.v1"),
       harnessRuntimeHash: HashSchema,
@@ -638,6 +676,7 @@ export const TrainingCapabilitiesSchema = z
         resumeFromCheckpoint: z.boolean(),
       })
       .strict(),
+    estimates: z.object({ schemaVersion: z.literal("openpond.trainingEstimate.v1") }).strict().optional(),
     limits: z
       .object({
         maximumSpendUsd: z.number().nonnegative(),
@@ -728,6 +767,7 @@ export function createTrainingClient(input: {
   return {
     postTraining: createPostTrainingClient({ request }),
     ...createTrainingPreparationClient(request),
+    ...createTrainingEstimateClient(request),
     ...createTrainingAcceptanceClient(request),
     ...createTrainingHarnessSourceClient(request),
     ...createTrainingCandidateDecisionClient(request),
@@ -735,6 +775,9 @@ export function createTrainingClient(input: {
       return TrainingCapabilitiesSchema.parse(
         unwrapObject(await request("/v1/training/capabilities"), "capabilities"),
       );
+    },
+    async gpuCatalog() {
+      return TrainingGpuCatalogSchema.parse(unwrapObject(await request("/v1/training/gpu-catalog"), "catalog"));
     },
     async stageArtifact(upload: TrainingInputArtifactUpload) {
       const parsed = await parseAndVerifyTrainingInputArtifactUpload(upload);
@@ -814,6 +857,11 @@ export function createTrainingClient(input: {
     },
     async recoverCheckpoint(jobId: string, input: z.input<typeof TrainingCheckpointRecoveryRequestSchema>) {
       const recovery = TrainingCheckpointRecoveryRequestSchema.parse(input);
+      if (recovery.resourceApproval) {
+        const { approvalHash, ...body } = recovery.resourceApproval;
+        if (body.sourceJobId !== jobId || await canonicalSha256(body) !== approvalHash)
+          throw new OpenPondProtocolError("content_hash_mismatch", "Recovery resource approval does not bind this source request.");
+      }
       return TrainingJobSchema.parse(unwrapObject(await request(
         `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/recover`,
         { method: "POST", body: JSON.stringify(recovery) },

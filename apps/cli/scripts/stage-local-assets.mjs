@@ -1,12 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { packageCustomerSkills } from "./package-skills.mjs";
 
 const cliRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const root = path.resolve(cliRoot, "../..");
 const webSource = path.join(root, "apps", "web", "dist");
 const webTarget = path.join(cliRoot, "dist", "web");
-const skillsSource = path.join(cliRoot, "skills");
 const skillsTarget = path.join(cliRoot, "dist", "skills");
 
 try {
@@ -21,7 +21,7 @@ await Promise.all([
 ]);
 await Promise.all([
   fs.cp(webSource, webTarget, { recursive: true }),
-  fs.cp(skillsSource, skillsTarget, { recursive: true }),
+  packageCustomerSkills(),
 ]);
 console.log(
   `Staged local CLI assets at ${path.relative(root, webTarget)} and ${path.relative(root, skillsTarget)}.`,
