@@ -1,6 +1,6 @@
 # Source Implementation Boundary
 
-In a real migration, the existing implementation files from `/home/glu/Projects/all/openpond-cloud-water-estimator-example/src` would remain under `src/`:
+In a real migration, the existing implementation files from `../water-estimator-original/src` would remain under `src/`:
 
 - `generate-task-plan.ts`
 - `generate-estimate.ts`

@@ -140,9 +140,9 @@ describe("codex history", () => {
                 type: "output_text",
                 text:
                   "Published the branch.\n\n" +
-                  '::git-stage{cwd="/home/glu/Projects/all/openpond"}\n' +
-                  '::git-commit{cwd="/home/glu/Projects/all/openpond"}\n' +
-                  '::git-push{cwd="/home/glu/Projects/all/openpond" branch="feat/hosted-work-evidence"}',
+                  '::git-stage{cwd="/home/example/Projects/all/openpond"}\n' +
+                  '::git-commit{cwd="/home/example/Projects/all/openpond"}\n' +
+                  '::git-push{cwd="/home/example/Projects/all/openpond" branch="feat/hosted-work-evidence"}',
               },
             ],
           },
@@ -563,9 +563,9 @@ describe("codex history", () => {
                 text:
                   "# Files mentioned by the user:\n\n" +
                   "## Screenshot from 2026-08-05 10.53.12.png:\n" +
-                  "/home/glu/Pictures/Screenshots/Screenshot from 2026-08-05 10.53.12.png\n\n" +
+                  "/home/example/Pictures/Screenshots/Screenshot from 2026-08-05 10.53.12.png\n\n" +
                   "## Screenshot from 2026-08-05 10.53.06.png:\n" +
-                  "/home/glu/Pictures/Screenshots/Screenshot from 2026-08-05 10.53.06.png\n\n" +
+                  "/home/example/Pictures/Screenshots/Screenshot from 2026-08-05 10.53.06.png\n\n" +
                   "## My request for Codex:\n" +
                   "Compare this Codex task without changing other providers.",
               },
@@ -821,7 +821,7 @@ describe("codex history", () => {
                 { type: "input_text", text: "testing this image" },
                 {
                   type: "input_text",
-                  text: '<image name=[Image #1] path="/home/glu/Pictures/Screenshots/Screenshot from 2026-07-02 15.54.41.png">',
+                  text: '<image name=[Image #1] path="/home/example/Pictures/Screenshots/Screenshot from 2026-07-02 15.54.41.png">',
                 },
                 {
                   type: "input_image",
@@ -1119,7 +1119,7 @@ describe("codex history", () => {
           timestamp: "2026-05-29T00:53:17.784Z",
           payload: {
             id: threadId,
-            cwd: "/home/glu/Projects/all/openpond-app",
+            cwd: "/home/example/Projects/all/openpond-app",
             timestamp: "2026-05-29T00:53:17.784Z",
           },
         })}\n`,
@@ -1138,7 +1138,7 @@ describe("codex history", () => {
       expect(threads).toHaveLength(1);
       expect(threads[0]?.session.id).toBe(codexHistorySessionId(threadId));
       expect(threads[0]?.session.title).toContain("how can i get my codex chats");
-      expect(threads[0]?.session.cwd).toBe("/home/glu/Projects/all/openpond-app");
+      expect(threads[0]?.session.cwd).toBe("/home/example/Projects/all/openpond-app");
     } finally {
       await rm(codexHome, { recursive: true, force: true });
     }
@@ -1157,7 +1157,7 @@ describe("codex history", () => {
           timestamp: "2026-05-29T00:00:00.000Z",
           payload: {
             id: threadId,
-            cwd: "/home/glu/Projects/all/openpond-app",
+            cwd: "/home/example/Projects/all/openpond-app",
             timestamp: "2026-05-29T00:00:00.000Z",
           },
         },
@@ -1202,7 +1202,7 @@ describe("codex history", () => {
           timestamp: "2026-05-29T00:53:17.784Z",
           payload: {
             id: threadId,
-            cwd: "/home/glu/Projects/all/openpond-app",
+            cwd: "/home/example/Projects/all/openpond-app",
             timestamp: "2026-05-29T00:53:17.784Z",
           },
         })}\n${JSON.stringify({
@@ -1251,7 +1251,7 @@ describe("codex history", () => {
             timestamp: "2026-05-29T00:53:17.784Z",
             payload: {
               id: threadId,
-              cwd: "/home/glu/Projects/all/openpond-app",
+              cwd: "/home/example/Projects/all/openpond-app",
               timestamp: "2026-05-29T00:53:17.784Z",
             },
           },
@@ -1324,7 +1324,7 @@ describe("codex history", () => {
           timestamp: "2026-05-29T00:53:17.784Z",
           payload: {
             id: threadId,
-            cwd: "/home/glu/Projects/all/openpond-app",
+            cwd: "/home/example/Projects/all/openpond-app",
             timestamp: "2026-05-29T00:53:17.784Z",
           },
         })}\n${JSON.stringify({
@@ -1381,7 +1381,7 @@ describe("codex history", () => {
           timestamp: "2026-05-29T00:53:18.784Z",
           payload: {
             turn_id: "turn_provider",
-            cwd: "/home/glu/Projects/all/openpond-app/apps/web",
+            cwd: "/home/example/Projects/all/openpond-app/apps/web",
           },
         })}\n`,
       );
@@ -1390,9 +1390,9 @@ describe("codex history", () => {
       const project: LocalProject = {
         id: "project_1",
         name: "OpenPond App",
-        path: "/home/glu/Projects/all/openpond-app",
-        workspacePath: "/home/glu/Projects/all/openpond-app",
-        repoPath: "/home/glu/Projects/all/openpond-app",
+        path: "/home/example/Projects/all/openpond-app",
+        workspacePath: "/home/example/Projects/all/openpond-app",
+        repoPath: "/home/example/Projects/all/openpond-app",
         source: "git",
         sandboxTemplate: null,
         linkedOpenPondApp: null,
@@ -1400,7 +1400,7 @@ describe("codex history", () => {
         updatedAt: "2026-05-29T00:00:00.000Z",
       };
 
-      expect(threads[0]?.session.cwd).toBe("/home/glu/Projects/all/openpond-app/apps/web");
+      expect(threads[0]?.session.cwd).toBe("/home/example/Projects/all/openpond-app/apps/web");
       expect(
         sidebarProjectIdForSession(
           threads[0]!.session,

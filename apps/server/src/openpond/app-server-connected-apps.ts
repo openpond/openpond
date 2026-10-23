@@ -30,7 +30,7 @@ export async function listAppServerIntegrationConnections(input: {
   const client = createOpenPondSandboxClient({
     apiKey,
     ...(sandboxApiUrl
-      ? { sandboxApiUrl: normalizeSandboxApiUrl(sandboxApiUrl) }
+      ? { sandboxApiUrl: normalizeSandboxApiUrl(sandboxApiUrl, { apiBaseUrl: sandboxApiUrl }) }
       : { baseUrl: context.apiBaseUrl }),
   });
   const status = input.status ?? "active";

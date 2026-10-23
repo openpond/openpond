@@ -26,7 +26,7 @@ test("logging out clears only the active account credentials", async () => {
     activeProfile: { handle: "active", baseUrl: "https://openpond.ai" },
     accounts: [
       { handle: "active", apiKey: "opk_active", session: { token: "session-token", appId: "app-1" }, baseUrl: "https://openpond.ai" },
-      { handle: "other", apiKey: "opk_other", baseUrl: "https://staging.openpond.ai" },
+      { handle: "other", apiKey: "opk_other", baseUrl: "https://web.example.test" },
     ],
   }));
 

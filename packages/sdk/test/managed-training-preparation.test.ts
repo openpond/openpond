@@ -164,7 +164,7 @@ async function fixture(): Promise<ManagedTrainingPreparationInput & { evaluation
     schemaVersion: "openpond.modelProject.v2", id: job.source.modelProject.portableProjectId, profileId: "team", revision: 3,
     name: "Prepared model", objective: null, defaultBaseModel: baseModel, defaultDestinationId: "openpond_managed",
     trainingSetup: { baseModel, recipe, tasksetRef: job.source.taskset, evaluationTasksetRef: evaluationSource.taskset },
-    hosted: { apiOrigin: "https://staging-api.openpond.ai", schemaVersion: "openpond.hostedModelProjectLink.v1", teamId: "team",
+    hosted: { apiOrigin: "https://api.example.test", schemaVersion: "openpond.hostedModelProjectLink.v1", teamId: "team",
       projectId: job.source.modelProject.id, portableProjectId: job.source.modelProject.portableProjectId,
       revision: 1, etag: job.source.modelProject.contentHash, syncedSourceRevision: 3, syncedAt: stamp, tasksets: [] },
     createdAt: stamp, updatedAt: stamp,

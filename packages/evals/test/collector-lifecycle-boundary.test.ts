@@ -141,7 +141,7 @@ it("preserves local source identity and receipts across remote controls", async 
     id: "connection",
     teamId: "team",
     apiBaseUrl: "http://localhost",
-    accountBaseUrl: "https://staging.openpond.ai",
+    accountBaseUrl: "https://web.example.test",
     projectId: "project",
     revision: 1,
     since: null,
@@ -166,7 +166,7 @@ it("preserves local source identity and receipts across remote controls", async 
   // No link is manufactured before the server returns a destination; a foreign
   // scope or credential-bearing/unsafe origin must never become a Desktop link.
   expect(collectorDestinationLinks(connection).tasks).toBeNull();
-  const destinationUrl = new URL(collectorDestinationLinks({ ...connection, destinations: destination, accountBaseUrl: "https://staging.openpond.ai" }).tasks!);
+  const destinationUrl = new URL(collectorDestinationLinks({ ...connection, destinations: destination, accountBaseUrl: "https://web.example.test" }).tasks!);
   expect(destinationUrl.searchParams.get("project")).toBe(connection.projectId);
   expect(destinationUrl.searchParams.get("connection")).toBe(connection.id);
   expect(decodeURIComponent(destinationUrl.pathname)).toBe("/console/datasets/task/dataset/tasks");
@@ -213,7 +213,7 @@ it("preserves local source identity and receipts across remote controls", async 
     });
     expect(store.status().connections[0]).toMatchObject({
       source: "pi",
-      destinationLinks: { tasks: "https://staging.openpond.ai/console/datasets/task%2Fdataset/tasks?project=project&connection=connection", conversations: null },
+      destinationLinks: { tasks: "https://web.example.test/console/datasets/task%2Fdataset/tasks?project=project&connection=connection", conversations: null },
       admitted: 1,
       queued: 0,
       backfill: { stage: "complete", total: 1, admitted: 1, failed: 0 },

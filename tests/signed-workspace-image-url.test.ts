@@ -70,7 +70,7 @@ describe("signed workspace image URLs", () => {
 
     expect(() =>
       signedWorkspaceImageUrlPayload(
-        { appId: "support-app", path: "/home/glu/private.png" },
+        { appId: "support-app", path: "/home/example/private.png" },
         new URL("http://127.0.0.1:17876/v1/assets/workspace-image-url"),
         token,
       ),

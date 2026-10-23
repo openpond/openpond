@@ -87,9 +87,10 @@ export class OpenPondSandboxInstanceClient {
   constructor(options: OpenPondSandboxClientOptions) {
     this.apiKey = options.apiKey;
     this.customEndpoint = options.customEndpoint ?? false;
-    this.sandboxApiUrl = normalizeSandboxApiUrl(
-      options.sandboxApiUrl ?? options.baseUrl ?? DEFAULT_OPENPOND_API_BASE_URL
-    );
+    const configuredEndpoint = options.sandboxApiUrl ?? options.baseUrl ?? DEFAULT_OPENPOND_API_BASE_URL;
+    this.sandboxApiUrl = normalizeSandboxApiUrl(configuredEndpoint, {
+      apiBaseUrl: this.customEndpoint ? undefined : configuredEndpoint,
+    });
     this.apiRootUrl = apiRootUrlFromSandboxApiUrl(this.sandboxApiUrl);
   }
 

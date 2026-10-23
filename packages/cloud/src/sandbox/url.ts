@@ -3,7 +3,10 @@ import {
   DEFAULT_OPENPOND_WEB_BASE_URL,
 } from "../urls.js";
 
-export function normalizeSandboxApiUrl(baseUrlOrApiUrl: string): string {
+export function normalizeSandboxApiUrl(
+  baseUrlOrApiUrl: string,
+  options: { apiBaseUrl?: string } = {},
+): string {
   const trimmed = baseUrlOrApiUrl.trim().replace(/\/$/, "");
   if (!trimmed) {
     throw new Error("sandbox API URL must be non-empty");
@@ -19,11 +22,12 @@ export function normalizeSandboxApiUrl(baseUrlOrApiUrl: string): string {
   if (normalizedPath.endsWith("/v1")) {
     return `${url.origin}${normalizedPath}/sandboxes`;
   }
-  if (isOpenPondHostedApiHost(url.hostname)) {
-    return `${url.origin}${normalizedPath}/v1/sandboxes`;
-  }
   if (url.origin === DEFAULT_OPENPOND_WEB_BASE_URL) {
     return `${DEFAULT_OPENPOND_API_BASE_URL}/v1/sandboxes`;
+  }
+  const configuredApiOrigin = options.apiBaseUrl ? new URL(options.apiBaseUrl).origin : DEFAULT_OPENPOND_API_BASE_URL;
+  if (url.origin === configuredApiOrigin) {
+    return `${url.origin}${normalizedPath}/v1/sandboxes`;
   }
   return `${url.origin}${normalizedPath}/api/sandboxes`;
 }
@@ -34,12 +38,4 @@ export function apiRootUrlFromSandboxApiUrl(sandboxApiUrl: string): string {
     throw new Error("sandbox API URL must end with /sandboxes");
   }
   return sandboxApiUrl.slice(0, -suffix.length);
-}
-
-function isOpenPondHostedApiHost(hostname: string): boolean {
-  return (
-    hostname === "api.openpond.ai" ||
-    hostname === "staging-api.openpond.ai" ||
-    (hostname.startsWith("api") && hostname.endsWith(".openpond.ai"))
-  );
 }

@@ -39,9 +39,9 @@ describe("URL normalization", () => {
 
   test.each([
     ["https://api.openpond.ai", "https://api.openpond.ai/v1/sandboxes"],
-    ["https://staging-api.openpond.ai", "https://staging-api.openpond.ai/v1/sandboxes"],
+    ["https://api.example.test", "https://api.example.test/v1/sandboxes"],
   ])("normalizes sandbox API route %s", (input, expected) => {
-    expect(normalizeSandboxApiUrl(input)).toBe(expected);
+    expect(normalizeSandboxApiUrl(input, { apiBaseUrl: input })).toBe(expected);
   });
 
   test("maps API hosts to the hosted app and honors an explicit origin", () => {
@@ -54,13 +54,13 @@ describe("URL normalization", () => {
 
 describe("local paths", () => {
   test("recognizes and resolves supported local video paths", () => {
-    expect(isLocalVideoPath("/home/glu/Videos/demo.mp4")).toBe(true);
+    expect(isLocalVideoPath("/home/example/Videos/demo.mp4")).toBe(true);
     expect(isLocalVideoPath("demo.webm")).toBe(true);
     expect(isLocalVideoPath("demo.png")).toBe(false);
-    expect(absoluteLocalVideoPath("renders/demo.mp4", "/home/glu/project"))
-      .toBe("/home/glu/project/renders/demo.mp4");
-    expect(absoluteLocalVideoPath("/home/glu/Videos/demo.mp4", "/home/glu/project"))
-      .toBe("/home/glu/Videos/demo.mp4");
+    expect(absoluteLocalVideoPath("renders/demo.mp4", "/home/example/project"))
+      .toBe("/home/example/project/renders/demo.mp4");
+    expect(absoluteLocalVideoPath("/home/example/Videos/demo.mp4", "/home/example/project"))
+      .toBe("/home/example/Videos/demo.mp4");
   });
 
   test("uses the desktop Documents directory and normalizes user paths", () => {

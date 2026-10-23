@@ -2,7 +2,7 @@
 
 This is the existing cloud water estimator represented with the local `openpond-agent-sdk` package.
 
-See [CROSSWALK.md](./CROSSWALK.md) for the mapping from the original `/home/glu/Projects/all/openpond-cloud-water-estimator-example` files, actions, workflows, integrations, volumes, artifacts, fixtures, and tests into this SDK pilot.
+See [CROSSWALK.md](./CROSSWALK.md) for the mapping from the original `../water-estimator-original` files, actions, workflows, integrations, volumes, artifacts, fixtures, and tests into this SDK pilot.
 
 The original project has a large `src/actions/chat.ts` that does several jobs:
 

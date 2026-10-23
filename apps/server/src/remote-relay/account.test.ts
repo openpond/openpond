@@ -38,7 +38,7 @@ it.each([null, "fixture-team"])("captures the exact %s account scope without sel
   expect(headers.get("X-OpenPond-Team-Id")).toBe(teamId);
   expect(headers.get("Authorization")).toBe("Bearer fixture-credential");
   expect(headers.get("openpond-api-key")).toBeNull();
-  expect((await remoteRelayAccountStatus(preferences)).state).toBe("ready");
+  expect(await remoteRelayAccountStatus(preferences)).toMatchObject({ state: "ready", webBaseUrl: "https://fixture.invalid" });
   account.load.mockResolvedValue({ ...context, token: "opk_fixture_credential" });
   const apiKeySelected = (await read())!;
   await apiKeySelected.request({ path: "/remote-devices/service-keys" });

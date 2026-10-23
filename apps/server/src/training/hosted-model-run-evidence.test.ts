@@ -16,11 +16,11 @@ describe("API-created run evidence boundaries", () => {
     let teamId = "team-a";
     let job = { id: "job-a", metadata: { modelProjectId: "model-a", hostedModelProjectId: "hosted-a", hostedTeamId: "team-a" } } as unknown as TrainingJob;
     const store = {
-      getModelProject: async () => ({ hosted: { apiOrigin: "https://staging-api.openpond.ai", teamId: "team-a", projectId: "hosted-a" } }),
+      getModelProject: async () => ({ hosted: { apiOrigin: "https://api.example.test", teamId: "team-a", projectId: "hosted-a" } }),
       getTrainingJob: async () => job,
       saveTrainingJob: async (value: TrainingJob) => { job = value; },
     } as unknown as SqliteStore;
-    const service = createHostedModelRunEvidence({ store, resolveAccess: async () => ({ teamId, token: "test-token", apiBaseUrl: "https://staging-api.openpond.ai" }) });
+    const service = createHostedModelRunEvidence({ store, resolveAccess: async () => ({ teamId, token: "test-token", apiBaseUrl: "https://api.example.test" }) });
     remote.getJob.mockResolvedValue({ id: "job-a", teamId: "team-a", modelProjectId: "hosted-a", portableProjectId: "model-a", state: "succeeded", accruedSpendUsd: 0.2, rolloutProgress: { groupsTarget: 2, optimizerUpdatesApplied: 2, optimizerUpdatesSkipped: 0 } });
     remote.events.mockResolvedValue([]);
     remote.outputs.mockResolvedValue({ outputs: [{ id: "eval-a", contentHash: "a".repeat(64), kind: "evaluation", metadata: { kind: "candidate", policyVersion: 2, score: 0, passed: true, metrics: { taskCount: 4 } } }], receipt: null });
