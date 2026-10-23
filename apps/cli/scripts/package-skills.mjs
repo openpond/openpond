@@ -41,7 +41,8 @@ export async function packageCustomerSkills({ check = false } = {}) {
     await writeFile(path.join(target, "LICENSE"), license);
     await writeFile(path.join(target, "manifest.json"), manifest);
   }
-  console.log(`${check ? "Verified" : "Packaged"} openpond@${version}: ${names.length} customer skills, ${files.length} source files, MIT; manifest sha256:${hash(manifest)}`);
+  // npm pack --json owns stdout, including when it runs the prepack hook.
+  console.error(`${check ? "Verified" : "Packaged"} openpond@${version}: ${names.length} customer skills, ${files.length} source files, MIT; manifest sha256:${hash(manifest)}`);
 }
 
 async function listFiles(root, prefix = "") {
