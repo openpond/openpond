@@ -646,7 +646,7 @@ importers:
         specifier: 1.32.1
         version: 1.32.1(zod@4.4.3)
       openpond-sdk:
-        specifier: ^0.12.6
+        specifier: ^0.12.7
         version: link:../sdk
       zod:
         specifier: ^4.1.13
@@ -686,7 +686,7 @@ importers:
   packages/sdk:
     dependencies:
       '@openpond/evals':
-        specifier: ^0.12.2
+        specifier: ^0.12.3
         version: link:../evals
       '@openpond/harness':
         specifier: ^0.4.10

@@ -4,8 +4,8 @@ MCP is released independently from Desktop and the CLI. Publish compatible
 `@openpond/evals` and `openpond-sdk` versions first. The package's SDK dependency
 floor must include every SDK contract imported by its tool adapters.
 
-The initial cohort is Harness `0.4.10`, Evals `0.12.2`, SDK `0.12.6`, MCP `0.1.0` and CLI `0.2.63`.
-Evals and SDK require Harness `^0.4.10`; SDK requires Evals `^0.12.2`; MCP requires SDK `^0.12.6`. The CLI bundles these
+The initial cohort is Harness `0.4.10`, Evals `0.12.3`, SDK `0.12.7`, MCP `0.1.0` and CLI `0.2.63`.
+Evals and SDK require Harness `^0.4.10`; SDK requires Evals `^0.12.3`; MCP requires SDK `^0.12.7`. The CLI bundles these
 sources and does not acquire the SDK through an npm runtime dependency.
 
 ## First publication
@@ -55,3 +55,5 @@ MCP client protocol and authorization integration checks against the installed
 tarball. Neither invokes a compiler or launches paid work.
 
 Harness `0.4.9` predates the structured-sampling contracts consumed by Sandbox. Publish `0.4.10` through `release-harness.yml` first. Then dispatch `release-evals.yml` and `release-sdk.yml` against the same merged source if their push runs deferred while the Harness floor was unavailable. Do not reuse the older registry foundation for external-consumer acceptance.
+
+Evals `0.12.2` was published from the earlier merged source despite cancellation of its workflow. Its registry peer floor remains `^0.4.6`; immutable npm metadata cannot be corrected in place. The `0.12.3` patch carries the reviewed Harness floor, and SDK `0.12.7` and MCP require the corrected cohort. Verify registry manifests after publication, including after a canceled or unknown publication outcome.
