@@ -87,7 +87,7 @@ These mappings follow the checked-in CLI command reference; the MCP accepts its 
 
 ## Boundaries and release gates
 
-The package requires compatible public SDK learning-command and correction-metrics exports. Before an npm release, publish the required SDK contracts, set the minimum SDK dependency to their supported version, and verify a clean installation using published dependencies. The current `openpond-sdk@0.12.5` registry release does not contain all required exports.
+The package requires `openpond-sdk@^0.12.6` for its public learning-command, correction-metrics, queue and checkpoint-recovery contracts. Publish the compatible Evals/SDK cohort before MCP, then verify a clean installation using published dependencies. See [release preparation and first-publication setup](RELEASING.md).
 
 The tool catalog excludes local filesystem access, shell execution, desktop-session management and account or infrastructure administration. Asset uploads accept the existing typed hash-verified upload/package contracts, never a path interpreted on the MCP host. Profiles/Skills/Harness authoring and published organization actions remain under their existing separate interfaces; released Harness evaluation targets are supported here.
 
