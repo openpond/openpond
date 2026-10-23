@@ -62,7 +62,7 @@ export type HttpRouteDeps = {
     ensureProfile?: boolean;
   }) => Promise<BootstrapPayload>;
   skillSourceFilePayload: (
-    scope: "codex" | "profile" | "extension",
+    scope: "codex" | "profile" | "extension" | "builtin",
     skillName: string,
     filePath: string
   ) => Promise<unknown>;

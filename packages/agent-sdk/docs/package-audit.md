@@ -36,4 +36,4 @@ That command proves:
 
 The package is generic enough for the next platform phase when `pnpm check` passes from the Agent SDK package root.
 
-Remaining non-SDK work stays platform-owned: integration lease selection, secret storage, volume provisioning, schedule enablement, run history, draft source refs, publish transactions, UI projections, and staging deployment.
+Remaining non-SDK work stays platform-owned: integration lease selection, secret storage, volume provisioning, schedule enablement, run history, draft source refs, publish transactions, UI projections, and deployment verification.

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TrainingGpuSelectionSchema } from "./training-compute-selection.js";
 import { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
 export { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
@@ -107,6 +108,8 @@ export const ModelProjectTrainingSetupSchema = z
     managedGpuPlacementObjective: z
       .enum(["fast", "balanced", "economical"])
       .default("balanced"),
+    managedGpuSelection: TrainingGpuSelectionSchema.optional(),
+    continuationAdapterMode: z.enum(["residual_append", "shared", "sequential_merge"]).optional(),
     managedGpuRequirement: z
       .enum(["any", "h100_hbm3"])
       .default("any"),

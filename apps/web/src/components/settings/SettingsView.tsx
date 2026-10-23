@@ -348,6 +348,7 @@ export function SettingsView({
         ) : section === "skills" ? (
           <SkillsSettingsSection
             personalSkills={payload?.codexPersonalSkills ?? []}
+            builtInSkills={payload?.builtInSkills ?? []}
             extensionCatalog={payload?.extensionCatalog ?? {
               rootPath: "",
               registryPath: "",

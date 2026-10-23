@@ -112,7 +112,7 @@ has not been verified at this checkpoint.
 ### Phase 3 — Published packages and hosted parity
 
 - [ ] Publish and verify the exact public packages from the registry.
-- [ ] Implement scoped hosted persistence, source authentication, grading, review and package operations in Sandbox using those packages.
+- [ ] Implement scoped hosted persistence, source authentication, grading, review and package operations in the hosted service using those packages.
 - [ ] Deliver equivalent hosted Models pages and prove the manual journey with Desktop closed.
 
 ### Phase 4 — Automatic continual learning

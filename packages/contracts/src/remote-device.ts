@@ -1,4 +1,4 @@
-// Generated from Sandbox shared/remote-device.ts. Do not edit.
+// Generated remote-device protocol. Do not edit.
 // Source SHA256: 0065cfe0a56c9326564d3ebb34719a3fc1cd5b10c26dbd8f07540efa2ce3bda8
 // Refresh: node scripts/sync-remote-device-contract.mjs
 import { z } from "zod";

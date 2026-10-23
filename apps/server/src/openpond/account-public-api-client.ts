@@ -16,7 +16,7 @@ export function createCapturedOpenPondPublicApiClient(context: RuntimeAccountCon
   const apiKey = context.token?.trim();
   if (!apiKey || context.accountState.state !== "signed_in" || !context.accountState.activeProfile)
     throw new Error("A signed-in OpenPond account is required.");
-  const normalized = normalizeSandboxApiUrl(context.apiBaseUrl);
+  const normalized = normalizeSandboxApiUrl(context.apiBaseUrl, { apiBaseUrl: context.apiBaseUrl });
   const root = /\/api\/sandboxes\/?$/.test(normalized)
     ? normalized.replace(/\/api\/sandboxes\/?$/, "/v1")
     : normalized.replace(/\/sandboxes\/?$/, "");

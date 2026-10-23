@@ -26,7 +26,10 @@
     "test": "vitest run test",
     "build": "pnpm run clean && pnpm run docs:commands && pnpm run build:bundles && pnpm run build:local-assets && pnpm run build:types",
     "prepublishOnly": "pnpm run build",
-    "build:bundles": "tsx ../../scripts/build/bundle-cli.ts all"
+    "build:bundles": "tsx ../../scripts/build/bundle-cli.ts all",
+    "skills:package": "node scripts/package-skills.mjs",
+    "skills:check": "node scripts/package-skills.mjs --check",
+    "prepack": "pnpm run skills:package"
   },
   "files": [
     "dist/**/*",

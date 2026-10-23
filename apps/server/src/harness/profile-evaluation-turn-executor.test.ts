@@ -81,7 +81,7 @@ test("bounded Profile cases require the exact host-authorized run ceiling before
     await expect(execute(member)).rejects.toThrow("admitted hosted spend ceiling");
     expect(createSession).not.toHaveBeenCalled();
     vi.stubEnv("OPENPOND_API_KEY", "test-host-scoped-credential");
-    vi.stubEnv("OPENPOND_OPCHAT_API_URL", "https://staging-api.openpond.ai/opchat/v1");
+    vi.stubEnv("OPENPOND_OPCHAT_API_URL", "https://api.example.test/opchat/v1");
     const fetchAuthority = vi.fn(async () => Response.json({ runId: bounded.id,
       manifestHash: contentHash("another-source"), maximumCostUsd: 1 }));
     vi.stubGlobal("fetch", fetchAuthority);

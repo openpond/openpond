@@ -1279,7 +1279,7 @@ async function resolveSandboxClient(): Promise<ResolvedSandboxClient> {
       }),
       context: await loadOpenPondAccountContext().catch(() => null),
       apiKey: configuredSandboxApiKey,
-      sandboxApiUrl: normalizeSandboxApiUrl(configuredSandboxApiUrl),
+      sandboxApiUrl: normalizeSandboxApiUrl(configuredSandboxApiUrl, { apiBaseUrl: configuredSandboxApiUrl }),
     };
   }
 
@@ -1299,7 +1299,7 @@ async function resolveSandboxClient(): Promise<ResolvedSandboxClient> {
       }),
       context,
       apiKey,
-      sandboxApiUrl: normalizeSandboxApiUrl(configuredSandboxApiUrl),
+      sandboxApiUrl: normalizeSandboxApiUrl(configuredSandboxApiUrl, { apiBaseUrl: configuredSandboxApiUrl }),
     };
   }
 
@@ -1308,16 +1308,16 @@ async function resolveSandboxClient(): Promise<ResolvedSandboxClient> {
     client: createOpenPondSandboxClient({ apiKey, baseUrl }),
     context,
     apiKey,
-    sandboxApiUrl: normalizeSandboxApiUrl(baseUrl),
+    sandboxApiUrl: normalizeSandboxApiUrl(baseUrl, { apiBaseUrl: baseUrl }),
   };
 }
 
 function sandboxApiRootUrl(sandboxApiUrl: string): string {
-  return normalizeSandboxApiUrl(sandboxApiUrl).replace(/\/sandboxes\/?$/, "");
+  return normalizeSandboxApiUrl(sandboxApiUrl, { apiBaseUrl: sandboxApiUrl }).replace(/\/sandboxes\/?$/, "");
 }
 
 function sandboxPublicApiRootUrl(sandboxApiUrl: string): string {
-  const normalized = normalizeSandboxApiUrl(sandboxApiUrl);
+  const normalized = normalizeSandboxApiUrl(sandboxApiUrl, { apiBaseUrl: sandboxApiUrl });
   if (/\/api\/sandboxes\/?$/.test(normalized)) {
     return normalized.replace(/\/api\/sandboxes\/?$/, "/v1");
   }

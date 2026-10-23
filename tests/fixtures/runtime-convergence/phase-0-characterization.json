@@ -2,7 +2,6 @@
   "schemaVersion": "openpond.agentRuntimeCharacterization.v1",
   "capturedAt": "2026-08-07T06:42:00.000Z",
   "openpondCommit": "f3381f75b6bb259c953b171a602a30a55876d9c2",
-  "sandboxCommit": "3559206a887c2c9bda1e944e1e965694917afe60",
   "canonicalization": {
     "algorithm": "sha256",
     "encoding": "utf8",
@@ -58,37 +57,30 @@
   "hosted": [
     {
       "id": "provider-rounds-checkpoints-tools-waits-cancellation",
-      "path": "lib/sandbox/agent-runtime/provider-round.ts",
       "sha256": "4a097c8f2939e7f24a35988cf4654c651bcdff63cc5ec51d19e014607a9387c2"
     },
     {
       "id": "prompt-skills-compaction-provider-tool-registry",
-      "path": "deployment-worker/domain/services/hosted-agent-runtime/runtime-composition.test.ts",
       "sha256": "9c024698e565dba9a008c441af6b761c6592aa1e76176111de441f9cd2dce96a"
     },
     {
       "id": "sandbox-and-managed-tool-adapters",
-      "path": "deployment-worker/domain/services/hosted-agent-runtime/runtime-adapters.test.ts",
       "sha256": "74e5ba7c8cef29eb3199ec6f22627302ad436fdafe483eec388c72f0500fc1fd"
     },
     {
       "id": "durable-event-ordering",
-      "path": "deployment-worker/domain/services/hosted-agent-runtime/event-store.test.ts",
       "sha256": "6e6f8ad13ab8bb4c7617966916dbd6ca890b1bb4c2d1c6e2226c7e7eed43962c"
     },
     {
       "id": "web-event-projection",
-      "path": "apps/web/components/sandbox/sandbox-manager/hosted-agent-events.test.ts",
       "sha256": "671fa74bc2d18848160dc413b6a09469846c30d4212c55f4e740cf6e39f88e64"
     },
     {
       "id": "web-chat-work-turn-lifecycle",
-      "path": "apps/web/components/sandbox/sandbox-manager/hosted-work-chat.test.tsx",
       "sha256": "0065ef79ab15f6b012c0da38c680a48f670ed32d664c39040770b0f3b7f952a1"
     },
     {
       "id": "turn-service-cancellation-and-outputs",
-      "path": "lib/sandbox/hosted-work/service.test.ts",
       "sha256": "480c085c90fdf994e68f8e081678a2f7cb4e20a79c5ddb1b35dc23394123ce56"
     }
   ],

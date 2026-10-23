@@ -65,11 +65,7 @@ export async function authorizeImporter(
       resolveApiBaseUrlOption(options) ||
       config.apiBaseUrl ||
       DEFAULT_OPENPOND_API_BASE_URL;
-  const configuredWeb =
-    optionString(options, "baseUrl") ||
-    (new URL(configuredApi).hostname === "staging-api.openpond.ai"
-      ? "https://staging.openpond.ai"
-      : resolveBaseUrl(config));
+  const configuredWeb = optionString(options, "baseUrl") || resolveBaseUrl(config);
   const origin = new URL(configuredWeb),
     api = new URL(configuredApi);
   for (const url of [origin, api])

@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import { createAccountScopeRefresh } from "../apps/web/src/lib/account-scope-refresh";
 
 test("a team/account switch discards the in-flight snapshot and a detached renderer cannot receive it", async () => {
-  // An older staging reply must never restore staging after switching to production.
+  // A previous account reply must never restore its snapshot after an account switch.
   const replies: Array<(value: string) => void> = [];
   const apply = vi.fn();
   const refresh = createAccountScopeRefresh({
@@ -14,13 +14,13 @@ test("a team/account switch discards the in-flight snapshot and a detached rende
   refresh.invalidate();
   const second = refresh.refresh();
   expect(replies).toHaveLength(1);
-  replies[0]!("staging / previous team");
+  replies[0]!("account-a / previous team");
   await Promise.resolve();
   expect(apply).not.toHaveBeenCalled();
   expect(replies).toHaveLength(2);
-  replies[1]!("production / Example Team");
+  replies[1]!("account-b / Example Team");
   await Promise.all([first, second]);
-  expect(apply.mock.calls).toEqual([["production / Example Team"]]);
+  expect(apply.mock.calls).toEqual([["account-b / Example Team"]]);
 
   const detached = refresh.refresh();
   refresh.dispose();

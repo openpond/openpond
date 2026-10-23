@@ -28,11 +28,6 @@ if (!storeDir) throw new Error("OPENPOND_APP_HOME is required for benchmark admi
 const apiBaseUrl = process.env.OPENPOND_API_URL?.trim();
 if (!apiBaseUrl) throw new Error("OPENPOND_API_URL is required for benchmark admission.");
 const apiUrl = new URL(apiBaseUrl);
-const gatewayEnvironment = apiUrl.hostname.startsWith("staging-")
-  ? "staging"
-  : apiUrl.hostname === "api.openpond.ai"
-    ? "production"
-    : "custom";
 const outputPath = path.resolve(
   process.env.OPENPOND_REFINER_ADMISSION_OUTPUT?.trim()
     || path.join(storeDir, "harness-refiner-admission.json"),
@@ -131,7 +126,6 @@ try {
     model,
     gateway: {
       service: "openpond-chat",
-      environment: gatewayEnvironment,
       apiBaseUrl: apiUrl.origin,
     },
     upstreamModel,

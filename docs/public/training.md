@@ -56,16 +56,6 @@ Qualify a Linux execution host with
 These checks execute real network and filesystem boundary probes and fail when
 the isolation runtime is unavailable.
 
-For a remote smoke test, run
-`pnpm exec tsx scripts/testing/python-sandbox-staging-smoke.ts --bootstrap`
-with a saved staging CLI account. It uploads the exact executor bundle to a
-disposable staging Work guest, installs bubblewrap there if needed, verifies
-the bundle hash and isolation checks, then deletes the guest. The guest has a
-$0.10 spend cap. Results are written to `tmp/python-isolation-staging/report.json`.
-This qualifies the executor in that guest; it does not publish a desktop release
-or change the hosted service's runtime image. A permanent execution host still
-needs bubblewrap and Python provisioned before accepting these rollouts.
-
 ## Plan, Approve, and Run
 
 Once the Taskset is ready:

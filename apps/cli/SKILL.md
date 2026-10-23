@@ -1,33 +1,26 @@
 ---
 name: openpond
-description: Entry skill for OpenPond CLI workflows. Delegates to the reusable openpond-cli skill in this repo.
-metadata:
-  short-description: OpenPond CLI skill index
+description: Entry point for OpenPond CLI, dataset, Agent, skill, and Refiner authoring workflows in this source repository.
 ---
 
-# OpenPond CLI Skill
+# OpenPond skills
 
-Use this root skill as the default entrypoint when importing this repository into agent skill systems.
+The maintained customer skills live in `skills/`. Desktop ships these five enabled by default; do not install a second copy inside Desktop.
 
-## Primary reusable skills
+- [CLI operations](skills/openpond-cli/SKILL.md)
+- [Taskset authoring](skills/openpond-taskset-authoring/SKILL.md)
+- [Agent authoring](skills/openpond-agent-authoring/SKILL.md)
+- [Skill authoring](skills/openpond-skill-authoring/SKILL.md)
+- [Refiner authoring](skills/openpond-refiner-authoring/SKILL.md)
 
-- `skills/openpond-cli/SKILL.md`
-- `skills/openpond-desktop-harness/SKILL.md`
+For an external coding agent, follow the canonical [agent setup guide](https://openpond.ai/agent-setup.md). Use the standard Skills CLI and select the intended customer skills explicitly:
 
-## Suggested install commands
+```sh
+npx skills add openpond/openpond --full-depth --skill openpond-cli --agent codex
+```
 
-- `npx add-skill openpondai/openpond --skill openpond-cli`
-- `npx add-skill /path/to/openpond --skill openpond-cli`
+Replace `codex` with the intended supported client, such as `claude-code` or `cursor`. Installation is project scoped unless `--global` is selected. List first with `npx skills add openpond/openpond --full-depth --list`. Use a GitHub tree URL with a verified release tag or commit for a pinned source.
 
-## What this skill covers
+The npm `openpond` release contains the same customer sources at `dist/skills`, together with a versioned SHA-256 manifest and MIT license. `pnpm run skills:package` creates this pack; `pnpm run skills:check` verifies it against the maintained sources. The developer testing skill `openpond-desktop-harness` stays outside the customer pack.
 
-- Dataset discovery, authoring, and validation
-- Grader calibration and experiment execution, inspection, and comparison
-- Supported model training and continual experiment workflows
-
-- API key login and auth flows (`openpond login`)
-- Repo create/push workflows (`openpond repo create`, `openpond repo push`)
-- Deployment watch workflows (`openpond deploy watch`)
-- Tool discovery and execution (`openpond tool list`, `openpond tool run`)
-- CLI-driven deploy and tool validation loop
-- Desktop harness scenario authoring, execution, and proof workflow
+Skills supply workflow instructions. The CLI, SDK, and supported app tools perform operations. Installing a skill does not establish authentication, tool connectivity, or successful execution.

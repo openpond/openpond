@@ -5,7 +5,7 @@ import { LearningTextAssetSchema, TaskDefinitionSchema, learningRef, sameLearnin
 import { RewardBindingSchema, RewardReleaseSchema, compileBoundGraders } from "@openpond/evals/rewards";
 import { assertBoundedTaskJson, validateTaskValue } from "@openpond/evals/task-schema";
 
-import { ModelProjectBaseModelSchema, ModelProjectTrainingMethodSchema, ModelProjectVersionedRefSchema } from "./model-projects.js";
+import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelProjectTrainingMethodSchema, ModelProjectVersionedRefSchema, ModelProjectTrainingSetupSchema } from "./model-projects.js";
 import { canonicalSha256 } from "./protocol.js";
 import { ModelStarterExecutionSchema, validateModelStarterExecution } from "./model-starter-execution.js";
 
@@ -13,7 +13,7 @@ export { ModelStarterExecutionSchema, ModelStarterEnvironmentAttemptSchema, veri
 export { NativeHarnessExperimentAttemptSchema, verifyNativeHarnessExperimentAttempt, type NativeHarnessExperimentAttempt } from "./model-starter-execution.js";
 export { ModelTasksetDerivationSchema, ModelTasksetPackageSchema, deriveModelTaskset, validateModelTasksetPackage, type ModelTasksetPackage } from "./model-taskset-derivation.js";
 export { ModelTasksetExecutionResourcesSchema, createModelTasksetExecutionResourcesAsset, modelTasksetExecutionResourcesAssetId, resolveModelTasksetExecutionResourcesAsset } from "./model-taskset-resources.js";
-export { prepareModelTrainingDefaults } from "./model-training-defaults.js";
+export { prepareModelTrainingDefaults, createModelTrainingRecipeDefaults, rebindModelTrainingRecipe } from "./model-training-defaults.js";
 
 const IdSchema = z.string().trim().min(1).max(500);
 const RefSchema = ModelProjectVersionedRefSchema;
@@ -95,6 +95,9 @@ export const ModelStarterCreationIntentSchema = z.object({
   startingModel: ModelProjectBaseModelSchema,
   method: ModelProjectTrainingMethodSchema,
   rewardBindingRef: RefSchema.nullable().optional(),
+  recipe: ModelProjectRecipeDocumentSchema.nullable().optional(),
+  managedGpuSelection: ModelProjectTrainingSetupSchema.shape.managedGpuSelection,
+  continuationAdapterMode: ModelProjectTrainingSetupSchema.shape.continuationAdapterMode,
   learning: ModelInitialLearningSchema.optional(),
 }).strict();
 export const ModelStarterCreationRequestSchema = ModelStarterCreationIntentSchema.extend({

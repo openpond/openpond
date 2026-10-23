@@ -167,7 +167,7 @@ function cloudConnectedAppToolPayload(
 function apiBaseUrlFromSandboxApiUrl(value: string | null | undefined): string | null {
   const normalized = normalizeOptionalUrl(value);
   if (!normalized) return null;
-  return normalizeApiBaseUrl(normalizeSandboxApiUrl(normalized));
+  return normalizeApiBaseUrl(normalizeSandboxApiUrl(normalized, { apiBaseUrl: normalized }));
 }
 
 function normalizeApiBaseUrl(value: string | null | undefined): string | null {

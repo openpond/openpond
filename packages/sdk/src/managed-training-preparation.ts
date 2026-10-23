@@ -2,6 +2,7 @@ import { contentHash, sha256 } from "@openpond/harness";
 import { TrainingHandoffOriginSchema, type TrainingHandoffOrigin } from "./post-training.js";
 import { z } from "zod";
 import { TrainingPhysicalPlacementSchema, type TrainingPhysicalPlacement } from "./training-physical-placement.js";
+import { TrainingGpuSelectionSchema, type TrainingGpuSelection } from "./training-compute-selection.js";
 
 import type { ModelProject } from "./model-projects.js";
 import {
@@ -28,6 +29,7 @@ type PolicyJob = Extract<TrainingJobSubmission["job"], { kind: "policy_optimize"
 export type TrainingPreparationFile = TrainingEvaluationSource["assets"][number];
 
 export interface ManagedTrainingPreparationInput {
+  gpuSelection?: TrainingGpuSelection;
   physicalPlacement?: TrainingPhysicalPlacement;
   origin?: TrainingHandoffOrigin;
   executionMode?: "qualification";
@@ -200,6 +202,7 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
         : []),
     ],
     placementObjective: project.trainingSetup.managedGpuPlacementObjective,
+    ...((input.gpuSelection ?? project.trainingSetup.managedGpuSelection) ? { gpuSelection: TrainingGpuSelectionSchema.parse(input.gpuSelection ?? project.trainingSetup.managedGpuSelection) } : {}),
     ...(physicalPlacement ? { physicalPlacement } : {}),
     budget: {
       maximumSpendUsd: approval.maximumSpendUsd,

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "license": "MIT",
+  "sourceRepository": "https://github.com/openpond/openpond",
+  "sourceDirectory": "apps/cli/skills",
+  "skills": [
+    {
+      "name": "openpond-cli",
+      "externalSupport": "CLI operations"
+    },
+    {
+      "name": "openpond-taskset-authoring",
+      "externalSupport": "CLI authoring and evaluation workflows"
+    },
+    {
+      "name": "openpond-agent-authoring",
+      "externalSupport": "CLI and Agent SDK source authoring"
+    },
+    {
+      "name": "openpond-skill-authoring",
+      "externalSupport": "Profile source authoring and packaged validation"
+    },
+    {
+      "name": "openpond-refiner-authoring",
+      "externalSupport": "Review Profile drafts; inspection and activation require Desktop tools"
+    }
+  ]
+}

@@ -314,3 +314,11 @@
     display: none;
   }
 }
+
+.built-in-skills-table { min-width: 640px; }
+.built-in-skills-table th:first-child { width: 31%; }
+.built-in-skills-table th:nth-child(2) { width: 39%; }
+.built-in-skills-table th:nth-child(3) { width: 18%; }
+.built-in-skills-table th:last-child { width: 12%; }
+.built-in-skills-table td { font-size: 12px; line-height: 1.5; }
+.built-in-skills-table td strong { white-space: normal; overflow-wrap: anywhere; }

@@ -1,3 +1,4 @@
+import { LearningContinuationModeOverrideSchema } from "./continuation-mode.js";
 import { TrainingHandoffOriginSchema } from "./training-handoff.js";
 import { LearningDomainError } from "./errors.js";
 import { z } from "zod";
@@ -451,6 +452,7 @@ export const LearningPolicyContentSchema = z
         recipe: ImmutableReleaseRefSchema,
         retentionEvaluation: ImmutableReleaseRefSchema,
         replayBatches: z.array(ImmutableReleaseRefSchema).max(100),
+        continuationMode: LearningContinuationModeOverrideSchema.optional(),
       })
       .strict(),
     limits: z

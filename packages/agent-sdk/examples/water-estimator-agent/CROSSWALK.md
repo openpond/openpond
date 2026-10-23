@@ -1,6 +1,6 @@
 # Water Estimator Original Project Crosswalk
 
-Original project: `/home/glu/Projects/all/openpond-cloud-water-estimator-example`.
+Original project: `../water-estimator-original`.
 
 This file maps the original runtime shape into the SDK pilot so gaps are visible before platform work depends on the conversion.
 

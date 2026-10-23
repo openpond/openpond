@@ -1,4 +1,5 @@
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { DropdownSelect } from "../DropdownSelect";
 import { FileText, Maximize2, Minimize2, X } from "../icons";
 import type { SkillSourceDocument } from "./skill-source-document";
 import "../../styles/app-shell/native-skill-sidebar.css";
@@ -16,7 +17,13 @@ export function NativeSkillSidebar({
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
 }) {
-  const fileName = skill.path.split("/").at(-1) ?? skill.path;
+  const [selected, setSelected] = useState({ skill, path: "SKILL.md" });
+  const file =
+    skill.files?.find((file) => selected.skill === skill && file.path === selected.path) ??
+    skill.files?.[0];
+  const filePath = file?.path ?? skill.path;
+  const body = file?.body ?? skill.body;
+  const fileName = filePath.split("/").at(-1) ?? filePath;
 
   return (
     <aside
@@ -33,12 +40,23 @@ export function NativeSkillSidebar({
         />
       ) : null}
       <div className="workspace-diff-topbar native-skill-sidebar-topbar">
-        <div className="workspace-diff-tabs" role="tablist" aria-label="Native skill files">
-          <button className="workspace-diff-tab active" type="button" role="tab" aria-selected>
-            <FileText size={14} />
-            <span>{fileName}</span>
-          </button>
-        </div>
+        {skill.files?.length ? (
+          <DropdownSelect
+            compact
+            floating
+            label="Skill file"
+            value={filePath}
+            options={skill.files.map((file) => ({ value: file.path, label: file.path }))}
+            onChange={(path) => setSelected({ skill, path })}
+          />
+        ) : (
+          <div className="workspace-diff-tabs" role="tablist" aria-label="Native skill files">
+            <button className="workspace-diff-tab active" type="button" role="tab" aria-selected>
+              <FileText size={14} />
+              <span>{fileName}</span>
+            </button>
+          </div>
+        )}
         <div className="workspace-diff-toolbar-actions">
           <button
             className="diff-icon-button"
@@ -64,10 +82,10 @@ export function NativeSkillSidebar({
         <header className="native-skill-source-header">
           <h2>{skill.name}</h2>
           <p>{skill.description}</p>
-          <code>{skill.path}</code>
+          <code>{filePath}</code>
         </header>
         <pre className="native-skill-markdown-source" aria-label={`${skill.name} Markdown source`}>
-          <code>{skill.body}</code>
+          <code>{body}</code>
         </pre>
       </div>
     </aside>

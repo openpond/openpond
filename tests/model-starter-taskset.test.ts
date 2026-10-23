@@ -52,7 +52,7 @@ it("recovers atomic package pushes after restart and attaches history without re
     let rejectNext = false;
     const calls: string[] = [];
     const service = (teamId = "team") => createModelProjectHostingService({ store,
-      resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test-key", teamId }),
+      resolveAccess: async () => ({ apiBaseUrl: "https://api.example.test", token: "test-key", teamId }),
       fetch: async (url, init) => {
         expect(new URL(String(url)).pathname).toBe("/v1/taskset-packages");
         expect(init?.method).toBe("POST");
@@ -82,7 +82,7 @@ it("recovers atomic package pushes after restart and attaches history without re
     });
     await expect(service().syncProject(original.id)).rejects.toThrow("Response lost");
     expect((await store.getModelProject(original.id))!.hosted).toBeNull();
-    const pending = await store.pendingModelPackagePush({ profileId: original.profileId, modelId: original.id, apiOrigin: "https://staging-api.openpond.ai", teamId: "team" });
+    const pending = await store.pendingModelPackagePush({ profileId: original.profileId, modelId: original.id, apiOrigin: "https://api.example.test", teamId: "team" });
     expect(pending?.localEvaluation).toEqual(other.trainingSetup.tasksetRef);
     expect(pending?.evaluationPackageHash).toMatch(/^[a-f0-9]{64}$/);
     expect(pending?.request).not.toHaveProperty("evaluationPackage");
@@ -112,7 +112,7 @@ it("recovers atomic package pushes after restart and attaches history without re
     const selectedPackage = await exportLocalModelTasksetPackage({ store, storeDir: home, profileId: third.profileId, modelId: third.id });
     rejectNext = true;
     await expect(service().publishTaskset({ projectId: third.id, taskset: selectedTaskset, release: selectedPackage.taskset })).rejects.toThrow("Fixture rejects");
-    expect(await store.pendingModelPackagePush({ profileId: third.profileId, modelId: third.id, apiOrigin: "https://staging-api.openpond.ai", teamId: "team" })).toBeNull();
+    expect(await store.pendingModelPackagePush({ profileId: third.profileId, modelId: third.id, apiOrigin: "https://api.example.test", teamId: "team" })).toBeNull();
     await service().publishTaskset({ projectId: third.id, taskset: selectedTaskset, release: selectedPackage.taskset });
     expect(calls[calls.length - 2]).toBe(calls[calls.length - 1]);
     expect(remote!.name).toBe(third.name);
@@ -128,7 +128,7 @@ it("recovers atomic package pushes after restart and attaches history without re
     expect(remote!.etag).toBe(etagBefore);
     expect(attached.hosted!.tasksets).toHaveLength(3);
     expect(receipts.size).toBe(4);
-    expect(await store.pendingModelPackagePush({ profileId: original.profileId, modelId: original.id, apiOrigin: "https://staging-api.openpond.ai", teamId: "team" })).toBeNull();
+    expect(await store.pendingModelPackagePush({ profileId: original.profileId, modelId: original.id, apiOrigin: "https://api.example.test", teamId: "team" })).toBeNull();
   } finally { await store.close(); }
 }));
 
@@ -156,7 +156,7 @@ it("pulls complete private packages atomically and exports their exact bytes aft
     let servedPackage = value;
     let duringDownload: (() => Promise<void>) | null = null;
     const service = (store = target) => createModelProjectHostingService({ store,
-      resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test-key", teamId: "team" }),
+      resolveAccess: async () => ({ apiBaseUrl: "https://api.example.test", token: "test-key", teamId: "team" }),
       fetch: async url => {
         const pathname = new URL(String(url)).pathname;
         const isEvaluation = pathname.includes(evaluation.taskset.id);
@@ -245,7 +245,7 @@ it("pulls complete private packages atomically and exports their exact bytes aft
       syncedSourceRevision: original.revision, syncedAt: original.updatedAt, tasksets: [],
     } }));
     const recovered = await service(source).pullProject({ hostedProjectId: hosted.id, profileId: original.profileId });
-    expect(recovered.project.hosted!.apiOrigin).toBe("https://staging-api.openpond.ai");
+    expect(recovered.project.hosted!.apiOrigin).toBe("https://api.example.test");
     expect(await source.getTaskset(value.taskset.id)).toEqual(originalTaskset);
     expect(await exportLocalModelTasksetPackage({ store: source, storeDir: source.home, profileId: original.profileId, modelId: original.id })).toEqual(exported);
     const generic = new SqliteStore(path.join(home, "generic"));
@@ -278,7 +278,7 @@ it("recovers an explicitly pinned projected snapshot atomically and rejects alte
       trainingSetup: { ...hostedModelProjectTrainingSetup(original.trainingSetup), tasksetRef: learningRef(projected), evaluationTasksetRef: learningRef(projected) },
       sourceRevision: 1, revision: 1, etag: "a".repeat(64), sourceUpdatedAt: original.updatedAt, createdAt: original.createdAt, updatedAt: original.updatedAt };
     const service = () => createModelProjectHostingService({ store: target,
-      resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test", teamId: "team" }),
+      resolveAccess: async () => ({ apiBaseUrl: "https://api.example.test", token: "test", teamId: "team" }),
       fetch: async url => {
         const pathname = new URL(String(url)).pathname;
         if (pathname === "/v1/training/jobs") return Response.json({ schemaVersion: "openpond.trainingJobPage.v2", jobs: [], nextCursor: null });

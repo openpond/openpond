@@ -152,7 +152,7 @@ export class OpenPondLearningClient {
   }
 }
 
-async function readBoundedLearningResponse(response: Response): Promise<unknown> {
+export async function readBoundedLearningResponse(response: Response): Promise<unknown> {
   const maximumBytes = 16_777_216;
   const reader = response.body?.getReader();
   if (!reader) throw new OpenPondLearningError(response.status, "empty_response", "Learning response was empty.", null);

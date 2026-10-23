@@ -22,7 +22,7 @@ From the OpenPond repository root:
 
 ```bash
 node docs/research/post-training-course/manim/narration/generate.mjs \
-  --env-file ../sandbox/.env.staging \
+  --env-file /path/to/narration.env \
   --sample
 ```
 
@@ -30,7 +30,7 @@ After reviewing `narration/sample-cedar.wav`, generate and mix the full course:
 
 ```bash
 node docs/research/post-training-course/manim/narration/generate.mjs \
-  --env-file ../sandbox/.env.staging \
+  --env-file /path/to/narration.env \
   --all
 ```
 
@@ -39,7 +39,7 @@ Generate the appendix with its separate manifest:
 ```bash
 node docs/research/post-training-course/manim/narration/generate.mjs \
   --manifest appendix_manifest.json \
-  --env-file ../sandbox/.env.staging \
+  --env-file /path/to/narration.env \
   --all
 ```
 

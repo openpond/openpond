@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { createServer } from "node:http";
+import { once } from "node:events";
 import { canonicalSha256 } from "../src/protocol.js";
 import { type TrainingPreparationRequest } from "../src/training-preparations.js";
 
@@ -10,6 +12,7 @@ import {
   type TrainingJobOutput,
   canonicalJson,
   createTrainingClient,
+  createTrainingCheckpointRecoveryResourceApproval,
   parseAndVerifyTrainingJobSubmission,
   parseAndVerifyTrainingInputArtifactUpload,
   parseAndVerifyTrainingExecutionReceipt,
@@ -107,6 +110,89 @@ function job() {
 }
 
 describe("Training SDK contracts", () => {
+  it("carries exact owner-approved recovery resources over HTTP and rejects changed consent before submission", async () => {
+    const received: unknown[] = [];
+    const server = createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      received.push(body);
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          job: {
+            ...job(),
+            ...(body.resourceApproval
+              ? {
+                  recovery: {
+                    sourceJobId: "source-job",
+                    checkpointId: "checkpoint-1",
+                    policyVersion: 1,
+                    completedGroups: 2,
+                    optimizerMode: "continue",
+                    resourceApproval: body.resourceApproval,
+                  },
+                }
+              : {}),
+          },
+        }),
+      );
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Missing local HTTP address");
+      const client = createTrainingClient({ baseUrl: `http://127.0.0.1:${address.port}` });
+      const resourceApproval = await createTrainingCheckpointRecoveryResourceApproval({
+        schemaVersion: "openpond.checkpointRecoveryResourceApproval.v1",
+        ownerUserId: "owner-1",
+        teamId: "team-1",
+        sourceJobId: "source-job",
+        sourceJobVersion: 2,
+        sourceInputManifestSha256: HASH,
+        checkpointId: "checkpoint-1",
+        adapterSha256: HASH,
+        resumeSha256: HASH,
+        idempotencyKey: "recovery-resource-bound-1",
+        approvedAt: NOW,
+        maximumSpendUsd: 4.5,
+        maximumGpuSeconds: 5400,
+        maximumWallSeconds: 6000,
+      });
+      const request = {
+        expectedVersion: 2,
+        checkpointId: "checkpoint-1",
+        idempotencyKey: resourceApproval.idempotencyKey,
+        maximumSpendUsd: 4.5,
+        maximumWallSeconds: 6000,
+        resourceApproval,
+      };
+      const result = await client.recoverCheckpoint("source-job", request);
+      expect(received).toEqual([request]);
+      expect(result.recovery?.resourceApproval).toEqual(resourceApproval);
+      await expect(client.recoverCheckpoint("foreign-source", request)).rejects.toThrow();
+      await expect(
+        client.recoverCheckpoint("source-job", {
+          ...request,
+          resourceApproval: { ...resourceApproval, maximumGpuSeconds: 5401 },
+        }),
+      ).rejects.toThrow();
+      await expect(
+        client.recoverCheckpoint("source-job", { ...request, maximumSpendUsd: 5 }),
+      ).rejects.toThrow();
+      expect(received).toHaveLength(1);
+      const { resourceApproval: _approval, ...legacy } = request;
+      await client.recoverCheckpoint("source-job", legacy);
+      expect(received).toEqual([request, legacy]);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
   it("verifies receipt identity, authority, Job binding, hash, and cleanup", async () => {
     const receipt = {
       schemaVersion: "openpond.trainingExecutionReceipt.v2" as const,
@@ -123,27 +209,31 @@ describe("Training SDK contracts", () => {
       spendUsd: 0.5,
       durationSeconds: 60,
       cleanupComplete: true,
-      issuer: "sandbox-managed-training",
+      issuer: "test-training-issuer",
       issuedAt: NOW,
       signature: null,
     };
     const contentHash = await trainingExecutionReceiptHash(receipt);
-    await expect(parseAndVerifyTrainingExecutionReceipt(receipt, {
-      id: receipt.id,
-      contentHash,
-      teamId: receipt.teamId,
-      jobId: receipt.jobId,
-    })).resolves.toEqual(receipt);
-    await expect(parseAndVerifyTrainingExecutionReceipt(
-      { ...receipt, cleanupComplete: false },
-      {
+    await expect(
+      parseAndVerifyTrainingExecutionReceipt(receipt, {
         id: receipt.id,
-        contentHash: await trainingExecutionReceiptHash({
-          ...receipt,
-          cleanupComplete: false,
-        }),
-      },
-    )).rejects.toMatchObject({ code: "execution_cleanup_incomplete" });
+        contentHash,
+        teamId: receipt.teamId,
+        jobId: receipt.jobId,
+      }),
+    ).resolves.toEqual(receipt);
+    await expect(
+      parseAndVerifyTrainingExecutionReceipt(
+        { ...receipt, cleanupComplete: false },
+        {
+          id: receipt.id,
+          contentHash: await trainingExecutionReceiptHash({
+            ...receipt,
+            cleanupComplete: false,
+          }),
+        },
+      ),
+    ).rejects.toMatchObject({ code: "execution_cleanup_incomplete" });
   });
 
   it("stages a bounded content-addressed portable input without starting a Job", async () => {
@@ -160,18 +250,22 @@ describe("Training SDK contracts", () => {
     };
     await expect(parseAndVerifyTrainingInputArtifactUpload(upload)).resolves.toEqual(upload);
 
-    const fetch = vi.fn(async () =>
-      new Response(JSON.stringify({
-        artifact: {
-          schemaVersion: "openpond.trainingInputArtifact.v2",
-          kind: upload.kind,
-          sourceManifest: upload.sourceManifest,
-          artifactRef: "r2://team/training-inputs/hash.json",
-          contentHash: upload.contentHash,
-          sizeBytes: 128,
-          createdAt: NOW,
-        },
-      }), { status: 201 }),
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            artifact: {
+              schemaVersion: "openpond.trainingInputArtifact.v2",
+              kind: upload.kind,
+              sourceManifest: upload.sourceManifest,
+              artifactRef: "r2://team/training-inputs/hash.json",
+              contentHash: upload.contentHash,
+              sizeBytes: 128,
+              createdAt: NOW,
+            },
+          }),
+          { status: 201 },
+        ),
     );
     const client = createTrainingClient({
       baseUrl: "https://api.openpond.test",
@@ -216,30 +310,53 @@ describe("Training SDK contracts", () => {
     const base = submission();
     const qualification = {
       ...base,
-      job: { ...base.job, executionMode: "qualification" as const, baseModel: {
-        ...base.job.baseModel, revision: "a".repeat(40), tokenizerRevision: "b".repeat(40), chatTemplateHash: HASH,
-      } },
-      requestedCapabilities: [{ id: "managed_rl.policy.qualification", version: "1", required: true }],
+      job: {
+        ...base.job,
+        executionMode: "qualification" as const,
+        baseModel: {
+          ...base.job.baseModel,
+          revision: "a".repeat(40),
+          tokenizerRevision: "b".repeat(40),
+          chatTemplateHash: HASH,
+        },
+      },
+      requestedCapabilities: [
+        { id: "managed_rl.policy.qualification", version: "1", required: true },
+      ],
     };
     const parsed = TrainingJobSubmissionSchema.parse(qualification);
     expect(parsed.job).toHaveProperty("executionMode", "qualification");
     expect(await trainingJobSubmissionHash(parsed)).not.toBe(await trainingJobSubmissionHash(base));
     expect(TrainingJobSubmissionSchema.parse(base).job).not.toHaveProperty("executionMode");
-    expect(() => TrainingJobSubmissionSchema.parse({ ...qualification, requestedCapabilities: [] })).toThrow("must require");
-    expect(() => TrainingJobSubmissionSchema.parse({
-      ...qualification, job: { ...qualification.job, baseModel: base.job.baseModel },
-    })).toThrow("immutable model and tokenizer revisions");
-    expect(() => TrainingJobSubmissionSchema.parse({
-      ...qualification, requestedCapabilities: [{ id: "managed_rl.policy.qualification", version: "1", required: false }],
-    })).toThrow("must require");
-    expect(() => TrainingJobSubmissionSchema.parse({
-      ...qualification,
-      job: { ...qualification.job, resumeFrom: { id: "checkpoint-1", contentHash: HASH } },
-    })).toThrow("original GRPO learner");
-    expect(() => TrainingJobSubmissionSchema.parse({
-      ...qualification,
-      job: { ...qualification.job, recipe: { ...qualification.job.recipe, method: "ppo" } },
-    })).toThrow("original GRPO learner");
+    expect(() =>
+      TrainingJobSubmissionSchema.parse({ ...qualification, requestedCapabilities: [] }),
+    ).toThrow("must require");
+    expect(() =>
+      TrainingJobSubmissionSchema.parse({
+        ...qualification,
+        job: { ...qualification.job, baseModel: base.job.baseModel },
+      }),
+    ).toThrow("immutable model and tokenizer revisions");
+    expect(() =>
+      TrainingJobSubmissionSchema.parse({
+        ...qualification,
+        requestedCapabilities: [
+          { id: "managed_rl.policy.qualification", version: "1", required: false },
+        ],
+      }),
+    ).toThrow("must require");
+    expect(() =>
+      TrainingJobSubmissionSchema.parse({
+        ...qualification,
+        job: { ...qualification.job, resumeFrom: { id: "checkpoint-1", contentHash: HASH } },
+      }),
+    ).toThrow("original GRPO learner");
+    expect(() =>
+      TrainingJobSubmissionSchema.parse({
+        ...qualification,
+        job: { ...qualification.job, recipe: { ...qualification.job.recipe, method: "ppo" } },
+      }),
+    ).toThrow("original GRPO learner");
   });
 
   // A valid receipt hash alone cannot prove that the original learner performed
@@ -249,53 +366,128 @@ describe("Training SDK contracts", () => {
     const base = submission();
     const unsigned = TrainingJobSubmissionSchema.parse({
       ...base,
-      job: { ...base.job, executionMode: "qualification", baseModel: {
-        ...base.job.baseModel, revision: "a".repeat(40), tokenizerRevision: "b".repeat(40), chatTemplateHash: HASH,
-      } },
-      requestedCapabilities: [{ id: "managed_rl.policy.qualification", version: "1", required: true }],
+      job: {
+        ...base.job,
+        executionMode: "qualification",
+        baseModel: {
+          ...base.job.baseModel,
+          revision: "a".repeat(40),
+          tokenizerRevision: "b".repeat(40),
+          chatTemplateHash: HASH,
+        },
+      },
+      requestedCapabilities: [
+        { id: "managed_rl.policy.qualification", version: "1", required: true },
+      ],
     });
-    const qualificationSubmission = { ...unsigned, contentHash: await trainingJobSubmissionHash(unsigned) };
-    if (qualificationSubmission.job.kind !== "policy_optimize") throw new Error("Expected policy qualification.");
+    const qualificationSubmission = {
+      ...unsigned,
+      contentHash: await trainingJobSubmissionHash(unsigned),
+    };
+    if (qualificationSubmission.job.kind !== "policy_optimize")
+      throw new Error("Expected policy qualification.");
     const qualification = {
       schemaVersion: "openpond.trainingQualificationEvidence.v1" as const,
       baseModel: qualificationSubmission.job.baseModel,
       group: { id: "group-1", contentHash: HASH },
-      rolloutReceipts: [{ id: "rollout-1", contentHash: HASH }, { id: "rollout-2", contentHash: "c".repeat(64) }],
-      rewardEvidenceHash: HASH, groupsCompleted: 1, optimizerUpdatesApplied: 0,
-      optimizerUpdatesSkipped: 0, trainingStepsCreated: 0, checkpointsCreated: 0, artifactsCreated: 0,
+      rolloutReceipts: [
+        { id: "rollout-1", contentHash: HASH },
+        { id: "rollout-2", contentHash: "c".repeat(64) },
+      ],
+      rewardEvidenceHash: HASH,
+      groupsCompleted: 1,
+      optimizerUpdatesApplied: 0,
+      optimizerUpdatesSkipped: 0,
+      trainingStepsCreated: 0,
+      checkpointsCreated: 0,
+      artifactsCreated: 0,
     };
     const receipt = {
       schemaVersion: "openpond.trainingExecutionReceipt.v2" as const,
-      id: "qualification-receipt", teamId: "team-1", jobId: "job-1", submissionHash: qualificationSubmission.contentHash,
-      manifestHash: HASH, recipeHash: HASH, capabilityHash: HASH,
-      runtimeRelease: { id: "runtime-1", contentHash: HASH }, inputs: [], outputs: [],
-      spendUsd: 0.5, durationSeconds: 60, cleanupComplete: true, qualification,
-      issuer: "sandbox-managed-training", issuedAt: NOW, signature: null,
+      id: "qualification-receipt",
+      teamId: "team-1",
+      jobId: "job-1",
+      submissionHash: qualificationSubmission.contentHash,
+      manifestHash: HASH,
+      recipeHash: HASH,
+      capabilityHash: HASH,
+      runtimeRelease: { id: "runtime-1", contentHash: HASH },
+      inputs: [],
+      outputs: [],
+      spendUsd: 0.5,
+      durationSeconds: 60,
+      cleanupComplete: true,
+      qualification,
+      issuer: "test-training-issuer",
+      issuedAt: NOW,
+      signature: null,
     };
-    const verify = async (value: unknown, outputs: TrainingJobOutput[] = []) => parseAndVerifyTrainingExecutionReceipt(value, {
-      id: receipt.id, contentHash: await canonicalSha256(value), teamId: receipt.teamId, jobId: receipt.jobId,
-      qualificationSubmission, outputs,
-    });
+    const verify = async (value: unknown, outputs: TrainingJobOutput[] = []) =>
+      parseAndVerifyTrainingExecutionReceipt(value, {
+        id: receipt.id,
+        contentHash: await canonicalSha256(value),
+        teamId: receipt.teamId,
+        jobId: receipt.jobId,
+        qualificationSubmission,
+        outputs,
+      });
     await expect(verify(receipt)).resolves.toMatchObject({ qualification });
     await expect(verify({ ...receipt, qualification: undefined })).rejects.toThrow();
-    await expect(verify({ ...receipt, submissionHash: HASH })).rejects.toMatchObject({ code: "qualification_receipt_mismatch" });
-    await expect(verify({ ...receipt, qualification: { ...qualification, baseModel: {
-      ...qualification.baseModel, tokenizerRevision: "c".repeat(40),
-    } } })).rejects.toMatchObject({ code: "qualification_learner_mismatch" });
-    await expect(verify({ ...receipt, qualification: { ...qualification, optimizerUpdatesApplied: 1 } })).rejects.toThrow();
-    await expect(verify({ ...receipt, qualification: { ...qualification, rolloutReceipts: [qualification.rolloutReceipts[0], qualification.rolloutReceipts[0]] } })).rejects.toThrow();
+    await expect(verify({ ...receipt, submissionHash: HASH })).rejects.toMatchObject({
+      code: "qualification_receipt_mismatch",
+    });
+    await expect(
+      verify({
+        ...receipt,
+        qualification: {
+          ...qualification,
+          baseModel: {
+            ...qualification.baseModel,
+            tokenizerRevision: "c".repeat(40),
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "qualification_learner_mismatch" });
+    await expect(
+      verify({ ...receipt, qualification: { ...qualification, optimizerUpdatesApplied: 1 } }),
+    ).rejects.toThrow();
+    await expect(
+      verify({
+        ...receipt,
+        qualification: {
+          ...qualification,
+          rolloutReceipts: [qualification.rolloutReceipts[0], qualification.rolloutReceipts[0]],
+        },
+      }),
+    ).rejects.toThrow();
     const output = {
-      schemaVersion: "openpond.trainingJobOutput.v2" as const, id: "checkpoint-1", jobId: receipt.jobId,
-      kind: "checkpoint" as const, artifactRef: "r2://team/checkpoints/1", contentHash: HASH,
-      sizeBytes: 10, metadata: {}, createdAt: NOW,
+      schemaVersion: "openpond.trainingJobOutput.v2" as const,
+      id: "checkpoint-1",
+      jobId: receipt.jobId,
+      kind: "checkpoint" as const,
+      artifactRef: "r2://team/checkpoints/1",
+      contentHash: HASH,
+      sizeBytes: 10,
+      metadata: {},
+      createdAt: NOW,
     };
-    await expect(verify(receipt, [output])).rejects.toMatchObject({ code: "qualification_updated_artifact" });
-    await expect(verify({ ...receipt, cleanupComplete: false })).rejects.toMatchObject({ code: "execution_cleanup_incomplete" });
+    await expect(verify(receipt, [output])).rejects.toMatchObject({
+      code: "qualification_updated_artifact",
+    });
+    await expect(verify({ ...receipt, cleanupComplete: false })).rejects.toMatchObject({
+      code: "execution_cleanup_incomplete",
+    });
     const ordinary = TrainingJobSubmissionSchema.parse(base);
-    await expect(parseAndVerifyTrainingExecutionReceipt(receipt, {
-      id: receipt.id, contentHash: await canonicalSha256(receipt),
-      qualificationSubmission: { ...ordinary, contentHash: await trainingJobSubmissionHash(ordinary) },
-    })).rejects.toMatchObject({ code: "qualification_submission_required" });
+    await expect(
+      parseAndVerifyTrainingExecutionReceipt(receipt, {
+        id: receipt.id,
+        contentHash: await canonicalSha256(receipt),
+        qualificationSubmission: {
+          ...ordinary,
+          contentHash: await trainingJobSubmissionHash(ordinary),
+        },
+      }),
+    ).rejects.toMatchObject({ code: "qualification_submission_required" });
   });
 
   it("accepts an immutable learned scorer without qualification evidence", () => {
@@ -320,8 +512,8 @@ describe("Training SDK contracts", () => {
     });
 
     if (
-      learned.job.kind !== "policy_optimize"
-      || learned.job.rewardSource.kind !== "learned_reward"
+      learned.job.kind !== "policy_optimize" ||
+      learned.job.rewardSource.kind !== "learned_reward"
     ) {
       throw new Error("Expected policy optimization Job with learned reward");
     }
@@ -329,15 +521,19 @@ describe("Training SDK contracts", () => {
   });
 
   it("lists Jobs by Project through the public API", async () => {
-    const fetch = vi.fn(async () =>
-      new Response(JSON.stringify({
-        schemaVersion: "openpond.trainingJobPage.v2",
-        jobs: [job()],
-        nextCursor: "cursor-2",
-      }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            schemaVersion: "openpond.trainingJobPage.v2",
+            jobs: [job()],
+            nextCursor: "cursor-2",
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
     );
     const client = createTrainingClient({
       baseUrl: "https://api.openpond.test",
@@ -371,8 +567,8 @@ describe("Training SDK contracts", () => {
     await expect(readClient.getJob("job-1")).resolves.toEqual(job());
     expect(readFetch).toHaveBeenCalledTimes(2);
 
-    const mutationFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ error: "upstream unavailable" }), { status: 500 }),
+    const mutationFetch = vi.fn(
+      async () => new Response(JSON.stringify({ error: "upstream unavailable" }), { status: 500 }),
     );
     const mutationClient = createTrainingClient({
       baseUrl: "https://api.openpond.test",
@@ -398,23 +594,23 @@ describe("Training SDK contracts", () => {
     await expect(
       parseAndVerifyTrainingJobSubmission({ ...unsigned, contentHash }),
     ).resolves.toMatchObject({ contentHash });
-    await expect(
-      parseAndVerifyTrainingJobSubmission(unsigned),
-    ).rejects.toMatchObject({
+    await expect(parseAndVerifyTrainingJobSubmission(unsigned)).rejects.toMatchObject({
       code: "content_hash_mismatch",
     });
   });
 
   it("requires strict versioned error envelopes", () => {
     expect(() => TrainingApiErrorSchema.parse({ error: "failed" })).toThrow();
-    expect(TrainingApiErrorSchema.parse({
-      schemaVersion: "openpond.trainingApiError.v2",
-      code: "budget_exceeded",
-      message: "Budget exceeded.",
-      retryable: false,
-      requestId: null,
-      details: {},
-    }).code).toBe("budget_exceeded");
+    expect(
+      TrainingApiErrorSchema.parse({
+        schemaVersion: "openpond.trainingApiError.v2",
+        code: "budget_exceeded",
+        message: "Budget exceeded.",
+        retryable: false,
+        requestId: null,
+        details: {},
+      }).code,
+    ).toBe("budget_exceeded");
   });
 });
 
@@ -423,39 +619,106 @@ describe("Training SDK contracts", () => {
 describe("manual training preparation boundary", () => {
   it("binds preparation and controls to the exact request, workspace and immutable plan", async () => {
     const request: TrainingPreparationRequest = {
-      schemaVersion: "openpond.trainingPreparationRequest.v1", teamId: "team-a", operationId: "manual-preparation-1", projectId: null,
+      schemaVersion: "openpond.trainingPreparationRequest.v1",
+      teamId: "team-a",
+      operationId: "manual-preparation-1",
+      projectId: null,
       configuration: { id: "hosted-project-1", expectedRevision: 3, expectedEtag: HASH },
-      batch: { id: "approved-batch", revision: 1, contentHash: HASH }, name: "One reviewed run", maximumSpendUsd: 2,
+      batch: { id: "approved-batch", revision: 1, contentHash: HASH },
+      name: "One reviewed run",
+      maximumSpendUsd: 2,
     };
-    const content = { schemaVersion: "openpond.trainingPreparationPlan.v1" as const, id: "preparation-1", creatorUserId: "user-a", request,
-      requestHash: await canonicalSha256(request), source: submission().source, submissionHash: HASH, createdAt: NOW };
+    const content = {
+      schemaVersion: "openpond.trainingPreparationPlan.v1" as const,
+      id: "preparation-1",
+      creatorUserId: "user-a",
+      request,
+      requestHash: await canonicalSha256(request),
+      source: submission().source,
+      submissionHash: HASH,
+      createdAt: NOW,
+    };
     const plan = { ...content, contentHash: await canonicalSha256(content) };
-    let response: unknown = { schemaVersion: "openpond.trainingPreparationReceipt.v1", plan, revision: 1, state: "prepared", jobId: null };
+    let response: unknown = {
+      schemaVersion: "openpond.trainingPreparationReceipt.v1",
+      plan,
+      revision: 1,
+      state: "prepared",
+      jobId: null,
+    };
     const fetcher = vi.fn(async () => new Response(JSON.stringify(response), { status: 200 }));
     const client = createTrainingClient({ baseUrl: "https://training.example", fetch: fetcher });
     const prepared = await client.prepareRun(request);
     expect(prepared.plan.request.maximumSpendUsd).toBe(2);
     const control = { teamId: request.teamId, planHash: plan.contentHash, expectedRevision: 1 };
-    await expect(client.startPreparation(plan.id, control)).rejects.toMatchObject({ code: "training_preparation_start_mismatch" });
-    response = { schemaVersion: "openpond.trainingPreparationReceipt.v1", plan, revision: 2, state: "submitted", jobId: "job-1" };
+    await expect(client.startPreparation(plan.id, control)).rejects.toMatchObject({
+      code: "training_preparation_start_mismatch",
+    });
+    response = {
+      schemaVersion: "openpond.trainingPreparationReceipt.v1",
+      plan,
+      revision: 2,
+      state: "submitted",
+      jobId: "job-1",
+    };
     expect((await client.startPreparation(plan.id, control)).jobId).toBe("job-1");
-    await expect(client.getPreparation("team-b", plan.id)).rejects.toMatchObject({ code: "training_preparation_scope_mismatch" });
-    await expect(client.getPreparation("team-a", "different-plan")).rejects.toMatchObject({ code: "training_preparation_scope_mismatch" });
-    response = { schemaVersion: "openpond.trainingPreparationReceipt.v1", plan: { ...plan, request: { ...request, maximumSpendUsd: 3 } }, revision: 1, state: "prepared", jobId: null };
-    await expect(client.prepareRun(request)).rejects.toMatchObject({ code: "training_preparation_mismatch" });
-    response = { schemaVersion: "openpond.trainingPreparationReceipt.v1", plan, revision: 2, state: "cancelled", jobId: null };
+    await expect(client.getPreparation("team-b", plan.id)).rejects.toMatchObject({
+      code: "training_preparation_scope_mismatch",
+    });
+    await expect(client.getPreparation("team-a", "different-plan")).rejects.toMatchObject({
+      code: "training_preparation_scope_mismatch",
+    });
+    response = {
+      schemaVersion: "openpond.trainingPreparationReceipt.v1",
+      plan: { ...plan, request: { ...request, maximumSpendUsd: 3 } },
+      revision: 1,
+      state: "prepared",
+      jobId: null,
+    };
+    await expect(client.prepareRun(request)).rejects.toMatchObject({
+      code: "training_preparation_mismatch",
+    });
+    response = {
+      schemaVersion: "openpond.trainingPreparationReceipt.v1",
+      plan,
+      revision: 2,
+      state: "cancelled",
+      jobId: null,
+    };
     expect((await client.cancelPreparation(plan.id, control)).state).toBe("cancelled");
-    const page = { schemaVersion: "openpond.trainingPreparationPage.v1", teamId: "team-a", items: [prepared], nextCursor: null };
+    const page = {
+      schemaVersion: "openpond.trainingPreparationPage.v1",
+      teamId: "team-a",
+      items: [prepared],
+      nextCursor: null,
+    };
     response = page;
-    expect((await client.listPreparations("team-a", { state: "prepared", limit: 1 })).items).toEqual([prepared]);
-    await expect(client.listPreparations("team-b")).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
-    await expect(client.listPreparations("team-a", { projectId: "different-project" })).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
-    await expect(client.listPreparations("team-a", { state: "submitted" })).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
+    expect(
+      (await client.listPreparations("team-a", { state: "prepared", limit: 1 })).items,
+    ).toEqual([prepared]);
+    await expect(client.listPreparations("team-b")).rejects.toMatchObject({
+      code: "training_preparation_page_mismatch",
+    });
+    await expect(
+      client.listPreparations("team-a", { projectId: "different-project" }),
+    ).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
+    await expect(client.listPreparations("team-a", { state: "submitted" })).rejects.toMatchObject({
+      code: "training_preparation_page_mismatch",
+    });
     response = { ...page, items: [prepared, prepared] };
-    await expect(client.listPreparations("team-a")).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
+    await expect(client.listPreparations("team-a")).rejects.toMatchObject({
+      code: "training_preparation_page_mismatch",
+    });
     response = { ...page, nextCursor: "unrelated-cursor" };
-    await expect(client.listPreparations("team-a")).rejects.toMatchObject({ code: "training_preparation_page_mismatch" });
-    response = { ...page, items: [{ ...prepared, plan: { ...plan, request: { ...request, maximumSpendUsd: 3 } } }] };
-    await expect(client.listPreparations("team-a")).rejects.toMatchObject({ code: "training_preparation_mismatch" });
+    await expect(client.listPreparations("team-a")).rejects.toMatchObject({
+      code: "training_preparation_page_mismatch",
+    });
+    response = {
+      ...page,
+      items: [{ ...prepared, plan: { ...plan, request: { ...request, maximumSpendUsd: 3 } } }],
+    };
+    await expect(client.listPreparations("team-a")).rejects.toMatchObject({
+      code: "training_preparation_mismatch",
+    });
   });
 });

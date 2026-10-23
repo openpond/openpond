@@ -194,7 +194,7 @@ it.each([null, "team"])("authenticates its %s socket before publishing leased fr
       state: signedIn ? "ready" : "signed_out",
       account: signedIn ? { id: "owner", label: "Fixture owner" } : null,
       team: signedIn && owner.teamId ? { id: owner.teamId } : null,
-      webBaseUrl: "https://staging.openpond.ai",
+      webBaseUrl: "https://web.example.test",
       });
     },
     current: async () =>

@@ -10,7 +10,7 @@ it("retains catalog metadata across runtime restarts and refresh failures", asyn
   const home = await mkdtemp(join(tmpdir(), "starter-catalog-cache-"));
   try {
     const page = { items: [], nextCursor: "next-page" };
-    const scope = { apiBaseUrl: "https://staging-api.example.test", teamId: "team-a", query: { limit: 30 } };
+    const scope = { apiBaseUrl: "https://api.configured.example.test", teamId: "team-a", query: { limit: 30 } };
     let calls = 0;
     const fetch = async () => { calls++; return page; };
     const first = createModelStarterCatalogCache(home);

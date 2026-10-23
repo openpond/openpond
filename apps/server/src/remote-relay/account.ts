@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { DEFAULT_OPENPOND_API_BASE_URL, DEFAULT_OPENPOND_WEB_BASE_URL } from "@openpond/cloud/urls";
 import { loadAuthenticatedOpenPondAccountContext } from "@openpond/runtime";
 import type {
   AppPreferences,
@@ -45,13 +46,10 @@ export async function remoteRelayAccountStatus(
   let webBaseUrl: string | null = null;
   if (baseUrl) {
     const url = new URL(baseUrl);
-    const registeredWebOrigins: Record<string, string> = {
-      "https://openpond.ai": "https://openpond.ai",
-      "https://api.openpond.ai": "https://openpond.ai",
-      "https://staging.openpond.ai": "https://staging.openpond.ai",
-      "https://staging-api.openpond.ai": "https://staging.openpond.ai",
-    };
-    webBaseUrl = registeredWebOrigins[url.origin] ?? null;
+    const local = url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname);
+    if ((url.protocol === "https:" || local) && !url.username && !url.password && !url.search && !url.hash) {
+      webBaseUrl = url.origin === DEFAULT_OPENPOND_API_BASE_URL ? DEFAULT_OPENPOND_WEB_BASE_URL : url.origin;
+    }
   }
   return {
     state: signedIn ? "ready" : "signed_out",

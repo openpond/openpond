@@ -166,12 +166,12 @@ describe("CLI common parsing", () => {
     expect(parsed.options.input).toBe("ls -la");
   });
 
-  test("accepts explicit staging environment selection for sandbox commands", () => {
-    const parsed = parseArgs(["sandbox", "pricing", "--env", "staging"]);
+  test("accepts explicit environment selection for sandbox commands", () => {
+    const parsed = parseArgs(["sandbox", "pricing", "--env", "custom"]);
 
     expect(parsed.command).toBe("sandbox");
     expect(parsed.rest).toEqual(["pricing"]);
-    expect(parsed.options.env).toBe("staging");
+    expect(parsed.options.env).toBe("custom");
   });
 
   test("parses profile hosted promotion options with typed JSON input", () => {

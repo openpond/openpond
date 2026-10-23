@@ -7,3 +7,4 @@ export * from "./model-learning-policy.js";
 export * from "./grader-inspection.js";
 
 export * from "./grader-feedback-key.js";
+export * from "./learning-correction-metrics.js";

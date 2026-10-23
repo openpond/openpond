@@ -1,4 +1,4 @@
-// Keep local compiler runs responsive. Sandbox uses the same runner and lock.
+// Keep local compiler runs responsive with a shared local compiler lock.
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";

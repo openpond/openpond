@@ -680,6 +680,46 @@
           "items": {
             "$ref": "#/$defs/__schema4"
           }
+        },
+        "continuationMode": {
+          "type": "object",
+          "properties": {
+            "adapterMode": {
+              "type": "string",
+              "enum": [
+                "residual_append",
+                "shared",
+                "sequential_merge"
+              ]
+            },
+            "sourceConfiguration": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/__schema2"
+                },
+                "revision": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "etag": {
+                  "$ref": "#/$defs/__schema3"
+                }
+              },
+              "required": [
+                "id",
+                "revision",
+                "etag"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "adapterMode",
+            "sourceConfiguration"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

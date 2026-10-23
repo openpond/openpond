@@ -8,10 +8,11 @@ import { readAccountConfiguration } from "../../../packages/persistence/src/acco
 
 const { values } = parseArgs({ options: {
   root: { type: "string" }, home: { type: "string" }, team: { type: "string" },
-  account: { type: "string", default: "openpondai" }, "api-base-url": { type: "string", default: "https://api.openpond.ai" },
+  account: { type: "string" }, "api-base-url": { type: "string", default: "https://api.openpond.ai" },
   apply: { type: "boolean", default: false },
 } });
-if (!values.root || !values.home || !values.team) throw new Error("Provide --root, --home and --team; --apply performs the production upload.");
+if (!values.root || !values.home || !values.team) throw new Error("Provide --root, --home and --team; --apply performs the upload.");
+if (values.apply && !values.account?.trim()) throw new Error("--apply requires an explicit --account handle.");
 const root = path.resolve(values.root), teamId = values.team;
 const apiBaseUrl = values["api-base-url"];
 const revision = "639865fd3374018d6cb29b9fb82dd531406fcf5f";
@@ -84,18 +85,18 @@ if (values.apply) {
   if (!account?.apiKey) throw new Error("The specified local account has no credential for the specified API origin.");
   const accountResponse = await fetch(`${apiBaseUrl}/v1/account`, { headers: { Authorization: `Bearer ${account.apiKey}` }, redirect: "error" });
   const identity = await accountResponse.json();
-  if (!accountResponse.ok || identity.account?.handle !== values.account) throw new Error("Production account identity differs from the intended publisher.");
+  if (!accountResponse.ok || identity.account?.handle !== values.account) throw new Error("Upload account identity differs from the intended publisher.");
   const client = new OpenPondDatasetWorkspaceClient({ baseUrl: apiBaseUrl, apiKey: account.apiKey, teamId });
   const receipts = [];
   for (const { domain, workspace } of workspaces) {
     const operationId = `mimo-source-upload-${domain}-${revision}-${workspace.contentHash.slice(0, 16)}`;
     const saved = await client.save({ operationId, expectedRevision: 0, workspace, ownerScope: "workspace" });
     const verified = await client.get(saved.datasetId);
-    if (verified.workspace.contentHash !== workspace.contentHash || verified.workspace.draft.tasks.length !== workspace.draft.tasks.length) throw new Error("Production readback changed source bytes or task count.");
+    if (verified.workspace.contentHash !== workspace.contentHash || verified.workspace.draft.tasks.length !== workspace.draft.tasks.length) throw new Error("Upload readback changed source bytes or task count.");
     const receipt = { domain, apiBaseUrl, publisher: identity.account.handle, teamId, operationId, datasetId: saved.datasetId,
       revision: saved.revision, workspaceHash: verified.workspace.contentHash, taskCount: verified.workspace.draft.tasks.length, status: verified.workspace.draft.status };
     receipts.push(receipt);
-    await writeFile(path.join(output, "production-upload-receipts.json"), JSON.stringify(receipts, null, 2));
+    await writeFile(path.join(output, "upload-receipts.json"), JSON.stringify(receipts, null, 2));
     console.log(JSON.stringify({ uploaded: true, ...receipt }));
   }
 }

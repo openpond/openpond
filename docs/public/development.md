@@ -50,7 +50,7 @@ pnpm run test:live          # explicit external/live-provider checks
 `pnpm run verify:quick` runs typechecking plus the fast unit layer. The complete deterministic matrix runs in CI rather than behind a package-level push command. Coverage and per-file timing are collected by `pnpm run test:observe`; they run weekly in CI instead of adding instrumentation to every pull request.
 
 Local TypeScript scripts run at lower process priority. On Linux, they use `flock`
-(from util-linux) to share one compiler slot with Sandbox, including package builds
+(from util-linux) to share one local compiler slot, including package builds
 and the development server's initial compilation. Checks retain their full scope
 and incremental caches. Other platforms use lower priority without the shared queue.
 Direct `tsc`/`tsgo` commands and editor language servers bypass this runner; use

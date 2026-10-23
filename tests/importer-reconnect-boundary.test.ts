@@ -14,8 +14,8 @@ it("retains reconnect scope and rejects changed machine, source and concurrent c
   const machineId = await collectorMachineId(directory);
   const store = await CollectorStore.open(directory);
   const connection: CollectorConnection = {
-    id: "retained", teamId: "team", apiBaseUrl: "https://staging-api.openpond.ai",
-    accountBaseUrl: "https://staging.openpond.ai", projectId: "original-project", revision: 7,
+    id: "retained", teamId: "team", apiBaseUrl: "https://api.example.test",
+    accountBaseUrl: "https://web.example.test", projectId: "original-project", revision: 7,
     since: "2026-09-26T12:00:00.000Z", keepSyncing: false, state: "disconnected",
     source: { source: "pi", machineId, instanceId: "original-profile", root: join(directory, "selected-profile"), acquisition: "files", available: true, capabilities: { history: true, live: true, nativeResume: false } },
   };
