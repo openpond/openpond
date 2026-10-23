@@ -31,8 +31,8 @@ describe("team chat API base URL", () => {
   });
 
   test("preserves an explicit deployment path prefix", () => {
-    expect(apiBaseUrlFromSandboxApiUrl("https://example.test/staging/api/sandboxes")).toBe(
-      "https://example.test/staging",
+    expect(apiBaseUrlFromSandboxApiUrl("https://example.test/deployment/api/sandboxes")).toBe(
+      "https://example.test/deployment",
     );
   });
 

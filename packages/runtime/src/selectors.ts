@@ -85,7 +85,7 @@ export function findActiveAccount(
 
     // A stale or malformed active selector must never silently select a
     // different account. That can route authenticated operations to the wrong
-    // OpenPond environment (for example, production instead of staging).
+    // API origin or account.
     return null;
   }
 

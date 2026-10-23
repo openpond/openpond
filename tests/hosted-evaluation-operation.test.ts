@@ -15,7 +15,7 @@ import {createWorkspaceApi} from "../apps/web/src/components/labs/workspace/work
 // new Start, while another authenticated actor/workspace cannot recover it.
 test("durable evaluation intent survives restart and fences acknowledgement scope",async()=> {
   const home=await mkdtemp(path.join(tmpdir(),"openpond-evaluation-intent-"));
-  let store=new SqliteStore(home),actorId="actor-a",teamId="team-a",apiBaseUrl="https://staging.example.test";
+  let store=new SqliteStore(home),actorId="actor-a",teamId="team-a",apiBaseUrl="https://api.workspace-a.example.test";
   const create=()=>createHostedEvaluationWorkspace({store,resolveActorId:async()=>actorId,
     resolveAccess:async()=>({apiBaseUrl,token:"controlled-test-key",teamId}),
     fetch:async()=>{throw new Error("Operation recovery must not dispatch a hosted job.");}});
@@ -43,7 +43,7 @@ test("durable evaluation intent survives restart and fences acknowledgement scop
     await expect(service.request({teamId,operation:"acknowledgeOperation",value:{...value,id:first.id}})).rejects.toThrow("does not own");
     actorId="actor-a";expect(await prepare()).toEqual(first);
     teamId="team-b";expect((await prepare()).id).not.toBe(first.id);teamId="team-a";
-    apiBaseUrl="https://other.example.test";expect((await prepare()).id).not.toBe(first.id);apiBaseUrl="https://staging.example.test";
+    apiBaseUrl="https://other.example.test";expect((await prepare()).id).not.toBe(first.id);apiBaseUrl="https://api.workspace-a.example.test";
     expect(await prepare()).toEqual(first);
     expect(await service.request({teamId,operation:"acknowledgeOperation",value:{...value,id:first.id}})).toEqual({acknowledged:true});
     const explicitNext=await prepare();expect(explicitNext.id).not.toBe(first.id);

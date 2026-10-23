@@ -57,7 +57,7 @@ inputs:
     - name: DEEPSEEK_API_KEY_SANDBOX
       required: true
       secret: true
-      description: DeepSeek staging smoke key injected through the sandbox secret/env-ref path.
+      description: DeepSeek API key supplied through the sandbox secret/env-ref path.
 artifacts:
   paths:
     - artifacts/conversation-state.json

@@ -138,7 +138,7 @@ export function UserAuthFooter({
               <strong>{identity.label}</strong>
               {account?.state === "signed_in" && account.environment ? (
                 <small title={account.baseUrl ?? undefined}>
-                  {account.environment === "production" ? "Production" : account.environment === "staging" ? "Staging" : account.environment}
+                  {account.environment.slice(0, 1).toUpperCase() + account.environment.slice(1)}
                 </small>
               ) : null}
             </span>

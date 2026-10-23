@@ -15,7 +15,7 @@ describe("hosted API access identities", () => {
         loadAccountContext: async () => accountContext("opk_user"),
       }),
     ).resolves.toEqual({
-      apiBaseUrl: "https://api.staging.test",
+      apiBaseUrl: "https://api.selected-account.test",
       token: "opk_user",
     });
   });
@@ -34,7 +34,7 @@ describe("hosted API access identities", () => {
         teamId: "team_customer",
       }),
     ).resolves.toEqual({
-      apiBaseUrl: "https://api.staging.test",
+      apiBaseUrl: "https://api.selected-account.test",
       token: "opk_user",
       teamId: "team_customer",
     });
@@ -48,7 +48,7 @@ describe("hosted API access identities", () => {
         teamId: "team_customer",
       }),
     ).resolves.toEqual({
-      apiBaseUrl: "https://api.staging.test",
+      apiBaseUrl: "https://api.selected-account.test",
       token: "opk_user",
       teamId: "team_customer",
     });
@@ -57,12 +57,12 @@ describe("hosted API access identities", () => {
 
 function accountContext(token: string): RuntimeAccountContext {
   return {
-    config: { apiBaseUrl: "https://api.staging.test" },
+    config: { apiBaseUrl: "https://api.selected-account.test" },
     profiles: [],
     account: null,
     token,
-    apiBaseUrl: "https://api.staging.test",
-    chatApiBaseUrl: "https://api.staging.test",
+    apiBaseUrl: "https://api.selected-account.test",
+    chatApiBaseUrl: "https://api.selected-account.test",
     accountState: {} as RuntimeAccountContext["accountState"],
   };
 }

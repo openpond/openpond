@@ -10,7 +10,7 @@ describe("managed RL operator access", () => {
   test("is absent unless the complete override is configured", async () => {
     await expect(managedRlOperatorAccess({})).resolves.toBeNull();
     await expect(managedRlOperatorAccess({
-      OPENPOND_MANAGED_RL_API_URL: "https://staging-api.example.test",
+      OPENPOND_MANAGED_RL_API_URL: "https://api.configured.example.test",
     })).rejects.toThrow("must be configured together");
   });
 
@@ -21,11 +21,11 @@ describe("managed RL operator access", () => {
     await chmod(credentialFile, 0o600);
 
     await expect(managedRlOperatorAccess({
-      OPENPOND_MANAGED_RL_API_URL: "https://staging-api.example.test",
+      OPENPOND_MANAGED_RL_API_URL: "https://api.configured.example.test",
       OPENPOND_MANAGED_RL_CREDENTIAL_FILE: credentialFile,
       OPENPOND_MANAGED_RL_TEAM_ID: "team_staging",
     })).resolves.toEqual({
-      apiBaseUrl: "https://staging-api.example.test",
+      apiBaseUrl: "https://api.configured.example.test",
       token: "opk_private",
       teamId: "team_staging",
     });
@@ -38,7 +38,7 @@ describe("managed RL operator access", () => {
     await chmod(credentialFile, 0o644);
 
     await expect(managedRlOperatorAccess({
-      OPENPOND_MANAGED_RL_API_URL: "https://staging-api.example.test",
+      OPENPOND_MANAGED_RL_API_URL: "https://api.configured.example.test",
       OPENPOND_MANAGED_RL_CREDENTIAL_FILE: credentialFile,
       OPENPOND_MANAGED_RL_TEAM_ID: "team_staging",
     })).rejects.toThrow("private regular file");

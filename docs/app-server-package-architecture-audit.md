@@ -293,7 +293,7 @@ graph excludes Local product-only services. Hosted Work does not initialize
 Python training, Local compute discovery, Fireworks, product HTTP/static
 routes, Desktop schedulers, or sandbox provisioning. It may call the scoped
 Sandbox API for the exact compute workspace attached by the control plane. The
-remaining gate is operational distribution and staging proof.
+remaining gate is operational distribution and deployment verification.
 
 | Work | Required before hosted sandbox launch? | Reason |
 | --- | --- | --- |
@@ -539,8 +539,8 @@ use the scoped remote-workspace client for an already-attached sandbox.
   embeds `@openpond/app-server` in-process; hosted Work supervises the dedicated
   JSONL process.
 - The remaining choices are operational: which CLI version to publish and pin,
-  where the sandbox image mounts durable app-server state, and which staging
-  environment will provide the first hosted no-Project Work acceptance proof.
+  where the sandbox image mounts durable app-server state, and which deployment
+  will provide the first hosted no-Project Work acceptance proof.
 
 ## Progress Log
 
