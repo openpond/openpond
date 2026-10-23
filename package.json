@@ -187,11 +187,7 @@
     "format:check": "oxfmt --check",
     "typecheck:native": "node scripts/run-typescript.mjs tsgo -b",
     "build:mcp": "pnpm --dir packages/mcp run build",
-    "mcp:check": "pnpm --dir packages/mcp run check",
-    "mcp:publish:check": "pnpm --dir packages/mcp run publish:check",
-    "release:mcp:patch": "tsx scripts/release-mcp.ts patch",
-    "release:mcp:minor": "tsx scripts/release-mcp.ts minor",
-    "release:mcp:major": "tsx scripts/release-mcp.ts major"
+    "mcp:check": "pnpm --dir packages/mcp run check"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "1.7.0",

@@ -1,59 +1,30 @@
-# Releasing `@openpond/mcp`
+# Internal MCP delivery
 
-MCP is released independently from Desktop and the CLI. Publish compatible
-`@openpond/evals` and `openpond-sdk` versions first. The package's SDK dependency
-floor must include every SDK contract imported by its tool adapters.
+`@openpond/mcp` is a private workspace adapter for the hosted OAuth MCP route. Deliver it with the application or as an exact internal archive for a reviewed host integration. It has no independent public npm publication, trusted-publisher setup, package tag, GitHub release, or separate version-bump gate. Its package version remains packaging metadata; the reviewed source commit and archive digest identify the delivered build. The existing MIT license and attribution in [LICENSE](LICENSE) remain unchanged.
 
-The initial cohort is Harness `0.4.10`, Evals `0.12.3`, SDK `0.12.7`, MCP `0.1.0` and CLI `0.2.63`.
-Evals and SDK require Harness `^0.4.10`; SDK requires Evals `^0.12.3`; MCP requires SDK `^0.12.7`. The CLI bundles these
-sources and does not acquire the SDK through an npm runtime dependency.
+## Validate the delivered adapter
 
-## First publication
+The adapter depends on `openpond-sdk@^0.12.7` for its learning, correction, queue and checkpoint contracts. Preserve compatible SDK/Evals/Harness contracts and their existing release processes. A hosted adapter archive can consume compatible registry dependencies or an explicitly packed local cohort; do not treat a workspace-linked import as proof that an archive is installable.
 
-npm requires a package to exist before its trusted publisher can be configured.
-From reviewed, clean, current `master`, with the prerequisite versions already
-published and a maintainer authenticated to npm:
+From the repository root, after building the required dependency cohort:
 
 ```sh
-pnpm --dir packages/sdk run build
-pnpm mcp:publish:check
-npm publish ./packages/mcp --access public --ignore-scripts --provenance=false
-npm trust github @openpond/mcp \
-  --repo openpond/openpond \
-  --file release-mcp.yml \
-  --environment npm-production \
-  --allow-publish
-npm trust list @openpond/mcp
-gh workflow run release-mcp.yml --ref master
+pnpm run build:mcp
+node --test packages/mcp/test/protocol-boundary.test.mjs
+node packages/mcp/scripts/check-installed-consumer.mjs --local-dependencies
 ```
 
-Use a current npm version supporting `npm trust` (the release workflows pin
-`npm@11.18.0`). Initial interactive publication needs maintainer authentication
-and any required npm account confirmation. Never commit tokens. The initial
-bootstrap has no GitHub OIDC provenance; record that distinction. The recovery
-dispatch observes the existing immutable version and creates its package tag
-and GitHub release without republishing it.
+The installed-consumer check packs MCP and the local Harness/Evals/SDK cohort, installs those exact archives in a clean temporary consumer, verifies installed versions, and runs the existing real MCP-client protocol/authorization integration proof against the installed adapter. Without `--local-dependencies`, it still installs the locally packed MCP archive but resolves its runtime dependencies from their supported registry releases. Neither mode publishes MCP, invokes a compiler, or launches paid work.
 
-## Subsequent releases
+## Hand off an exact internal artifact
+
+Build and qualify the reviewed source commit, then pack its adapter output:
 
 ```sh
-pnpm release:mcp:patch
-# or release:mcp:minor / release:mcp:major
+mkdir -p artifacts/internal-mcp
+npm pack ./packages/mcp --ignore-scripts --pack-destination artifacts/internal-mcp
 ```
 
-Merge the generated release PR after CI passes. `release-mcp.yml` runs only from
-`master`, waits for exact-source CI and the published SDK dependency, verifies
-an isolated installed consumer, publishes through the `npm-production` trusted
-publisher, then verifies registry integrity, signatures/provenance and actual
-MCP protocol behavior before creating the package tag/release.
+Record the source commit, archive SHA-256/integrity, and compatible dependency cohort with the handoff. The consuming application must pin that exact file artifact through its existing dependency/override and lockfile workflow, verify the installed consumer boundary, and include the archive in its reproducible remote build inputs. Replacing the artifact requires a fresh source-bound handoff and the consumer's normal CI/deployment checks; an npm release of MCP adds no authority or delivery gate.
 
-`pnpm --dir packages/mcp run check:consumer` packs only MCP and resolves all
-runtime dependencies from npm. Its `--local-dependencies` option installs the
-local Harness/Evals/SDK cohort explicitly for prepublication qualification;
-that result is not published-dependency acceptance. Both modes reuse the real
-MCP client protocol and authorization integration checks against the installed
-tarball. Neither invokes a compiler or launches paid work.
-
-Harness `0.4.9` predates the structured-sampling contracts consumed by Sandbox. Publish `0.4.10` through `release-harness.yml` first. Then dispatch `release-evals.yml` and `release-sdk.yml` against the same merged source if their push runs deferred while the Harness floor was unavailable. Do not reuse the older registry foundation for external-consumer acceptance.
-
-Evals `0.12.2` was published from the earlier merged source despite cancellation of its workflow. Its registry peer floor remains `^0.4.6`; immutable npm metadata cannot be corrected in place. The `0.12.3` patch carries the reviewed Harness floor, and SDK `0.12.7` and MCP require the corrected cohort. Verify registry manifests after publication, including after a canceled or unknown publication outcome.
+Keep the existing full CI adapter build and isolated installed-consumer proof. Hosted deployment must also verify OAuth discovery/PKCE/refresh/revocation, current-grant and membership enforcement, exact workspace/resource isolation, permitted API routes and approved spend, and real MCP client interoperability. Package metadata changes do not replace those service/security checks or prove a deployment succeeded. Customers connect to the configured hosted `/mcp/app` endpoint and complete OAuth consent; they do not install this internal archive.
