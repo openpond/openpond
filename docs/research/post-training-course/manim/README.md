@@ -98,19 +98,13 @@ pnpm media:prepare
 
 The manifest records each playlist's lifecycle status plus every logical video ID, local source path, byte size, duration, SHA-256 digest, and immutable key `media/videos/<sha256>.mp4`. Both video builders refresh it automatically. The continuous full-course video is referenced by `fullVideoId` and deliberately excluded from the lesson `videoIds`. Because each key represents one file's content, rebuilding one lesson produces one new lesson object plus a new continuous-course object rather than replacing unrelated media. The learning UI reads the post-training playlist's `draft` or `published` status directly from this manifest.
 
-Publish exactly the manifest entries from the infrastructure repository. The command preflights every local hash before changing R2, skips matching objects, rejects mismatches, uploads only missing objects, and verifies public range playback:
-
-```bash
-cd ../sandbox && ./cli --production cloudflare r2 publish-videos --manifest ../openpond/apps/web/src/lib/public-video-manifest.json --source-root ../openpond/apps/web/public --confirm-upload
-```
-
-Then verify the complete production set from OpenPond:
+After publishing reviewed manifest entries through your media hosting service, verify the public objects:
 
 ```bash
 pnpm media:verify
 ```
 
-Production builds use `https://media.openpond.ai` with the manifest keys directly; there is no media environment variable and no Cloudflare credential in OpenPond. Never replace a content-addressed key. The Sandbox publisher is intentionally idempotent, so rerunning it after a one-video edit uploads only that video's new digest.
+Production builds use `https://media.openpond.ai` with the manifest keys directly; there is no media environment variable and no Cloudflare credential in OpenPond. Never replace a content-addressed key. Publish content-addressed objects idempotently so a one-video edit uploads only that video's new digest.
 
 To render one chapter:
 

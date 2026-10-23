@@ -32,9 +32,8 @@ Baseline verification on 2026-08-07 used Node 24.18.0:
 
 ## Hosted baseline
 
-The hosted reference is Sandbox commit
-`3559206a887c2c9bda1e944e1e965694917afe60`. Phase 0 does not change hosted
-execution. The manifest pins the exact hosted provider-round implementation and
+Phase 0 does not change hosted execution. The manifest records retained hosted
+behavior snapshots for provider rounds and
 tests for runtime composition, local and managed tool adapters, event ordering,
 web projection, Chat/Work turn lifecycle, cancellation, and outputs. These
 fixtures are the comparison source for Phase 3, after Local Phases 1–2 pass.

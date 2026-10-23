@@ -10,13 +10,15 @@ UI colors belong in `apps/web/src/styles/theme.css`. Use semantic CSS variables 
 
 ## Development and validation
 
+Public source, documentation and package metadata must use portable paths and configured endpoints; keep private repository paths, deployment details and real operator account or resource identifiers out of the public tree.
+
 Use the official OpenPond CLI for supported operations, including experiment preparation, execution, status, results and comparison. Check the CLI help or command reference before creating helper scripts. Do not duplicate existing CLI authentication or API operations in custom scripts; use a custom helper only for a verified capability gap.
 
 When using an account already configured in the running desktop app, run the CLI with that app's OpenPond home. The standard development home is `~/.openpond/openpond-app-dev`; pass it with `--home` unless the running app uses an explicit override. Check the home and account context before diagnosing missing authentication or asking the user to log in. A missing session in the CLI's default home does not mean the desktop credentials are missing. See `docs/public/configuration.md`.
 
 Typechecking is selective validation, not a default step after every edit or turn. Do not run a full-repository typecheck for documentation, copy, styling, or small implementation changes without a concrete type-related concern. Prefer existing diagnostics and the smallest relevant package/project check when changing shared types, public interfaces, module boundaries, TypeScript configuration, or investigating a type error. Batch related edits and run the needed check once; repeat only after relevant changes or to verify a fix for a reported failure. Leave routine full-repository checking to CI unless the user requests it or a broad cross-project change needs local validation. Do not run a build merely as a substitute for a skipped typecheck, and state accurately which checks were run or skipped.
 
-For TypeScript validation, use `pnpm run typecheck` or the package's typecheck/build script. For a custom compiler invocation, use `node scripts/run-typescript.mjs tsc <args>` from the repository root instead of invoking `tsc` directly. The runner lowers local priority and serializes Linux compiler runs across OpenPond and Sandbox. Reuse an already-running check rather than starting duplicates. CI runs unrestricted; `TYPECHECK_UNRESTRICTED=1` explicitly opts out locally.
+For TypeScript validation, use `pnpm run typecheck` or the package's typecheck/build script. For a custom compiler invocation, use `node scripts/run-typescript.mjs tsc <args>` from the repository root instead of invoking `tsc` directly. The runner lowers local priority and serializes Linux compiler runs sharing the same local runner. Reuse an already-running check rather than starting duplicates. CI runs unrestricted; `TYPECHECK_UNRESTRICTED=1` explicitly opts out locally.
 
 Keep files and folders organized for maintainability. Split large components, utilities, and modules into focused files before they become difficult to work with; avoid letting the codebase drift into oversized 2,000-line files that are hard to review, test, and change.
 

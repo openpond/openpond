@@ -49,7 +49,7 @@ const compatibilityFiles = new Set([
   "tests/release-workflow.test.ts",
 ]);
 
-// These modules export source text for the separately owned Sandbox guest.
+// These modules export source text for the isolated guest runtime.
 // Importing them on Node does not execute a guest runtime API. Dependency,
 // installation, lockfile and local-command checks still apply to these files.
 const guestSourceFiles = new Set([
