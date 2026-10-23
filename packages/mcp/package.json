@@ -11,6 +11,7 @@
   "files": [
     "dist",
     "README.md",
+    "RELEASING.md",
     "LICENSE"
   ],
   "type": "module",
@@ -30,11 +31,14 @@
   "scripts": {
     "build": "node ../../scripts/run-typescript.mjs tsc -p tsconfig.json",
     "typecheck": "node ../../scripts/run-typescript.mjs tsc -p tsconfig.json --noEmit",
-    "test": "node --test test/protocol-boundary.test.mjs"
+    "test": "node --test test/protocol-boundary.test.mjs",
+    "check:consumer": "node scripts/check-published-consumer.mjs",
+    "check": "pnpm run build && pnpm run test && pnpm run check:consumer",
+    "publish:check": "pnpm run check"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
-    "openpond-sdk": "^0.12.5",
+    "openpond-sdk": "^0.12.6",
     "zod": "^4.1.13"
   },
   "devDependencies": {

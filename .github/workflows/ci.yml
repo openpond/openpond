@@ -189,6 +189,9 @@ jobs:
       - name: Build package prerequisites
         if: needs.scope.outputs.release_package == 'evals'
         run: pnpm --dir packages/harness run build
+      - name: Build MCP SDK prerequisite
+        if: needs.scope.outputs.release_package == 'mcp'
+        run: pnpm --dir packages/sdk run build
       - name: Check selected package
         env:
           RELEASE_PACKAGE: ${{ needs.scope.outputs.release_package }}
@@ -250,6 +253,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:artifacts
       - run: pnpm run cli:build:from-web
+      - name: Build the public MCP package
+        run: pnpm run build:mcp
+      - name: Verify the installed public package cohort
+        run: node packages/mcp/scripts/check-published-consumer.mjs --local-dependencies
       - name: Record package size
         run: node scripts/report-package-size.ts --output artifacts/package-size.json --check-contents
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -481,7 +488,22 @@ jobs:
   checks:
     name: Checks
     if: always()
-    needs: [scope, targeted, package_release, quality, verified_build, distribution, test_build, unit, system, integration, image, python, contract]
+    needs:
+      [
+        scope,
+        targeted,
+        package_release,
+        quality,
+        verified_build,
+        distribution,
+        test_build,
+        unit,
+        system,
+        integration,
+        image,
+        python,
+        contract,
+      ]
     runs-on: ubuntu-latest
     steps:
       - name: Require the selected CI lanes
