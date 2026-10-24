@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "openpond.wireNormalization.v1",
+  "vectors": [
+    {
+      "name": "published-taskset-reference-strips",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "x-openpond-string-transforms": [
+              "trim"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "contentHash": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 256,
+            "x-openpond-string-transforms": [
+              "trim"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "contentHash"
+        ],
+        "additionalProperties": false,
+        "x-openpond-object-policy": "strip"
+      },
+      "input": {
+        "id": " taskset-fixture ",
+        "revision": 1,
+        "contentHash": "abcdefgh",
+        "unknown": "discarded"
+      },
+      "accepted": true,
+      "output": {
+        "id": "taskset-fixture",
+        "revision": 1,
+        "contentHash": "abcdefgh"
+      }
+    },
+    {
+      "name": "event-data-record-preserves",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": {},
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      },
+      "input": {
+        "unknown": {
+          "retained": true
+        }
+      },
+      "accepted": true,
+      "output": {
+        "unknown": {
+          "retained": true
+        }
+      }
+    },
+    {
+      "name": "workspace-validation-strict",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "expectedRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "expectedRevision"
+        ],
+        "additionalProperties": false,
+        "x-openpond-object-policy": "strict"
+      },
+      "input": {
+        "expectedRevision": 1,
+        "unknown": "rejected"
+      },
+      "accepted": false
+    }
+  ]
+}

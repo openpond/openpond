@@ -85,6 +85,41 @@ export function parseBoundedJson(
   }
 }
 
+/** Bound the wire body while consuming it, before allocating the complete JSON
+ * string. Reader cleanup must never replace the original transport/JSON error. */
+export async function readBoundedJsonResponse(
+  response: Response,
+  maximumBytes: number,
+  label: string,
+): Promise<unknown> {
+  const reader = response.body?.getReader();
+  if (!reader) return parseBoundedJson("", maximumBytes, label);
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = "";
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > maximumBytes) {
+        throw new OpenPondProtocolError(
+          "response_too_large",
+          `${label} exceeds the maximum of ${maximumBytes} bytes.`,
+        );
+      }
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    text += decoder.decode();
+    return parseBoundedJson(text, maximumBytes, label);
+  } catch (error) {
+    try { await reader.cancel(); } catch { /* Preserve the primary failure. */ }
+    throw error;
+  } finally {
+    try { reader.releaseLock(); } catch { /* Never mask a transport/parse failure. */ }
+  }
+}
+
 function normalizeCanonicalJson(value: unknown): CanonicalJsonValue {
   if (
     value === null ||
@@ -113,7 +148,7 @@ function normalizeCanonicalJson(value: unknown): CanonicalJsonValue {
         "Canonical JSON accepts only plain objects.",
       );
     }
-    const result: Record<string, CanonicalJsonValue> = {};
+    const result: Record<string, CanonicalJsonValue> = Object.create(null);
     for (const key of Object.keys(value as Record<string, unknown>).sort()) {
       const entry = (value as Record<string, unknown>)[key];
       if (entry === undefined || typeof entry === "function" || typeof entry === "symbol") {

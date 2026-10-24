@@ -93,7 +93,7 @@
     "test:qualification": "vitest run --project root-qualification",
     "test:integration": "tsx scripts/run-tests.ts integration",
     "test:image": "tsx scripts/run-tests.ts image",
-    "test:python": "pnpm run test:python:datasets && pnpm run test:python:evals",
+    "test:python": "pnpm run test:python:datasets && pnpm run test:python:evals && pnpm run test:python:sdk",
     "test:python:datasets": "uv run --project python/openpond-datasets --frozen pytest python/openpond-datasets/tests",
     "test:python:evals": "uv run --project packages/evals/python --with pytest pytest packages/evals/python/tests -q",
     "test:contract": "tsx scripts/run-tests.ts contract",
@@ -187,7 +187,10 @@
     "format:check": "oxfmt --check",
     "typecheck:native": "node scripts/run-typescript.mjs tsgo -b",
     "build:mcp": "pnpm --dir packages/mcp run build",
-    "mcp:check": "pnpm --dir packages/mcp run check"
+    "mcp:check": "pnpm --dir packages/mcp run check",
+    "ponder-sdk:check": "pnpm --dir packages/ponder-sdk run check",
+    "ponder-sdk:publish:check": "pnpm --dir packages/ponder-sdk run publish:check",
+    "test:python:sdk": "uv run --project python/openpond-sdk --frozen pytest python/openpond-sdk/tests"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "1.7.0",

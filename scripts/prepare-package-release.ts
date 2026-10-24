@@ -42,13 +42,30 @@ export async function preparePackageRelease(key: keyof typeof packages): Promise
   const branch = `feat/release-${key}-v${version}`;
   const title = `chore(${key}): release v${version}`;
   if (exists("git", ["rev-parse", "--verify", "--quiet", branch]) || output("git", ["ls-remote", "--heads", "origin", branch])) throw new Error(`Branch ${branch} already exists.`);
+  // The Ponder name is a distribution of this exact implementation, not an
+  // independently versioned fork. Publish reconciliation remains separate.
+  const ponderManifestPath = "packages/ponder-sdk/package.json";
+  let ponderRelease: Record<string, unknown> | undefined;
+  if (key === "sdk") {
+    const ponder = JSON.parse(await readFile(path.join(root, ponderManifestPath), "utf8"));
+    if (ponder.name !== "ponder-sdk" || ponder.dependencies?.[config.name] !== manifest.version || ponder.version !== manifest.version) {
+      throw new Error("Ponder must match the current SDK version before a coordinated release.");
+    }
+    ponderRelease = { ...ponder, version, dependencies: { ...ponder.dependencies, [config.name]: version } };
+  }
   run("git", ["switch", "-c", branch]);
   if (!dryRun) await writeFile(path.join(root, manifestPath), `${JSON.stringify({ ...manifest, version }, null, 2)}\n`);
   else console.log(`[dry-run] set ${manifestPath} version to ${version}`);
+  if (ponderRelease) {
+    if (!dryRun) await writeFile(path.join(root, ponderManifestPath), `${JSON.stringify(ponderRelease, null, 2)}\n`);
+    else console.log(`[dry-run] set Ponder version and exact SDK dependency to ${version}`);
+  }
   run("pnpm", ["install", "--lockfile-only", "--strict-peer-dependencies=false"]);
   if (config.prerequisite) run("pnpm", ["--dir", `packages/${config.prerequisite}`, "run", "build"]);
   run("pnpm", ["run", `${key}:check`]);
+  if (key === "sdk") run("pnpm", ["run", "ponder-sdk:check"]);
   run("git", ["add", manifestPath, "pnpm-lock.yaml"]);
+  if (key === "sdk") run("git", ["add", ponderManifestPath]);
   run("git", ["diff", "--cached", "--check"]);
   const releaseOnly = dryRun || readPackageRelease("HEAD", "HEAD", root, true) === key;
   const lane = releaseOnly ? "Package-only CI (master additionally requires a successful CI proof on its previous SHA)." : "Ordinary CI because the staged diff includes changes beyond a single package version.";

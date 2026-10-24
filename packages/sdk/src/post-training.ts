@@ -227,6 +227,9 @@ export function createPostTrainingClient(input: {
   request: (path: string, init?: RequestInit) => Promise<unknown>;
 }) {
   const { request } = input;
+  // These public evaluation routes consume ordinary JSON, independently of
+  // the versioned Training V2 job routes used by the parent factory.
+  const headers = { accept: "application/json", "content-type": "application/json" };
   const path = (jobId: string) =>
     `/v1/training/jobs/${encodeURIComponent(Id.parse(jobId))}/post-training`;
   async function read(raw: unknown, teamId: string, jobId: string) {
@@ -245,6 +248,7 @@ export function createPostTrainingClient(input: {
       const value = verifyPostTrainingPlan(
         await request("/v1/training/post-training-plans", {
           method: "POST",
+          headers,
           body: JSON.stringify(body),
         }),
       );
@@ -259,7 +263,7 @@ export function createPostTrainingClient(input: {
       return value;
     },
     async get(teamId: string, jobId: string) {
-      return read(await request(path(jobId)), teamId, jobId);
+      return read(await request(path(jobId), { headers }), teamId, jobId);
     },
     async control(
       teamId: string,
@@ -269,7 +273,7 @@ export function createPostTrainingClient(input: {
     ) {
       const body = PostTrainingControlSchema.parse(raw);
       const value = await read(
-        await request(`${path(jobId)}/${action}`, { method: "POST", body: JSON.stringify(body) }),
+        await request(`${path(jobId)}/${action}`, { method: "POST", headers, body: JSON.stringify(body) }),
         teamId,
         jobId,
       );

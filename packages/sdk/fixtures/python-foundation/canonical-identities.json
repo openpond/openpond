@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "openpond.canonicalIdentities.v1",
+  "vectors": [
+    {
+      "value": "😀",
+      "canonical": "\"😀\"",
+      "sha256": "7a0c50b92434b015545fe93ab723db2d4b2cdd14a441405624a9ce8be29f1d5a"
+    },
+    {
+      "value": "\ud800",
+      "canonical": "\"\\ud800\"",
+      "sha256": "8c0c59dd0d275aadcd462a5fe12eb352cbdfeaf961eae4f85a4660521df7d2f5"
+    },
+    {
+      "value": {
+        "__proto__": {
+          "retained": true
+        },
+        "ordinary": 1
+      },
+      "canonical": "{\"__proto__\":{\"retained\":true},\"ordinary\":1}",
+      "sha256": "8d52a329a7fb2167e4d72deefb9d41ed2c78233596ebff7b240d78eab348c1eb"
+    },
+    {
+      "value": {
+        "2": 2,
+        "10": 1,
+        "4294967294": 4,
+        "01": 3,
+        "4294967295": 5
+      },
+      "canonical": "{\"2\":2,\"10\":1,\"4294967294\":4,\"01\":3,\"4294967295\":5}",
+      "sha256": "7c26965db131091a44f39acaf6c3942dd756609639f983920dc6bdb0142cd42c"
+    },
+    {
+      "value": "\ud800",
+      "canonical": "\"\\ud800\"",
+      "sha256": "8c0c59dd0d275aadcd462a5fe12eb352cbdfeaf961eae4f85a4660521df7d2f5"
+    },
+    {
+      "value": null,
+      "canonical": "null",
+      "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    {
+      "value": {
+        "omitted": "kept",
+        "present": null
+      },
+      "canonical": "{\"omitted\":\"kept\",\"present\":null}",
+      "sha256": "d0da19ce46bbcb4461108e6f2c2f0516e3318cd7fd92bdff2c03ed22eee8ac83"
+    },
+    {
+      "value": {
+        "unicode": "雪😀é",
+        "keys": {
+          "😀": 1,
+          "": 2
+        }
+      },
+      "canonical": "{\"keys\":{\"😀\":1,\"\":2},\"unicode\":\"雪😀é\"}",
+      "sha256": "3423a9dd306cadadef53d0a5f3ed563011be1c5535aa070c1cf9241b036acdbe"
+    },
+    {
+      "value": [
+        0,
+        0,
+        1,
+        0.000001,
+        1e-7,
+        100000000000000000000,
+        1e+21,
+        9007199254740991,
+        1000000000000000100
+      ],
+      "canonical": "[0,0,1,0.000001,1e-7,100000000000000000000,1e+21,9007199254740991,1000000000000000100]",
+      "sha256": "273ae0fdf747be4c44e06422fb5b08eed98820708f932cc3cfc74f749a0978af"
+    },
+    {
+      "value": {
+        "nested": [
+          true,
+          false,
+          {
+            "b": 2,
+            "a": 1
+          }
+        ]
+      },
+      "canonical": "{\"nested\":[true,false,{\"a\":1,\"b\":2}]}",
+      "sha256": "421f4604e52b696d8eb084190e28030fe39187d8d5adced1fa8fadef2dd9ded0"
+    }
+  ]
+}

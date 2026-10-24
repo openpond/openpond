@@ -100,7 +100,7 @@ import {
   OpenPondProtocolError,
   assertCanonicalPayloadSize,
   canonicalSha256,
-  parseBoundedJson,
+  readBoundedJsonResponse,
 } from "./protocol.js";
 
 export {
@@ -750,7 +750,7 @@ export function createTrainingClient(input: {
         await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
         continue;
       }
-      const body = parseBoundedJson(await response.text(), responseLimit, "Training API response");
+      const body = await readBoundedJsonResponse(response, responseLimit, "Training API response");
       if (response.ok) return body;
       const error = trainingApiError(body, response.status);
       if (attempt === maximumAttempts || !trainingReadFailureIsRetryable(response.status, error)) {

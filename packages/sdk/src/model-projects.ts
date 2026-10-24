@@ -11,7 +11,7 @@ import {
   OpenPondProtocolError,
   assertCanonicalPayloadSize,
   canonicalSha256,
-  parseBoundedJson,
+  readBoundedJsonResponse,
 } from "./protocol.js";
 
 export {
@@ -418,8 +418,8 @@ export function createModelProjectsClient(input: {
         ...headersRecord(init?.headers),
       },
     });
-    const body = parseBoundedJson(
-      await response.text(),
+    const body = await readBoundedJsonResponse(
+      response,
       MODEL_PROJECT_API_RESPONSE_MAX_BYTES,
       "Model Project API response",
     );
