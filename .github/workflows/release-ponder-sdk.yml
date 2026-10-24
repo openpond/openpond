@@ -144,6 +144,7 @@ jobs:
               echo "Exact OpenPond SDK dependency is available."
               exit 0
             fi
+            echo "Waiting for exact SDK dependency (${attempt}/90)."
             sleep 10
           done
           echo "Exact SDK dependency unavailable; Ponder publication refused." >&2
