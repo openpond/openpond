@@ -1,4 +1,4 @@
-/** Development-only schema export. Installed Python never invokes Node/Bun. */
+/** Development-only schema export. Installed Python never invokes a JavaScript runtime. */
 import { z } from 'zod';
 import { writeFile, mkdir, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';

@@ -112,7 +112,7 @@ subject to the existing public format and API limits.
 
 ```sh
 uv sync --project python/openpond-sdk --locked
-bun python/openpond-sdk/tools/export-wire.ts
+pnpm exec tsx python/openpond-sdk/tools/export-wire.ts
 uv run --project python/openpond-sdk python python/openpond-sdk/tools/generate_models.py
 uv run --project python/openpond-sdk python python/openpond-sdk/tools/generate_models.py --inputs
 uv run --project python/openpond-sdk python python/openpond-sdk/tools/generate_clients.py
@@ -125,7 +125,7 @@ strict decoder expands it before validation or type generation; JSON Schema
 local references, parsing policies and annotations retain their original scope.
 The shared and packaged asset bytes match.
 
-The Bun command is a development schema exporter only; installed consumers never
+The command is a development schema exporter only; installed consumers never
 need it. Shared canonical fixtures include omitted/null, Unicode, integer-key
 ordering and JavaScript number boundaries. The canonical JSON implementation
 matches the existing protocol, including JS array-index enumeration; plain JCS
