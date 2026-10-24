@@ -76,15 +76,46 @@ publication, evidence and feedback, grade/review decisions, batch sealing and
 iteration reserve/cancel/retry. Reuse released resources and exact revision refs;
 the SDK does not execute Python-authored graders or invent another scheduler.
 
-`npx tsx examples/training/continual.ts inspect policy-ref.json inspection.json`
-reads current admission/budget without reserving an iteration. To execute one
-reviewed existing command, use `command command.json response.json`. The input
-must contain its stable operation ID and all schema-required scope-independent
-release references, expected revisions and limits. A reserve command is an
-explicit action, not a side effect of inspection. Retain the resulting iteration
-and job references, observe them through the same public reads, and use existing
-cancel/retry controls for recovery. Neither example changes recurring policy
-settings merely by opening or inspecting them.
+The TS example `examples/training/continual.ts` and native Python example
+`python/openpond-sdk/examples/continual.py` expose the same explicit steps:
+
+1. `inspect policy-ref.json inspection.json` checks the exact released policy.
+   Use existing reviewed source/definition/reward/binding resources and approved
+   evidence; `command command.json response.json` may publish/review/seal only
+   the explicitly supplied typed command. These are writes, and grade/reward
+   checks can incur model cost. They are never inferred from opening a policy.
+2. `reserve reserve-command.json reserved.json` sends one existing
+   `reserve_iteration` command with a stable operationId, pinned policy
+   `{id, revision, contentHash}` and manual trigger `{kind:"manual", identity}`.
+   This is the explicit paid-admission boundary: host workers may dispatch it
+   automatically. The policy must already contain the reviewed configuration,
+   batch/evidence eligibility and finite budget; the example never enables it,
+   changes its limits or accepts/promotes a candidate automatically.
+3. If the reply is lost, `reconcile reserve-command.json reconciled.json` reads
+   that policy's chain and scans at most10 pages of100 reservations for the SAME
+   pinned policy/manual trigger. It never issues another reservation. A missing
+   result is UNKNOWN, not permission to submit a new operation/trigger.
+4. `status reserved.json status.json` reloads the retained iteration, lists only
+   its dispatch, refreshes the iteration once and checks policy/execution identity
+   before reading its training job. Inconsistent snapshots require another read,
+   never a mutation. Reinvoke explicitly
+   with the latest receipt; there is no unbounded polling. `results status.json
+   results.json` requires settled dispatch plus authoritative terminal cleanup
+   receipt, then reads retained training outputs. Only cancellation before initial
+   submission may return a terminal record without a job. A candidate_ready result is not
+   accepted or served, and failed/cancelled terminal records are not success.
+5. For `cancel` or `retry`, add a new stable `operationId` to a retained response.
+   Each reloads current iteration revision; retry additionally requires the SAME
+   blocked dispatch. The host handles cancellation by dispatch identity, including
+   uncertain initial submission. Read status/results until authoritative terminal
+   receipt is observed. Local request abort never claims remote cancellation.
+
+Each invocation has a120-second bound, exclusive private output and retains exact
+iteration/policy/dispatch/job references. Reservation reads cannot manufacture
+proof of actual execution. This declares existing manual-trigger continual
+iterations; schedule/approved-count automation and Python-authored graders are
+not demonstrated by this example. One ordinary external consumer must still run
+the reviewed hosted sequence after platform security qualification.
 
 ## Proof and release
 
@@ -95,4 +126,7 @@ lost-reply reconciliation, pagination and real cancellation/recovery remain
 integration gates. Examples and source/package checks do not establish a real
 GPU result. Actual hosted GRPO/reward-model execution uses a separately bounded
 approved workflow and retains exact version/SHA/input/result/cleanup evidence.
-No package has been published by these changes.
+The original `openpond-sdk@0.12.8` is published and independently verified.
+The source follow-up prepares coordinated SDK/Ponder0.12.9; it does not claim
+that version is published. Ponder npm and Python first-name publication remain separate publisher/bootstrap
+gates; clean packed consumers do not establish registry ownership.
