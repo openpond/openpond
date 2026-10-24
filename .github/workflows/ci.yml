@@ -454,6 +454,7 @@ jobs:
           version: "0.13.4"
       - run: uv run --project python/openpond-datasets --frozen pytest python/openpond-datasets/tests
       - run: uv run --project packages/evals/python --with pytest pytest packages/evals/python/tests -q
+      - run: uv run --project python/openpond-sdk --frozen pytest python/openpond-sdk/tests
 
   contract:
     name: Runtime contract tests

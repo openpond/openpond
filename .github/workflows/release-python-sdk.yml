@@ -1,0 +1,159 @@
+name: Release Python SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [build, publish]
+        default: build
+        required: true
+      version:
+        description: Exact reviewed ponder-sdk version
+        required: true
+      candidate_run_id:
+        description: Successful build-mode run in this workflow (publish only)
+        required: false
+      candidate_sha:
+        description: Exact reviewed source commit (publish only)
+        required: false
+      manifest_sha256:
+        description: Reviewed candidate manifest SHA-256 (publish only)
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-python-sdk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: inputs.mode == 'build'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.10'
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: '0.9.11'
+      - name: Require successful CI for exact source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          timeout 120 gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&per_page=10" --jq '.workflow_runs | any(.conclusion == "success")' | grep -qx true
+      - name: Build and verify reviewed distributions
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          uv sync --project python/openpond-sdk --locked
+          uv run --project python/openpond-sdk --locked pytest python/openpond-sdk/tests/test_http_workflow.py
+          uv run --project python/openpond-sdk --locked python python/openpond-sdk/tools/prepare_release.py --output candidate --expected-version "${VERSION}"
+          uv run --project python/openpond-sdk --locked python - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          root=Path('candidate'); manifest=json.loads((root/'manifest.json').read_text())
+          wheel=next((root/'distributions').glob('*.whl'))
+          subprocess.run(['uv','run','--project','python/openpond-sdk','--locked','python','python/openpond-sdk/tools/check_consumer.py',str(wheel),'--sha256',manifest['artifacts'][wheel.name],'--receipt',str(root/'consumer.json')],check=True,timeout=600)
+          (root/'provenance.json').write_text(json.dumps({'sourceSha':os.environ['GITHUB_SHA'],'repository':os.environ['GITHUB_REPOSITORY'],'runId':os.environ['GITHUB_RUN_ID'],'version':manifest['version'],'manifestSha256':hashlib.sha256((root/'manifest.json').read_bytes()).hexdigest()},indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ponder-python-candidate
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: inputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi-production
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - name: Require verified first-publisher setup and reviewed source run
+        env:
+          OWNER_VERIFIED: ${{ vars.PONDER_SDK_PYPI_OWNER_VERIFIED }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          SOURCE_SHA: ${{ inputs.candidate_sha }}
+          VERSION: ${{ inputs.version }}
+          MANIFEST_SHA: ${{ inputs.manifest_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "${OWNER_VERIFIED}" = 'true'
+          [[ "${RUN_ID}" =~ ^[0-9]+$ && "${SOURCE_SHA}" =~ ^[a-f0-9]{40}$ && "${MANIFEST_SHA}" =~ ^[a-f0-9]{64}$ && "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "${SOURCE_SHA}" = "${GITHUB_SHA}"
+          timeout 120 gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq ".head_sha == \"${SOURCE_SHA}\" and .conclusion == \"success\" and .path == \".github/workflows/release-python-sdk.yml\" and .event == \"workflow_dispatch\"" | grep -qx true
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: ponder-python-candidate
+          path: candidate
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify exact retained artifact bytes
+        env:
+          SOURCE_SHA: ${{ inputs.candidate_sha }}
+          VERSION: ${{ inputs.version }}
+          MANIFEST_SHA: ${{ inputs.manifest_sha256 }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path('candidate'); raw=(root/'manifest.json').read_bytes(); manifest=json.loads(raw); provenance=json.loads((root/'provenance.json').read_text())
+          assert hashlib.sha256(raw).hexdigest()==os.environ['MANIFEST_SHA']
+          assert manifest['distribution']=='ponder-sdk' and manifest['version']==os.environ['VERSION']
+          assert provenance=={'sourceSha':os.environ['SOURCE_SHA'],'repository':os.environ['GITHUB_REPOSITORY'],'runId':os.environ['RUN_ID'],'version':os.environ['VERSION'],'manifestSha256':os.environ['MANIFEST_SHA']}
+          artifacts={p.name:p for p in (root/'distributions').iterdir() if p.name!='.gitignore'}
+          assert set(artifacts)==set(manifest['artifacts']) and len(artifacts)==2
+          assert all(hashlib.sha256(p.read_bytes()).hexdigest()==manifest['artifacts'][name] for name,p in artifacts.items())
+          assert all(r['installedFromWheel'] for r in json.loads((root/'consumer.json').read_text())['results'])
+          PY
+      - name: Reconcile existing immutable PyPI version
+        id: registry
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.error,urllib.request
+          manifest=json.load(open('candidate/manifest.json'))
+          try:
+              with urllib.request.urlopen('https://pypi.org/pypi/ponder-sdk/'+os.environ['VERSION']+'/json',timeout=15) as response:
+                  raw=response.read(1048577)
+              assert len(raw)<=1048576
+              remote=json.loads(raw)
+          except urllib.error.HTTPError as error:
+              if error.code!=404:raise
+              remote=None
+          if remote is not None:
+              assert {a['filename']:a['digests']['sha256'] for a in remote['urls']}==manifest['artifacts'], 'Published version differs; never replace or republish.'
+          with open(os.environ['GITHUB_OUTPUT'],'a') as file:file.write('already_published='+('true' if remote is not None else 'false')+'\n')
+          PY
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        if: steps.registry.outputs.already_published != 'true'
+        with:
+          packages-dir: candidate/distributions/
+      - name: Verify registry artifact digests after acknowledged publish
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          manifest=json.load(open('candidate/manifest.json'))
+          with urllib.request.urlopen('https://pypi.org/pypi/ponder-sdk/'+os.environ['VERSION']+'/json',timeout=15) as response:raw=response.read(1048577)
+          assert len(raw)<=1048576
+          remote=json.loads(raw)
+          assert {a['filename']:a['digests']['sha256'] for a in remote['urls']}==manifest['artifacts']
+          PY

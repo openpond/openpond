@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.12.7",
+  "version": "0.12.8",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -16,7 +16,8 @@
     "examples",
     "LEARNING.md",
     "TASKSETS.md",
-    "MODEL_STARTERS.md"
+    "MODEL_STARTERS.md",
+    "TRAINING_WORKFLOWS.md"
   ],
   "exports": {
     "./experiment-improvements": {

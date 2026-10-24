@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "openpond.trainingJobSubmission.v2",
+  "idempotencyKey": "fixture-policy-project-r3",
+  "name": "Policy optimization fixture",
+  "source": {
+    "modelProject": {
+      "id": "hosted-project-fixture",
+      "portableProjectId": "project-fixture",
+      "revision": 3,
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "harnessRunManifest": {
+      "id": "manifest-fixture",
+      "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "harnessRelease": {
+      "id": "harness-fixture",
+      "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "taskset": {
+      "id": "taskset-fixture",
+      "revision": 2,
+      "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "tasksetRelease": {
+      "id": "taskset-release-fixture",
+      "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "dataset": {
+      "id": "dataset-fixture",
+      "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "evidenceSets": [],
+    "evaluation": {
+      "taskset": {
+        "id": "held-out-fixture",
+        "revision": 1,
+        "contentHash": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "dataset": {
+        "id": "evaluation-dataset-fixture",
+        "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+      }
+    }
+  },
+  "job": {
+    "kind": "policy_optimize",
+    "baseModel": {
+      "schemaVersion": "openpond.baseModelPreference.v1",
+      "modelId": "model-fixture",
+      "revision": "revision-fixture",
+      "tokenizerRevision": "tokenizer-fixture",
+      "chatTemplateHash": "template-fixture",
+      "modelAssetId": null,
+      "source": "managed"
+    },
+    "recipe": {
+      "schemaVersion": "openpond.rftRecipe.v1",
+      "method": "grpo",
+      "parameterization": "lora",
+      "optimizer": {
+        "maximumSteps": 1
+      }
+    },
+    "rewardSource": {
+      "kind": "deterministic",
+      "grader": {
+        "id": "grader-fixture",
+        "contentHash": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "composer": null
+    },
+    "resumeFrom": null
+  },
+  "requestedCapabilities": [
+    {
+      "id": "managed_rl.policy.grpo",
+      "version": "1",
+      "required": true
+    }
+  ],
+  "placementObjective": "balanced",
+  "budget": {
+    "maximumSpendUsd": 1,
+    "maximumWallSeconds": 900
+  },
+  "approval": {
+    "approvalHash": "2222222222222222222222222222222222222222222222222222222222222222",
+    "approvedAt": "2026-08-27T00:00:00.000Z",
+    "exportApproved": true,
+    "maximumSpendUsd": 1,
+    "retentionDays": 7,
+    "region": null
+  },
+  "contentHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b"
+}

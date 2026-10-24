@@ -671,6 +671,12 @@ importers:
         specifier: ^4.1.13
         version: 4.4.3
 
+  packages/ponder-sdk:
+    dependencies:
+      openpond-sdk:
+        specifier: 0.12.8
+        version: link:../sdk
+
   packages/runtime:
     dependencies:
       '@openpond/cloud':
