@@ -180,8 +180,12 @@ def finish(operation: dict[str,Any], team_id: str, parameters: dict[str,Any], bo
         if method in ('command','submit_example','submit_feedback') and response['operationId']!=body['command']['operationId']:raise ProtocolError('operation_identity_mismatch')
         if method=='publish_batch' and response['batchId']!=body['batchId']:raise ProtocolError('batch_identity_mismatch')
         if method in ('get','inspect_evidence','inspect_policy'):
-            ref=body.get('evidence',body.get('policy',body))
-            actual=response.get('evidence',response.get('policy',response))
+            # A resource may itself contain policy/evidence references. Only
+            # inspection envelopes bind those nested references; get binds the
+            # requested kind's validated top-level resource identity.
+            field={'inspect_evidence':'evidence','inspect_policy':'policy'}.get(method)
+            ref=body[field] if field else body
+            actual=response[field] if field else response
             if ref.get('id')!=actual.get('id') or 'revision' in ref and ref['revision']!=actual.get('revision') or 'contentHash' in ref and ref['contentHash']!=actual.get('contentHash'):raise ProtocolError('learning_resource_identity_mismatch')
         if method=='inspect_task_queue' and response['modelProjectId']!=body['modelProjectId']:raise ProtocolError('model_identity_mismatch')
         if method=='source_configuration' and response['source']['id']!=body['sourceId']:raise ProtocolError('credential_identity_mismatch')
