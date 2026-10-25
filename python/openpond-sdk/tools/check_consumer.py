@@ -16,7 +16,7 @@ from ponder_sdk import Client,AsyncClient,models,inputs,canonical_json
 from ponder_sdk.wire import schemas
 origin=Path(ponder_sdk.__file__).resolve()
 assert Path(sys.prefix).resolve() in origin.parents
-assert ponder_sdk.__version__=='0.1.0'
+assert ponder_sdk.__version__=='0.1.1'
 assert schemas()['schemas']['TrainingPreparationReceiptSchema']
 assert models.TrainingPreparationReceipt.__annotations__
 assert inputs.TrainingPreparationRequest.__annotations__
