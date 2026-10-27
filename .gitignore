@@ -126,3 +126,13 @@ bun-debug.log*
 .DS_Store
 .idea/
 .vscode/
+
+# Private infrastructure, studies and operator evidence belong in Sandbox.
+/rust/
+/benchmarks/gsm8k/
+/.artifacts/
+/.gsm8k-*.json
+/.github/workflows/rust-hardware.yml
+/apps/cli/src/cli/training-gke-candidate.ts
+/apps/cli/src/cli/hosted-training-configured-account.ts
+/apps/cli/test/cli-gke-candidate.test.ts
