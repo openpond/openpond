@@ -1,4 +1,5 @@
 import { assertNativeWorkerDirectInput } from "./native-worker-capabilities.js";
+import { CodexOwnershipError } from "./codex-ownership.js";
 import { createTaskCoordinationMcp } from "./task-inbox/codex-mcp.js";
 import type { CodexTurnInput } from "./turns/ports.js";
 import type {
@@ -97,7 +98,7 @@ export function createCodexRuntimeManager({
     assertNativeWorkerDirectInput(session);
     const existing = codexSessions.get(session.id);
     if (
-      existing?.permissionMode === turnInput.codexPermissionMode &&
+      existing?.client.isRunning() && existing.permissionMode === turnInput.codexPermissionMode &&
       existing.reasoningEffort === (turnInput.codexReasoningEffort ?? null) &&
       existing.cwd === session.cwd &&
       coordinationSignatures.get(session.id) === JSON.stringify(turnInput.coordination?.tools.map(tool => tool.name) ?? [])
@@ -203,14 +204,18 @@ export function createCodexRuntimeManager({
       await coordinationServers.get(session.id)?.close();
       coordinationServers.delete(session.id);
       coordinationSignatures.delete(session.id);
-      setCodexStatus({
-        ...getCodexStatus(),
-        appServer: {
-          status: "error",
-          lastError: error instanceof Error ? error.message : String(error),
-        },
-      });
-      throw error;
+      const detail = error instanceof Error ? error.message : String(error);
+      const ownedElsewhere = detail.includes("already has an active writer");
+      const message = ownedElsewhere
+        ? new CodexOwnershipError(session.codexThreadId!, error).message
+        : detail;
+      await appendRuntimeEvent(event({
+        sessionId: session.id, name: "diagnostic", source: "provider", status: "failed", output: detail,
+        data: { phase: "codex_runtime", operation: session.codexThreadId ? "resume" : "start",
+          threadId: session.codexThreadId, reason: ownedElsewhere ? "thread_owned_elsewhere" : "initialization_failed" },
+      }));
+      setCodexStatus({ ...getCodexStatus(), appServer: { status: "error", lastError: message } });
+      throw ownedElsewhere ? new CodexOwnershipError(session.codexThreadId!, error) : error;
     }
   }
 

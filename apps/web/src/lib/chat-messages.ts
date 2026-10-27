@@ -56,6 +56,11 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
   for (const original of items) {
     const item = projectNativeHistoryTool(original, nativeToolNames);
+    if (item.name === "diagnostic" && item.source === "server" && asRecord(item.data)?.kind === "codex_ownership_recovery" && item.sessionId && item.turnId) {
+      const failure = findLast(messages, message => message.role === "error" && message.turnId === item.turnId);
+      if (failure) failure.codexRecovery = { sessionId: item.sessionId, failedTurnId: item.turnId };
+      continue;
+    }
     if(item.source === "server" && asRecord(item.data)?.chatResource)continue;
     if (item.name === "visual.published") {
       const parsed = HtmlVisualReferenceSchema.safeParse(asRecord(item.data)?.visual);

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { codexThreadUrl } from "./desktop-codex-thread.js";
 import { desktopBackground, initializeDesktopAppearance, setDesktopAppearance, trackWindowAppearance } from "./desktop-appearance.js";
 import { saveImageDownload } from "./desktop-image-download.js";
 import { prepareDesktopBrowserHome } from "./desktop-browser-home.js";
@@ -481,6 +482,9 @@ function registerIpcHandlers(): void {
   if (ipcHandlersRegistered) return;
   ipcHandlersRegistered = true;
   registerBrowserSidebarIpc(() => mainWindow, handleTrackedIpc);
+  handleTrackedIpc("openpond:codex:openThread", async (_event, payload: unknown) => {
+    await shell.openExternal(codexThreadUrl(payload));
+  });
   handleTrackedIpc("openpond:updates:state", () => desktopUpdater!.getState());
   handleTrackedIpc("openpond:updates:check", () => desktopUpdater!.check());
   handleTrackedIpc("openpond:updates:download", () => desktopUpdater!.download());

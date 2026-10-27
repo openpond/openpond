@@ -1,11 +1,10 @@
 import { attachHostedTrainingToChat } from "./training-chat-attachment";
 import { readFile } from "node:fs/promises";
-import { loadOpenPondAccountContext } from "@openpond/runtime";
+import { hostedTrainingAccount } from "./hosted-training-account";
 import { createTrainingClient, OpenPondTrainingApiError, parseAndVerifyTrainingJobSubmission, parseAndVerifyTrainingPreparationReceipt, TrainingPreparationRequestSchema, type TrainingInputArtifactUpload } from "openpond-sdk/training";
 import { createModelProjectsClient, HostedModelProjectSyncSchema } from "openpond-sdk/model-projects";
 import { OpenPondCorrectionMetricsClient, OpenPondLearningClient } from "openpond-sdk/learning";
 import { optionString, parseBooleanOption, parseIntegerOption } from "./common/options";
-import { resolveApiBaseUrlOption } from "./common/urls";
 import { cancelHostedTrainingJob, parseHostedWatchOptions, stopHostedTrainingJobAfterGroup, watchHostedTrainingJob } from "./training-hosted-lifecycle";
 import { printTrainingEstimate } from "./training-estimate-output";
 
@@ -19,18 +18,7 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   const action = rest[0], target = rest[1];
   const watchOptions = action === "hosted-watch" ? parseHostedWatchOptions(options) : null;
   const requestBound = { deadlineAt: watchOptions?.deadlineAt ?? null };
-  const context = await accountContext(options);
-  if (!context.token) throw new Error("Sign in to an OpenPond account before using hosted training.");
-  const baseUrl = resolveApiBaseUrlOption(options) ?? context.apiBaseUrl;
-  if (new URL(baseUrl).origin !== new URL(context.apiBaseUrl).origin)
-    throw new Error("The hosted API URL must match the signed-in account’s API origin.");
-  const teamId = optionString(options, "teamId");
-  if (!teamId) throw new Error("Hosted training requires --team-id <workspace-id>.");
-  const headers = new Headers({ "x-openpond-team-id": teamId });
-  if (context.token.startsWith("opk_")) {
-    headers.set("Authorization", `ApiKey ${context.token}`);
-    headers.set("openpond-api-key", context.token);
-  } else headers.set("Authorization", `Bearer ${context.token}`);
+  const { context, baseUrl, teamId, headers } = await hostedTrainingAccount(options);
   const request: typeof fetch = (url, init) => {
     const remaining = requestBound.deadlineAt === null ? Infinity : requestBound.deadlineAt - Date.now();
     if (remaining <= 0) throw new DOMException("Hosted watch deadline reached", "TimeoutError");
@@ -87,6 +75,14 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     const value: unknown = await response.json();
     if (!response.ok) throw new Error(`Hosted capacity read failed (${response.status}).`);
     print(value); return;
+  }
+  if (action === "hosted-hardware") {
+    if (target) throw new Error("hosted-hardware does not accept an identifier; use --worker-id or --job-id.");
+    print(await client.hardwareObservations({ teamId,
+      workerId: optionString(options, "workerId") || undefined, jobId: optionString(options, "jobId") || undefined,
+      cursor: optionString(options, "cursor") || undefined,
+      limit: options.limit === undefined ? undefined : parseIntegerOption(options.limit, "limit"),
+    })); return;
   }
   if (action === "hosted-workers" || action === "hosted-worker" || action?.startsWith("hosted-worker-")) {
     print(await (await import("./training-hosted-workers")).runHostedWorkerCommand({
@@ -190,9 +186,12 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
       throw new Error("hosted-qualify requires an immutable policy_optimize submission with executionMode=qualification.");
     }
     if (!parseBooleanOption(options.yes)) throw new Error("Submitting paid hosted training requires --yes.");
-    if (input.job.kind === "policy_optimize" && input.job.executionMode === "qualification") {
+    if (input.gpuSelection?.gpuCount === 2 || input.job.kind === "policy_optimize" && input.job.executionMode === "qualification") {
       const capabilities = await client.capabilities();
-      if (!capabilities.executionModes?.includes("qualification")) {
+      if (input.gpuSelection?.gpuCount === 2 && !capabilities.policyDataParallel) {
+        throw new Error("This hosted runtime has no qualified two-GPU policy-training image.");
+      }
+      if (input.job.kind === "policy_optimize" && input.job.executionMode === "qualification" && !capabilities.executionModes?.includes("qualification")) {
         throw new Error("This hosted runtime does not advertise original-learner qualification support.");
       }
     }
@@ -277,17 +276,4 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     return;
   }
   throw new Error(`Unknown hosted training command: ${action}`);
-}
-
-async function accountContext(options: Options) {
-  // Credential-store reconciliation can briefly overlap another CLI or app.
-  // Retry only this local read; never automatically repeat a paid submission.
-  for (let attempt = 0; ; attempt++) {
-    try { return await loadOpenPondAccountContext(optionString(options, "account")); }
-    catch (error) {
-      const issue = (error as { issue?: { code?: string } }).issue;
-      if (issue?.code !== "STORAGE_BUSY" || attempt >= 29) throw error;
-      await new Promise(resolve => setTimeout(resolve, 1_000));
-    }
-  }
 }

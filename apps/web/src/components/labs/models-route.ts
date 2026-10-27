@@ -24,7 +24,7 @@ export interface ModelsRoute {
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
-  "get-started": "Get started", home: "Home", inbox: "Inbox", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Experiments", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Training", versions: "Versions", serving: "Serving",
+  "get-started": "Get started", home: "Home", inbox: "Inbox", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Experiments", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Training", versions: "Versions", serving: "Inference",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
   tasks: ["drafts"], tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
@@ -97,7 +97,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   if(executionLocation!==null&&(!hosted||!["local","hosted"].includes(executionLocation)))return null;
   const executionKind=query.get("kind");
   if(executionKind!==null&&(page!=="experiments"||!resourceId||executionLocation==="local"||executionKind!=="recorded_evidence"))return null;
-  if (encoded[0] === "console" && !hosted && page !== "runs") return null;
+  if (encoded[0] === "console" && !hosted && page !== "runs" && page !== "serving") return null;
   const projectId = query.get("project") === "all" ? null : query.get("project");
   const passId = query.get("pass");
   if ([projectId, passId].some(id => id !== null && (!id.trim() || id.length > 240)) || (!hosted && !hostedTraining && (projectId || passId)) || (page !== "experiments" && passId) || ((hosted || hostedTraining) && pathModelId)) return null;

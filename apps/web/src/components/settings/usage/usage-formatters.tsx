@@ -58,8 +58,9 @@ export function numericValue(value: number | string | undefined): number {
   }
   return 0;
 }
-export function providerLabel(provider: string): string {
-  const known: Record<string, string> = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", openpond: "OpenPond", openrouter: "OpenRouter", codex: "Codex" };
+export function providerLabel(provider: string, route?: string): string {
+  if (route === "openpond_hosted" || provider === "openpond" || (!route && ["fireworks", "runpod", "huggingface"].includes(provider))) return "OpenPond Chat";
+  const known: Record<string, string> = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", openpond: "OpenPond Chat", openrouter: "OpenRouter", codex: "Codex" };
   return known[provider] ?? titleFromIdentifier(provider);
 }
 export function routeLabel(route: string): string {

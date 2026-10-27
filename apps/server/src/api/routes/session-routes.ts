@@ -28,6 +28,11 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     return true;
   }
   const sessionPatchMatch = /^\/v1\/sessions\/([^/]+)$/.exec(requestUrl.pathname);
+  const recoveryMatch = /^\/v1\/sessions\/([^/]+)\/codex-recovery$/.exec(requestUrl.pathname);
+  if (request.method === "POST" && recoveryMatch) {
+    sendJson(response, 200, await deps.recoverCodexSession(decodeURIComponent(recoveryMatch[1]!), await readJson(request)));
+    return true;
+  }
   const goalMatch = /^\/v1\/sessions\/([^/]+)\/goal$/.exec(requestUrl.pathname);
   if (request.method === "GET" && goalMatch) {
     sendJson(response, 200, await deps.patchSessionGoal(decodeURIComponent(goalMatch[1]!), undefined));

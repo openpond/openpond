@@ -12,6 +12,7 @@ export * from "./providers.js";
 export * from "./settings.js";
 export * from "./experiences.js";
 export * from "./sessions.js";
+export * from "./codex-recovery.js";
 export * from "./subagents.js";
 export * from "./approvals.js";
 export * from "./placeholders.js";

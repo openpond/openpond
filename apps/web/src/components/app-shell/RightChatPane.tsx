@@ -295,6 +295,7 @@ export function RightChatPane({
                 : null
             }
             message={row.message}
+            codexRecoveryEnabled={row.message.turnId === latestMessage?.turnId}
             onOpenBrowserLink={handleOpenBrowserLink}
             onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
             onOpenFileInSidebar={onOpenFileInSidebar}

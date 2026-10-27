@@ -1,4 +1,5 @@
 import { createFilePreviewTool, FILE_PREVIEW_INSTRUCTIONS } from "../openpond/file-preview-tool.js";
+import { failTurnWithCodexRecovery } from "./codex-ownership.js";
 import { ponderHostedTools } from "../openpond/ponder-hosted-tools.js";
 import { ponderHistoryTools } from "../openpond/ponder-history/tools.js";
 import { localPonderTools } from "../openpond/local-ponder-tools.js";
@@ -216,7 +217,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     recoverInterruptedTurn: async (sessionId, turnId) => {
       if ((await store.getTurn(turnId))?.status === "in_progress") {
         await interruptTurn(await getSession(sessionId), turnId,
-          "The execution owner stopped. Pending inputs are preserved; review completed tool activity before continuing.");
+          "The local app server restarted before this turn finished. Pending inputs are preserved. Review completed tool activity, then resume this chat to continue.");
       }
     },
     getSubagentRun: (id) => store.getSubagentRun ? store.getSubagentRun(id) : Promise.resolve(null),
@@ -1907,13 +1908,12 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           message,
         }).catch(() => undefined);
       }
-      const failed = await failTurn(session, turn.id, message);
-      await processHarnessImprovementBoundarySafely({
-        session,
-        turn: failed,
-        boundaryKind: "turn_completed",
+      return await failTurnWithCodexRecovery({ error, nativeStarted: Boolean(activeTurn.codexTurnId), session, turn, request: input,
+        pending: () => inboxStore.pendingTaskInputs(sessionId, turn.id), queue: (request, key) => taskInbox.queue(sessionId, request, key),
+        save: marker => updateStoredTurn(turn.id, current => ({ ...current, metadata: { ...current.metadata, codexRecovery: marker } })),
+        append: appendRuntimeEvent, fail: () => failTurn(session, turn.id, message),
+        onFailed: failed => processHarnessImprovementBoundarySafely({ session, turn: failed, boundaryKind: "turn_completed" }),
       });
-      return failed;
     } finally {
       stopConfigurationWatch();
       await finalizeSubagentContinuationTurn({

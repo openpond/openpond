@@ -82,7 +82,8 @@ export function parseDevRunnerArgs(
   let host = env.OPENPOND_DEV_HOST || "127.0.0.1";
   let serverPort = numberFromEnv(env.OPENPOND_SERVER_PORT);
   let webPort = numberFromEnv(env.OPENPOND_WEB_PORT);
-  let watch = true;
+  // Server reloads terminate active agent turns; opt in explicitly while editing backend code.
+  let watch = false;
   let devtoolsPort: number | undefined;
   let skipBuild = false;
 

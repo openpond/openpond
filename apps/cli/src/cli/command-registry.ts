@@ -251,8 +251,13 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   {
     name: "account",
     usage: "openpond account",
+    usages: ["openpond account context [--account <handle>] [--base-url <url>] [--api-base-url <url>] [--json]"],
     optionSchema: { json: "boolean" },
-    handler: async () => (await import("./core-commands")).runAccount(),
+    handler: async ({ options, rest }) => {
+      if (rest[0] === "context" && rest.length === 1) return (await import("./account-context")).runAccountContext(options);
+      if (rest.length) throw new Error("usage: account [context]");
+      return (await import("./core-commands")).runAccount();
+    },
   },
   {
     name: "health",
@@ -478,7 +483,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     name: "training",
     usage: "openpond training <projects|inspect-project|create-project|prepare-project|pull-project|estimate|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]",
     usages: [
-      "openpond training estimate <hosted-model-project-id> --team-id <id> [--batch-id <id>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--api-base-url <url>] [--json]",
+      "openpond training estimate <hosted-model-project-id> --team-id <id> [--batch-id <id>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--gpu-count <1|2>] [--api-base-url <url>] [--json]",
       "openpond training hosted-estimate <input.json> --team-id <id> [--api-base-url <url>] [--json]",
       "openpond training prepare-project <input.json> [--dry-run] [--output <receipt.json>] [--json]",
       "openpond training prepare-project <reviewed-receipt.json> --apply [--output <saved.json>] [--json]",
@@ -486,12 +491,13 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       "openpond training projects [--profile <local-profile-id>] [--json]",
       "openpond training inspect-project <local-model-project-id> [--profile <local-profile-id>] [--json]",
       "openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]",
-      "openpond training start <hosted-model-project-id> --team-id <id> --batch-id <id> [--max-spend <usd>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--yes] [--detach] [--json]",
+      "openpond training start <hosted-model-project-id> --team-id <id> --batch-id <id> [--max-spend <usd>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--gpu-count <1|2>] [--yes] [--detach] [--json]",
       "openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]",
       "openpond training hosted-models|hosted-batches|hosted-preparations|hosted-jobs|hosted-capabilities|hosted-gpu-catalog --team-id <id> [--api-base-url <url>] [--json]",
       "openpond training hosted-learning-inspect <model-project-id> --team-id <id> [--cursor <id>] [--limit <1..100>] [--api-base-url <url>] [--json]",
       "openpond training hosted-corrections <model-project-id> --team-id <id> [--run-id <id>] [--api-base-url <url>] [--json]",
       "openpond training hosted-workers --team-id <id> [--api-base-url <url>] [--json]",
+      "openpond training hosted-hardware --team-id <id> [--worker-id <id>] [--job-id <id>] [--limit <1..50>] [--cursor <worker-id>] [--api-base-url <url>] [--watch --interval-ms <100..60000> --timeout-ms <1000..60000>] [--json]",
       "openpond training hosted-serving-pools --team-id <id> [--api-base-url <url>] [--json]",
       "openpond training hosted-base-serving-prepare <base-profile.json> --team-id <id> [--api-base-url <url>] --yes [--json]",
       "openpond training hosted-serving-pool-retire <pool-and-reason.json> --team-id <id> [--api-base-url <url>] --yes [--json]",
@@ -524,7 +530,10 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       apiBaseUrl: "string",
       batchId: "string",
       operationId: "string",
+      workerId: "string",
+      jobId: "string",
       gpuType: "string",
+      gpuCount: "string",
       availabilityId: "string",
       apply: "boolean",
       dryRun: "boolean",
@@ -538,6 +547,8 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       exportApproved: "boolean",
       gpuPlacementObjective: "string",
       intervalMs: "integer",
+      watch: "boolean",
+      timeoutMs: "integer",
       deadlineAt: "string",
       cleanupReserveMs: "integer",
       waitForCleanup: "boolean",
@@ -565,8 +576,10 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       runPreset: "string",
       yes: "boolean",
     },
-    handler: async ({ options, rest }) =>
-      (await import("./training")).runTrainingCommand(options, rest),
+    handler: async ({ options, rest }) => {
+      if (rest[0] === "hosted-hardware") return (await import("./training-hardware")).runHardwareObservations(options, rest);
+      return (await import("./training")).runTrainingCommand(options, rest);
+    },
   },
   {
     name: "taskset",

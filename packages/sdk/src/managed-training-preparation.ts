@@ -61,6 +61,8 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
   const manifest = HarnessRunManifestSchema.parse(input.manifest);
   const bundle = ResolvedTrainingBundleManifestSchema.parse(input.bundleManifest);
   const qualification = input.executionMode === "qualification";
+  const gpuSelection = (input.gpuSelection ?? project.trainingSetup.managedGpuSelection)
+    ? TrainingGpuSelectionSchema.parse(input.gpuSelection ?? project.trainingSetup.managedGpuSelection) : undefined;
   const physicalPlacement = input.physicalPlacement
     ? TrainingPhysicalPlacementSchema.parse(input.physicalPlacement) : undefined;
   const qualificationGroupSize = manifest.qualificationSamples === undefined ? null
@@ -192,6 +194,9 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
     },
     requestedCapabilities: [
       { id: qualification ? "managed_rl.policy.qualification" : "managed_rl.policy.grpo", version: "1", required: true },
+      ...(gpuSelection?.gpuCount === 2
+        ? [{ id: "managed_rl.policy.data_parallel", version: "1", required: true }]
+        : []),
       {
         id: `managed_rl.rollouts.${manifest.runtimeTarget.placement}`,
         version: "1",
@@ -202,7 +207,7 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
         : []),
     ],
     placementObjective: project.trainingSetup.managedGpuPlacementObjective,
-    ...((input.gpuSelection ?? project.trainingSetup.managedGpuSelection) ? { gpuSelection: TrainingGpuSelectionSchema.parse(input.gpuSelection ?? project.trainingSetup.managedGpuSelection) } : {}),
+    ...(gpuSelection ? { gpuSelection } : {}),
     ...(physicalPlacement ? { physicalPlacement } : {}),
     budget: {
       maximumSpendUsd: approval.maximumSpendUsd,

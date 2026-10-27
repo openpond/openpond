@@ -62,7 +62,6 @@ failed `budgets:check` and its targeted/full CI callers; now they only warn.
 | Public app-server CLI startup | 10,000 ms, performance run only | `tests/agent-app-server-cli.test.ts` |
 | Million-event recovery projection time | 1,000 ms | `tests/runtime-event-lists-performance.test.ts` |
 | Single-event append p95 | 50 ms | `tests/runtime-event-lists-performance.test.ts` |
-| Post-training lesson / full-course export | 15 MiB / 100 MiB | `scripts/tutorials/build-post-training-series.mjs` |
 | Agent overview export | 15 MiB | `scripts/tutorials/build-openpond-agent-overview.mjs` |
 | Agent tutorial export | 25 MiB | `scripts/tutorials/build-how-to-make-an-agent.mjs` |
 

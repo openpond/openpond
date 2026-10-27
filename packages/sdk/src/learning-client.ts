@@ -1,3 +1,5 @@
+import { OpenPondLearningError } from "./learning-error.js";
+export { OpenPondLearningError } from "./learning-error.js";
 import { z } from "zod";
 import {
   LearningCommandRequestSchema, LearningOperationResultSchema, LearningReadRequestSchema,
@@ -27,13 +29,6 @@ export const LearningBatchPublicationResultSchema = z.object({
   batchId: z.string().min(1), projectId: z.string().min(1), tasksetId: z.string().min(1),
   releaseId: z.string().min(1), revision: z.number().int().positive(), contentHash: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
-export class OpenPondLearningError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string, readonly details: unknown) {
-    super(message);
-    this.name = "OpenPondLearningError";
-  }
-}
-
 /** The same portable commands are sent to the local and hosted execution owner. */
 export class OpenPondLearningClient {
   readonly #options: OpenPondLearningClientOptions;

@@ -262,6 +262,7 @@ interface Window {
     notify?: (input: { id: string; title: string; body: string; ponder?: boolean }) => Promise<boolean>;
     onPonderNotification?: (callback: (payload: { id: string }) => void) => () => void;
     getConnection: () => Promise<OpenPondConnection>;
+    openCodexThread?: (input: { threadId: string }) => Promise<void>;
     getDesktopRuntimeInfo?: () => Promise<OpenPondDesktopRuntimeInfo>;
     reloadDesktopApp?: () => Promise<{ ok: boolean; error?: string }>;
     browser?: {

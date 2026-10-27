@@ -11,12 +11,16 @@ export function trainingGpuChoice(options: Options) {
   const gpuType = optionString(options, "gpuType");
   const availabilityId = optionString(options, "availabilityId");
   const objective = optionString(options, "gpuPlacementObjective");
+  const gpuCount = parseNumberOption(options.gpuCount, "gpu-count");
+  if (gpuCount !== undefined && gpuCount !== 1 && gpuCount !== 2)
+    throw new Error("--gpu-count must be 1 or 2.");
   if (gpuType || availabilityId) {
     if (!gpuType || !availabilityId || objective)
       throw new Error("Choose --gpu-type with --availability-id, or --gpu-placement-objective.");
-    return TrainingGpuSelectionSchema.parse({ mode: "manual", gpuType, availabilityId });
+    return TrainingGpuSelectionSchema.parse({ mode: "manual", gpuType, availabilityId, ...(gpuCount !== undefined ? { gpuCount } : {}) });
   }
-  return objective ? TrainingGpuSelectionSchema.parse({ mode: "automatic", objective }) : undefined;
+  return objective || gpuCount !== undefined
+    ? TrainingGpuSelectionSchema.parse({ mode: "automatic", objective: objective ?? "balanced", ...(gpuCount !== undefined ? { gpuCount } : {}) }) : undefined;
 }
 
 /** Resolves immutable reviewed inputs through the authenticated SDK. Only the
@@ -65,7 +69,7 @@ export async function startHostedModel(input: {
   if (!parseBooleanOption(options.json)) {
     console.log(`Prepared run: ${preparation.plan.id}; approved maximum $${cap}.`);
     console.log(`Model: ${project.name}@${preparation.plan.source.modelProject.revision}; batch: ${preparation.plan.request.batch.id}@${preparation.plan.request.batch.revision}.`);
-    console.log(`GPU choice: ${gpuSelection?.mode === "manual" ? `${gpuSelection.gpuType} / ${gpuSelection.availabilityId}` : `Automatic (${gpuSelection?.objective ?? project.trainingSetup.managedGpuPlacementObjective})`}.`);
+    console.log(`GPU choice: ${gpuSelection?.mode === "manual" ? `${gpuSelection.gpuType} / ${gpuSelection.availabilityId}` : `Automatic (${gpuSelection?.objective ?? project.trainingSetup.managedGpuPlacementObjective})`}; count ${gpuSelection?.gpuCount ?? 1}.`);
   }
   if (!yes) {
     const prompt = createInterface({ input: process.stdin, output: process.stdout });

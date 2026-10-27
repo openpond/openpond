@@ -1,3 +1,4 @@
+import { modelDisplayLabel } from "../../lib/model-display";
 import { CHART_COLORS } from "../../theme/chart-colors";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import "../../styles/settings/usage-settings.css";
@@ -695,7 +696,7 @@ const modelColumns: Array<UsageTableColumn<UsageModelBreakdown>> = [
   {
     key: "model",
     label: "Model",
-    render: (row) => <UsagePrimaryCell title={row.model} detail={`${providerLabel(row.provider)} / ${routeLabel(row.route)}`} />,
+    render: (row) => <UsagePrimaryCell title={modelDisplayLabel(row.model)} detail={`${providerLabel(row.provider, row.route)} / ${routeLabel(row.route)}`} />,
   },
   { key: "tokens", label: "Tokens", align: "end", render: (row) => formatTokens(row.totalTokens) },
   { key: "cache", label: "Cache reuse", align: "end", render: (row) => formatCacheRate(row.cacheHitRate) },
@@ -760,7 +761,7 @@ const requestColumns: Array<UsageTableColumn<ModelUsageRecord>> = [
   {
     key: "model",
     label: "Model",
-    render: (row) => <UsagePrimaryCell title={row.model} detail={providerLabel(row.provider)} />,
+    render: (row) => <UsagePrimaryCell title={modelDisplayLabel(row.model)} detail={providerLabel(row.provider, row.route)} />,
   },
   {
     key: "route",

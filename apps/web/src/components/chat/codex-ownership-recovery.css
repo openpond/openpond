@@ -1,0 +1,11 @@
+.codex-ownership-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.codex-ownership-actions a {
+  text-decoration: none;
+}

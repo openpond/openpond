@@ -24,6 +24,12 @@ Continuous Review enablement, cadence and execution receipts remain durable sche
 
 Only one runtime may own a home. A second launcher reports the existing runtime. Interrupted scheduled work with an uncertain external outcome is paused for review instead of being blindly replayed.
 
+A server restart preserves the chat and pending inputs, but ends its running local agent turn. Review completed tool activity, then resume in the same chat. If another Codex session has opened that thread for writing, release it from that session before retrying in OpenPond. Turn starts, completions, failures, interruptions and failed runtime diagnostics are correlated by chat/turn IDs in `logs/server.log`; the retained history remains in SQLite.
+
+An ownership failure that occurs before a native turn starts retains the original request in the user queue. **Resume in OpenPond** checks the writer and retries that unchanged request. Stopping a currently running OpenPond turn requires confirmation for that exact turn. If another Codex app owns the thread, choose **Open in Codex**, archive that chat there to release it, then return and choose **Retry**. Recovery restores the same archived native thread without reopening it in the other app. Edited, cancelled or already retried queue entries are not replayed.
+
+`pnpm dev` keeps the development backend running across source edits and retains frontend hot reload. Relaunch to load backend changes. Use `pnpm dev:watch` only when automatic backend restarts are intended; each restart interrupts active local turns. Interactive Codex turns have no default wall-clock deadline; bounded owners such as evaluations retain their explicit execution limits.
+
 ## Editing configuration
 
 ```sh
