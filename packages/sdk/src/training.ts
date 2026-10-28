@@ -1,4 +1,6 @@
 import { createTrainingRequest } from "./training-transport.js";
+import { SftRecipeSchema } from "./training-supervised.js";
+export { SftRecipeSchema, ManagedSftRecipeSchema, type SftRecipe } from "./training-supervised.js";
 export { TrainingApiErrorSchema, OpenPondTrainingApiError } from "./training-transport.js";
 import { createTrainingAcceptanceClient } from "./training-acceptance.js";
 import { createTrainingHardwareClient } from "./training-hardware.js";
@@ -286,7 +288,36 @@ export const PolicyOptimizationRequestSchema = z
     ]),
     resumeFrom: ModelProjectImmutableRefSchema.nullable().default(null),
   })
-  .strict();
+  .strict()
+  .superRefine((job, context) => {
+    if (job.recipe.method !== "sft") return;
+    const recipe = SftRecipeSchema.safeParse(job.recipe);
+    if (!recipe.success) {
+      context.addIssue({
+        code: "custom",
+        path: ["recipe"],
+        message: "The SFT recipe is incomplete or invalid.",
+      });
+      return;
+    }
+    if (job.executionMode || job.resumeFrom || "continuation" in job.recipe)
+      context.addIssue({
+        code: "custom",
+        message:
+          "Initial managed SFT requires a fresh supervised run without rollout qualification or continuation.",
+      });
+    if (
+      recipe.data.baseModel.id !== job.baseModel.modelId ||
+      recipe.data.baseModel.revision !== job.baseModel.revision ||
+      recipe.data.baseModel.tokenizerRevision !== job.baseModel.tokenizerRevision ||
+      recipe.data.baseModel.chatTemplateHash !== job.baseModel.chatTemplateHash
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["baseModel"],
+        message: "The SFT recipe must pin the exact submitted base and tokenizer.",
+      });
+  });
 
 export const TrainingJobRequestSchema = z.discriminatedUnion("kind", [
   RewardModelTrainingRequestSchema,

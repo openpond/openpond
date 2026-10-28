@@ -394,3 +394,25 @@ revision changes and budget reservations, resolve authoritative execution/gradin
 receipts, isolate holdouts from training, bind the exact candidate at runtime,
 verify cleanup, and enforce the verdict inside the candidate-decision transaction.
 No customer serving is activated by an acceptance group.
+
+### Bounded tool episodes
+
+The explicit `@openpond/evals/tool-learning` entry describes bounded attempt,
+observation, recovery-link, verification, installation, and recovery-consultation
+contracts. An event is sealed over validated sanitized bytes; the observation
+references the exact attempted action. Execution failure, validation failure,
+incomplete observation, uncertain effects, and verified outcome stay distinct.
+A producer-provided verifier reference is a claim that intake must resolve against
+its authentic execution owner.
+
+Collection acknowledgements explicitly have `learningEnrollment: false`. The
+capture policy requires separate review for model updates and disables synthetic
+variants. Retaining a successful command is not evidence of the requested outcome,
+a qualified training target, or permission to spend. Reuse the existing task
+review, immutable supervised batch, and publication owners for actual admission.
+
+Recovery consultation binds its action/context, active manifest, selected model,
+and usage receipt. Integration qualification advertises an existing-model route;
+learned qualification additionally requires retained training/evaluation/activation
+lineage. Neither installation nor receipt of evidence establishes learned efficacy.
+These protocols do not install client hooks or start background services.

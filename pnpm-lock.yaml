@@ -674,7 +674,7 @@ importers:
   packages/ponder-sdk:
     dependencies:
       openpond-sdk:
-        specifier: 0.12.9
+        specifier: 0.12.10
         version: link:../sdk
 
   packages/runtime:
@@ -692,7 +692,7 @@ importers:
   packages/sdk:
     dependencies:
       '@openpond/evals':
-        specifier: ^0.12.3
+        specifier: ^0.12.4
         version: link:../evals
       '@openpond/harness':
         specifier: ^0.4.10
