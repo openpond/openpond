@@ -30,6 +30,8 @@ export type Command =
   | "sandbox"
   | "continual"
   | "training"
+  | "tool-learning"
+  | "learning"
   | "taskset"
   | "human-review"
   | "connected-evidence"

@@ -4,6 +4,41 @@
 
 Parsing, aliases, command help, and this reference use the same authoritative registry.
 
+## learning
+
+```text
+Usage:
+  openpond learning <get|list> <kind> [id] --team-id <id> [--revision <n>] [--after-id <id>]
+  openpond learning <command|publish-batch> --input-file <absolute-path> --team-id <id>
+
+Options:
+  --after-id <string>
+  --input-file <string>
+  --limit <integer>
+  --parent-id <string>
+  --revision <integer>
+  --status <string>
+  --team-id <string>
+```
+## tool-learning
+
+```text
+Usage:
+  openpond tool-learning <setup|register|install|doctor|status|routing|configure|append|flush|episodes|episode|project|disable|enable|revoke|purge|uninstall> [installation-id] [episode-id] [--input-file <absolute-path>] [--team-id <id>] [--workspace <absolute-path>]
+
+Options:
+  --after <string>
+  --allow-upload
+  --client <string>
+  --environment-file <string>
+  --expires-at <string>
+  --input-file <string>
+  --project-id <string>
+  --team-id <string>
+  --timeout-sec <integer>
+  --tools <string>
+  --workspace <string>
+```
 ## import
 
 ```text

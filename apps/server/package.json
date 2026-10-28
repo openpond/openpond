@@ -69,6 +69,10 @@
     "./hosted-experiment-improvement": {
       "import": "./dist/hosted-experiment-improvement.js",
       "types": "./dist/hosted-experiment-improvement.d.ts"
+    },
+    "./tool-learning": {
+      "import": "./dist/tool-learning.js",
+      "types": "./dist/tool-learning.d.ts"
     }
   },
   "bin": {

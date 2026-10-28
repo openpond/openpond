@@ -674,7 +674,7 @@ importers:
   packages/ponder-sdk:
     dependencies:
       openpond-sdk:
-        specifier: 0.12.10
+        specifier: 0.12.11
         version: link:../sdk
 
   packages/runtime:
