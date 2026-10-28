@@ -35,6 +35,7 @@ import { ActivityGroup } from "./MessageActivityGroup";
 import { ChangeSummaryCard } from "./MessageChangeSummary";
 import { CreateImproveStatusReceipt } from "./CreatePipelineStatusReceipt";
 import { MessageAttachments } from "./MessageAttachments";
+import { CodexOwnershipRecovery } from "./CodexOwnershipRecovery";
 
 type MessageRowProps = {
   activeWorkspaceAppId?: string | null;
@@ -45,6 +46,7 @@ type MessageRowProps = {
   connection?: ClientConnection | null;
   conversationLinks?: readonly { conversationId: string; title: string }[];
   message: ChatMessage;
+  codexRecoveryEnabled?: boolean;
   kvCacheSummary?: Pick<UsageTurnCacheSummary, "cacheHitRate"> | null;
   onOpenBrowserLink?: (
     href: string,
@@ -75,6 +77,7 @@ export const MessageRow = memo(function MessageRow({
   connection = null,
   conversationLinks,
   message,
+  codexRecoveryEnabled = true,
   kvCacheSummary = null,
   onOpenBrowserLink,
   onOpenAttachmentInSidebar,
@@ -126,6 +129,8 @@ export const MessageRow = memo(function MessageRow({
       <article className="message-row assistant" data-notification-turn={message.turnId} data-notification-final={message.finalAnswer ? "true" : undefined}>
         <div className="assistant-message error-message">
           {message.content ?? ""}
+          {connection && message.codexRecovery && codexRecoveryEnabled ? <CodexOwnershipRecovery
+            key={message.codexRecovery.failedTurnId} connection={connection} {...message.codexRecovery} /> : null}
         </div>
       </article>
     );

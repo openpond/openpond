@@ -394,3 +394,21 @@ function runtimeEventFromSseWrite(write: string): RuntimeEvent {
   if (!dataLine) throw new Error(`Missing SSE data line: ${write}`);
   return JSON.parse(dataLine.slice("data: ".length)) as RuntimeEvent;
 }
+
+// Failure story: a turn can disappear after a restart with no searchable server
+// outcome. Log lifecycle failures with correlation IDs without copying prompts.
+test("logs retained turn outcomes and ownership diagnostics without logging user prompts", async () => {
+  const events: RuntimeEvent[] = [];
+  const logger = { info: vi.fn(), warn: vi.fn() };
+  const bus = createRuntimeEventBus({ logger, store: fakeStore(events) });
+  await bus.appendRuntimeEvent(runtimeEvent("started", { name: "turn.started", args: { prompt: "private user text" } }));
+  await bus.appendRuntimeEvent(runtimeEvent("interrupted", { name: "turn.interrupted", output: "Server restarted" }));
+  await bus.appendRuntimeEvent(runtimeEvent("failed", { name: "turn.failed", status: "failed", error: "Writer conflict" }));
+  await bus.appendRuntimeEvent(runtimeEvent("ownership", { name: "diagnostic", status: "failed",
+    output: "Native writer conflict", data: { phase: "codex_runtime", threadId: "native-thread" } }));
+  expect(logger.warn.mock.calls.map(([, fields]) => fields?.eventName)).toEqual(["turn.interrupted", "turn.failed", "diagnostic"]);
+  expect(logger.warn.mock.calls[1]?.[1]).toMatchObject({ sessionId: "session-1", turnId: "turn-1", error: "Writer conflict" });
+  expect(logger.warn.mock.calls[2]?.[1]?.data).toMatchObject({ threadId: "native-thread" });
+  expect(JSON.stringify([...logger.info.mock.calls, ...logger.warn.mock.calls])).not.toContain("private user text");
+  expect(events[0]?.args).toEqual({ prompt: "private user text" });
+});

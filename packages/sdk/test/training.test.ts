@@ -110,6 +110,21 @@ function job() {
 }
 
 describe("Training SDK contracts", () => {
+  it("binds two-GPU policy execution to its immutable count and required capability", async () => {
+    // A count/capability downgrade could provision one GPU for a reviewed two-rank job.
+    const candidate = {
+      ...submission(),
+      gpuSelection: { mode: "automatic" as const, objective: "balanced" as const, gpuCount: 2 as const },
+      requestedCapabilities: [{ id: "managed_rl.policy.data_parallel", version: "1", required: true }],
+    };
+    candidate.contentHash = await trainingJobSubmissionHash(candidate);
+    await expect(parseAndVerifyTrainingJobSubmission(candidate)).resolves.toMatchObject({ gpuSelection: { gpuCount: 2 } });
+    expect(TrainingJobSubmissionSchema.safeParse({ ...candidate, requestedCapabilities: [] }).success).toBe(false);
+    expect(TrainingJobSubmissionSchema.safeParse({ ...candidate, gpuSelection: { ...candidate.gpuSelection, gpuCount: 1 } }).success).toBe(false);
+    const changedCount = { ...candidate, gpuSelection: { ...candidate.gpuSelection, gpuCount: 1 as const }, requestedCapabilities: [] };
+    await expect(parseAndVerifyTrainingJobSubmission(changedCount)).rejects.toThrow(/contentHash/);
+    expect(TrainingJobSubmissionSchema.safeParse({ ...candidate, job: { ...candidate.job, executionMode: "qualification" } }).success).toBe(false);
+  });
   it("carries exact owner-approved recovery resources over HTTP and rejects changed consent before submission", async () => {
     const received: unknown[] = [];
     const server = createServer(async (request, response) => {

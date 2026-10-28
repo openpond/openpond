@@ -1,4 +1,10 @@
+import { createTrainingRequest } from "./training-transport.js";
+export { TrainingApiErrorSchema, OpenPondTrainingApiError } from "./training-transport.js";
 import { createTrainingAcceptanceClient } from "./training-acceptance.js";
+import { createTrainingHardwareClient } from "./training-hardware.js";
+export { HardwareObservationSchema, HardwareFleetSnapshotSchema,
+  HardwareAvailabilitySchema, HardwareGpuObservationSchema,
+  type HardwareObservation, type HardwareFleetSnapshot, type HardwareObservationQuery } from "./training-hardware.js";
 import { TrainingHandoffOriginSchema } from "./post-training.js";
 import { createPostTrainingClient } from "./post-training.js";
 export {
@@ -93,14 +99,11 @@ import {
   ModelProjectVersionedRefSchema,
 } from "./model-projects.js";
 import {
-  OPENPOND_TRAINING_MEDIA_TYPE,
-  TRAINING_API_RESPONSE_MAX_BYTES,
   TRAINING_INPUT_ARTIFACT_MAX_BYTES,
   TRAINING_JOB_SUBMISSION_MAX_BYTES,
   OpenPondProtocolError,
   assertCanonicalPayloadSize,
   canonicalSha256,
-  readBoundedJsonResponse,
 } from "./protocol.js";
 
 export {
@@ -323,6 +326,16 @@ export const TrainingJobSubmissionSchema = z
   })
   .strict()
   .superRefine((submission, context) => {
+    const distributed = (submission.gpuSelection?.gpuCount ?? 1) === 2;
+    const distributedRequirement = submission.requestedCapabilities.some(requirement =>
+      requirement.id === "managed_rl.policy.data_parallel" && requirement.version === "1" && requirement.required);
+    if (distributed !== distributedRequirement) {
+      context.addIssue({ code: "custom", path: ["requestedCapabilities"], message: "Two-GPU training must require managed_rl.policy.data_parallel@1 and bind gpuSelection.gpuCount to 2." });
+    }
+    if (distributed && (submission.job.kind !== "policy_optimize" || submission.job.executionMode ||
+      submission.job.recipe.method !== "grpo" || submission.physicalPlacement)) {
+      context.addIssue({ code: "custom", path: ["gpuSelection"], message: "Two-GPU execution requires exclusive GRPO policy training." });
+    }
     if (submission.physicalPlacement && (submission.job.kind !== "policy_optimize" ||
       submission.job.resumeFrom || submission.job.executionMode || submission.job.recipe.continuation !== undefined)) {
       context.addIssue({ code: "custom", path: ["physicalPlacement"], message: "Reuse-only placement requires fresh-base policy training without continuation." });
@@ -593,35 +606,6 @@ export const TrainingJobOutputsSchema = z
   })
   .strict();
 
-export const TrainingApiErrorSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingApiError.v2"),
-    code: z.string().trim().min(1).max(200),
-    message: z.string().trim().min(1).max(5_000),
-    retryable: z.boolean().default(false),
-    requestId: z.string().trim().min(1).max(500).nullable().default(null),
-    details: z.record(z.string(), z.unknown()).default({}),
-  })
-  .strict();
-
-export class OpenPondTrainingApiError extends Error {
-  readonly status: number;
-  readonly code: string;
-  readonly retryable: boolean;
-  readonly requestId: string | null;
-  readonly details: Record<string, unknown>;
-
-  constructor(status: number, error: z.infer<typeof TrainingApiErrorSchema>) {
-    super(error.message);
-    this.name = "OpenPondTrainingApiError";
-    this.status = status;
-    this.code = error.code;
-    this.retryable = error.retryable;
-    this.requestId = error.requestId;
-    this.details = error.details;
-  }
-}
-
 export const TrainingPolicyLoraCapabilitiesSchema = z.object({
   workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   envelopeRank: z.number().int().positive().max(256),
@@ -659,6 +643,15 @@ export const TrainingCapabilitiesSchema = z
     methods: z.array(z.string().trim().min(1).max(200)),
     executionModes: z.array(z.enum(["training", "qualification"])).optional(),
     policyLora: TrainingPolicyLoraCapabilitiesSchema.optional(),
+    policyDataParallel: z.object({
+      capability: z.literal("managed_rl.policy.data_parallel"),
+      version: z.literal("1"),
+      gpuCount: z.literal(2),
+      worldSize: z.literal(2),
+      backend: z.literal("nccl"),
+      allocationMode: z.literal("exclusive"),
+      workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    }).strict().optional(),
     structuredOutputs: z.object({
       capability: z.literal("work.structured-output.v1"),
       harnessRuntimeHash: HashSchema,
@@ -702,73 +695,19 @@ export type TrainingJobOutputs = z.infer<typeof TrainingJobOutputsSchema>;
 export type TrainingExecutionReceipt = z.infer<typeof TrainingExecutionReceiptSchema>;
 export type TrainingCapabilities = z.infer<typeof TrainingCapabilitiesSchema>;
 
-function headersRecord(headers: HeadersInit | undefined): Record<string, string> {
-  const result: Record<string, string> = {};
-  new Headers(headers).forEach((value, key) => {
-    result[key] = value;
-  });
-  return result;
-}
-
 export function createTrainingClient(input: {
   baseUrl: string;
   fetch?: typeof fetch;
   headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
 }) {
-  const fetchImpl = input.fetch ?? fetch;
-  const baseUrl = input.baseUrl.replace(/\/$/, "");
-
-  async function request(
-    pathname: string,
-    init?: RequestInit,
-    responseLimit = TRAINING_API_RESPONSE_MAX_BYTES,
-  ): Promise<unknown> {
-    const readOnly = init?.method === undefined || init.method.toUpperCase() === "GET";
-    const maximumAttempts = readOnly ? 3 : 1;
-    for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
-      let response: Response;
-      try {
-        const configuredHeaders =
-          typeof input.headers === "function" ? await input.headers() : (input.headers ?? {});
-        response = await fetchImpl(`${baseUrl}${pathname}`, {
-          ...init,
-          headers: {
-            accept: OPENPOND_TRAINING_MEDIA_TYPE,
-            ...(init?.body ? { "content-type": OPENPOND_TRAINING_MEDIA_TYPE } : {}),
-            ...headersRecord(configuredHeaders),
-            ...headersRecord(init?.headers),
-          },
-        });
-      } catch (error) {
-        if (
-          attempt === maximumAttempts ||
-          init?.signal?.aborted ||
-          !trainingReadFailureIsRetryable(null, error)
-        ) {
-          throw error;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
-        continue;
-      }
-      const body = await readBoundedJsonResponse(response, responseLimit, "Training API response");
-      if (response.ok) return body;
-      const error = trainingApiError(body, response.status);
-      if (attempt === maximumAttempts || !trainingReadFailureIsRetryable(response.status, error)) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
-    }
-    throw new OpenPondProtocolError(
-      "training_read_retry_exhausted",
-      "Training read retry loop exhausted without a response.",
-    );
-  }
+  const request = createTrainingRequest(input);
 
   return {
     postTraining: createPostTrainingClient({ request }),
     ...createTrainingPreparationClient(request),
     ...createTrainingEstimateClient(request),
     ...createTrainingAcceptanceClient(request),
+    ...createTrainingHardwareClient(request),
     ...createTrainingHarnessSourceClient(request),
     ...createTrainingCandidateDecisionClient(request),
     async capabilities() {
@@ -924,29 +863,7 @@ export function createTrainingClient(input: {
   };
 }
 
-function trainingReadFailureIsRetryable(status: number | null, error: unknown): boolean {
-  if (status !== null) {
-    return status === 408 || status === 429 || status >= 500;
-  }
-  if (error instanceof OpenPondTrainingApiError) return error.retryable;
-  if (error instanceof OpenPondProtocolError) {
-    return error.code === "invalid_error_response";
-  }
-  return error instanceof TypeError;
-}
-
 function unwrapObject(value: unknown, key: string): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   return key in value ? (value as Record<string, unknown>)[key] : value;
-}
-
-function trainingApiError(value: unknown, status: number): Error {
-  const parsed = TrainingApiErrorSchema.safeParse(value);
-  if (parsed.success) {
-    return new OpenPondTrainingApiError(status, parsed.data);
-  }
-  return new OpenPondProtocolError(
-    "invalid_error_response",
-    `Training request failed with HTTP ${status} and an invalid error envelope.`,
-  );
 }

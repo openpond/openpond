@@ -1,5 +1,4 @@
-import { OpenPondTrainingApiError } from "openpond-sdk/training";
-import { OpenPondLearningError } from "openpond-sdk/learning";
+import { OpenPondTrainingApiError, OpenPondLearningError } from "openpond-sdk/errors";
 
 /** Preserve actionable API diagnostics without dumping response details. */
 export function trainingCliError(error: unknown) {

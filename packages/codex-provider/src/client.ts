@@ -75,6 +75,10 @@ export class CodexAppServerClient {
     });
   }
 
+  isRunning(): boolean {
+    return this.child !== null && this.child.exitCode === null && this.child.signalCode === null;
+  }
+
   async initialize(): Promise<unknown> {
     if (this.initialized) return null;
     await this.start();
@@ -168,6 +172,11 @@ export class CodexAppServerClient {
     return { threadId: params.threadId, response };
   }
 
+  async unarchiveThread(threadId: string): Promise<void> {
+    await this.initialize();
+    await this.request("thread/unarchive", { threadId });
+  }
+
   async startTurn(params: {
     threadId: string;
     prompt: string;
@@ -234,17 +243,19 @@ export class CodexAppServerClient {
 
   waitForTurn(turnId: string, timeoutMs = 10 * 60 * 1000): Promise<unknown> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      // Zero explicitly disables the deadline for interactive work. Other owners
+      // retain the bounded default or supply their own execution limit.
+      const timer = timeoutMs === 0 ? null : setTimeout(() => {
         this.turnWaiters.delete(turnId);
         reject(new Error(`codex turn ${turnId} timed out`));
       }, timeoutMs);
       this.turnWaiters.set(turnId, {
         resolve: (value) => {
-          clearTimeout(timer);
+          if (timer !== null) clearTimeout(timer);
           resolve(value);
         },
         reject: (error) => {
-          clearTimeout(timer);
+          if (timer !== null) clearTimeout(timer);
           reject(error);
         },
       });

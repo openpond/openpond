@@ -4,6 +4,7 @@ import { createPonderHostedService } from "./openpond/ponder-hosted-service.js";
 import { createCapturedOpenPondPublicApiClient } from "./openpond/account-public-api-client.js";
 import { createLocalPonderService } from "./openpond/local-ponder-service.js";
 import { createSessionGoalPayload } from "./api/session-goal-payload.js";
+import { createSessionCodexRecovery } from "./api/session-codex-recovery.js";
 import { createLocalAgentSchedulePayloads } from "./api/local-agent-schedule-payloads.js";
 import { createDesktopVisualRuntime } from "./visuals/visual-runtime.js";
 import { withUrlModels } from "./enclave/provider.js";
@@ -1853,6 +1854,15 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       sendTurn,
       runSessionCommand: runSessionCommandPayload,
       patchSessionGoal: createSessionGoalPayload({ getSession, appendRuntimeEvent }),
+      recoverCodexSession: createSessionCodexRecovery({ getSession, getTurn: id => store.getTurn(id),
+        latestTurn: id => store.latestTurnForSession(id), getInput: id => store.getTaskInput(id),
+        activeTurnId: async id => turnRunner.isSessionTurnActive(id) ? (await store.latestTurnForSession(id, "in_progress"))?.id ?? null : null,
+        ownsWriter: session => { const runtime = codexSessions.get(session.id); return runtime?.threadId === session.codexThreadId && runtime.client.isRunning(); },
+        interrupt: (id, expected) => turnRunner.interruptSessionTurn(id, "Stopped to resume the saved message in OpenPond.", expected),
+        waitForSettlement: id => turnRunner.waitForSessionTurnSettlement(id),
+        resume: (id, input) => turnRunner.updateTaskInput(id, input.id, { action: "resume", expectedRevision: input.revision }),
+        append: appendRuntimeEvent,
+      }),
       ensureCloudWorkspaceReady,
       recordPreflightTurnFailure,
       listCreateImproveRunsPayload: async (requestUrl) => ({

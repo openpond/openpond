@@ -18,7 +18,9 @@ export async function awaitCodexTurn(input: {
   });
   try {
     input.signal.throwIfAborted();
-    await Promise.race([input.client.waitForTurn(input.turnId, input.timeoutMs), interrupted]);
+    // Interactive turns run until completion or cancellation. Evaluation owners
+    // supply a bounded nativeTimeoutMs, which must still be enforced.
+    await Promise.race([input.client.waitForTurn(input.turnId, input.timeoutMs ?? 0), interrupted]);
   } catch (error) {
     const failures: unknown[] = [error];
     try {

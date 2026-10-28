@@ -178,6 +178,7 @@ export type ChatMessage = {
   resourceSessionId?: string;
   content?: string;
   errorKind?: "opchat_quota_exceeded";
+  codexRecovery?: { sessionId: string; failedTurnId: string };
   attachments?: ChatAttachmentSummary[];
   timestamp: string;
   turnId?: string;

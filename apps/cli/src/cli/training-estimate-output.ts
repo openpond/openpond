@@ -12,7 +12,7 @@ export function printTrainingEstimate(estimate: TrainingEstimate, json: boolean)
   console.log(`Model: ${estimate.configuration.modelId}@${estimate.configuration.modelRevision}`);
   const config = estimate.configuration;
   console.log(`Configuration: ${config.method}${config.loraRank === null ? "" : `, rank ${config.loraRank}`}${config.groups === null ? "" : `, ${config.groups} groups`}${config.rolloutConcurrency === null ? "" : `, ${config.rolloutConcurrency} rollout lanes`}${config.adapterMode === null ? "" : `, ${config.adapterMode}`}`);
-  console.log(`GPU: ${estimate.gpu.resolved?.gpuType ?? "Awaiting a supported offering"} (${estimate.gpu.requested.mode}, ${estimate.gpu.availability})`);
+  console.log(`GPU: ${estimate.gpu.resolved?.gpuType ?? "Awaiting a supported offering"} × ${estimate.gpu.resolved?.gpuCount ?? estimate.gpu.requested.gpuCount ?? 1} (${estimate.gpu.requested.mode}, ${estimate.gpu.availability})`);
   const cost = estimate.cost;
   console.log(`Expected cost: ${cost.expectedUsd === null ? "Not yet calibrated" : money(cost.expectedUsd)}`);
   if (cost.planningRangeUsd) console.log(`Planning range: ${money(cost.planningRangeUsd.low)}–${money(cost.planningRangeUsd.high)}`);

@@ -18,24 +18,26 @@ type LabServingRow = {
 
 export function LabServingPage({
   modelProjectId = null,
+  modelProjectIds,
   state,
 }: {
   modelProjectId?: string | null;
+  modelProjectIds?: Set<string>;
   state: TrainingStateResponse | null;
 }) {
   if (!state) {
     return (
       <div className="labs-table-empty">
-        <Loader2 className="spin" size={16} /> Loading serving state…
+        <Loader2 className="spin" size={16} /> Loading inference state…
       </div>
     );
   }
 
-  const rows = labServingRows(state, modelProjectId);
+  const rows = labServingRows(state, modelProjectId).filter(row => !modelProjectIds || modelProjectIds.has(row.modelProjectId));
   return (
     <div className="labs-flat-body labs-serving-page">
       <ModelProjectPageHeader
-        title="Serving"
+        title="Inference"
         description="Published adapters, active bindings, and deployment readiness."
         metrics={[
           { label: "Bindings", value: rows.length },
@@ -46,7 +48,7 @@ export function LabServingPage({
       <section className="labs-operational-section" aria-labelledby="managed-serving-title">
         <header>
           <div>
-            <h2 id="managed-serving-title">Managed serving</h2>
+            <h2 id="managed-serving-title">Your deployments</h2>
             <p>
               Durable adapter publication and binding state synchronized from
               OpenPond Managed training.
@@ -54,7 +56,7 @@ export function LabServingPage({
           </div>
         </header>
         {!rows.length ? (
-          <div className="labs-table-empty">No managed serving bindings are synchronized.</div>
+          <div className="labs-table-empty">No model deployments are synchronized yet.</div>
         ) : (
           <div className="training-table-wrap">
             <table className="training-data-table labs-managed-serving-table">

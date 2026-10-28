@@ -79,7 +79,7 @@ export const TrainingEstimateSchema = z.object({
   pricing: z.object({ version: Id, quoteExpiresAt: Timestamp.nullable() }).strict(),
   gpu: z.object({
     requested: TrainingGpuSelectionSchema,
-    resolved: z.object({ availabilityId: Id, gpuType: z.string().min(1).max(256), gpuCount: z.literal(1) }).strict().nullable(),
+    resolved: z.object({ availabilityId: Id, gpuType: z.string().min(1).max(256), gpuCount: z.union([z.literal(1), z.literal(2)]) }).strict().nullable(),
     customerHourlyUsd: NonNegative.nullable(),
     availability: z.enum(["available", "limited", "unavailable", "unknown"]),
   }).strict(),
@@ -134,6 +134,9 @@ export const TrainingEstimateSchema = z.object({
       (estimate.gpu.requested.availabilityId !== estimate.gpu.resolved.availabilityId ||
        estimate.gpu.requested.gpuType !== estimate.gpu.resolved.gpuType)) {
     context.addIssue({ code: "custom", path: ["gpu"], message: "An explicit GPU offering cannot be substituted" });
+  }
+  if (estimate.gpu.resolved && estimate.gpu.resolved.gpuCount !== (estimate.gpu.requested.gpuCount ?? 1)) {
+    context.addIssue({ code: "custom", path: ["gpu", "resolved", "gpuCount"], message: "The resolved GPU count must match the requested count" });
   }
 });
 

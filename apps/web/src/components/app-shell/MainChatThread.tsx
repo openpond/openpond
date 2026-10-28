@@ -122,6 +122,7 @@ export function MainChatThread({
                     : null)
                 }
                 message={row.message}
+                codexRecoveryEnabled={row.message.turnId === latestTurnId}
                 onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
                 onOpenFileInSidebar={onOpenFileInSidebar}
                 onOpenBrowserLink={onOpenBrowserLink}

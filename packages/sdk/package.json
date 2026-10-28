@@ -148,6 +148,14 @@
     "./dataset-commerce": {
       "types": "./dist/types/packages/sdk/src/dataset-commerce.d.ts",
       "import": "./dist/dataset-commerce.js"
+    },
+    "./errors": {
+      "types": "./dist/types/packages/sdk/src/errors.d.ts",
+      "import": "./dist/errors.js"
+    },
+    "./training-hardware": {
+      "types": "./dist/types/packages/sdk/src/training-hardware.d.ts",
+      "import": "./dist/training-hardware.js"
     }
   },
   "publishConfig": {

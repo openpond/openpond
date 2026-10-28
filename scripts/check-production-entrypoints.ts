@@ -35,6 +35,8 @@ for (const relativePath of [
   "apps/web/src/test-pages/native-agent-cards-browser-proof.tsx",
   "apps/web/src/test-pages/browser-panel-resize-browser-proof.tsx",
   "apps/web/src/test-pages/file-preview-browser-proof.tsx",
+  "apps/web/src/test-pages/codex-recovery-browser-proof.tsx",
+  "apps/web/src/test-pages/composer-queue-browser-proof.tsx",
   "apps/cli/src/index.ts",
   "apps/cli/src/cli/main.ts",
   "apps/cli/src/sandbox-template/manifest.ts",

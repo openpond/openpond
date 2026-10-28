@@ -6,6 +6,8 @@ const native = vi.hoisted(() => ({ child: null as unknown }));
 vi.mock("node:child_process", () => ({ spawn: () => native.child }));
 vi.mock("../packages/codex-provider/src/binary.js", () => ({ resolveCodexBinary: async () => ({ command: "test-codex", supportsListen: true }) }));
 
+import { awaitCodexTurn } from "../apps/server/src/runtime/await-codex-turn.js";
+
 import { CodexAppServerClient } from "../packages/codex-provider/src/client.js";
 
 // Failure story: native steering keeps the text but drops image input when
@@ -65,4 +67,31 @@ test("preserves the provider's structured turn failure message", async () => {
   child.stdout.write(JSON.stringify({method:"turn/completed",params:{turn:{id:"failed-turn",status:"failed",error:{message:"The model is temporarily unavailable. Try again later.",codexErrorInfo:"other"}}}})+"\n");
   await check;
   const stopping=client.stop();child.emit("close",0,null);await stopping;
+});
+
+// Failure story: a healthy interactive run used to be killed at ten minutes,
+// while evaluation owners must still enforce the deadline they explicitly set.
+test("interactive turns stay live past ten minutes and explicit execution deadlines still settle", async () => {
+  vi.useFakeTimers();
+  const child = Object.assign(new EventEmitter(), {
+    stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), kill: vi.fn(),
+  });
+  native.child = child;
+  const client = new CodexAppServerClient({ binaryPath: "test-codex" });
+  try {
+    await client.start();
+    let completed = false;
+    const interactive = awaitCodexTurn({ client, turnId: "interactive", signal: new AbortController().signal }).then(() => { completed = true; });
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(completed).toBe(false);
+    expect(child.kill).not.toHaveBeenCalled();
+    child.stdout.write(JSON.stringify({ method: "turn/completed", params: { turn: { id: "interactive", status: "completed" } } }) + "\n");
+    await interactive;
+    const bounded = expect(client.waitForTurn("evaluation", 5_000)).rejects.toThrow("timed out");
+    await vi.advanceTimersByTimeAsync(5_000);
+    await bounded;
+  } finally {
+    const stopping = client.stop(); child.emit("close", 0, null); await stopping;
+    vi.useRealTimers();
+  }
 });

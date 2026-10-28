@@ -51,7 +51,7 @@ describe("dev runner", () => {
     expect(isReusableOpenPondHealth({ ok: true, server: "another-service" })).toBe(false);
   });
 
-  test("plans desktop dev with a watched server plus renderer and desktop processes", () => {
+  test("keeps the desktop backend stable across source edits while retaining renderer reloads", () => {
     const options = parseDevRunnerArgs(["desktop"], {
       OPENPOND_APP_CHANNEL: "stable",
     });
@@ -74,7 +74,6 @@ describe("dev runner", () => {
       "desktop",
     ]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
-      "watch",
       "apps/server/src/index.ts",
       "--port",
       "17874",
@@ -118,7 +117,6 @@ describe("dev runner", () => {
     ]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual(["server", "renderer"]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
-      "watch",
       "apps/server/src/index.ts",
       "--port",
       "19074",

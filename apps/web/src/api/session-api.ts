@@ -21,8 +21,12 @@ import type {
   WorkspaceToolResult,
 } from "@openpond/contracts";
 import { apiFetch, type ClientConnection } from "./api-client";
+import { CodexRecoveryResponseSchema, type CodexRecoveryRequest } from "@openpond/contracts";
 
 export const sessionApi = {
+  recoverCodex: async (connection: ClientConnection, sessionId: string, input: CodexRecoveryRequest) =>
+    CodexRecoveryResponseSchema.parse(await apiFetch<unknown>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/codex-recovery`,
+      { method: "POST", body: JSON.stringify(input) })),
   getGoal: (connection: ClientConnection, sessionId: string) =>
     apiFetch<{ goal: Record<string, unknown> | null; observedAt: string }>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/goal`),
   patchGoal: (connection: ClientConnection, sessionId: string, input: {

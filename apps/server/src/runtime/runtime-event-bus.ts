@@ -61,7 +61,11 @@ export function createRuntimeEventBus({
   const writes = createRuntimeEventWriteQueue(persistAndBroadcastRuntimeEvent);
 
   function logRuntimeEvent(runtimeEvent: RuntimeEvent): void {
+    const turnLifecycle = ["turn.started", "turn.completed", "turn.failed", "turn.interrupted"].includes(runtimeEvent.name);
+    const failedDiagnostic = runtimeEvent.name === "diagnostic" && runtimeEvent.status === "failed";
     if (
+      !turnLifecycle &&
+      !failedDiagnostic &&
       runtimeEvent.name !== "workspace_action" &&
       runtimeEvent.name !== "workspace_action_result" &&
       runtimeEvent.name !== "tool.started" &&
@@ -70,9 +74,9 @@ export function createRuntimeEventBus({
     ) {
       return;
     }
-    const level = runtimeEvent.status === "failed" ? "warn" : "info";
+    const level = runtimeEvent.status === "failed" || runtimeEvent.name === "turn.failed" || runtimeEvent.name === "turn.interrupted" ? "warn" : "info";
     logger[level](
-      runtimeEvent.name === "workspace_action"
+      turnLifecycle ? "turn lifecycle" : failedDiagnostic ? "runtime diagnostic" : runtimeEvent.name === "workspace_action"
         ? "workspace action started"
         : runtimeEvent.name === "workspace_action_result"
           ? "workspace action completed"
@@ -88,7 +92,9 @@ export function createRuntimeEventBus({
         status: runtimeEvent.status,
         output: runtimeEvent.output,
         error: runtimeEvent.error,
-        args: truncateLogValue(runtimeEvent.args),
+        // Starting a turn includes the full user prompt and attachments. Log
+        // lifecycle identity/outcome without duplicating that private content.
+        args: turnLifecycle ? undefined : truncateLogValue(runtimeEvent.args),
         data: truncateLogValue(runtimeEvent.data),
       }
     );

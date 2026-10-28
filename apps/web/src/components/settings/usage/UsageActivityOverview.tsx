@@ -1,3 +1,5 @@
+import { modelDisplayLabel } from "../../../lib/model-display";
+import { providerLabel } from "./usage-formatters";
 import { chartColor as modelColorAt } from "../../../theme/chart-colors";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type {
@@ -364,7 +366,7 @@ function ActivityDayTooltip({
                   color: colorByModel.get(usageModelKey(model.provider, model.model)),
                 }}
               />
-              <small title={`${providerLabel(model.provider)} · ${model.model}`}>{model.model}</small>
+              <small title={`${providerLabel(model.provider)} · ${modelDisplayLabel(model.model)}`}>{modelDisplayLabel(model.model)}</small>
               <em>{formatTokens(model.totalTokens)}</em>
             </div>
           ))}
@@ -378,9 +380,9 @@ function ModelLegend({ models }: { models: ModelColor[] }) {
   return (
     <div className="usage-model-legend" aria-label="Model colors">
       {models.map((model) => (
-        <span key={model.key} title={`${providerLabel(model.provider)} · ${model.model}`}>
+        <span key={model.key} title={`${providerLabel(model.provider)} · ${modelDisplayLabel(model.model)}`}>
           <i aria-hidden="true" style={{ background: model.color }} />
-          {model.model}
+          {modelDisplayLabel(model.model)}
         </span>
       ))}
     </div>
@@ -444,8 +446,8 @@ function ModelMix({
                   style={{ background: color }}
                 />
                 <div className="usage-model-mix-copy">
-                  <strong title={model.model}>{model.model}</strong>
-                  <span>{providerLabel(model.provider)} · {formatInteger(model.requests)} requests</span>
+                  <strong title={modelDisplayLabel(model.model)}>{modelDisplayLabel(model.model)}</strong>
+                  <span>{providerLabel(model.provider, model.route)} · {formatInteger(model.requests)} requests</span>
                   <i
                     style={{
                       "--usage-model-color": color,
@@ -699,16 +701,6 @@ function activityRangeLabel(
   return firstDate === lastDate
     ? `Last 12 months · stored activity on ${from}`
     : `Last 12 months · stored activity ${from} – ${to}`;
-}
-
-function providerLabel(provider: string): string {
-  if (provider === "openai") return "OpenAI";
-  if (provider === "anthropic") return "Anthropic";
-  if (provider === "google") return "Google";
-  if (provider === "openpond") return "OpenPond";
-  if (provider === "openrouter") return "OpenRouter";
-  if (provider === "codex") return "Codex";
-  return titleCase(provider.replaceAll("_", " "));
 }
 
 function firstText(...values: Array<string | null | undefined>): string | null {

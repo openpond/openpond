@@ -4,8 +4,8 @@ const Id = z.string().trim().min(1).max(191);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 
 export const TrainingGpuSelectionSchema = z.discriminatedUnion("mode", [
-  z.object({ mode: z.literal("automatic"), objective: z.enum(["balanced", "fast", "economical"]) }).strict(),
-  z.object({ mode: z.literal("manual"), availabilityId: Id, gpuType: z.string().trim().min(1).max(256) }).strict(),
+  z.object({ mode: z.literal("automatic"), objective: z.enum(["balanced", "fast", "economical"]), gpuCount: z.union([z.literal(1), z.literal(2)]).optional() }).strict(),
+  z.object({ mode: z.literal("manual"), availabilityId: Id, gpuType: z.string().trim().min(1).max(256), gpuCount: z.union([z.literal(1), z.literal(2)]).optional() }).strict(),
 ]);
 
 /** This token binds a reviewed workload and price, without reserving resources
