@@ -5,14 +5,14 @@ import { resolve } from "node:path";
 import { contentHash } from "@openpond/harness";
 import { ToolLearningRegistrationSchema } from "openpond-sdk/tool-learning";
 import { hostedTrainingAccount } from "../hosted-training-account";
-import { optionString } from "../common/options";
+import { optionString, parseBooleanOption } from "../common/options";
 import { nativeToolLearningClientVersion } from "@openpond/local-server/tool-learning";
 import { toolLearningHome, type ToolLearningOptions } from "./credentials";
 
 /** One explicit opt-in creates one workspace/client installation. Collection
  * still grants neither training enrollment nor an inference allowance. */
 export async function prepareToolLearningSetup(options: ToolLearningOptions) {
-  if (options.allowUpload !== true)
+  if (!parseBooleanOption(options.allowUpload))
     throw new Error(
       "Tool capture uploads bounded private tool events. Pass --allow-upload to opt in.",
     );
