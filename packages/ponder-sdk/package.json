@@ -1,6 +1,6 @@
 {
   "name": "ponder-sdk",
-  "version": "0.12.9",
+  "version": "0.12.10",
   "description": "Ponder distribution of the complete OpenPond TypeScript SDK",
   "license": "MIT",
   "type": "module",
@@ -141,10 +141,26 @@
     "./dataset-commerce": {
       "types": "./dist/dataset-commerce.d.ts",
       "import": "./dist/dataset-commerce.js"
+    },
+    "./tool-learning": {
+      "types": "./dist/tool-learning.d.ts",
+      "import": "./dist/tool-learning.js"
+    },
+    "./tool-learning/node": {
+      "types": "./dist/tool-learning/node.d.ts",
+      "import": "./dist/tool-learning/node.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    },
+    "./training-hardware": {
+      "types": "./dist/training-hardware.d.ts",
+      "import": "./dist/training-hardware.js"
     }
   },
   "dependencies": {
-    "openpond-sdk": "0.12.9"
+    "openpond-sdk": "0.12.10"
   },
   "engines": {
     "node": ">=22.14.0 <25"

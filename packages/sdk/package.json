@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.12.9",
+  "version": "0.12.10",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -156,6 +156,14 @@
     "./training-hardware": {
       "types": "./dist/types/packages/sdk/src/training-hardware.d.ts",
       "import": "./dist/training-hardware.js"
+    },
+    "./tool-learning": {
+      "types": "./dist/types/packages/sdk/src/tool-learning.d.ts",
+      "import": "./dist/tool-learning.js"
+    },
+    "./tool-learning/node": {
+      "types": "./dist/types/packages/sdk/src/tool-learning-local-store.d.ts",
+      "import": "./dist/tool-learning-local-store.js"
     }
   },
   "publishConfig": {
@@ -197,7 +205,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
-    "@openpond/evals": "^0.12.3",
+    "@openpond/evals": "^0.12.4",
     "@openpond/harness": "^0.4.10",
     "yaml": "^2.9.0",
     "esbuild": "0.28.1",

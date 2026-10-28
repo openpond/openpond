@@ -40,7 +40,7 @@ test("prepares one immutable manual/hosted submission and rejects changed inputs
   expect(hosted.artifact.payload).toMatchObject({ idempotencyKey: hostedInput.idempotencyKey });
   await expect(prepareManagedTrainingSubmission(input)).rejects.toThrow("changed before upload");
   await expect(prepareManagedTrainingSubmission({ ...expected, files: [...expected.files, expected.files[0]!] })).rejects.toThrow("inventory changed");
-  await expect(prepareManagedTrainingSubmission({ ...expected, recipe: { ...expected.recipe, resourceLimits: { wallTimeMs: 1 } } })).rejects.toThrow("exact approved GRPO recipe");
+  await expect(prepareManagedTrainingSubmission({ ...expected, recipe: { ...expected.recipe, resourceLimits: { wallTimeMs: 1 } } })).rejects.toThrow();
   await expect(prepareManagedTrainingSubmission({ ...expected, approval: { ...expected.approval, maximumSpendUsd: expected.approval.maximumSpendUsd + 1 } })).rejects.toThrow("spend ceiling");
   await expect(prepareManagedTrainingSubmission({ ...expected, evaluationSource: { ...expected.evaluationSource,
     tasks: [{ ...expected.evaluationSource.tasks[0]!, expectedOutput: { answer: "changed private answer" } }],

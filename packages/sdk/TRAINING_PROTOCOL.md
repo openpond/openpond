@@ -288,3 +288,43 @@ CLI: `openpond training hosted-recover recovery.json --team-id <id> --home <conf
 Managed Work reconciles a transient or lost policy HTTP response inside its current guest using the identical delivery, turn, seed, messages and tool body. The native gateway reads the existing command result for that identity; a response retry does not add a policy sample or replay already-executed Work tools. The signed native retry allowance is shared across the case and the original execution deadline remains binding. Successful Work timing evidence includes `policyHttpRetries`.
 
 The native runner does not restart a whole stateful Work process to recover a policy HTTP failure. Exhausted retries, authentication/custody failures and first-call budget exhaustion still fail the attempt; no response, reward or optimizer update is fabricated. Other execution kinds keep their established process-retry behavior.
+
+## Supervised recipes and reviewed targets
+
+`SftRecipeSchema` and `ManagedSftRecipeSchema` from `openpond-sdk/training` describe
+supervised LoRA updates with pinned model/tokenizer identity, completion-only
+masking, dataset selection, epochs/steps, batch accumulation, and resource limits.
+The workbench consumes the same recipe schema. SFT does not use GRPO rollout
+counts, relative advantages, or reward-loss parameters. Initial managed SFT
+requests require a fresh single-GPU run without cross-job continuation or
+rollout-only qualification. A deterministic held-out grader remains evaluation
+configuration; it is not the supervised optimizer objective.
+
+`prepareManagedTrainingSubmission` requires a fully materialized approved recipe
+and requests `managed_training.sft@1` for SFT. A deployed backend must explicitly
+support that capability before accepting work; schema availability is not a claim
+that a particular deployment or worker image has qualified SFT. Collection and
+publication do not authorize optimizer execution. Approved targets, an independent
+held-out population, funding, exact artifact custody, and execution permission
+remain separate boundaries.
+
+## Tool episode protocol
+
+`openpond-sdk/tool-learning` re-exports the portable bounded episode, scoped
+installation, manifest, and recovery-consultation schemas from
+`@openpond/evals/tool-learning`. Integration and learned capability entries carry
+different qualification receipts. A learned entry requires training, evaluation,
+adapter, and activation references; newly captured errors cannot promote it.
+Operational unavailability is distinct from a model's `proceed` response, and a
+response must match the request's operation, installation, action, context,
+manifest, capability, and model identity.
+
+The separate `openpond-sdk/tool-learning/node` entry exports
+`ToolLearningLocalStore`, a private bounded SQLite queue for an explicitly selected
+OpenPond home. It records installation scope and capture policy, rejects conflicting
+event identities, bounds pending evidence, records dropped/expired counts, and
+removes queued events only for exact installation/event/content-hash acknowledgements.
+It performs no authentication, network upload, tool execution, training, or model
+activation. Callers must verify authentic durable hosted receipts before
+acknowledging delivery. Import the portable entry in browser code; the Node queue
+is a separate runtime capability.

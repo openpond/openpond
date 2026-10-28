@@ -102,47 +102,8 @@ export const TrainingDestinationIdSchema = z.enum([
   "openpond_managed",
 ]);
 
-export const SftRecipeSchema = deferredObject(() => ({
-  schemaVersion: z.literal("openpond.sftRecipe.v1"),
-  method: z.literal("sft"),
-  parameterization: z.literal("lora"),
-  baseModel: z.object({
-    id: IdSchema,
-    revision: z.string().trim().min(1).max(256),
-    tokenizerRevision: z.string().trim().min(1).max(256),
-    chatTemplateHash: HashSchema,
-  }),
-  dataset: z.object({
-    trainSplit: z.literal("train"),
-    validationSplit: z.enum(["validation", "frozen_eval"]),
-    completionOnly: z.boolean(),
-    maxSequenceLength: z.number().int().positive().max(32_768),
-    maxExamples: z.number().int().positive().max(100_000).default(1_000),
-    selectionStrategy: z
-      .literal("stable_hash_top_n")
-      .default("stable_hash_top_n"),
-    selectionSeed: z.number().int().default(17),
-  }),
-  lora: z.object({
-    rank: z.number().int().positive().max(256),
-    alpha: z.number().positive().max(1_024),
-    dropout: z.number().min(0).max(1),
-    targetModules: z.array(IdSchema).min(1).max(100),
-  }),
-  optimizer: z.object({
-    learningRate: z.number().positive(),
-    epochs: z.number().positive().max(100),
-    maxSteps: z.number().int().positive().max(1_000_000),
-    batchSize: z.number().int().positive().max(10_000),
-    gradientAccumulationSteps: z.number().int().positive().max(10_000),
-    seed: z.number().int(),
-  }),
-  resourceLimits: z.object({
-    cpuThreads: z.number().int().positive().max(256),
-    memoryBytes: z.number().int().positive(),
-    wallTimeMs: z.number().int().positive(),
-  }),
-}));
+export { SftRecipeSchema } from "openpond-sdk/training";
+import { SftRecipeSchema } from "openpond-sdk/training";
 
 export const SftTrainingRecordSchema = deferredObject(() => ({
   id: IdSchema,

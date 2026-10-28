@@ -1,3 +1,4 @@
+import { ManagedSftRecipeSchema } from "./training-supervised.js";
 import { contentHash, sha256 } from "@openpond/harness";
 import { TrainingHandoffOriginSchema, type TrainingHandoffOrigin } from "./post-training.js";
 import { z } from "zod";
@@ -106,12 +107,27 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
     throw new Error("The synced Model Project base Model does not match the Run manifest.");
   }
   if (
-    recipe.method !== "grpo" ||
+    !["grpo", "sft"].includes(recipe.method) ||
     contentHash(recipe) !== manifest.recipe.configHash ||
     approval.approvalHash !== manifest.approval.approvalHash ||
     approval.maximumSpendUsd !== manifest.approval.maximumSpendUsd
   ) {
-    throw new Error("Managed training requires the exact approved GRPO recipe and spend ceiling.");
+    throw new Error("Managed training requires the exact approved supported recipe and spend ceiling.");
+  }
+  if (recipe.method === "sft") {
+    const supervised = ManagedSftRecipeSchema.parse(recipe);
+    // Parsing cannot silently normalize bytes after the owner approved them.
+    if (contentHash(supervised) !== contentHash(recipe))
+      throw new Error("SFT recipe must be fully materialized before approval.");
+    if (
+      qualification ||
+      input.resumeFrom ||
+      physicalPlacement ||
+      (gpuSelection?.gpuCount ?? 1) !== 1
+    )
+      throw new Error(
+        "Initial managed SFT requires a fresh single-GPU run without reuse-only placement or rollout qualification.",
+      );
   }
   const limits = z.object({ wallTimeMs: z.number().positive() }).parse(recipe.resourceLimits);
   if (input.idempotencyKey !== undefined)
@@ -193,7 +209,7 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
       resumeFrom: input.resumeFrom,
     },
     requestedCapabilities: [
-      { id: qualification ? "managed_rl.policy.qualification" : "managed_rl.policy.grpo", version: "1", required: true },
+      { id: qualification ? "managed_rl.policy.qualification" : recipe.method === "sft" ? "managed_training.sft" : "managed_rl.policy.grpo", version: "1", required: true },
       ...(gpuSelection?.gpuCount === 2
         ? [{ id: "managed_rl.policy.data_parallel", version: "1", required: true }]
         : []),
