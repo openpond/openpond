@@ -1,3 +1,4 @@
+import { nativeToolLearningContext, nativeToolLearningTools } from "../tool-learning/native.js";
 import { createFilePreviewTool, FILE_PREVIEW_INSTRUCTIONS } from "../openpond/file-preview-tool.js";
 import { failTurnWithCodexRecovery } from "./codex-ownership.js";
 import { ponderHostedTools } from "../openpond/ponder-hosted-tools.js";
@@ -814,6 +815,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       options
       ),
       ...ponderTools,
+      ...(!options.trainingHarness ? nativeToolLearningTools() : []),
       ...coordinationTools,
       ...(!options.trainingHarness ? [filePreviewTool] : []),
       ...(!options.trainingHarness && executeChatResourceAction ? [createChatNextStepTool(executeChatResourceAction)] : []),
@@ -1410,7 +1412,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         ? nativeBrowserTools(session, browserToolExecutor) : [];
       const fileDefinitions = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
         && peerInput?.payload.taskReportingOnly !== true ? [filePreviewTool] : [];
+      const toolLearningContext = !nativeEvaluation && !candidateAuthoring && !isolatedProfileEvaluation ? await nativeToolLearningContext(session).catch(() => "") : "";
       const extraSystemContext = [
+        toolLearningContext,
         fileDefinitions.length ? FILE_PREVIEW_INSTRUCTIONS : "",
         session.systemKind === "openpond.ponder" ? LOCAL_PONDER_INSTRUCTIONS : "",
         nextStepTools.length ? CHAT_NEXT_STEP_INSTRUCTIONS : "",

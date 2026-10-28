@@ -1,3 +1,4 @@
+import { captureNativeToolAttempt, captureNativeToolResult } from "../../tool-learning/native.js";
 import { type ChatProvider } from "@openpond/contracts/settings";
 import { type ConnectedAppIntegrationSkill } from "@openpond/contracts/connected-apps";
 import { type OpenPondApp } from "@openpond/contracts/apps";
@@ -191,7 +192,7 @@ export function createNativeToolRuntime(deps: {
             signal: params.signal,
           },
         })) as NativeModelToolResult;
-        await appendNativeToolCompleted(params.session, params.turnId, result);
+        await appendNativeToolCompleted(params.session, params.turnId, result, "executed");
         if (profileSkillName) {
           const skill = profileSkillFromNativeResult(result);
           await appendProfileSkillEvent({
@@ -225,7 +226,7 @@ export function createNativeToolRuntime(deps: {
         results.push(result);
       } catch (error) {
         const result = failedNativeToolResult(toolCall, textFromUnknown(error) || "Tool execution failed.");
-        await appendNativeToolCompleted(params.session, params.turnId, result);
+        await appendNativeToolCompleted(params.session, params.turnId, result, "executed");
         if (profileSkillName) {
           await appendProfileSkillEvent({
             session: params.session,
@@ -514,6 +515,7 @@ export function createNativeToolRuntime(deps: {
     toolCall: NativeModelToolCall,
     args: Record<string, unknown>,
   ): Promise<void> {
+    await captureNativeToolAttempt(session, turnId, toolCall);
     await appendRuntimeEvent(
       event({
         sessionId: session.id,
@@ -537,7 +539,9 @@ export function createNativeToolRuntime(deps: {
     session: Session,
     turnId: string,
     result: NativeModelToolResult,
+    execution: "executed" | "not_executed" = "not_executed",
   ): Promise<void> {
+    await captureNativeToolResult(session, turnId, result, execution);
     const resourceRefs = nativeToolResultResourceRefs(result);
     await appendRuntimeEvent(
       event({

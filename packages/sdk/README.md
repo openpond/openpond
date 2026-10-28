@@ -1,5 +1,7 @@
 # `openpond-sdk`
 
+See [tool learning](./TOOL_LEARNING.md) for scoped tool capture, private recovery evidence, and metered specialist consultation.
+
 See [task evidence and learning](./LEARNING.md) for reusable Rewards, task-format publication, SDK/HTTP intake, grading, review and approved batches.
 
 The OpenPond SDK is the server-side TypeScript client for running agentic work in OpenPond sandboxes. It gives Node.js applications, Next.js route handlers, workers, and backend services a small API for creating sandboxes, executing commands, managing files and runtimes, and running a model/tool loop in an isolated workspace.
