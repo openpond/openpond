@@ -103,7 +103,7 @@ export function createTrainingService(deps: {
     new PortablePreparationTrainingDestination("openpond_managed", {
       resolveTaskset,
       estimatedCostUsd: null,
-      methods: ["grpo"],
+      methods: ["grpo", "sft"],
       environmentPlacements: ["local", "remote"],
       assumptions: [
         "OpenPond Managed selects supported compute capacity after approval.",

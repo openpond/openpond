@@ -558,10 +558,10 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         "Sync the exact Model Project revision before creating managed training.",
       );
     }
-    if (plan.recipe.method !== "grpo" || plan.maximumSpendUsd === null) {
-      throw new Error("Managed Training V2 requires GRPO and an approved spend ceiling.");
+    if ((plan.recipe.method !== "grpo" && plan.recipe.method !== "sft") || plan.maximumSpendUsd === null) {
+      throw new Error("Managed Training V2 requires a supported GRPO or SFT recipe and an approved spend ceiling.");
     }
-    const learnedPreference = plan.recipe.reward.learnedPreference ?? null;
+    const learnedPreference = plan.recipe.method === "grpo" ? plan.recipe.reward.learnedPreference ?? null : null;
     const rewardSource = learnedPreference
       ? learnedRewardSource(learnedPreference)
       : await managedTrainingGradingSource(files);
