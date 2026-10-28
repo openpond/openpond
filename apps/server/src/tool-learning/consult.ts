@@ -4,6 +4,7 @@ import { ToolLearningLocalStore } from "openpond-sdk/tool-learning/node";
 import {
   ToolLearningConsultationRequestSchema,
   OpenPondToolLearningError,
+  type ToolLearningConsultationRequest,
 } from "openpond-sdk/tool-learning";
 import { scanAndRedactEvidence } from "openpond-sdk/training-bundle";
 import { loadToolLearningCredential, toolLearningProducer } from "./local.js";
@@ -82,7 +83,7 @@ export async function consultLocalToolLearning(
           error.code !== "tool_learning_consultation_not_found"
         )
           throw error;
-        return { operationId, response: await client.consult(previous, signal) };
+        return submitLocalToolConsultation(client, previous, signal);
       }
     }
     const manifest = await client.manifest(installationId, signal);
@@ -116,16 +117,7 @@ export async function consultLocalToolLearning(
     });
     store.retainConsultationRequest(request);
     await flushToolLearning(home, store, record, signal);
-    try {
-      return { operationId, response: await client.consult(request, signal) };
-    } catch {
-      return {
-        operationId,
-        response: { state: "unavailable", reason: "dispatch_uncertain" },
-        recovery:
-          "Use openpond_consult_status with this operationId; do not create a replacement request.",
-      };
-    }
+    return submitLocalToolConsultation(client, request, signal);
   } finally {
     store.close();
   }
@@ -148,5 +140,28 @@ export async function readLocalToolConsultation(
     };
   } finally {
     store.close();
+  }
+}
+
+async function submitLocalToolConsultation(
+  client: ReturnType<typeof toolLearningProducer>,
+  request: ToolLearningConsultationRequest,
+  signal?: AbortSignal,
+) {
+  try {
+    return { operationId: request.operationId, response: await client.consult(request, signal) };
+  } catch (error) {
+    const rejected =
+      error instanceof OpenPondToolLearningError &&
+      error.status >= 400 &&
+      error.status < 500 &&
+      error.status !== 408;
+    return {
+      operationId: request.operationId,
+      response: { state: "unavailable", reason: rejected ? error.code : "dispatch_uncertain" },
+      recovery: rejected
+        ? "Resolve the reported admission error. Keep this original operation ID; do not create a replacement paid request."
+        : "Use openpond_consult_status with this operationId; do not create a replacement request.",
+    };
   }
 }

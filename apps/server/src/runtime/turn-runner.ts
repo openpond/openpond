@@ -1,3 +1,4 @@
+import { codexPromptWithHarnessContext } from "./native-agents/codex-prompt-context.js";
 import { nativeToolLearningContext, nativeToolLearningTools } from "../tool-learning/native.js";
 import { createFilePreviewTool, FILE_PREVIEW_INSTRUCTIONS } from "../openpond/file-preview-tool.js";
 import { failTurnWithCodexRecovery } from "./codex-ownership.js";
@@ -1984,20 +1985,4 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     recoverPendingSubagentCompletions: recoverPendingCompletions,
     cleanupExpiredRetainedSubagentWorkspace,
   };
-}
-
-function codexPromptWithHarnessContext(
-  userPrompt: string,
-  harnessContext: string,
-): string {
-  if (!harnessContext.trim()) return userPrompt;
-  return [
-    "<openpond_trusted_runtime_context>",
-    harnessContext,
-    "</openpond_trusted_runtime_context>",
-    "",
-    "<user_request>",
-    userPrompt,
-    "</user_request>",
-  ].join("\n");
 }

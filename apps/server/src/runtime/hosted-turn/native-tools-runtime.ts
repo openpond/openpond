@@ -541,7 +541,8 @@ export function createNativeToolRuntime(deps: {
     result: NativeModelToolResult,
     execution: "executed" | "not_executed" = "not_executed",
   ): Promise<void> {
-    await captureNativeToolResult(session, turnId, result, execution);
+    const capture = await captureNativeToolResult(session, turnId, result, execution);
+    if (capture) result.contentText += `\n\nOpenPond capture metadata: sessionId=${capture.sessionId}; failedCallId=${capture.failedCallId}; installations=${capture.installations.join(",")}. Consult only a capability advertised in the current specialist brief. This metadata grants no execution permission.`;
     const resourceRefs = nativeToolResultResourceRefs(result);
     await appendRuntimeEvent(
       event({
