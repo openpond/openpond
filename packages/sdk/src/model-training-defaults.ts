@@ -2,14 +2,21 @@ import { contentHash } from "@openpond/harness";
 import { compileBoundGraders } from "@openpond/evals/rewards";
 import { validateModelTasksetPackage } from "./model-taskset-derivation.js";
 import { ModelProjectTrainingSetupSchema, type ModelProjectTrainingSetup } from "./model-projects.js";
+import { createSupervisedTrainingRecipeDefaults } from "./model-supervised-training-defaults.js";
+import { ManagedSftRecipeSchema } from "./training-supervised.js";
 
 function fields(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-/** Editable GRPO defaults are available before tasks/base/grader are bound.
+/** Editable method-specific defaults exist before tasks/base/grader are bound.
  * This draft never authorizes execution; package preparation binds those inputs. */
-export function createModelTrainingRecipeDefaults(saved?: ModelProjectTrainingSetup["recipe"]): NonNullable<ModelProjectTrainingSetup["recipe"]> {
+export function createModelTrainingRecipeDefaults(
+  saved?: ModelProjectTrainingSetup["recipe"],
+  method: "grpo" | "sft" = saved?.method === "sft" ? "sft" : "grpo",
+): NonNullable<ModelProjectTrainingSetup["recipe"]> {
+  if (method === "sft") return createSupervisedTrainingRecipeDefaults(saved);
+  const grpo = saved?.method === "grpo" ? saved : undefined;
   const defaults = {
     schemaVersion: "openpond.rftRecipe.v1", method: "grpo" as const, parameterization: "lora" as const,
     lora: { rank: 2 },
@@ -22,13 +29,13 @@ export function createModelTrainingRecipeDefaults(saved?: ModelProjectTrainingSe
     policyOptimization: null,
   };
   return {
-    ...defaults, ...saved,
-    lora: { ...defaults.lora, ...fields(saved?.lora) },
-    rollout: { ...defaults.rollout, ...fields(saved?.rollout) },
-    optimizer: { ...defaults.optimizer, ...fields(saved?.optimizer),
-      adamw: { ...defaults.optimizer.adamw, ...fields(fields(saved?.optimizer).adamw) } },
-    loss: { ...defaults.loss, ...fields(saved?.loss) },
-    resourceLimits: { ...defaults.resourceLimits, ...fields(saved?.resourceLimits) },
+    ...defaults, ...grpo,
+    lora: { ...defaults.lora, ...fields(grpo?.lora) },
+    rollout: { ...defaults.rollout, ...fields(grpo?.rollout) },
+    optimizer: { ...defaults.optimizer, ...fields(grpo?.optimizer),
+      adamw: { ...defaults.optimizer.adamw, ...fields(fields(grpo?.optimizer).adamw) } },
+    loss: { ...defaults.loss, ...fields(grpo?.loss) },
+    resourceLimits: { ...defaults.resourceLimits, ...fields(grpo?.resourceLimits) },
   };
 }
 
@@ -39,7 +46,9 @@ export function rebindModelTrainingRecipe(saved: ModelProjectTrainingSetup["reci
   // Split names and the derived source population belong to the new package.
   // Retain authoring controls such as prompt length/selection strategy.
   const { trainSplit: _train, validationSplit: _validation, maxExamples: _population, ...dataset } = fields(recipe.dataset);
-  return { ...recipe, dataset, policyOptimization: null };
+  return recipe.method === "sft"
+    ? { ...recipe, dataset: { ...dataset, ...(_validation ? { validationSplit: _validation } : {}) } }
+    : { ...recipe, dataset, policyOptimization: null };
 }
 import { validateTasksetPackage } from "./taskset-package-contracts.js";
 
@@ -65,6 +74,29 @@ export function prepareModelTrainingDefaults(input: {
     setup.evaluationTasksetRef = setup.tasksetRef;
   }
   const base = setup.baseModel;
+  if (setup.method === "sft") {
+    if ((setup.recipe && setup.recipe.method !== "sft") || !base?.revision
+      || !base.tokenizerRevision || !base.chatTemplateHash) return setup;
+    const training = source.taskset.tasks.filter(task => task.split === "train");
+    if (!training.length) return setup;
+    const recipe = createSupervisedTrainingRecipeDefaults(setup.recipe);
+    const dataset = fields(recipe.dataset);
+    const sameEvaluation = setup.evaluationTasksetRef?.id === setup.tasksetRef?.id
+      && setup.evaluationTasksetRef?.contentHash === setup.tasksetRef?.contentHash;
+    if (!dataset.validationSplit && !sameEvaluation)
+      throw new Error("Choose the optimizer validation split from the selected evaluation dataset.");
+    return ModelProjectTrainingSetupSchema.parse({
+      ...setup,
+      recipe: ManagedSftRecipeSchema.parse({
+        ...recipe,
+        baseModel: { id: base.modelId, revision: base.revision,
+          tokenizerRevision: base.tokenizerRevision, chatTemplateHash: base.chatTemplateHash },
+        dataset: { ...dataset, trainSplit: "train",
+          validationSplit: dataset.validationSplit ?? (source.taskset.tasks.some(task => task.split === "frozen_eval") ? "frozen_eval" : "validation"),
+          maxExamples: typeof dataset.maxExamples === "number" ? Math.min(dataset.maxExamples, training.length) : Math.min(1_000, training.length) },
+      }),
+    });
+  }
   if (setup.method !== "grpo" || (setup.recipe && setup.recipe.method !== "grpo") || !base?.revision
     || !base.tokenizerRevision || !base.chatTemplateHash) return setup;
   // Existing bound recipes retain their exact explicit settings and the
