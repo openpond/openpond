@@ -120,7 +120,11 @@ export function LabWorkproductDetail({
   onSelectedModelEntryKeyChange,
   modelDetailTab,
   onModelDetailTabChange,
+  hostedWebBaseUrl,
+  hostedApiOrigin,
 }: {
+  hostedWebBaseUrl?: string | null;
+  hostedApiOrigin?: string | null;
   workproduct: LabWorkproductSummary;
   modelSection: "overview" | "training" | "evals" | "versions";
   selectedModelEntryKey: string | null;
@@ -596,6 +600,8 @@ export function LabWorkproductDetail({
           <>
             {modelSection === "overview" ? (
               <LabModelProjectOverview
+                hostedWebBaseUrl={hostedWebBaseUrl}
+                hostedApiOrigin={hostedApiOrigin}
                 connection={connection}
                 actions={modelProject ? (
                   <button

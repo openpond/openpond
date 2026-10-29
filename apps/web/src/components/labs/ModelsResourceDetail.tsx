@@ -29,6 +29,8 @@ export function ModelsResourceDetail({ props, model, profile, runs, route }: {
     void navigateModelsRoute(modelsLocation(page, route.modelId, { resourceId: ref }));
   };
   return <LabWorkproductDetail
+    hostedWebBaseUrl={props.account?.baseUrl ?? null}
+    hostedApiOrigin={props.account?.apiBaseUrl ?? null}
     connection={profileView.connection} profile={profile} runs={runs} training={training.training} workproduct={model}
     modelSection={route.page === "runs" ? "training" : route.page === "versions" ? "versions" : "overview"}
     modelDetailTab={route.detailTab} selectedModelEntryKey={route.resourceId}

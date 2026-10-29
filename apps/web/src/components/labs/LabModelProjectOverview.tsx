@@ -28,7 +28,11 @@ export function LabModelProjectOverview({
   state,
   status,
   versions,
+  hostedWebBaseUrl,
+  hostedApiOrigin,
 }: {
+  hostedWebBaseUrl?: string | null;
+  hostedApiOrigin?: string | null;
   actions?: ReactNode;
   connection?: ClientConnection | null;
   modelProject: ModelProject | null;
@@ -52,6 +56,10 @@ export function LabModelProjectOverview({
   const trainingModel = modelProject?.trainingSetup.baseModel ?? modelProject?.defaultBaseModel ?? null;
   const servingReady = currentVersion?.lineage.managedServing?.customerBindingAllowed ?? false;
   const tasksetCount = modelProjectTasksetIds(modelProject).size;
+  const toolLearningUrl = hostedWebBaseUrl && modelProject?.hosted &&
+    modelProject.hosted.apiOrigin === hostedApiOrigin
+    ? new URL(`/console/models/${encodeURIComponent(modelProject.hosted.projectId)}`, hostedWebBaseUrl).href
+    : null;
 
   return (
     <div className="labs-model-overview">
@@ -101,6 +109,20 @@ export function LabModelProjectOverview({
         status={status}
         title={modelProject?.name ?? "Model Project"}
       />
+      {toolLearningUrl ? (
+        <section className="training-detail-section" aria-label="Tool learning">
+          <div className="labs-project-trends-heading">
+            <div>
+              <h2>Tool learning</h2>
+              <p>Connect this Model to native OpenPond or Claude Code, review captured recoveries, and inspect consultation results in your private workspace.</p>
+              <p>Capture is opt-in. Training and learned specialist activation require reviewed evidence and separate qualification.</p>
+            </div>
+            <a className="training-button secondary" href={toolLearningUrl} target="_blank" rel="noreferrer">
+              Set up tool learning
+            </a>
+          </div>
+        </section>
+      ) : null}
       {connection && modelProject?.hosted && currentRun?.hostedJobId ? <ModelTrainingJourney
         key={`${modelProject.hosted.projectId}:${currentRun.hostedJobId}`}
         connection={connection} teamId={modelProject.hosted.teamId} projectId={modelProject.hosted.projectId}
