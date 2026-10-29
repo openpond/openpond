@@ -38,10 +38,14 @@ export function bindOrdinaryModelTasksetReward(input: {
     assets.set(asset.id, asset);
   }
   const { policy, environment, environmentRelease, tools, capabilities, verifierSetRelease } = source.taskset;
+  const outputContract = source.taskset.metadata.tasksetOutputContract;
+  const outputSchema = outputContract && typeof outputContract === "object" && !Array.isArray(outputContract)
+    && "mode" in outputContract && outputContract.mode === "structured_json"
+    ? ("jsonSchema" in outputContract ? outputContract.jsonSchema : null) : { type: "object" };
   const taskDefinition = TaskDefinitionSchema.parse(sealLearningContent({
     schemaVersion: "openpond.taskDefinition.v1", id: `${source.taskset.id}-definition`, revision: 1,
     name: source.taskset.id, description: "", instructions, category: "custom", familyNamespace: source.taskset.id,
-    inputSchema: { type: "object" }, outputSchema: { type: "object" },
+    inputSchema: { type: "object" }, outputSchema,
     rewardBinding: learningRef(input.rewardBinding), harness: null,
     execution: { policy, environment, environmentRelease, tools, capabilities, verifierSetRelease },
   }));
