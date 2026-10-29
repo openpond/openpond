@@ -43,12 +43,14 @@ HostedTrainingSetupCatalogConfiguration3Trainingsetup7Profileevaluation30 = Type
 HostedTrainingSetupCatalogConfiguration3Trainingsetup7Managedgpuselection120 = TypedDict('HostedTrainingSetupCatalogConfiguration3Trainingsetup7Managedgpuselection120', {
     'mode': Required[Literal['automatic']],
     'objective': Required[Literal['balanced', 'fast', 'economical']],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 HostedTrainingSetupCatalogConfiguration3Trainingsetup7Managedgpuselection121 = TypedDict('HostedTrainingSetupCatalogConfiguration3Trainingsetup7Managedgpuselection121', {
     'mode': Required[Literal['manual']],
     'availabilityId': Required[str],
     'gpuType': Required[str],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 HostedTrainingSetupCatalogConfiguration3Trainingsetup7Recipe160 = TypedDict('HostedTrainingSetupCatalogConfiguration3Trainingsetup7Recipe160', {

@@ -6,7 +6,6 @@ import {
   ToolLearningRegistrationSchema,
   ToolLearningInstallationSchema,
   ToolLearningIdSchema,
-  ToolEpisodeEventSchema,
   ToolLearningRefSchema,
   ToolLearningDecisionSchema,
   boundedToolLearningSchema,
@@ -27,7 +26,15 @@ import {
 } from "./learning-credentials.js";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import { readBoundedJsonResponse } from "./protocol.js";
-import { assembleToolLearningEpisode, ToolLearningEpisodeAssemblySchema } from "./tool-learning-episodes.js";
+import { assembleToolLearningEpisode } from "./tool-learning-episodes.js";
+import {
+  ToolLearningRegistrationReceiptSchema,
+  ToolLearningInstallationPageSchema,
+  ToolLearningEpisodePageSchema,
+  ToolLearningEpisodeDetailSchema,
+  ToolLearningPurgeRequestSchema,
+  ToolLearningPurgeReceiptSchema,
+} from "./tool-learning-responses.js";
 
 /** Prepare and retain this request privately before registration. Retrying the
  * same bytes recovers issuance without storing plaintext on the host. */
@@ -198,13 +205,9 @@ export class OpenPondToolLearningClient {
     const input = ToolLearningRegistrationRequestSchema.parse(value);
     if (input.registration.projectId !== this.#options.projectId)
       throw new Error("tool_learning_project_mismatch");
-    const result = z
-      .object({
-        installation: ToolLearningInstallationSchema,
-        apiKey: LearningSourceCredentialSecretSchema,
-      })
-      .strict()
-      .parse(await this.#request("installations", "POST", input, signal));
+    const result = ToolLearningRegistrationReceiptSchema.parse(
+      await this.#request("installations", "POST", input, signal),
+    );
     this.#installation(result.installation, input.registration.installationId);
     if (result.apiKey !== input.credential.apiKey)
       throw new Error("tool_learning_credential_mismatch");
@@ -232,20 +235,14 @@ export class OpenPondToolLearningClient {
   }
 
   async installations(after?: string, signal?: AbortSignal) {
-    const result = z
-      .object({
-        items: z.array(ToolLearningInstallationSchema).max(30),
-        nextCursor: ToolLearningIdSchema.nullable(),
-      })
-      .strict()
-      .parse(
-        await this.#request(
-          `installations?projectId=${encodeURIComponent(this.#options.projectId)}${after ? `&after=${encodeURIComponent(after)}` : ""}`,
-          "GET",
-          undefined,
-          signal,
-        ),
-      );
+    const result = ToolLearningInstallationPageSchema.parse(
+      await this.#request(
+        `installations?projectId=${encodeURIComponent(this.#options.projectId)}${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+        "GET",
+        undefined,
+        signal,
+      ),
+    );
     for (const installation of result.items) this.#installation(installation, installation.id);
     if (result.nextCursor !== null && result.nextCursor !== result.items.at(-1)?.id)
       throw new Error("tool_learning_installation_cursor_mismatch");
@@ -253,33 +250,14 @@ export class OpenPondToolLearningClient {
   }
 
   async episodes(installationId: string, after?: string, signal?: AbortSignal) {
-    const result = z
-      .object({
-        installationId: ToolLearningIdSchema,
-        scope: z.object({ teamId: ToolLearningIdSchema, projectId: ToolLearningIdSchema }).strict(),
-        items: z
-          .array(
-            z
-              .object({
-                episodeId: ToolLearningIdSchema,
-                eventCount: z.number().int().positive(),
-                lastReceivedAt: z.iso.datetime(),
-              })
-              .strict(),
-          )
-          .max(30),
-        nextCursor: ToolLearningIdSchema.nullable(),
-        learningEnrollment: z.literal(false),
-      })
-      .strict()
-      .parse(
-        await this.#request(
-          `installations/${encodeURIComponent(installationId)}/episodes${after ? `?after=${encodeURIComponent(after)}` : ""}`,
-          "GET",
-          undefined,
-          signal,
-        ),
-      );
+    const result = ToolLearningEpisodePageSchema.parse(
+      await this.#request(
+        `installations/${encodeURIComponent(installationId)}/episodes${after ? `?after=${encodeURIComponent(after)}` : ""}`,
+        "GET",
+        undefined,
+        signal,
+      ),
+    );
     if (
       result.installationId !== installationId ||
       result.scope.teamId !== this.#options.teamId ||
@@ -291,26 +269,14 @@ export class OpenPondToolLearningClient {
   }
 
   async episode(installationId: string, episodeId: string, signal?: AbortSignal) {
-    const result = z
-      .object({
-        installationId: ToolLearningIdSchema,
-        episodeId: ToolLearningIdSchema,
-        scope: z.object({ teamId: ToolLearningIdSchema, projectId: ToolLearningIdSchema }).strict(),
-        events: z.array(ToolEpisodeEventSchema).max(TOOL_LEARNING_LIMITS.eventsPerEpisode),
-        state: ToolLearningEpisodeAssemblySchema.shape.state,
-        assembly: ToolLearningEpisodeAssemblySchema,
-        verificationAuthority: z.literal("not_granted"),
-        learningEnrollment: z.literal(false),
-      })
-      .strict()
-      .parse(
-        await this.#request(
-          `installations/${encodeURIComponent(installationId)}/episodes/${encodeURIComponent(episodeId)}`,
-          "GET",
-          undefined,
-          signal,
-        ),
-      );
+    const result = ToolLearningEpisodeDetailSchema.parse(
+      await this.#request(
+        `installations/${encodeURIComponent(installationId)}/episodes/${encodeURIComponent(episodeId)}`,
+        "GET",
+        undefined,
+        signal,
+      ),
+    );
     if (
       result.installationId !== installationId ||
       result.episodeId !== episodeId ||
@@ -321,8 +287,10 @@ export class OpenPondToolLearningClient {
       )
     )
       throw new Error("tool_learning_episode_scope_mismatch");
-    if (result.state !== result.assembly.state ||
-      contentHash(assembleToolLearningEpisode(result.events)) !== contentHash(result.assembly))
+    if (
+      result.state !== result.assembly.state ||
+      contentHash(assembleToolLearningEpisode(result.events)) !== contentHash(result.assembly)
+    )
       throw new Error("tool_learning_episode_assembly_mismatch");
     return result;
   }
@@ -332,26 +300,15 @@ export class OpenPondToolLearningClient {
     input: { operationId: string; expectedRevision: number },
     signal?: AbortSignal,
   ) {
-    const request = z
-      .object({ operationId: ToolLearningIdSchema, expectedRevision: z.number().int().positive() })
-      .strict()
-      .parse(input);
-    const result = z
-      .object({
-        installationId: ToolLearningIdSchema,
-        operationId: ToolLearningIdSchema,
-        purgedEvents: z.number().int().nonnegative(),
-        learningEnrollment: z.literal(false),
-      })
-      .strict()
-      .parse(
-        await this.#request(
-          `installations/${encodeURIComponent(installationId)}/purge`,
-          "POST",
-          request,
-          signal,
-        ),
-      );
+    const request = ToolLearningPurgeRequestSchema.parse(input);
+    const result = ToolLearningPurgeReceiptSchema.parse(
+      await this.#request(
+        `installations/${encodeURIComponent(installationId)}/purge`,
+        "POST",
+        request,
+        signal,
+      ),
+    );
     if (result.installationId !== installationId || result.operationId !== request.operationId)
       throw new Error("tool_learning_purge_scope_mismatch");
     return result;

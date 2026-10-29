@@ -43,12 +43,14 @@ ModelProjectEditableTrainingsetup6Profileevaluation30 = TypedDict('ModelProjectE
 ModelProjectEditableTrainingsetup6Managedgpuselection120 = TypedDict('ModelProjectEditableTrainingsetup6Managedgpuselection120', {
     'mode': Required[Literal['automatic']],
     'objective': Required[Literal['balanced', 'fast', 'economical']],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 ModelProjectEditableTrainingsetup6Managedgpuselection121 = TypedDict('ModelProjectEditableTrainingsetup6Managedgpuselection121', {
     'mode': Required[Literal['manual']],
     'availabilityId': Required[str],
     'gpuType': Required[str],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 ModelProjectEditableTrainingsetup6Recipe160 = TypedDict('ModelProjectEditableTrainingsetup6Recipe160', {

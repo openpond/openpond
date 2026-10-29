@@ -1,0 +1,150 @@
+{
+  "installation": {
+    "schemaVersion": "openpond.toolLearningInstallation.v1",
+    "id": "installation-fixture",
+    "revision": 1,
+    "scope": {
+      "teamId": "team-fixture",
+      "projectId": "project-fixture"
+    },
+    "ownerUserId": "user-fixture",
+    "machineSourceId": "source-fixture",
+    "client": "openpond",
+    "clientVersion": "fixture-v1",
+    "adapterRelease": {
+      "id": "fixture-release",
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "state": "enabled",
+    "collectionPolicy": {
+      "revision": 1,
+      "permittedTools": [
+        "exec_command"
+      ],
+      "workspaceRootHashes": [
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "permittedFields": [
+        "action",
+        "intent",
+        "state",
+        "result_excerpt"
+      ],
+      "unchangedControls": {
+        "numerator": 0,
+        "denominator": 1
+      },
+      "maximumEventBytes": 65536,
+      "maximumEpisodeBytes": 2097152,
+      "maximumEpisodeEvents": 256,
+      "maximumQueueBytes": 52428800,
+      "maximumQueueEvents": 5000,
+      "maximumQueueAgeSeconds": 86400,
+      "rawRetentionDays": 1,
+      "purposes": [
+        "capture",
+        "consultation"
+      ],
+      "modelUpdates": "requires_separate_review",
+      "variantGeneration": "disabled"
+    },
+    "collectionPolicyHash": "a5b685cc915d204b80b52a79f7e06aeaa4c7c0100359438dc469bfd214eca3e4",
+    "coverage": {
+      "receipt": null,
+      "start": "unqualified",
+      "resume": "unqualified",
+      "compaction": "unqualified",
+      "executionFailure": "unqualified",
+      "processFailure": "unqualified",
+      "validationFailure": "unqualified",
+      "nestedCalls": "unqualified",
+      "contextRefresh": "unqualified",
+      "gaps": [
+        "Fixture only; no client qualification"
+      ]
+    },
+    "credential": {
+      "id": "credential-fixture",
+      "expiresAt": "2099-01-01T00:00:00Z",
+      "revokedAt": null,
+      "capabilities": [
+        "episode_append",
+        "manifest_read",
+        "consultation_submit",
+        "consultation_read"
+      ]
+    },
+    "createdAt": "2026-10-29T00:00:00Z",
+    "updatedAt": "2026-10-29T00:00:00Z"
+  },
+  "request": {
+    "schemaVersion": "openpond.toolLearningConsultation.v1",
+    "operationId": "consultation-fixture",
+    "installationId": "installation-fixture",
+    "scope": {
+      "teamId": "team-fixture",
+      "projectId": "project-fixture"
+    },
+    "sessionId": "session-fixture",
+    "callId": "call-fixture",
+    "capabilityId": "capability-fixture",
+    "manifestHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "modelRelease": {
+      "id": "fixture-release",
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "mode": "recovery",
+    "intent": "Print one.",
+    "action": {
+      "kind": "shell",
+      "command": "python -c 'print(1)'",
+      "shell": "bash"
+    },
+    "actionHash": "6cb4a8b3a4b80d2752f04d65030746a19830a4b604664fdc78016f77c760505b",
+    "environment": {
+      "application": "fixture",
+      "version": "v1",
+      "state": {
+        "cwd": "fixture"
+      },
+      "fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "contextHash": "e515a6c025f5e4b30210a097e84c6c077de4ded57cb58c8ffbaa5b3b3b785b57",
+    "failure": {
+      "message": "A retained fixture error",
+      "observation": {
+        "id": "observation-fixture",
+        "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    },
+    "round": 1
+  },
+  "response": {
+    "schemaVersion": "openpond.toolLearningDecision.v1",
+    "operationId": "consultation-fixture",
+    "installationId": "installation-fixture",
+    "capabilityId": "capability-fixture",
+    "manifestHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "modelRelease": {
+      "id": "fixture-release",
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "actionHash": "6cb4a8b3a4b80d2752f04d65030746a19830a4b604664fdc78016f77c760505b",
+    "contextHash": "e515a6c025f5e4b30210a097e84c6c077de4ded57cb58c8ffbaa5b3b3b785b57",
+    "state": "completed",
+    "decision": {
+      "decision": "needs_context",
+      "missing": [
+        {
+          "field": "error",
+          "reason": "Fixture only"
+        }
+      ]
+    },
+    "usageReceipt": {
+      "id": "usage-fixture",
+      "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "completedAt": "2026-10-29T00:00:00Z"
+  }
+}

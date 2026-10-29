@@ -21,6 +21,10 @@ import * as postTraining from '../../../packages/sdk/src/post-training.ts';
 import * as candidate from '../../../packages/sdk/src/training-candidate-decisions.ts';
 import * as acceptance from '../../../packages/sdk/src/training-acceptance.ts';
 import * as recovery from '../../../packages/sdk/src/training-recovery.ts';
+import * as toolLearning from '../../../packages/evals/src/tool-learning/index.ts';
+import * as toolLearningClient from '../../../packages/sdk/src/tool-learning-client.ts';
+import * as toolLearningResponses from '../../../packages/sdk/src/tool-learning-responses.ts';
+import * as toolLearningEpisodes from '../../../packages/sdk/src/tool-learning-episodes.ts';
 import { canonicalJson, canonicalSha256 } from '../../../packages/sdk/src/protocol.ts';
 const schemas: Record<string,unknown>={};
 const inputSchemas: Record<string,unknown>={};
@@ -40,11 +44,15 @@ const override=({zodSchema,jsonSchema}:any)=>{
  });
  jsonSchema['x-openpond-string-transforms']=transforms;
 };
-for(const module of [training,preparation,models,learning,datasets,estimates,postTraining,candidate,acceptance,recovery,evaluation,datasetPreparation,datasetOperations,tasksetRuns,harness,credentials,learningIndex,learningClient,harnessClient]){
+for(const module of [training,preparation,models,learning,datasets,estimates,postTraining,candidate,acceptance,recovery,evaluation,datasetPreparation,datasetOperations,tasksetRuns,harness,credentials,learningIndex,learningClient,harnessClient,toolLearning,toolLearningClient,toolLearningResponses,toolLearningEpisodes]){
  for(const [name,value] of Object.entries(module)){
   if(!name.endsWith('Schema')||!(value instanceof z.ZodType))continue;
   const schema=z.toJSONSchema(value,{target:'draft-2020-12',io:'output',override});
-  inputSchemas[name]=z.toJSONSchema(value,{target:'draft-2020-12',io:'input',override});
+  // These wire envelopes have no defaults or shape-changing transforms. Their
+  // preprocessors only enforce JSON bounds, so input and output shapes match.
+  // Zod's generic input projection would otherwise erase bounded request types.
+  inputSchemas[name]=[toolLearning,toolLearningClient,toolLearningResponses,toolLearningEpisodes].includes(module as any)
+   ? schema : z.toJSONSchema(value,{target:'draft-2020-12',io:'input',override});
   if(name in schemas&&canonicalJson(schemas[name])!==canonicalJson(schema))throw Error(`Conflicting wire schema ${name}`);
   schemas[name]=schema;
  }
@@ -83,7 +91,7 @@ await mkdir(root,{recursive:true});
 const generator=await readFile(import.meta.url.startsWith('file:')?new URL(import.meta.url):import.meta.url,'utf8');
 const sourcePaths=[...generator.matchAll(/from '(\.\.\/\.\.\/\.\.\/packages\/[^']+)'/g)].map(match=>match[1]!);
 const sourceFiles=Object.fromEntries(await Promise.all([...new Set(sourcePaths)].sort().map(async path=>[path.replace('../../../',''),createHash('sha256').update(await readFile(new URL(path,import.meta.url))).digest('hex')])));
-const provenance={sourceBase:'7f66b937790fe6f17ef6662841d086520df6d57e',candidateSdkVersion:'0.12.8',pythonVersion:'0.1.0',sourceFiles};
+const provenance={sourceBase:'0bf7b6be48ae1d3a94f1266d41c695c992d05b48',candidateSdkVersion:'0.12.12',pythonVersion:'0.1.2',sourceFiles};
 // Lossless transport interning only: expand before interpreting any JSON Schema.
 // Every source object is a reference, so source keys cannot collide with tags.
 // Child-first references preserve root-local $refs and original property order.

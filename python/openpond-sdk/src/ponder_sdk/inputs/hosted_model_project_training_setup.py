@@ -43,12 +43,14 @@ HostedModelProjectTrainingSetupBasemodel70 = TypedDict('HostedModelProjectTraini
 HostedModelProjectTrainingSetupManagedgpuselection120 = TypedDict('HostedModelProjectTrainingSetupManagedgpuselection120', {
     'mode': Required[Literal['automatic']],
     'objective': Required[Literal['balanced', 'fast', 'economical']],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 HostedModelProjectTrainingSetupManagedgpuselection121 = TypedDict('HostedModelProjectTrainingSetupManagedgpuselection121', {
     'mode': Required[Literal['manual']],
     'availabilityId': Required[str],
     'gpuType': Required[str],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 HostedModelProjectTrainingSetupRecipe160 = TypedDict('HostedModelProjectTrainingSetupRecipe160', {

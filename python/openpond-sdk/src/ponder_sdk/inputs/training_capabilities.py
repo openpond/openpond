@@ -25,7 +25,17 @@ TrainingCapabilitiesPolicylora5 = TypedDict('TrainingCapabilitiesPolicylora5', {
     'continuation': Required['TrainingCapabilitiesPolicylora5Continuation4'],
 })
 
-TrainingCapabilitiesStructuredoutputs6 = TypedDict('TrainingCapabilitiesStructuredoutputs6', {
+TrainingCapabilitiesPolicydataparallel6 = TypedDict('TrainingCapabilitiesPolicydataparallel6', {
+    'capability': Required[Literal['managed_rl.policy.data_parallel']],
+    'version': Required[Literal['1']],
+    'gpuCount': Required[Literal[2]],
+    'worldSize': Required[Literal[2]],
+    'backend': Required[Literal['nccl']],
+    'allocationMode': Required[Literal['exclusive']],
+    'workerImageDigest': Required[str],
+})
+
+TrainingCapabilitiesStructuredoutputs7 = TypedDict('TrainingCapabilitiesStructuredoutputs7', {
     'capability': Required[Literal['work.structured-output.v1']],
     'harnessRuntimeHash': Required[str],
     'workHarnessHash': Required[str],
@@ -35,17 +45,17 @@ TrainingCapabilitiesStructuredoutputs6 = TypedDict('TrainingCapabilitiesStructur
     'invalidBytesRejected': Required[Literal[True]],
 })
 
-TrainingCapabilitiesControls8 = TypedDict('TrainingCapabilitiesControls8', {
+TrainingCapabilitiesControls9 = TypedDict('TrainingCapabilitiesControls9', {
     'cancel': Required[bool],
     'stopAfterGroup': Required[bool],
     'resumeFromCheckpoint': Required[bool],
 })
 
-TrainingCapabilitiesEstimates9 = TypedDict('TrainingCapabilitiesEstimates9', {
+TrainingCapabilitiesEstimates10 = TypedDict('TrainingCapabilitiesEstimates10', {
     'schemaVersion': Required[Literal['openpond.trainingEstimate.v1']],
 })
 
-TrainingCapabilitiesLimits10 = TypedDict('TrainingCapabilitiesLimits10', {
+TrainingCapabilitiesLimits11 = TypedDict('TrainingCapabilitiesLimits11', {
     'maximumSpendUsd': Required[Union[int, float]],
     'maximumWallSeconds': Required[int],
     'maximumArtifactBytes': Required[int],
@@ -58,11 +68,12 @@ TrainingCapabilities = TypedDict('TrainingCapabilities', {
     'methods': Required[list[str]],
     'executionModes': NotRequired[list[Literal['training', 'qualification']]],
     'policyLora': NotRequired['TrainingCapabilitiesPolicylora5'],
-    'structuredOutputs': NotRequired['TrainingCapabilitiesStructuredoutputs6'],
+    'policyDataParallel': NotRequired['TrainingCapabilitiesPolicydataparallel6'],
+    'structuredOutputs': NotRequired['TrainingCapabilitiesStructuredoutputs7'],
     'placements': Required[list[Literal['local', 'remote', 'colocated', 'provider_native']]],
-    'controls': Required['TrainingCapabilitiesControls8'],
-    'estimates': NotRequired['TrainingCapabilitiesEstimates9'],
-    'limits': Required['TrainingCapabilitiesLimits10'],
+    'controls': Required['TrainingCapabilitiesControls9'],
+    'estimates': NotRequired['TrainingCapabilitiesEstimates10'],
+    'limits': Required['TrainingCapabilitiesLimits11'],
     'checkedAt': Required[str],
     'expiresAt': Required[str],
 })

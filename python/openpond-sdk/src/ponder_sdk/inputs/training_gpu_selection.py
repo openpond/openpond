@@ -7,12 +7,14 @@ from ..wire import JsonValue
 TrainingGpuSelectionValue0 = TypedDict('TrainingGpuSelectionValue0', {
     'mode': Required[Literal['automatic']],
     'objective': Required[Literal['balanced', 'fast', 'economical']],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingGpuSelectionValue1 = TypedDict('TrainingGpuSelectionValue1', {
     'mode': Required[Literal['manual']],
     'availabilityId': Required[str],
     'gpuType': Required[str],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingGpuSelection: TypeAlias = Union['TrainingGpuSelectionValue0', 'TrainingGpuSelectionValue1']
