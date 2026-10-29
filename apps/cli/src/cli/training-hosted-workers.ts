@@ -32,6 +32,18 @@ export async function runHostedWorkerCommand(input: {
   let body: string | undefined;
   if (input.action === "hosted-workers") {
     if (input.target) throw new Error("hosted-workers does not accept an identifier.");
+  } else if (input.action === "hosted-worker-adopt") {
+    if (!input.confirmed) throw new Error("Attaching a reserved GPU requires --yes and a funded queued job.");
+    body = JSON.stringify(z.object({
+      jobId: z.string().min(1).max(191), providerPodId: z.string().min(1).max(191),
+      idempotencyKey: z.string().min(1).max(191), deadlineAt: z.iso.datetime({ offset: true }),
+      maximumHourlyUsd: z.number().positive().max(10), maximumSessionUsd: z.number().positive().max(30),
+    }).strict().parse(await input.readInput()));
+    path += "/adopt";
+  } else if (input.action === "hosted-worker-enroll" || input.action === "hosted-worker-verify") {
+    if (!input.confirmed || !input.target) throw new Error("Reserved GPU enrollment requires a worker ID and --yes.");
+    path += `/${encodeURIComponent(input.target)}/${input.action === "hosted-worker-enroll" ? "enroll" : "enrollment-verification"}`;
+    body = "{}";
   } else if (input.action === "hosted-worker") {
     if (!input.target) throw new Error("hosted-worker requires a physical worker ID.");
     path += `/${encodeURIComponent(input.target)}`;
