@@ -15,7 +15,7 @@ OpenPond is an open-source, local-first agent workspace and runtime.
 - Build Tasksets and run evaluations before using evidence for model training;
   a completed conversation is not automatically treated as training data.
 
-![OpenPond Work interface](docs/public/assets/openpond-work-interface.png)
+![OpenPond desktop app](docs/public/assets/openpond-desktop.png)
 
 ## Installation
 
