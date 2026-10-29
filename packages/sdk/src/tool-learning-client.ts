@@ -27,6 +27,7 @@ import {
 } from "./learning-credentials.js";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import { readBoundedJsonResponse } from "./protocol.js";
+import { assembleToolLearningEpisode, ToolLearningEpisodeAssemblySchema } from "./tool-learning-episodes.js";
 
 /** Prepare and retain this request privately before registration. Retrying the
  * same bytes recovers issuance without storing plaintext on the host. */
@@ -296,7 +297,8 @@ export class OpenPondToolLearningClient {
         episodeId: ToolLearningIdSchema,
         scope: z.object({ teamId: ToolLearningIdSchema, projectId: ToolLearningIdSchema }).strict(),
         events: z.array(ToolEpisodeEventSchema).max(TOOL_LEARNING_LIMITS.eventsPerEpisode),
-        state: z.enum(["incomplete", "awaiting_owner_review"]),
+        state: ToolLearningEpisodeAssemblySchema.shape.state,
+        assembly: ToolLearningEpisodeAssemblySchema,
         verificationAuthority: z.literal("not_granted"),
         learningEnrollment: z.literal(false),
       })
@@ -319,6 +321,9 @@ export class OpenPondToolLearningClient {
       )
     )
       throw new Error("tool_learning_episode_scope_mismatch");
+    if (result.state !== result.assembly.state ||
+      contentHash(assembleToolLearningEpisode(result.events)) !== contentHash(result.assembly))
+      throw new Error("tool_learning_episode_assembly_mismatch");
     return result;
   }
 
