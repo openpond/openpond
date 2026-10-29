@@ -154,3 +154,14 @@ or known eligible boundaries. Changed originals require a new policy.
 false when unreadable originals are excluded. `coverage.excludedSessions` retains
 their count. These fields establish inventory reconciliation only; reconstructed
 tasks still need their own starting-state and grader qualification.
+
+### Bounded tool episode records
+
+`openpond-sdk/tool-learning` exports `assembleToolLearningEpisode`. Episode reads
+retain the original events plus an `assembly` with structural application/tool
+version groups and an explicit `incomplete`, `ambiguous`, or
+`awaiting_owner_review` state. Missing observations stay incomplete; contradictory
+terminal observations or mismatched call references stay ambiguous. Delivery
+order does not select a preferred outcome. The SDK checks assembly against the
+returned events. These records grant neither verification nor learning authority;
+owner review and canonical grading/admission remain separate.
