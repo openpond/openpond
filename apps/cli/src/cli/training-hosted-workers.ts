@@ -40,6 +40,13 @@ export async function runHostedWorkerCommand(input: {
       maximumHourlyUsd: z.number().positive().max(10), maximumSessionUsd: z.number().positive().max(30),
     }).strict().parse(await input.readInput()));
     path += "/adopt";
+  } else if (input.action === "hosted-worker-rebind") {
+    if (!input.confirmed) throw new Error("Reserved GPU recovery requires --yes and a fresh funded queued job.");
+    const { workerId, ...request } = z.object({ workerId: z.string().min(1).max(191),
+      jobId: z.string().min(1).max(191), idempotencyKey: z.string().min(1).max(191),
+    }).strict().parse(await input.readInput());
+    path += `/${encodeURIComponent(workerId)}/rebind`;
+    body = JSON.stringify(request);
   } else if (input.action === "hosted-worker-enroll" || input.action === "hosted-worker-verify") {
     if (!input.confirmed || !input.target) throw new Error("Reserved GPU enrollment requires a worker ID and --yes.");
     path += `/${encodeURIComponent(input.target)}/${input.action === "hosted-worker-enroll" ? "enroll" : "enrollment-verification"}`;

@@ -516,6 +516,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       "openpond training hosted-provider|hosted-quotes --team-id <id> [--api-base-url <url>] [--json]",
       "openpond training hosted-worker <physical-worker-id> --team-id <id> [--api-base-url <url>] [--json]",
       "openpond training hosted-worker-adopt <reserved-pod-and-job.json> --team-id <id> [--api-base-url <url>] --yes [--json]",
+      "openpond training hosted-worker-rebind <worker-and-job.json> --team-id <id> [--api-base-url <url>] --yes [--json]",
       "openpond training hosted-worker-enroll|hosted-worker-verify <physical-worker-id> --team-id <id> [--api-base-url <url>] --yes [--json]",
       "openpond training hosted-worker-stop|hosted-worker-resume|hosted-worker-retire|hosted-worker-warm-idle|hosted-worker-retain-session <control.json> --team-id <id> [--api-base-url <url>] --yes [--json]",
       "openpond training hosted-model <model-project-id> --team-id <id> [--api-base-url <url>] [--json]",
