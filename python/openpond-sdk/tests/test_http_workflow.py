@@ -25,7 +25,7 @@ def receipt(request):
 
 @pytest.fixture
 def server():
-    state={'receipt':None,'posts':0}
+    state={'receipt':None,'posts':0,'tool_posts':0,'tool_reply':'valid'}
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*_):pass
         def reply(self,status,value):
@@ -35,9 +35,20 @@ def server():
         def auth(self):
             assert self.headers['Authorization']=='Bearer secret-fixture'
             assert self.headers['X-OpenPond-Team-Id']==TEAM
-            assert self.headers['Accept']==('application/json' if self.path.startswith('/v1/model-projects/configuration/') else 'application/vnd.openpond.training+json;version=2')
+            assert self.headers['Accept']==('application/json' if self.path.startswith(('/v1/model-projects/configuration/','/v1/tool-learning/')) else 'application/vnd.openpond.training+json;version=2')
         def do_POST(self):
-            self.auth();state['posts']+=1
+            self.auth()
+            if self.path=='/v1/tool-learning/consultations':
+                state['tool_posts']+=1
+                request=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                assert self.headers['Content-Type']=='application/json'
+                assert request==TOOL['request']
+                if state['tool_reply']=='lost':
+                    self.connection.shutdown(2);self.connection.close();return
+                response=copy.deepcopy(TOOL['response'])
+                if state['tool_reply']=='wrong-identity':response['modelRelease']['contentHash']='0'*64
+                self.reply(200,response);return
+            state['posts']+=1
             data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             if self.path=='/v1/training/preparations':
                 state['receipt']=receipt(data)
@@ -50,6 +61,13 @@ def server():
             state['receipt']=retained;self.reply(200,retained)
         def do_GET(self):
             self.auth()
+            if self.path.startswith('/v1/tool-learning/installations?'):
+                assert self.path.endswith('projectId=project-fixture')
+                item=copy.deepcopy(TOOL['installation'])
+                if state['tool_reply']=='wrong-project':item['scope']['projectId']='another-project'
+                self.reply(200,{'items':[item],'nextCursor':None});return
+            if self.path=='/v1/tool-learning/installations/installation-fixture/consultations/consultation-fixture':
+                self.reply(200,TOOL['response']);return
             if self.path=='/v1/model-projects/configuration/candidates':
                 self.reply(200,{'candidates':[]});return
             if self.path.endswith('/slow'):time.sleep(.15)
@@ -140,3 +158,46 @@ def test_shared_identity_vectors_and_number_refusal():
     assert decode_schema_asset(asset([{'$object':7}]))=={'$object':7}
     for malformed in (asset([{'cycle':{'$object':0}}]),asset([{}, {'bad':{'$object':True}}],1),asset([{'raw':{'extra':0}}])):
         with pytest.raises(SchemaAssetError):decode_schema_asset(malformed)
+
+
+TOOL=json.loads(files('ponder_sdk').joinpath('fixtures/tool-learning.valid.json').read_text())
+
+def test_native_tool_learning_scope_receipts_and_uncertain_write(server):
+    """A valid HTTP response must not cross project/model identity, and a lost
+    paid consultation reply must be reconciled by GET rather than replayed.
+    Both clients use real HTTP and TypeScript-sealed portable fixtures.
+    """
+    url,state=server
+    async def async_run():
+        async with AsyncClient(base_url=url,api_key='secret-fixture',team_id=TEAM,read_attempts=1) as client:
+            tools=client.tool_learning(project_id='project-fixture')
+            assert (await tools.installations())['items']==[TOOL['installation']]
+            state['tool_reply']='wrong-project'
+            with pytest.raises(ProtocolError):await tools.installations()
+            state['tool_reply']='wrong-identity'
+            with pytest.raises(ProtocolError):await tools.consult(TOOL['request'])
+            state['tool_reply']='lost';before=state['tool_posts']
+            with pytest.raises(PonderError) as uncertain:await tools.consult(TOOL['request'])
+            assert uncertain.value.outcome_unknown and state['tool_posts']==before+1
+            assert await tools.consultation(TOOL['request'])==TOOL['response']
+            wrong=copy.deepcopy(TOOL['request']);wrong['scope']['projectId']='another-project'
+            before=state['tool_posts']
+            with pytest.raises(ProtocolError):await tools.consult(wrong)
+            assert state['tool_posts']==before
+    with Client(base_url=url,api_key='secret-fixture',team_id=TEAM,read_attempts=1) as client:
+        tools=client.tool_learning(project_id='project-fixture')
+        assert tools.installations()['items']==[TOOL['installation']]
+        state['tool_reply']='wrong-project'
+        with pytest.raises(ProtocolError):tools.installations()
+        state['tool_reply']='wrong-identity'
+        with pytest.raises(ProtocolError):tools.consult(TOOL['request'])
+        state['tool_reply']='lost';before=state['tool_posts']
+        with pytest.raises(PonderError) as uncertain:tools.consult(TOOL['request'])
+        assert uncertain.value.outcome_unknown and state['tool_posts']==before+1
+        assert tools.consultation(TOOL['request'])==TOOL['response']
+        wrong=copy.deepcopy(TOOL['request']);wrong['scope']['projectId']='another-project'
+        before=state['tool_posts']
+        with pytest.raises(ProtocolError):tools.consult(wrong)
+        assert state['tool_posts']==before
+    state['tool_reply']='valid'
+    asyncio.run(async_run())

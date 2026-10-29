@@ -325,12 +325,14 @@ TrainingEstimateSourceValue2Submission1Requestedcapabilities5Item = TypedDict('T
 TrainingEstimateSourceValue2Submission1Gpuselection70 = TypedDict('TrainingEstimateSourceValue2Submission1Gpuselection70', {
     'mode': Required[Literal['automatic']],
     'objective': Required[Literal['balanced', 'fast', 'economical']],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingEstimateSourceValue2Submission1Gpuselection71 = TypedDict('TrainingEstimateSourceValue2Submission1Gpuselection71', {
     'mode': Required[Literal['manual']],
     'availabilityId': Required[str],
     'gpuType': Required[str],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingEstimateSourceValue2Submission1Physicalplacement8 = TypedDict('TrainingEstimateSourceValue2Submission1Physicalplacement8', {

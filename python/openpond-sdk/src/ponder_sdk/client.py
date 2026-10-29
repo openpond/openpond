@@ -8,6 +8,7 @@ from .learning import Learning,AsyncLearning
 from .post_training import PostTraining,AsyncPostTraining
 from .evaluation_runs import EvaluationRuns,AsyncEvaluationRuns
 from .datasets import Datasets,AsyncDatasets
+from .tool_learning import ToolLearning,AsyncToolLearning
 from .dataset_preparations import DatasetPreparations,AsyncDatasetPreparations
 
 class Client:
@@ -21,6 +22,9 @@ class Client:
         self.evaluation_runs=EvaluationRuns(self._transport,team_id)
         self.datasets=Datasets(self._transport,team_id)
         self.dataset_preparations=DatasetPreparations(self._transport,team_id)
+    def tool_learning(self, *, project_id: str) -> ToolLearning:
+        """Bind tool learning to one project without creating another HTTP pool."""
+        return ToolLearning(self._transport, self.team_id, project_id)
     def close(self)->None:self._transport.close()
     def __enter__(self)->Client:return self
     def __exit__(self,*exception)->None:
@@ -39,6 +43,9 @@ class AsyncClient:
         self.evaluation_runs=AsyncEvaluationRuns(self._transport,team_id)
         self.datasets=AsyncDatasets(self._transport,team_id)
         self.dataset_preparations=AsyncDatasetPreparations(self._transport,team_id)
+    def tool_learning(self, *, project_id: str) -> AsyncToolLearning:
+        """Bind tool learning to one project using this client's async pool."""
+        return AsyncToolLearning(self._transport, self.team_id, project_id)
     async def close(self)->None:await self._transport.close()
     async def __aenter__(self)->AsyncClient:return self
     async def __aexit__(self,*exception)->None:

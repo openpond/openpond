@@ -43,12 +43,14 @@ ModelProjectSaveRequestProject3Trainingsetup6Profileevaluation30 = TypedDict('Mo
 ModelProjectSaveRequestProject3Trainingsetup6Managedgpuselection120 = TypedDict('ModelProjectSaveRequestProject3Trainingsetup6Managedgpuselection120', {
     'mode': Required[Literal['automatic']],
     'objective': Required[Literal['balanced', 'fast', 'economical']],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 ModelProjectSaveRequestProject3Trainingsetup6Managedgpuselection121 = TypedDict('ModelProjectSaveRequestProject3Trainingsetup6Managedgpuselection121', {
     'mode': Required[Literal['manual']],
     'availabilityId': Required[str],
     'gpuType': Required[str],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 ModelProjectSaveRequestProject3Trainingsetup6Recipe160 = TypedDict('ModelProjectSaveRequestProject3Trainingsetup6Recipe160', {

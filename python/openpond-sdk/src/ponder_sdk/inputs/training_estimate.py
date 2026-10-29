@@ -19,18 +19,20 @@ TrainingEstimatePricing12 = TypedDict('TrainingEstimatePricing12', {
 TrainingEstimateGpu13Requested00 = TypedDict('TrainingEstimateGpu13Requested00', {
     'mode': Required[Literal['automatic']],
     'objective': Required[Literal['balanced', 'fast', 'economical']],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingEstimateGpu13Requested01 = TypedDict('TrainingEstimateGpu13Requested01', {
     'mode': Required[Literal['manual']],
     'availabilityId': Required[str],
     'gpuType': Required[str],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingEstimateGpu13Resolved10 = TypedDict('TrainingEstimateGpu13Resolved10', {
     'availabilityId': Required[str],
     'gpuType': Required[str],
-    'gpuCount': Required[Literal[1]],
+    'gpuCount': Required[Union[Literal[1], Literal[2]]],
 })
 
 TrainingEstimateGpu13 = TypedDict('TrainingEstimateGpu13', {

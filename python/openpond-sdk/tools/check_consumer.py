@@ -16,10 +16,16 @@ from ponder_sdk import Client,AsyncClient,models,inputs,canonical_json
 from ponder_sdk.wire import schemas
 origin=Path(ponder_sdk.__file__).resolve()
 assert Path(sys.prefix).resolve() in origin.parents
-assert ponder_sdk.__version__=='0.1.1'
+assert ponder_sdk.__version__=='0.1.2'
 assert schemas()['schemas']['TrainingPreparationReceiptSchema']
 assert models.TrainingPreparationReceipt.__annotations__
 assert inputs.TrainingPreparationRequest.__annotations__
+assert models.ToolLearningConsultationResponse.__args__
+assert inputs.ToolLearningConsultationRequest.__annotations__
+with Client(base_url='https://example.invalid',api_key='fixture',team_id='team-fixture') as client:
+    tools=client.tool_learning(project_id='project-fixture')
+    assert tools.project_id=='project-fixture'
+    assert callable(tools.consult) and callable(tools.consultation)
 assert canonical_json({'2':2,'10':1})=='{"2":2,"10":1}'
 print(json.dumps({'installedFromWheel':True,'runtime':'python','pythonVersion':sys.version.split()[0],'schemas':len(schemas()['schemas']),'noNodeSubprocess':True}))
 '''

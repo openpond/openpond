@@ -3,13 +3,13 @@
 Native synchronous and asynchronous access to existing OpenPond training,
 evaluation, dataset and continual-learning APIs. Python3.10+; no Node subprocess,
 Desktop application, or uv installation is required to use the installed wheel.
-Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.1. Name and
+Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.2. Name and
 publisher ownership must be verified before publication; this source is not a
 claim that a registry release exists.
 
 ```sh
-pip install ponder-sdk==0.1.1
-# or: uv add ponder-sdk==0.1.1
+pip install ponder-sdk==0.1.2
+# or: uv add ponder-sdk==0.1.2
 ```
 
 Use an existing workspace API credential and explicit API origin. Do not put
@@ -108,11 +108,63 @@ never shells out to a Node authoring compiler. Advanced `stage_artifact` and
 capabilities and exact approval. Dataset source ingestion/large uploads remain
 subject to the existing public format and API limits.
 
+## Ponder Fix-it and SFT
+
+Bind the tool-learning client to an explicit project. It shares the parent
+client's connection pool and exposes all fourteen existing tool-learning API
+operations in both synchronous and asynchronous form:
+
+```python
+from ponder_sdk import Client, inputs
+
+with Client(base_url=api_url, api_key=api_key, team_id=team_id) as client:
+    tools = client.tool_learning(project_id=project_id)
+    page = tools.installations()
+    # Keep page["nextCursor"]; pass query={"after": cursor} for another page.
+    installation = tools.installation(installation_id)
+    episodes = tools.episodes(installation_id)
+    episode = tools.episode(installation_id, episode_id)
+    manifest = tools.manifest(installation_id)
+
+    # request is an already-sealed, reviewed ToolLearningConsultationRequest
+    # from your capture/consultation integration. This may incur model usage.
+    # response = tools.consult(request)
+    # If a submit reply is lost, reconcile the SAME request without replay:
+    # response = tools.consultation(request)
+```
+
+Owner credentials register/control installations, select routing, project
+recoveries, and purge retained events. Use the separate short-lived installation
+credential for capture/manifest/consultation calls; possession of it does not
+approve training data, spend, or a learned adapter. `register`, `set_state`,
+`append`, `project`, `purge`, `configure_routing`, and `consult` are explicit
+mutations and are never automatically replayed. Queries cannot override the
+bound project. Response scope, installation, operation, echoed configuration,
+event references and consultation/model identity are checked before return.
+
+Tool-learning and Harness seals use the existing Harness canonical format,
+which differs from the compact training protocol. Retain seals from the
+qualified integration/host owner; **do not use `canonical_sha256` to create
+Harness event, action, context, manifest or routing seals.** Like portable
+Harness packages, these are host-authenticated declarations rather than a
+claim that this Python client reproduces JavaScript locale collation. Installed
+Python makes no Node subprocess calls. The canonical host validates seals and
+admission; schema validation is not authority to capture, bill or train.
+
+For SFT, select `sft` and the supervised recipe on the hosted Model, review the
+supervised batch, and use `training.prepare_run` / `start_preparation` with that
+pinned Model configuration and bounded spend. The manual example reads the
+actual selected method and checks hosted capabilities, revision and etag; it no
+longer assumes every preparation is GRPO. Status, outputs and cancellation use
+the same existing operations. A completed optimizer run does not automatically
+activate an adapter or establish better held-out behavior.
+
 ## Development and release
 
 ```sh
 uv sync --project python/openpond-sdk --locked
 pnpm exec tsx python/openpond-sdk/tools/export-wire.ts
+pnpm exec tsx python/openpond-sdk/tools/tool-learning-fixtures.ts
 uv run --project python/openpond-sdk python python/openpond-sdk/tools/generate_models.py
 uv run --project python/openpond-sdk python python/openpond-sdk/tools/generate_models.py --inputs
 uv run --project python/openpond-sdk python python/openpond-sdk/tools/generate_clients.py
@@ -143,10 +195,10 @@ same artifacts with their exact source/run/version/manifest binding:
 
 ```sh
 # Run from the reviewed source ref; these are operator commands, not yet run.
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.1
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.2
 gh run download REVIEWED_BUILD_RUN -n ponder-python-candidate -D reviewed-python-candidate
 sha256sum reviewed-python-candidate/manifest.json
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.1 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.2 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
 ```
 
 The publish lane requires the protected `pypi-production` environment and

@@ -1,4 +1,4 @@
-"""Native reviewed-batch orchestration; each mutation is selected explicitly.
+"""Native reviewed SFT/reward-batch orchestration; each mutation is selected explicitly.
 
 OPENPOND_API_URL / OPENPOND_API_KEY / OPENPOND_TEAM_ID are existing credentials,
 not a second login. Never execute this example as a test without approval.
@@ -19,7 +19,13 @@ async def main():
     async with AsyncClient(base_url=os.environ['OPENPOND_API_URL'],api_key=os.environ['OPENPOND_API_KEY'],team_id=os.environ['OPENPOND_TEAM_ID']) as client:
         if args.action=='prepare':
             capabilities=await client.training.capabilities()
-            if 'grpo' not in capabilities['methods']:raise ProtocolError('grpo_not_available')
+            configuration=(await client.models.get(value['configuration']['id']))['project']
+            if configuration['revision']!=value['configuration']['expectedRevision'] or configuration['etag']!=value['configuration']['expectedEtag']:
+                raise ProtocolError('configuration_identity_mismatch')
+            setup=configuration['trainingSetup']
+            method=setup['recipe']['method'] if setup['recipe'] else setup['method']
+            if method is None or method not in capabilities['methods']:
+                raise ProtocolError('configured_training_method_unavailable')
             response=await client.training.prepare_run(value)
         else:
             retained=await client.training.get_preparation(value['plan']['id'])

@@ -310,12 +310,14 @@ TrainingJobSubmissionRequestedcapabilities5Item = TypedDict('TrainingJobSubmissi
 TrainingJobSubmissionGpuselection70 = TypedDict('TrainingJobSubmissionGpuselection70', {
     'mode': Required[Literal['automatic']],
     'objective': Required[Literal['balanced', 'fast', 'economical']],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingJobSubmissionGpuselection71 = TypedDict('TrainingJobSubmissionGpuselection71', {
     'mode': Required[Literal['manual']],
     'availabilityId': Required[str],
     'gpuType': Required[str],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingJobSubmissionPhysicalplacement8 = TypedDict('TrainingJobSubmissionPhysicalplacement8', {

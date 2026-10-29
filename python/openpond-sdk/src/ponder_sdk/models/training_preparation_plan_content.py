@@ -220,12 +220,14 @@ TrainingPreparationPlanContentRequest3Batch6 = TypedDict('TrainingPreparationPla
 TrainingPreparationPlanContentRequest3Gpuselection90 = TypedDict('TrainingPreparationPlanContentRequest3Gpuselection90', {
     'mode': Required[Literal['automatic']],
     'objective': Required[Literal['balanced', 'fast', 'economical']],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingPreparationPlanContentRequest3Gpuselection91 = TypedDict('TrainingPreparationPlanContentRequest3Gpuselection91', {
     'mode': Required[Literal['manual']],
     'availabilityId': Required[str],
     'gpuType': Required[str],
+    'gpuCount': NotRequired[Union[Literal[1], Literal[2]]],
 })
 
 TrainingPreparationPlanContentRequest3Physicalplacement10 = TypedDict('TrainingPreparationPlanContentRequest3Physicalplacement10', {
