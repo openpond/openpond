@@ -19,10 +19,12 @@ export function FixItSetup({ context, baseUrl, onClose }: { context: FixItContex
   return <div className="git-dialog-backdrop provider-dialog-backdrop" onMouseDown={onClose}>
     <section ref={ref} className="git-dialog provider-details-dialog agent-setup-dialog" role="dialog" aria-modal="true" aria-label="Connect Fix-it" onMouseDown={event => event.stopPropagation()}>
       <button className="git-dialog-close" aria-label="Close" onClick={onClose}><X size={16} /></button>
-      <h2>Connect Fix-it</h2><p>Send tool errors and recovery candidates to your private saved dataset.</p>
-      <label>Coding agent<DropdownSelect label="Fix-it coding agent" value={client} onChange={value => { setClient(value); setCopied(false); }} options={[{ value: "claude_code", label: "Claude Code" }, { value: "openpond", label: "OpenPond" }]} /></label>
-      <button className="training-button" onClick={() => void copy()}>{copied ? "Setup prompt copied" : "Copy capture setup prompt"}</button>
-      <p>Paste this into your agent in the workspace you want to connect. Captures stay in your saved dataset until removed. Training stays off.</p>
+      <div className="provider-dialog-header"><div><h2>Connect Fix-it</h2><span>Tool capture to your saved dataset</span></div></div>
+      <div className="provider-dialog-body">
+      <div className="agent-sync-form">
+      <label>Coding agent<DropdownSelect label="Fix-it coding agent" value={client} onChange={value => { setClient(value); setCopied(false); }} options={[{ value: "claude_code", label: "Claude Code" }, { value: "openpond", label: "OpenPond" }]} /></label></div>
+      <div className="settings-button-row"><button className="agent-connect-button" onClick={() => void copy()}>{copied ? "Setup prompt copied" : "Copy capture setup prompt"}</button></div>
+      <p className="provider-dialog-note">Paste this into your agent in the workspace you want to connect. Captures stay in your saved dataset until removed. Training stays off.</p></div>
     </section>
   </div>;
 }
