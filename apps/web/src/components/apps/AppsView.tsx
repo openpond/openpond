@@ -104,7 +104,7 @@ export function AppsView({ account, connection, defaultTeamId, onToast, payload,
         const next = event.key === "Home" ? "apps" : event.key === "End" ? "agents" : page === "agents" ? "apps" : "agents";
         setPage(next);
         event.currentTarget.querySelector<HTMLElement>(`#${CSS.escape(`${tabsId}-${next}`)}`)?.focus();
-      }}>{([{ value: "apps", label: "Apps" }, { value: "agents", label: "Continuous learning" }] as const).map(item => <button key={item.value} type="button" role="tab" id={`${tabsId}-${item.value}`} aria-controls={`${tabsId}-${item.value}-panel`} tabIndex={page === item.value ? 0 : -1} aria-selected={page === item.value} onClick={() => setPage(item.value)}>{item.label}</button>)}</div>
+      }}>{([{ value: "apps", label: "Apps" }, { value: "agents", label: "Fix-it" }] as const).map(item => <button key={item.value} type="button" role="tab" id={`${tabsId}-${item.value}`} aria-controls={`${tabsId}-${item.value}-panel`} tabIndex={page === item.value ? 0 : -1} aria-selected={page === item.value} onClick={() => setPage(item.value)}>{item.label}</button>)}</div>
       <div role="tabpanel" id={`${tabsId}-${page}-panel`} aria-labelledby={`${tabsId}-${page}`}>
       {page === "agents" ? <ConnectedAgentsView key={JSON.stringify([account?.activeProfile, defaultTeamId])} connection={connection} payload={payload} onPayload={onPayload} onToast={onToast} /> : <section className="connected-apps-view" aria-label="Apps">
       <div className="connected-apps-header">

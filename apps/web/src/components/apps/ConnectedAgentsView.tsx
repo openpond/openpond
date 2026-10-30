@@ -1,4 +1,5 @@
 import { ErrorToast } from "../common/ErrorToast";
+import { FixItConnections } from "../fix-it/FixItConnections";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BootstrapPayload, ProviderSettings } from "@openpond/contracts";
 import { type ClientConnection } from "../../api";
@@ -23,7 +24,23 @@ import "../../styles/settings/settings-forms.css";
 import "../../styles/settings/settings-lists.css";
 import "../../styles/settings/provider-connections.css";
 
-export function ConnectedAgentsView({
+export function ConnectedAgentsView(props: {
+  connection: ClientConnection | null; payload: BootstrapPayload | null;
+  onPayload(payload: BootstrapPayload): void;
+  onToast?: (message: string, tone?: "success" | "error" | "info") => void;
+}) {
+  const [history, setHistory] = useState(false);
+  const account = props.payload?.account;
+  const teamId = props.payload?.preferences.defaultTeamId ?? account?.accounts.find(item => item.isActive)?.apiKeyAccess?.teamId;
+  const baseUrl = account?.baseUrl ?? account?.activeProfile?.baseUrl;
+  return <>
+    {props.connection && teamId && baseUrl && account?.state === "signed_in" ? <FixItConnections context={{ connection: props.connection, teamId, accountKey: JSON.stringify(account.activeProfile) }} baseUrl={baseUrl} /> : <section className="connected-agents-view"><h2>Fix-it</h2><p>Sign in and select a workspace to connect an agent.</p></section>}
+    <div className="connected-agents-view"><button className="training-text-button" aria-expanded={history} onClick={() => setHistory(value => !value)}>{history ? "Hide history imports" : "History import tools"}</button></div>
+    {history ? <ConnectedAgentsHistoryView {...props} /> : null}
+  </>;
+}
+
+function ConnectedAgentsHistoryView({
   connection,
   payload,
   onPayload,
@@ -173,8 +190,8 @@ export function ConnectedAgentsView({
     <section className="connected-agents-view" aria-label="Continuous learning">
       <div className="agent-connections-heading">
         <div>
-          <h2>Continuous learning</h2>
-          <p>Sync conversations from your installed agents and configure continuous learning.</p>
+          <h2>Conversation history imports</h2>
+          <p>Import existing conversations and manage their original learning setup.</p>
         </div>
         <div className="agent-connections-actions">
           <button
