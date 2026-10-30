@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const RequestSchema = z.object({
-  mode: z.literal("frozen_evaluation"),
+  mode: z.enum(["frozen_evaluation", "training_diagnostic"]),
   evaluationPanel: z.object({
     sourceManifest: z.object({ id: z.string().trim().min(1).max(2000), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
     populationSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -19,6 +19,8 @@ const RequestSchema = z.object({
   maximumSpendUsd: z.number().positive().max(10),
   maxGpuSeconds: z.number().int().positive().max(7200),
 }).strict().superRefine((value, ctx) => {
+  if (value.mode === "training_diagnostic" && (!value.artifact || value.retainedCheckpoint || value.evaluationPanel || value.representation === "merged_backbone"))
+    ctx.addIssue({ code: "custom", message: "Training fit uses a published supervised adapter and the server-derived original training population only." });
   if (Boolean(value.artifact) === Boolean(value.retainedCheckpoint))
     ctx.addIssue({ code: "custom", message: "Choose exactly one published or retained checkpoint source." });
   if (value.retainedCheckpoint && value.representation === "merged_backbone")

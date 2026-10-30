@@ -100,7 +100,11 @@ export function buildHostedTrainingReport(input: {
   const qualification = job.executionMode === "qualification";
   if (qualification) add("qualification_only", "This run collects original-model evidence; optimizer updates were not requested.");
   if (serving) add("serving_only", "This run serves an existing checkpoint; optimizer work and model publication were not requested.");
-  if (serving?.executionMode === "frozen_evaluation" && job.terminalReason === "checkpoint_evaluation_complete") {
+  if (serving?.executionMode === "training_diagnostic")
+    add("training_fit_only", "This diagnostic measures the original training cases; it provides no held-out generalization or promotion evidence.");
+  if (serving?.executionMode === "training_diagnostic" && job.terminalReason === "training_diagnostic_complete")
+    add("training_diagnostic_complete", "The training fit diagnostic finished and entered ordinary cleanup.");
+  else if (serving?.executionMode === "frozen_evaluation" && job.terminalReason === "checkpoint_evaluation_complete") {
     add("checkpoint_evaluation_complete", "The frozen evaluation finished and entered its ordinary cancellation/cleanup lifecycle.");
   } else if (job.terminalReason) add("terminal_reason_present", "The job has a terminal reason; inspect official status/logs for its details.");
   if (!outputs.receipt && serving?.cleanupAttestation) {
