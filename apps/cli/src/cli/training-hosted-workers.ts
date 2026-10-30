@@ -66,7 +66,7 @@ export async function runHostedWorkerCommand(input: {
     if (action === "warm-idle" && (!control.warmIdleDeadlineAt || !control.maximumIdleUsd))
       throw new Error("Warm idle requires warmIdleDeadlineAt and maximumIdleUsd; the server caps retention at three hours.");
     if (action === "retain-session" && (!control.sessionId || !control.sessionDeadlineAt || !control.maximumSessionUsd || !control.idleGraceSeconds))
-      throw new Error("Session retention requires sessionId, sessionDeadlineAt, maximumSessionUsd, and idleGraceSeconds; its deadline and active-plus-idle execution budget cannot be renewed; reserve cleanup costs separately.");
+      throw new Error("Session retention requires sessionId, sessionDeadlineAt, maximumSessionUsd, and idleGraceSeconds. Extending the same session requires explicit owner reauthorization within the server lifetime bound; job budgets remain separate.");
     path += `/${encodeURIComponent(workerId)}/control`;
     body = JSON.stringify({ ...control, action });
   }

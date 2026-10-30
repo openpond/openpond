@@ -33,6 +33,13 @@ const ServingSource = z.object({
   policyVersion: z.number().int().nonnegative(),
   adapterSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   artifact: z.object({ id: z.string().min(1), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).optional(),
+  retainedCheckpoint: z.object({
+    schemaVersion: z.literal("openpond.retainedSupervisedCheckpoint.v1"),
+    sourceJobId: z.string().min(1), sourceJobVersion: z.number().int().positive(),
+    sourceInputManifestSha256: z.string().regex(/^[a-f0-9]{64}$/), checkpointId: z.string().min(1), policyVersion: z.literal(1),
+    checkpointReceiptSha256: z.string().regex(/^[a-f0-9]{64}$/), optimizerEvidenceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    inventorySha256: z.string().regex(/^[a-f0-9]{64}$/), adapterSha256: z.string().regex(/^[a-f0-9]{64}$/), resumeSha256: z.string().regex(/^[a-f0-9]{64}$/), receiptSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  }).optional(),
   evaluationPanel: z.object({
     schemaVersion: z.literal("openpond.frozenEvaluationPanel.v1"),
     sourceManifest: z.object({ id: z.string(), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
@@ -64,6 +71,12 @@ export function parseHostedServingReportEvidence(value: unknown, expected: Pick<
     source.policyVersion > 0 && source.adapterSha256 === null && lastDelta !== undefined &&
     lastDelta.sourceJobId === source.sourceJobId && lastDelta.checkpointId === source.checkpointId &&
     lastDelta.artifact.id === source.artifact?.id && lastDelta.artifact.contentHash === source.artifact?.contentHash;
+  const retained = source.retainedCheckpoint;
+  if (retained && (source.mode !== "frozen_evaluation" || source.artifact || source.derivedBackbone ||
+      retained.sourceJobId !== source.sourceJobId || retained.checkpointId !== source.checkpointId ||
+      (source.target === "checkpoint" && (retained.policyVersion !== source.policyVersion || retained.adapterSha256 !== source.adapterSha256)))) {
+    throw new Error("Hosted serving report retained checkpoint identity mismatch.");
+  }
   if (source.policyVersion !== job.currentPolicyVersion ||
       (source.derivedBackbone ? !mergedIdentityMatches :
         source.mode === "frozen_evaluation" && (source.target === "base_model"
