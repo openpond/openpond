@@ -2,6 +2,15 @@ import { spawn } from "node:child_process";
 import { JavaScriptIsolateExecutionError, validateJavaScriptIsolateInput, type JavaScriptIsolateInput } from "./javascript-isolate.js";
 import { assertBoundedTaskJson } from "./task-schema.js";
 
+/** Created only by the trusted parent wall timer, never from guest error text.
+ * The process executor rejects with this error only after child exit. */
+export class JavaScriptVerifierHostTimeoutError extends Error {
+  constructor(readonly timeoutMs: number, readonly elapsedMs: number) {
+    super("verifier_timeout");
+    this.name = "JavaScriptVerifierHostTimeoutError";
+  }
+}
+
 /** A Node subprocess owns the interpreter; completion always waits for its exit. */
 export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolateInput & { stripTypeScript?: boolean }): Promise<unknown> {
   input.signal?.throwIfAborted();
@@ -13,6 +22,7 @@ export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolate
   // The authored source remains JSON data passed to QuickJS, never host code.
   const program = `globalThis.__openpondIsolateInput = JSON.parse(${JSON.stringify(JSON.stringify(data))});\n${stripTypeScript ? 'globalThis.__openpondIsolateInput.source = require("node:module").stripTypeScriptTypes(globalThis.__openpondIsolateInput.source, { mode: "strip" });\n' : ""}${javascriptIsolateProcessSource}`;
   return new Promise((resolve, reject) => {
+    const startedAt = performance.now();
     const child = spawn("node", ["--max-old-space-size=64", "--input-type=commonjs", "-"], {
       stdio: ["pipe", "pipe", "pipe"],
       env: { PATH: process.env.PATH },
@@ -27,7 +37,11 @@ export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolate
       child.kill("SIGKILL");
     };
     const cancel = () => stop(signal?.reason instanceof Error ? signal.reason : error("cancelled"));
-    const timer = setTimeout(() => stop(input.errorPrefix === "candidate" ? new JavaScriptIsolateExecutionError("candidate_timeout") : error("timeout")), input.timeoutMs);
+    const timer = setTimeout(() => stop(input.errorPrefix === "candidate"
+      ? new JavaScriptIsolateExecutionError("candidate_timeout")
+      : input.errorPrefix === "verifier"
+        ? new JavaScriptVerifierHostTimeoutError(input.timeoutMs, performance.now() - startedAt)
+        : error("timeout")), input.timeoutMs);
     signal?.addEventListener("abort", cancel, { once: true });
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
