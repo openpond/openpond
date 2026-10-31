@@ -14,6 +14,7 @@ const Command = z.object({ id: z.string().min(1).max(200), type: z.literal("comm
 /** Forward Codex's own execution stream. Capture observes real status; it never
  * changes commands, sandbox settings, approvals, or model responses. */
 export async function runCodexWithCapture(options: ToolLearningOptions, id: string) {
+  if (process.env.OPENPOND_CODEX_CAPTURE_ACTIVE) throw new Error("This Codex task already runs inside a captured session. Continue with its normal tools.");
   const home = toolLearningHome(options), { value: record } = await loadToolLearningCredential(home, id);
   if (record.prepared.registration.client !== "codex" || !record.locallyEnabled || record.installation?.state !== "enabled") throw new Error("Select an enabled Codex capture installation.");
   if (await externalCaptureVersion("codex") !== record.prepared.registration.clientVersion) throw new Error("Codex version changed; run tool-learning doctor.");
@@ -27,7 +28,7 @@ export async function runCodexWithCapture(options: ToolLearningOptions, id: stri
   const store = new ToolLearningLocalStore(home);
   try {
     configureLocalToolLearning(store, record, record.installation);
-    const child = spawn("codex", args, { cwd: record.workspaceRoot, stdio: ["inherit", "pipe", "inherit"] });
+    const child = spawn("codex", args, { cwd: record.workspaceRoot, stdio: ["inherit", "pipe", "inherit"], env: { ...process.env, OPENPOND_CODEX_CAPTURE_ACTIVE: id } });
     const completion = once(child, "close").catch(error => [null, error]);
     const interrupt = () => child.kill("SIGINT");
     const terminate = () => child.kill("SIGTERM");
