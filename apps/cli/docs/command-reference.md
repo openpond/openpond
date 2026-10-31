@@ -24,7 +24,7 @@ Options:
 
 ```text
 Usage:
-  openpond tool-learning <setup|register|install|doctor|status|routing|configure|append|flush|episodes|episode|project|disable|enable|revoke|purge|uninstall> [installation-id] [episode-id] [--input-file <absolute-path>] [--team-id <id>] [--workspace <absolute-path>]
+  openpond tool-learning <setup|run|register|install|doctor|status|routing|configure|append|flush|episodes|episode|project|disable|enable|revoke|purge|uninstall> [installation-id] [episode-id] [--input-file <absolute-path>] [--team-id <id>] [--workspace <absolute-path>] [--client claude_code|opencode|codex|openpond] [--prompt <codex-task>] [--model <codex-model>] [--sandbox read-only|workspace-write]
 
 Options:
   --after <string>
@@ -33,7 +33,10 @@ Options:
   --environment-file <string>
   --expires-at <string>
   --input-file <string>
+  --model <string>
   --project-id <string>
+  --prompt <string>
+  --sandbox <string>
   --team-id <string>
   --timeout-sec <integer>
   --tools <string>
