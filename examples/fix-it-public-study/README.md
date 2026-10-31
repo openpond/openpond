@@ -77,6 +77,36 @@ history and ordinary tool schemas at that moment. These support grounded review
 and later consultation; simulator-only instructions, task answers and evaluator
 state are never read into this context.
 
+After a correction-source run has retained its report and resolved every model
+request, export a separate packet for owner review:
+
+```sh
+uv run --locked fixit-study review-packet \
+  --run ./results/correction-source \
+  --output ./results/correction-source-review
+```
+
+The exporter accepts only the fixed twelve-task correction-source partition.
+It checks the protocol, SQLite spending ledger, episode identities, official
+reward records, tool hash chains and pinned upstream message contracts. The
+packet keeps all twelve tasks in its coverage record, including tasks that did
+not start, failed or had no eligible errors. Unscored episodes retain their
+bounded trace evidence and stay outside the candidate set. Held-out and
+development runs cannot produce review packets.
+
+`candidates.jsonl` indexes individual candidate files. Each candidate retains the
+original failure, caller-visible context, possible later recovery and its own
+context, official task outcome and source references. Attribution stays
+unverified, with no target, review decision or training authorization. Reviewers
+use the full source simulations as evidence and the separate
+`agentVisibleContext` for model inputs. Approving targets and admitting a batch
+still use the normal OpenPond learning workflow. This command creates no Dataset,
+training job, model call or paid resource.
+
+Evidence files are limited to 64 MiB each and a packet to 1 GiB. Oversized or
+changed evidence is rejected; context is never silently truncated. The temporary
+synthetic review fixture in the boundary test is separate from benchmark data.
+
 Held-out test plans are refused by this baseline collection command. The SDK
 consultation adapter, frozen learned-checkpoint comparison, reviewed public
 corpus and interleaved A/B/C execution remain in progress. No effectiveness or

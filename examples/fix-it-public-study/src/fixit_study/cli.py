@@ -12,6 +12,25 @@ from . import plan
 
 
 def main() -> None:
+    if len(sys.argv) < 2 or sys.argv[1] in ("--help", "-h"):
+        parser = argparse.ArgumentParser(description=__doc__)
+        commands = parser.add_subparsers(dest="command", required=True)
+        for command, help_text in [("fetch-data", "Fetch verified public assets"), ("plan", "Freeze a task selection without inference"),
+                                   ("run-baseline", "Prepare or execute bounded development/source episodes"),
+                                   ("review-packet", "Export unapproved correction-source review evidence")]:
+            commands.add_parser(command, help=help_text)
+        parser.parse_args()
+        return
+    if len(sys.argv) >= 2 and sys.argv[1] == "review-packet":
+        parser = argparse.ArgumentParser(description="Export correction-source evidence for owner review; never approve targets")
+        parser.add_argument("command", choices=["review-packet"])
+        parser.add_argument("--run", type=Path, required=True)
+        parser.add_argument("--output", type=Path, required=True)
+        args = parser.parse_args()
+        from .review import export_review_packet
+        receipt = export_review_packet(args.run, args.output)
+        print(json.dumps({key: receipt[key] for key in ("contentHash", "declaredSourceTasks", "candidateCount", "targetsApproved", "trainingAuthorized")}))
+        return
     if len(sys.argv) < 2 or sys.argv[1] != "run-baseline":
         plan.main()
         return
