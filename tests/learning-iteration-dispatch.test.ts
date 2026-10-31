@@ -57,6 +57,78 @@ function provider(suffix = "") {
 }
 
 describe("durable iteration dispatch", () => {
+  // Calendar/capacity waits can span restarts and more polls than the failure
+  // budget. They must retain one sealed batch and never become a failed Job.
+  test("persists admission waits across restart without retry spend and reconciles an eventual ambiguous submit", async () => withTempDirectory("iteration-admission-", async home => {
+    let store = new SqliteStore(home);
+    try {
+      const f = await fixture(store); const p = provider();
+      let ready = false; let admissionCalls = 0;
+      const executor: LearningIterationExecutor = { ...p.executor, async admit() {
+        admissionCalls++;
+        return ready ? { status: "ready" } : { status: "deferred",
+          retryAt: new Date(Date.parse(f.now()) + 3_600_000).toISOString(), reason: "Waiting for available execution capacity." };
+      } };
+      const worker = () => createLearningIterationWorker(store.learningRepository(), executor, { workerId: "admission-worker", executionOwner: "hosted", now: f.now });
+      const service = () => createLearningService(store.learningRepository());
+      await worker().run(learningContext.scope, f.iteration.id);
+      const sealed = await service().get(learningContext, "dispatch", f.iteration.dispatchId);
+      expect(sealed).toMatchObject({ state: "prepared", submissionStartedAt: null, consecutiveFailures: 0,
+        leaseOwner: null, leaseExpiresAt: null, admission: { status: "deferred", retryAt: sealed.nextAttemptAt } });
+      await store.close(); store = new SqliteStore(home);
+      await worker().run(learningContext.scope, f.iteration.id);
+      expect(admissionCalls).toBe(1);
+      for (let i = 0; i < f.policy.limits.maxRetries + 2; i++) {
+        f.advance(3_600_001);
+        expect(await worker().run(learningContext.scope, f.iteration.id)).toMatchObject({ status: "dispatching", retryCount: 0, failure: null });
+      }
+      const waiting = await service().get(learningContext, "dispatch", sealed.id);
+      expect(waiting).toMatchObject({ state: "prepared", submission: sealed.submission, submissionHash: sealed.submissionHash,
+        submissionStartedAt: null, consecutiveFailures: 0 });
+      expect((await service().get(learningContext, "reservation", f.iteration.id)).budget).toMatchObject({ reservedSpendUsd: 2, settledSpendUsd: 0 });
+      expect(p.counts()).toEqual({ prepared: 1, submitted: 0, cancelled: 0 });
+      ready = true; p.loseReply(); f.advance(3_600_001);
+      expect(await worker().run(learningContext.scope, f.iteration.id)).toMatchObject({ retryCount: 1 });
+      const admittedCalls = admissionCalls;
+      await store.close(); store = new SqliteStore(home); ready = false; f.advance();
+      expect(await worker().run(learningContext.scope, f.iteration.id)).toMatchObject({ status: "training", trainingJob: ref("provider-job") });
+      expect(admissionCalls).toBe(admittedCalls);
+      expect(p.counts()).toEqual({ prepared: 1, submitted: 1, cancelled: 0 });
+      p.complete(); f.advance();
+      expect(await worker().run(learningContext.scope, f.iteration.id)).toMatchObject({ status: "candidate_ready", spendUsd: 0.5 });
+      expect((await service().get(learningContext, "reservation", f.iteration.id)).budget).toMatchObject({ reservedSpendUsd: 0, settledSpendUsd: 0.5 });
+      expect((await service().list(learningContext, "consumption")).items).toHaveLength(1);
+    } finally { await store.close(); }
+  }));
+
+  // Cancellation cannot wait until tomorrow's admission timestamp or be lost
+  // while a capacity check is in flight. Neither case may launch or charge.
+  test("cancels deferred and in-flight admission without waiting or submitting", async () => {
+    for (const inFlight of [false, true]) await withTempDirectory("iteration-admission-cancel-", async home => {
+      const store = new SqliteStore(home);
+      try {
+        const f = await fixture(store); const p = provider();
+        let enter!: () => void; let release!: () => void;
+        const entered = new Promise<void>(resolve => { enter = resolve; });
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        const executor: LearningIterationExecutor = { ...p.executor, async admit() {
+          enter(); if (inFlight) await gate;
+          return { status: "deferred", retryAt: new Date(Date.parse(f.now()) + 86_400_000).toISOString(), reason: "Waiting for the next execution window." };
+        } };
+        const worker = createLearningIterationWorker(store.learningRepository(), executor, { workerId: "cancel-admission", executionOwner: "hosted", now: f.now });
+        const pending = worker.run(learningContext.scope, f.iteration.id);
+        await entered; if (!inFlight) await pending;
+        const current = await f.service.get(learningContext, "iteration", f.iteration.id);
+        await f.command({ action: "cancel_iteration", iterationId: current.id, expectedRevision: current.revision });
+        release(); await pending;
+        expect(await worker.run(learningContext.scope, current.id)).toMatchObject({ status: "cancelled", retryCount: 0, spendUsd: 0 });
+        expect((await f.service.get(learningContext, "dispatch", f.iteration.dispatchId))).toMatchObject({ state: "settled", admission: null, nextAttemptAt: null, submissionStartedAt: null });
+        expect((await f.service.get(learningContext, "reservation", current.id)).budget).toMatchObject({ reservedSpendUsd: 0, settledSpendUsd: 0 });
+        expect(p.counts()).toEqual({ prepared: 1, submitted: 0, cancelled: 0 });
+      } finally { await store.close(); }
+    });
+  });
+
   // Reviews can arrive twice or out of order after another iteration starts.
   // Reconciliation must retain exact evidence and never release that newer chain.
   test("pins accepted parents, rolls back future selection and preserves newer reservations across later reviews", async () => withTempDirectory("iteration-review-", async home => {

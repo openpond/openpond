@@ -251,6 +251,17 @@ state is `dispatching`; only a provider observation establishes `training` or
 `evaluating`. A paused policy stops new submissions while existing executions
 continue to be observed.
 
+Executors can implement `admit` to defer an unstarted, persisted submission for
+calendar or capacity reasons. Return `{ status: "deferred", retryAt, reason }`
+with a future timestamp, or `{ status: "ready" }`. This check must not create an
+execution, launch compute or spend. A wait persists its reason and retry time,
+releases the worker lease and retains the same sealed batch and reservation
+without increasing failure retries. Restarted workers respect that timestamp;
+cancellation bypasses it and can settle an unstarted dispatch at zero spend.
+Once submission has started, retries reconcile its existing identity without
+repeating admission. The executor must still verify current authority atomically
+when creating an execution; a prior ready decision is not authorization to spend.
+
 The executor must deduplicate `submit` by `dispatch.id`, verify observation
 identity and provider receipts, and use `reconcile` to recover an existing Job
 after a lost reply. An unreachable owner is an error, never proof of absence.

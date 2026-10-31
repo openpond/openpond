@@ -10,6 +10,13 @@ export const LearningIterationSubmissionSchema = z.object({
   payload: LearningJsonObjectSchema,
 }).strict();
 
+/** Normal capacity/calendar waits are not failed execution attempts. */
+export const LearningIterationAdmissionSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ready") }).strict(),
+  z.object({ status: z.literal("deferred"), retryAt: ReleaseTimestampSchema,
+    reason: z.string().trim().min(1).max(2_000) }).strict(),
+]);
+
 export const LearningIterationDispatchSchema = z.object({
   schemaVersion: z.literal("openpond.learningIterationDispatch.v1"),
   id: ReleaseIdSchema,
@@ -30,6 +37,7 @@ export const LearningIterationDispatchSchema = z.object({
   leaseExpiresAt: ReleaseTimestampSchema.nullable(),
   consecutiveFailures: z.number().int().nonnegative(),
   nextAttemptAt: ReleaseTimestampSchema.nullable(),
+  admission: LearningIterationAdmissionSchema.nullable().optional(),
   lastError: z.string().max(20_000).nullable(),
   createdAt: ReleaseTimestampSchema,
   updatedAt: ReleaseTimestampSchema,
@@ -38,6 +46,9 @@ export const LearningIterationDispatchSchema = z.object({
     context.addIssue({ code: "custom", path: ["submissionHash"], message: "Dispatch submission identity changed." });
   }
   if (value.submissionStartedAt && !value.submission) context.addIssue({ code: "custom", path: ["submission"], message: "A started dispatch requires its persisted submission." });
+  if (value.admission?.status === "deferred" && (value.submissionStartedAt || value.state !== "prepared" || value.nextAttemptAt !== value.admission.retryAt)) {
+    context.addIssue({ code: "custom", path: ["admission"], message: "Admission deferral requires an unstarted prepared dispatch and its retry time." });
+  }
   if (value.execution && !value.submissionStartedAt) context.addIssue({ code: "custom", path: ["execution"], message: "An execution requires a started dispatch." });
   if (["prepared", "submitted"].includes(value.state) && !value.submission) context.addIssue({ code: "custom", path: ["state"], message: "A prepared dispatch requires its immutable submission." });
   if (value.state === "submitted" && !value.execution) context.addIssue({ code: "custom", path: ["execution"], message: "A submitted dispatch requires an observed execution." });
@@ -70,3 +81,4 @@ export const LearningIterationObservationSchema = z.object({
 export type LearningIterationSubmission = z.infer<typeof LearningIterationSubmissionSchema>;
 export type LearningIterationDispatch = z.infer<typeof LearningIterationDispatchSchema>;
 export type LearningIterationObservation = z.infer<typeof LearningIterationObservationSchema>;
+export type LearningIterationAdmission = z.infer<typeof LearningIterationAdmissionSchema>;

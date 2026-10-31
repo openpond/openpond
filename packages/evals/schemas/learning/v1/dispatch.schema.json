@@ -59,8 +59,11 @@
     "nextAttemptAt": {
       "$ref": "#/$defs/__schema19"
     },
-    "lastError": {
+    "admission": {
       "$ref": "#/$defs/__schema20"
+    },
+    "lastError": {
+      "$ref": "#/$defs/__schema21"
     },
     "createdAt": {
       "$ref": "#/$defs/__schema10"
@@ -322,6 +325,53 @@
       ]
     },
     "__schema20": {
+      "anyOf": [
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "ready"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "const": "deferred"
+                },
+                "retryAt": {
+                  "$ref": "#/$defs/__schema10"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "status",
+                "retryAt",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "__schema21": {
       "anyOf": [
         {
           "type": "string",
