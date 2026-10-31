@@ -13,7 +13,10 @@ from .plan import SOURCE_COMMIT
 
 
 def fetch_data(destination: Path) -> dict:
-    manifest = json.loads(files("fixit_study").joinpath("assets.json").read_bytes())
+    manifest_bytes = files("fixit_study").joinpath("assets.json").read_bytes()
+    manifest = json.loads(manifest_bytes)
+    if manifest.get("commit") != SOURCE_COMMIT:
+        raise ValueError("The asset manifest belongs to a different upstream commit")
     if manifest["commit"] != SOURCE_COMMIT:
         raise ValueError("Asset manifest and dependency source do not match")
     destination.mkdir(parents=True, exist_ok=True)
@@ -44,5 +47,8 @@ def fetch_data(destination: Path) -> dict:
     with ThreadPoolExecutor(max_workers=4) as pool:
         assets = list(pool.map(fetch, manifest["assets"]))
     receipt = {"schemaVersion": "openpond.fixitPublicStudyAssets.v1", "sourceCommit": SOURCE_COMMIT, "assets": assets}
-    (destination / "fixit-assets.json").write_text(json.dumps(receipt, indent=2) + "\n")
-    return {"files": len(assets), "bytes": sum(asset["sizeBytes"] for asset in assets), "inferenceExecuted": False}
+    receipt_bytes = (json.dumps(receipt, indent=2) + "\n").encode()
+    (destination / "fixit-assets.json").write_bytes(receipt_bytes)
+    return {"files": len(assets), "bytes": sum(asset["sizeBytes"] for asset in assets),
+            "manifestSha256": hashlib.sha256(manifest_bytes).hexdigest(),
+            "receiptSha256": hashlib.sha256(receipt_bytes).hexdigest(), "inferenceExecuted": False}
