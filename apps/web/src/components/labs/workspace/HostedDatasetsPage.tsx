@@ -5,7 +5,9 @@ import { ConnectedRecordedSetup } from "./connected-evidence/ConnectedRecordedSe
 import { ConnectedSources } from "./connected-evidence/ConnectedSources";
 import { useDatasetVisibilityMenu } from "./useDatasetVisibilityMenu";
 import { EvaluationTableState } from "./EvaluationTableState";
-import { EvaluationCard, EvaluationStatus } from "./EvaluationPresentation";
+import { EvaluationStatus } from "./EvaluationPresentation";
+import { DatasetTaskInspector } from "./DatasetTaskInspector";
+import { DatasetTaskPreview } from "./DatasetTaskPreview";
 import { useWorkspaceActions, useWorkspacePanelControls } from "./WorkspacePanel";
 import { DatasetVisibility } from "./DatasetVisibility";
 import { DiscoverDatasets } from "./DiscoverDatasets";
@@ -19,9 +21,9 @@ import { HostedDatasetEditor } from "./HostedDatasetEditor";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { WorkspaceActionMenu, type WorkspaceMenuAction } from "./WorkspaceActionMenu";
 import { DropdownSelect } from "../../DropdownSelect";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { DatasetWorkspaceReceipt } from "openpond-sdk/dataset-workspaces";
+import { DatasetWorkspaceListSchema, type DatasetWorkspaceReceipt } from "openpond-sdk/dataset-workspaces";
 import { draftPublishIssues } from "openpond-sdk/taskset-drafts";
 import type { ModelsRoute } from "../models-route";
 import type { Inventory, WorkspaceApi } from "./workspace-api";
@@ -33,11 +35,24 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
   const [visibilityOpen, setVisibilityOpen] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [workflowEvaluations,setWorkflowEvaluations]=useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [importPath, setImportPath] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const selected = useQuery({ queryKey: ["evaluation-workspace", api.key, "dataset", route.resourceId], enabled: Boolean(route.resourceId && route.datasetKind !== "release"), queryFn: ({ signal }) => api.request<DatasetWorkspaceReceipt>("dataset", { id: route.resourceId }, signal) });
+  const head = useQuery({ queryKey: ["evaluation-workspace", api.key, "datasets-head"], queryFn: async ({ signal }) => DatasetWorkspaceListSchema.parse(await api.request("datasets", { limit: 1 }, signal)), staleTime: 10_000, refetchInterval: 15_000 });
+  const pinned = head.data?.datasets.find(item => item.id.startsWith("tool-captures-"));
+  const pinnedMatchesQuery = pinned && (!route.query.trim() || pinned.name.toLowerCase().includes(route.query.trim().toLowerCase()));
+  const liveInventory = inventory && pinned && pinnedMatchesQuery && !route.after ? { ...inventory, datasets: { ...inventory.datasets, datasets: [pinned, ...inventory.datasets.datasets.filter(item => item.id !== pinned.id)] } } : inventory;
+  const selected = useQuery({ queryKey: ["evaluation-workspace", api.key, "dataset", route.resourceId], enabled: Boolean(route.resourceId && route.datasetKind !== "release"), queryFn: ({ signal }) => api.request<DatasetWorkspaceReceipt>("dataset", { id: route.resourceId }, signal),
+    refetchOnWindowFocus: !editing, refetchOnReconnect: !editing,
+    // Retry a missed revision on the next poll, including after request retries fail.
+    refetchInterval: query => !editing && !route.revision && pinned?.id === route.resourceId && pinned.revision > (query.state.data?.revision ?? 0) ? 15_000 : false });
+  const refreshedHead = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${api.key}:${pinned?.id}:${pinned?.revision}`;
+    if (!editing && !selected.isFetching && pinned?.id === route.resourceId && selected.data && pinned.revision > selected.data.revision && refreshedHead.current !== key) { refreshedHead.current = key; void selected.refetch(); }
+  }, [api.key, editing, pinned?.id, pinned?.revision, route.resourceId, selected.data, selected.isFetching, selected.refetch]);
   const versionRevision = route.revision ?? null;
   const version = useQuery({ queryKey: ["evaluation-workspace", api.key, "datasetVersion", route.resourceId, versionRevision, route.contentHash], enabled: Boolean(route.resourceId && versionRevision), queryFn: async ({ signal }) => { const value = await api.request<DatasetWorkspaceReceipt>("datasetVersion", { id: route.resourceId, revision: versionRevision }, signal); if (value.publication?.release.contentHash !== route.contentHash) throw new Error("Dataset version differs from its pinned release."); return value; } });
   const dataset = versionRevision ? version.data : selected.data;
@@ -54,11 +69,11 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
   async function upload() {
     if (busy) return; setBusy(true); setError(null);
     try {
-      const folder = window.openpond?.selectFolder ? await window.openpond.selectFolder() : { canceled: false, path: importPath };
+      const folder = window.openpond?.selectFolder ? await window.openpond.selectFolder() : { canceled: false, path: importPath?.trim() };
       if (folder.canceled || !folder.path) return;
       const operation = await api.operation("uploadFolder", { path: folder.path });
       const value = await api.request<DatasetWorkspaceReceipt>("uploadFolder", { directory: folder.path, operationId: operation.id });
-      await operation.acknowledge(); onRefresh(); navigate({ ...route, resourceId: value.datasetId, detailTab: "tasks" });
+      await operation.acknowledge(); setImportOpen(false); onRefresh(); navigate({ ...route, resourceId: value.datasetId, detailTab: "tasks" });
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setBusy(false); }
   }
   async function beginVersion() {
@@ -93,6 +108,7 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
     { id: "workflow-evaluations",label:"Existing Workflow evaluations",onSelect:()=>setWorkflowEvaluations(true) },
     { id: "discover", label: "Discover", onSelect: () => setDiscovering(true) },
     { id: "connected-sources", label: "Recorded activity and imports", onSelect: () => setConnectedSources(true) },
+    ...(importOpen ? [{ id: "import-folder", label: "Import folder", onSelect: () => setImportOpen(true) }] : []),
     ...(task ? [{ id: "task", label: "Task", onSelect: () => {} }] : []),
     ...(visibilityOpen && dataset?.publication ? [{ id: "visibility", label: "Visibility", onSelect: () => {} }] : []),
     ...(!versionRevision && route.datasetKind !== "release" ? [{ id: "dataset", label: dataset ? "Edit" : "Create", onSelect: () => { if (!editing && !busy && !selected.isFetching) { if (dataset?.workspace.draft.status === "published") void beginVersion(); else setEditing(true); } } }] : []),
@@ -108,7 +124,7 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
     { id: "connected-sources", label: "Recorded activity and imports", disabled: busy, onSelect: () => selectSidebarAction("connected-sources") },
     { id: "workflow-evaluations", label: "Use existing evaluation", disabled: busy, onSelect: () => selectSidebarAction("workflow-evaluations") },
     ...(dataset ? [{ id: "discover", label: "Discover datasets", disabled: busy, onSelect: () => selectSidebarAction("discover") }] : []),
-    { id: "import-folder", label: "Import authored folder", disabled: busy, onSelect: () => void upload() },
+    { id: "import-folder", label: "Import authored folder", disabled: busy, onSelect: () => { if (window.openpond?.selectFolder) void upload(); else setImportOpen(true); } },
     { id: "local-authoring", label: "Local authoring and import", onSelect: onLocalDatasets },
   ];
   return <><header className="evaluation-workspace-header">
@@ -123,20 +139,24 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
       <WorkspaceActionMenu label="More dataset actions" actions={moreActions} />
     </header>
     {visibilityMenu.error ? <ErrorToast error={visibilityMenu.error} /> : null}
-    {!window.openpond?.selectFolder ? <label>Authored folder path <input value={importPath ?? ""} onChange={event => setImportPath(event.target.value)} /></label> : null}
+    {head.error ? <ErrorToast error={head.error.message} /> : null}
     {selected.error || version.error || error ? <ErrorToast error={selected.error?.message ?? version.error?.message ?? error} /> : null}
     {versionRevision ? <p className="evaluation-version-banner" role="status">Viewing immutable published version. <button className="evaluation-link-button" onClick={() => { navigate({ ...route, revision: undefined, contentHash: undefined }); setTaskId(null); }}>Return to current workspace</button></p> : null}
-    {dataset ? <><div className="evaluation-run-summary"><EvaluationStatus status={dataset.publication ? "published" : "Not published"} /><span>{dataset.publication ? `Revision ${dataset.publication.release.revision}` : "Draft"}</span><span aria-hidden="true">·</span><span>{dataset.workspace.draft.tasks.length} tasks</span></div><nav className="evaluation-workspace-tabs" aria-label="Dataset tabs">{["tasks", "experiments", "graders", "versions"].map(value => <button key={value} aria-selected={tab === value} onClick={() => { setTaskId(null); navigate({ ...route, detailTab: value }); }}>{value[0]!.toUpperCase() + value.slice(1)}</button>)}</nav>
-      {tab === "tasks" ? <><div className="evaluation-table-scroll evaluation-table-frame"><table className="training-data-table evaluation-workspace-table evaluation-task-table"><thead><tr>{executableRelease ? <th scope="col"><DatasetTaskSelection release={executableRelease!} count={dataset.workspace.draft.tasks.length} route={route} /></th> : null}<th>Task</th><th>Input</th><th>Split</th></tr></thead><tbody>{dataset.workspace.draft.tasks.map(item => <tr key={item.id} tabIndex={0} onClick={() => inspectTask(item.id)} onKeyDown={event => { if (event.key === "Enter") inspectTask(item.id); }}>{executableRelease ? <DatasetTaskCheckbox release={executableRelease} id={item.id} route={route} /> : null}<td><span className="evaluation-cell-text" title={item.id}>{item.id}</span></td><td><code className="evaluation-cell-text evaluation-task-input" title={JSON.stringify(item.input).slice(0, 2000)}>{JSON.stringify(item.input).slice(0, 200)}</code></td><td>{item.split}</td></tr>)}<EvaluationTableState columns={executableRelease ? 4 : 3} empty={!dataset.workspace.draft.tasks.length}>Edit Dataset to add tasks, then check and publish the version.</EvaluationTableState></tbody></table></div></> : tab === "experiments" ? <DatasetExperiments api={api} releaseHash={dataset.publication?.release.contentHash ?? null} route={route} navigate={navigate} /> : tab === "graders" ? null : <><DatasetVersions api={api} datasetId={dataset.datasetId} onSelect={(revision, publication) => { setTaskId(null); navigate({ ...route, revision: revision ?? undefined, contentHash: publication?.release.contentHash, detailTab: "tasks" }); }} /><dl className="evaluation-workspace-meta evaluation-card"><dt>Workspace revision</dt><dd>{dataset.revision}</dd><dt>Workspace hash</dt><dd>{dataset.workspace.contentHash}</dd><dt>Published release</dt><dd>{dataset.publication?.release.id ?? "Unpublished"}</dd><dt>Release hash</dt><dd>{dataset.publication?.release.contentHash ?? "Unpublished"}</dd><dt>Package hash</dt><dd>{dataset.publication?.packageHash ?? "Unpublished"}</dd></dl></>}
+    {dataset ? <><div className="evaluation-run-summary"><span className="evaluation-run-counts"><b>{dataset.workspace.draft.name}</b></span><EvaluationStatus status={dataset.publication ? "published" : "Not published"} /><span>{dataset.publication ? `Revision ${dataset.publication.release.revision}` : "Draft"}</span><span aria-hidden="true">·</span><span>{dataset.workspace.draft.tasks.length} {dataset.workspace.draft.tasks.length === 1 ? "task" : "tasks"}</span></div><nav className="evaluation-workspace-tabs" aria-label="Dataset tabs">{["tasks", "experiments", "graders", "versions"].map(value => <button key={value} aria-selected={tab === value} onClick={() => { setTaskId(null); navigate({ ...route, detailTab: value }); }}>{value[0]!.toUpperCase() + value.slice(1)}</button>)}</nav>
+      {tab === "tasks" ? <><div className="evaluation-table-scroll evaluation-table-frame"><table className="training-data-table evaluation-workspace-table evaluation-task-table"><thead><tr>{executableRelease ? <th scope="col"><DatasetTaskSelection release={executableRelease!} count={dataset.workspace.draft.tasks.length} route={route} /></th> : null}<th>Task</th><th>Input / error</th><th>Split</th></tr></thead><tbody>{dataset.workspace.draft.tasks.map(item => <tr key={item.id} tabIndex={0} onClick={() => inspectTask(item.id)} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); inspectTask(item.id); } }}>{executableRelease ? <DatasetTaskCheckbox release={executableRelease} id={item.id} route={route} /> : null}<DatasetTaskPreview task={item} /><td>{item.split}</td></tr>)}<EvaluationTableState columns={executableRelease ? 4 : 3} empty={!dataset.workspace.draft.tasks.length}>Edit Dataset to add tasks, then check and publish the version.</EvaluationTableState></tbody></table></div></> : tab === "experiments" ? <DatasetExperiments api={api} releaseHash={dataset.publication?.release.contentHash ?? null} route={route} navigate={navigate} /> : tab === "graders" ? null : <><DatasetVersions api={api} datasetId={dataset.datasetId} onSelect={(revision, publication) => { setTaskId(null); navigate({ ...route, revision: revision ?? undefined, contentHash: publication?.release.contentHash, detailTab: "tasks" }); }} /><dl className="evaluation-workspace-meta evaluation-card"><dt>Workspace revision</dt><dd>{dataset.revision}</dd><dt>Workspace hash</dt><dd>{dataset.workspace.contentHash}</dd><dt>Published release</dt><dd>{dataset.publication?.release.id ?? "Unpublished"}</dd><dt>Release hash</dt><dd>{dataset.publication?.release.contentHash ?? "Unpublished"}</dd><dt>Package hash</dt><dd>{dataset.publication?.packageHash ?? "Unpublished"}</dd></dl></>}
       <div hidden={tab !== "graders"}><DatasetGraders key={`${dataset.datasetId}:${dataset.revision}`} api={api} dataset={dataset} readOnly={Boolean(versionRevision) || dataset.workspace.draft.status !== "draft"} onSaved={() => { void selected.refetch(); onRefresh(); }} /></div>
-    </> : <><DatasetCollectionTable api={api} inventory={inventory} route={route} navigate={navigate} loading={inventoryLoading ?? !inventory}
-      error={inventoryError} retry={onRefresh} /><div className="evaluation-pagination">{route.after ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: null })}>First dataset page</button> : null}{inventory?.datasets.nextCursor ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: `workspace:${inventory.datasets.nextCursor}` })}>More authored datasets</button> : null}{inventory?.releasedDatasets.nextCursor ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: `catalog:${inventory.releasedDatasets.nextCursor}` })}>More released datasets</button> : null}</div></>}
+    </> : <><DatasetCollectionTable api={api} inventory={liveInventory} route={route} navigate={navigate} loading={inventoryLoading ?? !inventory}
+      error={inventoryError ?? head.error?.message} retry={() => { void head.refetch(); onRefresh(); }} /><div className="evaluation-pagination">{route.after ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: null })}>First dataset page</button> : null}{inventory?.datasets.nextCursor ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: `workspace:${inventory.datasets.nextCursor}` })}>More authored datasets</button> : null}{inventory?.releasedDatasets.nextCursor ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: `catalog:${inventory.releasedDatasets.nextCursor}` })}>More released datasets</button> : null}</div></>}
     {visibilityOpen && dataset?.publication ? <DatasetVisibility api={api} dataset={dataset} onClose={() => setVisibilityOpen(false)} /> : null}
     {discoverPanel}
+    {importOpen ? <WorkspacePanel action="import-folder" label="Import authored folder" onRequestClose={() => { if (!busy) setImportOpen(false); }}><h2>Import authored folder</h2>
+      <form onSubmit={event => { event.preventDefault(); if (importPath?.trim()) void upload(); }}><label>Authored folder path<input autoFocus value={importPath ?? ""} disabled={busy} onChange={event => setImportPath(event.target.value)} /></label>
+        <div className="settings-button-row"><button className="training-button secondary" type="button" disabled={busy} onClick={() => setImportOpen(false)}>Cancel</button><button className="training-button" type="submit" disabled={busy || !importPath?.trim()}>{busy ? "Importing…" : "Import folder"}</button></div>
+      </form></WorkspacePanel> : null}
     {workflowEvaluations?<WorkflowEvaluationDiscovery key={api.key} api={api} inventory={inventory} route={route} navigate={navigate} onClose={()=>setWorkflowEvaluations(false)}/>:null}
     {recordedScoring && dataset && executableRelease ? <ConnectedRecordedSetup api={api} dataset={dataset} caseIds={dataset.workspace.draft.tasks.filter(task => taskSelection.selected(executableRelease, task.id)).map(task => task.id)} onClose={() => setRecordedScoring(false)} onStarted={(execution, pass) => { setRecordedScoring(false); onRefresh(); navigate({ ...route, page: "experiments", resourceId: execution.id, projectId: execution.request.projectId, passId: pass.id, detailTab: "cases", datasetKind: undefined, revision: undefined, contentHash: undefined }); }} /> : null}
     {connectedSources && api.humanContext ? <ConnectedSources key={api.key + JSON.stringify(route.reviewSource ?? null)} initialSelection={route.reviewSource} api={api} ownerUserId={api.humanContext.actorId} projects={inventory?.projects.projects.filter(project => !project.archived && project.ownerScope === "personal" && project.creatorUserId === api.humanContext!.actorId).map(project => ({ id: project.id, name: project.content.name })) ?? []} onClose={() => { setConnectedSources(false); if(route.reviewSource) navigate({ ...route, reviewSource: undefined }); }} onDataset={(id, projectId) => { setConnectedSources(false); onRefresh(); navigate({ ...route, reviewSource: undefined, projectId, resourceId: id, detailTab: "tasks", datasetKind: undefined }); }} /> : null}
     {editing ? <HostedDatasetEditor api={api} existing={dataset ?? null} onClose={closeEditor} onSaved={closeEditor} /> : null}
-    {task ? <WorkspacePanel action="task" label="Task inspector" onRequestClose={() => setTaskId(null)}><header><h2>{task.id}</h2></header><EvaluationCard title="Input"><pre>{JSON.stringify(task.input, null, 2)}</pre></EvaluationCard><EvaluationCard title="Task details"><pre>{JSON.stringify(task, null, 2)}</pre></EvaluationCard></WorkspacePanel> : null}
+    {task ? <WorkspacePanel action="task" label="Task inspector" onRequestClose={() => setTaskId(null)}><header><h2>{task.id}</h2></header><DatasetTaskInspector task={task} /></WorkspacePanel> : null}
   </>;
 }

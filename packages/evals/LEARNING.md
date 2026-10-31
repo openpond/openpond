@@ -251,6 +251,27 @@ state is `dispatching`; only a provider observation establishes `training` or
 `evaluating`. A paused policy stops new submissions while existing executions
 continue to be observed.
 
+Executors can implement `admit` to defer an unstarted, persisted submission for
+calendar or capacity reasons. Return `{ status: "deferred", retryAt, reason }`
+with a future timestamp, or `{ status: "ready" }`. This check must not create an
+execution, launch compute or spend. A wait persists its reason and retry time,
+releases the worker lease and retains the same sealed batch and reservation
+without increasing failure retries. Restarted workers respect that timestamp;
+cancellation bypasses it and can settle an unstarted dispatch at zero spend.
+Once submission has started, retries reconcile its existing identity without
+repeating admission. The executor must still verify current authority atomically
+when creating an execution; a prior ready decision is not authorization to spend.
+
+If admission closes during transport, `submit` may return a `deferred` result
+with the exact scope, dispatch/hash, lease generation, retry time and immutable
+receipt. The owner must atomically prove no execution or charge was created and
+durably fence every late submission from that attempt before returning it. A
+timeout or a read that finds no Job cannot establish this. The shared worker
+retains the receipt, clears the started marker and releases/increments the
+lease generation without spending a failure retry. Owners sharing the learning
+repository use `deferLearningIterationSubmission` inside their native admission
+transaction; the older worker then observes the committed generation change.
+
 The executor must deduplicate `submit` by `dispatch.id`, verify observation
 identity and provider receipts, and use `reconcile` to recover an existing Job
 after a lost reply. An unreachable owner is an error, never proof of absence.

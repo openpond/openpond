@@ -1,4 +1,5 @@
 import { ErrorToast } from "../../common/ErrorToast";
+import { DropdownSelect } from "../../DropdownSelect";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { ModelBindingSchema, type ModelProject } from "@openpond/contracts";
@@ -52,8 +53,10 @@ function ServingOwnerQuery({ connection, model, readOnly }: Parameters<typeof Co
     {error ? <ErrorToast error={error} /> : null}
     {!state && !error ? <p>Loading serving authorization…</p> : null}
     {state ? <>
-      <label>Conversation policy<select disabled={busy || readOnly} value={policyId} onChange={event => setPolicyId(event.target.value)}><option value="">Select policy</option>{state.policies.map(policy => <option key={policy.id} value={policy.id}>{policy.configuration.name} / {policy.status}</option>)}</select></label>
-      <label>Current OpenPond target<select disabled={busy || readOnly} value={bindingId} onChange={event => setBindingId(event.target.value)}><option value="">Select active binding</option>{state.bindings.map(binding => <option key={binding.id} value={binding.id}>{binding.role} / {binding.roleTargetId}</option>)}</select></label>
+      <label>Conversation policy<DropdownSelect label="Conversation policy" disabled={busy || readOnly} value={policyId} onChange={setPolicyId}
+        options={[{ value: "", label: "Select policy" }, ...state.policies.map(policy => ({ value: policy.id, label: `${policy.configuration.name} / ${policy.status}` }))]} /></label>
+      <label>Current OpenPond target<DropdownSelect label="Current OpenPond target" disabled={busy || readOnly} value={bindingId} onChange={setBindingId}
+        options={[{ value: "", label: "Select active binding" }, ...state.bindings.map(binding => ({ value: binding.id, label: `${binding.role} / ${binding.roleTargetId}` }))]} /></label>
       <button type="button" className="training-button secondary" disabled={busy || readOnly || !selected || !bindingId} onClick={() => { if (selected) void command("register", { projectId: selected.configuration.projectId, bindingId }); }}>Register serving target</button>
       {state.grants.map(grant => {
         const policy = state.policies.find(value => value.configuration.mode === "activate" && value.configuration.serving?.targetId === grant.id);

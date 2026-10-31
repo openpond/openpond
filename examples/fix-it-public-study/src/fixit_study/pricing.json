@@ -1,0 +1,27 @@
+{
+  "observedOn": "2026-10-31",
+  "source": "https://developers.openai.com/api/docs/pricing",
+  "tier": "standard, global processing",
+  "models": {
+    "gpt-5.5-2026-04-23": {
+      "aliases": ["gpt-5.5"],
+      "contextTokens": 1050000,
+      "inputNanoUsdPerToken": 5000,
+      "cachedInputNanoUsdPerToken": 500,
+      "outputNanoUsdPerToken": 30000,
+      "longContextThreshold": 272000,
+      "longInputMultiplier": 2,
+      "longOutputMultiplier": 1.5
+    },
+    "gpt-5.4-mini-2026-03-17": {
+      "aliases": ["gpt-5.4-mini"],
+      "contextTokens": 400000,
+      "inputNanoUsdPerToken": 750,
+      "cachedInputNanoUsdPerToken": 75,
+      "outputNanoUsdPerToken": 4500,
+      "longContextThreshold": null,
+      "longInputMultiplier": 1,
+      "longOutputMultiplier": 1
+    }
+  }
+}

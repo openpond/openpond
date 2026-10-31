@@ -1,6 +1,15 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { JavaScriptIsolateExecutionError, validateJavaScriptIsolateInput, type JavaScriptIsolateInput } from "./javascript-isolate.js";
 import { assertBoundedTaskJson } from "./task-schema.js";
+
+/** Created only by the trusted parent wall timer, never from guest error text.
+ * The process executor rejects with this error only after child exit. */
+export class JavaScriptVerifierHostTimeoutError extends Error {
+  constructor(readonly timeoutMs: number, readonly elapsedMs: number) {
+    super("verifier_timeout");
+    this.name = "JavaScriptVerifierHostTimeoutError";
+  }
+}
 
 /** A Node subprocess owns the interpreter; completion always waits for its exit. */
 export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolateInput & { stripTypeScript?: boolean }): Promise<unknown> {
@@ -13,11 +22,12 @@ export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolate
   // The authored source remains JSON data passed to QuickJS, never host code.
   const program = `globalThis.__openpondIsolateInput = JSON.parse(${JSON.stringify(JSON.stringify(data))});\n${stripTypeScript ? 'globalThis.__openpondIsolateInput.source = require("node:module").stripTypeScriptTypes(globalThis.__openpondIsolateInput.source, { mode: "strip" });\n' : ""}${javascriptIsolateProcessSource}`;
   return new Promise((resolve, reject) => {
+    const startedAt = performance.now();
     const child = spawn("node", ["--max-old-space-size=64", "--input-type=commonjs", "-"], {
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe", "ipc"],
       env: { PATH: process.env.PATH },
       windowsHide: true,
-    });
+    }) as ChildProcessWithoutNullStreams;
     let failure: Error | undefined;
     let response = "";
     let responseBytes = 0;
@@ -27,7 +37,25 @@ export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolate
       child.kill("SIGKILL");
     };
     const cancel = () => stop(signal?.reason instanceof Error ? signal.reason : error("cancelled"));
-    const timer = setTimeout(() => stop(input.errorPrefix === "candidate" ? new JavaScriptIsolateExecutionError("candidate_timeout") : error("timeout")), input.timeoutMs);
+    const verifier = input.errorPrefix === "verifier";
+    let executionReady = !verifier;
+    const timedOut = () => stop(input.errorPrefix === "candidate"
+      ? new JavaScriptIsolateExecutionError("candidate_timeout")
+      : input.errorPrefix === "verifier"
+        ? new JavaScriptVerifierHostTimeoutError(input.timeoutMs, performance.now() - startedAt)
+        : error("timeout"));
+    // Cold Node/WASM initialization has its own finite bound. It must not
+    // consume the authored verifier budget, and cancellation covers both phases.
+    let timer = setTimeout(timedOut, verifier ? 30_000 : input.timeoutMs);
+    child.on("message", (message: unknown) => {
+      if (!verifier || executionReady || !message || typeof message !== "object" ||
+          !("type" in message) || message.type !== "execution_ready") {
+        stop(error("process_invalid_startup_message")); return;
+      }
+      executionReady = true;
+      clearTimeout(timer);
+      timer = setTimeout(timedOut, input.timeoutMs);
+    });
     signal?.addEventListener("abort", cancel, { once: true });
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -47,6 +75,7 @@ export async function executeJavaScriptIsolateInProcess(input: JavaScriptIsolate
       if (failure) { reject(failure); return; }
       try {
         if (code !== 0) throw error("process_exited_without_result");
+        if (!executionReady) throw error("process_exited_before_ready");
         const message: unknown = JSON.parse(response);
         if (!message || typeof message !== "object" || !("ok" in message)) throw error("process_invalid_response");
         if (message.ok !== true) {

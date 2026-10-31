@@ -1,0 +1,635 @@
+{
+  "commit": "989d3285ae669e49503324bdb9981bf14fccedeb",
+  "assets": [
+    {
+      "path": "data/tau2/benchmarks/text.json",
+      "gitBlob": "a75438a5f508a588b3eac1b9510ee93899e1efd5",
+      "sizeBytes": 3362
+    },
+    {
+      "path": "data/tau2/domains/airline/audio_difficulty.json",
+      "gitBlob": "3b7a6c1a48416aa9dbf7027d7eccc7ed60a906ba",
+      "sizeBytes": 1263575
+    },
+    {
+      "path": "data/tau2/domains/airline/db.json",
+      "gitBlob": "c6a1e817aa9102c5822e83affb3595acbc312701",
+      "sizeBytes": 7042725
+    },
+    {
+      "path": "data/tau2/domains/airline/policy.md",
+      "gitBlob": "8098be7db3f47de943fad39d1e057ede6cc6cd04",
+      "sizeBytes": 7676
+    },
+    {
+      "path": "data/tau2/domains/airline/split_tasks.json",
+      "gitBlob": "c83cce155671e66a6bf07450fd2845fe0eb1f229",
+      "sizeBytes": 1443
+    },
+    {
+      "path": "data/tau2/domains/airline/tasks.json",
+      "gitBlob": "ea4ff5e3f5e3d97ca391846a6e8dd9eb3437dc80",
+      "sizeBytes": 155528
+    },
+    {
+      "path": "data/tau2/domains/airline/tasks_voice.json",
+      "gitBlob": "8922c8c41ffcc39a428d85b64bc258813efa1556",
+      "sizeBytes": 1354490
+    },
+    {
+      "path": "data/tau2/domains/retail/audio_difficulty.json",
+      "gitBlob": "9c0acf81a1a986fd8dc5523402944e4d743af3b4",
+      "sizeBytes": 2083968
+    },
+    {
+      "path": "data/tau2/domains/retail/db.json",
+      "gitBlob": "4d67b03b2d39ade5a7ab6facb2edd7ab3e013d48",
+      "sizeBytes": 2811616
+    },
+    {
+      "path": "data/tau2/domains/retail/policy.md",
+      "gitBlob": "d127e6b074654926f337d0d98b0e669ebe90d19e",
+      "sizeBytes": 6699
+    },
+    {
+      "path": "data/tau2/domains/retail/split_tasks.json",
+      "gitBlob": "8b20704a17aa1940b1e58668f89dcef2ddaeeea3",
+      "sizeBytes": 3263
+    },
+    {
+      "path": "data/tau2/domains/retail/task_issues/task_4_issue_2b74ee61.json",
+      "gitBlob": "0e68e8d8a0fe2be4c8d144a9c14c736aa1636887",
+      "sizeBytes": 5257159
+    },
+    {
+      "path": "data/tau2/domains/retail/task_issues/task_5_issue_770466c1.json",
+      "gitBlob": "1877e8f9063925f59482765fc210f754356d08e9",
+      "sizeBytes": 13002644
+    },
+    {
+      "path": "data/tau2/domains/retail/task_issues/task_7_issue_9a37c151.json",
+      "gitBlob": "86f17de1320b92468ea6fb69f560c469d0b9ecc5",
+      "sizeBytes": 8043615
+    },
+    {
+      "path": "data/tau2/domains/retail/tasks.json",
+      "gitBlob": "e95a9f898b2d1f6568ea8faec78edc3767ce747d",
+      "sizeBytes": 345982
+    },
+    {
+      "path": "data/tau2/domains/retail/tasks_voice.json",
+      "gitBlob": "96a76e33e1dcc228bf8871507e0678a77d9be8c8",
+      "sizeBytes": 3088442
+    },
+    {
+      "path": "data/tau2/domains/telecom/audio_difficulty.json",
+      "gitBlob": "ba4995741ecdc7a760e8f5faa6e02f68bc73dbf8",
+      "sizeBytes": 975551
+    },
+    {
+      "path": "data/tau2/domains/telecom/db.toml",
+      "gitBlob": "6c8a639d85896a049a5daf87332107a840a55aac",
+      "sizeBytes": 9628
+    },
+    {
+      "path": "data/tau2/domains/telecom/main_policy.md",
+      "gitBlob": "c55f5bd10c49a3d0b48f6e83a3168e6242fb2be7",
+      "sizeBytes": 5699
+    },
+    {
+      "path": "data/tau2/domains/telecom/main_policy_solo.md",
+      "gitBlob": "2da88ab26054dbd574e48353e54b4296f0e554dd",
+      "sizeBytes": 5200
+    },
+    {
+      "path": "data/tau2/domains/telecom/split_tasks.json",
+      "gitBlob": "a5b01687eaaa5c669f792bff33c0d6ec13be36fd",
+      "sizeBytes": 356149
+    },
+    {
+      "path": "data/tau2/domains/telecom/tasks.json",
+      "gitBlob": "6f41a5e3489e187fa247d729706509d8250a31c1",
+      "sizeBytes": 13977063
+    },
+    {
+      "path": "data/tau2/domains/telecom/tasks_full.json",
+      "gitBlob": "6f41a5e3489e187fa247d729706509d8250a31c1",
+      "sizeBytes": 13977063
+    },
+    {
+      "path": "data/tau2/domains/telecom/tasks_small.json",
+      "gitBlob": "42edfc08d208b008ff68b41b40ebd0de560c1842",
+      "sizeBytes": 83833
+    },
+    {
+      "path": "data/tau2/domains/telecom/tasks_voice.json",
+      "gitBlob": "65157f551553d555c490585f68191060a768788d",
+      "sizeBytes": 62196350
+    },
+    {
+      "path": "data/tau2/domains/telecom/tech_support_manual.md",
+      "gitBlob": "b64a9f1433bfb62bdaf9e5c1d90c10e833b26c17",
+      "sizeBytes": 17589
+    },
+    {
+      "path": "data/tau2/domains/telecom/tech_support_workflow.md",
+      "gitBlob": "36104c70ea1caf5adfbbc8b26b61e29a1da72a7c",
+      "sizeBytes": 16390
+    },
+    {
+      "path": "data/tau2/domains/telecom/tech_support_workflow_solo.md",
+      "gitBlob": "768d8f446ee7bd9d301f614a03d9a403810c2ecc",
+      "sizeBytes": 15470
+    },
+    {
+      "path": "data/tau2/domains/telecom/user_db.toml",
+      "gitBlob": "1def9a98eabf1d4a5fc95a67387ec294f56196d8",
+      "sizeBytes": 933
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/dot_2_pdf.py",
+      "gitBlob": "a7b63a71006802684aceb10c5bc48ec013c81c50",
+      "sizeBytes": 1105
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/tech_support_path1_no_service.dot",
+      "gitBlob": "0994c090575d0d763af4f09592c40464019f1ca1",
+      "sizeBytes": 5821
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/tech_support_path1_no_service.pdf",
+      "gitBlob": "5ece234404da7382bca2e7f77eb80dca09697eeb",
+      "sizeBytes": 31570
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/tech_support_path1_no_service.png",
+      "gitBlob": "1ddcf96a522eb74ac2120198ec75115889589e44",
+      "sizeBytes": 146038
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/tech_support_path2_mobile_data.dot",
+      "gitBlob": "92836433b9a7dd61bfc5e0fe02e3310e8129589b",
+      "sizeBytes": 12313
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/tech_support_path2_mobile_data.pdf",
+      "gitBlob": "8f41f90d70729bfab2182f9f80811435ac781aa9",
+      "sizeBytes": 44922
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/tech_support_path2_mobile_data.png",
+      "gitBlob": "b5ef3166343a0305ce441204b4605b6d7cd2249d",
+      "sizeBytes": 598165
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/tech_support_path3_mms.dot",
+      "gitBlob": "6ba8d8c5aae8408318bc2bebac2cd8c5afe58a85",
+      "sizeBytes": 5961
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/tech_support_path3_mms.pdf",
+      "gitBlob": "3722f5118bf6a2df623520a3c3cd37346e1c4bbd",
+      "sizeBytes": 43300
+    },
+    {
+      "path": "data/tau2/domains/telecom/workflows/tech_support_path3_mms.png",
+      "gitBlob": "6ddeb3f943607f6eb65035f4326aa64db0400d8f",
+      "sizeBytes": 206268
+    },
+    {
+      "path": "data/tau2/multilingual/en/airline_metadata_en.json",
+      "gitBlob": "c03c07bc3de33dc9dfd6f807864f7a18df457c19",
+      "sizeBytes": 3733
+    },
+    {
+      "path": "data/tau2/multilingual/en/pack.yaml",
+      "gitBlob": "ce96565b5296b7c36778ad7cd6aebb9259fe0c3f",
+      "sizeBytes": 10125
+    },
+    {
+      "path": "data/tau2/multilingual/en/retail_metadata_en.json",
+      "gitBlob": "3eab8916b121a1f97f8e3a81ae18c7cb6237db90",
+      "sizeBytes": 3765
+    },
+    {
+      "path": "data/tau2/multilingual/en/retail_tasks_en.json",
+      "gitBlob": "03feba659718b884af3d051d540f5de01c9ae187",
+      "sizeBytes": 128941
+    },
+    {
+      "path": "data/tau2/multilingual/en/telecom_metadata_en.json",
+      "gitBlob": "489dbb7c4e33af8c99c76992d4bcd5b4d9275944",
+      "sizeBytes": 15061
+    },
+    {
+      "path": "data/tau2/multilingual/en/telecom_tasks_en.json",
+      "gitBlob": "bd047b51ce4629b7393c267de886ec2049937826",
+      "sizeBytes": 502397
+    },
+    {
+      "path": "data/tau2/multilingual/es/airline_metadata_es.json",
+      "gitBlob": "b11381a3e8becff0d530ede6ffb7d4fbe2fc5b0f",
+      "sizeBytes": 4333
+    },
+    {
+      "path": "data/tau2/multilingual/es/localization/README.md",
+      "gitBlob": "366176634815733a8a8b5657906b5bd311467ae6",
+      "sizeBytes": 5890
+    },
+    {
+      "path": "data/tau2/multilingual/es/localization/airline.json",
+      "gitBlob": "9500ed9fe138cdfcec360dff2c0ab7b619cbf2f6",
+      "sizeBytes": 7240128
+    },
+    {
+      "path": "data/tau2/multilingual/es/localization/airport-catalog.json",
+      "gitBlob": "a87f49705005898100197bf5bef86a7c0c77b616",
+      "sizeBytes": 6482
+    },
+    {
+      "path": "data/tau2/multilingual/es/localization/banking_knowledge.json",
+      "gitBlob": "489240240e4e022c7daef83f9b5376bd9ce5a619",
+      "sizeBytes": 2881157
+    },
+    {
+      "path": "data/tau2/multilingual/es/localization/intake.json",
+      "gitBlob": "b69311b2c2251d5fe3c0723ebbadecc1f6a1331a",
+      "sizeBytes": 915576
+    },
+    {
+      "path": "data/tau2/multilingual/es/localization/retail.json",
+      "gitBlob": "77f66a3f58769608d45c72a8de309b565ab2f987",
+      "sizeBytes": 3869713
+    },
+    {
+      "path": "data/tau2/multilingual/es/localization/telecom.json",
+      "gitBlob": "bc0d59c3062f97775af40f682d67ac9fbec2f605",
+      "sizeBytes": 267828
+    },
+    {
+      "path": "data/tau2/multilingual/es/pack.yaml",
+      "gitBlob": "42472d464263ede5ea1c50ae9a3ef56cceaa9daa",
+      "sizeBytes": 37227
+    },
+    {
+      "path": "data/tau2/multilingual/es/regional/airline.json",
+      "gitBlob": "f8e57af548e52366b790c81e961e1dafe4bb2418",
+      "sizeBytes": 5827034
+    },
+    {
+      "path": "data/tau2/multilingual/es/regional/retail.json",
+      "gitBlob": "3b78165855f37756e41b8cf0f24e9bcb31c47385",
+      "sizeBytes": 2471875
+    },
+    {
+      "path": "data/tau2/multilingual/es/regional/telecom.json",
+      "gitBlob": "2baf746af29b5bbf8fe0e0c1d934d53568f0ffcf",
+      "sizeBytes": 665668
+    },
+    {
+      "path": "data/tau2/multilingual/es/retail_metadata_es.json",
+      "gitBlob": "d5039bbb9946e7ce5980153f7a28389d4ec429a0",
+      "sizeBytes": 4365
+    },
+    {
+      "path": "data/tau2/multilingual/es/telecom_metadata_es.json",
+      "gitBlob": "489dbb7c4e33af8c99c76992d4bcd5b4d9275944",
+      "sizeBytes": 15061
+    },
+    {
+      "path": "data/tau2/multilingual/hi/airline_metadata_hi.json",
+      "gitBlob": "ea478cc838c45468d750f2906dd039fb4fbb292c",
+      "sizeBytes": 4333
+    },
+    {
+      "path": "data/tau2/multilingual/hi/localization/README.md",
+      "gitBlob": "e4d636b8ae561bf149c18b0ba019f983b2639e7b",
+      "sizeBytes": 5140
+    },
+    {
+      "path": "data/tau2/multilingual/hi/localization/airline.json",
+      "gitBlob": "4c3287881998621a5bf482f2a96efdc9f2cdb5a4",
+      "sizeBytes": 7230438
+    },
+    {
+      "path": "data/tau2/multilingual/hi/localization/airport-catalog.json",
+      "gitBlob": "f5980e2f2d4de85bd059b4b698bd517b9c65dcce",
+      "sizeBytes": 5945
+    },
+    {
+      "path": "data/tau2/multilingual/hi/localization/banking_knowledge.json",
+      "gitBlob": "2adc49f578e4cdbf7ff571601d50c5e5164351ad",
+      "sizeBytes": 2952917
+    },
+    {
+      "path": "data/tau2/multilingual/hi/localization/intake.json",
+      "gitBlob": "189e9e91fbfe588b70893157e3edaa9995c79d3e",
+      "sizeBytes": 975653
+    },
+    {
+      "path": "data/tau2/multilingual/hi/localization/retail.json",
+      "gitBlob": "3b83fa2d9a4d9e241626ef4930ab90f041924288",
+      "sizeBytes": 3971402
+    },
+    {
+      "path": "data/tau2/multilingual/hi/localization/telecom.json",
+      "gitBlob": "452b0255b5b1d0f6eea61dd14dadbea6c3ec2716",
+      "sizeBytes": 269855
+    },
+    {
+      "path": "data/tau2/multilingual/hi/pack.yaml",
+      "gitBlob": "e8bab167f0ceac172fb23a1070768ddf1e0117d8",
+      "sizeBytes": 44869
+    },
+    {
+      "path": "data/tau2/multilingual/hi/regional/airline.json",
+      "gitBlob": "e5a6f0898addea03a214e4be6ac94fc90f58ca85",
+      "sizeBytes": 5983293
+    },
+    {
+      "path": "data/tau2/multilingual/hi/regional/retail.json",
+      "gitBlob": "db1ead08fa456c369b8226defae60f85d15da224",
+      "sizeBytes": 2715381
+    },
+    {
+      "path": "data/tau2/multilingual/hi/regional/telecom.json",
+      "gitBlob": "3a2d63954ce0cfe50e3ca12a83ba3f265c7ecc72",
+      "sizeBytes": 682139
+    },
+    {
+      "path": "data/tau2/multilingual/hi/retail_metadata_hi.json",
+      "gitBlob": "9c08a6d8ec3d28c4b4d0867affbe1229e004f31f",
+      "sizeBytes": 4365
+    },
+    {
+      "path": "data/tau2/multilingual/hi/telecom_metadata_hi.json",
+      "gitBlob": "489dbb7c4e33af8c99c76992d4bcd5b4d9275944",
+      "sizeBytes": 15061
+    },
+    {
+      "path": "data/tau2/multilingual/ko/airline_metadata_ko.json",
+      "gitBlob": "54cc2d93b73be220055a5c8b6682571fbb85c082",
+      "sizeBytes": 4333
+    },
+    {
+      "path": "data/tau2/multilingual/ko/localization/README.md",
+      "gitBlob": "436bf6ae4c5e371e055d82e39370d782f86c2273",
+      "sizeBytes": 5143
+    },
+    {
+      "path": "data/tau2/multilingual/ko/localization/airline.json",
+      "gitBlob": "e598a99a4a542abbf8e03a87dec592cdb7ca62d8",
+      "sizeBytes": 7448958
+    },
+    {
+      "path": "data/tau2/multilingual/ko/localization/airport-catalog.json",
+      "gitBlob": "1c2f7c7dd8389b7b34be73a24298b613783491ea",
+      "sizeBytes": 5960
+    },
+    {
+      "path": "data/tau2/multilingual/ko/localization/banking_knowledge.json",
+      "gitBlob": "cce113f9f6fc71efaaf895329a49c91abad6ab09",
+      "sizeBytes": 2893621
+    },
+    {
+      "path": "data/tau2/multilingual/ko/localization/banking_knowledge.name-orthography-v1.json",
+      "gitBlob": "5760f1f202546da770b316be1bf8d959e49c8475",
+      "sizeBytes": 2849968
+    },
+    {
+      "path": "data/tau2/multilingual/ko/localization/intake.json",
+      "gitBlob": "2294cc14d1883fa932e696a18d2cf0f5d9a4fff4",
+      "sizeBytes": 950123
+    },
+    {
+      "path": "data/tau2/multilingual/ko/localization/retail.json",
+      "gitBlob": "d0e4498e038a55bb0c18b0808603c638bd23f0a7",
+      "sizeBytes": 3881017
+    },
+    {
+      "path": "data/tau2/multilingual/ko/localization/telecom.json",
+      "gitBlob": "9cf66730ba0f4ea0f47ece6d3f4435d832f51b1f",
+      "sizeBytes": 270457
+    },
+    {
+      "path": "data/tau2/multilingual/ko/pack.yaml",
+      "gitBlob": "9ffb3c94974c2ebc65013aac17f711512888b6ed",
+      "sizeBytes": 38977
+    },
+    {
+      "path": "data/tau2/multilingual/ko/regional/airline.json",
+      "gitBlob": "d2ce16937d03ca85fc3c1b2b847bad5cf511bd87",
+      "sizeBytes": 5870578
+    },
+    {
+      "path": "data/tau2/multilingual/ko/regional/retail.json",
+      "gitBlob": "648989175e51eb6a51738f387da8bca6c4f6b8a0",
+      "sizeBytes": 2497719
+    },
+    {
+      "path": "data/tau2/multilingual/ko/regional/telecom.json",
+      "gitBlob": "3bb265fbc1271626ab6738c948946e3a4cd491a7",
+      "sizeBytes": 664320
+    },
+    {
+      "path": "data/tau2/multilingual/ko/retail_metadata_ko.json",
+      "gitBlob": "5f700a25cb5dd07f8af3200902758be66f226736",
+      "sizeBytes": 4365
+    },
+    {
+      "path": "data/tau2/multilingual/ko/telecom_metadata_ko.json",
+      "gitBlob": "489dbb7c4e33af8c99c76992d4bcd5b4d9275944",
+      "sizeBytes": 15061
+    },
+    {
+      "path": "data/tau2/multilingual/migration_manifest.json",
+      "gitBlob": "83311e9b933de1f2759dab21f901f256965f06c9",
+      "sizeBytes": 14223
+    },
+    {
+      "path": "data/tau2/multilingual/pt/airline_metadata_pt.json",
+      "gitBlob": "4eeb892a68e4fb7c185573ada11cf3c4f32abd9a",
+      "sizeBytes": 4333
+    },
+    {
+      "path": "data/tau2/multilingual/pt/localization/README.md",
+      "gitBlob": "b3bd8265548dd2fd33a564201e31784eb148c224",
+      "sizeBytes": 5501
+    },
+    {
+      "path": "data/tau2/multilingual/pt/localization/airline.json",
+      "gitBlob": "668d8660bee58ab7f5931f2b8a0f69f7bbd59124",
+      "sizeBytes": 7284585
+    },
+    {
+      "path": "data/tau2/multilingual/pt/localization/airport-catalog.json",
+      "gitBlob": "e0f0959670523d308b0b80e2e8c55f7e0db77384",
+      "sizeBytes": 5856
+    },
+    {
+      "path": "data/tau2/multilingual/pt/localization/banking_knowledge.json",
+      "gitBlob": "e324b644ec6675bec2fe7abd845a296d1a84cd77",
+      "sizeBytes": 2860680
+    },
+    {
+      "path": "data/tau2/multilingual/pt/localization/intake.json",
+      "gitBlob": "56d0942890da12abcb74b396b31af417cf66f64d",
+      "sizeBytes": 891343
+    },
+    {
+      "path": "data/tau2/multilingual/pt/localization/retail.json",
+      "gitBlob": "5a055b7e433012bade8a7d07f48b1be27723e8b1",
+      "sizeBytes": 3883648
+    },
+    {
+      "path": "data/tau2/multilingual/pt/localization/telecom.json",
+      "gitBlob": "28a7a4159663c88fa920b9abc1214677e1e9a2ac",
+      "sizeBytes": 268605
+    },
+    {
+      "path": "data/tau2/multilingual/pt/pack.yaml",
+      "gitBlob": "fb3070e3b06a74d16d02415a01716ed7deb1acde",
+      "sizeBytes": 37872
+    },
+    {
+      "path": "data/tau2/multilingual/pt/regional/airline.json",
+      "gitBlob": "ead24bc115102e58bb717aab38aa08a814748061",
+      "sizeBytes": 5841060
+    },
+    {
+      "path": "data/tau2/multilingual/pt/regional/retail.json",
+      "gitBlob": "a85bcba3008c47349726a3f11ed84ff3609a2467",
+      "sizeBytes": 2472402
+    },
+    {
+      "path": "data/tau2/multilingual/pt/regional/telecom.json",
+      "gitBlob": "b7464a8366ec3ace96647d9425e0c90ac498bfc7",
+      "sizeBytes": 665373
+    },
+    {
+      "path": "data/tau2/multilingual/pt/retail_metadata_pt.json",
+      "gitBlob": "c3bd7893acec4ecf9d82c1bfbbd390033293757d",
+      "sizeBytes": 4365
+    },
+    {
+      "path": "data/tau2/multilingual/pt/telecom_metadata_pt.json",
+      "gitBlob": "489dbb7c4e33af8c99c76992d4bcd5b4d9275944",
+      "sizeBytes": 15061
+    },
+    {
+      "path": "data/tau2/multilingual/telecom-caller-roles.json",
+      "gitBlob": "2088070448a702e1a0b1b34777ab9da71a5282cd",
+      "sizeBytes": 258
+    },
+    {
+      "path": "data/tau2/multilingual/zh/airline_metadata_zh.json",
+      "gitBlob": "a4eca25b095cd244677867499e630e402c7fc4e9",
+      "sizeBytes": 4333
+    },
+    {
+      "path": "data/tau2/multilingual/zh/localization/README.md",
+      "gitBlob": "182b5d2dda7cd8ea85d561f02f49a1a0638f2569",
+      "sizeBytes": 6152
+    },
+    {
+      "path": "data/tau2/multilingual/zh/localization/airline.json",
+      "gitBlob": "71667233db240d2208a588a1c3bd5baf6f376bfe",
+      "sizeBytes": 7240415
+    },
+    {
+      "path": "data/tau2/multilingual/zh/localization/airport-catalog.json",
+      "gitBlob": "9863f3f101f37ddacb883789c166a8d3038f72df",
+      "sizeBytes": 5726
+    },
+    {
+      "path": "data/tau2/multilingual/zh/localization/banking_knowledge.json",
+      "gitBlob": "9f5a3b9149240f18a98ce7757a5426d7cf2112d3",
+      "sizeBytes": 2906623
+    },
+    {
+      "path": "data/tau2/multilingual/zh/localization/banking_knowledge.name-orthography-v1.json",
+      "gitBlob": "609fab3d9957e8ad53e6ca5948e5f057ccd6dd4d",
+      "sizeBytes": 2860949
+    },
+    {
+      "path": "data/tau2/multilingual/zh/localization/intake.json",
+      "gitBlob": "a225d8fe6d36382f3940b0dc9ab07a4bb1e45c5a",
+      "sizeBytes": 939672
+    },
+    {
+      "path": "data/tau2/multilingual/zh/localization/retail.json",
+      "gitBlob": "4b9e86220fb080d3d3dcce9f28744b5334cea50d",
+      "sizeBytes": 3971113
+    },
+    {
+      "path": "data/tau2/multilingual/zh/localization/telecom.json",
+      "gitBlob": "6ffb749e1ce00281a1063643052dbfc95741700d",
+      "sizeBytes": 263794
+    },
+    {
+      "path": "data/tau2/multilingual/zh/pack.yaml",
+      "gitBlob": "bd71f9f681893640a4f3969c3457206b2096bec1",
+      "sizeBytes": 37223
+    },
+    {
+      "path": "data/tau2/multilingual/zh/regional/airline.json",
+      "gitBlob": "1083872a1a4f13b3f9bf5be32f74071edf468e0d",
+      "sizeBytes": 5808854
+    },
+    {
+      "path": "data/tau2/multilingual/zh/regional/retail.json",
+      "gitBlob": "560bc9bf0cbfc9c04ee3f25d993198a9398e6f1c",
+      "sizeBytes": 2435891
+    },
+    {
+      "path": "data/tau2/multilingual/zh/regional/telecom.json",
+      "gitBlob": "9bdbde0462b487e228ed6ea7e26227702a891438",
+      "sizeBytes": 656626
+    },
+    {
+      "path": "data/tau2/multilingual/zh/retail_metadata_zh.json",
+      "gitBlob": "f58160697fcd6cee2e0807b167d5c37822dbce60",
+      "sizeBytes": 4365
+    },
+    {
+      "path": "data/tau2/multilingual/zh/telecom_metadata_zh.json",
+      "gitBlob": "489dbb7c4e33af8c99c76992d4bcd5b4d9275944",
+      "sizeBytes": 15061
+    },
+    {
+      "path": "data/tau2/task_subsets/airline_50.json",
+      "gitBlob": "beedcb2439a506f27b8d8cac0084564814ee84bd",
+      "sizeBytes": 932
+    },
+    {
+      "path": "data/tau2/task_subsets/banking_knowledge_97.json",
+      "gitBlob": "ba947f650b9f24c6fa2903a6a6d087479f56a74d",
+      "sizeBytes": 2062
+    },
+    {
+      "path": "data/tau2/task_subsets/intake_200.json",
+      "gitBlob": "1310a8c5396df5a83cc2e87ac0fab7816ce22649",
+      "sizeBytes": 6581
+    },
+    {
+      "path": "data/tau2/task_subsets/retail_114.json",
+      "gitBlob": "ff208b01f678ec4d6c127264bd87669a52a52e2a",
+      "sizeBytes": 1625
+    },
+    {
+      "path": "data/tau2/task_subsets/retail_50.json",
+      "gitBlob": "837e569fe3c3447851f3ea67d174a318b120c983",
+      "sizeBytes": 2730
+    },
+    {
+      "path": "data/tau2/task_subsets/telecom_114.json",
+      "gitBlob": "d60dc57255a4b4890a0605e5b1c4356865851b40",
+      "sizeBytes": 14634
+    },
+    {
+      "path": "data/tau2/task_subsets/telecom_50.json",
+      "gitBlob": "14744fc750067785b988c22ca38f305e74ca498a",
+      "sizeBytes": 7335
+    }
+  ]
+}

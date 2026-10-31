@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { createHash } from "node:crypto";
+import { canonicalJson } from "openpond-sdk/training";
 import type { TrainingJob } from "openpond-sdk/training";
 
 const CleanupAttestation = z.object({
@@ -20,6 +22,7 @@ const Inspection = z.object({ job: z.object({
     canonicalPublishState: z.literal("skipped"), publicSubmission: z.null(),
     cleanupAttestation: CleanupAttestation.nullable(),
   }),
+  evaluations: z.array(z.object({ id: z.string(), metrics: z.record(z.string(), z.unknown()), passed: z.boolean().nullable() })).default([]),
   resources: z.array(z.object({ kind: z.string(), externalId: z.string(), metadata: z.unknown() })),
   trainingSteps: z.array(z.unknown()).length(0),
   rolloutGroups: z.array(z.unknown()).length(0),
@@ -27,12 +30,19 @@ const Inspection = z.object({ job: z.object({
   artifacts: z.array(z.unknown()).length(0),
 }) });
 const ServingSource = z.object({
-  mode: z.enum(["load_test", "frozen_evaluation"]),
+  mode: z.enum(["load_test", "frozen_evaluation", "training_diagnostic"]),
   target: z.enum(["base_model", "checkpoint"]),
   sourceJobId: z.string().min(1), checkpointId: z.string().min(1),
   policyVersion: z.number().int().nonnegative(),
   adapterSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   artifact: z.object({ id: z.string().min(1), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).optional(),
+  retainedCheckpoint: z.object({
+    schemaVersion: z.literal("openpond.retainedSupervisedCheckpoint.v1"),
+    sourceJobId: z.string().min(1), sourceJobVersion: z.number().int().positive(),
+    sourceInputManifestSha256: z.string().regex(/^[a-f0-9]{64}$/), checkpointId: z.string().min(1), policyVersion: z.literal(1),
+    checkpointReceiptSha256: z.string().regex(/^[a-f0-9]{64}$/), optimizerEvidenceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    inventorySha256: z.string().regex(/^[a-f0-9]{64}$/), adapterSha256: z.string().regex(/^[a-f0-9]{64}$/), resumeSha256: z.string().regex(/^[a-f0-9]{64}$/), receiptSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  }).optional(),
   evaluationPanel: z.object({
     schemaVersion: z.literal("openpond.frozenEvaluationPanel.v1"),
     sourceManifest: z.object({ id: z.string(), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
@@ -40,6 +50,16 @@ const ServingSource = z.object({
     populationSha256: z.string().regex(/^[a-f0-9]{64}$/), populationCount: z.number().int().positive(),
     shardIndex: z.number().int().nonnegative(), shardSize: z.number().int().positive(), shardCount: z.number().int().positive(),
     selectedTasksSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  }).optional(),
+  trainingDiagnostic: z.object({
+    schemaVersion: z.literal("openpond.trainingDiagnostic.v1"),
+    evidenceKind: z.literal("training_fit"), sourceSplit: z.literal("train"), qualifiesGeneralization: z.literal(false),
+    sourceJobId: z.string().min(1), sourceInputManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    sourceEnvironmentSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    sourceTaskset: z.object({ id: z.string(), revision: z.number().int().positive(), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }),
+    taskInputHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)).min(1).max(128),
+    trainingTasksSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    taskIds: z.array(z.string().min(1)).min(1).max(128),
   }).optional(),
   derivedBackbone: z.object({
     planSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -53,20 +73,35 @@ const ServingSource = z.object({
 /** Project only serving identity and custody from the authenticated owner read.
  * Never copy native inputs, prompts, artifact contents, or provider metadata. */
 export function parseHostedServingReportEvidence(value: unknown, expected: Pick<TrainingJob, "id" | "teamId">) {
-  const { job, resources } = Inspection.parse(value).job;
+  const { job, resources, evaluations } = Inspection.parse(value).job;
   if (job.id !== expected.id || job.teamId !== expected.teamId) {
     throw new Error("Hosted serving report evidence belongs to a different job or workspace.");
   }
   const resource = resources.find(row => row.kind === "worker_command" && row.externalId === "serving-soak-source");
   const source = ServingSource.parse(resource?.metadata);
+  if (source.mode === "training_diagnostic" && (!source.trainingDiagnostic || source.trainingDiagnostic.sourceJobId !== source.sourceJobId ||
+      !source.artifact || source.evaluationPanel || source.retainedCheckpoint || source.derivedBackbone))
+    throw new Error("Hosted training diagnostic source classification mismatch.");
+  const authoritySha256 = source.trainingDiagnostic ? createHash("sha256").update(canonicalJson(source.trainingDiagnostic)).digest("hex") : null;
+  if (source.trainingDiagnostic && evaluations.some(evaluation => evaluation.passed !== null ||
+      evaluation.metrics.evidenceKind !== "training_fit" || evaluation.metrics.sourceSplit !== "train" ||
+      evaluation.metrics.qualifiesGeneralization !== false || evaluation.metrics.sourceJobId !== source.sourceJobId ||
+      evaluation.metrics.authoritySha256 !== authoritySha256))
+    throw new Error("Hosted training diagnostic evaluation classification mismatch.");
   const lastDelta = source.derivedBackbone?.plan.deltas.at(-1);
   const mergedIdentityMatches = source.mode === "frozen_evaluation" && source.target === "checkpoint" &&
     source.policyVersion > 0 && source.adapterSha256 === null && lastDelta !== undefined &&
     lastDelta.sourceJobId === source.sourceJobId && lastDelta.checkpointId === source.checkpointId &&
     lastDelta.artifact.id === source.artifact?.id && lastDelta.artifact.contentHash === source.artifact?.contentHash;
+  const retained = source.retainedCheckpoint;
+  if (retained && (source.mode !== "frozen_evaluation" || source.artifact || source.derivedBackbone ||
+      retained.sourceJobId !== source.sourceJobId || retained.checkpointId !== source.checkpointId ||
+      (source.target === "checkpoint" && (retained.policyVersion !== source.policyVersion || retained.adapterSha256 !== source.adapterSha256)))) {
+    throw new Error("Hosted serving report retained checkpoint identity mismatch.");
+  }
   if (source.policyVersion !== job.currentPolicyVersion ||
       (source.derivedBackbone ? !mergedIdentityMatches :
-        source.mode === "frozen_evaluation" && (source.target === "base_model"
+        (source.mode === "frozen_evaluation" || source.mode === "training_diagnostic") && (source.target === "base_model"
           ? source.policyVersion !== 0 || source.adapterSha256 !== null
           : !source.adapterSha256))) {
     throw new Error("Hosted serving report checkpoint identity mismatch.");
@@ -83,7 +118,8 @@ export function parseHostedServingReportEvidence(value: unknown, expected: Pick<
     representation: derivedBackbone ? "merged_backbone" as const : source.target === "base_model" ? "base_model" as const : "adapter" as const,
     ...(derivedBackbone ? { backbonePlanSha256: derivedBackbone.planSha256 } : {}),
   };
-  return { jobId: job.id, teamId: job.teamId, executionMode: source.mode, source: servingIdentity, nativeJobVersion: job.version,
+  return { ...(source.trainingDiagnostic ? { evidenceKind: "training_fit" as const, qualifiesGeneralization: false as const,
+      authoritySha256, evaluationIds: evaluations.map(evaluation => evaluation.id) } : {}), jobId: job.id, teamId: job.teamId, executionMode: source.mode, source: servingIdentity, nativeJobVersion: job.version,
     cleanupAttestation: custody, cleanupComplete };
 }
 

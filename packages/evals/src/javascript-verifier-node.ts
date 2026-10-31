@@ -2,6 +2,7 @@ import type { executeJavaScriptVerifier } from "./javascript-verifier.js";
 import { assertIsolatedVerifierRuntime, JavaScriptVerifierResultSchema, type JavaScriptVerifierResult } from "./javascript-verifier-contract.js";
 import { executeJavaScriptIsolateInWorker } from "./javascript-isolate-node.js";
 import { executeJavaScriptIsolateInProcess } from "./javascript-isolate-process.js";
+export { JavaScriptVerifierHostTimeoutError } from "./javascript-isolate-process.js";
 
 /** Resolves/rejects only after the execution owner has stopped the worker. */
 export async function executeJavaScriptVerifierInWorker(input: Parameters<typeof executeJavaScriptVerifier>[0]): Promise<JavaScriptVerifierResult> {

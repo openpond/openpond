@@ -6,6 +6,7 @@ import { learningRef, type LearningCommand } from "openpond-sdk/learning";
 import type { ClientConnection } from "../../../api";
 import { createHostedModelLearningApi, type HostedModelLearningOverview } from "../../../api/model-learning-api";
 import { LearningActions, LearningError, LearningPager } from "./LearningFields";
+import { DropdownSelect } from "../../DropdownSelect";
 
 const Settings = lazy(() => import("./HostedModelLearningSettings").then(module => ({ default: module.HostedModelLearningSettings })));
 const Review = lazy(() => import("./HostedModelLearningReview").then(module => ({ default: module.HostedModelLearningReview })));
@@ -39,6 +40,8 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
   }, [client, policyId, afterId, key, revision]);
   const value = state?.client === client && state.key === key ? state.value : null;
   const policy = value?.policy;
+  const waiting = value?.dispatch?.state === "prepared" && !value.dispatch.submissionStartedAt
+    && value.dispatch.admission?.status === "deferred" ? value.dispatch.admission : null;
   async function run(command: LearningCommand) {
     if (active.current) return;
     active.current = true; setBusy(true); setMutationError(null);
@@ -62,19 +65,19 @@ export function HostedModelLearning({ connection, model, readOnly }: { connectio
     {!readOnly && value ? <button type="button" className="training-button secondary" disabled={busy || Boolean(pending.current)} onClick={() => setEditing({ project: value.project, policy: value.policy })}>{value.policy ? "Learning settings" : "Configure learning"}</button> : null}
     {!value && !error ? <p>Loading hosted learning…</p> : null}
     {value?.policies.items.length === 0 ? <p>No hosted learning policy on this page.</p> : null}
-    {value && value.policies.items.length > 1 ? <label>Learning policy<select value={policyId ?? ""} disabled={busy || Boolean(pending.current)} onChange={event => setPolicyId(event.target.value || undefined)}>
-      <option value="">Select a policy</option>{value.policies.items.map(item => <option key={item.id} value={item.id}>{item.id} · {item.enabled ? "Enabled" : "Paused"}</option>)}
-    </select></label> : null}
+    {value && value.policies.items.length > 1 ? <label>Learning policy<DropdownSelect label="Learning policy" value={policyId ?? policy?.id ?? ""} disabled={busy || Boolean(pending.current)} onChange={id => { setPolicyId(id); setAfterId(undefined); }}
+      options={value.policies.items.map(item => ({ value: item.id, label: `${item.id} · ${item.enabled ? "Enabled" : "Paused"}` }))} /></label> : null}
     {policy ? <>
       <p>{policy.enabled ? "Enabled" : "Paused"} · {policy.admission.mode === "human" ? "Human review required" : "Qualified automatic admission"}</p>
       <div className="labs-overview-decision-grid">{[["Ready to train", value?.inspection?.counts?.eligible], ["Awaiting review", value?.inspection?.counts?.awaitingReview], ["Already used", value?.inspection?.counts?.consumed]].map(([label, count]) =>
         <div className="labs-overview-decision-card" key={label}><small>{label}</small><strong>{count ?? "—"}</strong></div>)}</div>
-      <p>{policy.trigger.kind === "schedule" ? `Checks every ${policy.trigger.intervalSeconds / 60} minutes` : "Manual training"}. At least {policy.admission.minimumApprovedExamples} approved new tasks are required.</p>
+      <p>{policy.trigger.kind === "schedule" ? `Checks every ${policy.trigger.intervalSeconds / 60} minutes` : policy.trigger.kind === "nightly" ? `Checks at ${policy.trigger.localTime} · ${policy.trigger.timeZone}` : policy.trigger.kind === "approved_count" ? "Checks as approved tasks arrive" : "Manual training"}. At least {policy.admission.minimumApprovedExamples} approved new tasks are required.</p>
       {value?.schedule?.nextRunAt ? <p>Next check: {new Date(value.schedule.nextRunAt).toLocaleString()}</p> : null}
       {value?.schedule?.state === "blocked" ? <LearningError error={value.schedule.lastError ?? "The schedule is blocked. Review learning settings before resuming."} /> : null}
       {value?.inspection?.blockers.length ? <ul>{value.inspection.blockers.map(item => <li key={item.code}>{item.message}</li>)}</ul> : null}
-      {value?.iteration ? <p>Latest iteration: {value.iteration.status.replaceAll("_", " ")} · {value.iteration.id}</p> : null}
-      {value?.iteration?.failure ? <LearningError error={value.iteration.failure.message} /> : null}
+      {value?.iteration ? <p>Latest iteration: {waiting ? "Waiting to train" : value.iteration.status.replaceAll("_", " ")} · {value.iteration.id}</p> : null}
+      {waiting ? <div role="status" aria-live="polite"><p>{waiting.reason}</p><p>Next admission check: <time dateTime={waiting.retryAt}>{new Date(waiting.retryAt).toLocaleString()}</time>. Training has not started.</p></div> : null}
+      {value?.iteration?.failure ? <details><summary>Recorded iteration failure</summary><p>{value.iteration.failure.message}</p></details> : null}
       {value?.inspection ? <p>Reserved: ${value.inspection.budget.reservedSpendUsd.toFixed(4)} · Spent: ${value.inspection.budget.settledSpendUsd.toFixed(4)} · Daily limit: ${policy.limits.maxDailySpendUsd}</p> : null}
       {value?.inspection?.trainingParent ? <details><summary>Starting checkpoint for the next iteration</summary>
         <p>{value.inspection.trainingParent.selection ? "Latest accepted candidate; optimizer state resets." : "Configured base model."}</p>

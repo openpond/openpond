@@ -71,6 +71,23 @@ Bundles contain approved training records, the recipe, policy, and provenance. T
 
 The open-source repository provides bundle export and an optional non-production local CPU training fixture. OpenPond Managed is the hosted compute option when it is available for the signed-in account. Connected and direct-provider destinations appear only when their required worker and destination integrations are configured. The local worker lives in `python/openpond-training` and requires Python `>=3.10,<3.13` plus `uv`.
 
+## Inspect supervised training fit
+
+Use `openpond training hosted-evaluate-checkpoint <request.json> --team-id <id> --yes`
+with `mode: "training_diagnostic"` to measure a completed published supervised
+adapter, or its pinned base, on the exact original training cases. Supply the
+published artifact reference, checkpoint, signed GPU quote, and approved budget.
+The server derives every task from the immutable source; this mode accepts no
+caller panel, task edits, sampling overrides, retained failed checkpoint, or
+merged backbone.
+
+This read-only run performs no optimizer updates or publication. Its job,
+evaluation metrics, and `hosted-report` identify it as `training_fit`, with
+`qualifiesGeneralization: false`. Export per-task results with their bound job
+and report: the existing `candidate` field identifies the evaluated policy role,
+not held-out evidence. Use `frozen_evaluation` for an isolated development panel;
+its training-overlap checks remain enforced.
+
 ## The Full Loop
 
 ```text

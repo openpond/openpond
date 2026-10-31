@@ -18,7 +18,7 @@ export function configureLocalToolLearning(
   installation: ToolLearningInstallation | null,
 ) {
   const registration = record.prepared.registration;
-  if (registration.client !== "openpond" && registration.client !== "claude_code")
+  if (!["openpond", "claude_code", "opencode", "codex"].includes(registration.client))
     throw new Error("This client has not been qualified for installation.");
   return store.configure({
     schemaVersion: "openpond.localToolLearningInstallation.v1",

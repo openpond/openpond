@@ -32,6 +32,25 @@ export async function runHostedWorkerCommand(input: {
   let body: string | undefined;
   if (input.action === "hosted-workers") {
     if (input.target) throw new Error("hosted-workers does not accept an identifier.");
+  } else if (input.action === "hosted-worker-adopt") {
+    if (!input.confirmed) throw new Error("Attaching a reserved GPU requires --yes and a funded queued job.");
+    body = JSON.stringify(z.object({
+      jobId: z.string().min(1).max(191), providerPodId: z.string().min(1).max(191),
+      idempotencyKey: z.string().min(1).max(191), deadlineAt: z.iso.datetime({ offset: true }),
+      maximumHourlyUsd: z.number().positive().max(10), maximumSessionUsd: z.number().positive().max(30),
+    }).strict().parse(await input.readInput()));
+    path += "/adopt";
+  } else if (input.action === "hosted-worker-rebind") {
+    if (!input.confirmed) throw new Error("Reserved GPU recovery requires --yes and a fresh funded queued job.");
+    const { workerId, ...request } = z.object({ workerId: z.string().min(1).max(191),
+      jobId: z.string().min(1).max(191), idempotencyKey: z.string().min(1).max(191),
+    }).strict().parse(await input.readInput());
+    path += `/${encodeURIComponent(workerId)}/rebind`;
+    body = JSON.stringify(request);
+  } else if (input.action === "hosted-worker-enroll" || input.action === "hosted-worker-verify") {
+    if (!input.confirmed || !input.target) throw new Error("Reserved GPU enrollment requires a worker ID and --yes.");
+    path += `/${encodeURIComponent(input.target)}/${input.action === "hosted-worker-enroll" ? "enroll" : "enrollment-verification"}`;
+    body = "{}";
   } else if (input.action === "hosted-worker") {
     if (!input.target) throw new Error("hosted-worker requires a physical worker ID.");
     path += `/${encodeURIComponent(input.target)}`;
@@ -47,7 +66,7 @@ export async function runHostedWorkerCommand(input: {
     if (action === "warm-idle" && (!control.warmIdleDeadlineAt || !control.maximumIdleUsd))
       throw new Error("Warm idle requires warmIdleDeadlineAt and maximumIdleUsd; the server caps retention at three hours.");
     if (action === "retain-session" && (!control.sessionId || !control.sessionDeadlineAt || !control.maximumSessionUsd || !control.idleGraceSeconds))
-      throw new Error("Session retention requires sessionId, sessionDeadlineAt, maximumSessionUsd, and idleGraceSeconds; its deadline and active-plus-idle execution budget cannot be renewed; reserve cleanup costs separately.");
+      throw new Error("Session retention requires sessionId, sessionDeadlineAt, maximumSessionUsd, and idleGraceSeconds. Extending the same session requires explicit owner reauthorization within the server lifetime bound; job budgets remain separate.");
     path += `/${encodeURIComponent(workerId)}/control`;
     body = JSON.stringify({ ...control, action });
   }

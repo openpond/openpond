@@ -168,11 +168,8 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   if (action === "hosted-start") {
     const receipt = await parseAndVerifyTrainingPreparationReceipt(await readInput());
     if (receipt.plan.request.teamId !== teamId) throw new Error("Preparation belongs to a different workspace.");
-    const estimate = await client.estimate({ schemaVersion: "openpond.trainingEstimateRequest.v1", teamId,
-      source: { kind: "preparation", id: receipt.plan.id, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision } });
-    if (!parseBooleanOption(options.json)) printTrainingEstimate(estimate, false);
     if (!parseBooleanOption(options.yes)) throw new Error("Starting paid hosted training requires --yes.");
-    const submitted = await client.startPreparation(receipt.plan.id, { teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision, estimateReview: estimate.review });
+    const submitted = await client.startPreparation(receipt.plan.id, { teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision });
     print(submitted);
     if (submitted.jobId) await attach(submitted.jobId);
     return;

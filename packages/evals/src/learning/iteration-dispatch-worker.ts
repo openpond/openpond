@@ -3,10 +3,12 @@ import { LearningIterationSchema, type LearningIteration, type LearningPolicy, t
 import { LearningDomainError } from "./errors.js";
 import { LearningChainSchema, LearningIterationReservationSchema } from "./iteration-reservation-contracts.js";
 import {
-  LearningIterationDispatchSchema, LearningIterationObservationSchema, LearningIterationSubmissionSchema,
-  type LearningIterationDispatch, type LearningIterationObservation, type LearningIterationSubmission,
+  LearningIterationAdmissionSchema, LearningIterationDispatchSchema, LearningIterationObservationSchema, LearningIterationSubmissionSchema,
+  type LearningIterationAdmission, type LearningIterationDispatch, type LearningIterationObservation, type LearningIterationSubmission,
 } from "./iteration-dispatch-contracts.js";
 import { requireLearningRelease, requireLearningResource, type LearningRepository, type LearningTransaction } from "./repository.js";
+import { deferLearningIterationSubmission } from "./iteration-dispatch-deferral.js";
+import { LearningIterationSubmissionDeferralSchema, type LearningIterationSubmissionDeferral } from "./iteration-dispatch-contracts.js";
 
 export type LearningIterationExecutionContext = {
   scope: string;
@@ -19,12 +21,18 @@ export type LearningIterationExecutionContext = {
 export interface LearningIterationExecutor {
   /** Resolve immutable inputs and validate compatibility. Must not launch compute. */
   prepare(input: LearningIterationExecutionContext): Promise<LearningIterationSubmission>;
+  /** Check calendar/capacity for the persisted submission before its first
+   * attempt. May reserve admission custody, but must not create an execution,
+   * launch compute or spend. Submit must still enforce current authority. */
+  admit?(input: LearningIterationExecutionContext): Promise<LearningIterationAdmission>;
   /** Return the existing execution under dispatch.id; null means not found.
    * An unavailable owner must throw, never report absence. */
   reconcile(input: LearningIterationExecutionContext): Promise<LearningIterationObservation | null>;
   /** Idempotently submit exactly dispatch.submission under dispatch.id, across
    * crashes, lease owners and retries. Never create a different Job on retry. */
-  submit(input: LearningIterationExecutionContext): Promise<LearningIterationObservation>;
+  // A deferral requires authoritative no-execution/no-spend and durable fencing
+  // of this attempt, including late transports. Never infer it from a timeout.
+  submit(input: LearningIterationExecutionContext): Promise<LearningIterationObservation | LearningIterationSubmissionDeferral>;
   /** Cancel by dispatch identity, including an ambiguous initial submission.
    * Terminal confirmation MUST fence late submits under that identity, including
    * when no Job was created. A network abort alone is not cleanup confirmation. */
@@ -53,7 +61,7 @@ export function createLearningIterationWorker(repository: LearningRepository, ex
       const stamp = now();
       if (current?.state === "settled" || (current?.state === "blocked" && !current.cancelRequestedAt)
         || (current?.leaseExpiresAt && Date.parse(current.leaseExpiresAt) > Date.parse(stamp))
-        || (current?.nextAttemptAt && Date.parse(current.nextAttemptAt) > Date.parse(stamp))) return null;
+        || (!current?.cancelRequestedAt && current?.nextAttemptAt && Date.parse(current.nextAttemptAt) > Date.parse(stamp))) return null;
       const policy = await requireLearningRelease(tx, "policy", iteration.policy);
       if (policy.executionOwner !== options.executionOwner) throw new LearningDomainError("learning_execution_owner_mismatch", 409);
       const latestPolicy = await requireLearningResource(tx, "policy", policy.id);
@@ -110,7 +118,7 @@ export function createLearningIterationWorker(repository: LearningRepository, ex
     });
     await tx.put("iteration", updated, iteration.revision, { parentId: current.chainId, status });
     await saveDispatch(tx, current, { state: terminal ? "settled" : "submitted", execution: outcome?.execution ?? current.execution,
-      terminalReceipt: outcome?.receipt ?? null, leaseOwner: null, leaseExpiresAt: null,
+      terminalReceipt: outcome?.receipt ?? null, leaseOwner: null, leaseExpiresAt: null, admission: null,
       nextAttemptAt: terminal ? null : new Date(Date.parse(now()) + 5_000).toISOString(), consecutiveFailures: 0, lastError: null });
     if (terminal) {
       const reservation = await requireLearningResource(tx, "reservation", iteration.id);
@@ -148,20 +156,44 @@ export function createLearningIterationWorker(repository: LearningRepository, ex
         if (!prepared) return read();
         dispatch = prepared;
       }
+      if (!dispatch.submissionStartedAt && !dispatch.cancelRequestedAt && executor.admit) {
+        const checkedAt = now();
+        const admission = LearningIterationAdmissionSchema.parse(await bounded(input => executor.admit!(input)));
+        if (admission.status === "deferred") {
+          if (Date.parse(admission.retryAt) <= Date.parse(checkedAt)) throw new LearningDomainError("learning_admission_retry_time_invalid", 409);
+          await fenced(scope, dispatch, async (tx, current, iteration) => {
+            if (current.cancelRequestedAt) return settle(tx, current, iteration, null);
+            const retryAt = new Date(Math.max(Date.parse(admission.retryAt), Date.parse(now()) + 1_000)).toISOString();
+            await saveDispatch(tx, current, { admission: { ...admission, retryAt }, nextAttemptAt: retryAt,
+              consecutiveFailures: 0, lastError: null, leaseOwner: null, leaseExpiresAt: null });
+            if (iteration.failure) await tx.put("iteration", LearningIterationSchema.parse({ ...iteration,
+              revision: iteration.revision + 1, failure: null, updatedAt: now() }), iteration.revision,
+              { parentId: current.chainId, status: iteration.status });
+          });
+          return read();
+        }
+      }
       const starting = await fenced(scope, dispatch, async (tx, current, iteration) => {
         if (current.cancelRequestedAt && !current.submissionStartedAt) { await settle(tx, current, iteration, null); return null; }
         const policy = await requireLearningResource(tx, "policy", current.policy.id);
         if (!policy.enabled && !current.submissionStartedAt) { await saveDispatch(tx, current, { leaseOwner: null, leaseExpiresAt: null }); return null; }
-        return saveDispatch(tx, current, { submissionStartedAt: current.submissionStartedAt ?? now() });
+        return saveDispatch(tx, current, { submissionStartedAt: current.submissionStartedAt ?? now(), admission: null });
       });
       if (!starting) return read();
       dispatch = starting;
-      let observed = dispatch.cancelRequestedAt ? await bounded(input => executor.cancel(input)) : await bounded(input => executor.reconcile(input));
+      let observed: LearningIterationObservation | LearningIterationSubmissionDeferral | null = dispatch.cancelRequestedAt ? await bounded(input => executor.cancel(input)) : await bounded(input => executor.reconcile(input));
       if (!observed) {
         const refreshed = await fenced(scope, dispatch, (tx, current) => saveDispatch(tx, current, {}));
         if (!refreshed) return read();
         dispatch = refreshed;
         observed = dispatch.cancelRequestedAt ? await bounded(input => executor.cancel(input)) : await bounded(input => executor.submit(input));
+      }
+      if (observed.status === "deferred") {
+        const outcome = LearningIterationSubmissionDeferralSchema.parse(observed);
+        if (outcome.scope !== scope || outcome.dispatchId !== dispatch.id || outcome.submissionHash !== dispatch.submissionHash ||
+          outcome.leaseGeneration !== dispatch.leaseGeneration) throw new LearningDomainError("learning_execution_identity_mismatch", 409);
+        await fenced(scope, dispatch, (tx, current, iteration) => deferLearningIterationSubmission(tx, scope, current, iteration, outcome, now()));
+        return read();
       }
       const outcome = LearningIterationObservationSchema.parse(observed);
       if (outcome.scope !== scope || outcome.dispatchId !== dispatch.id || outcome.submissionHash !== dispatch.submissionHash
@@ -177,7 +209,7 @@ export function createLearningIterationWorker(repository: LearningRepository, ex
         const blocked = failures > acquired.policy.limits.maxRetries;
         const message = (error instanceof Error ? error.message : "Learning dispatch failed.").slice(0, 20_000);
         await saveDispatch(tx, current, { state: blocked ? "blocked" : current.state, consecutiveFailures: failures,
-          lastError: message, leaseOwner: null, leaseExpiresAt: null,
+          lastError: message, leaseOwner: null, leaseExpiresAt: null, admission: null,
           nextAttemptAt: blocked ? null : new Date(Date.parse(now()) + Math.min(60_000, 1_000 * 2 ** Math.min(failures, 6))).toISOString() });
         const updated = LearningIterationSchema.parse({ ...iteration, revision: iteration.revision + 1, retryCount: iteration.retryCount + 1,
           failure: { code: blocked ? "learning_dispatch_attention_required" : "learning_dispatch_retry_pending", message }, updatedAt: now() });

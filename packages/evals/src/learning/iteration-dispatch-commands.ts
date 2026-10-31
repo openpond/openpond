@@ -21,7 +21,7 @@ export async function commandLearningIterationDispatch(tx: LearningTransaction, 
   const resumed = LearningIterationDispatchSchema.parse({ ...dispatch, revision: dispatch.revision + 1,
     state: dispatch.execution ? "submitted" : dispatch.submission ? "prepared" : "preparing",
     cancelRequestedAt: cancelling ? dispatch.cancelRequestedAt ?? now : null,
-    consecutiveFailures: 0, nextAttemptAt: null, lastError: null, updatedAt: now });
+    consecutiveFailures: 0, nextAttemptAt: null, lastError: null, admission: null, updatedAt: now });
   // Preserve an in-flight lease. Its owner observes cancellation on the next
   // transition, and a replacement worker may claim only after that lease ends.
   await tx.put("dispatch", resumed, dispatch.revision, { parentId: iteration.id, status: resumed.state });

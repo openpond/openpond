@@ -1,0 +1,19 @@
+[project]
+name = "openpond-fixit-public-study"
+version = "0.1.0"
+description = "Pinned, custom twenty-task Fix-it effectiveness and cost study"
+requires-python = ">=3.12,<3.14"
+dependencies = ["tau2==2.0.0", "ponder-sdk==0.1.2", "filelock>=3.20,<4"]
+
+[project.scripts]
+fixit-study = "fixit_study.cli:main"
+
+[tool.uv.sources]
+tau2 = { git = "https://github.com/sierra-research/tau2-bench", rev = "989d3285ae669e49503324bdb9981bf14fccedeb" }
+
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fixit_study"]

@@ -1,4 +1,6 @@
 import {EvaluationOperationRecoveryPageSchema} from "@openpond/contracts";
+import { createModelProjectsClient } from "openpond-sdk/model-projects";
+import { OpenPondToolLearningClient } from "openpond-sdk/tool-learning";
 import {validateReviewedEvaluationIntent,validateReviewedEvaluationCommand} from "./reviewed-evaluation-operation.js";
 import {OpenPondProfileEvaluationDiscoveryClient} from "openpond-sdk/experiments";
 import { connectedWorkspaceOperations, connectedWorkspaceRequest } from "./connected-workspace.js";
@@ -18,13 +20,13 @@ import { OpenPondLearningClient, LearningReadRequestSchema, LearningCommandReque
 import { z } from "zod";
 import { OpenPondExperimentsClient, ExperimentListQuerySchema, RunExperimentSchema, PrepareHarnessExperimentSchema, ExperimentScoringRequestSchema } from "openpond-sdk/experiments";
 import { OpenPondTrainingProjectClient } from "openpond-sdk/training-projects";
-import { OpenPondDatasetPopulationClient, DatasetPopulationQuerySchema, OpenPondDatasetWorkspaceClient, DatasetWorkspaceWriteSchema, DatasetWorkspacePublishSchema } from "openpond-sdk/dataset-workspaces";
+import { OpenPondDatasetPopulationClient, DatasetPopulationQuerySchema, OpenPondDatasetWorkspaceClient, DatasetWorkspaceListQuerySchema, DatasetWorkspaceWriteSchema, DatasetWorkspacePublishSchema } from "openpond-sdk/dataset-workspaces";
 import { OpenPondDatasetMarketplaceClient, CatalogBrowse, CatalogCategoriesQuerySchema, AdoptCatalogDataset, PublishCatalogDataset, CatalogVisibilityChange } from "openpond-sdk/dataset-marketplace";
 import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
 
 const Id = z.string().trim().min(1).max(240);
 const Envelope = z.object({ teamId: Id, projectId: Id.nullable().default(null), operation: z.enum([
-  ...connectedWorkspaceOperations, "connectedSummary", "recordedExecution",
+  ...connectedWorkspaceOperations, "connectedSummary", "recordedExecution", "toolConnections", "datasets",
   "prepareOperation", "acknowledgeOperation", "retainOperation", "pendingOperations", "feedbackSummary", "harnessSources", "profileEvaluationDiscovery", "diagnostics",
   "datasetExperiments", "experiments", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "run", "prepareHarness", "experiment", "duplicate", "result", "cancel", "score", "passes", "pass", "passResult", "cancelPass", "compare",
 ]), value: z.unknown().optional() }).strict();
@@ -46,6 +48,19 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     const projects = new OpenPondTrainingProjectClient(options);
     const datasets = new OpenPondDatasetWorkspaceClient(options);
     const catalog = new OpenPondTasksetCatalogClient(options);
+    if (request.operation === "datasets") return datasets.list({ ...DatasetWorkspaceListQuerySchema.parse(request.value ?? {}), projectId: request.projectId ?? undefined });
+    if (request.operation === "toolConnections") {
+      const models = await createModelProjectsClient({ baseUrl: access.apiBaseUrl, headers: {
+        Authorization: `Bearer ${access.token}`, "X-OpenPond-Team-Id": access.teamId,
+      }, fetch: input.fetch }).list();
+      const pages = await Promise.all(models.map(async model => {
+        const client = new OpenPondToolLearningClient({ ...options, projectId: model.id });
+        const items = []; let after: string | undefined;
+        do { const page = await client.installations(after); items.push(...page.items); after = page.nextCursor ?? undefined; } while (after);
+        return items;
+      }));
+      return { installations: pages.flat() };
+    }
     if(["prepareOperation","acknowledgeOperation","retainOperation","pendingOperations"].includes(request.operation)) {
       const actorId=await input.resolveActorId?.();
       if(!actorId?.trim())throw new Error("An authenticated account identity is required to retain operation recovery.");
