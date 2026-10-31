@@ -103,6 +103,7 @@
 .evaluation-workspace .evaluation-table-frame table thead th:last-child{border-top-right-radius:7px}
 .evaluation-numeric{text-align:right!important;font-variant-numeric:tabular-nums;white-space:nowrap}
 .evaluation-cell-text{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.evaluation-capture-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;overflow-wrap:anywhere;white-space:normal}
 .evaluation-selection-bar{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:8px 8px 8px 14px;border:1px solid color-mix(in srgb, var(--accent-primary) 25.1%, transparent);border-radius:8px;background:color-mix(in srgb, var(--accent-primary) 5.1%, transparent);font-size:13px;color:var(--text-secondary)}
 .evaluation-selection-bar>span{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .evaluation-selection-bar strong{color:var(--text-primary);font-weight:500}

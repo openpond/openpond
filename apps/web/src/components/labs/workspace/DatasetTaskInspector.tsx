@@ -1,31 +1,14 @@
-import { z } from "zod";
 import type { TaskDataRecord } from "@openpond/contracts";
 import { captureClientName } from "../../fix-it/client";
+import { readCapturedToolError } from "./captured-tool-error";
 import { EvaluationCard, EvaluationTime } from "./EvaluationPresentation";
 
-// This is a display projection of stored evidence, not training admission.
-const CaptureSummary = z.object({
-  client: z.string(),
-  capturedAt: z.string(),
-  trainingUseAuthorized: z.boolean(),
-  attempt: z.object({ payload: z.object({
-    tool: z.object({ name: z.string() }),
-    action: z.unknown(),
-  }) }),
-  failure: z.object({ payload: z.object({
-    message: z.string(),
-    exitCode: z.number().nullable(),
-    execution: z.string(),
-  }) }),
-});
-
 export function DatasetTaskInspector({ task }: { task: TaskDataRecord }) {
-  const parsed = CaptureSummary.safeParse(task.metadata.toolCapture);
-  if (!parsed.success) return <>
+  const capture = readCapturedToolError(task.metadata.toolCapture);
+  if (!capture) return <>
     <EvaluationCard title="Input"><pre>{JSON.stringify(task.input, null, 2)}</pre></EvaluationCard>
     <EvaluationCard title="Task details"><pre>{JSON.stringify(task, null, 2)}</pre></EvaluationCard>
   </>;
-  const capture = parsed.data;
   const failure = capture.failure.payload;
   return <>
     <EvaluationCard title="Captured tool error">
