@@ -17,11 +17,11 @@ export class JavaScriptIsolateExecutionError extends Error {
 }
 
 /** Authored code is interpreter data, with no host functions or module loader. */
-export async function executeJavaScriptIsolate(input: JavaScriptIsolateInput): Promise<unknown> {
+export async function executeJavaScriptIsolate(input: JavaScriptIsolateInput, host?: { onExecutionReady(): void }): Promise<unknown> {
   validateJavaScriptIsolateInput(input);
   input.signal?.throwIfAborted();
   const error = (suffix: string) => new Error(`${input.errorPrefix}_${suffix}`);
-  const deadline = Date.now() + input.timeoutMs;
+  let deadline = Date.now() + input.timeoutMs;
   const { default: variant } = await import("@jitl/quickjs-singlefile-cjs-release-sync");
   input.signal?.throwIfAborted();
   const module = await newQuickJSWASMModuleFromVariant(variant);
@@ -32,6 +32,9 @@ export async function executeJavaScriptIsolate(input: JavaScriptIsolateInput): P
     runtime.setMaxStackSize(262_144);
     runtime.setInterruptHandler(() => Date.now() >= deadline || input.signal?.aborted === true);
     const context = scope.manage(runtime.newContext());
+    // Only a trusted process owner supplies this hook. Interpreter startup is
+    // bounded by that owner; authored source gets its pinned execution budget.
+    if (host) { deadline = Date.now() + input.timeoutMs; host.onExecutionReady(); }
     if (input.deterministic) {
       scope.manage(context.unwrapResult(context.evalCode("globalThis.Date = undefined; Math.random = () => { throw new Error('environment_random_requires_explicit_seed'); };")));
     }

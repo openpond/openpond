@@ -4,6 +4,20 @@ import { executeJavaScriptVerifierInProcess, executeJavaScriptVerifierInWorker }
 
 const options = { timeoutMs: 1_000, value: { input: { question: "2 + 2" }, output: { answer: 4 }, expectedOutput: { answer: 4 }, evaluatorContext: { privateAnswer: 4 } } };
 
+// Real subprocess boundary: cold interpreter startup cannot spend the guest's
+// execution budget; runaway code and cancellation still terminate the child.
+test("process verifier separates startup from bounded authored execution", async () => {
+  expect(await executeJavaScriptVerifierInProcess({ ...options, timeoutMs: 100,
+    source: "export function verify() { return { score: 1, passed: true, feedback: 'bounded' }; }",
+  })).toMatchObject({ score: 1, passed: true });
+  await expect(executeJavaScriptVerifierInProcess({ ...options, timeoutMs: 100,
+    source: "export function verify() { for (;;) {} }",
+  })).rejects.toThrow();
+  await expect(executeJavaScriptVerifierInProcess({ ...options, signal: AbortSignal.timeout(10),
+    source: "export function verify() { return { score: 1, passed: true }; }",
+  })).rejects.toThrow();
+});
+
 // A source checker can require subprocess/filesystem semantics even when its
 // wrapper also runs in an interpreter. Never accept that accidental success.
 test.each([executeJavaScriptVerifier, executeJavaScriptVerifierInWorker, executeJavaScriptVerifierInProcess])(
