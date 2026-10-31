@@ -114,7 +114,8 @@ export function LabModelProjectOverview({
           <div className="labs-project-trends-heading">
             <div>
               <h2>Tool learning</h2>
-              <p>Connect this Model to native OpenPond or Claude Code, review captured recoveries, and inspect consultation results in your private workspace.</p>
+              <p>Capture tool errors from OpenPond, Claude Code, OpenCode, or Codex CLI into your private Fix-it dataset, then review the saved examples.</p>
+              <p>OpenPond and Claude Code can consult a qualified specialist. OpenCode and Codex CLI currently support capture.</p>
               <p>Capture is opt-in. Training and learned specialist activation require reviewed evidence and separate qualification.</p>
             </div>
             <a className="training-button secondary" href={toolLearningUrl} target="_blank" rel="noreferrer">
