@@ -36,12 +36,12 @@ export async function runExternalToolLearningHook(options: ToolLearningOptions, 
       return;
     }
     if (event.event === "flush") {
-      try { await flushToolLearning(home, store, record, AbortSignal.timeout(2000)); } catch { /* Startup retries retain the durable queue on transport failure. */ }
+      try { await flushToolLearning(home, store, record, AbortSignal.timeout(5000)); } catch { /* Startup retries retain the durable queue on transport failure. */ }
       return;
     }
     if (["start", "resume", "compact", "idle"].includes(event.event)) {
       if (event.event !== "idle") store.recordClientObservation(id, event.event as "start" | "resume" | "compact");
-      try { await flushToolLearning(home, store, record, AbortSignal.timeout(2000)); } catch { /* Durable queue remains visible to doctor. */ }
+      try { await flushToolLearning(home, store, record, AbortSignal.timeout(5000)); } catch { /* Durable queue remains visible to doctor. */ }
       return;
     }
     store.recordClientObservation(id, event.event === "attempt" ? "pre_tool" : event.event === "failure" ? "failure" : "post_tool");

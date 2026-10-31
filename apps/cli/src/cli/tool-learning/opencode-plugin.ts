@@ -9,7 +9,7 @@ export const OpenPondToolCapture = async ({ directory, client }) => {
       const body = JSON.stringify({ cwd: directory, ...value });
       if (Buffer.byteLength(body) > 1048576) return;
       await new Promise((resolve, reject) => {
-        const child = spawn(launcher[0], launcher.slice(1), { stdio: ["pipe", "ignore", "ignore"], timeout: 7000 });
+        const child = spawn(launcher[0], launcher.slice(1), { stdio: ["pipe", "ignore", "ignore"], timeout: 12000 });
         child.once("error", reject); child.once("close", code => code === 0 ? resolve() : reject(new Error("capture_unavailable")));
         child.stdin.on("error", () => {}); child.stdin.end(body);
       });
