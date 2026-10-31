@@ -20,7 +20,7 @@ export function useCaptureDestination(context: FixItContext) {
 export function useToolConnections(context: FixItContext) {
   return useQuery({ queryKey: ["tool-connections", context.connection.serverUrl, context.accountKey, context.teamId],
     queryFn: async ({ signal }) => z.object({ installations: z.array(ToolLearningInstallationSchema) }).parse(
-      await fixItRequest(context, "toolConnections", {}, signal)), staleTime: 10_000, refetchInterval: 15_000 });
+      await fixItRequest(context, "toolConnections", {}, signal)), staleTime: 30_000, refetchInterval: 60_000 });
 }
 
 export function captureClientName(client: string) { return ({ claude_code: "Claude Code", opencode: "OpenCode", codex: "Codex CLI", openpond: "OpenPond" } as Record<string, string>)[client] ?? client; }
