@@ -15,7 +15,7 @@ export function FixItConnections({ context, baseUrl }: { context: FixItContext; 
   return <section className="connected-agents-view" aria-label="Fix-it connections">
     <header className="agent-connections-heading"><div><h2>Fix-it</h2><p>Tool errors from all your connected agents go to one private saved dataset.</p></div>
       <div className="agent-connections-actions"><button onClick={refresh} disabled={dataset.isFetching || connections.isFetching}>Refresh</button><button className="agent-connect-button" onClick={() => setSetup(true)}>Connect agent</button></div></header>
-    <div className="evaluation-card"><h3>Destination: {destination?.name ?? "Fix-it"}</h3><p>{destination ? `${destination.taskCount ?? 0} saved records` : "Loading dataset…"}</p>
+    <div className="evaluation-card"><h3>Destination: {destination?.name ?? "Fix-it"}</h3><p role="status" aria-live="polite">{destination ? `${destination.taskCount ?? 0} saved ${destination.taskCount === 1 ? "record" : "records"}` : dataset.isPending ? "Loading dataset…" : dataset.error ? null : "No capture dataset available"}</p>
       <button className="training-text-button" disabled={!destination} onClick={() => destination && void navigateDesktopRoute({ kind: "models", route: modelsLocation("datasets", null, { area: "console", resourceId: destination.id, detailTab: "tasks", projectId: null, executionLocation: "hosted" }) })}>Open dataset</button>
       {dataset.error ? <button className="training-text-button" onClick={() => void dataset.refetch()}>Retry</button> : null}
     </div>

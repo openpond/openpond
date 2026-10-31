@@ -5,7 +5,8 @@ import { ConnectedRecordedSetup } from "./connected-evidence/ConnectedRecordedSe
 import { ConnectedSources } from "./connected-evidence/ConnectedSources";
 import { useDatasetVisibilityMenu } from "./useDatasetVisibilityMenu";
 import { EvaluationTableState } from "./EvaluationTableState";
-import { EvaluationCard, EvaluationStatus } from "./EvaluationPresentation";
+import { EvaluationStatus } from "./EvaluationPresentation";
+import { DatasetTaskInspector } from "./DatasetTaskInspector";
 import { useWorkspaceActions, useWorkspacePanelControls } from "./WorkspacePanel";
 import { DatasetVisibility } from "./DatasetVisibility";
 import { DiscoverDatasets } from "./DiscoverDatasets";
@@ -41,12 +42,15 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
   const pinned = head.data?.datasets.find(item => item.id.startsWith("tool-captures-"));
   const pinnedMatchesQuery = pinned && (!route.query.trim() || pinned.name.toLowerCase().includes(route.query.trim().toLowerCase()));
   const liveInventory = inventory && pinned && pinnedMatchesQuery && !route.after ? { ...inventory, datasets: { ...inventory.datasets, datasets: [pinned, ...inventory.datasets.datasets.filter(item => item.id !== pinned.id)] } } : inventory;
-  const selected = useQuery({ queryKey: ["evaluation-workspace", api.key, "dataset", route.resourceId], enabled: Boolean(route.resourceId && route.datasetKind !== "release"), queryFn: ({ signal }) => api.request<DatasetWorkspaceReceipt>("dataset", { id: route.resourceId }, signal) });
+  const selected = useQuery({ queryKey: ["evaluation-workspace", api.key, "dataset", route.resourceId], enabled: Boolean(route.resourceId && route.datasetKind !== "release"), queryFn: ({ signal }) => api.request<DatasetWorkspaceReceipt>("dataset", { id: route.resourceId }, signal),
+    refetchOnWindowFocus: !editing, refetchOnReconnect: !editing,
+    // Retry a missed revision on the next poll, including after request retries fail.
+    refetchInterval: query => !editing && !route.revision && pinned?.id === route.resourceId && pinned.revision > (query.state.data?.revision ?? 0) ? 15_000 : false });
   const refreshedHead = useRef<string | null>(null);
   useEffect(() => {
-    const key = `${pinned?.id}:${pinned?.revision}`;
+    const key = `${api.key}:${pinned?.id}:${pinned?.revision}`;
     if (!editing && !selected.isFetching && pinned?.id === route.resourceId && selected.data && pinned.revision > selected.data.revision && refreshedHead.current !== key) { refreshedHead.current = key; void selected.refetch(); }
-  }, [editing, pinned?.id, pinned?.revision, route.resourceId, selected.data, selected.isFetching, selected.refetch]);
+  }, [api.key, editing, pinned?.id, pinned?.revision, route.resourceId, selected.data, selected.isFetching, selected.refetch]);
   const versionRevision = route.revision ?? null;
   const version = useQuery({ queryKey: ["evaluation-workspace", api.key, "datasetVersion", route.resourceId, versionRevision, route.contentHash], enabled: Boolean(route.resourceId && versionRevision), queryFn: async ({ signal }) => { const value = await api.request<DatasetWorkspaceReceipt>("datasetVersion", { id: route.resourceId, revision: versionRevision }, signal); if (value.publication?.release.contentHash !== route.contentHash) throw new Error("Dataset version differs from its pinned release."); return value; } });
   const dataset = versionRevision ? version.data : selected.data;
@@ -147,6 +151,6 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
     {recordedScoring && dataset && executableRelease ? <ConnectedRecordedSetup api={api} dataset={dataset} caseIds={dataset.workspace.draft.tasks.filter(task => taskSelection.selected(executableRelease, task.id)).map(task => task.id)} onClose={() => setRecordedScoring(false)} onStarted={(execution, pass) => { setRecordedScoring(false); onRefresh(); navigate({ ...route, page: "experiments", resourceId: execution.id, projectId: execution.request.projectId, passId: pass.id, detailTab: "cases", datasetKind: undefined, revision: undefined, contentHash: undefined }); }} /> : null}
     {connectedSources && api.humanContext ? <ConnectedSources key={api.key + JSON.stringify(route.reviewSource ?? null)} initialSelection={route.reviewSource} api={api} ownerUserId={api.humanContext.actorId} projects={inventory?.projects.projects.filter(project => !project.archived && project.ownerScope === "personal" && project.creatorUserId === api.humanContext!.actorId).map(project => ({ id: project.id, name: project.content.name })) ?? []} onClose={() => { setConnectedSources(false); if(route.reviewSource) navigate({ ...route, reviewSource: undefined }); }} onDataset={(id, projectId) => { setConnectedSources(false); onRefresh(); navigate({ ...route, reviewSource: undefined, projectId, resourceId: id, detailTab: "tasks", datasetKind: undefined }); }} /> : null}
     {editing ? <HostedDatasetEditor api={api} existing={dataset ?? null} onClose={closeEditor} onSaved={closeEditor} /> : null}
-    {task ? <WorkspacePanel action="task" label="Task inspector" onRequestClose={() => setTaskId(null)}><header><h2>{task.id}</h2></header><EvaluationCard title="Input"><pre>{JSON.stringify(task.input, null, 2)}</pre></EvaluationCard><EvaluationCard title="Task details"><pre>{JSON.stringify(task, null, 2)}</pre></EvaluationCard></WorkspacePanel> : null}
+    {task ? <WorkspacePanel action="task" label="Task inspector" onRequestClose={() => setTaskId(null)}><header><h2>{task.id}</h2></header><DatasetTaskInspector task={task} /></WorkspacePanel> : null}
   </>;
 }

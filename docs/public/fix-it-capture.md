@@ -22,3 +22,5 @@ Optional `--model <available-model>` selects a Codex model. Optional `--sandbox 
 Use `openpond tool-learning doctor <installation-id> --home <existing-openpond-home>` to check the installed integration, observed lifecycle, queue and remote state. Use `flush` to retry queued uploads. Disabling or uninstalling capture stops future collection and preserves saved dataset records. Reinstall and uninstall preserve user-modified files. A client version change requires qualifying the adapter again.
 
 The dataset count and current detail refresh as uploads arrive. An open editor retains its local work; concurrent saves still use normal revision checks. Captured failures have no reference answer or training approval. A later successful command remains separate evidence until reviewed and explicitly linked.
+
+Open a captured task to see its agent, tool action, observed error, execution status and training permission. The full saved record remains available in the inspector. A capture being assigned to the train split does not grant training permission or activate a specialist.
