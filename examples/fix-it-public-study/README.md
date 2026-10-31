@@ -72,6 +72,10 @@ correction-source tasks can emit review candidates. A later same-tool success
 is an **unverified review lead**, never an approved target or a training claim.
 Unresolved failures remain visible. Full task success and correct recovery
 attribution still need review.
+Each assistant tool attempt also references the caller's actual visible message
+history and ordinary tool schemas at that moment. These support grounded review
+and later consultation; simulator-only instructions, task answers and evaluator
+state are never read into this context.
 
 Held-out test plans are refused by this baseline collection command. The SDK
 consultation adapter, frozen learned-checkpoint comparison, reviewed public

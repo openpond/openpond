@@ -49,9 +49,20 @@ class ToolTrace:
 
         def execute_observed(tool_calls):
             pending = defaultdict(deque)
+            context = None
+            if any(call.requestor == "assistant" for call in tool_calls):
+                from tau2.utils.llm_utils import to_litellm_messages
+                state = orchestrator.agent_state
+                # Retain only the caller's actual visible history and tools.
+                # User-simulator instructions, task answers and evaluator state
+                # are deliberately never read at this observation boundary.
+                context = self.append({"kind": "agent_visible_context",
+                                       "messages": to_litellm_messages(state.system_messages + state.messages),
+                                       "tools": [tool.openai_schema for tool in orchestrator.agent.tools]})
             for call in tool_calls:
                 payload = call.model_dump(mode="json")
-                attempt = self.append({"kind": "attempt", "call": payload})
+                attempt = self.append({"kind": "attempt", "call": payload,
+                                       "agentContextSha256": context["sha256"] if context and call.requestor == "assistant" else None})
                 pending[call.id].append(attempt)
             results = execute(tool_calls)
             for result in results:
@@ -77,6 +88,7 @@ class ToolTrace:
         if self.identity["split"] != "correction_source":
             raise ValueError("Only the declared training-source partition may produce correction candidates")
         attempts = {record["sha256"]: record for record in self.records if record["kind"] == "attempt"}
+        contexts = {record["sha256"]: record for record in self.records if record["kind"] == "agent_visible_context"}
         observations = [record for record in self.records if record["kind"] == "observation"
                         and record["result"]["requestor"] == "assistant" and record["attemptSha256"] in attempts]
         candidates = []
@@ -90,6 +102,7 @@ class ToolTrace:
                              if not later["result"]["error"]
                              and attempts[later["attemptSha256"]]["call"]["name"] == original["call"]["name"]), None)
             candidates.append({**self.identity, "failure": failure, "failedAttempt": original,
+                               "agentVisibleContext": contexts[original["agentContextSha256"]],
                                "possibleRecovery": recovery,
                                "possibleCorrectedAttempt": attempts[recovery["attemptSha256"]] if recovery else None,
                                "attribution": "unverified", "targetApproval": "pending_owner_review",
