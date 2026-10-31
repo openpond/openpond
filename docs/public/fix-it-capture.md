@@ -2,6 +2,8 @@
 
 Fix-it saves bounded tool-error records in one ordinary private saved dataset per owner and workspace. All of that owner's connected agents contribute to this dataset. It is pinned first in the dataset library and uses the normal dataset read, edit and retention controls. Collection does not activate training.
 
+Existing conversation-history and authored-folder imports remain available through the secondary dataset controls. Folder import opens the native folder picker or a dedicated path panel instead of displaying an import field on every dataset screen.
+
 Open the Fix-it connections screen, choose a coding agent and copy its setup prompt into the workspace you want to connect. Setup reuses your existing OpenPond account and home, asks for the actual application context and permitted tool names, registers a scoped capture installation and installs the integration. Saved records remain until removed; raw capture buffers have separate bounded retention.
 
 | Client | Integration | Qualified version |
