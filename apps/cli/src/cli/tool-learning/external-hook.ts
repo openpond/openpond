@@ -7,10 +7,11 @@ import { loadToolLearningCredential, saveToolLearningCredential, toolLearningHom
 import { configureLocalToolLearning, flushToolLearning } from "./delivery";
 import { externalCaptureVersion, type ExternalCaptureClient } from "./external-client";
 
-const Event = z.object({ cwd: z.string().min(1).max(4000), sessionId: z.string().min(1).max(200),
+const ToolEvent = z.object({ cwd: z.string().min(1).max(4000), sessionId: z.string().min(1).max(200),
   event: z.enum(["start", "resume", "compact", "idle", "attempt", "observation", "failure"]),
   callId: z.string().max(200).optional(), tool: z.string().max(200).optional(), arguments: z.unknown().optional(),
   text: z.string().optional(), exitCode: z.number().int().nullable().optional() });
+const Event = z.union([ToolEvent, z.object({ cwd: z.string().min(1).max(4000), event: z.literal("flush") })]);
 
 /** Observer only: empty stdout, no transcript access, and no permission directives. */
 export async function runExternalToolLearningHook(options: ToolLearningOptions, id: string, client: ExternalCaptureClient) {
@@ -32,6 +33,10 @@ export async function runExternalToolLearningHook(options: ToolLearningOptions, 
       const suspended = { ...record, locallyEnabled: false };
       await saveToolLearningCredential(home, suspended, saved.revision);
       configureLocalToolLearning(store, suspended, record.installation);
+      return;
+    }
+    if (event.event === "flush") {
+      try { await flushToolLearning(home, store, record, AbortSignal.timeout(2000)); } catch { /* Startup retries retain the durable queue on transport failure. */ }
       return;
     }
     if (["start", "resume", "compact", "idle"].includes(event.event)) {

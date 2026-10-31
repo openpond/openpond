@@ -17,6 +17,7 @@ export const OpenPondToolCapture = async ({ directory, client }) => {
       await client.app.log({ body: { service: "openpond-capture", level: "warn", message: "Capture unavailable; run openpond tool-learning doctor." } }).catch(() => {});
     }
   }
+  await capture({ event: "flush" });
   return {
     "tool.execute.before": async (input, output) => capture({ event: "attempt", sessionId: input.sessionID, callId: input.callID, tool: input.tool, arguments: output.args }),
     "tool.execute.after": async (input, output) => capture({ event: "observation", sessionId: input.sessionID, callId: input.callID, tool: input.tool, text: output.output, exitCode: Number.isInteger(output.metadata?.exit) ? output.metadata.exit : null }),
