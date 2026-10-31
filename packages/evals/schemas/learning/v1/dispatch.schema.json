@@ -62,8 +62,11 @@
     "admission": {
       "$ref": "#/$defs/__schema20"
     },
-    "lastError": {
+    "lastSubmissionDeferral": {
       "$ref": "#/$defs/__schema21"
+    },
+    "lastError": {
+      "$ref": "#/$defs/__schema22"
     },
     "createdAt": {
       "$ref": "#/$defs/__schema10"
@@ -372,6 +375,52 @@
       ]
     },
     "__schema21": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "dispatchId": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "submissionHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "leaseGeneration": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "const": "deferred"
+        },
+        "retryAt": {
+          "$ref": "#/$defs/__schema10"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "receipt": {
+          "$ref": "#/$defs/__schema12"
+        }
+      },
+      "required": [
+        "scope",
+        "dispatchId",
+        "submissionHash",
+        "leaseGeneration",
+        "status",
+        "retryAt",
+        "reason",
+        "receipt"
+      ],
+      "additionalProperties": false
+    },
+    "__schema22": {
       "anyOf": [
         {
           "type": "string",

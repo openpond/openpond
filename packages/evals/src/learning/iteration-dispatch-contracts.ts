@@ -17,6 +17,20 @@ export const LearningIterationAdmissionSchema = z.discriminatedUnion("status", [
     reason: z.string().trim().min(1).max(2_000) }).strict(),
 ]);
 
+/** The execution owner has durably rejected/fenced this exact attempt before
+ * creating an execution or spending. A timeout/absence read is not this proof. */
+export const LearningIterationSubmissionDeferralSchema = z.object({
+  scope: ReleaseIdSchema,
+  dispatchId: ReleaseIdSchema,
+  submissionHash: z.string().regex(/^[a-f0-9]{64}$/),
+  leaseGeneration: z.number().int().positive(),
+  status: z.literal("deferred"),
+  retryAt: ReleaseTimestampSchema,
+  reason: z.string().trim().min(1).max(2_000),
+  receipt: ImmutableReleaseRefSchema,
+}).strict();
+export type LearningIterationSubmissionDeferral = z.infer<typeof LearningIterationSubmissionDeferralSchema>;
+
 export const LearningIterationDispatchSchema = z.object({
   schemaVersion: z.literal("openpond.learningIterationDispatch.v1"),
   id: ReleaseIdSchema,
@@ -38,6 +52,7 @@ export const LearningIterationDispatchSchema = z.object({
   consecutiveFailures: z.number().int().nonnegative(),
   nextAttemptAt: ReleaseTimestampSchema.nullable(),
   admission: LearningIterationAdmissionSchema.nullable().optional(),
+  lastSubmissionDeferral: LearningIterationSubmissionDeferralSchema.optional(),
   lastError: z.string().max(20_000).nullable(),
   createdAt: ReleaseTimestampSchema,
   updatedAt: ReleaseTimestampSchema,
@@ -48,6 +63,10 @@ export const LearningIterationDispatchSchema = z.object({
   if (value.submissionStartedAt && !value.submission) context.addIssue({ code: "custom", path: ["submission"], message: "A started dispatch requires its persisted submission." });
   if (value.admission?.status === "deferred" && (value.submissionStartedAt || value.state !== "prepared" || value.nextAttemptAt !== value.admission.retryAt)) {
     context.addIssue({ code: "custom", path: ["admission"], message: "Admission deferral requires an unstarted prepared dispatch and its retry time." });
+  }
+  if (value.lastSubmissionDeferral && (value.lastSubmissionDeferral.dispatchId !== value.id ||
+    value.lastSubmissionDeferral.submissionHash !== value.submissionHash || value.lastSubmissionDeferral.leaseGeneration >= value.leaseGeneration)) {
+    context.addIssue({ code: "custom", path: ["lastSubmissionDeferral"], message: "A retained deferral must identify an earlier fenced attempt of this submission." });
   }
   if (value.execution && !value.submissionStartedAt) context.addIssue({ code: "custom", path: ["execution"], message: "An execution requires a started dispatch." });
   if (["prepared", "submitted"].includes(value.state) && !value.submission) context.addIssue({ code: "custom", path: ["state"], message: "A prepared dispatch requires its immutable submission." });

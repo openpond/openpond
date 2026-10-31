@@ -7,6 +7,8 @@ import {
   type LearningIterationAdmission, type LearningIterationDispatch, type LearningIterationObservation, type LearningIterationSubmission,
 } from "./iteration-dispatch-contracts.js";
 import { requireLearningRelease, requireLearningResource, type LearningRepository, type LearningTransaction } from "./repository.js";
+import { deferLearningIterationSubmission } from "./iteration-dispatch-deferral.js";
+import { LearningIterationSubmissionDeferralSchema, type LearningIterationSubmissionDeferral } from "./iteration-dispatch-contracts.js";
 
 export type LearningIterationExecutionContext = {
   scope: string;
@@ -28,7 +30,9 @@ export interface LearningIterationExecutor {
   reconcile(input: LearningIterationExecutionContext): Promise<LearningIterationObservation | null>;
   /** Idempotently submit exactly dispatch.submission under dispatch.id, across
    * crashes, lease owners and retries. Never create a different Job on retry. */
-  submit(input: LearningIterationExecutionContext): Promise<LearningIterationObservation>;
+  // A deferral requires authoritative no-execution/no-spend and durable fencing
+  // of this attempt, including late transports. Never infer it from a timeout.
+  submit(input: LearningIterationExecutionContext): Promise<LearningIterationObservation | LearningIterationSubmissionDeferral>;
   /** Cancel by dispatch identity, including an ambiguous initial submission.
    * Terminal confirmation MUST fence late submits under that identity, including
    * when no Job was created. A network abort alone is not cleanup confirmation. */
@@ -177,12 +181,19 @@ export function createLearningIterationWorker(repository: LearningRepository, ex
       });
       if (!starting) return read();
       dispatch = starting;
-      let observed = dispatch.cancelRequestedAt ? await bounded(input => executor.cancel(input)) : await bounded(input => executor.reconcile(input));
+      let observed: LearningIterationObservation | LearningIterationSubmissionDeferral | null = dispatch.cancelRequestedAt ? await bounded(input => executor.cancel(input)) : await bounded(input => executor.reconcile(input));
       if (!observed) {
         const refreshed = await fenced(scope, dispatch, (tx, current) => saveDispatch(tx, current, {}));
         if (!refreshed) return read();
         dispatch = refreshed;
         observed = dispatch.cancelRequestedAt ? await bounded(input => executor.cancel(input)) : await bounded(input => executor.submit(input));
+      }
+      if (observed.status === "deferred") {
+        const outcome = LearningIterationSubmissionDeferralSchema.parse(observed);
+        if (outcome.scope !== scope || outcome.dispatchId !== dispatch.id || outcome.submissionHash !== dispatch.submissionHash ||
+          outcome.leaseGeneration !== dispatch.leaseGeneration) throw new LearningDomainError("learning_execution_identity_mismatch", 409);
+        await fenced(scope, dispatch, (tx, current, iteration) => deferLearningIterationSubmission(tx, scope, current, iteration, outcome, now()));
+        return read();
       }
       const outcome = LearningIterationObservationSchema.parse(observed);
       if (outcome.scope !== scope || outcome.dispatchId !== dispatch.id || outcome.submissionHash !== dispatch.submissionHash

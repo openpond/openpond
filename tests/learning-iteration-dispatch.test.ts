@@ -63,11 +63,19 @@ describe("durable iteration dispatch", () => {
     let store = new SqliteStore(home);
     try {
       const f = await fixture(store); const p = provider();
-      let ready = false; let admissionCalls = 0;
+      let ready = false; let admissionCalls = 0; let deferSubmission = true;
       const executor: LearningIterationExecutor = { ...p.executor, async admit() {
         admissionCalls++;
         return ready ? { status: "ready" } : { status: "deferred",
           retryAt: new Date(Date.parse(f.now()) + 3_600_000).toISOString(), reason: "Waiting for available execution capacity." };
+      }, async submit(input) {
+        if (deferSubmission) {
+          deferSubmission = false;
+          return { scope: input.scope, dispatchId: input.dispatch.id, submissionHash: input.dispatch.submissionHash!,
+            leaseGeneration: input.dispatch.leaseGeneration, status: "deferred", retryAt: new Date(Date.parse(f.now()) + 3_600_000).toISOString(),
+            reason: "The execution window closed before admission.", receipt: ref("fenced-no-execution") };
+        }
+        return p.executor.submit(input);
       } };
       const worker = () => createLearningIterationWorker(store.learningRepository(), executor, { workerId: "admission-worker", executionOwner: "hosted", now: f.now });
       const service = () => createLearningService(store.learningRepository());
@@ -87,7 +95,14 @@ describe("durable iteration dispatch", () => {
         submissionStartedAt: null, consecutiveFailures: 0 });
       expect((await service().get(learningContext, "reservation", f.iteration.id)).budget).toMatchObject({ reservedSpendUsd: 2, settledSpendUsd: 0 });
       expect(p.counts()).toEqual({ prepared: 1, submitted: 0, cancelled: 0 });
-      ready = true; p.loseReply(); f.advance(3_600_001);
+      ready = true; f.advance(3_600_001);
+      expect(await worker().run(learningContext.scope, f.iteration.id)).toMatchObject({ retryCount: 0, failure: null });
+      const declined = await service().get(learningContext, "dispatch", sealed.id);
+      expect(declined).toMatchObject({ submissionStartedAt: null, leaseOwner: null, consecutiveFailures: 0,
+        lastSubmissionDeferral: { receipt: ref("fenced-no-execution"), leaseGeneration: declined.leaseGeneration - 1 } });
+      expect(declined.submissionHash).toBe(sealed.submissionHash);
+      expect(p.counts().submitted).toBe(0);
+      p.loseReply(); f.advance(3_600_001);
       expect(await worker().run(learningContext.scope, f.iteration.id)).toMatchObject({ retryCount: 1 });
       const admittedCalls = admissionCalls;
       await store.close(); store = new SqliteStore(home); ready = false; f.advance();
@@ -104,7 +119,7 @@ describe("durable iteration dispatch", () => {
   // Cancellation cannot wait until tomorrow's admission timestamp or be lost
   // while a capacity check is in flight. Neither case may launch or charge.
   test("cancels deferred and in-flight admission without waiting or submitting", async () => {
-    for (const inFlight of [false, true]) await withTempDirectory("iteration-admission-cancel-", async home => {
+    for (const phase of ["waiting", "admission", "submission"] as const) await withTempDirectory("iteration-admission-cancel-", async home => {
       const store = new SqliteStore(home);
       try {
         const f = await fixture(store); const p = provider();
@@ -112,12 +127,18 @@ describe("durable iteration dispatch", () => {
         const entered = new Promise<void>(resolve => { enter = resolve; });
         const gate = new Promise<void>(resolve => { release = resolve; });
         const executor: LearningIterationExecutor = { ...p.executor, async admit() {
-          enter(); if (inFlight) await gate;
+          if (phase === "submission") return { status: "ready" };
+          enter(); if (phase === "admission") await gate;
           return { status: "deferred", retryAt: new Date(Date.parse(f.now()) + 86_400_000).toISOString(), reason: "Waiting for the next execution window." };
+        }, async submit(input) {
+          enter(); await gate;
+          return { scope: input.scope, dispatchId: input.dispatch.id, submissionHash: input.dispatch.submissionHash!,
+            leaseGeneration: input.dispatch.leaseGeneration, status: "deferred", retryAt: new Date(Date.parse(f.now()) + 86_400_000).toISOString(),
+            reason: "The window closed.", receipt: ref("cancelled-at-admission") };
         } };
         const worker = createLearningIterationWorker(store.learningRepository(), executor, { workerId: "cancel-admission", executionOwner: "hosted", now: f.now });
         const pending = worker.run(learningContext.scope, f.iteration.id);
-        await entered; if (!inFlight) await pending;
+        await entered; if (phase === "waiting") await pending;
         const current = await f.service.get(learningContext, "iteration", f.iteration.id);
         await f.command({ action: "cancel_iteration", iterationId: current.id, expectedRevision: current.revision });
         release(); await pending;
