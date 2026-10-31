@@ -349,6 +349,12 @@ jobs:
       - name: Prepare release build config
         run: pnpm exec tsx scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
 
+      - name: Rebuild Linux PTY before staging the desktop runtime
+        if: runner.os == 'Linux'
+        env:
+          npm_config_build_from_source: "true"
+        run: pnpm --dir apps/server rebuild node-pty
+
       - name: Package non-macOS desktop
         if: runner.os != 'macOS'
         run: pnpm run ${{ matrix.package_script }}
