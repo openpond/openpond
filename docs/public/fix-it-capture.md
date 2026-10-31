@@ -26,3 +26,5 @@ Use `openpond tool-learning doctor <installation-id> --home <existing-openpond-h
 The dataset count and current detail refresh as uploads arrive. An open editor retains its local work; concurrent saves still use normal revision checks. Captured failures have no reference answer or training approval. A later successful command remains separate evidence until reviewed and explicitly linked.
 
 Captured task rows show the agent, tool, capture time and a readable error preview. Open a captured task to see its tool action, full observed error, execution status and training permission. The full saved record remains available in the inspector. A capture being assigned to the train split does not grant training permission or activate a specialist.
+
+For an opted-in learning policy, the Model's continual-learning view refreshes its saved state automatically. A prepared run waiting for admission shows its waiting reason and next check time. Waiting does not use execution failure retries. Cancellation remains available while a run waits; training starts only after the normal approval, funding and execution gates pass.
