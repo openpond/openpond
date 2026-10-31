@@ -8,6 +8,7 @@ import { hostedTrainingAccount } from "../hosted-training-account";
 import { optionString, parseBooleanOption } from "../common/options";
 import { nativeToolLearningClientVersion } from "@openpond/local-server/tool-learning";
 import { toolLearningHome, type ToolLearningOptions } from "./credentials";
+import { externalCaptureVersion } from "./external-client";
 
 /** One explicit opt-in creates one workspace/client installation. Collection
  * still grants neither training enrollment nor an inference allowance. */
@@ -17,8 +18,8 @@ export async function prepareToolLearningSetup(options: ToolLearningOptions) {
       "Tool capture uploads bounded private tool events. Pass --allow-upload to opt in.",
     );
   const client = optionString(options, "client");
-  if (client !== "claude_code" && client !== "openpond")
-    throw new Error("Choose --client claude_code or --client openpond.");
+  if (!["claude_code", "openpond", "codex", "opencode"].includes(client))
+    throw new Error("Choose --client claude_code, codex, opencode or openpond.");
   if (!optionString(options, "environmentFile"))
     throw new Error(
       "Provide --environment-file with the actual application, version, and bounded state.",
@@ -33,7 +34,7 @@ export async function prepareToolLearningSetup(options: ToolLearningOptions) {
   if (!projectId) throw new Error("Choose an existing private Model with --project-id.");
   const workspace = await realpath(resolve(optionString(options, "workspace") || process.cwd()));
   const clientVersion =
-    client === "claude_code"
+    client === "codex" || client === "opencode" ? await externalCaptureVersion(client) : client === "claude_code"
       ? (
           await promisify(execFile)("claude", ["--version"], { timeout: 10000, maxBuffer: 65536 })
         ).stdout
@@ -81,7 +82,7 @@ export async function prepareToolLearningSetup(options: ToolLearningOptions) {
       maximumQueueEvents: 256,
       maximumQueueAgeSeconds: 86400,
       rawRetentionDays: 1,
-      purposes: ["capture", "consultation"],
+      purposes: client === "codex" || client === "opencode" ? ["capture"] : ["capture", "consultation"],
       modelUpdates: "requires_separate_review",
       variantGeneration: "disabled",
     },

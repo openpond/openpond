@@ -79,8 +79,8 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "tool-learning",
-    usage: "openpond tool-learning <setup|register|install|doctor|status|routing|configure|append|flush|episodes|episode|project|disable|enable|revoke|purge|uninstall> [installation-id] [episode-id] [--input-file <absolute-path>] [--team-id <id>] [--workspace <absolute-path>]",
-    optionSchema: { client: "string", tools: "string", allowUpload: "boolean", inputFile: "string", teamId: "string", projectId: "string", workspace: "string", environmentFile: "string", expiresAt: "string", after: "string", timeoutSec: "integer" },
+    usage: "openpond tool-learning <setup|run|register|install|doctor|status|routing|configure|append|flush|episodes|episode|project|disable|enable|revoke|purge|uninstall> [installation-id] [episode-id] [--input-file <absolute-path>] [--team-id <id>] [--workspace <absolute-path>] [--client claude_code|opencode|codex|openpond] [--prompt <codex-task>] [--model <codex-model>] [--sandbox read-only|workspace-write]",
+    optionSchema: { prompt: "string", model: "string", sandbox: "string", client: "string", tools: "string", allowUpload: "boolean", inputFile: "string", teamId: "string", projectId: "string", workspace: "string", environmentFile: "string", expiresAt: "string", after: "string", timeoutSec: "integer" },
     handler: async ({ options, rest }) => (await import("./tool-learning/command")).runToolLearningCommand(options, rest),
   },
   { name: "import", usage: "openpond import <connect|reconnect|discover|status|conversations|coverage|sync|schedule|cancel|pause|resume|disconnect|branches|branch|service> [id] [--source <name>] [--source-path <path>] [--range day|week|all] [--upload] [--selection-file <path>] [--query <text>] [--offset <number>] [--until <ISO-cutoff>] [--team <id>] [--project <id>] [--session <native-id>] [--leaf <uuid>] [--revision <hash>] [--continual [--daily|--weekly|--hourly|--cron <expression>] [--at HH:MM] [--on sun|mon|tue|wed|thu|fri|sat]] [--off] [--yes]",

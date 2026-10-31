@@ -14,7 +14,7 @@ import { loadToolLearningCredential } from "./local.js";
 import { configureLocalToolLearning, flushToolLearning } from "./delivery.js";
 
 export type ToolLearningBoundary = {
-  client: "claude_code" | "openpond";
+  client: "claude_code" | "openpond" | "codex" | "opencode";
   workspaceRoot: string;
   installationId?: string;
   accountScope?: {

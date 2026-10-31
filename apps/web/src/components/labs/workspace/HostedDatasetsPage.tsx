@@ -19,9 +19,9 @@ import { HostedDatasetEditor } from "./HostedDatasetEditor";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { WorkspaceActionMenu, type WorkspaceMenuAction } from "./WorkspaceActionMenu";
 import { DropdownSelect } from "../../DropdownSelect";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { DatasetWorkspaceReceipt } from "openpond-sdk/dataset-workspaces";
+import { DatasetWorkspaceListSchema, type DatasetWorkspaceReceipt } from "openpond-sdk/dataset-workspaces";
 import { draftPublishIssues } from "openpond-sdk/taskset-drafts";
 import type { ModelsRoute } from "../models-route";
 import type { Inventory, WorkspaceApi } from "./workspace-api";
@@ -37,7 +37,15 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
   const [taskId, setTaskId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const head = useQuery({ queryKey: ["evaluation-workspace", api.key, "datasets-head"], queryFn: async ({ signal }) => DatasetWorkspaceListSchema.parse(await api.request("datasets", { limit: 1 }, signal)), staleTime: 10_000, refetchInterval: 15_000 });
+  const pinned = head.data?.datasets.find(item => item.id.startsWith("tool-captures-"));
+  const liveInventory = inventory && pinned && !route.after ? { ...inventory, datasets: { ...inventory.datasets, datasets: [pinned, ...inventory.datasets.datasets.filter(item => item.id !== pinned.id)] } } : inventory;
   const selected = useQuery({ queryKey: ["evaluation-workspace", api.key, "dataset", route.resourceId], enabled: Boolean(route.resourceId && route.datasetKind !== "release"), queryFn: ({ signal }) => api.request<DatasetWorkspaceReceipt>("dataset", { id: route.resourceId }, signal) });
+  const refreshedHead = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${pinned?.id}:${pinned?.revision}`;
+    if (!editing && !selected.isFetching && pinned?.id === route.resourceId && selected.data && pinned.revision > selected.data.revision && refreshedHead.current !== key) { refreshedHead.current = key; void selected.refetch(); }
+  }, [editing, pinned?.id, pinned?.revision, route.resourceId, selected.data, selected.isFetching, selected.refetch]);
   const versionRevision = route.revision ?? null;
   const version = useQuery({ queryKey: ["evaluation-workspace", api.key, "datasetVersion", route.resourceId, versionRevision, route.contentHash], enabled: Boolean(route.resourceId && versionRevision), queryFn: async ({ signal }) => { const value = await api.request<DatasetWorkspaceReceipt>("datasetVersion", { id: route.resourceId, revision: versionRevision }, signal); if (value.publication?.release.contentHash !== route.contentHash) throw new Error("Dataset version differs from its pinned release."); return value; } });
   const dataset = versionRevision ? version.data : selected.data;
@@ -124,13 +132,14 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
     </header>
     {visibilityMenu.error ? <ErrorToast error={visibilityMenu.error} /> : null}
     {!window.openpond?.selectFolder ? <label>Authored folder path <input value={importPath ?? ""} onChange={event => setImportPath(event.target.value)} /></label> : null}
+    {head.error ? <ErrorToast error={head.error.message} /> : null}
     {selected.error || version.error || error ? <ErrorToast error={selected.error?.message ?? version.error?.message ?? error} /> : null}
     {versionRevision ? <p className="evaluation-version-banner" role="status">Viewing immutable published version. <button className="evaluation-link-button" onClick={() => { navigate({ ...route, revision: undefined, contentHash: undefined }); setTaskId(null); }}>Return to current workspace</button></p> : null}
     {dataset ? <><div className="evaluation-run-summary"><EvaluationStatus status={dataset.publication ? "published" : "Not published"} /><span>{dataset.publication ? `Revision ${dataset.publication.release.revision}` : "Draft"}</span><span aria-hidden="true">·</span><span>{dataset.workspace.draft.tasks.length} tasks</span></div><nav className="evaluation-workspace-tabs" aria-label="Dataset tabs">{["tasks", "experiments", "graders", "versions"].map(value => <button key={value} aria-selected={tab === value} onClick={() => { setTaskId(null); navigate({ ...route, detailTab: value }); }}>{value[0]!.toUpperCase() + value.slice(1)}</button>)}</nav>
       {tab === "tasks" ? <><div className="evaluation-table-scroll evaluation-table-frame"><table className="training-data-table evaluation-workspace-table evaluation-task-table"><thead><tr>{executableRelease ? <th scope="col"><DatasetTaskSelection release={executableRelease!} count={dataset.workspace.draft.tasks.length} route={route} /></th> : null}<th>Task</th><th>Input</th><th>Split</th></tr></thead><tbody>{dataset.workspace.draft.tasks.map(item => <tr key={item.id} tabIndex={0} onClick={() => inspectTask(item.id)} onKeyDown={event => { if (event.key === "Enter") inspectTask(item.id); }}>{executableRelease ? <DatasetTaskCheckbox release={executableRelease} id={item.id} route={route} /> : null}<td><span className="evaluation-cell-text" title={item.id}>{item.id}</span></td><td><code className="evaluation-cell-text evaluation-task-input" title={JSON.stringify(item.input).slice(0, 2000)}>{JSON.stringify(item.input).slice(0, 200)}</code></td><td>{item.split}</td></tr>)}<EvaluationTableState columns={executableRelease ? 4 : 3} empty={!dataset.workspace.draft.tasks.length}>Edit Dataset to add tasks, then check and publish the version.</EvaluationTableState></tbody></table></div></> : tab === "experiments" ? <DatasetExperiments api={api} releaseHash={dataset.publication?.release.contentHash ?? null} route={route} navigate={navigate} /> : tab === "graders" ? null : <><DatasetVersions api={api} datasetId={dataset.datasetId} onSelect={(revision, publication) => { setTaskId(null); navigate({ ...route, revision: revision ?? undefined, contentHash: publication?.release.contentHash, detailTab: "tasks" }); }} /><dl className="evaluation-workspace-meta evaluation-card"><dt>Workspace revision</dt><dd>{dataset.revision}</dd><dt>Workspace hash</dt><dd>{dataset.workspace.contentHash}</dd><dt>Published release</dt><dd>{dataset.publication?.release.id ?? "Unpublished"}</dd><dt>Release hash</dt><dd>{dataset.publication?.release.contentHash ?? "Unpublished"}</dd><dt>Package hash</dt><dd>{dataset.publication?.packageHash ?? "Unpublished"}</dd></dl></>}
       <div hidden={tab !== "graders"}><DatasetGraders key={`${dataset.datasetId}:${dataset.revision}`} api={api} dataset={dataset} readOnly={Boolean(versionRevision) || dataset.workspace.draft.status !== "draft"} onSaved={() => { void selected.refetch(); onRefresh(); }} /></div>
-    </> : <><DatasetCollectionTable api={api} inventory={inventory} route={route} navigate={navigate} loading={inventoryLoading ?? !inventory}
-      error={inventoryError} retry={onRefresh} /><div className="evaluation-pagination">{route.after ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: null })}>First dataset page</button> : null}{inventory?.datasets.nextCursor ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: `workspace:${inventory.datasets.nextCursor}` })}>More authored datasets</button> : null}{inventory?.releasedDatasets.nextCursor ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: `catalog:${inventory.releasedDatasets.nextCursor}` })}>More released datasets</button> : null}</div></>}
+    </> : <><DatasetCollectionTable api={api} inventory={liveInventory} route={route} navigate={navigate} loading={inventoryLoading ?? !inventory}
+      error={inventoryError ?? head.error?.message} retry={() => { void head.refetch(); onRefresh(); }} /><div className="evaluation-pagination">{route.after ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: null })}>First dataset page</button> : null}{inventory?.datasets.nextCursor ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: `workspace:${inventory.datasets.nextCursor}` })}>More authored datasets</button> : null}{inventory?.releasedDatasets.nextCursor ? <button className="training-button secondary" onClick={() => navigate({ ...route, after: `catalog:${inventory.releasedDatasets.nextCursor}` })}>More released datasets</button> : null}</div></>}
     {visibilityOpen && dataset?.publication ? <DatasetVisibility api={api} dataset={dataset} onClose={() => setVisibilityOpen(false)} /> : null}
     {discoverPanel}
     {workflowEvaluations?<WorkflowEvaluationDiscovery key={api.key} api={api} inventory={inventory} route={route} navigate={navigate} onClose={()=>setWorkflowEvaluations(false)}/>:null}

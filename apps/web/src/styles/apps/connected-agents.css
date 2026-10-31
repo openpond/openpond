@@ -306,3 +306,6 @@
 .agent-account-link:hover {
   text-decoration: underline;
 }
+
+.agent-connections-actions { flex-shrink: 0; }
+.agent-connections-actions button { white-space: nowrap; }

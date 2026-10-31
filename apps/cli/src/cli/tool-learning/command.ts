@@ -34,6 +34,9 @@ import {
   doctorToolLearning,
 } from "./installation";
 import { runToolLearningHook } from "./hook";
+import { installExternalToolLearning, uninstallExternalToolLearning, doctorExternalToolLearning } from "./external-installation";
+import { runExternalToolLearningHook } from "./external-hook";
+import { runCodexWithCapture } from "./codex-run";
 
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
 async function inputJson(options: ToolLearningOptions) {
@@ -66,7 +69,7 @@ async function register(options: ToolLearningOptions, preparedRegistration?: unk
   const registration = ToolLearningRegistrationSchema.parse(
     preparedRegistration ?? (await inputJson(options)),
   );
-  if (registration.client !== "claude_code" && registration.client !== "openpond")
+  if (!["claude_code", "openpond", "codex", "opencode"].includes(registration.client))
     throw new Error("This client is outside the current tool learning release.");
   if (
     optionString(options, "projectId") &&
@@ -150,12 +153,14 @@ export async function runToolLearningCommand(options: ToolLearningOptions, rest:
     ![
       "register",
       "setup",
+      "run",
       "routing",
       "configure",
       "install",
       "doctor",
       "uninstall",
       "hook",
+      "opencode-hook",
       "mcp",
       "status",
       "append",
@@ -180,7 +185,9 @@ export async function runToolLearningCommand(options: ToolLearningOptions, rest:
     const integration =
       registration.client === "claude_code"
         ? await installClaudeToolLearning(options, registration.installationId)
-        : { bundled: true, restartSession: true };
+        : registration.client === "codex" || registration.client === "opencode"
+          ? await installExternalToolLearning(options, registration.installationId)
+          : { bundled: true, restartSession: true };
     print({
       ...registered,
       integration,
@@ -194,9 +201,10 @@ export async function runToolLearningCommand(options: ToolLearningOptions, rest:
     return;
   }
   if (!id) throw new Error("Select a tool learning installation ID.");
-  if (action === "hook") {
+  if (["hook", "opencode-hook"].includes(action)) {
     try {
-      await runToolLearningHook(options, id);
+      if (action === "hook") await runToolLearningHook(options, id);
+      else await runExternalToolLearningHook(options, id, "opencode");
     } catch {
       process.stderr.write("OpenPond capture was unavailable; run tool-learning doctor.\n");
     }
@@ -208,12 +216,15 @@ export async function runToolLearningCommand(options: ToolLearningOptions, rest:
     ).runToolLearningMcp(toolLearningHome(options), id);
     return;
   }
+  if (action === "run") { await runCodexWithCapture(options, id); return; }
   if (action === "install") {
-    print(await installClaudeToolLearning(options, id));
+    const { value } = await loadToolLearningCredential(toolLearningHome(options), id);
+    print(await (value.prepared.registration.client === "codex" || value.prepared.registration.client === "opencode" ? installExternalToolLearning : installClaudeToolLearning)(options, id));
     return;
   }
   if (action === "doctor") {
-    print(await doctorToolLearning(options, id));
+    const { value } = await loadToolLearningCredential(toolLearningHome(options), id);
+    print(await (value.prepared.registration.client === "codex" || value.prepared.registration.client === "opencode" ? doctorExternalToolLearning : doctorToolLearning)(options, id));
     return;
   }
   const home = toolLearningHome(options);
@@ -318,7 +329,7 @@ export async function runToolLearningCommand(options: ToolLearningOptions, rest:
         locallyEnabled: record.locallyEnabled,
         local: store.status(id),
         ...(action === "uninstall"
-          ? { client: await uninstallClaudeToolLearning(options, id) }
+          ? { client: await (record.prepared.registration.client === "codex" || record.prepared.registration.client === "opencode" ? uninstallExternalToolLearning : uninstallClaudeToolLearning)(options, id) }
           : {}),
       });
       return;
