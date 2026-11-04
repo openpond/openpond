@@ -177,8 +177,9 @@ export const ChatContextSelectionSchema = ChatContextOptionSchema.extend({
         value.job.id !== pin.jobId || value.teamId !== pin.owner.teamId || value.job.modelProjectId !== pin.modelProjectId ||
         value.job.portableProjectId !== pin.portableProjectId || value.job.submissionHash !== pin.submissionHash ||
         canonicalJson(immutableCandidate) !== canonicalJson(pin.candidate) ||
-        !value.outputs.receipt || !value.outputs.outputs.some(output => output.kind === "execution_receipt" &&
-          output.id === pin.executionReceipt.id && output.contentHash === pin.executionReceipt.contentHash)) mismatch();
+        !value.outputs.receipt || value.outputs.receipt.id !== pin.executionReceipt.id ||
+        !value.outputs.outputs.some(output => output.kind === "receipt" &&
+          output.id === `${value.outputs.receipt!.id}:output` && output.contentHash === pin.executionReceipt.contentHash)) mismatch();
       return;
     }
     if (pin.kind === "managed_modification_result" || pin.kind === "engram_result") {
