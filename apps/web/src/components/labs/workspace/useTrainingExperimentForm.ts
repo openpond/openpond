@@ -69,7 +69,7 @@ export function useTrainingExperimentForm(
     () =>
       seed?.trainingForm?.recipe ??
       seed?.training?.settings?.recipe ??
-      createModelTrainingRecipeDefaults(null, method),
+      createModelTrainingRecipeDefaults(null, method, setup.trainingBaseModel),
   );
   const [batch, setBatch] = useState<Ref | null>(
     seed?.trainingForm

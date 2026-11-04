@@ -16,6 +16,7 @@
     "../cloud/src/hosted-chat.ts",
     "../cloud/src/urls.ts",
     "../cloud/src/api/core.ts",
+    "../cloud/src/api/client-context.ts",
     "../cloud/src/sandbox/**/*.ts"
   ],
   "exclude": ["test/**/*.ts", "../cloud/src/**/*.test.ts"]

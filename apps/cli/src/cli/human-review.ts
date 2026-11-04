@@ -1,3 +1,4 @@
+import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import {readFile,stat} from "node:fs/promises";
 import {contentHash} from "@openpond/harness";
 import {HumanReviewTransportSchema,HumanReviewViewSchema,HumanInboxSchema,HumanInspectionSchema,HumanResultViewSchema,type HumanReviewTransportRequest} from "@openpond/evals/human-review";
@@ -25,7 +26,7 @@ export async function runHumanReviewCommand(options:Record<string,string|boolean
   const base=new URL(optionString(options,"serverUrl")||DEFAULT_LOCAL_TRAINING_API_URL);if(base.protocol!=="http:"||!["localhost","127.0.0.1","[::1]"].includes(base.hostname)||base.username||base.password||base.search||base.hash||base.pathname!=="/")throw new Error("Local Human review requires an HTTP loopback server origin.");
   const request=await createLocalAuthenticatedRequest(base.origin),response=await request(new URL("/v1/human-review?location=local",base),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body),redirect:"error",signal:AbortSignal.timeout(30000)});
   const text=await boundedResponse(response);result=JSON.parse(text);if(!response.ok)throw new Error(typeof (result as {error?:unknown}).error==="string"?(result as {error:string}).error:`Local Human request failed (${response.status}).`);
- }else{const config=await loadConfig(),client=new OpenPondHumanReviewClient({scope,apiKey:await ensureApiKey(config,resolveBaseUrl(config)),baseUrl:resolveApiBaseUrlOption(options)??config.apiBaseUrl??DEFAULT_OPENPOND_API_BASE_URL});result=await client.request(body,AbortSignal.timeout(30000));}
+ }else{const config=await loadConfig(),client=new OpenPondHumanReviewClient({scope,fetch:hostedCliFetch,apiKey:await ensureApiKey(config,resolveBaseUrl(config)),baseUrl:resolveApiBaseUrlOption(options)??config.apiBaseUrl??DEFAULT_OPENPOND_API_BASE_URL});result=await client.request(body,AbortSignal.timeout(30000));}
  if(body.endpoint==="get"||body.endpoint==="command"){const view=HumanReviewViewSchema.parse(result),expected=body.endpoint==="get"?body.id:body.command.id;if(view.id!==expected||view.scope!==scope)throw new Error("Review response differs from the requested identity.");}
  if(body.endpoint==="inbox"){const page=HumanInboxSchema.parse(result);if(page.items.some(record=>record.scope!==scope||body.projectId&&record.projectId!==body.projectId))throw new Error("Inbox response differs from the requested scope.");}
  if(body.endpoint==="inspect"&&HumanInspectionSchema.parse(result).some(row=>row.reviewId!==body.id))throw new Error("Inspection response differs from the selected assignment.");

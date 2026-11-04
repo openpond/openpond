@@ -1,3 +1,4 @@
+import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { alphaEditHostedActions } from "./training-hosted-alphaedit";
 import { neuronTrainingHostedActions } from "./training-hosted-neuron-training";
 import { engramHostedActions } from "./training-hosted-engram";
@@ -31,7 +32,7 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     const remaining = requestBound.deadlineAt === null ? Infinity : requestBound.deadlineAt - Date.now();
     if (remaining <= 0) throw new DOMException("Hosted watch deadline reached", "TimeoutError");
     const timeout = AbortSignal.timeout(Math.max(1, Math.min(watchOptions ? 10_000 : maximumRequestMs, remaining)));
-    return fetch(url, {
+    return hostedCliFetch(url, {
       ...init, redirect: "error", signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
     });
   };

@@ -1,3 +1,4 @@
+import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { readFile } from "node:fs/promises";
 import {
   OpenPondLearningClient,
@@ -26,7 +27,7 @@ export async function runLearningCommand(
     apiKey: context.token,
     scope: teamId,
     fetch: (url, init) =>
-      fetch(url, {
+      hostedCliFetch(url, {
         ...init,
         signal: init?.signal
           ? AbortSignal.any([init.signal, AbortSignal.timeout(60000)])
