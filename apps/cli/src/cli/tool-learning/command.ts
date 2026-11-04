@@ -1,3 +1,4 @@
+import { hostedCliFetch } from "../common/hosted-cli-fetch";
 import { readFile, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { readCredential } from "@openpond/persistence";
@@ -126,6 +127,7 @@ async function register(options: ToolLearningOptions, preparedRegistration?: unk
   try {
     configureLocalToolLearning(store, record, null);
     const client = new OpenPondToolLearningClient({
+    fetch: hostedCliFetch,
       baseUrl,
       apiKey: context.token,
       teamId,
