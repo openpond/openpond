@@ -27,6 +27,7 @@ import type {
   SandboxScheduleRecord,
   SandboxScheduleRun,
   SandboxSnapshot,
+  SandboxSnapshotJob,
   SandboxSnapshotValidationResult,
   SandboxTemplateBuildRecord,
   SandboxTemplateCatalogEntry,
@@ -105,6 +106,11 @@ export type SandboxOpenPortResponse = {
 export type SandboxSnapshotResponse = {
   sandbox: SandboxRecord;
   snapshot: SandboxSnapshot;
+};
+
+export type SandboxSnapshotJobResponse = {
+  sandbox: SandboxRecord;
+  snapshotJob: SandboxSnapshotJob;
 };
 
 export type SandboxSnapshotValidationResponse = {
@@ -289,6 +295,12 @@ export type SandboxStartResponse = {
 
 export type SandboxRestoreResponse = {
   sandbox: SandboxRecord;
+  restoreIntent?: {
+    operationId: string;
+    intentSha256: string;
+    checkpointId: string;
+    phase: "prepared" | "deleting" | "root_closed" | "booting" | "running";
+  };
 };
 
 export type SandboxReceiptsResponse = {

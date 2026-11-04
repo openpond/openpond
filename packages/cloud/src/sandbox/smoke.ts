@@ -95,7 +95,7 @@ export async function runSandboxSmoke(
 
     let snapshotId: string | null = null;
     if (options.snapshot || options.fork) {
-      const snapshotResponse = (await client.createSnapshot(sandbox.id, {
+      const snapshotResponse = await client.createSnapshot(sandbox.id, {
         async: true,
         name: `openpond-code-smoke-${runId}`,
         replay: {
@@ -124,22 +124,12 @@ export async function runSandboxSmoke(
             ],
           },
         },
-      })) as SandboxSnapshotResponse & {
-        snapshotJob?: {
-          snapshotId?: string;
-          status?: string;
-          error?: string | null;
-        };
-      };
-      const snapshot =
-        snapshotResponse.snapshot ??
-        (
-          await waitForSnapshotReady(
-            client,
-            sandbox.id,
-            snapshotResponse.snapshotJob?.snapshotId
-          )
-        ).snapshot;
+      });
+      const { snapshot } = await waitForSnapshotReady(
+        client,
+        sandbox.id,
+        snapshotResponse.snapshotJob.snapshotId,
+      );
       snapshotId = snapshot.id;
       if (snapshot.state !== "ready") {
         throw new Error(`expected ready snapshot, got ${snapshot.state}`);

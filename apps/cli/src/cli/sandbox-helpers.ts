@@ -11,6 +11,7 @@ import type {
   SandboxReplayInput,
   SandboxReplayRecord,
   SandboxSnapshotValidateInput,
+  SandboxSnapshotInput,
   SandboxTemplateBuildCreateInput,
   SandboxTemplateBuildRecord,
 } from "../sandbox/types/index";
@@ -27,6 +28,8 @@ import {
   type SandboxCreatePlan,
   type SandboxCreatePlanResult,
 } from "./common";
+
+import { nativeCheckpointInput } from "./sandbox-checkpoint-inputs";
 
 const DOCKER_CONTEXT_MAX_FILES = 500;
 const DOCKER_CONTEXT_MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -783,7 +786,9 @@ export function buildTemplateBuildCreateInput(
 
 export function buildSnapshotCreateInput(
   options: Record<string, string | boolean>
-): Record<string, unknown> {
+): SandboxSnapshotInput {
+  const native = nativeCheckpointInput(options);
+  if (native) return native;
   const name = typeof options.name === "string" ? options.name.trim() : "";
   if (!name) {
     throw new Error("snapshot-create requires --name <name>");
@@ -822,7 +827,7 @@ export function buildSnapshotCreateInput(
       ? options.description.trim()
       : undefined;
   const tags = parseCsvOption(options.tags);
-  const input: Record<string, unknown> = {
+  const input: SandboxSnapshotInput = {
     ...(parseBooleanOption(options.async) ? { async: true } : {}),
     name,
     replay: {
