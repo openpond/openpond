@@ -1,8 +1,4 @@
 import {
-  AlphaEditModelServingControlRequestSchema,
-  NeuronTrainingModelServingControlRequestSchema,
-} from "openpond-sdk/training";
-import {
   createHostedAlphaEditPublication,
   HostedAlphaEditPublicationEnvelopeSchema,
 } from "../training/hosted-alphaedit-publication.js";
@@ -73,7 +69,6 @@ import {
   HostedModificationExecutionError,
 } from "../training/hosted-modification-executions.js";
 import { validateReviewedEvaluationCommand } from "../training/reviewed-evaluation-operation.js";
-import { RunFeedbackTargetSchema } from "@openpond/contracts";
 import {
   HumanRevokeLocalPublicationSchema,
   HumanLocalPublicationsReadSchema,
@@ -90,17 +85,12 @@ import { z } from "zod";
 import { createHostedCandidateEvaluations } from "../training/hosted-candidate-evaluations.js";
 import { createHostedExperimentTrainingHandoff } from "../training/experiment-training-handoff.js";
 import { createHostedTrainingSetup } from "../training/hosted-training-setup.js";
-import { createHostedTrainingRunDetail } from "../training/hosted-training-run-detail.js";
-import {
-  DecisionModelServingControlRequestSchema,
-  EngramModelServingControlRequestSchema,
-  SteeringModelServingControlRequestSchema,
-} from "openpond-sdk/training";
 import { OpenPondTrainingProjectClient } from "openpond-sdk/training-projects";
 import { HostedTrainingSetupActionSchema } from "openpond-sdk/post-training";
 import { createExecutionActivityService } from "../training/execution-activity.js";
 import { readHostedExecutionActivity } from "../training/hosted-execution-activity.js";
 import { createHostedHumanReviewBridge } from "./hosted-bridge.js";
+import { createHostedTrainingDetailTransport } from "./hosted-training-detail-transport.js";
 import { createLocalHumanReviewRuntime } from "./runtime.js";
 import type { createLocalExperimentService } from "../evaluations/local-experiment-service.js";
 import type { createTrainingApi } from "../training/training-api.js";
@@ -117,6 +107,7 @@ export function createReviewAndActivityTransport(deps: {
   trainingRequest: ReturnType<typeof createTrainingApi>["request"];
   humanReview?: ReturnType<typeof createLocalHumanReviewRuntime>;
 }): ReturnType<typeof createTrainingApi>["request"] {
+  const trainingDetailRequest = createHostedTrainingDetailTransport(deps);
   const local = deps.humanReview ?? createLocalHumanReviewRuntime(deps);
   const hosted = createHostedHumanReviewBridge({
     resolveAccess: async () => ({ ...(await deps.resolveAccess()), teamId: await deps.teamId() }),
@@ -856,213 +847,9 @@ export function createReviewAndActivityTransport(deps: {
         },
       }).perform(body);
     }
-    if (action === "hosted_training_model_serving_control") {
-      const body = z
-        .object({
-          teamId: z.string().min(1),
-          modelProjectId: z.string().min(1).max(240),
-          command: z.unknown(),
-          review: z
-            .object({
-              intentHash: z.string().regex(/^[a-f0-9]{64}$/),
-              projectId: z.string().min(1).max(240).nullable(),
-            })
-            .strict()
-            .optional(),
-        })
-        .strict()
-        .parse(payload);
-      const [teamId, actorId, access] = await Promise.all([
-        deps.teamId(),
-        deps.actorId(),
-        deps.resolveAccess(),
-      ]);
-      if (body.teamId !== teamId)
-        throw new Error("The active workspace changed. Reload this Model.");
-      const decision = z
-        .union([
-          DecisionModelServingControlRequestSchema,
-          AlphaEditModelServingControlRequestSchema,
-          NeuronTrainingModelServingControlRequestSchema,
-        ])
-        .safeParse(body.command);
-      if (decision.success) {
-        if (!body.review)
-          throw new HostedDecisionExecutionError(
-            "decision_serving_review_required",
-            "Recover the original reviewed decision serving control.",
-          );
-        const projectId = body.review.projectId,
-          apiOrigin = new URL(access.apiBaseUrl).origin;
-        const command = { modelProjectId: body.modelProjectId, request: decision.data };
-        const retained = await deps.store.readPendingEvaluationOperation({
-          scopeHash: contentHash({ actorId, apiOrigin, teamId, projectId }),
-          action: "training-model-serving-control",
-          intentHash: body.review.intentHash,
-          id: decision.data.operationId,
-        });
-        if (
-          retained.phase !== "dispatching" ||
-          contentHash(retained.command) !== contentHash(command)
-        )
-          throw new HostedDecisionExecutionError(
-            "decision_serving_review_required",
-            "Recover the original reviewed decision serving control.",
-          );
-        validateReviewedEvaluationCommand({
-          action: "training-model-serving-control",
-          id: decision.data.operationId,
-          actorId,
-          teamId,
-          projectId,
-          intent: retained.reviewedIntent,
-          command,
-        });
-      }
-      const detail = createHostedTrainingRunDetail({
-        teamId,
-        actorId,
-        access,
-        currentIdentity: async () => ({
-          teamId: await deps.teamId(),
-          actorId: await deps.actorId(),
-          apiOrigin: (await deps.resolveAccess()).apiBaseUrl,
-        }),
-      });
-      return AlphaEditModelServingControlRequestSchema.safeParse(body.command).success
-        ? detail.controlAlphaEditModelServing(body.modelProjectId, body.command)
-        : NeuronTrainingModelServingControlRequestSchema.safeParse(body.command).success
-          ? detail.controlNeuronTrainingModelServing(body.modelProjectId, body.command)
-          : DecisionModelServingControlRequestSchema.safeParse(body.command).success
-            ? detail.controlDecisionModelServing(body.modelProjectId, body.command)
-            : EngramModelServingControlRequestSchema.safeParse(body.command).success
-              ? detail.controlEngramModelServing(body.modelProjectId, body.command)
-              : SteeringModelServingControlRequestSchema.safeParse(body.command).success
-                ? detail.controlSteeringModelServing(body.modelProjectId, body.command)
-                : detail.controlModelServing(body.modelProjectId, body.command);
-    }
-    if (action === "hosted_training_model_serving") {
-      const body = z
-        .object({
-          teamId: z.string().min(1),
-          modelProjectId: z.string().min(1).max(240),
-          versionHash: z.string().regex(/^[a-f0-9]{64}$/),
-        })
-        .strict()
-        .parse(payload);
-      const [teamId, actorId, access] = await Promise.all([
-        deps.teamId(),
-        deps.actorId(),
-        deps.resolveAccess(),
-      ]);
-      if (body.teamId !== teamId)
-        throw new Error("The active workspace changed. Reload this Model.");
-      return createHostedTrainingRunDetail({
-        teamId,
-        actorId,
-        access,
-        currentIdentity: async () => ({
-          teamId: await deps.teamId(),
-          actorId: await deps.actorId(),
-          apiOrigin: (await deps.resolveAccess()).apiBaseUrl,
-        }),
-      }).savedModelServing(body.modelProjectId, { teamId, versionHash: body.versionHash });
-    }
-    if (action === "hosted_training_saved_model" || action === "hosted_training_saved_version") {
-      const body = z
-        .object({
-          teamId: z.string().min(1),
-          modelProjectId: z.string().min(1).max(240),
-          versionHash: z
-            .string()
-            .regex(/^[a-f0-9]{64}$/)
-            .optional(),
-        })
-        .strict()
-        .parse(payload);
-      const [teamId, actorId, access] = await Promise.all([
-        deps.teamId(),
-        deps.actorId(),
-        deps.resolveAccess(),
-      ]);
-      if (body.teamId !== teamId)
-        throw new Error("The active workspace changed. Reload this Model.");
-      const detail = createHostedTrainingRunDetail({
-        teamId,
-        actorId,
-        access,
-        currentIdentity: async () => ({
-          teamId: await deps.teamId(),
-          actorId: await deps.actorId(),
-          apiOrigin: (await deps.resolveAccess()).apiBaseUrl,
-        }),
-      });
-      return action === "hosted_training_saved_version"
-        ? detail.savedVersion(body.modelProjectId, body.versionHash)
-        : detail.savedModel(body.modelProjectId);
-    }
-    if (
-      [
-        "hosted_training_detail",
-        "hosted_training_result",
-        "hosted_training_save_model",
-        "hosted_training_flow",
-        "hosted_training_summary",
-        "hosted_training_logs",
-        "hosted_training_feedback",
-        "hosted_training_control",
-      ].includes(action)
-    ) {
-      const body = z
-        .object({
-          teamId: z.string().min(1),
-          jobId: z.string().min(1).max(200),
-          includeFlow: z.boolean().optional(),
-          feedbackTarget: RunFeedbackTargetSchema.optional(),
-          action: z.enum(["start", "retry", "cancel"]).optional(),
-          command: z.unknown().optional(),
-        })
-        .strict()
-        .parse(payload);
-      const [teamId, actorId, access] = await Promise.all([
-        deps.teamId(),
-        deps.actorId(),
-        deps.resolveAccess(),
-      ]);
-      if (body.teamId !== teamId)
-        throw new Error("The active workspace changed. Reload this training run.");
-      const detail = createHostedTrainingRunDetail({
-        teamId,
-        actorId,
-        access,
-        currentIdentity: async () => ({
-          teamId: await deps.teamId(),
-          actorId: await deps.actorId(),
-          apiOrigin: (await deps.resolveAccess()).apiBaseUrl,
-        }),
-      });
-      return action === "hosted_training_detail"
-        ? detail.read(body.jobId, { includeFlow: body.includeFlow })
-        : action === "hosted_training_result"
-          ? detail.result(body.jobId)
-          : action === "hosted_training_save_model"
-            ? detail.saveModel(body.jobId, body.command)
-            : action === "hosted_training_flow"
-              ? detail.readFlow(body.jobId)
-              : action === "hosted_training_summary"
-                ? detail.summary(body.jobId)
-                : action === "hosted_training_logs"
-                  ? detail.logs(body.jobId)
-                  : action === "hosted_training_feedback"
-                    ? detail.feedback(body.jobId, body.feedbackTarget)
-                    : detail.control(
-                        body.jobId,
-                        z.enum(["start", "retry", "cancel"]).parse(body.action),
-                        body.command,
-                      );
-    }
     if (action === "execution_activity") return activity(payload);
-    if (action !== "human_review") return deps.trainingRequest(action, payload, requestUrl, signal);
+    if (action !== "human_review")
+      return trainingDetailRequest(action, payload, requestUrl, signal);
     const location = requestUrl?.searchParams.get("location") ?? "hosted";
     if (location === "local") {
       if (HumanRevokeLocalPublicationSchema.safeParse(payload).success)
