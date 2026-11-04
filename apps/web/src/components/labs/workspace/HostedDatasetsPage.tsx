@@ -1,3 +1,4 @@
+import { useEvaluationSetup } from "./EvaluationSetupState";
 import { ErrorToast } from "../../common/ErrorToast";
 import { DatasetCollectionTable } from "./DatasetCollectionTable";
 import {WorkflowEvaluationDiscovery} from "./WorkflowEvaluationDiscovery";
@@ -14,7 +15,7 @@ import { DiscoverDatasets } from "./DiscoverDatasets";
 import { ReleasedDatasetDetail } from "./ReleasedDatasetDetail";
 import { useWorkspaceResourceName } from "./WorkspacePanel";
 import { DatasetExperiments } from "./DatasetExperiments";
-import { DatasetTaskCheckbox, DatasetTaskSelection, useDatasetTaskSelection } from "./DatasetTaskSelection";
+import { DatasetExperimentButton, DatasetTaskCheckbox, DatasetTaskSelection } from "./DatasetTaskSelection";
 import { DatasetGraders } from "./DatasetGraders";
 import { DatasetVersions } from "./DatasetVersions";
 import { HostedDatasetEditor } from "./HostedDatasetEditor";
@@ -59,7 +60,7 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
   const visibilityMenu = useDatasetVisibilityMenu(api,dataset?.publication ?? null,()=>{setVisibilityOpen(true);controls?.select({id:"visibility",label:"Visibility",onSelect:()=>{}});});
   const tab = route.detailTab ?? "tasks";
   const executableRelease = dataset?.workspace.draft.status === "published" ? dataset.publication?.release ?? null : null;
-  const taskSelection = useDatasetTaskSelection(executableRelease);
+  const taskSelection = useEvaluationSetup();
   const task = dataset?.workspace.draft.tasks.find(item => item.id === taskId);
   function closeEditor(id?: string) {
     setEditing(false); onRefresh();
@@ -134,6 +135,7 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
         <DropdownSelect label="Sort datasets" value={route.sort ?? "name"} options={[{ value: "name", label: "Sort by name" }, { value: "updated", label: "Latest update" }, { value: "id", label: "Dataset identity" }]} onChange={value => navigate({ ...route, sort: value as "id" | "name" | "updated", after: null })} />
         <button className="training-button secondary" disabled={busy} onClick={() => selectSidebarAction("discover")}>Discover</button>
       </> : null}
+      {executableRelease ? <DatasetExperimentButton release={executableRelease} route={route} /> : null}
       {dataset && dataset.workspace.draft.status === "draft" ? <button className="training-button secondary" disabled={busy || selected.isFetching} onClick={() => void publish()}>{busy ? "Checking…" : "Check and publish"}</button> : null}
       <button className="training-button" disabled={busy || selected.isFetching || Boolean(versionRevision)} onClick={() => selectSidebarAction("dataset")}>{published ? "Create editable version" : dataset ? "Edit Dataset" : "New Dataset"}</button>
       <WorkspaceActionMenu label="More dataset actions" actions={moreActions} />

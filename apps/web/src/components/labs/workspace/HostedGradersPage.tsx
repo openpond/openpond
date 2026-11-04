@@ -10,9 +10,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GraderCatalogPageSchema, GraderVersionsPageSchema, GraderUsagePageSchema } from "openpond-sdk/learning";
 import type { z } from "zod";
 import { WorkspacePanel } from "./WorkspacePanel";
-import { useMemo, useRef, useState } from "react";
-import { OpenPondLearningClient, type AuthoringDraft, type RewardRelease, learningRef } from "openpond-sdk/learning";
-import { scopeLearningClient } from "../../../lib/query-scope";
+import { useRef, useState } from "react";
+import { type AuthoringDraft, type RewardRelease, learningRef } from "openpond-sdk/learning";
+import { useWorkspaceLearningClient } from "./useWorkspaceLearningClient";
 import { useLearningResource } from "../learning/useLearningResources";
 import { RewardEditor, type GraderModelChoice } from "../learning/RewardEditor";
 import { RewardCheckHistory } from "../learning/RewardCheckHistory";
@@ -22,12 +22,7 @@ import type { DraftEditorHandle } from "../useDraftNavigation";
 import type { Inventory, WorkspaceApi } from "./workspace-api";
 import type { ModelsRoute } from "../models-route";
 export function HostedGradersPage({ api, inventory, route, navigate }: { api: WorkspaceApi; inventory?: Inventory | null; route: ModelsRoute; navigate: (route: ModelsRoute) => void }) {
-  const client = useMemo(() => scopeLearningClient(new OpenPondLearningClient({ baseUrl: "https://desktop.openpond.invalid", apiKey: "desktop-server-boundary", scope: api.teamId, fetch: async (url, init) => {
-    const endpoint = new URL(String(url)).pathname.split("/").at(-1);
-    if (endpoint !== "read" && endpoint !== "commands") throw new Error("Unsupported grader action.");
-    const result = await api.request("learningRelay", { endpoint, request: JSON.parse(String(init?.body)) }, init?.signal ?? undefined);
-    return new Response(JSON.stringify(result), { status: 200, headers: { "Content-Type": "application/json" } });
-  } }), ["learning", "hosted-evaluation-workspace", api.key]), [api]);
+  const client = useWorkspaceLearningClient(api);
   const queries = useQueryClient();
   const refresh = () => { void queries.invalidateQueries({ queryKey: ["evaluation-workspace", api.key] }); };
   const selected = useLearningResource(client, "reward", route.resourceId, route.revision);

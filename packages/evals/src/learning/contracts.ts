@@ -110,6 +110,13 @@ export const LearningReviewOriginSchema = z
     rewardBinding: LearningRevisionRefSchema,
   })
   .strict();
+/** A host must verify this retained import receipt before resolving package
+ * bytes. This portable reference is neither an approval nor an access grant. */
+export const LearningDatasetOriginSchema = z.object({
+  receiptId: ReleaseIdSchema,
+  packageHash: ReleaseHashSchema,
+  taskset: LearningRevisionRefSchema,
+}).strict();
 export const LearningSourceContentSchema = z
   .object({
     schemaVersion: z.literal("openpond.learningSource.v1"),
@@ -123,6 +130,7 @@ export const LearningSourceContentSchema = z
     mapping: TaskSourceMappingSchema.nullable(),
     adapterVersion: z.string().trim().min(1).max(200).nullable(),
     reviewOrigin: LearningReviewOriginSchema.optional(),
+    datasetOrigin: LearningDatasetOriginSchema.optional(),
     /** Host-retained authorization for materializing neutral conversation
      * evidence. The receipt is reauthorized at preparation and paid admission;
      * this portable reference alone never grants access or training consent. */
@@ -136,6 +144,8 @@ export const LearningSourceContentSchema = z
   })
   .strict()
   .superRefine((source, context) => {
+    if (source.datasetOrigin && (source.reviewOrigin || source.capturedOrigin))
+      context.addIssue({ code: "custom", path: ["datasetOrigin"], message: "Choose one retained source origin." });
     if (source.kind !== "direct" && !source.mapping)
       context.addIssue({
         code: "custom",
@@ -171,6 +181,8 @@ export const TaskExampleSubmissionSchema = z
     familyKey: ReleaseIdSchema.nullable(),
     split: TaskSplitSchema,
     input: LearningJsonObjectSchema,
+    /** Per-example policy context remains separate from evaluator-only data. */
+    policyVisibleContext: LearningJsonObjectSchema.optional(),
     observedOutput: LearningJsonObjectSchema.nullable(),
     expected: LearningJsonObjectSchema.nullable(),
     evaluatorContext: LearningJsonObjectSchema.nullable(),

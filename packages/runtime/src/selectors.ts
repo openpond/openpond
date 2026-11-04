@@ -80,6 +80,10 @@ export function findActiveAccount(
     const exact = accounts.find((account) => accountMatchesSelector(account, requestedProfile));
     if (exact) return exact;
 
+    // An explicit destination is an authentication boundary. A unique handle
+    // must not route a staging command to an account at another origin.
+    if (normalizeBaseUrl(requestedBaseUrl ?? process.env.OPENPOND_BASE_URL)) return null;
+
     const sameHandle = accounts.filter((account) => handleEquals(account.handle, requestedProfile.handle));
     if (sameHandle.length === 1) return sameHandle[0] ?? null;
 

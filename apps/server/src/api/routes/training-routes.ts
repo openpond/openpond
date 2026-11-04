@@ -1,9 +1,22 @@
+import { handleAlphaEditPublicationRoutes } from "./alphaedit-publication-routes.js";
+import { handleHostedAlphaEditRoutes } from "./hosted-alphaedit-routes.js";
+import { handleNeuronTrainingPublicationRoutes } from "./neuron-training-publication-routes.js";
+import { handleHostedNeuronTrainingRoutes } from "./hosted-neuron-training-routes.js";
+import { handleDecisionScoringRoutes } from "./decision-scoring-routes.js";
+import { handleDecisionPublicationRoutes } from "./decision-publication-routes.js";
+import { handleHostedDecisionRoutes } from "./hosted-decision-routes.js";
+import { HostedDecisionExecutionError } from "../../training/hosted-decision-executions.js";
+import { handleEngramPublicationRoutes } from "./engram-publication-routes.js";
+import { handleHostedEngramRoutes } from "./hosted-engram-routes.js";
+import { handleSteeringPublicationRoutes } from "./steering-publication-routes.js";
+import { handleHostedModificationRoutes } from "./hosted-modification-routes.js";
 import { OpenPondExperimentError } from "openpond-sdk/experiments";
 import { OpenPondLearningError } from "openpond-sdk/learning";
+import { OpenPondTrainingApiError } from "openpond-sdk/training";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { OpenPondModelProjectApiError } from "openpond-sdk/model-projects";
 import { OpenPondModelStarterCatalogError } from "openpond-sdk/model-starter-catalog";
 import { ModelBatchReviewError } from "openpond-sdk/taskset-packages";
@@ -16,122 +29,539 @@ import {
   type TrainingArtifactPackage,
 } from "../../training/training-artifact-package.js";
 
-export async function handleTrainingRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
+export async function handleTrainingRoutes({
+  deps,
+  request,
+  requestUrl,
+  response,
+}: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
-  if (request.method === "POST" && ["/v1/training/model-project-preparations/prepare", "/v1/training/model-project-preparations/apply"].includes(requestUrl.pathname)) {
+  if (await handleAlphaEditPublicationRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleNeuronTrainingPublicationRoutes({ deps, request, requestUrl, response }))
+    return true;
+  if (await handleHostedAlphaEditRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleHostedNeuronTrainingRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleDecisionScoringRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleDecisionPublicationRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleHostedDecisionRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleEngramPublicationRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleSteeringPublicationRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleHostedEngramRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleHostedModificationRoutes({ deps, request, requestUrl, response })) return true;
+  if (
+    request.method === "POST" &&
+    [
+      "/v1/training/model-project-preparations/prepare",
+      "/v1/training/model-project-preparations/apply",
+    ].includes(requestUrl.pathname)
+  ) {
     try {
-      const action = requestUrl.pathname.endsWith("/apply") ? "apply_local_model_project_preparation" : "prepare_local_model_project";
+      const action = requestUrl.pathname.endsWith("/apply")
+        ? "apply_local_model_project_preparation"
+        : "prepare_local_model_project";
       response.setHeader("Cache-Control", "no-store");
-      sendJson(response, 200, await deps.trainingPayload(action, await readJson(request, { maxBytes: 67_108_864 }), requestUrl));
+      sendJson(
+        response,
+        200,
+        await deps.trainingPayload(
+          action,
+          await readJson(request, { maxBytes: 67_108_864 }),
+          requestUrl,
+        ),
+      );
     } catch (error) {
-      if (error instanceof ZodError) sendJson(response, 400, { code: "model_preparation_invalid", error: "Project preparation does not match its contract." });
-      else if (error instanceof Error) sendJson(response, 409, { code: "model_preparation_conflict", error: error.message });
+      if (error instanceof ZodError)
+        sendJson(response, 400, {
+          code: "model_preparation_invalid",
+          error: "Project preparation does not match its contract.",
+        });
+      else if (error instanceof Error)
+        sendJson(response, 409, { code: "model_preparation_conflict", error: error.message });
       else throw error;
     }
     return true;
   }
-  const candidate = /^\/v1\/training\/candidate-evaluations(?:\/([^/]+)(?:\/(prepare|run|cancel))?)?$/.exec(requestUrl.pathname);
-  if ((requestUrl.pathname === "/v1/training/candidates" && request.method === "GET") ||
-      (candidate && (request.method === "GET" && candidate[1] && !candidate[2] || request.method === "POST" && (!candidate[1] || candidate[2])))) {
-    const body=request.method==="POST"?await readJson(request,{maxBytes:8_388_608}):undefined;
-    response.setHeader("Cache-Control","no-store");
-    sendJson(response,200,await deps.trainingPayload("hosted_candidate_evaluation", {
-      teamId:requestUrl.searchParams.get("teamId") ?? (body && typeof body==="object" && "teamId" in body ? body.teamId : null),
-      action:requestUrl.pathname==="/v1/training/candidates"?"options":candidate?.[2] ?? (request.method==="GET"?"read":"save"),
-      ...(candidate?.[1]?{id:decodeURIComponent(candidate[1])}:{}),
-      ...(body===undefined?{}:{command:body}),
-      ...(requestUrl.pathname==="/v1/training/candidates"?{query:{...(requestUrl.searchParams.get("afterId")?{afterId:requestUrl.searchParams.get("afterId")!}:{}),...(requestUrl.searchParams.get("projectId")?{projectId:requestUrl.searchParams.get("projectId")!}:{})}}:{}),
-    },requestUrl));
+  const candidate =
+    /^\/v1\/training\/candidate-evaluations(?:\/([^/]+)(?:\/(prepare|run|cancel))?)?$/.exec(
+      requestUrl.pathname,
+    );
+  if (
+    (requestUrl.pathname === "/v1/training/candidates" && request.method === "GET") ||
+    (candidate &&
+      ((request.method === "GET" && candidate[1] && !candidate[2]) ||
+        (request.method === "POST" && (!candidate[1] || candidate[2]))))
+  ) {
+    const body =
+      request.method === "POST" ? await readJson(request, { maxBytes: 8_388_608 }) : undefined;
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        "hosted_candidate_evaluation",
+        {
+          teamId:
+            requestUrl.searchParams.get("teamId") ??
+            (body && typeof body === "object" && "teamId" in body ? body.teamId : null),
+          action:
+            requestUrl.pathname === "/v1/training/candidates"
+              ? "options"
+              : (candidate?.[2] ?? (request.method === "GET" ? "read" : "save")),
+          ...(candidate?.[1] ? { id: decodeURIComponent(candidate[1]) } : {}),
+          ...(body === undefined ? {} : { command: body }),
+          ...(requestUrl.pathname === "/v1/training/candidates"
+            ? {
+                query: {
+                  ...(requestUrl.searchParams.get("afterId")
+                    ? { afterId: requestUrl.searchParams.get("afterId")! }
+                    : {}),
+                  ...(requestUrl.searchParams.get("projectId")
+                    ? { projectId: requestUrl.searchParams.get("projectId")! }
+                    : {}),
+                },
+              }
+            : {}),
+        },
+        requestUrl,
+      ),
+    );
     return true;
   }
-  const hostedPolicy = /^\/v1\/training\/hosted-policies\/([^/]+)(\/control)?$/.exec(requestUrl.pathname);
-  if (hostedPolicy && (request.method === "GET" && !hostedPolicy[2] || request.method === "POST" && hostedPolicy[2])) {
+  const hostedPolicy = /^\/v1\/training\/hosted-policies\/([^/]+)(\/control)?$/.exec(
+    requestUrl.pathname,
+  );
+  if (
+    hostedPolicy &&
+    ((request.method === "GET" && !hostedPolicy[2]) ||
+      (request.method === "POST" && hostedPolicy[2]))
+  ) {
     response.setHeader("Cache-Control", "no-store");
-    sendJson(response, 200, await deps.trainingPayload("hosted_training_policy", {
-      teamId:requestUrl.searchParams.get("teamId"), id:decodeURIComponent(hostedPolicy[1]!),
-      ...(hostedPolicy[2]?{command:await readJson(request,{maxBytes:262_144})}:{afterId:requestUrl.searchParams.get("afterId")}),
-    }, requestUrl));
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        "hosted_training_policy",
+        {
+          teamId: requestUrl.searchParams.get("teamId"),
+          id: decodeURIComponent(hostedPolicy[1]!),
+          ...(hostedPolicy[2]
+            ? { command: await readJson(request, { maxBytes: 262_144 }) }
+            : { afterId: requestUrl.searchParams.get("afterId") }),
+        },
+        requestUrl,
+      ),
+    );
     return true;
   }
-  const trainingSetup = /^\/v1\/training\/setup(?:\/(prepare|start|cancel|publish|attach))?$/.exec(requestUrl.pathname);
-  if (trainingSetup && (request.method === "GET" && !trainingSetup[1] || request.method === "POST" && trainingSetup[1])) {
+  if (requestUrl.pathname === "/v1/training/setup/draft-inputs" && request.method === "GET") {
     response.setHeader("Cache-Control", "no-store");
-    sendJson(response, 200, await deps.trainingPayload("hosted_training_setup", {
-      teamId: requestUrl.searchParams.get("teamId"),
-      ...(trainingSetup[1] ? {action:trainingSetup[1],command:await readJson(request,{maxBytes:8_388_608})}
-        : {configurationId:requestUrl.searchParams.get("configurationId"),projectId:requestUrl.searchParams.get("projectId")}),
-    }, requestUrl));
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        "hosted_training_setup",
+        {
+          teamId: requestUrl.searchParams.get("teamId"),
+          draftInputs: true,
+          projectId: requestUrl.searchParams.get("projectId"),
+          cursor: requestUrl.searchParams.get("cursor"),
+        },
+        requestUrl,
+      ),
+    );
+    return true;
+  }
+  const draftSetup = /^\/v1\/training\/setup\/drafts(?:\/([^/]+)(\/archive)?)?$/.exec(
+    requestUrl.pathname,
+  );
+  if (
+    draftSetup &&
+    ((request.method === "GET" && !draftSetup[2]) ||
+      (request.method === "POST" && (!draftSetup[1] || draftSetup[2])))
+  ) {
+    const id = draftSetup[1] ? decodeURIComponent(draftSetup[1]) : null;
+    const query = Object.fromEntries(requestUrl.searchParams);
+    const { teamId, limit, archived, ...filters } = query;
+    const command =
+      request.method === "POST" ? await readJson(request, { maxBytes: 32_768 }) : null;
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        "hosted_training_setup",
+        {
+          teamId,
+          action:
+            request.method === "GET"
+              ? id
+                ? "get-draft"
+                : "list-drafts"
+              : id
+                ? "archive-draft"
+                : "save-draft",
+          command:
+            request.method === "POST"
+              ? id
+                ? { id, control: command }
+                : command
+              : id
+                ? { id }
+                : {
+                    ...filters,
+                    ...(limit === undefined ? {} : { limit: Number(limit) }),
+                    ...(archived === undefined
+                      ? {}
+                      : { archived: z.enum(["true", "false"]).parse(archived) === "true" }),
+                  },
+        },
+        requestUrl,
+      ),
+    );
+    return true;
+  }
+  const trainingSetup =
+    /^\/v1\/training\/setup(?:\/(prepare|prepare-draft|review-dataset|start|cancel|publish|attach|estimate|funding|funding-handoff|hardware-catalog|gpu-catalog|modification-capabilities))?$/.exec(
+      requestUrl.pathname,
+    );
+  if (
+    trainingSetup &&
+    ((request.method === "GET" && !trainingSetup[1]) ||
+      (request.method === "POST" && trainingSetup[1]))
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        "hosted_training_setup",
+        {
+          teamId: requestUrl.searchParams.get("teamId"),
+          ...(trainingSetup[1]
+            ? {
+                action: trainingSetup[1],
+                command: await readJson(request, { maxBytes: 8_388_608 }),
+              }
+            : {
+                configurationId: requestUrl.searchParams.get("configurationId"),
+                projectId: requestUrl.searchParams.get("projectId"),
+              }),
+        },
+        requestUrl,
+      ),
+    );
     return true;
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/training/experiment-handoff") {
     response.setHeader("Cache-Control", "no-store");
-    sendJson(response, 200, await deps.trainingPayload("experiment_training_handoff", {
-      teamId: requestUrl.searchParams.get("teamId"), executionId: requestUrl.searchParams.get("executionId"),
-      passId: requestUrl.searchParams.get("passId"),
-    }, requestUrl));
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        "experiment_training_handoff",
+        {
+          teamId: requestUrl.searchParams.get("teamId"),
+          executionId: requestUrl.searchParams.get("executionId"),
+          passId: requestUrl.searchParams.get("passId"),
+        },
+        requestUrl,
+      ),
+    );
     return true;
   }
-  const hostedJob = /^\/v1\/training\/hosted-jobs\/([^/]+)(?:\/(flow|summary|logs|feedback)|\/post-training\/(start|retry|cancel))?$/.exec(requestUrl.pathname);
-  if (hostedJob && (request.method === "GET" && !hostedJob[3] || request.method === "POST" && hostedJob[3])) {
+  const modelServing = /^\/v1\/training\/saved-models\/([^/]+)\/serving$/.exec(requestUrl.pathname);
+  if (modelServing && request.method === "POST") {
     response.setHeader("Cache-Control", "no-store");
-    const payload = {teamId:requestUrl.searchParams.get("teamId"),jobId:decodeURIComponent(hostedJob[1]!),
-      ...(hostedJob[2] === "feedback" ? { feedbackTarget: { kind: requestUrl.searchParams.get("kind"), id: requestUrl.searchParams.get("id"), ...(requestUrl.searchParams.has("taskId") ? { taskId: requestUrl.searchParams.get("taskId") } : {}) } } : {}),
-      ...(hostedJob[3] ? {action:hostedJob[3],command:await readJson(request,{maxBytes:65_536})} : {}),
-      ...(!hostedJob[2] && !hostedJob[3] ? { includeFlow: requestUrl.searchParams.get("graph") !== "false" } : {})};
-    sendJson(response,200,await deps.trainingPayload(hostedJob[3] ? "hosted_training_control" : hostedJob[2] ? `hosted_training_${hostedJob[2]}` : "hosted_training_detail",payload,requestUrl));
+    try {
+      sendJson(
+        response,
+        200,
+        await deps.trainingPayload(
+          "hosted_training_model_serving_control",
+          {
+            teamId: requestUrl.searchParams.get("teamId"),
+            modelProjectId: decodeURIComponent(modelServing[1]!),
+            command: await readJson(request, { maxBytes: 32_768 }),
+            ...(requestUrl.searchParams.has("intentHash")
+              ? {
+                  review: {
+                    intentHash: requestUrl.searchParams.get("intentHash"),
+                    projectId: requestUrl.searchParams.get("projectId"),
+                  },
+                }
+              : {}),
+          },
+          requestUrl,
+        ),
+      );
+    } catch (error) {
+      if (error instanceof OpenPondTrainingApiError)
+        sendJson(response, error.status, {
+          code: error.code,
+          error: error.message,
+          retryable: error.retryable,
+        });
+      else if (error instanceof HostedDecisionExecutionError)
+        sendJson(response, error.status, {
+          code: error.code,
+          error: error.message,
+          retryable: false,
+        });
+      else throw error;
+    }
+    return true;
+  }
+  if (modelServing && request.method === "GET") {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        "hosted_training_model_serving",
+        {
+          teamId: requestUrl.searchParams.get("teamId"),
+          modelProjectId: decodeURIComponent(modelServing[1]!),
+          versionHash: requestUrl.searchParams.get("versionHash"),
+        },
+        requestUrl,
+      ),
+    );
+    return true;
+  }
+  const savedVersion = /^\/v1\/training\/saved-models\/([^/]+)\/version$/.exec(requestUrl.pathname);
+  if (savedVersion && request.method === "GET") {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        "hosted_training_saved_version",
+        {
+          teamId: requestUrl.searchParams.get("teamId"),
+          modelProjectId: decodeURIComponent(savedVersion[1]!),
+          ...(requestUrl.searchParams.has("versionHash")
+            ? { versionHash: requestUrl.searchParams.get("versionHash") }
+            : {}),
+        },
+        requestUrl,
+      ),
+    );
+    return true;
+  }
+  const savedModel = /^\/v1\/training\/saved-models\/([^/]+)$/.exec(requestUrl.pathname);
+  if (savedModel && request.method === "GET") {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        "hosted_training_saved_model",
+        {
+          teamId: requestUrl.searchParams.get("teamId"),
+          modelProjectId: decodeURIComponent(savedModel[1]!),
+        },
+        requestUrl,
+      ),
+    );
+    return true;
+  }
+  const saveModel = /^\/v1\/training\/hosted-jobs\/([^/]+)\/model$/.exec(requestUrl.pathname);
+  if (saveModel && request.method === "POST") {
+    response.setHeader("Cache-Control", "no-store");
+    try {
+      sendJson(
+        response,
+        200,
+        await deps.trainingPayload(
+          "hosted_training_save_model",
+          {
+            teamId: requestUrl.searchParams.get("teamId"),
+            jobId: decodeURIComponent(saveModel[1]!),
+            command: await readJson(request, { maxBytes: 32_768 }),
+          },
+          requestUrl,
+        ),
+      );
+    } catch (error) {
+      if (error instanceof OpenPondTrainingApiError)
+        sendJson(response, error.status, {
+          code: error.code,
+          error: error.message,
+          retryable: error.retryable,
+        });
+      else throw error;
+    }
+    return true;
+  }
+  const hostedJob =
+    /^\/v1\/training\/hosted-jobs\/([^/]+)(?:\/(result|flow|summary|logs|feedback)|\/post-training\/(start|retry|cancel))?$/.exec(
+      requestUrl.pathname,
+    );
+  if (
+    hostedJob &&
+    ((request.method === "GET" && !hostedJob[3]) || (request.method === "POST" && hostedJob[3]))
+  ) {
+    response.setHeader("Cache-Control", "no-store");
+    const payload = {
+      teamId: requestUrl.searchParams.get("teamId"),
+      jobId: decodeURIComponent(hostedJob[1]!),
+      ...(hostedJob[2] === "feedback"
+        ? {
+            feedbackTarget: {
+              kind: requestUrl.searchParams.get("kind"),
+              id: requestUrl.searchParams.get("id"),
+              ...(requestUrl.searchParams.has("taskId")
+                ? { taskId: requestUrl.searchParams.get("taskId") }
+                : {}),
+            },
+          }
+        : {}),
+      ...(hostedJob[3]
+        ? { action: hostedJob[3], command: await readJson(request, { maxBytes: 65_536 }) }
+        : {}),
+      ...(!hostedJob[2] && !hostedJob[3]
+        ? { includeFlow: requestUrl.searchParams.get("graph") !== "false" }
+        : {}),
+    };
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        hostedJob[3]
+          ? "hosted_training_control"
+          : hostedJob[2]
+            ? `hosted_training_${hostedJob[2]}`
+            : "hosted_training_detail",
+        payload,
+        requestUrl,
+      ),
+    );
     return true;
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/training/execution-activity") {
     response.setHeader("Cache-Control", "no-store");
     const teamId = requestUrl.searchParams.get("teamId");
     const projectId = requestUrl.searchParams.get("projectId");
-    sendJson(response, 200, await deps.trainingPayload("execution_activity", { teamId, projectId }, requestUrl));
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload("execution_activity", { teamId, projectId }, requestUrl),
+    );
     return true;
   }
   if (request.method === "POST" && requestUrl.pathname === "/v1/training/evaluation-workspace") {
     response.setHeader("Cache-Control", "no-store");
-    try { sendJson(response, 200, await deps.trainingPayload("evaluation_workspace", await readJson(request, { maxBytes: 67_108_864 }), requestUrl)); }
-    catch (error) {
-      if (error instanceof ZodError) sendJson(response, 400, { code: "evaluation_workspace_request_invalid", error: "The evaluation request does not match its contract." });
-      else if (error instanceof OpenPondExperimentError || error instanceof OpenPondLearningError) sendJson(response, error.status, { code: error.code, error: error.message });
+    try {
+      sendJson(
+        response,
+        200,
+        await deps.trainingPayload(
+          "evaluation_workspace",
+          await readJson(request, { maxBytes: 67_108_864 }),
+          requestUrl,
+        ),
+      );
+    } catch (error) {
+      if (error instanceof ZodError)
+        sendJson(response, 400, {
+          code: "evaluation_workspace_request_invalid",
+          error: "The evaluation request does not match its contract.",
+        });
+      else if (error instanceof OpenPondExperimentError || error instanceof OpenPondLearningError)
+        sendJson(response, error.status, { code: error.code, error: error.message });
       else throw error;
     }
     return true;
   }
-  if (request.method === "POST" && ["/v1/training/models/batch-review", "/v1/training/models/batch-review/inspect"].includes(requestUrl.pathname)) {
+  if (
+    request.method === "POST" &&
+    ["/v1/training/models/batch-review", "/v1/training/models/batch-review/inspect"].includes(
+      requestUrl.pathname,
+    )
+  ) {
     try {
-      const result = await deps.trainingPayload(requestUrl.pathname.endsWith("/inspect") ? "inspect_model_batch_review" : "begin_model_batch_review", await readJson(request, { maxBytes: 16_777_216 }), requestUrl);
+      const result = await deps.trainingPayload(
+        requestUrl.pathname.endsWith("/inspect")
+          ? "inspect_model_batch_review"
+          : "begin_model_batch_review",
+        await readJson(request, { maxBytes: 16_777_216 }),
+        requestUrl,
+      );
       response.setHeader("Cache-Control", "no-store");
       sendJson(response, 200, result);
     } catch (error) {
-      if (error instanceof LearningDomainError || error instanceof ModelBatchReviewError) sendJson(response, error.status, { code: error.code, error: error.message });
-      else if (error instanceof ZodError) sendJson(response, 400, { code: "model_review_request_invalid", error: "Model review request does not match its contract." });
+      if (error instanceof LearningDomainError || error instanceof ModelBatchReviewError)
+        sendJson(response, error.status, { code: error.code, error: error.message });
+      else if (error instanceof ZodError)
+        sendJson(response, 400, {
+          code: "model_review_request_invalid",
+          error: "Model review request does not match its contract.",
+        });
       else throw error;
     }
     return true;
   }
-  if ((request.method === "GET" && requestUrl.pathname === "/v1/training/model-starters") ||
-    (request.method === "POST" && ["/v1/training/model-starters/preview", "/v1/training/model-starters/check", "/v1/training/model-starters/create"].includes(requestUrl.pathname))) {
+  if (
+    (request.method === "GET" && requestUrl.pathname === "/v1/training/model-starters") ||
+    (request.method === "POST" &&
+      [
+        "/v1/training/model-starters/preview",
+        "/v1/training/model-starters/check",
+        "/v1/training/model-starters/create",
+      ].includes(requestUrl.pathname))
+  ) {
     try {
       const listing = request.method === "GET";
-      const action = listing ? "model_starter_catalog" : requestUrl.pathname.endsWith("/preview") ? "model_starter_preview" : requestUrl.pathname.endsWith("/check") ? "check_model_starter" : "create_model_from_starter";
+      const action = listing
+        ? "model_starter_catalog"
+        : requestUrl.pathname.endsWith("/preview")
+          ? "model_starter_preview"
+          : requestUrl.pathname.endsWith("/check")
+            ? "check_model_starter"
+            : "create_model_from_starter";
       const query = Object.fromEntries(requestUrl.searchParams);
-      const body = listing ? { ...query, ...(query.limit === undefined ? {} : { limit: Number(query.limit) }) } : await readJson(request, { maxBytes: 65_536 });
+      const body = listing
+        ? { ...query, ...(query.limit === undefined ? {} : { limit: Number(query.limit) }) }
+        : await readJson(request, { maxBytes: 65_536 });
       sendJson(response, 200, await deps.trainingPayload(action, body, requestUrl));
     } catch (error) {
-      if (error instanceof OpenPondModelStarterCatalogError) sendJson(response, error.status, { code: error.code, error: error.message });
-      else if (error instanceof ZodError) sendJson(response, 400, { code: "model_starter_request_invalid", error: "Starter request or publication does not match its contract." });
+      if (error instanceof OpenPondModelStarterCatalogError)
+        sendJson(response, error.status, { code: error.code, error: error.message });
+      else if (error instanceof ZodError)
+        sendJson(response, 400, {
+          code: "model_starter_request_invalid",
+          error: "Starter request or publication does not match its contract.",
+        });
       else throw error;
     }
     return true;
   }
-  if ((request.method === "PUT" && requestUrl.pathname === "/v1/training/models") ||
-    (request.method === "POST" && requestUrl.pathname === "/v1/training/models/check")) {
+  if (
+    (request.method === "PUT" && requestUrl.pathname === "/v1/training/models") ||
+    (request.method === "POST" && requestUrl.pathname === "/v1/training/models/check")
+  ) {
     try {
-      sendJson(response, 200, await deps.trainingPayload(request.method === "PUT" ? "save_model_project" : "check_model_project", await readJson(request, { maxBytes: 524_288 }), requestUrl));
+      sendJson(
+        response,
+        200,
+        await deps.trainingPayload(
+          request.method === "PUT" ? "save_model_project" : "check_model_project",
+          await readJson(request, { maxBytes: 524_288 }),
+          requestUrl,
+        ),
+      );
     } catch (error) {
-      if (error instanceof OpenPondModelProjectApiError) sendJson(response, error.status, { code: error.code, error: error.message });
-      else if (error instanceof ZodError) sendJson(response, 400, { code: "model_configuration_invalid", error: "Model configuration does not match its contract." });
+      if (error instanceof OpenPondModelProjectApiError)
+        sendJson(response, error.status, {
+          code: error.code,
+          error: error.message,
+          retryable: error.retryable,
+        });
+      else if (error instanceof ZodError)
+        sendJson(response, 400, {
+          code: "model_configuration_invalid",
+          error: "Model configuration does not match its contract.",
+        });
       else throw error;
     }
     return true;
@@ -148,58 +578,120 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     sendJson(response, 200, await deps.trainingPayload("activity", {}, requestUrl));
     return true;
   }
-  const conversationServing = /^\/v1\/training\/models\/([^/]+)\/conversation-serving(?:\/(register|authorize|revoke))?$/.exec(requestUrl.pathname);
-  if (conversationServing && (request.method === "GET" && !conversationServing[2] || request.method === "POST" && conversationServing[2])) {
+  const conversationServing =
+    /^\/v1\/training\/models\/([^/]+)\/conversation-serving(?:\/(register|authorize|revoke))?$/.exec(
+      requestUrl.pathname,
+    );
+  if (
+    conversationServing &&
+    ((request.method === "GET" && !conversationServing[2]) ||
+      (request.method === "POST" && conversationServing[2]))
+  ) {
     try {
-      const scope = { modelId: decodeURIComponent(conversationServing[1]!), profileId: requestUrl.searchParams.get("profileId") };
-      const payload = request.method === "POST" ? { ...await readJson(request, { maxBytes: 65536 }) as object, ...scope } : scope;
-      const result = await deps.trainingPayload(`conversation_serving_${conversationServing[2] ?? "state"}`, payload, requestUrl);
+      const scope = {
+        modelId: decodeURIComponent(conversationServing[1]!),
+        profileId: requestUrl.searchParams.get("profileId"),
+      };
+      const payload =
+        request.method === "POST"
+          ? { ...((await readJson(request, { maxBytes: 65536 })) as object), ...scope }
+          : scope;
+      const result = await deps.trainingPayload(
+        `conversation_serving_${conversationServing[2] ?? "state"}`,
+        payload,
+        requestUrl,
+      );
       response.setHeader("Cache-Control", "no-store");
       sendJson(response, 200, result);
     } catch (error) {
-      sendJson(response, error instanceof ZodError ? 400 : 409, { code: "conversation_serving_request_failed", error: error instanceof Error ? error.message : "The native serving owner could not complete this operation." });
+      sendJson(response, error instanceof ZodError ? 400 : 409, {
+        code: "conversation_serving_request_failed",
+        error:
+          error instanceof Error
+            ? error.message
+            : "The native serving owner could not complete this operation.",
+      });
     }
     return true;
   }
-  const hostedLearning = /^\/v1\/training\/models\/([^/]+)\/hosted-learning(\/sources|\/review)?$/.exec(requestUrl.pathname);
-  if (hostedLearning && (request.method === "GET" && hostedLearning[2] !== "/review" || request.method === "POST" && hostedLearning[2] !== "/sources")) {
-    const scope = { modelId: decodeURIComponent(hostedLearning[1]!), profileId: requestUrl.searchParams.get("profileId") };
+  const hostedLearning =
+    /^\/v1\/training\/models\/([^/]+)\/hosted-learning(\/sources|\/review)?$/.exec(
+      requestUrl.pathname,
+    );
+  if (
+    hostedLearning &&
+    ((request.method === "GET" && hostedLearning[2] !== "/review") ||
+      (request.method === "POST" && hostedLearning[2] !== "/sources"))
+  ) {
+    const scope = {
+      modelId: decodeURIComponent(hostedLearning[1]!),
+      profileId: requestUrl.searchParams.get("profileId"),
+    };
     try {
-      const payload = request.method === "POST"
-        ? { ...scope, command: await readJson(request, { maxBytes: 524_288 }) }
-        : { ...scope, policyId: requestUrl.searchParams.get("policyId"), afterId: requestUrl.searchParams.get("afterId") };
-      const result = await deps.trainingPayload(hostedLearning[2] === "/review" ? "hosted_model_learning_review" : request.method === "POST" ? "hosted_model_learning_command" : hostedLearning[2] ? "hosted_model_learning_sources" : "hosted_model_learning", payload, requestUrl);
+      const payload =
+        request.method === "POST"
+          ? { ...scope, command: await readJson(request, { maxBytes: 524_288 }) }
+          : {
+              ...scope,
+              policyId: requestUrl.searchParams.get("policyId"),
+              afterId: requestUrl.searchParams.get("afterId"),
+            };
+      const result = await deps.trainingPayload(
+        hostedLearning[2] === "/review"
+          ? "hosted_model_learning_review"
+          : request.method === "POST"
+            ? "hosted_model_learning_command"
+            : hostedLearning[2]
+              ? "hosted_model_learning_sources"
+              : "hosted_model_learning",
+        payload,
+        requestUrl,
+      );
       response.setHeader("Cache-Control", "no-store");
       sendJson(response, 200, result);
     } catch (error) {
-      if (error instanceof OpenPondLearningError || error instanceof OpenPondModelProjectApiError) sendJson(response, error.status, { code: error.code, error: error.message });
-      else if (error instanceof ZodError) sendJson(response, 400, { code: "model_learning_request_invalid", error: "Learning request does not match its contract." });
+      if (error instanceof OpenPondLearningError || error instanceof OpenPondModelProjectApiError)
+        sendJson(response, error.status, { code: error.code, error: error.message });
+      else if (error instanceof ZodError)
+        sendJson(response, 400, {
+          code: "model_learning_request_invalid",
+          error: "Learning request does not match its contract.",
+        });
       else throw error;
     }
     return true;
   }
-  const hostedRun = /^\/v1\/training\/models\/([^/]+)\/hosted-evaluations(?:\/([^/]+)(?:\/(result|cancel))?)?$/.exec(requestUrl.pathname);
-  if (hostedRun && (request.method === "GET" && hostedRun[3] !== "cancel" || request.method === "POST" && hostedRun[3] === "cancel")) {
-    const action = hostedRun[3] === "cancel" ? "cancel_hosted_taskset_run" : hostedRun[3] === "result" ? "hosted_taskset_run_result" : hostedRun[2] ? "hosted_taskset_run" : "hosted_taskset_runs";
-    const payload = { modelId: decodeURIComponent(hostedRun[1]!), runId: hostedRun[2] ? decodeURIComponent(hostedRun[2]) : undefined, profileId: requestUrl.searchParams.get("profileId"), afterId: requestUrl.searchParams.get("afterId") };
+  const hostedRun =
+    /^\/v1\/training\/models\/([^/]+)\/hosted-evaluations(?:\/([^/]+)(?:\/(result|cancel))?)?$/.exec(
+      requestUrl.pathname,
+    );
+  if (
+    hostedRun &&
+    ((request.method === "GET" && hostedRun[3] !== "cancel") ||
+      (request.method === "POST" && hostedRun[3] === "cancel"))
+  ) {
+    const action =
+      hostedRun[3] === "cancel"
+        ? "cancel_hosted_taskset_run"
+        : hostedRun[3] === "result"
+          ? "hosted_taskset_run_result"
+          : hostedRun[2]
+            ? "hosted_taskset_run"
+            : "hosted_taskset_runs";
+    const payload = {
+      modelId: decodeURIComponent(hostedRun[1]!),
+      runId: hostedRun[2] ? decodeURIComponent(hostedRun[2]) : undefined,
+      profileId: requestUrl.searchParams.get("profileId"),
+      afterId: requestUrl.searchParams.get("afterId"),
+    };
     sendJson(response, 200, await deps.trainingPayload(action, payload, requestUrl));
     return true;
   }
-  if (
-    request.method === "GET"
-    && requestUrl.pathname === "/v1/training/catalog"
-  ) {
-    sendJson(
-      response,
-      200,
-      await deps.trainingPayload("portable_catalog", {}, requestUrl),
-    );
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/catalog") {
+    sendJson(response, 200, await deps.trainingPayload("portable_catalog", {}, requestUrl));
     return true;
   }
-  if (
-    request.method === "GET"
-    && requestUrl.pathname === "/v1/training/hosted-model-projects"
-  ) {
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/hosted-model-projects") {
     sendJson(
       response,
       200,
@@ -214,33 +706,39 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     );
     return true;
   }
-  if (
-    request.method === "GET"
-    && requestUrl.pathname === "/v1/training/datasets"
-  ) {
-    sendJson(
-      response,
-      200,
-      await deps.trainingPayload("dataset_catalog", {}, requestUrl),
-    );
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/datasets") {
+    sendJson(response, 200, await deps.trainingPayload("dataset_catalog", {}, requestUrl));
     return true;
   }
   const downloadMatch = /^\/v1\/training\/artifacts\/([^/]+)\/download$/.exec(requestUrl.pathname);
   if (request.method === "GET" && downloadMatch) {
-    const result = await deps.trainingPayload("artifact_download", { artifactId: decodeURIComponent(downloadMatch[1]!) }, requestUrl) as { artifact: { path: string; sizeBytes: number }; path: string };
+    const result = (await deps.trainingPayload(
+      "artifact_download",
+      { artifactId: decodeURIComponent(downloadMatch[1]!) },
+      requestUrl,
+    )) as { artifact: { path: string; sizeBytes: number }; path: string };
     const info = await stat(result.path);
-    if (!info.isFile() || info.size !== result.artifact.sizeBytes) throw new Error("Training artifact changed before download.");
-    response.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": String(info.size), "Content-Disposition": `attachment; filename="${path.basename(result.path).replaceAll('"', '')}"`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+    if (!info.isFile() || info.size !== result.artifact.sizeBytes)
+      throw new Error("Training artifact changed before download.");
+    response.writeHead(200, {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": String(info.size),
+      "Content-Disposition": `attachment; filename="${path.basename(result.path).replaceAll('"', "")}"`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
     createReadStream(result.path).pipe(response);
     return true;
   }
-  const modelDownloadMatch = /^\/v1\/training\/models\/([^/]+)\/download$/.exec(requestUrl.pathname);
+  const modelDownloadMatch = /^\/v1\/training\/models\/([^/]+)\/download$/.exec(
+    requestUrl.pathname,
+  );
   if (request.method === "GET" && modelDownloadMatch) {
-    const result = await deps.trainingPayload(
+    const result = (await deps.trainingPayload(
       "model_package_download",
       { modelId: decodeURIComponent(modelDownloadMatch[1]!) },
       requestUrl,
-    ) as TrainingArtifactPackage;
+    )) as TrainingArtifactPackage;
     response.writeHead(200, {
       "Content-Type": "application/x-tar",
       "Content-Length": String(trainingArtifactPackageSize(result)),
@@ -251,15 +749,40 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     await streamTrainingArtifactPackage(response, result);
     return true;
   }
-  const bundleDownloadMatch = /^\/v1\/training\/bundles\/([^/]+)\/download$/.exec(requestUrl.pathname);
+  const bundleDownloadMatch = /^\/v1\/training\/bundles\/([^/]+)\/download$/.exec(
+    requestUrl.pathname,
+  );
   if (request.method === "GET" && bundleDownloadMatch) {
-    const result = await deps.trainingPayload("export_bundle", { bundleId: decodeURIComponent(bundleDownloadMatch[1]!) }, requestUrl) as { filename: string; content: string };
-    response.setHeader("Content-Disposition", `attachment; filename="${result.filename.replaceAll('"', '')}"`);
-    sendBinary(response, 200, Buffer.from(result.content, "utf8"), "application/vnd.openpond.training-bundle+json");
+    const result = (await deps.trainingPayload(
+      "export_bundle",
+      { bundleId: decodeURIComponent(bundleDownloadMatch[1]!) },
+      requestUrl,
+    )) as { filename: string; content: string };
+    response.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${result.filename.replaceAll('"', "")}"`,
+    );
+    sendBinary(
+      response,
+      200,
+      Buffer.from(result.content, "utf8"),
+      "application/vnd.openpond.training-bundle+json",
+    );
     return true;
   }
-  if (request.method === "GET" && ["/v1/training/tasks", "/v1/training/tasks/detail"].includes(requestUrl.pathname)) {
-    sendJson(response, 200, await deps.trainingPayload(requestUrl.pathname.endsWith("/detail") ? "task_inventory_detail" : "task_inventory", {}, requestUrl));
+  if (
+    request.method === "GET" &&
+    ["/v1/training/tasks", "/v1/training/tasks/detail"].includes(requestUrl.pathname)
+  ) {
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(
+        requestUrl.pathname.endsWith("/detail") ? "task_inventory_detail" : "task_inventory",
+        {},
+        requestUrl,
+      ),
+    );
     return true;
   }
   const routes: Array<{ method: string; path: string; action: string; status?: number }> = [
@@ -268,19 +791,76 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/sources/batch", action: "add_sources", status: 201 },
     { method: "POST", path: "/v1/training/sources/estimate", action: "estimate_sources" },
     { method: "POST", path: "/v1/training/sources/search", action: "search_sources" },
-    { method: "POST", path: "/v1/training/dataset-imports/huggingface/inspect", action: "inspect_huggingface_dataset", status: 201 },
-    { method: "POST", path: "/v1/training/harness-reviews/accept", action: "accept_harness_review", status: 201 },
+    {
+      method: "POST",
+      path: "/v1/training/dataset-imports/huggingface/inspect",
+      action: "inspect_huggingface_dataset",
+      status: 201,
+    },
+    {
+      method: "POST",
+      path: "/v1/training/harness-reviews/accept",
+      action: "accept_harness_review",
+      status: 201,
+    },
     { method: "POST", path: "/v1/training/task-creations", action: "start_creation", status: 201 },
-    { method: "POST", path: "/v1/training/taskset-drafts", action: "init_taskset_draft", status: 201 },
-    { method: "POST", path: "/v1/training/taskset-drafts/source", action: "inspect_taskset_draft_source" },
-    { method: "POST", path: "/v1/training/taskset-drafts/import", action: "import_taskset_draft_package", status: 201 },
-    { method: "POST", path: "/v1/training/learning-batches/prepare", action: "prepare_learning_batch", status: 201 },
-    { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
-    { method: "POST", path: "/v1/training/comparison-series", action: "save_model_comparison_series", status: 201 },
-    { method: "PUT", path: "/v1/training/continual-support/issue-reviews", action: "save_continual_support_issue_review" },
-    { method: "POST", path: "/v1/training/continual-learning/daily-batches/import", action: "import_continual_learning_daily_batch", status: 201 },
-    { method: "POST", path: "/v1/training/continual-learning/responses", action: "generate_continual_learning_responses", status: 202 },
-    { method: "PUT", path: "/v1/training/continual-learning/daily-batches", action: "save_continual_learning_daily_batch" },
+    {
+      method: "POST",
+      path: "/v1/training/taskset-drafts",
+      action: "init_taskset_draft",
+      status: 201,
+    },
+    {
+      method: "POST",
+      path: "/v1/training/taskset-drafts/source",
+      action: "inspect_taskset_draft_source",
+    },
+    {
+      method: "POST",
+      path: "/v1/training/taskset-drafts/import",
+      action: "import_taskset_draft_package",
+      status: 201,
+    },
+    {
+      method: "POST",
+      path: "/v1/training/learning-batches/prepare",
+      action: "prepare_learning_batch",
+      status: 201,
+    },
+    {
+      method: "POST",
+      path: "/v1/training/models/from-taskset",
+      action: "create_model_from_taskset",
+      status: 201,
+    },
+    {
+      method: "POST",
+      path: "/v1/training/comparison-series",
+      action: "save_model_comparison_series",
+      status: 201,
+    },
+    {
+      method: "PUT",
+      path: "/v1/training/continual-support/issue-reviews",
+      action: "save_continual_support_issue_review",
+    },
+    {
+      method: "POST",
+      path: "/v1/training/continual-learning/daily-batches/import",
+      action: "import_continual_learning_daily_batch",
+      status: 201,
+    },
+    {
+      method: "POST",
+      path: "/v1/training/continual-learning/responses",
+      action: "generate_continual_learning_responses",
+      status: 202,
+    },
+    {
+      method: "PUT",
+      path: "/v1/training/continual-learning/daily-batches",
+      action: "save_continual_learning_daily_batch",
+    },
     { method: "POST", path: "/v1/training/miner/run", action: "run_miner", status: 202 },
     { method: "PUT", path: "/v1/training/miner/config", action: "configure_miner" },
     { method: "POST", path: "/v1/training/grade", action: "grade" },
@@ -297,131 +877,640 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/start", action: "start", status: 202 },
     { method: "POST", path: "/v1/training/credentials", action: "save_credential" },
   ];
-  const route = routes.find((item) => item.method === request.method && item.path === requestUrl.pathname);
+  const route = routes.find(
+    (item) => item.method === request.method && item.path === requestUrl.pathname,
+  );
   if (route) {
-    sendJson(response, route.status ?? 200, await deps.trainingPayload(route.action, await readJson(request), requestUrl));
+    sendJson(
+      response,
+      route.status ?? 200,
+      await deps.trainingPayload(route.action, await readJson(request), requestUrl),
+    );
     return true;
   }
   const dynamic = [
-    { pattern: /^\/v1\/training\/model-projects\/([^/]+)$/, method: "GET", action: "inspect_local_model_projects", key: "modelProjectId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/graders$/, method: "GET", action: "taskset_grader_details", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/attempts\/([^/]+)\/evidence$/, method: "GET", action: "model_comparison_attempt_evidence", key: "runId", assignmentKey: "attemptId" },
-    { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/seal$/, method: "POST", action: "seal_model_comparison_series", key: "seriesId" },
-    { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/archive$/, method: "POST", action: "archive_model_comparison_series", key: "seriesId" },
-    { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/releases$/, method: "POST", action: "queue_model_comparison_release", key: "seriesId" },
-    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/run$/, method: "PATCH", action: "link_model_comparison_run", key: "entryId" },
-    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/evaluations$/, method: "POST", action: "start_model_comparison_evaluation", key: "entryId" },
-    { pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/reference-evaluations$/, method: "POST", action: "start_model_comparison_reference_evaluation", key: "seriesId" },
-    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/retry$/, method: "POST", action: "retry_model_comparison_entry", key: "entryId" },
-    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/decision$/, method: "POST", action: "decide_model_comparison_entry", key: "entryId" },
-    { pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/promotion$/, method: "POST", action: "record_model_comparison_promotion", key: "entryId" },
-    { pattern: /^\/v1\/training\/model-projects\/([^/]+)\/training\/prepare$/, method: "POST", action: "prepare_model_run", key: "modelProjectId" },
-    { pattern: /^\/v1\/training\/model-projects\/([^/]+)\/training\/start$/, method: "POST", action: "start_model_run", key: "modelProjectId" },
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/status$/, method: "GET", action: "model_run_status", key: "modelRunId" },
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/events$/, method: "GET", action: "model_run_events", key: "modelRunId" },
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/logs$/, method: "GET", action: "model_run_logs", key: "modelRunId" },
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/artifacts$/, method: "GET", action: "model_run_artifacts", key: "modelRunId" },
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_model_run", key: "modelRunId" },
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/retry-collection$/, method: "POST", action: "retry_model_run_collection", key: "modelRunId" },
-    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/resume$/, method: "POST", action: "resume_model_run", key: "modelRunId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/rows$/, method: "GET", action: "dataset_rows", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/operations$/, method: "GET", action: "taskset_operational_state", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/workspace$/, method: "GET", action: "taskset_draft_workspace", key: "draftId" },
-    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/files$/, method: "GET", action: "taskset_draft_files", key: "draftId" },
-    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/file$/, method: "GET", action: "taskset_draft_file", key: "draftId" },
-    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/file$/, method: "PATCH", action: "save_taskset_draft_file", key: "draftId" },
-    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)$/, method: "PUT", action: "save_taskset_draft", key: "draftId", wrap: "draft" },
-    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/publish$/, method: "POST", action: "publish_taskset_draft", key: "draftId" },
-    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/model-revision$/, method: "POST", action: "refresh_taskset_draft_model", key: "draftId" },
-    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)$/, method: "DELETE", action: "delete_taskset_draft", key: "draftId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/attempts$/, method: "POST", action: "execute_taskset_attempt", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/synthetic-collection$/, method: "POST", action: "materialize_synthetic_collection", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/synthetic-preference-collection$/, method: "POST", action: "materialize_synthetic_preference_collection", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/, method: "GET", action: "preference_comparison_list", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/, method: "POST", action: "preference_comparison_publish", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/status$/, method: "GET", action: "preference_comparison_calibration_status", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/batches$/, method: "POST", action: "preference_comparison_calibration_start", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/batches\/([^/]+)\/sync$/, method: "POST", action: "preference_comparison_calibration_sync", key: "tasksetId", assignmentKey: "jobId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/model-reviews\/next$/, method: "POST", action: "preference_comparison_calibration_review_next", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/report$/, method: "POST", action: "preference_comparison_calibration_save", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/assignments$/, method: "POST", action: "preference_comparison_create_assignment", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/next$/, method: "POST", action: "preference_comparison_next", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/submit$/, method: "POST", action: "preference_comparison_submit", key: "tasksetId", assignmentKey: "assignmentId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/fixture-submit$/, method: "POST", action: "preference_comparison_fixture_submit", key: "tasksetId", assignmentKey: "assignmentId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/model-review$/, method: "POST", action: "preference_comparison_model_review", key: "tasksetId", assignmentKey: "assignmentId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/unreviewable$/, method: "POST", action: "preference_comparison_unreviewable", key: "tasksetId", assignmentKey: "assignmentId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/benchmark-runs$/, method: "POST", action: "run_taskset_benchmark", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-datasets$/, method: "GET", action: "preference_dataset_list", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-datasets$/, method: "POST", action: "preference_dataset_materialize", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/reward-model-runs$/, method: "POST", action: "reward_model_run_launch", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/reward-model-runs\/([^/]+)\/retry-qualification$/, method: "POST", action: "reward_model_qualification_retry", key: "runId" },
-    { pattern: /^\/v1\/training\/reward-model-runs\/([^/]+)\/cancel$/, method: "POST", action: "reward_model_run_cancel", key: "runId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/learned-preference-reward-binding$/, method: "POST", action: "learned_preference_reward_binding", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/harness-refiner-benchmark$/, method: "POST", action: "start_harness_refiner_benchmark", key: "modelId" },
-    { pattern: /^\/v1\/training\/hosted-model-projects\/([^/]+)\/pull$/, method: "POST", action: "pull_hosted_model_project", key: "hostedProjectId" },
-    { pattern: /^\/v1\/training\/hosted-model-projects\/([^/]+)\/open$/, method: "POST", action: "open_hosted_model_project", key: "hostedProjectId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/sync$/, method: "POST", action: "sync_model_project", key: "modelId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/managed-base$/, method: "POST", action: "version_model_project_onto_managed_rl_base", key: "modelProjectId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/tasksets\/([^/]+)\/publish$/, method: "POST", action: "publish_model_project_taskset", key: "modelId", assignmentKey: "tasksetId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/taskset-package\/export$/, method: "POST", action: "export_model_project_taskset", key: "modelId" },
-    { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/materialize$/, method: "POST", action: "materialize_dataset_import", key: "importId" },
-    { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/cancel$/, method: "POST", action: "cancel_dataset_import", key: "importId" },
-    { pattern: /^\/v1\/training\/sources\/([^/]+)$/, method: "DELETE", action: "remove_source", key: "sourceId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)$/, method: "DELETE", action: "delete_taskset", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/expert-bootstrap\/preview$/, method: "POST", action: "preview_expert_bootstrap", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/expert-bootstrap\/approve$/, method: "POST", action: "approve_expert_bootstrap", key: "tasksetId" },
-    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/disclosure$/, method: "POST", action: "approve_disclosure", key: "creationId" },
-    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/retry$/, method: "POST", action: "retry_creation", key: "creationId" },
-    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/questions$/, method: "POST", action: "answer_questions", key: "creationId" },
-    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/materialize$/, method: "POST", action: "approve_materialization", key: "creationId" },
-    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/chat$/, method: "POST", action: "chat_creation", key: "creationId" },
-    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/name$/, method: "PATCH", action: "rename_creation", key: "creationId" },
-    { pattern: /^\/v1\/training\/task-creations\/([^/]+)\/cancel$/, method: "POST", action: "cancel_creation", key: "creationId" },
-    { pattern: /^\/v1\/training\/miner\/runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_miner_run", key: "runId" },
-    { pattern: /^\/v1\/training\/candidates\/([^/]+)$/, method: "PATCH", action: "patch_candidate", key: "candidateId", wrap: "patch" },
-    { pattern: /^\/v1\/training\/candidates\/([^/]+)\/create$/, method: "POST", action: "create_candidate", key: "candidateId" },
-    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_job", key: "jobId" },
-    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/events$/, method: "GET", action: "job_events", key: "jobId" },
-    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/detail$/, method: "GET", action: "run_detail", key: "jobId" },
-    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/evaluations\/([^/]+)\/tasks$/, method: "GET", action: "managed_evaluation_tasks", key: "jobId", assignmentKey: "evaluationId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/candidate-decision$/, method: "GET", action: "managed_candidate_review", key: "modelId" },
-    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/candidate-decision$/, method: "GET", action: "managed_candidate_review", key: "jobId" },
-    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/candidate-decision$/, method: "POST", action: "record_managed_candidate_review", key: "jobId", wrap: "review" },
-    { pattern: /^\/v1\/training\/jobs\/([^/]+)\/candidate-decision-history$/, method: "GET", action: "managed_candidate_review_history", key: "jobId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/candidate-decision$/, method: "POST", action: "record_managed_candidate_review", key: "modelId", wrap: "review" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/candidate-decision-history$/, method: "GET", action: "managed_candidate_review_history", key: "modelId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/reject$/, method: "POST", action: "reject_model", key: "modelId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/bind$/, method: "POST", action: "bind_model", key: "modelId" },
-    { pattern: /^\/v1\/training\/bindings\/([^/]+)\/rollback$/, method: "POST", action: "rollback_model_binding", key: "bindingId" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/configuration$/, method: "PATCH", action: "update_model_configuration", key: "modelId", wrap: "configuration" },
-    { pattern: /^\/v1\/training\/models\/([^/]+)\/pin$/, method: "PATCH", action: "set_model_pinned", key: "modelId" },
+    {
+      pattern: /^\/v1\/training\/model-projects\/([^/]+)$/,
+      method: "GET",
+      action: "inspect_local_model_projects",
+      key: "modelProjectId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/graders$/,
+      method: "GET",
+      action: "taskset_grader_details",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-runs\/([^/]+)\/attempts\/([^/]+)\/evidence$/,
+      method: "GET",
+      action: "model_comparison_attempt_evidence",
+      key: "runId",
+      assignmentKey: "attemptId",
+    },
+    {
+      pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/seal$/,
+      method: "POST",
+      action: "seal_model_comparison_series",
+      key: "seriesId",
+    },
+    {
+      pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/archive$/,
+      method: "POST",
+      action: "archive_model_comparison_series",
+      key: "seriesId",
+    },
+    {
+      pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/releases$/,
+      method: "POST",
+      action: "queue_model_comparison_release",
+      key: "seriesId",
+    },
+    {
+      pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/run$/,
+      method: "PATCH",
+      action: "link_model_comparison_run",
+      key: "entryId",
+    },
+    {
+      pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/evaluations$/,
+      method: "POST",
+      action: "start_model_comparison_evaluation",
+      key: "entryId",
+    },
+    {
+      pattern: /^\/v1\/training\/comparison-series\/([^/]+)\/reference-evaluations$/,
+      method: "POST",
+      action: "start_model_comparison_reference_evaluation",
+      key: "seriesId",
+    },
+    {
+      pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/retry$/,
+      method: "POST",
+      action: "retry_model_comparison_entry",
+      key: "entryId",
+    },
+    {
+      pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/decision$/,
+      method: "POST",
+      action: "decide_model_comparison_entry",
+      key: "entryId",
+    },
+    {
+      pattern: /^\/v1\/training\/comparison-series-entries\/([^/]+)\/promotion$/,
+      method: "POST",
+      action: "record_model_comparison_promotion",
+      key: "entryId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-projects\/([^/]+)\/training\/prepare$/,
+      method: "POST",
+      action: "prepare_model_run",
+      key: "modelProjectId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-projects\/([^/]+)\/training\/start$/,
+      method: "POST",
+      action: "start_model_run",
+      key: "modelProjectId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-runs\/([^/]+)\/status$/,
+      method: "GET",
+      action: "model_run_status",
+      key: "modelRunId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-runs\/([^/]+)\/events$/,
+      method: "GET",
+      action: "model_run_events",
+      key: "modelRunId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-runs\/([^/]+)\/logs$/,
+      method: "GET",
+      action: "model_run_logs",
+      key: "modelRunId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-runs\/([^/]+)\/artifacts$/,
+      method: "GET",
+      action: "model_run_artifacts",
+      key: "modelRunId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-runs\/([^/]+)\/cancel$/,
+      method: "POST",
+      action: "cancel_model_run",
+      key: "modelRunId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-runs\/([^/]+)\/retry-collection$/,
+      method: "POST",
+      action: "retry_model_run_collection",
+      key: "modelRunId",
+    },
+    {
+      pattern: /^\/v1\/training\/model-runs\/([^/]+)\/resume$/,
+      method: "POST",
+      action: "resume_model_run",
+      key: "modelRunId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/rows$/,
+      method: "GET",
+      action: "dataset_rows",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/operations$/,
+      method: "GET",
+      action: "taskset_operational_state",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/workspace$/,
+      method: "GET",
+      action: "taskset_draft_workspace",
+      key: "draftId",
+    },
+    {
+      pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/files$/,
+      method: "GET",
+      action: "taskset_draft_files",
+      key: "draftId",
+    },
+    {
+      pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/file$/,
+      method: "GET",
+      action: "taskset_draft_file",
+      key: "draftId",
+    },
+    {
+      pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/file$/,
+      method: "PATCH",
+      action: "save_taskset_draft_file",
+      key: "draftId",
+    },
+    {
+      pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)$/,
+      method: "PUT",
+      action: "save_taskset_draft",
+      key: "draftId",
+      wrap: "draft",
+    },
+    {
+      pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/publish$/,
+      method: "POST",
+      action: "publish_taskset_draft",
+      key: "draftId",
+    },
+    {
+      pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/model-revision$/,
+      method: "POST",
+      action: "refresh_taskset_draft_model",
+      key: "draftId",
+    },
+    {
+      pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)$/,
+      method: "DELETE",
+      action: "delete_taskset_draft",
+      key: "draftId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/attempts$/,
+      method: "POST",
+      action: "execute_taskset_attempt",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/synthetic-collection$/,
+      method: "POST",
+      action: "materialize_synthetic_collection",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/synthetic-preference-collection$/,
+      method: "POST",
+      action: "materialize_synthetic_preference_collection",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/,
+      method: "GET",
+      action: "preference_comparison_list",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/,
+      method: "POST",
+      action: "preference_comparison_publish",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/status$/,
+      method: "GET",
+      action: "preference_comparison_calibration_status",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/batches$/,
+      method: "POST",
+      action: "preference_comparison_calibration_start",
+      key: "tasksetId",
+    },
+    {
+      pattern:
+        /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/batches\/([^/]+)\/sync$/,
+      method: "POST",
+      action: "preference_comparison_calibration_sync",
+      key: "tasksetId",
+      assignmentKey: "jobId",
+    },
+    {
+      pattern:
+        /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/model-reviews\/next$/,
+      method: "POST",
+      action: "preference_comparison_calibration_review_next",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/report$/,
+      method: "POST",
+      action: "preference_comparison_calibration_save",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/assignments$/,
+      method: "POST",
+      action: "preference_comparison_create_assignment",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/next$/,
+      method: "POST",
+      action: "preference_comparison_next",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/submit$/,
+      method: "POST",
+      action: "preference_comparison_submit",
+      key: "tasksetId",
+      assignmentKey: "assignmentId",
+    },
+    {
+      pattern:
+        /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/fixture-submit$/,
+      method: "POST",
+      action: "preference_comparison_fixture_submit",
+      key: "tasksetId",
+      assignmentKey: "assignmentId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/model-review$/,
+      method: "POST",
+      action: "preference_comparison_model_review",
+      key: "tasksetId",
+      assignmentKey: "assignmentId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/unreviewable$/,
+      method: "POST",
+      action: "preference_comparison_unreviewable",
+      key: "tasksetId",
+      assignmentKey: "assignmentId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/benchmark-runs$/,
+      method: "POST",
+      action: "run_taskset_benchmark",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-datasets$/,
+      method: "GET",
+      action: "preference_dataset_list",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-datasets$/,
+      method: "POST",
+      action: "preference_dataset_materialize",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/reward-model-runs$/,
+      method: "POST",
+      action: "reward_model_run_launch",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/reward-model-runs\/([^/]+)\/retry-qualification$/,
+      method: "POST",
+      action: "reward_model_qualification_retry",
+      key: "runId",
+    },
+    {
+      pattern: /^\/v1\/training\/reward-model-runs\/([^/]+)\/cancel$/,
+      method: "POST",
+      action: "reward_model_run_cancel",
+      key: "runId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/learned-preference-reward-binding$/,
+      method: "POST",
+      action: "learned_preference_reward_binding",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/harness-refiner-benchmark$/,
+      method: "POST",
+      action: "start_harness_refiner_benchmark",
+      key: "modelId",
+    },
+    {
+      pattern: /^\/v1\/training\/hosted-model-projects\/([^/]+)\/pull$/,
+      method: "POST",
+      action: "pull_hosted_model_project",
+      key: "hostedProjectId",
+    },
+    {
+      pattern: /^\/v1\/training\/hosted-model-projects\/([^/]+)\/open$/,
+      method: "POST",
+      action: "open_hosted_model_project",
+      key: "hostedProjectId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/sync$/,
+      method: "POST",
+      action: "sync_model_project",
+      key: "modelId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/managed-base$/,
+      method: "POST",
+      action: "version_model_project_onto_managed_rl_base",
+      key: "modelProjectId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/tasksets\/([^/]+)\/publish$/,
+      method: "POST",
+      action: "publish_model_project_taskset",
+      key: "modelId",
+      assignmentKey: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/taskset-package\/export$/,
+      method: "POST",
+      action: "export_model_project_taskset",
+      key: "modelId",
+    },
+    {
+      pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/materialize$/,
+      method: "POST",
+      action: "materialize_dataset_import",
+      key: "importId",
+    },
+    {
+      pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/cancel$/,
+      method: "POST",
+      action: "cancel_dataset_import",
+      key: "importId",
+    },
+    {
+      pattern: /^\/v1\/training\/sources\/([^/]+)$/,
+      method: "DELETE",
+      action: "remove_source",
+      key: "sourceId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)$/,
+      method: "DELETE",
+      action: "delete_taskset",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/expert-bootstrap\/preview$/,
+      method: "POST",
+      action: "preview_expert_bootstrap",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/tasksets\/([^/]+)\/expert-bootstrap\/approve$/,
+      method: "POST",
+      action: "approve_expert_bootstrap",
+      key: "tasksetId",
+    },
+    {
+      pattern: /^\/v1\/training\/task-creations\/([^/]+)\/disclosure$/,
+      method: "POST",
+      action: "approve_disclosure",
+      key: "creationId",
+    },
+    {
+      pattern: /^\/v1\/training\/task-creations\/([^/]+)\/retry$/,
+      method: "POST",
+      action: "retry_creation",
+      key: "creationId",
+    },
+    {
+      pattern: /^\/v1\/training\/task-creations\/([^/]+)\/questions$/,
+      method: "POST",
+      action: "answer_questions",
+      key: "creationId",
+    },
+    {
+      pattern: /^\/v1\/training\/task-creations\/([^/]+)\/materialize$/,
+      method: "POST",
+      action: "approve_materialization",
+      key: "creationId",
+    },
+    {
+      pattern: /^\/v1\/training\/task-creations\/([^/]+)\/chat$/,
+      method: "POST",
+      action: "chat_creation",
+      key: "creationId",
+    },
+    {
+      pattern: /^\/v1\/training\/task-creations\/([^/]+)\/name$/,
+      method: "PATCH",
+      action: "rename_creation",
+      key: "creationId",
+    },
+    {
+      pattern: /^\/v1\/training\/task-creations\/([^/]+)\/cancel$/,
+      method: "POST",
+      action: "cancel_creation",
+      key: "creationId",
+    },
+    {
+      pattern: /^\/v1\/training\/miner\/runs\/([^/]+)\/cancel$/,
+      method: "POST",
+      action: "cancel_miner_run",
+      key: "runId",
+    },
+    {
+      pattern: /^\/v1\/training\/candidates\/([^/]+)$/,
+      method: "PATCH",
+      action: "patch_candidate",
+      key: "candidateId",
+      wrap: "patch",
+    },
+    {
+      pattern: /^\/v1\/training\/candidates\/([^/]+)\/create$/,
+      method: "POST",
+      action: "create_candidate",
+      key: "candidateId",
+    },
+    {
+      pattern: /^\/v1\/training\/jobs\/([^/]+)\/cancel$/,
+      method: "POST",
+      action: "cancel_job",
+      key: "jobId",
+    },
+    {
+      pattern: /^\/v1\/training\/jobs\/([^/]+)\/events$/,
+      method: "GET",
+      action: "job_events",
+      key: "jobId",
+    },
+    {
+      pattern: /^\/v1\/training\/jobs\/([^/]+)\/detail$/,
+      method: "GET",
+      action: "run_detail",
+      key: "jobId",
+    },
+    {
+      pattern: /^\/v1\/training\/jobs\/([^/]+)\/evaluations\/([^/]+)\/tasks$/,
+      method: "GET",
+      action: "managed_evaluation_tasks",
+      key: "jobId",
+      assignmentKey: "evaluationId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/candidate-decision$/,
+      method: "GET",
+      action: "managed_candidate_review",
+      key: "modelId",
+    },
+    {
+      pattern: /^\/v1\/training\/jobs\/([^/]+)\/candidate-decision$/,
+      method: "GET",
+      action: "managed_candidate_review",
+      key: "jobId",
+    },
+    {
+      pattern: /^\/v1\/training\/jobs\/([^/]+)\/candidate-decision$/,
+      method: "POST",
+      action: "record_managed_candidate_review",
+      key: "jobId",
+      wrap: "review",
+    },
+    {
+      pattern: /^\/v1\/training\/jobs\/([^/]+)\/candidate-decision-history$/,
+      method: "GET",
+      action: "managed_candidate_review_history",
+      key: "jobId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/candidate-decision$/,
+      method: "POST",
+      action: "record_managed_candidate_review",
+      key: "modelId",
+      wrap: "review",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/candidate-decision-history$/,
+      method: "GET",
+      action: "managed_candidate_review_history",
+      key: "modelId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/reject$/,
+      method: "POST",
+      action: "reject_model",
+      key: "modelId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/bind$/,
+      method: "POST",
+      action: "bind_model",
+      key: "modelId",
+    },
+    {
+      pattern: /^\/v1\/training\/bindings\/([^/]+)\/rollback$/,
+      method: "POST",
+      action: "rollback_model_binding",
+      key: "bindingId",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/configuration$/,
+      method: "PATCH",
+      action: "update_model_configuration",
+      key: "modelId",
+      wrap: "configuration",
+    },
+    {
+      pattern: /^\/v1\/training\/models\/([^/]+)\/pin$/,
+      method: "PATCH",
+      action: "set_model_pinned",
+      key: "modelId",
+    },
   ];
   for (const item of dynamic) {
     const match = item.pattern.exec(requestUrl.pathname);
     if (!match || request.method !== item.method) continue;
-    const body = request.method === "GET" || request.method === "DELETE" ? {} : await readJson(request);
+    const body =
+      request.method === "GET" || request.method === "DELETE" ? {} : await readJson(request);
     const payload = {
       ...(item.wrap ? { [item.wrap]: body } : record(body)),
       [item.key]: decodeURIComponent(match[1]!),
       ...(item.assignmentKey ? { [item.assignmentKey]: decodeURIComponent(match[2]!) } : {}),
-      ...(item.action === "model_comparison_attempt_evidence" ? { kind: requestUrl.searchParams.get("kind") } : {}),
-      ...(item.action === "managed_candidate_review" ? { refresh: requestUrl.searchParams.get("refresh") === "true" } : {}),
-      ...(item.action === "managed_candidate_review_history" ? { decisionId: requestUrl.searchParams.get("decisionId"), decisionHash: requestUrl.searchParams.get("decisionHash") } : {}),
-      ...(item.action === "run_detail" ? {
-        includeEvaluation: requestUrl.searchParams.get("evaluation") !== "false",
-        refresh: requestUrl.searchParams.get("refresh") !== "false",
-      } : {}),
-      ...(item.action === "managed_evaluation_tasks" ? { cursor: requestUrl.searchParams.get("cursor") ?? undefined, limit: requestUrl.searchParams.has("limit") ? Number(requestUrl.searchParams.get("limit")) : undefined } : {}),
+      ...(item.action === "model_comparison_attempt_evidence"
+        ? { kind: requestUrl.searchParams.get("kind") }
+        : {}),
+      ...(item.action === "managed_candidate_review"
+        ? { refresh: requestUrl.searchParams.get("refresh") === "true" }
+        : {}),
+      ...(item.action === "managed_candidate_review_history"
+        ? {
+            decisionId: requestUrl.searchParams.get("decisionId"),
+            decisionHash: requestUrl.searchParams.get("decisionHash"),
+          }
+        : {}),
+      ...(item.action === "run_detail"
+        ? {
+            includeEvaluation: requestUrl.searchParams.get("evaluation") !== "false",
+            refresh: requestUrl.searchParams.get("refresh") !== "false",
+          }
+        : {}),
+      ...(item.action === "managed_evaluation_tasks"
+        ? {
+            cursor: requestUrl.searchParams.get("cursor") ?? undefined,
+            limit: requestUrl.searchParams.has("limit")
+              ? Number(requestUrl.searchParams.get("limit"))
+              : undefined,
+          }
+        : {}),
     };
     const controller = new AbortController();
     request.once("aborted", () => controller.abort(new Error("training_request_aborted")));
     response.once("close", () => {
       if (!response.writableEnded) controller.abort(new Error("training_response_closed"));
     });
-    sendJson(response, 200, await deps.trainingPayload(item.action, payload, requestUrl, controller.signal));
+    sendJson(
+      response,
+      200,
+      await deps.trainingPayload(item.action, payload, requestUrl, controller.signal),
+    );
     return true;
   }
   return false;
 }
 
-function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}

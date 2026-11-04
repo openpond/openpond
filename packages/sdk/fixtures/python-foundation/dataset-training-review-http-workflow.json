@@ -1,0 +1,62 @@
+{
+  "request": {
+    "schemaVersion": "openpond.datasetTrainingReviewRequest.v1",
+    "teamId": "team-fixture",
+    "operationId": "dataset-review-operation",
+    "dataset": {
+      "id": "dataset-fixture",
+      "revision": 1,
+      "contentHash": "405cef6d1a2310c115f4d5e6808baf1366c41b49a158981b44979832705151a7"
+    },
+    "packageHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "taskIds": [
+      "selected-task"
+    ],
+    "purpose": "supervised_training",
+    "rewardBindingRef": null,
+    "definition": {},
+    "targetSource": "expected_output",
+    "shareWithWorkspace": true
+  },
+  "response": {
+    "schemaVersion": "openpond.datasetTrainingReviewReceipt.v1",
+    "id": "dataset-review-598eccf516a0a3384afac69863fa822e2b722a06c2faf613b795b74cf0ae16d9",
+    "teamId": "team-fixture",
+    "actorId": "actor-fixture",
+    "operationId": "dataset-review-operation",
+    "requestHash": "60f5419bd5f95bf2a7bda6e35bfc74ec5d20656da540a20086460ab9ef8c9893",
+    "dataset": {
+      "id": "dataset-fixture",
+      "revision": 1,
+      "contentHash": "405cef6d1a2310c115f4d5e6808baf1366c41b49a158981b44979832705151a7"
+    },
+    "packageHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "purpose": "supervised_training",
+    "shareWithWorkspace": true,
+    "source": {
+      "id": "review-source",
+      "revision": 1,
+      "contentHash": "230afddefe66f21d70bc3c2892fa793d62614b7d864e4205a41f428d8a2071f8"
+    },
+    "definition": {
+      "id": "review-definition",
+      "revision": 1,
+      "contentHash": "dbdcbdda067667c09fbfa1d251664e28283c5eb23db85ee180c18eb37ada1602"
+    },
+    "evidence": [
+      {
+        "id": "review-evidence",
+        "revision": 1,
+        "contentHash": "6764d05519eb02d311b94f66d5a0944e6e3e54d6cf22ce0db82b5cc0e4cad3b4"
+      }
+    ],
+    "proposals": [
+      {
+        "id": "review-proposal",
+        "revision": 1
+      }
+    ],
+    "createdAt": "2026-11-01T12:00:00Z",
+    "contentHash": "c064ca05005ae6133e8d58368cc68fd2aaff537f4c801e768f0629377c2bd095"
+  }
+}

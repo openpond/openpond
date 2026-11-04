@@ -3,7 +3,7 @@ import { contentHash, sha256 } from "@openpond/harness";
 import { TaskBatchSchema, TaskEvidenceSchema, TaskAdmissionDecisionSchema, LearningSourceSchema, LearningTextAssetSchema,
   assertLearningContentHash, compileTaskBatch, learningRef, sameLearningRef, taskBatchPackageMetadata, verifyLearningTextAsset } from "@openpond/evals/learning";
 import type { TasksetRelease } from "@openpond/evals/tasksets";
-import { canonicalJson } from "./training.js";
+import { canonicalJson } from "./protocol.js";
 
 /** Review snapshots travel with their exact batch; importing them is not a
  * new local admission or permission to train. */

@@ -1,0 +1,18 @@
+parallel_schema.py is retained byte-for-byte from the Apache-2.0 licensed
+bespokelabs/Bespoke-Nimble-9B Hugging Face release:
+  repository: bespokelabs/Bespoke-Nimble-9B
+  revision: e93fabce8fcee46e7e8b45e2d955b8a4f0035917
+  file SHA256: a0a0f94d0f65e972bc20d088678ad3d595ff1c42b9c0d78f96034526303f63fc
+The original license is included in LICENSE. The file's unused MODEL_ID and
+REVISION constants retain the original release bytes; OpenPond never uses those
+constants for loading. The complete Qwen3.5-9B source identity is independently
+verified by the Decision Model contract and native source verifier.
+
+No code is vendored from the author's separately published GitHub repository.
+OpenPond's native training, loading, custody and scoring implementation lives in
+the parent package. This attribution does not claim author endorsement or GPU
+qualification.
+
+In this public SDK distribution, only the pinned prompt source and portable
+inference integration are included. Managed training, execution, scheduling,
+billing enforcement and infrastructure implementations are not distributed.

@@ -1,0 +1,100 @@
+{
+  "request": {
+    "schemaVersion": "openpond.trainingEstimateRequest.v1",
+    "teamId": "team",
+    "source": {
+      "kind": "preparation",
+      "id": "preparation",
+      "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "expectedRevision": 1
+    }
+  },
+  "response": {
+    "schemaVersion": "openpond.trainingEstimate.v1",
+    "id": "estimate",
+    "teamId": "team",
+    "requestHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "inputHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "source": {
+      "kind": "preparation",
+      "id": "preparation",
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": 1
+    },
+    "status": "partial",
+    "currency": "USD",
+    "createdAt": "2026-10-31T00:00:00.000Z",
+    "expiresAt": "2026-10-31T00:01:00.000Z",
+    "estimatorVersion": "estimator-v1",
+    "runtimeVersion": "runtime-v1",
+    "pricing": {
+      "version": "pricing-v1",
+      "quoteExpiresAt": null
+    },
+    "gpu": {
+      "requested": {
+        "mode": "automatic",
+        "objective": "balanced"
+      },
+      "resolved": {
+        "availabilityId": "offer",
+        "gpuType": "gpu",
+        "gpuCount": 1
+      },
+      "customerHourlyUsd": 2,
+      "availability": "available"
+    },
+    "configuration": {
+      "modelId": "model",
+      "modelRevision": "revision",
+      "method": "sft",
+      "loraRank": 16,
+      "adapterMode": null,
+      "groups": null,
+      "rolloutConcurrency": null,
+      "maxOutputTokens": null,
+      "trainingRows": 8,
+      "evaluationRows": 2,
+      "retentionDays": null,
+      "approvedMaximumUsd": 4
+    },
+    "cost": {
+      "expectedUsd": null,
+      "planningRangeUsd": null,
+      "knownMinimumUsd": 0,
+      "recommendedMaximumUsd": null,
+      "minimumCleanupReserveUsd": 0.4,
+      "components": []
+    },
+    "executionSeconds": {
+      "expected": 200,
+      "planningRange": {
+        "low": 100,
+        "high": 300
+      }
+    },
+    "queueWaitSeconds": null,
+    "calibration": {
+      "version": "calibration-v1",
+      "cohortHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "completedSamples": 3,
+      "partialSamples": 0,
+      "scope": "workspace"
+    },
+    "assumptions": [
+      "Synthetic protocol fixture; these values are not model throughput evidence.",
+      "The range is an observed minimum/maximum, not a confidence interval."
+    ],
+    "unknowns": [
+      "Complete cost coverage is unavailable."
+    ],
+    "review": {
+      "estimateId": "estimate",
+      "inputHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "requestHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "pricingVersion": "pricing-v1",
+      "expiresAt": "2026-10-31T00:01:00.000Z",
+      "token": "opaque-signed-server-review"
+    }
+  }
+}

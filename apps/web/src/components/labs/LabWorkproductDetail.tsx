@@ -62,6 +62,7 @@ import {
 } from "./LabWorkproductDetailSections";
 import { SquarePen } from "../icons";
 import { LabModelProjectOverview } from "./LabModelProjectOverview";
+import type { WorkspaceApi } from "./workspace/workspace-api";
 import { modelOverviewRuns } from "./model-overview-runs";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { LabRunStatusBadge } from "./LabRunStatusBadge";
@@ -111,6 +112,7 @@ export function LabWorkproductDetail({
   onResume,
   onRevise,
   onNewModelRun,
+  experimentOpen = false,
   benchmarkDefaultModel,
   benchmarkProviderSettings,
   initialBenchmarkModel = null,
@@ -122,7 +124,9 @@ export function LabWorkproductDetail({
   onModelDetailTabChange,
   hostedWebBaseUrl,
   hostedApiOrigin,
+  servingApi,
 }: {
+  servingApi?: WorkspaceApi;
   hostedWebBaseUrl?: string | null;
   hostedApiOrigin?: string | null;
   workproduct: LabWorkproductSummary;
@@ -182,6 +186,7 @@ export function LabWorkproductDetail({
     input: CreateImproveReviewActionInput,
     revision: string
   ) => Promise<void>;
+  experimentOpen?: boolean;
   onNewModelRun: (initialTasksetId: string | null) => void;
   candidateReview: {
     diff: WorkspaceDiffSummary | null;
@@ -277,26 +282,18 @@ export function LabWorkproductDetail({
         (run) => run.id === selectedModelJob.metadata.modelRunId
       ) ?? null
     : null;
-  const selectedModelVersion =
-    (selectedModelEntryKey?.startsWith("version:")
-      ? modelVersions.find(
-          (version) =>
-            version.lineage.id ===
-            selectedModelEntryKey.slice("version:".length)
-        ) ?? null
-      : null) ??
-    (selectedModelJob
-      ? modelVersions.find(
-          (version) => version.job?.id === selectedModelJob.id
-        ) ?? null
-      : null) ??
-    (selectedModelLifecycleRun?.adapterArtifactLineageId
-      ? modelVersions.find(
-          (version) =>
-            version.lineage.id ===
-            selectedModelLifecycleRun.adapterArtifactLineageId
-        ) ?? null
-      : null);
+  const selectedVersionByEntry = selectedModelEntryKey?.startsWith("version:")
+    ? modelVersions.find((version) =>
+        version.lineage.id === selectedModelEntryKey.slice("version:".length))
+    : undefined;
+  const selectedVersionByJob = selectedModelJob
+    ? modelVersions.find((version) => version.job?.id === selectedModelJob.id)
+    : undefined;
+  const selectedVersionByLineage = selectedModelLifecycleRun?.adapterArtifactLineageId
+    ? modelVersions.find((version) =>
+        version.lineage.id === selectedModelLifecycleRun.adapterArtifactLineageId)
+    : undefined;
+  const selectedModelVersion = selectedVersionByEntry ?? selectedVersionByJob ?? selectedVersionByLineage ?? null;
   const modelRunHistory = useMemo(() => {
     const entries = modelRunEntries(
       modelJobs,
@@ -600,10 +597,14 @@ export function LabWorkproductDetail({
           <>
             {modelSection === "overview" ? (
               <LabModelProjectOverview
+                servingApi={servingApi}
                 hostedWebBaseUrl={hostedWebBaseUrl}
                 hostedApiOrigin={hostedApiOrigin}
                 connection={connection}
                 actions={modelProject ? (
+                  <>
+                  <button type="button" className="training-button" disabled={readOnlyModel || experimentOpen}
+                    onClick={() => onNewModelRun(null)}>New experiment</button>
                   <button
                     className="training-button secondary"
                     disabled={
@@ -629,6 +630,7 @@ export function LabWorkproductDetail({
                         ? "Sync project"
                         : "Connect to hosted Team"}
                   </button>
+                  </>
                 ) : undefined}
                 modelProject={modelProject}
                 modelRuns={modelOverviewRuns(modelRunEntries(modelJobs, modelVersions, modelLifecycleRuns))}

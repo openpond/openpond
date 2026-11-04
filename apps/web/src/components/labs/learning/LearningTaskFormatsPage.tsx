@@ -12,7 +12,7 @@ import { TaskFormatEditor } from "./TaskFormatEditor";
 import { RewardBindingSummary } from "./RewardBindingSummary";
 import { LearningSourceCredentials } from "./LearningSourceCredentials";
 
-export function LearningTaskFormatsPage({ client, selectedId, after, onSelect, onPage, onReview }: { client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; onSelect: (id: string | null) => void; onPage: (after: string | null) => void; onReview: (id: string) => void }) {
+export function LearningTaskFormatsPage({ client, selectedId, after, onSelect, onPage, onReview, allowCredentials = true }: { client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; onSelect: (id: string | null) => void; onPage: (after: string | null) => void; onReview: (id: string) => void; allowCredentials?: boolean }) {
   const definitions = useLearningResources(client, "definition", { limit: 30, ...(after ? { afterId: after } : {}) });
   const [resuming, setResuming] = useState<AuthoringDraft | null>(null);
   const [editing, setEditing] = useState<TaskDefinition | "new" | null>(null);
@@ -29,9 +29,9 @@ export function LearningTaskFormatsPage({ client, selectedId, after, onSelect, o
       <p>{definition.instructions}</p><p>Release {definition.revision} · {definition.contentHash}</p>
       <details><summary>Input and output contracts</summary><LearningValue label="Input schema" value={definition.inputSchema} /><LearningValue label="Output schema" value={definition.outputSchema} /></details>
       <LearningError error={binding.error} />{binding.resource ? <RewardBindingSummary client={client} binding={binding.resource} /> : null}
-      <details><summary>Connect an application</summary><LearningSourceCredentials key={`${definition.id}:${definition.revision}`} client={client} sourceId={definition.revision === 1 ? `${definition.id}-direct` : `${definition.id}-r${definition.revision}-direct`} /></details>
-      <LearningIntake key={`${definition.id}:${definition.revision}`} client={client} definition={definition} onReview={onReview} />
-    </> : selectedId ? <><p role="status">{selected.error ? "This task format is unavailable." : "Loading task format…"}</p><button type="button" className="training-button secondary" onClick={() => onSelect(null)}>All task formats</button></> : <>
+      {allowCredentials ? <details><summary>Connect an application</summary><LearningSourceCredentials key={`${definition.id}:${definition.revision}`} client={client} sourceId={definition.revision === 1 ? `${definition.id}-direct` : `${definition.id}-r${definition.revision}-direct`} /></details> : null}
+      <LearningIntake key={definition.id} client={client} definition={definition} onReview={onReview} />
+    </> : selectedId ? <>{!selected.error ? <p role="status">Loading task format…</p> : <button type="button" className="training-button secondary" onClick={selected.refresh}>Retry task format</button>}<button type="button" className="training-button secondary" onClick={() => onSelect(null)}>All task formats</button></> : <>
       <AuthoringDraftList client={client} targetKind="definition" onResume={setResuming} />
       <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Task format</th><th>Category</th><th>Release</th></tr></thead><tbody>{definitions.page?.items.map((definition) => <tr key={definition.id}><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(definition.id)}><strong>{definition.name}</strong><small>{definition.description}</small></button></td><td>{definition.category}</td><td>{definition.revision}</td></tr>)}</tbody></table></div>
       {definitions.loading ? <p role="status">Loading task formats…</p> : !definitions.page?.items.length ? <p>Create a task format to accept structured examples and human corrections.</p> : null}<LearningPager after={after} next={definitions.page?.nextCursor} onPage={onPage} />

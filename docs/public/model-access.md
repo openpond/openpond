@@ -39,3 +39,5 @@ OpenPond's orchestration layer is designed to help open source models operate wi
 - OpenPond Cloud execution when local compute is not enough.
 
 The model can change; the agent workflow should remain understandable and reviewable.
+
+See [Model modifications](model-modifications.md) for the distinction between existing training workflows and proposed activation, memory and weight-editing capabilities. Access to a hosted chat model does not imply access to its internal activations or weights.

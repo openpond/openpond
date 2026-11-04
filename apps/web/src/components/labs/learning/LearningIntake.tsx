@@ -5,8 +5,13 @@ import { useDraftNavigation } from "../useDraftNavigation";
 import { LearningActions, LearningError, LearningJsonField } from "./LearningFields";
 import { useLearningMutation } from "./useLearningResources";
 
-export function LearningIntake({ client, definition, onReview }: { client: OpenPondLearningClient | null; definition: TaskDefinition; onReview: (id: string) => void }) {
-  const [initial] = useState(() => JSON.stringify({ schemaVersion: "openpond.taskExample.v1", sourceId: definition.revision === 1 ? `${definition.id}-direct` : `${definition.id}-r${definition.revision}-direct`, idempotencyKey: `example-${crypto.randomUUID()}`, taskDefinition: learningRef(definition), exampleId: "your-record-id", attemptId: "attempt-1", occurredAt: new Date().toISOString(), familyKey: "your-family-id", split: "train", input: {}, observedOutput: null, expected: null, evaluatorContext: null, assets: [], provenance: { sourceRecordRef: null, mappingHash: null } }, null, 2));
+function exampleTemplate(definition: TaskDefinition) { return JSON.stringify({ schemaVersion: "openpond.taskExample.v1", sourceId: definition.revision === 1 ? `${definition.id}-direct` : `${definition.id}-r${definition.revision}-direct`, idempotencyKey: `example-${crypto.randomUUID()}`, taskDefinition: learningRef(definition), exampleId: "your-record-id", attemptId: "attempt-1", occurredAt: new Date().toISOString(), familyKey: "your-family-id", split: "train", input: {}, observedOutput: null, expected: null, evaluatorContext: null, assets: [], provenance: { sourceRecordRef: null, mappingHash: null } }, null, 2); }
+
+export function LearningIntake({ client, definition: currentDefinition, onReview }: { client: OpenPondLearningClient | null; definition: TaskDefinition; onReview: (id: string) => void }) {
+  // Revalidation may discover a newer format while JSON is being edited. Keep
+  // the original contract until the user explicitly changes its release.
+  const [definition, setDefinition] = useState(currentDefinition);
+  const [initial] = useState(() => exampleTemplate(definition));
   const [draft, setDraft] = useState(initial);
   const [saved, setSaved] = useState(initial);
   const [receipts, setReceipts] = useState<Array<{ row: number; id: string; revision: number }>>([]);
@@ -43,6 +48,11 @@ export function LearningIntake({ client, definition, onReview }: { client: OpenP
   const guard = useDraftNavigation({ name: "examples", dirty: draft !== saved, busy: mutation.busy, save: async () => Boolean(await submit()) });
   return <section className="learning-intake">
     <h2>Submit examples</h2><p>Fill in the task input and stable record, attempt, and family IDs. Observed output, expected answer, and evaluator context stay separate. Saved examples enter review; importing does not approve them for training.</p>
+    <p>Import into {definition.name} · release {definition.revision}.</p>
+    {!sameLearningRef(learningRef(definition), learningRef(currentDefinition)) ? <button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => void guard.requestLeave(() => {
+      const next = exampleTemplate(currentDefinition);
+      setDefinition(currentDefinition); setDraft(next); setSaved(next); setReceipts([]); setFileError(null);
+    })}>Use format release {currentDefinition.revision}</button> : null}
     <LearningError error={mutation.error ?? fileError} />
     <label>Import JSON or JSONL<input type="file" accept=".json,.jsonl,application/json" disabled={mutation.busy} onChange={async (event) => {
       const file = event.target.files?.[0]; if (!file) return;

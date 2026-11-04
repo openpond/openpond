@@ -1,3 +1,28 @@
+import {
+  ExperimentDraftSchema,
+  StoredExperimentDraftReferenceSchema,
+  StoredExperimentResultReferenceSchema,
+} from "openpond-sdk/training";
+export {
+  StoredExperimentDraftReferenceSchema,
+  type StoredExperimentDraftReference,
+} from "openpond-sdk/training";
+export {
+  StoredExperimentResultReferenceSchema,
+  StoredTrainingResultReferenceSchema,
+  StoredManagedModificationResultReferenceSchema,
+  StoredEngramResultReferenceSchema,
+  StoredDecisionResultReferenceSchema,
+  StoredAlphaEditResultReferenceSchema,
+  StoredNeuronTrainingResultReferenceSchema,
+  type StoredExperimentResultReference,
+  type StoredTrainingResultReference,
+  type StoredManagedModificationResultReference,
+  type StoredEngramResultReference,
+  type StoredDecisionResultReference,
+  type StoredAlphaEditResultReference,
+  type StoredNeuronTrainingResultReference,
+} from "openpond-sdk/training";
 import { ChatTrainingAttachmentSchema } from "./chat-training-resources.js";
 import { OpenPondProfileRefSchema } from "./profile-ref.js";
 import { z } from "zod";
@@ -5,81 +30,240 @@ import { TasksetDraftWorkspaceSchema } from "openpond-sdk/taskset-drafts";
 
 const Id = z.string().trim().min(1).max(240);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
-export const LocalDatasetCheckSchema = z.object({
-  kind: z.enum(["structure", "graders"]), revision: z.number().int().positive(), workspaceHash: Hash,
-  status: z.enum(["passed", "failed", "unavailable"]), checkedAt: z.iso.datetime(),
-  checked: z.number().int().nonnegative(), total: z.number().int().nonnegative(),
-  issues: z.array(z.object({ code: z.string(), message: z.string(), taskId: Id.optional(), graderId: Id.optional() })).max(10_000),
-  scopes: z.array(z.object({graderId:Id,checked:z.number().int().nonnegative(),total:z.number().int().nonnegative(),status:z.enum(["passed","failed","unavailable"])}).strict()).max(1000).optional(),
-}).strict();
-export const DatasetSyncLinkSchema = z.object({
-  apiOrigin: z.url(), actorId: Id, teamId: Id, datasetId: Id, remoteRevision: z.number().int().nonnegative(),
-  acknowledgedHash: Hash.nullable(), remoteHash: Hash.nullable(), pendingLocalHash: Hash.nullable(), paused: z.boolean(),
-  status: z.enum(["pending", "syncing", "synced", "retry", "conflict", "paused"]),
-  error: z.string().nullable(), operationId: Id.nullable(), pendingWorkspace: TasksetDraftWorkspaceSchema.nullable(),
-  beginVersionOperationId:Id.nullable().optional(),
-  publicationIntent:z.object({operationId:Id,expectedRevision:z.number().int().positive(),workspaceHash:Hash,packageHash:Hash,localHash:Hash}).strict().nullable().optional(),
-}).strict();
-export const LocalDatasetRecordSchema = z.object({
-  schemaVersion: z.literal("openpond.localDataset.v1"), ownerId: Id, projectId: Id.nullable(),
-  workspace: TasksetDraftWorkspaceSchema, checks: z.array(LocalDatasetCheckSchema).max(2),
-  packageHash: Hash.nullable(), sync: DatasetSyncLinkSchema.nullable(),
-}).strict();
+export const LocalDatasetCheckSchema = z
+  .object({
+    kind: z.enum(["structure", "graders"]),
+    revision: z.number().int().positive(),
+    workspaceHash: Hash,
+    status: z.enum(["passed", "failed", "unavailable"]),
+    checkedAt: z.iso.datetime(),
+    checked: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    issues: z
+      .array(
+        z.object({
+          code: z.string(),
+          message: z.string(),
+          taskId: Id.optional(),
+          graderId: Id.optional(),
+        }),
+      )
+      .max(10_000),
+    scopes: z
+      .array(
+        z
+          .object({
+            graderId: Id,
+            checked: z.number().int().nonnegative(),
+            total: z.number().int().nonnegative(),
+            status: z.enum(["passed", "failed", "unavailable"]),
+          })
+          .strict(),
+      )
+      .max(1000)
+      .optional(),
+  })
+  .strict();
+export const DatasetSyncLinkSchema = z
+  .object({
+    apiOrigin: z.url(),
+    actorId: Id,
+    teamId: Id,
+    datasetId: Id,
+    remoteRevision: z.number().int().nonnegative(),
+    acknowledgedHash: Hash.nullable(),
+    remoteHash: Hash.nullable(),
+    pendingLocalHash: Hash.nullable(),
+    paused: z.boolean(),
+    status: z.enum(["pending", "syncing", "synced", "retry", "conflict", "paused"]),
+    error: z.string().nullable(),
+    operationId: Id.nullable(),
+    pendingWorkspace: TasksetDraftWorkspaceSchema.nullable(),
+    beginVersionOperationId: Id.nullable().optional(),
+    publicationIntent: z
+      .object({
+        operationId: Id,
+        expectedRevision: z.number().int().positive(),
+        workspaceHash: Hash,
+        packageHash: Hash,
+        localHash: Hash,
+      })
+      .strict()
+      .nullable()
+      .optional(),
+  })
+  .strict();
+export const LocalDatasetRecordSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.localDataset.v1"),
+    ownerId: Id,
+    projectId: Id.nullable(),
+    workspace: TasksetDraftWorkspaceSchema,
+    checks: z.array(LocalDatasetCheckSchema).max(2),
+    packageHash: Hash.nullable(),
+    sync: DatasetSyncLinkSchema.nullable(),
+  })
+  .strict();
 export type LocalDatasetRecord = z.infer<typeof LocalDatasetRecordSchema>;
 export type LocalDatasetCheck = z.infer<typeof LocalDatasetCheckSchema>;
 
-export const ChatResourceSummarySchema = z.object({
-  kind: z.enum(["dataset", "grader", "experiment"]), id: Id, revision: z.number().int().positive(),
-  name: z.string().max(500), state: z.string().max(100), datasetId: Id.optional(), datasetRevision: z.number().int().positive().optional(),
-  taskCount: z.number().int().nonnegative().optional(), graderCount: z.number().int().nonnegative().optional(),
-  checkState: z.string().optional(), syncState: z.string().optional(), model: z.string().optional(),
-  evaluationHash:Hash.optional(),
-  graderId:Id.optional(),graderType:z.string().optional(),description:z.string().optional(),
-  location:z.enum(["local","cloud"]).optional(),scoreLabel:z.string().optional(),
-  owner:z.object({teamId:Id,actorId:Id}).strict().optional(),contentHash:Hash.optional(),profileRef:OpenPondProfileRefSchema.optional(),
-  score: z.number().nullable().optional(), costUsd: z.number().nonnegative().nullable().optional(),
-  evaluatedCount: z.number().int().nonnegative().optional(), failedCount: z.number().int().nonnegative().optional(),
-  qualityFailureCount:z.number().int().nonnegative().optional(),executionFailureCount:z.number().int().nonnegative().optional(),ungradedCount:z.number().int().nonnegative().optional(),
-  rows: z.array(z.object({ id: Id, label: z.string(), detail: z.string(), score: z.number().nullable().optional() })).max(10),
-}).strict();
+export const ChatResourceSummarySchema = z
+  .object({
+    kind: z.enum(["dataset", "grader", "experiment"]),
+    id: Id,
+    revision: z.number().int().positive(),
+    name: z.string().max(500),
+    state: z.string().max(100),
+    datasetId: Id.optional(),
+    datasetRevision: z.number().int().positive().optional(),
+    taskCount: z.number().int().nonnegative().optional(),
+    graderCount: z.number().int().nonnegative().optional(),
+    checkState: z.string().optional(),
+    syncState: z.string().optional(),
+    model: z.string().optional(),
+    evaluationHash: Hash.optional(),
+    graderId: Id.optional(),
+    graderType: z.string().optional(),
+    description: z.string().optional(),
+    location: z.enum(["local", "cloud"]).optional(),
+    scoreLabel: z.string().optional(),
+    owner: z.object({ teamId: Id, actorId: Id }).strict().optional(),
+    contentHash: Hash.optional(),
+    profileRef: OpenPondProfileRefSchema.optional(),
+    score: z.number().nullable().optional(),
+    costUsd: z.number().nonnegative().nullable().optional(),
+    evaluatedCount: z.number().int().nonnegative().optional(),
+    failedCount: z.number().int().nonnegative().optional(),
+    qualityFailureCount: z.number().int().nonnegative().optional(),
+    executionFailureCount: z.number().int().nonnegative().optional(),
+    ungradedCount: z.number().int().nonnegative().optional(),
+    rows: z
+      .array(
+        z.object({
+          id: Id,
+          label: z.string(),
+          detail: z.string(),
+          score: z.number().nullable().optional(),
+        }),
+      )
+      .max(10),
+  })
+  .strict();
 export type ChatResourceSummary = z.infer<typeof ChatResourceSummarySchema>;
 
 // A conversational experiment is a configuration scope, not an execution.
 // Runs retain their own immutable dataset/grader pins.
-export const ChatExperimentScopeSchema = z.object({
-  id: Id, ordinal: z.number().int().positive(), name: z.string().trim().min(1).max(500),
-  dataset: ChatResourceSummarySchema.nullable(),
-  evaluationModel: z.string().min(1).max(500).optional(),
-  executionLocation: z.enum(["local", "cloud"]).optional(),
-  graders: z.array(ChatResourceSummarySchema), selectedGraderId: Id.nullable(),
-  runs: z.array(ChatResourceSummarySchema), selectedRunId: Id.nullable(),
-  training: z.array(ChatTrainingAttachmentSchema).optional(), selectedTrainingKey: z.string().max(4000).nullable().optional(),
-  selectedTrainingJobId: Id.nullable().optional(),
-  turnIds: z.array(Id), operationId: Id,
-  createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
-}).strict();
+export const ChatExperimentScopeSchema = z
+  .object({
+    id: Id,
+    ordinal: z.number().int().positive(),
+    name: z.string().trim().min(1).max(500),
+    draft: ExperimentDraftSchema.optional(),
+    storedDraft: StoredExperimentDraftReferenceSchema.optional(),
+    draftRevision: z.number().int().positive().optional(),
+    creationHash: Hash.optional(),
+    dataset: ChatResourceSummarySchema.nullable(),
+    evaluationModel: z.string().min(1).max(500).optional(),
+    executionLocation: z.enum(["local", "cloud"]).optional(),
+    graders: z.array(ChatResourceSummarySchema),
+    selectedGraderId: Id.nullable(),
+    runs: z.array(ChatResourceSummarySchema),
+    selectedRunId: Id.nullable(),
+    training: z.array(ChatTrainingAttachmentSchema).optional(),
+    selectedTrainingKey: z.string().max(4000).nullable().optional(),
+    selectedTrainingJobId: Id.nullable().optional(),
+    results: z.array(StoredExperimentResultReferenceSchema).max(16).optional(),
+    turnIds: z.array(Id),
+    operationId: Id,
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .strict();
 export type ChatExperimentScope = z.infer<typeof ChatExperimentScopeSchema>;
 // Dataset browsing retains exact references without allocating an experiment.
 export const ChatDatasetFocusSchema = ChatExperimentScopeSchema.extend({ ordinal: z.null() });
 export type ChatDatasetFocus = z.infer<typeof ChatDatasetFocusSchema>;
-export const ChatExperimentContextSchema = z.object({
-  datasetFocus: ChatDatasetFocusSchema.optional(),
-  scopes: z.array(ChatExperimentScopeSchema), activeScopeId: Id.nullable(),
-  selectionVersion: z.number().int().nonnegative(), selectedAt: z.iso.datetime().nullable(),
-  selectionOperations: z.record(z.string(),z.object({hash:Hash,version:z.number().int().nonnegative(),visualPublicationId:z.string().optional(),resource:ChatResourceSummarySchema.optional()}).strict()).default({}),
-}).strict();
+export const ChatExperimentContextSchema = z
+  .object({
+    datasetFocus: ChatDatasetFocusSchema.optional(),
+    scopes: z.array(ChatExperimentScopeSchema),
+    activeScopeId: Id.nullable(),
+    selectionVersion: z.number().int().nonnegative(),
+    selectedAt: z.iso.datetime().nullable(),
+    selectionOperations: z
+      .record(
+        z.string(),
+        z
+          .object({
+            hash: Hash,
+            version: z.number().int().nonnegative(),
+            visualPublicationId: z.string().optional(),
+            resource: ChatResourceSummarySchema.optional(),
+          })
+          .strict(),
+      )
+      .default({}),
+  })
+  .strict();
 export type ChatExperimentContext = z.infer<typeof ChatExperimentContextSchema>;
 export function chatResourceWorkspaces(context: ChatExperimentContext) {
   return [...context.scopes, ...(context.datasetFocus ? [context.datasetFocus] : [])];
 }
 
-export const LocalDatasetRequestSchema = z.object({
-  action: z.enum(["schema", "list", "read", "create", "save", "file", "validate", "check_graders", "check_sources", "package", "import", "inspect_source", "import_source", "upload", "sync", "pause_sync", "disconnect_sync", "related_chats", "list_graders", "read_grader", "save_grader", "test_grader", "publish"]),
-  id: Id.optional(), operationId: Id.optional(), expectedRevision: z.number().int().nonnegative().optional(),
-  payload: z.record(z.string(), z.unknown()).default({}),
-}).strict();
+export const LocalDatasetRequestSchema = z
+  .object({
+    action: z.enum([
+      "schema",
+      "list",
+      "read",
+      "create",
+      "save",
+      "file",
+      "validate",
+      "check_graders",
+      "check_sources",
+      "package",
+      "import",
+      "inspect_source",
+      "import_source",
+      "upload",
+      "sync",
+      "pause_sync",
+      "disconnect_sync",
+      "related_chats",
+      "list_graders",
+      "read_grader",
+      "save_grader",
+      "test_grader",
+      "publish",
+    ]),
+    id: Id.optional(),
+    operationId: Id.optional(),
+    expectedRevision: z.number().int().nonnegative().optional(),
+    payload: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strict();
 
-export const ChatExperimentViewSchema=z.object({
-  contentHash:Hash,scope:z.string(),graders:z.unknown(),cases:z.array(z.object({id:Id,taskId:Id,seed:z.string(),status:z.string(),output:z.string().nullable(),error:z.string().nullable(),score:z.number().nullable()}).strict()).max(10_000),
-}).strict();
-export type ChatExperimentView=z.infer<typeof ChatExperimentViewSchema>;
+export const ChatExperimentViewSchema = z
+  .object({
+    contentHash: Hash,
+    scope: z.string(),
+    graders: z.unknown(),
+    cases: z
+      .array(
+        z
+          .object({
+            id: Id,
+            taskId: Id,
+            seed: z.string(),
+            status: z.string(),
+            output: z.string().nullable(),
+            error: z.string().nullable(),
+            score: z.number().nullable(),
+          })
+          .strict(),
+      )
+      .max(10_000),
+  })
+  .strict();
+export type ChatExperimentView = z.infer<typeof ChatExperimentViewSchema>;

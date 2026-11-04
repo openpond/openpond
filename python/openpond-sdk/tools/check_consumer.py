@@ -9,7 +9,7 @@ from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('wheel',type=Path);p.add_argument('--sha256',required=True);p.add_argument('--receipt',type=Path,required=True);p.add_argument('--python',default=sys.executable);args=p.parse_args()
 wheel=args.wheel.resolve()
 if hashlib.sha256(wheel.read_bytes()).hexdigest()!=args.sha256:raise SystemExit('Wheel hash mismatch.')
-proof='''import json,sys
+proof='''import importlib,json,sys
 from pathlib import Path
 import ponder_sdk
 from ponder_sdk import Client,AsyncClient,models,inputs,canonical_json
@@ -22,6 +22,9 @@ assert models.TrainingPreparationReceipt.__annotations__
 assert inputs.TrainingPreparationRequest.__annotations__
 assert models.ToolLearningConsultationResponse.__args__
 assert inputs.ToolLearningConsultationRequest.__annotations__
+for module in ('qwen3', 'engram', 'neuron', 'alphaedit', 'decision'):
+    importlib.import_module('ponder_sdk.reference.'+module)
+assert all(name not in sys.modules for name in ('torch','transformers','peft'))
 with Client(base_url='https://example.invalid',api_key='fixture',team_id='team-fixture') as client:
     tools=client.tool_learning(project_id='project-fixture')
     assert tools.project_id=='project-fixture'

@@ -4,6 +4,7 @@ import {
   HostedTrainingPolicyControlSchema,
   verifyPostTrainingPlan,
   HostedTrainingSetupCatalogSchema,
+  type HostedTrainingSetupAction,
   PostTrainingAttachmentSchema,
   AttachPostTrainingSchema,
 } from "openpond-sdk/post-training";
@@ -23,9 +24,19 @@ import {
   createTrainingClient,
   TrainingPreparationRequestSchema,
   TrainingPreparationControlSchema,
+  TrainingExperimentSetupRequestSchema,
+  TrainingExperimentInputsPageSchema,
+  ExperimentDraftSaveSchema,
+  ExperimentDraftArchiveSchema,
+  ExperimentDraftListQuerySchema,
+  TrainingFundingRequestSchema,
+  TrainingFundingHandoffRequestSchema,
+  DatasetTrainingReviewRequestSchema,
+  parseAndVerifyDatasetTrainingReviewReceipt,
 } from "openpond-sdk/training";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 const Id = z.string().min(1).max(200);
+const DraftId = z.string().trim().min(1).max(240);
 export function createHostedTrainingSetup(input: {
   teamId: string;
   actorId: string;
@@ -139,6 +150,25 @@ export function createHostedTrainingSetup(input: {
     return selected;
   }
   return {
+    async draftInputs(raw: { projectId: string | null; cursor?: string }) {
+      await fence();
+      if (raw.projectId) {
+        const project = await projects.get(raw.projectId);
+        if (project.archived) throw new Error("Restore this Project before starting an experiment.");
+      }
+      const [models, capabilities, batches] = await Promise.all([
+        config.configurationCandidates(), train.capabilities(),
+        learn.list("batch", { limit: 100, ...(raw.cursor ? { afterId: raw.cursor } : {}) }),
+      ]);
+      await fence();
+      return TrainingExperimentInputsPageSchema.parse({
+        schemaVersion: "openpond.trainingExperimentInputsPage.v1", teamId: input.teamId, actorId: input.actorId, projectId: raw.projectId,
+        models, methods: capabilities.methods, billingModes: capabilities.billingModes,
+        batches: batches.items.map(batch => ({ reference: learningRef(batch), rewardBinding: batch.rewardBinding,
+          purpose: batch.purpose, exampleCount: batch.examples.length, sealedAt: batch.sealedAt })),
+        nextCursor: batches.nextCursor,
+      });
+    },
     async policyRead(id: string, afterId?: string) {
       await fence();
       const policy = await learn.get("policy", Id.parse(id));
@@ -300,8 +330,78 @@ export function createHostedTrainingSetup(input: {
         experiments: frozen,
       });
     },
-    async perform(action: "prepare" | "start" | "cancel" | "publish" | "attach", raw: unknown) {
+    async perform(action: HostedTrainingSetupAction, raw: unknown) {
       await fence();
+      if (action === "review-dataset") {
+        const body = DatasetTrainingReviewRequestSchema.parse(raw);
+        if (body.teamId !== input.teamId) throw new Error("The Dataset review workspace changed.");
+        const receipt = await train.reviewDataset(body);
+        await fence();
+        return parseAndVerifyDatasetTrainingReviewReceipt(receipt, body, input.actorId);
+      }
+      if (action === "funding" || action === "funding-handoff") {
+        const body = action === "funding" ? TrainingFundingRequestSchema.parse(raw) : TrainingFundingHandoffRequestSchema.parse(raw);
+        if (body.teamId !== input.teamId) throw new Error("The funding workspace changed.");
+        const value = action === "funding" ? await train.funding(TrainingFundingRequestSchema.parse(body)) : await train.fundingHandoff(TrainingFundingHandoffRequestSchema.parse(body));
+        await fence();
+        if (value.actorId !== input.actorId) throw new Error("Funding returned another account.");
+        return value;
+      }
+      if (action === "estimate") {
+        const { TrainingEstimateRequestSchema } = await import("openpond-sdk/training");
+        const request = TrainingEstimateRequestSchema.parse(raw);
+        if (request.teamId !== input.teamId) throw new Error("Choose this workspace's estimate inputs.");
+        return train.estimate(request);
+      }
+      if (action === "hardware-catalog") {
+        const catalog = await train.hardwareCatalog();
+        await fence();
+        return catalog;
+      }
+      if (action === "gpu-catalog") {
+        const { TrainingGpuCatalogQuerySchema } = await import("openpond-sdk/training");
+        const query = TrainingGpuCatalogQuerySchema.parse(raw);
+        if (query.teamId !== input.teamId) throw new Error("The compute workspace changed.");
+        const catalog = await train.gpuCatalog(query);
+        await fence();
+        return catalog;
+      }
+      if (action === "modification-capabilities") {
+        const { ModelModificationCapabilitiesQuerySchema, parseAndVerifyModelModificationCapabilities } = await import("openpond-sdk/training");
+        const query = ModelModificationCapabilitiesQuerySchema.parse(raw);
+        if (query.teamId !== input.teamId) throw new Error("The model capability workspace changed.");
+        const capabilities = await train.modificationCapabilities(query);
+        await fence();
+        return parseAndVerifyModelModificationCapabilities(capabilities, query, input.actorId);
+      }
+      if (action === "list-drafts") {
+        const page = await train.listExperimentDrafts(input.teamId, ExperimentDraftListQuerySchema.parse(raw ?? {}));
+        await fence();
+        if (page.ownerUserId !== input.actorId) throw new Error("Draft history returned another owner.");
+        return page;
+      }
+      if (action === "get-draft") {
+        const body = z.object({ id: DraftId }).strict().parse(raw);
+        const record = await train.getExperimentDraft(input.teamId, body.id);
+        await fence();
+        if (record.ownerUserId !== input.actorId) throw new Error("This draft belongs to another owner.");
+        return record;
+      }
+      if (action === "save-draft" || action === "archive-draft") {
+        const body = action === "save-draft" ? ExperimentDraftSaveSchema.parse(raw)
+          : z.object({ id: DraftId, control: ExperimentDraftArchiveSchema }).strict().parse(raw);
+        const teamId = "control" in body ? body.control.teamId : body.teamId;
+        if (teamId !== input.teamId) throw new Error("The draft workspace changed.");
+        const receipt = "control" in body ? await train.archiveExperimentDraft(body.id, body.control) : await train.saveExperimentDraft(body);
+        await fence();
+        if (receipt.record.ownerUserId !== input.actorId) throw new Error("The saved draft belongs to another owner.");
+        return receipt;
+      }
+      if (action === "prepare-draft") {
+        const body = TrainingExperimentSetupRequestSchema.parse(raw);
+        if (body.teamId !== input.teamId) throw new Error("Training workspace changed.");
+        return train.prepareExperiment(body);
+      }
       if (action === "prepare") {
         const body = TrainingPreparationRequestSchema.parse(raw);
         if (body.teamId !== input.teamId) throw new Error("Training workspace changed.");

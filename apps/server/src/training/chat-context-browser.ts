@@ -1,12 +1,18 @@
-import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, type ChatContextOption, type ChatContextSelection, type ChatContextTarget, type ChatResourceSummary } from "@openpond/contracts";
-import { createTrainingClient } from "openpond-sdk/training";
+import { readChatRetainedResult } from "./chat-retained-result.js";
+import { readChatAlphaEditResult } from "./chat-alphaedit-result.js";
+import { readChatNeuronTrainingResult } from "./chat-neuron-training-result.js";
+import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, type ChatContextOption, type ChatContextSelection, type ChatContextTarget, type ChatResourceSummary, type StoredExperimentDraftReference } from "@openpond/contracts";
+import { createTrainingClient, canonicalJson, experimentOperationLabel, ExperimentDraftSaveSchema, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
 import type { SqliteStore } from "../store/store.js";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import { listHostedModelProjectCatalog } from "./hosted-model-project-catalog.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
 import { readChatTrainingAttachment } from "./chat-training-attachment.js";
 
+import { createChatExperimentDraftStorage, storedDraftSelection } from "./chat-experiment-drafts.js";
+import { chatSteeringExperiment } from "./chat-steering-experiment.js";
 import { chatExperimentContext } from "./chat-experiment-scope.js";
+import { readChatDecisionResult } from "./chat-decision-result.js";
 
 type Access = { apiBaseUrl: string; token: string; teamId: string; actorId: string };
 function focusKey(state: ReturnType<typeof chatExperimentContext>) {
@@ -21,10 +27,28 @@ export function createChatContextBrowser(deps: {
   resource: (target: ChatContextTarget) => Promise<ChatResourceSummary>;
   selectResource: (sessionId: string, target: ChatContextTarget | null, version?: number) => Promise<void>;
   createExperiment: (sessionId: string, dataset: ChatContextTarget, expected?: { version: number; target: ChatContextTarget }) => Promise<void>;
+  associateDraftTraining?: (sessionId: string, draftId: string, training: import("@openpond/contracts").ChatTrainingAttachment) => Promise<void>;
+  createDraft?: (sessionId: string, draft: ExperimentDraft, expected: { version: number; target: ChatContextTarget | null }) => Promise<void>;
+  linkStoredDraft?: (sessionId: string, record: ExperimentDraftRecord, reference: StoredExperimentDraftReference, expected?: { version: number; target: ChatContextTarget | null }, scopeId?: string) => Promise<void>;
   inspectResource?: (resource: ChatResourceSummary) => Promise<{ dataset?: ChatResourceSummary; graders?: ChatResourceSummary[] }>;
 
 }) {
-  async function catalog(refresh = true, sessionId?: string) {
+  const drafts = createChatExperimentDraftStorage(deps.access);
+  async function catalog(refresh = true, sessionId?: string, draftCursor?: string) {
+    const session = sessionId ? await deps.store.getSession(sessionId) : null;
+    if (sessionId && (!session || session.systemKind)) throw new Error("Chat is unavailable.");
+    const scopes = session ? chatExperimentContext(session.metadata).scopes : [];
+    function storedOptions(items: ChatContextSelection[]): ChatContextOption[] {
+      return items.map(({ target, label, detail }) => {
+        const scope = scopes.find(item => item.storedDraft && canonicalJson(item.storedDraft) === canonicalJson({ id: target.id, teamId: target.teamId, apiOrigin: target.apiOrigin }));
+        const selected: ChatContextTarget = scope ? { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" } : target;
+        return { target: selected, label, detail };
+      });
+    }
+    if (draftCursor) {
+      const stored = await drafts.list(draftCursor);
+      return { options: storedOptions(stored.options), warning: null, nextDraftCursor: stored.page.nextCursor };
+    }
     const resources = await deps.resources();
     const options: ChatContextOption[] = resources.filter(item => item.kind !== "grader").map(item => ({
       target: { kind: item.kind as "dataset" | "experiment", id: item.id, revision: item.revision, location: item.location ?? "local" },
@@ -35,11 +59,9 @@ export function createChatContextBrowser(deps: {
       detail: `Model · ${model.defaultBaseModel?.modelId ?? "Local"}`,
     });
     if (sessionId) {
-      const session = await deps.store.getSession(sessionId);
-      if (!session || session.systemKind) throw new Error("Chat is unavailable.");
-      for (const scope of chatExperimentContext(session.metadata).scopes.filter(scope => !scope.selectedRunId && scope.dataset)) options.unshift({
+      for (const scope of scopes.filter(scope => !scope.storedDraft && !scope.selectedRunId && (scope.dataset || scope.draft))) options.unshift({
         target: { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" },
-        label: scope.name, detail: `Draft · ${scope.dataset!.name} · revision ${scope.dataset!.revision}`,
+        label: scope.name, detail: scope.draft ? `Draft · ${experimentOperationLabel(scope.draft.operationType)}` : `Draft · ${scope.dataset!.name} · revision ${scope.dataset!.revision}`,
       });
     }
     let warning: string | null = null;
@@ -51,7 +73,13 @@ export function createChatContextBrowser(deps: {
         label: project.name, detail: `Model · ${project.defaultBaseModel?.modelId ?? "Hosted"}`,
       });
     } catch { warning = "Hosted models could not be loaded for the current account. Local resources remain available."; }
-    return { options, warning };
+    let nextDraftCursor: string | null = null;
+    try {
+      const stored = await drafts.list(draftCursor);
+      nextDraftCursor = stored.page.nextCursor;
+      options.unshift(...storedOptions(stored.options));
+    } catch { warning = [warning, "Saved experiment drafts could not be loaded for the current account."].filter(Boolean).join(" "); }
+    return { options, warning, nextDraftCursor };
   }
   async function modelDetails(target: ChatContextTarget) {
     const project = target.location === "local" ? await deps.store.getModelProject(target.id) : await (async () => {
@@ -73,18 +101,32 @@ export function createChatContextBrowser(deps: {
   }
   async function resolve(raw: unknown): Promise<ChatContextSelection> {
     const target = ChatContextTargetSchema.parse(raw);
+    if (["training_result", "managed_modification_result", "engram_result"].includes(target.kind)) return readChatRetainedResult(target, deps.access);
+    if (target.kind === "alphaedit_result") return readChatAlphaEditResult(target, deps.access);
+    if (target.kind === "neuron_training_result") return readChatNeuronTrainingResult(target, deps.access);
+    if (target.kind === "decision_result") return readChatDecisionResult(target, deps.access);
+    if (target.storedDraft) {
+      const reference = { id: target.id, teamId: target.teamId!, apiOrigin: target.apiOrigin! };
+      return storedDraftSelection(await drafts.read(reference), reference);
+    }
+    if (target.draft) return { target, draft: target.draft, label: target.draft.name, detail: "Experiment draft" };
     if (target.scopeId) {
       if (target.kind !== "experiment" || target.id !== target.scopeId || !target.sessionId || target.location !== "local") throw new Error("Invalid experiment draft.");
       const session = await deps.store.getSession(target.sessionId);
       if (!session || session.systemKind || ["sandbox", "sandbox_template"].includes(session.workspaceKind ?? "")) throw new Error("Chat is unavailable.");
       const scope = chatExperimentContext(session.metadata).scopes.find(scope => scope.id === target.scopeId);
-      if (!scope?.dataset) throw new Error("Experiment draft is unavailable.");
+      if (!scope || !scope.dataset && !scope.draft && !scope.storedDraft) throw new Error("Experiment draft is unavailable.");
+      if (scope.storedDraft) {
+        const selection = storedDraftSelection(await drafts.read(scope.storedDraft), scope.storedDraft);
+        return { ...selection, target };
+      }
+      if (!scope.dataset) return { target, draft: scope.draft, draftRevision: scope.draftRevision ?? 1, label: scope.name, detail: "Experiment draft" };
       const resource = await deps.resource({ kind: "dataset", id: scope.dataset.id, revision: scope.dataset.revision, location: scope.dataset.location ?? "local" });
       if (resource.kind !== "dataset" || resource.id !== scope.dataset.id || resource.revision !== scope.dataset.revision ||
         (resource.location ?? "local") !== (scope.dataset.location ?? "local") ||
         JSON.stringify(resource.owner ?? null) !== JSON.stringify(scope.dataset.owner ?? null) ||
         JSON.stringify(resource.profileRef ?? null) !== JSON.stringify(scope.dataset.profileRef ?? null)) throw new Error("The draft’s exact dataset pin is unavailable.");
-      return { target, label: scope.name, detail: `Draft · ${resource.name}`, resource, ...await deps.inspectResource?.(resource) };
+      return { target, draft: scope.draft, ...(scope.draft ? { draftRevision: scope.draftRevision ?? 1 } : {}), label: scope.name, detail: `Draft · ${resource.name}`, resource, ...await deps.inspectResource?.(resource) };
     }
     if (target.kind === "training") {
       const access = await deps.access();
@@ -131,12 +173,50 @@ export function createChatContextBrowser(deps: {
     }
     return options;
   }
-  async function select(raw: unknown, sessionId?: string, newExperiment = false) {
+  async function select(raw: unknown, sessionId?: string, newExperiment = false, sourceDraftId?: string) {
     let selection = raw === null ? null : await resolve(raw);
-    if (newExperiment && selection?.resource?.kind !== "dataset") throw new Error("Choose the dataset for this experiment.");
+    if (sourceDraftId) {
+      if (!sessionId || !selection?.training || !deps.associateDraftTraining || newExperiment)
+        throw new Error("A returned training Job requires its originating chat draft.");
+      const session = await deps.store.getSession(sessionId);
+      const scope = chatExperimentContext(session?.metadata).scopes.find(item => item.draft?.id === sourceDraftId || item.storedDraft?.id === sourceDraftId);
+      if (!scope) throw new Error("The originating experiment draft is not in this conversation.");
+      if (scope.storedDraft) await drafts.read(scope.storedDraft);
+      const active = await deps.access(), training = selection.training;
+      if (training.owner.actorId !== active.actorId || training.owner.teamId !== active.teamId ||
+        training.location === "cloud" && training.apiOrigin !== new URL(active.apiBaseUrl).origin)
+        throw new Error("The active account changed before the training Job was associated.");
+      await deps.associateDraftTraining(sessionId, sourceDraftId, selection.training);
+      return current(sessionId);
+    }
+    if (newExperiment && selection?.target.kind === "model") {
+      const draft = await chatSteeringExperiment(selection.target, deps.access);
+      selection = { target: {kind:"experiment",id:draft.id,location:"local",draft}, draft, label:draft.name, detail:"Saved Model experiment draft" };
+    }
+    if (newExperiment && !selection?.draft && selection?.resource?.kind !== "dataset") throw new Error("Choose an experiment draft or dataset.");
     if (sessionId) {
       const session = await deps.store.getSession(sessionId);
       if (!session || session.systemKind || ["sandbox", "sandbox_template"].includes(session.workspaceKind ?? "")) throw new Error("This chat cannot select local resources.");
+      if (selection?.storedDraft && selection.target.storedDraft) {
+        if (!deps.linkStoredDraft) throw new Error("Stored experiment authoring is unavailable.");
+        const state = chatExperimentContext(session.metadata);
+        const reference = { id: selection.storedDraft.id, teamId: selection.target.teamId!, apiOrigin: selection.target.apiOrigin! };
+        await deps.linkStoredDraft(sessionId, selection.storedDraft, reference, { version: state.selectionVersion,
+          target: ChatContextTargetSchema.nullable().optional().parse(session.metadata?.chatContextSelection) ?? null });
+        if (!newExperiment) {
+          const linked = chatExperimentContext((await deps.store.getSession(sessionId))?.metadata);
+          const scope = linked.scopes.find(item => item.storedDraft && canonicalJson(item.storedDraft) === canonicalJson(reference));
+          if (scope && linked.activeScopeId !== scope.id) await deps.selectResource(sessionId, { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" });
+        }
+        return current(sessionId);
+      }
+      if (selection?.target.draft) {
+        if (!deps.createDraft) throw new Error("Experiment draft authoring is unavailable.");
+        const state = chatExperimentContext(session.metadata);
+        await deps.createDraft(sessionId, selection.target.draft, { version: state.selectionVersion,
+          target: ChatContextTargetSchema.nullable().optional().parse(session.metadata?.chatContextSelection) ?? null });
+        return current(sessionId);
+      }
       if (newExperiment && selection) await deps.createExperiment(sessionId, selection.target);
       else if (selection?.target.scopeId) {
         if (selection.target.sessionId !== sessionId) throw new Error("This draft belongs to another chat.");
@@ -164,11 +244,30 @@ export function createChatContextBrowser(deps: {
     const focused: ChatContextTarget | null = training ? {
       kind: "training", id: training.jobId, location: training.location,
       ...(training.location === "cloud" ? { teamId: training.owner.teamId, apiOrigin: training.apiOrigin } : {}),
-    } : !run && scope?.ordinal && scope.dataset ? { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" }
+    } : !run && scope?.ordinal && (scope.dataset || scope.draft || scope.storedDraft) ? { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" }
       : resource ? { kind: resource.kind as "dataset" | "experiment", id: resource.id, revision: resource.revision, location: resource.location ?? "local" } : null;
     const sameFocus = session.metadata?.chatContextFocusKey === undefined || session.metadata.chatContextFocusKey === focusKey(state);
+    // A draft staged before the first message is materialized in the newly
+    // created chat, only while its exact staged target still owns selection.
+    if (saved?.storedDraft) {
+      if (scope || version !== undefined) return focused ? resolve(focused) : null;
+      if (!deps.linkStoredDraft) throw new Error("Stored experiment authoring is unavailable.");
+      const selected = await resolve(saved);
+      const reference = { id: saved.id, teamId: saved.teamId!, apiOrigin: saved.apiOrigin! };
+      await deps.linkStoredDraft(sessionId, selected.storedDraft!, reference, { version: state.selectionVersion, target: saved });
+      return current(sessionId);
+    }
+    if (saved?.draft) {
+      if (scope || version !== undefined) return focused ? resolve(focused) : null;
+      if (!deps.createDraft) throw new Error("Experiment draft authoring is unavailable.");
+      await deps.createDraft(sessionId, saved.draft, { version: state.selectionVersion, target: saved });
+      const fresh = await deps.store.getSession(sessionId);
+      if (canonicalJson(fresh?.metadata?.chatContextSelection ?? null) === canonicalJson(saved))
+        throw new Error("The experiment draft could not be attached to this chat.");
+      return current(sessionId);
+    }
     if (version === state.selectionVersion && sameFocus) return saved ? resolve(saved) : null;
-    if (version === undefined && saved && ["model", "training"].includes(saved.kind)) {
+    if (version === undefined && saved && ["model", "training", "training_result", "managed_modification_result", "engram_result", "decision_result", "alphaedit_result", "neuron_training_result"].includes(saved.kind)) {
       await deps.store.updateSession(sessionId, current => {
         const target = ChatContextTargetSchema.safeParse(current.metadata?.chatContextSelection);
         if (current.metadata?.chatContextSelectionVersion !== undefined || !target.success ||
@@ -188,5 +287,25 @@ export function createChatContextBrowser(deps: {
     if (saved?.kind === "experiment" && !scope) await deps.selectResource(sessionId, saved, state.selectionVersion);
     return saved ? resolve(saved) : null;
   }
-  return { catalog, resolve, runs, select, current };
+  async function updateDraft(sessionId: string | undefined, rawTarget: unknown, rawInput: unknown) {
+    const target = ChatContextTargetSchema.parse(rawTarget), input = ExperimentDraftSaveSchema.parse(rawInput);
+    if (target.scopeId && target.sessionId !== sessionId) throw new Error("This experiment scope belongs to another chat.");
+    const selected = await resolve(target);
+    if (!selected.draft || selected.draft.id !== input.draft.id)
+      throw new Error("Reopen the intended experiment before saving settings.");
+    if (!selected.storedDraft && input.expectedRevision !== 0)
+      throw new Error("An unsaved experiment requires revision zero.");
+    const { receipt, reference } = await drafts.save(input);
+    if (sessionId && target.scopeId) {
+      if (!deps.linkStoredDraft) throw new Error("Stored experiment attachment is unavailable.");
+      await deps.linkStoredDraft(sessionId, receipt.record, reference, undefined, target.scopeId);
+    }
+    const saved = storedDraftSelection(receipt.record, reference);
+    if (target.scopeId) saved.target = target;
+    // Preserve the exact receipt separately from current focus/state. An old
+    // operation retry cannot report a newer draft as the input it saved.
+    const currentSaved = await resolve(saved.target);
+    return { saved, currentSaved, selection: sessionId ? await current(sessionId) : currentSaved };
+  }
+  return { catalog, resolve, runs, select, current, updateDraft };
 }

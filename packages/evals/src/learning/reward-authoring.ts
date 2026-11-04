@@ -1,4 +1,4 @@
-import { RewardReleaseSchema, createRewardRelease, feedbackKeyForReward, type RewardRelease } from "../rewards.js";
+import { RewardReleaseSchema, createRewardRelease, type RewardRelease } from "../rewards.js";
 import { assertBoundedTaskJson } from "../task-schema.js";
 import { RewardAuthoringFieldsSchema, RewardFixtureAuthoringFieldsSchema, type AuthoringDraftFor } from "./authoring.js";
 import { createLearningTextAsset, verifyLearningTextAsset, type LearningTextAsset } from "./assets.js";
@@ -56,7 +56,9 @@ export function compileRewardAuthoring(input: { id: string; fields: RewardAuthor
   const assets = [...(asset ? [asset] : []), ...(fixtureAsset ? [fixtureAsset] : [])];
   const reward = createRewardRelease({
     schemaVersion: "openpond.rewardRelease.v1", id: input.id, revision: (base?.revision ?? 0) + 1,
-    name: fields.name, description: fields.description, feedbackKey: fields.feedbackKey ?? feedbackKeyForReward({ id: input.id }), implementation,
+    // Derived defaults belong to feedbackKeyForReward at read time. Adding an
+    // unauthored field here changes the immutable calibration snapshot.
+    name: fields.name, description: fields.description, ...(fields.feedbackKey === undefined ? {} : { feedbackKey: fields.feedbackKey }), implementation,
     rawScore: fields.kind === "learned_model" ? { minimum: authoringNumber(fields.minimum, "Minimum score"), maximum: authoringNumber(fields.maximum, "Maximum score") } : { minimum: 0, maximum: 1 },
     assets: assets.map(value => value.asset), ...(fixtureAsset ? { fixtureSetRef: fixtureAsset.asset } : {}),
     ...(calibrationCheckRef ? { calibrationCheckRef } : {}),

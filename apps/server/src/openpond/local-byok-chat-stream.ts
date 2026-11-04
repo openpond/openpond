@@ -21,6 +21,7 @@ export function createLocalByokChatStream({ home, managedAdapterChatRuntime, loc
         tools: input.tools,
         toolChoice: input.toolChoice,
         requestId: input.requestId,
+        maxNewTokens: input.maxOutputTokens,
         signal: input.signal,
       });
       return;

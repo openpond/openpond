@@ -78,7 +78,7 @@ cgroup**, starts the model and app, asks for a plain reply, and then requests
 three distinct hashes. Every hash must match a real `sha256sum` execution and
 the model's final answer. The HTTP sandbox fixture validates the bound identity,
 credential and exact command grammar; it invokes `sha256sum` without a shell.
-It does not implement Firecracker isolation. Model answers are never stubbed.
+It does not implement runtime isolation. Model answers are never stubbed.
 
 Defaults: CPU threads 2, context 4096, one slot, batch/microbatch 128, Q8 KV cache,
 no model repacking, no idle RAM prompt cache, flash attention on, thinking off.

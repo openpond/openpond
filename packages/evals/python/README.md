@@ -27,5 +27,5 @@ delivery off the trainer hot path. Closing the asynchronous emitter drains its
 queue and performs a terminal flush. Delivery failures are retained and raised
 to the caller rather than silently dropping evidence.
 
-This package does not contain trainers, optimizers, RunPod provisioning,
+This package does not contain trainers, optimizers, infrastructure provisioning,
 credentials, hosted storage, billing, or diagnostic-agent behavior.

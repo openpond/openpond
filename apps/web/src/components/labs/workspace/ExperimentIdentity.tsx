@@ -75,7 +75,7 @@ export function ExperimentIdentity({
           <span ref={titleRef}>{title || id}</span>
         </button>
         <span className="evaluation-identity-meta">
-          <code title={id}>{id.replace(/^(mrun_|local_)/, "").slice(0, 12)}</code>
+          <code title={id}>{id.replace(/^(mrun_|local_|observation-)/, "").slice(0, 12)}</code>
           <button
             type="button"
             className="evaluation-copy-id"

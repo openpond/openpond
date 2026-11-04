@@ -9,8 +9,10 @@ export function evaluationStoreMethods(context: SqliteDomainContext, lifecycle: 
   const humanReview = lazyStoreDomain(lifecycle, () => import("../store-human-review.js").then(module => new module.SqliteHumanReviewStore(context)));
   const localExperiments = lazyStoreDomain(lifecycle, () => import("../store-local-experiments.js").then(module => new module.SqliteLocalExperimentStore(context)));
   const evaluationResults = lazyStoreDomain(lifecycle, () => import("../store-evaluation-results.js").then(module => new module.SqliteEvaluationResultStore(context)));
+  const modificationRecordings = lazyStoreDomain(lifecycle, () => import("../store-modification-recordings.js").then(module => new module.SqliteModificationRecordingStore(context)));
   const preferenceComparison = lazyStoreDomain(lifecycle, () => import("../store-preference-comparison.js").then(module => new module.SqlitePreferenceComparisonStore(context)));
   return {
+    ...modificationRecordings.methods(["retainModificationRecording", "readModificationRecording", "listModificationRecordings"]),
     ...learning.methods([
       "listLearningScopes",
     ]),

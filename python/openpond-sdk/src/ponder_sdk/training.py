@@ -4,6 +4,8 @@ from typing import Union, cast
 from . import inputs, models
 from .wire import JsonValue
 from .resources import Resource, AsyncResource, LearningPage
+from .decision_execution_identity import DecisionOperationExpectation
+from .weight_execution_identity import WeightOperationExpectation
 
 class Training(Resource):
     def capabilities(self, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingCapabilities:
@@ -13,6 +15,26 @@ class Training(Resource):
     def gpu_catalog(self, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingGpuCatalog:
         """GET /v1/training/gpu-catalog. Read/reconcile; no mutation."""
         return cast('models.TrainingGpuCatalog', self._execute('createTrainingClient.gpu_catalog', {}, None, query, expected))
+
+    def hardware_catalog(self, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingHardwareCatalog:
+        """GET /v1/training/hardware-catalog. Read/reconcile; no mutation."""
+        return cast('models.TrainingHardwareCatalog', self._execute('createTrainingClient.hardware_catalog', {}, None, query, expected))
+
+    def modification_capabilities(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ModelModificationCapabilities:
+        """GET /v1/training/modification-capabilities. Read/reconcile; no mutation."""
+        return cast('models.ModelModificationCapabilities', self._execute('createTrainingClient.modification_capabilities', {}, input, query, expected))
+
+    def record_modification_observation(self, input: inputs.ModificationRecordingRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ModificationRecording:
+        """POST /v1/modification-recordings. Explicit operation; never automatically replayed."""
+        return cast('models.ModificationRecording', self._execute('createTrainingClient.record_modification_observation', {}, input, query, expected))
+
+    def modification_recording(self, id: str, input: inputs.ModificationRecordingReadQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ModificationRecordingRead:
+        """GET /v1/modification-recordings/{id}. Read/reconcile; no mutation."""
+        return cast('models.ModificationRecordingRead', self._execute('createTrainingClient.modification_recording', {'id': id}, input, query, expected))
+
+    def modification_recordings(self, input: inputs.ModificationRecordingListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ModificationRecordingPage:
+        """GET /v1/modification-recordings. Read/reconcile; no mutation."""
+        return cast('models.ModificationRecordingPage', self._execute('createTrainingClient.modification_recordings', {}, input, query, expected))
 
     def stage_artifact(self, input: inputs.TrainingInputArtifactUpload, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingInputArtifact:
         """POST /v1/training/artifacts. Explicit operation; never automatically replayed."""
@@ -26,9 +48,57 @@ class Training(Resource):
         """GET /v1/training/jobs. Read/reconcile; no mutation."""
         return cast('models.TrainingJobPage', self._execute('createTrainingClient.list_jobs', {}, None, query, expected))
 
+    def list_executions(self, input: inputs.TrainingExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingExecutionPage:
+        """GET /v1/training/executions. Read/reconcile; no mutation."""
+        return cast('models.TrainingExecutionPage', self._execute('createTrainingClient.list_executions', {}, input, query, expected))
+
+    def list_modification_executions(self, input: inputs.ManagedModificationExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedModificationExecutionPage', self._execute('createTrainingClient.list_modification_executions', {}, input, query, expected))
+
+    def get_modification_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedModificationExecution', self._execute('createTrainingClient.get_modification_execution', {'id': id}, None, query, expected))
+
+    def compile_modification_execution(self, input: inputs.ManagedModificationCompile, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedModificationCompilation', self._execute('createTrainingClient.compile_modification_execution', {}, input, query, expected))
+
+    def prepare_modification_execution(self, input: inputs.ManagedModificationPrepare, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedModificationExecutionReceipt', self._execute('createTrainingClient.prepare_modification_execution', {}, input, query, expected))
+
+    def start_modification_execution(self, id: str, input: inputs.ManagedModificationStart, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedModificationExecutionReceipt', self._execute('createTrainingClient.start_modification_execution', {'id': id}, input, query, expected))
+
+    def cancel_modification_execution(self, id: str, input: inputs.ManagedModificationCancel, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedModificationExecutionReceipt', self._execute('createTrainingClient.cancel_modification_execution', {'id': id}, input, query, expected))
+
     def get_job(self, job_id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingJob:
         """GET /v1/training/jobs/{jobId}. Read/reconcile; no mutation."""
         return cast('models.TrainingJob', self._execute('createTrainingClient.get_job', {'jobId': job_id}, None, query, expected))
+
+    def result(self, job_id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingResult:
+        """GET /v1/training/jobs/{jobId}/result. Read/reconcile; no mutation."""
+        return cast('models.TrainingResult', self._execute('createTrainingClient.result', {'jobId': job_id}, None, query, expected))
+
+    def save_result_model(self, job_id: str, input: inputs.TrainingResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingResultSaveReceipt:
+        """POST /v1/training/jobs/{jobId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingResultSaveReceipt', self._execute('createTrainingClient.save_result_model', {'jobId': job_id}, input, query, expected))
+
+    def saved_model(self, model_project_id: str, input: inputs.TrainingSavedModelQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingSavedModel:
+        """GET /v1/training/models/{modelProjectId}. Read/reconcile; no mutation."""
+        return cast('models.TrainingSavedModel', self._execute('createTrainingClient.saved_model', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def model_serving(self, model_project_id: str, input: inputs.TrainingModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.TrainingModelServing', self._execute('createTrainingClient.model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def control_model_serving(self, model_project_id: str, input: inputs.TrainingModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingModelServingControlReceipt', self._execute('createTrainingClient.control_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
 
     def cancel_job(self, job_id: str, input: inputs.TrainingJobControlRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingJob:
         """POST /v1/training/jobs/{jobId}/cancel. Explicit operation; never automatically replayed."""
@@ -58,6 +128,10 @@ class Training(Resource):
         """GET /v1/training/jobs/{jobId}/evaluations/{evaluationId}/tasks. Read/reconcile; no mutation."""
         return cast('models.TrainingEvaluationTaskPage', self._execute('createTrainingClient.evaluation_tasks', {'jobId': job_id, 'evaluationId': evaluation_id}, None, query, expected))
 
+    def prepare_experiment(self, input: inputs.TrainingExperimentSetupRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingExperimentSetupReceipt:
+        """POST /v1/training/preparations/from-draft. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingExperimentSetupReceipt', self._execute('createTrainingClient.prepare_experiment', {}, input, query, expected))
+
     def prepare_run(self, input: inputs.TrainingPreparationRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingPreparationReceipt:
         """POST /v1/training/preparations. Explicit operation; never automatically replayed."""
         return cast('models.TrainingPreparationReceipt', self._execute('createTrainingClient.prepare_run', {}, input, query, expected))
@@ -79,8 +153,20 @@ class Training(Resource):
         return cast('models.TrainingPreparationReceipt', self._execute('createTrainingClient.cancel_preparation', {'id': id}, input, query, expected))
 
     def estimate(self, input: inputs.TrainingEstimateRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingEstimate:
-        """POST /v1/training/estimates. Current hosted route unavailable; no dispatch."""
+        """POST /v1/training/estimates. Explicit operation; never automatically replayed."""
         return cast('models.TrainingEstimate', self._execute('createTrainingClient.estimate', {}, input, query, expected))
+
+    def funding(self, input: inputs.TrainingFundingRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingFunding:
+        """POST /v1/training/funding/preview. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingFunding', self._execute('createTrainingClient.funding', {}, input, query, expected))
+
+    def review_dataset(self, input: inputs.DatasetTrainingReviewRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.DatasetTrainingReviewReceipt:
+        """POST /v1/training/dataset-reviews. Explicit operation; never automatically replayed."""
+        return cast('models.DatasetTrainingReviewReceipt', self._execute('createTrainingClient.review_dataset', {}, input, query, expected))
+
+    def funding_handoff(self, input: inputs.TrainingFundingHandoffRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingFundingHandoff:
+        """POST /v1/training/funding/handoff. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingFundingHandoff', self._execute('createTrainingClient.funding_handoff', {}, input, query, expected))
 
     def acceptance_groups(self, job_id: str, input: inputs.TrainingAcceptanceGroupQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingAcceptanceGroupPage:
         """GET /v1/training/jobs/{jobId}/acceptance-groups. Read/reconcile; no mutation."""
@@ -106,6 +192,226 @@ class Training(Resource):
         """GET /v1/training/harness-sources/{id}/{contentHash}. Read/reconcile; no mutation."""
         return cast('Union[models.HarnessSourcePackage, models.HarnessPolicySourcePackage]', self._execute('createTrainingClient.get_harness_source', {'id': id, 'contentHash': content_hash}, None, query, expected))
 
+    def save_experiment_draft(self, input: inputs.ExperimentDraftSave, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ExperimentDraftReceipt:
+        """POST /v1/training/experiment-drafts. Explicit operation; never automatically replayed."""
+        return cast('models.ExperimentDraftReceipt', self._execute('createTrainingClient.save_experiment_draft', {}, input, query, expected))
+
+    def get_experiment_draft(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ExperimentDraftRecord:
+        """GET /v1/training/experiment-drafts/{id}. Read/reconcile; no mutation."""
+        return cast('models.ExperimentDraftRecord', self._execute('createTrainingClient.get_experiment_draft', {'id': id}, None, query, expected))
+
+    def list_experiment_drafts(self, input: inputs.ExperimentDraftListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ExperimentDraftPage:
+        """GET /v1/training/experiment-drafts. Read/reconcile; no mutation."""
+        return cast('models.ExperimentDraftPage', self._execute('createTrainingClient.list_experiment_drafts', {}, input, query, expected))
+
+    def archive_experiment_draft(self, id: str, input: inputs.ExperimentDraftArchive, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ExperimentDraftReceipt:
+        """POST /v1/training/experiment-drafts/{id}/archive. Explicit operation; never automatically replayed."""
+        return cast('models.ExperimentDraftReceipt', self._execute('createTrainingClient.archive_experiment_draft', {'id': id}, input, query, expected))
+
+    def save_modification_result_model(self, input: inputs.SteeringProfileSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringProfileReceipt:
+        """POST /v1/training/steering-profiles. Explicit operation; never automatically replayed."""
+        return cast('models.SteeringProfileReceipt', self._execute('createTrainingClient.save_modification_result_model', {}, input, query, expected))
+
+    def get_steering_profile(self, id: str, input: inputs.SteeringProfileReadQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringProfileRecord:
+        """GET /v1/training/steering-profiles/{id}. Read/reconcile; no mutation."""
+        return cast('models.SteeringProfileRecord', self._execute('createTrainingClient.get_steering_profile', {'id': id}, input, query, expected))
+
+    def list_steering_profiles(self, input: inputs.SteeringProfileListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringProfilePage:
+        """GET /v1/training/steering-profiles. Read/reconcile; no mutation."""
+        return cast('models.SteeringProfilePage', self._execute('createTrainingClient.list_steering_profiles', {}, input, query, expected))
+
+    def archive_steering_profile(self, id: str, input: inputs.SteeringProfileArchiveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringProfileReceipt:
+        """POST /v1/training/steering-profiles/{id}/archive. Explicit operation; never automatically replayed."""
+        return cast('models.SteeringProfileReceipt', self._execute('createTrainingClient.archive_steering_profile', {'id': id}, input, query, expected))
+
+    def model_version(self, model_project_id: str, input: inputs.SteeringProfileReadQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SavedModelVersionRead:
+        """GET /v1/training/models/{modelProjectId}/version. Read/reconcile; no mutation."""
+        return cast('models.SavedModelVersionRead', self._execute('createTrainingClient.model_version', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def saved_model_serving(self, model_project_id: str, input: inputs.SavedModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SavedModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.SavedModelServing', self._execute('createTrainingClient.saved_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def control_steering_model_serving(self, model_project_id: str, input: inputs.SteeringModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.SteeringModelServingControlReceipt', self._execute('createTrainingClient.control_steering_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def control_engram_model_serving(self, model_project_id: str, input: inputs.EngramModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.EngramModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.EngramModelServingControlReceipt', self._execute('createTrainingClient.control_engram_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def import_neuron_calibration(self, input: inputs.NeuronCalibrationImportRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.NeuronCalibrationReceipt:
+        """POST /v1/training/neuron-calibrations. Explicit operation; never automatically replayed."""
+        return cast('models.NeuronCalibrationReceipt', self._execute('createTrainingClient.import_neuron_calibration', {}, input, query, expected))
+
+    def get_neuron_calibration(self, id: str, input: inputs.NeuronCalibrationReadQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.NeuronCalibrationRecord:
+        """GET /v1/training/neuron-calibrations/{id}. Read/reconcile; no mutation."""
+        return cast('models.NeuronCalibrationRecord', self._execute('createTrainingClient.get_neuron_calibration', {'id': id}, input, query, expected))
+
+    def list_neuron_calibrations(self, input: inputs.NeuronCalibrationListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.NeuronCalibrationPage:
+        """GET /v1/training/neuron-calibrations. Read/reconcile; no mutation."""
+        return cast('models.NeuronCalibrationPage', self._execute('createTrainingClient.list_neuron_calibrations', {}, input, query, expected))
+
+    def archive_neuron_calibration(self, id: str, input: inputs.NeuronCalibrationArchiveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.NeuronCalibrationReceipt:
+        """POST /v1/training/neuron-calibrations/{id}/archive. Explicit operation; never automatically replayed."""
+        return cast('models.NeuronCalibrationReceipt', self._execute('createTrainingClient.archive_neuron_calibration', {'id': id}, input, query, expected))
+
+    def engram_execution_capability(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.EngramExecutionCapability:
+        """GET /v1/training/modification-capabilities/engram. Read/reconcile; no mutation."""
+        return cast('models.EngramExecutionCapability', self._execute('createTrainingClient.engram_execution_capability', {}, input, query, expected))
+
+    def compile_engram_execution(self, input: inputs.ManagedEngramCompile, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedEngramCompilation', self._execute('createTrainingClient.compile_engram_execution', {}, input, query, expected))
+
+    def prepare_engram_execution(self, input: inputs.ManagedEngramPrepare, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedEngramExecutionReceipt', self._execute('createTrainingClient.prepare_engram_execution', {}, input, query, expected))
+
+    def start_engram_execution(self, id: str, input: inputs.ManagedEngramStart, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedEngramExecutionReceipt', self._execute('createTrainingClient.start_engram_execution', {'id': id}, input, query, expected))
+
+    def cancel_engram_execution(self, id: str, input: inputs.ManagedEngramCancel, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedEngramExecutionReceipt', self._execute('createTrainingClient.cancel_engram_execution', {'id': id}, input, query, expected))
+
+    def get_engram_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedEngramExecution', self._execute('createTrainingClient.get_engram_execution', {'id': id}, None, query, expected))
+
+    def list_engram_executions(self, input: inputs.ManagedEngramExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedEngramExecutionPage', self._execute('createTrainingClient.list_engram_executions', {}, input, query, expected))
+
+    def save_engram_result_model(self, execution_id: str, input: inputs.EngramResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.EngramResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.EngramResultSaveReceipt', self._execute('createTrainingClient.save_engram_result_model', {'executionId': execution_id}, input, query, expected))
+
+    def decision_execution_capability(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionExecutionCapability:
+        """GET /v1/training/modification-capabilities/decision. Read/reconcile; no mutation."""
+        return cast('models.DecisionExecutionCapability', self._execute('createTrainingClient.decision_execution_capability', {}, input, query, expected))
+
+    def compile_decision_execution(self, input: inputs.ManagedDecisionCompile, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedDecisionCompilation', self._execute('createTrainingClient.compile_decision_execution', {}, input, query, expected))
+
+    def prepare_decision_execution(self, input: inputs.ManagedDecisionPrepare, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedDecisionExecutionReceipt', self._execute('createTrainingClient.prepare_decision_execution', {}, input, query, expected))
+
+    def start_decision_execution(self, id: str, input: inputs.ManagedDecisionStart, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedDecisionExecutionReceipt', self._execute('createTrainingClient.start_decision_execution', {'id': id}, input, query, expected))
+
+    def cancel_decision_execution(self, id: str, input: inputs.ManagedDecisionCancel, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedDecisionExecutionReceipt', self._execute('createTrainingClient.cancel_decision_execution', {'id': id}, input, query, expected))
+
+    def get_decision_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedDecisionExecution', self._execute('createTrainingClient.get_decision_execution', {'id': id}, None, query, expected))
+
+    def list_decision_executions(self, input: inputs.ManagedDecisionExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedDecisionExecutionPage', self._execute('createTrainingClient.list_decision_executions', {}, input, query, expected))
+
+    def save_decision_result_model(self, execution_id: str, input: inputs.DecisionResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.DecisionResultSaveReceipt', self._execute('createTrainingClient.save_decision_result_model', {'executionId': execution_id}, input, query, expected))
+
+    def score_decision_model(self, model_project_id: str, input: inputs.DecisionModelScoreRequest, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionModelScoreReceipt:
+        """POST /v1/training/models/{modelProjectId}/decisions. Explicit operation; never automatically replayed."""
+        return cast('models.DecisionModelScoreReceipt', self._execute('createTrainingClient.score_decision_model', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def decision_model_serving(self, model_project_id: str, input: inputs.DecisionModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.DecisionModelServing', self._execute('createTrainingClient.decision_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def control_decision_model_serving(self, model_project_id: str, input: inputs.DecisionModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.DecisionModelServingControlReceipt', self._execute('createTrainingClient.control_decision_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def alpha_edit_execution_capability(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.AlphaEditExecutionCapability:
+        """GET /v1/training/modification-capabilities/alphaedit. Read/reconcile; no mutation."""
+        return cast('models.AlphaEditExecutionCapability', self._execute('createTrainingClient.alpha_edit_execution_capability', {}, input, query, expected))
+
+    def compile_alpha_edit_execution(self, input: inputs.ManagedAlphaEditCompile, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedAlphaEditCompilation', self._execute('createTrainingClient.compile_alpha_edit_execution', {}, input, query, expected))
+
+    def prepare_alpha_edit_execution(self, input: inputs.ManagedAlphaEditPrepare, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedAlphaEditExecutionReceipt', self._execute('createTrainingClient.prepare_alpha_edit_execution', {}, input, query, expected))
+
+    def start_alpha_edit_execution(self, id: str, input: inputs.ManagedAlphaEditStart, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedAlphaEditExecutionReceipt', self._execute('createTrainingClient.start_alpha_edit_execution', {'id': id}, input, query, expected))
+
+    def cancel_alpha_edit_execution(self, id: str, input: inputs.ManagedAlphaEditCancel, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedAlphaEditExecutionReceipt', self._execute('createTrainingClient.cancel_alpha_edit_execution', {'id': id}, input, query, expected))
+
+    def get_alpha_edit_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedAlphaEditExecution', self._execute('createTrainingClient.get_alpha_edit_execution', {'id': id}, None, query, expected))
+
+    def list_alpha_edit_executions(self, input: inputs.ManagedAlphaEditExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedAlphaEditExecutionPage', self._execute('createTrainingClient.list_alpha_edit_executions', {}, input, query, expected))
+
+    def save_alpha_edit_result_model(self, execution_id: str, input: inputs.AlphaEditResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.AlphaEditResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.AlphaEditResultSaveReceipt', self._execute('createTrainingClient.save_alpha_edit_result_model', {'executionId': execution_id}, input, query, expected))
+
+    def alpha_edit_model_serving(self, model_project_id: str, input: inputs.AlphaEditModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.AlphaEditModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.AlphaEditModelServing', self._execute('createTrainingClient.alpha_edit_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def control_alpha_edit_model_serving(self, model_project_id: str, input: inputs.AlphaEditModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.AlphaEditModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.AlphaEditModelServingControlReceipt', self._execute('createTrainingClient.control_alpha_edit_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def neuron_training_execution_capability(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.NeuronTrainingExecutionCapability:
+        """GET /v1/training/modification-capabilities/neuron-training. Read/reconcile; no mutation."""
+        return cast('models.NeuronTrainingExecutionCapability', self._execute('createTrainingClient.neuron_training_execution_capability', {}, input, query, expected))
+
+    def compile_neuron_training_execution(self, input: inputs.ManagedNeuronTrainingCompile, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedNeuronTrainingCompilation', self._execute('createTrainingClient.compile_neuron_training_execution', {}, input, query, expected))
+
+    def prepare_neuron_training_execution(self, input: inputs.ManagedNeuronTrainingPrepare, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedNeuronTrainingExecutionReceipt', self._execute('createTrainingClient.prepare_neuron_training_execution', {}, input, query, expected))
+
+    def start_neuron_training_execution(self, id: str, input: inputs.ManagedNeuronTrainingStart, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedNeuronTrainingExecutionReceipt', self._execute('createTrainingClient.start_neuron_training_execution', {'id': id}, input, query, expected))
+
+    def cancel_neuron_training_execution(self, id: str, input: inputs.ManagedNeuronTrainingCancel, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedNeuronTrainingExecutionReceipt', self._execute('createTrainingClient.cancel_neuron_training_execution', {'id': id}, input, query, expected))
+
+    def get_neuron_training_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedNeuronTrainingExecution', self._execute('createTrainingClient.get_neuron_training_execution', {'id': id}, None, query, expected))
+
+    def list_neuron_training_executions(self, input: inputs.ManagedNeuronTrainingExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedNeuronTrainingExecutionPage', self._execute('createTrainingClient.list_neuron_training_executions', {}, input, query, expected))
+
+    def save_neuron_training_result_model(self, execution_id: str, input: inputs.NeuronTrainingResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.NeuronTrainingResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.NeuronTrainingResultSaveReceipt', self._execute('createTrainingClient.save_neuron_training_result_model', {'executionId': execution_id}, input, query, expected))
+
+    def neuron_training_model_serving(self, model_project_id: str, input: inputs.NeuronTrainingModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.NeuronTrainingModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.NeuronTrainingModelServing', self._execute('createTrainingClient.neuron_training_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def control_neuron_training_model_serving(self, model_project_id: str, input: inputs.NeuronTrainingModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.NeuronTrainingModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.NeuronTrainingModelServingControlReceipt', self._execute('createTrainingClient.control_neuron_training_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
 class AsyncTraining(AsyncResource):
     async def capabilities(self, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingCapabilities:
         """GET /v1/training/capabilities. Read/reconcile; no mutation."""
@@ -114,6 +420,26 @@ class AsyncTraining(AsyncResource):
     async def gpu_catalog(self, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingGpuCatalog:
         """GET /v1/training/gpu-catalog. Read/reconcile; no mutation."""
         return cast('models.TrainingGpuCatalog', await self._execute('createTrainingClient.gpu_catalog', {}, None, query, expected))
+
+    async def hardware_catalog(self, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingHardwareCatalog:
+        """GET /v1/training/hardware-catalog. Read/reconcile; no mutation."""
+        return cast('models.TrainingHardwareCatalog', await self._execute('createTrainingClient.hardware_catalog', {}, None, query, expected))
+
+    async def modification_capabilities(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ModelModificationCapabilities:
+        """GET /v1/training/modification-capabilities. Read/reconcile; no mutation."""
+        return cast('models.ModelModificationCapabilities', await self._execute('createTrainingClient.modification_capabilities', {}, input, query, expected))
+
+    async def record_modification_observation(self, input: inputs.ModificationRecordingRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ModificationRecording:
+        """POST /v1/modification-recordings. Explicit operation; never automatically replayed."""
+        return cast('models.ModificationRecording', await self._execute('createTrainingClient.record_modification_observation', {}, input, query, expected))
+
+    async def modification_recording(self, id: str, input: inputs.ModificationRecordingReadQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ModificationRecordingRead:
+        """GET /v1/modification-recordings/{id}. Read/reconcile; no mutation."""
+        return cast('models.ModificationRecordingRead', await self._execute('createTrainingClient.modification_recording', {'id': id}, input, query, expected))
+
+    async def modification_recordings(self, input: inputs.ModificationRecordingListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ModificationRecordingPage:
+        """GET /v1/modification-recordings. Read/reconcile; no mutation."""
+        return cast('models.ModificationRecordingPage', await self._execute('createTrainingClient.modification_recordings', {}, input, query, expected))
 
     async def stage_artifact(self, input: inputs.TrainingInputArtifactUpload, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingInputArtifact:
         """POST /v1/training/artifacts. Explicit operation; never automatically replayed."""
@@ -127,9 +453,57 @@ class AsyncTraining(AsyncResource):
         """GET /v1/training/jobs. Read/reconcile; no mutation."""
         return cast('models.TrainingJobPage', await self._execute('createTrainingClient.list_jobs', {}, None, query, expected))
 
+    async def list_executions(self, input: inputs.TrainingExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingExecutionPage:
+        """GET /v1/training/executions. Read/reconcile; no mutation."""
+        return cast('models.TrainingExecutionPage', await self._execute('createTrainingClient.list_executions', {}, input, query, expected))
+
+    async def list_modification_executions(self, input: inputs.ManagedModificationExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedModificationExecutionPage', await self._execute('createTrainingClient.list_modification_executions', {}, input, query, expected))
+
+    async def get_modification_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedModificationExecution', await self._execute('createTrainingClient.get_modification_execution', {'id': id}, None, query, expected))
+
+    async def compile_modification_execution(self, input: inputs.ManagedModificationCompile, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedModificationCompilation', await self._execute('createTrainingClient.compile_modification_execution', {}, input, query, expected))
+
+    async def prepare_modification_execution(self, input: inputs.ManagedModificationPrepare, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedModificationExecutionReceipt', await self._execute('createTrainingClient.prepare_modification_execution', {}, input, query, expected))
+
+    async def start_modification_execution(self, id: str, input: inputs.ManagedModificationStart, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedModificationExecutionReceipt', await self._execute('createTrainingClient.start_modification_execution', {'id': id}, input, query, expected))
+
+    async def cancel_modification_execution(self, id: str, input: inputs.ManagedModificationCancel, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedModificationExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedModificationExecutionReceipt', await self._execute('createTrainingClient.cancel_modification_execution', {'id': id}, input, query, expected))
+
     async def get_job(self, job_id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingJob:
         """GET /v1/training/jobs/{jobId}. Read/reconcile; no mutation."""
         return cast('models.TrainingJob', await self._execute('createTrainingClient.get_job', {'jobId': job_id}, None, query, expected))
+
+    async def result(self, job_id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingResult:
+        """GET /v1/training/jobs/{jobId}/result. Read/reconcile; no mutation."""
+        return cast('models.TrainingResult', await self._execute('createTrainingClient.result', {'jobId': job_id}, None, query, expected))
+
+    async def save_result_model(self, job_id: str, input: inputs.TrainingResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingResultSaveReceipt:
+        """POST /v1/training/jobs/{jobId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingResultSaveReceipt', await self._execute('createTrainingClient.save_result_model', {'jobId': job_id}, input, query, expected))
+
+    async def saved_model(self, model_project_id: str, input: inputs.TrainingSavedModelQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingSavedModel:
+        """GET /v1/training/models/{modelProjectId}. Read/reconcile; no mutation."""
+        return cast('models.TrainingSavedModel', await self._execute('createTrainingClient.saved_model', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def model_serving(self, model_project_id: str, input: inputs.TrainingModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.TrainingModelServing', await self._execute('createTrainingClient.model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def control_model_serving(self, model_project_id: str, input: inputs.TrainingModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingModelServingControlReceipt', await self._execute('createTrainingClient.control_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
 
     async def cancel_job(self, job_id: str, input: inputs.TrainingJobControlRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingJob:
         """POST /v1/training/jobs/{jobId}/cancel. Explicit operation; never automatically replayed."""
@@ -159,6 +533,10 @@ class AsyncTraining(AsyncResource):
         """GET /v1/training/jobs/{jobId}/evaluations/{evaluationId}/tasks. Read/reconcile; no mutation."""
         return cast('models.TrainingEvaluationTaskPage', await self._execute('createTrainingClient.evaluation_tasks', {'jobId': job_id, 'evaluationId': evaluation_id}, None, query, expected))
 
+    async def prepare_experiment(self, input: inputs.TrainingExperimentSetupRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingExperimentSetupReceipt:
+        """POST /v1/training/preparations/from-draft. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingExperimentSetupReceipt', await self._execute('createTrainingClient.prepare_experiment', {}, input, query, expected))
+
     async def prepare_run(self, input: inputs.TrainingPreparationRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingPreparationReceipt:
         """POST /v1/training/preparations. Explicit operation; never automatically replayed."""
         return cast('models.TrainingPreparationReceipt', await self._execute('createTrainingClient.prepare_run', {}, input, query, expected))
@@ -180,8 +558,20 @@ class AsyncTraining(AsyncResource):
         return cast('models.TrainingPreparationReceipt', await self._execute('createTrainingClient.cancel_preparation', {'id': id}, input, query, expected))
 
     async def estimate(self, input: inputs.TrainingEstimateRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingEstimate:
-        """POST /v1/training/estimates. Current hosted route unavailable; no dispatch."""
+        """POST /v1/training/estimates. Explicit operation; never automatically replayed."""
         return cast('models.TrainingEstimate', await self._execute('createTrainingClient.estimate', {}, input, query, expected))
+
+    async def funding(self, input: inputs.TrainingFundingRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingFunding:
+        """POST /v1/training/funding/preview. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingFunding', await self._execute('createTrainingClient.funding', {}, input, query, expected))
+
+    async def review_dataset(self, input: inputs.DatasetTrainingReviewRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.DatasetTrainingReviewReceipt:
+        """POST /v1/training/dataset-reviews. Explicit operation; never automatically replayed."""
+        return cast('models.DatasetTrainingReviewReceipt', await self._execute('createTrainingClient.review_dataset', {}, input, query, expected))
+
+    async def funding_handoff(self, input: inputs.TrainingFundingHandoffRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingFundingHandoff:
+        """POST /v1/training/funding/handoff. Explicit operation; never automatically replayed."""
+        return cast('models.TrainingFundingHandoff', await self._execute('createTrainingClient.funding_handoff', {}, input, query, expected))
 
     async def acceptance_groups(self, job_id: str, input: inputs.TrainingAcceptanceGroupQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingAcceptanceGroupPage:
         """GET /v1/training/jobs/{jobId}/acceptance-groups. Read/reconcile; no mutation."""
@@ -206,3 +596,223 @@ class AsyncTraining(AsyncResource):
     async def get_harness_source(self, id: str, content_hash: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> Union[models.HarnessSourcePackage, models.HarnessPolicySourcePackage]:
         """GET /v1/training/harness-sources/{id}/{contentHash}. Read/reconcile; no mutation."""
         return cast('Union[models.HarnessSourcePackage, models.HarnessPolicySourcePackage]', await self._execute('createTrainingClient.get_harness_source', {'id': id, 'contentHash': content_hash}, None, query, expected))
+
+    async def save_experiment_draft(self, input: inputs.ExperimentDraftSave, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ExperimentDraftReceipt:
+        """POST /v1/training/experiment-drafts. Explicit operation; never automatically replayed."""
+        return cast('models.ExperimentDraftReceipt', await self._execute('createTrainingClient.save_experiment_draft', {}, input, query, expected))
+
+    async def get_experiment_draft(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ExperimentDraftRecord:
+        """GET /v1/training/experiment-drafts/{id}. Read/reconcile; no mutation."""
+        return cast('models.ExperimentDraftRecord', await self._execute('createTrainingClient.get_experiment_draft', {'id': id}, None, query, expected))
+
+    async def list_experiment_drafts(self, input: inputs.ExperimentDraftListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ExperimentDraftPage:
+        """GET /v1/training/experiment-drafts. Read/reconcile; no mutation."""
+        return cast('models.ExperimentDraftPage', await self._execute('createTrainingClient.list_experiment_drafts', {}, input, query, expected))
+
+    async def archive_experiment_draft(self, id: str, input: inputs.ExperimentDraftArchive, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ExperimentDraftReceipt:
+        """POST /v1/training/experiment-drafts/{id}/archive. Explicit operation; never automatically replayed."""
+        return cast('models.ExperimentDraftReceipt', await self._execute('createTrainingClient.archive_experiment_draft', {'id': id}, input, query, expected))
+
+    async def save_modification_result_model(self, input: inputs.SteeringProfileSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringProfileReceipt:
+        """POST /v1/training/steering-profiles. Explicit operation; never automatically replayed."""
+        return cast('models.SteeringProfileReceipt', await self._execute('createTrainingClient.save_modification_result_model', {}, input, query, expected))
+
+    async def get_steering_profile(self, id: str, input: inputs.SteeringProfileReadQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringProfileRecord:
+        """GET /v1/training/steering-profiles/{id}. Read/reconcile; no mutation."""
+        return cast('models.SteeringProfileRecord', await self._execute('createTrainingClient.get_steering_profile', {'id': id}, input, query, expected))
+
+    async def list_steering_profiles(self, input: inputs.SteeringProfileListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringProfilePage:
+        """GET /v1/training/steering-profiles. Read/reconcile; no mutation."""
+        return cast('models.SteeringProfilePage', await self._execute('createTrainingClient.list_steering_profiles', {}, input, query, expected))
+
+    async def archive_steering_profile(self, id: str, input: inputs.SteeringProfileArchiveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringProfileReceipt:
+        """POST /v1/training/steering-profiles/{id}/archive. Explicit operation; never automatically replayed."""
+        return cast('models.SteeringProfileReceipt', await self._execute('createTrainingClient.archive_steering_profile', {'id': id}, input, query, expected))
+
+    async def model_version(self, model_project_id: str, input: inputs.SteeringProfileReadQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SavedModelVersionRead:
+        """GET /v1/training/models/{modelProjectId}/version. Read/reconcile; no mutation."""
+        return cast('models.SavedModelVersionRead', await self._execute('createTrainingClient.model_version', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def saved_model_serving(self, model_project_id: str, input: inputs.SavedModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SavedModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.SavedModelServing', await self._execute('createTrainingClient.saved_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def control_steering_model_serving(self, model_project_id: str, input: inputs.SteeringModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.SteeringModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.SteeringModelServingControlReceipt', await self._execute('createTrainingClient.control_steering_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def control_engram_model_serving(self, model_project_id: str, input: inputs.EngramModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.EngramModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.EngramModelServingControlReceipt', await self._execute('createTrainingClient.control_engram_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def import_neuron_calibration(self, input: inputs.NeuronCalibrationImportRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.NeuronCalibrationReceipt:
+        """POST /v1/training/neuron-calibrations. Explicit operation; never automatically replayed."""
+        return cast('models.NeuronCalibrationReceipt', await self._execute('createTrainingClient.import_neuron_calibration', {}, input, query, expected))
+
+    async def get_neuron_calibration(self, id: str, input: inputs.NeuronCalibrationReadQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.NeuronCalibrationRecord:
+        """GET /v1/training/neuron-calibrations/{id}. Read/reconcile; no mutation."""
+        return cast('models.NeuronCalibrationRecord', await self._execute('createTrainingClient.get_neuron_calibration', {'id': id}, input, query, expected))
+
+    async def list_neuron_calibrations(self, input: inputs.NeuronCalibrationListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.NeuronCalibrationPage:
+        """GET /v1/training/neuron-calibrations. Read/reconcile; no mutation."""
+        return cast('models.NeuronCalibrationPage', await self._execute('createTrainingClient.list_neuron_calibrations', {}, input, query, expected))
+
+    async def archive_neuron_calibration(self, id: str, input: inputs.NeuronCalibrationArchiveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.NeuronCalibrationReceipt:
+        """POST /v1/training/neuron-calibrations/{id}/archive. Explicit operation; never automatically replayed."""
+        return cast('models.NeuronCalibrationReceipt', await self._execute('createTrainingClient.archive_neuron_calibration', {'id': id}, input, query, expected))
+
+    async def engram_execution_capability(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.EngramExecutionCapability:
+        """GET /v1/training/modification-capabilities/engram. Read/reconcile; no mutation."""
+        return cast('models.EngramExecutionCapability', await self._execute('createTrainingClient.engram_execution_capability', {}, input, query, expected))
+
+    async def compile_engram_execution(self, input: inputs.ManagedEngramCompile, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedEngramCompilation', await self._execute('createTrainingClient.compile_engram_execution', {}, input, query, expected))
+
+    async def prepare_engram_execution(self, input: inputs.ManagedEngramPrepare, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedEngramExecutionReceipt', await self._execute('createTrainingClient.prepare_engram_execution', {}, input, query, expected))
+
+    async def start_engram_execution(self, id: str, input: inputs.ManagedEngramStart, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedEngramExecutionReceipt', await self._execute('createTrainingClient.start_engram_execution', {'id': id}, input, query, expected))
+
+    async def cancel_engram_execution(self, id: str, input: inputs.ManagedEngramCancel, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedEngramExecutionReceipt', await self._execute('createTrainingClient.cancel_engram_execution', {'id': id}, input, query, expected))
+
+    async def get_engram_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedEngramExecution', await self._execute('createTrainingClient.get_engram_execution', {'id': id}, None, query, expected))
+
+    async def list_engram_executions(self, input: inputs.ManagedEngramExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.ManagedEngramExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedEngramExecutionPage', await self._execute('createTrainingClient.list_engram_executions', {}, input, query, expected))
+
+    async def save_engram_result_model(self, execution_id: str, input: inputs.EngramResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.EngramResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.EngramResultSaveReceipt', await self._execute('createTrainingClient.save_engram_result_model', {'executionId': execution_id}, input, query, expected))
+
+    async def decision_execution_capability(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionExecutionCapability:
+        """GET /v1/training/modification-capabilities/decision. Read/reconcile; no mutation."""
+        return cast('models.DecisionExecutionCapability', await self._execute('createTrainingClient.decision_execution_capability', {}, input, query, expected))
+
+    async def compile_decision_execution(self, input: inputs.ManagedDecisionCompile, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedDecisionCompilation', await self._execute('createTrainingClient.compile_decision_execution', {}, input, query, expected))
+
+    async def prepare_decision_execution(self, input: inputs.ManagedDecisionPrepare, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedDecisionExecutionReceipt', await self._execute('createTrainingClient.prepare_decision_execution', {}, input, query, expected))
+
+    async def start_decision_execution(self, id: str, input: inputs.ManagedDecisionStart, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedDecisionExecutionReceipt', await self._execute('createTrainingClient.start_decision_execution', {'id': id}, input, query, expected))
+
+    async def cancel_decision_execution(self, id: str, input: inputs.ManagedDecisionCancel, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedDecisionExecutionReceipt', await self._execute('createTrainingClient.cancel_decision_execution', {'id': id}, input, query, expected))
+
+    async def get_decision_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedDecisionExecution', await self._execute('createTrainingClient.get_decision_execution', {'id': id}, None, query, expected))
+
+    async def list_decision_executions(self, input: inputs.ManagedDecisionExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.ManagedDecisionExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedDecisionExecutionPage', await self._execute('createTrainingClient.list_decision_executions', {}, input, query, expected))
+
+    async def save_decision_result_model(self, execution_id: str, input: inputs.DecisionResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.DecisionResultSaveReceipt', await self._execute('createTrainingClient.save_decision_result_model', {'executionId': execution_id}, input, query, expected))
+
+    async def score_decision_model(self, model_project_id: str, input: inputs.DecisionModelScoreRequest, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionModelScoreReceipt:
+        """POST /v1/training/models/{modelProjectId}/decisions. Explicit operation; never automatically replayed."""
+        return cast('models.DecisionModelScoreReceipt', await self._execute('createTrainingClient.score_decision_model', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def decision_model_serving(self, model_project_id: str, input: inputs.DecisionModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.DecisionModelServing', await self._execute('createTrainingClient.decision_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def control_decision_model_serving(self, model_project_id: str, input: inputs.DecisionModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: DecisionOperationExpectation | None = None) -> models.DecisionModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.DecisionModelServingControlReceipt', await self._execute('createTrainingClient.control_decision_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def alpha_edit_execution_capability(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.AlphaEditExecutionCapability:
+        """GET /v1/training/modification-capabilities/alphaedit. Read/reconcile; no mutation."""
+        return cast('models.AlphaEditExecutionCapability', await self._execute('createTrainingClient.alpha_edit_execution_capability', {}, input, query, expected))
+
+    async def compile_alpha_edit_execution(self, input: inputs.ManagedAlphaEditCompile, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedAlphaEditCompilation', await self._execute('createTrainingClient.compile_alpha_edit_execution', {}, input, query, expected))
+
+    async def prepare_alpha_edit_execution(self, input: inputs.ManagedAlphaEditPrepare, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedAlphaEditExecutionReceipt', await self._execute('createTrainingClient.prepare_alpha_edit_execution', {}, input, query, expected))
+
+    async def start_alpha_edit_execution(self, id: str, input: inputs.ManagedAlphaEditStart, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedAlphaEditExecutionReceipt', await self._execute('createTrainingClient.start_alpha_edit_execution', {'id': id}, input, query, expected))
+
+    async def cancel_alpha_edit_execution(self, id: str, input: inputs.ManagedAlphaEditCancel, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedAlphaEditExecutionReceipt', await self._execute('createTrainingClient.cancel_alpha_edit_execution', {'id': id}, input, query, expected))
+
+    async def get_alpha_edit_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedAlphaEditExecution', await self._execute('createTrainingClient.get_alpha_edit_execution', {'id': id}, None, query, expected))
+
+    async def list_alpha_edit_executions(self, input: inputs.ManagedAlphaEditExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedAlphaEditExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedAlphaEditExecutionPage', await self._execute('createTrainingClient.list_alpha_edit_executions', {}, input, query, expected))
+
+    async def save_alpha_edit_result_model(self, execution_id: str, input: inputs.AlphaEditResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.AlphaEditResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.AlphaEditResultSaveReceipt', await self._execute('createTrainingClient.save_alpha_edit_result_model', {'executionId': execution_id}, input, query, expected))
+
+    async def alpha_edit_model_serving(self, model_project_id: str, input: inputs.AlphaEditModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.AlphaEditModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.AlphaEditModelServing', await self._execute('createTrainingClient.alpha_edit_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def control_alpha_edit_model_serving(self, model_project_id: str, input: inputs.AlphaEditModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.AlphaEditModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.AlphaEditModelServingControlReceipt', await self._execute('createTrainingClient.control_alpha_edit_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def neuron_training_execution_capability(self, input: inputs.ModelModificationCapabilitiesQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.NeuronTrainingExecutionCapability:
+        """GET /v1/training/modification-capabilities/neuron-training. Read/reconcile; no mutation."""
+        return cast('models.NeuronTrainingExecutionCapability', await self._execute('createTrainingClient.neuron_training_execution_capability', {}, input, query, expected))
+
+    async def compile_neuron_training_execution(self, input: inputs.ManagedNeuronTrainingCompile, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingCompilation:
+        """POST /v1/training/modification-executions/compile. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedNeuronTrainingCompilation', await self._execute('createTrainingClient.compile_neuron_training_execution', {}, input, query, expected))
+
+    async def prepare_neuron_training_execution(self, input: inputs.ManagedNeuronTrainingPrepare, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecutionReceipt:
+        """POST /v1/training/modification-executions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedNeuronTrainingExecutionReceipt', await self._execute('createTrainingClient.prepare_neuron_training_execution', {}, input, query, expected))
+
+    async def start_neuron_training_execution(self, id: str, input: inputs.ManagedNeuronTrainingStart, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedNeuronTrainingExecutionReceipt', await self._execute('createTrainingClient.start_neuron_training_execution', {'id': id}, input, query, expected))
+
+    async def cancel_neuron_training_execution(self, id: str, input: inputs.ManagedNeuronTrainingCancel, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecutionReceipt:
+        """POST /v1/training/modification-executions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.ManagedNeuronTrainingExecutionReceipt', await self._execute('createTrainingClient.cancel_neuron_training_execution', {'id': id}, input, query, expected))
+
+    async def get_neuron_training_execution(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecution:
+        """GET /v1/training/modification-executions/{id}. Read/reconcile; no mutation."""
+        return cast('models.ManagedNeuronTrainingExecution', await self._execute('createTrainingClient.get_neuron_training_execution', {'id': id}, None, query, expected))
+
+    async def list_neuron_training_executions(self, input: inputs.ManagedNeuronTrainingExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.ManagedNeuronTrainingExecutionPage:
+        """GET /v1/training/modification-executions. Read/reconcile; no mutation."""
+        return cast('models.ManagedNeuronTrainingExecutionPage', await self._execute('createTrainingClient.list_neuron_training_executions', {}, input, query, expected))
+
+    async def save_neuron_training_result_model(self, execution_id: str, input: inputs.NeuronTrainingResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.NeuronTrainingResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.NeuronTrainingResultSaveReceipt', await self._execute('createTrainingClient.save_neuron_training_result_model', {'executionId': execution_id}, input, query, expected))
+
+    async def neuron_training_model_serving(self, model_project_id: str, input: inputs.NeuronTrainingModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.NeuronTrainingModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.NeuronTrainingModelServing', await self._execute('createTrainingClient.neuron_training_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def control_neuron_training_model_serving(self, model_project_id: str, input: inputs.NeuronTrainingModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.NeuronTrainingModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.NeuronTrainingModelServingControlReceipt', await self._execute('createTrainingClient.control_neuron_training_model_serving', {'modelProjectId': model_project_id}, input, query, expected))

@@ -34,7 +34,7 @@ export function ComposerTrainingControls({ context, sessionId, busy }: {
         triggerContent={<><span className="composer-resource-dataset-name">{model?.name ?? selected.label}</span><ChevronDown size={12} /></>}
         options={modelOptions} onChange={raw => void choose(raw)} disabled={disabled} />
       <DropdownSelect compact floating placement="top" floatingMenuWidth={320} label="Training run" className="composer-resource-graders" value={runValue}
-        options={runs.length ? runs : [{ value: "", label: context.runs.isPending ? "Loading runs…" : "No runs", disabled: true }]}
+        options={[...(!training ? [{ value: "", label: context.runs.isPending ? "Loading runs…" : runs.length ? "Choose training run" : "No runs", disabled: true }] : []), ...runs]}
         onChange={raw => void choose(raw)} disabled={disabled || context.runs.isPending} />
       <button type="button" className="composer-resource-primary" onClick={() => window.dispatchEvent(new CustomEvent(CHAT_CONTEXT_SELECTED, { detail: { sessionId, scope: context.scope, targetKey: JSON.stringify(selected.target) } }))}>View progress</button>
     </div>

@@ -33,11 +33,11 @@ export function TrainingRunDiagnostics({
         resultAvailable: false,
         parent: null,
         accounting: {
-          maximumUsd: null,
-          settledUsd: null,
-          outstandingUsd: null,
-          outstandingCount: null,
-          final: false,
+          maximumUsd: job.usage?.customerCapUsd != null ? Number(job.usage.customerCapUsd) : null,
+          settledUsd: job.usage ? Number(job.usage.chargedUsd) : null,
+          outstandingUsd: job.usage ? Number(job.usage.outstandingUsd) : null,
+          outstandingCount: job.usage ? job.usage.components.reduce((sum, component) => sum + component.openOwners, 0) : null,
+          final: job.usage?.complete ?? false,
           receiptCount: 0,
         },
         events: items.map((event) =>

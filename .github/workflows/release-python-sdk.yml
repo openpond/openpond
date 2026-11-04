@@ -54,6 +54,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          uv run --no-project python python/openpond-sdk/tools/generate_types.py
           uv sync --project python/openpond-sdk --locked
           uv run --project python/openpond-sdk --locked pytest python/openpond-sdk/tests/test_http_workflow.py
           uv run --project python/openpond-sdk --locked python python/openpond-sdk/tools/prepare_release.py --output candidate --expected-version "${VERSION}"

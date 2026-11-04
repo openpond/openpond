@@ -1,5 +1,6 @@
 import { ErrorToast } from "../common/ErrorToast";
 import { TrainingRunDiagnostics } from "./workspace/TrainingRunDiagnostics";
+import { TrainingUsageDetails } from "./workspace/TrainingUsageDetails";
 import { contentHash } from "@openpond/harness";
 import { PostTrainingControlSchema } from "openpond-sdk/post-training";
 import { useEffect, useRef, useState } from "react";
@@ -11,6 +12,8 @@ import { TrainingRecoveryLineage } from "../training/TrainingRecoveryLineage";
 import "./hosted-training-run.css";
 import { useHostedTrainingRun } from "./use-hosted-training-run";
 import { TrainingRunLineage, ContinualLearningStatus } from "../training/TrainingRunLineage";
+import { TrainingResultDetails } from "./TrainingResultDetails";
+import type { WorkspaceApi } from "./workspace/workspace-api";
 
 export function LabHostedTrainingRunDetail({
   connection,
@@ -21,7 +24,11 @@ export function LabHostedTrainingRunDetail({
   onOpenExperiment,
   diagnostics=false,
   onDiagnostics,
+  api,
+  onOpenModel,
 }: {
+  api: WorkspaceApi;
+  onOpenModel: (id: string) => Promise<void>;
   diagnostics?:boolean;
   onDiagnostics?:(value:boolean)=>void;
   connection: ClientConnection;
@@ -144,7 +151,7 @@ export function LabHostedTrainingRunDetail({
         { label: "Rollout groups", value: `${summary.rolloutProgress.groupsCompleted} / ${summary.rolloutProgress.groupsTarget}` },
         { label: "Weight updates", value: summary.rolloutProgress.optimizerUpdatesApplied },
         { label: "Skipped updates", value: summary.rolloutProgress.optimizerUpdatesSkipped },
-        { label: "Accrued spend", value: `$${summary.accruedSpendUsd.toFixed(6)}` },
+        { label: summary.usage ? "Charged" : "Accrued spend", value: summary.usage ? `$${summary.usage.chargedUsd}` : `$${summary.accruedSpendUsd.toFixed(6)}` },
       ] : []} />
       <nav className="evaluation-workspace-tabs" aria-label="Training sections"><button aria-selected={!diagnostics} onClick={()=>onDiagnostics?.(false)}>Overview</button><button aria-selected={diagnostics} onClick={()=>onDiagnostics?.(true)}>Diagnostics</button></nav>
       <ErrorToast error={error ?? readError} />
@@ -159,7 +166,9 @@ export function LabHostedTrainingRunDetail({
       ) : !diagnostics ? (
         <>
           <TrainingRecoveryLineage recovery={value.flow?.recovery} />
+          {summary?.usage ? <TrainingUsageDetails usage={summary.usage} /> : null}
           {value.job.terminalReason ? <p>{value.job.terminalReason}</p> : null}
+          <TrainingResultDetails api={api} onOpenModel={onOpenModel} connection={connection} teamId={teamId} actorId={actorId} jobId={jobId} version={summary?.version ?? value.job.version} />
           <section>
             <h3>Evals</h3>
             {!value.evals ? (

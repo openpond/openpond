@@ -1,0 +1,61 @@
+{
+  "request": {
+    "schemaVersion": "openpond.trainingFundingRequest.v1",
+    "teamId": "team-fixture",
+    "maximumSpendUsd": 25,
+    "draft": {
+      "id": "draft-fixture",
+      "revision": 2,
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "projectId": null
+    }
+  },
+  "response": {
+    "schemaVersion": "openpond.trainingFunding.v1",
+    "teamId": "team-fixture",
+    "actorId": "actor-fixture",
+    "requestHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "maximumSpendUsd": 25,
+    "draft": {
+      "id": "draft-fixture",
+      "revision": 2,
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "projectId": null
+    },
+    "state": "covered",
+    "canViewBalance": false,
+    "canPurchase": false,
+    "availableUsageUsd": null,
+    "prepaidCreditUsd": null,
+    "checkedAt": "2026-11-01T00:00:00.000Z",
+    "expiresAt": "2026-11-01T00:01:00.000Z"
+  },
+  "handoffRequest": {
+    "schemaVersion": "openpond.trainingFundingHandoffRequest.v1",
+    "teamId": "team-fixture",
+    "maximumSpendUsd": 25,
+    "draft": {
+      "id": "draft-fixture",
+      "revision": 2,
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "projectId": null
+    }
+  },
+  "handoffResponse": {
+    "schemaVersion": "openpond.trainingFundingHandoff.v1",
+    "teamId": "team-fixture",
+    "actorId": "actor-fixture",
+    "requestHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "maximumSpendUsd": 25,
+    "draft": {
+      "id": "draft-fixture",
+      "revision": 2,
+      "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "projectId": null
+    },
+    "canPurchase": true,
+    "checkedAt": "2026-11-01T00:00:00.000Z",
+    "expiresAt": "2026-11-01T00:01:00.000Z",
+    "billingUrl": "https://app.example.test/entry/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  }
+}
