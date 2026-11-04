@@ -11,12 +11,13 @@ wheel=args.wheel.resolve()
 if hashlib.sha256(wheel.read_bytes()).hexdigest()!=args.sha256:raise SystemExit('Wheel hash mismatch.')
 proof='''import importlib,json,sys
 from pathlib import Path
+from importlib.metadata import version
 import ponder_sdk
 from ponder_sdk import Client,AsyncClient,models,inputs,canonical_json
 from ponder_sdk.wire import schemas
 origin=Path(ponder_sdk.__file__).resolve()
 assert Path(sys.prefix).resolve() in origin.parents
-assert ponder_sdk.__version__=='0.1.2'
+assert ponder_sdk.__version__==version('ponder-sdk')
 assert schemas()['schemas']['TrainingPreparationReceiptSchema']
 assert models.TrainingPreparationReceipt.__annotations__
 assert inputs.TrainingPreparationRequest.__annotations__
