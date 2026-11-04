@@ -32,7 +32,8 @@ export function useHostedTrainingRun(connection: ClientConnection, teamId: strin
       return job;
     },
     staleTime: 30_000, gcTime: 300_000,
-    refetchInterval: query => query.state.data && !terminal.has(query.state.data.state) ? 5_000 : false,
+    refetchInterval: query => query.state.data && !terminal.has(query.state.data.state) ? 5_000
+      : query.state.data?.usage && !query.state.data.usage.complete ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
   const logs = useQuery({
@@ -53,7 +54,8 @@ export function useHostedTrainingRun(connection: ClientConnection, teamId: strin
     },
     staleTime: 30_000,
     gcTime: 300_000,
-    refetchInterval: query => query.state.data && (!terminal.has(query.state.data.job.state) || postTrainingActive(query.state.data.evals)) ? 5_000 : false,
+    refetchInterval: query => query.state.data && (!terminal.has(query.state.data.job.state) || postTrainingActive(query.state.data.evals)) ? 5_000
+      : query.state.data?.job.usage && !query.state.data.job.usage.complete ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
   const graph = useQuery({

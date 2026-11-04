@@ -21,6 +21,7 @@ import {createAdvancedRefinerPaidBoundary} from "./training/advanced-refiner-pai
 import { createManagedTrainingComposition } from "./training/managed-training-composition.js";
 import {closeCoordinatedEvaluations,createCoordinatedQualificationRuntime} from "./evaluations/coordinated-qualification-runtime.js";
 import { createCoordinatedEvaluationRuntime } from "./evaluations/coordinated-evaluation-runtime.js";
+import { createLocalModificationRecordings } from "./evaluations/modification-recordings.js";
 import {createCurrentWorkspaceIdentity} from "./human-review/current-workspace-identity.js";
 import { loadChatProfilePackage } from "./evaluations/chat-profile-package.js";
 import { createChatProfileExperiments } from "./evaluations/chat-profile-experiments.js";
@@ -1739,6 +1740,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       usageTurnCachePayload: usageTurnCacheRoutePayload,
       trainingPayload,
       localExperimentPayload:chatResources.teamRequest,
+      modificationRecordings:createLocalModificationRecordings({store,...reviewIdentity,resolveAccess:resolveHostedApiAccess}),
       chatResourcePayload:chatResources.request,
       experimentImprovementPayload,experimentEvaluationSchedulePayload,advancedRefinerEvaluationPayload,
       learningProducerPayload: (endpoint, apiKey, payload) => trainingApi.learning.producerRequest(endpoint, apiKey, payload),

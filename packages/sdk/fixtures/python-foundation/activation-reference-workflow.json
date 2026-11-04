@@ -1,0 +1,6403 @@
+{
+  "request": {
+    "schemaVersion": "openpond.activationReferenceRequest.v1",
+    "model": {
+      "schemaVersion": "openpond.neuronSteeringModel.v1",
+      "modelId": "openpond/dense-reference-demo",
+      "revision": "reference-v1",
+      "configHash": "93eb02e10435b29fbc31b78beb92804924a5673854b99c3e2f19db1e5b4b632a",
+      "weightsHash": "a2c6109d87fbca6a1d657e91bdf136e64cdded1f678267de36ad2f02d19a2132",
+      "tokenizerHash": "61053e20944c5f1c5164d1d243513aefcadfc740dfbf0d3171ec5ad5cb21965f",
+      "weightIdentity": "torch_state_dict_sha256_v1",
+      "architecture": "dense_decoder",
+      "dtype": "float32",
+      "quantization": "none",
+      "adapter": null,
+      "hiddenSize": 4,
+      "intermediateSizes": [
+        6,
+        6
+      ]
+    },
+    "prompts": [
+      {
+        "id": "plain",
+        "tokenIds": [
+          1,
+          2,
+          3
+        ],
+        "attentionMask": [
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "id": "left-padded",
+        "tokenIds": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "attentionMask": [
+          0,
+          1,
+          1,
+          1
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "off",
+        "profile": null
+      },
+      {
+        "id": "zero",
+        "profile": {
+          "schemaVersion": "openpond.neuronSteeringProfile.v1",
+          "model": {
+            "schemaVersion": "openpond.neuronSteeringModel.v1",
+            "modelId": "openpond/dense-reference-demo",
+            "revision": "reference-v1",
+            "configHash": "93eb02e10435b29fbc31b78beb92804924a5673854b99c3e2f19db1e5b4b632a",
+            "weightsHash": "a2c6109d87fbca6a1d657e91bdf136e64cdded1f678267de36ad2f02d19a2132",
+            "tokenizerHash": "61053e20944c5f1c5164d1d243513aefcadfc740dfbf0d3171ec5ad5cb21965f",
+            "weightIdentity": "torch_state_dict_sha256_v1",
+            "architecture": "dense_decoder",
+            "dtype": "float32",
+            "quantization": "none",
+            "adapter": null,
+            "hiddenSize": 4,
+            "intermediateSizes": [
+              6,
+              6
+            ]
+          },
+          "hook": "mlp.down_proj.input",
+          "operation": "add",
+          "normalization": {
+            "mode": "baseline_prompt_residual_median",
+            "statistic": "midpoint_median_fp32",
+            "sample": "non_padding_prompt_after_position_zero"
+          },
+          "tokenScope": {
+            "phase": "prompt_and_decode",
+            "positions": "all_non_padding"
+          },
+          "entries": [
+            {
+              "layer": 0,
+              "neuron": 1,
+              "dose": 0
+            }
+          ],
+          "contentHash": "3433255a1f39a025060c88acf1bb36514a306cd35c705d6be527504fabadf302"
+        }
+      },
+      {
+        "id": "positive",
+        "profile": {
+          "schemaVersion": "openpond.neuronSteeringProfile.v1",
+          "model": {
+            "schemaVersion": "openpond.neuronSteeringModel.v1",
+            "modelId": "openpond/dense-reference-demo",
+            "revision": "reference-v1",
+            "configHash": "93eb02e10435b29fbc31b78beb92804924a5673854b99c3e2f19db1e5b4b632a",
+            "weightsHash": "a2c6109d87fbca6a1d657e91bdf136e64cdded1f678267de36ad2f02d19a2132",
+            "tokenizerHash": "61053e20944c5f1c5164d1d243513aefcadfc740dfbf0d3171ec5ad5cb21965f",
+            "weightIdentity": "torch_state_dict_sha256_v1",
+            "architecture": "dense_decoder",
+            "dtype": "float32",
+            "quantization": "none",
+            "adapter": null,
+            "hiddenSize": 4,
+            "intermediateSizes": [
+              6,
+              6
+            ]
+          },
+          "hook": "mlp.down_proj.input",
+          "operation": "add",
+          "normalization": {
+            "mode": "baseline_prompt_residual_median",
+            "statistic": "midpoint_median_fp32",
+            "sample": "non_padding_prompt_after_position_zero"
+          },
+          "tokenScope": {
+            "phase": "prompt_and_decode",
+            "positions": "all_non_padding"
+          },
+          "entries": [
+            {
+              "layer": 0,
+              "neuron": 1,
+              "dose": 1
+            }
+          ],
+          "contentHash": "233b5a8c4b56256f459b8546dabc47403b026c895f52189e8232311961cdccfa"
+        }
+      },
+      {
+        "id": "negative",
+        "profile": {
+          "schemaVersion": "openpond.neuronSteeringProfile.v1",
+          "model": {
+            "schemaVersion": "openpond.neuronSteeringModel.v1",
+            "modelId": "openpond/dense-reference-demo",
+            "revision": "reference-v1",
+            "configHash": "93eb02e10435b29fbc31b78beb92804924a5673854b99c3e2f19db1e5b4b632a",
+            "weightsHash": "a2c6109d87fbca6a1d657e91bdf136e64cdded1f678267de36ad2f02d19a2132",
+            "tokenizerHash": "61053e20944c5f1c5164d1d243513aefcadfc740dfbf0d3171ec5ad5cb21965f",
+            "weightIdentity": "torch_state_dict_sha256_v1",
+            "architecture": "dense_decoder",
+            "dtype": "float32",
+            "quantization": "none",
+            "adapter": null,
+            "hiddenSize": 4,
+            "intermediateSizes": [
+              6,
+              6
+            ]
+          },
+          "hook": "mlp.down_proj.input",
+          "operation": "add",
+          "normalization": {
+            "mode": "baseline_prompt_residual_median",
+            "statistic": "midpoint_median_fp32",
+            "sample": "non_padding_prompt_after_position_zero"
+          },
+          "tokenScope": {
+            "phase": "prompt_and_decode",
+            "positions": "all_non_padding"
+          },
+          "entries": [
+            {
+              "layer": 0,
+              "neuron": 1,
+              "dose": -1
+            }
+          ],
+          "contentHash": "b28372ffbbb158352d4a22fb6431d39db9f558ae9e05b829d8869ef5ab1dd670"
+        }
+      },
+      {
+        "id": "after-first",
+        "profile": {
+          "schemaVersion": "openpond.neuronSteeringProfile.v1",
+          "model": {
+            "schemaVersion": "openpond.neuronSteeringModel.v1",
+            "modelId": "openpond/dense-reference-demo",
+            "revision": "reference-v1",
+            "configHash": "93eb02e10435b29fbc31b78beb92804924a5673854b99c3e2f19db1e5b4b632a",
+            "weightsHash": "a2c6109d87fbca6a1d657e91bdf136e64cdded1f678267de36ad2f02d19a2132",
+            "tokenizerHash": "61053e20944c5f1c5164d1d243513aefcadfc740dfbf0d3171ec5ad5cb21965f",
+            "weightIdentity": "torch_state_dict_sha256_v1",
+            "architecture": "dense_decoder",
+            "dtype": "float32",
+            "quantization": "none",
+            "adapter": null,
+            "hiddenSize": 4,
+            "intermediateSizes": [
+              6,
+              6
+            ]
+          },
+          "hook": "mlp.down_proj.input",
+          "operation": "add",
+          "normalization": {
+            "mode": "baseline_prompt_residual_median",
+            "statistic": "midpoint_median_fp32",
+            "sample": "non_padding_prompt_after_position_zero"
+          },
+          "tokenScope": {
+            "phase": "prompt_and_decode",
+            "positions": "after_position_zero"
+          },
+          "entries": [
+            {
+              "layer": 0,
+              "neuron": 1,
+              "dose": 1
+            }
+          ],
+          "contentHash": "b2400b4c887abeebeb4a098fd1c87b8f68e621e26844c63c1f33368fe37c3e14"
+        }
+      },
+      {
+        "id": "decode-only",
+        "profile": {
+          "schemaVersion": "openpond.neuronSteeringProfile.v1",
+          "model": {
+            "schemaVersion": "openpond.neuronSteeringModel.v1",
+            "modelId": "openpond/dense-reference-demo",
+            "revision": "reference-v1",
+            "configHash": "93eb02e10435b29fbc31b78beb92804924a5673854b99c3e2f19db1e5b4b632a",
+            "weightsHash": "a2c6109d87fbca6a1d657e91bdf136e64cdded1f678267de36ad2f02d19a2132",
+            "tokenizerHash": "61053e20944c5f1c5164d1d243513aefcadfc740dfbf0d3171ec5ad5cb21965f",
+            "weightIdentity": "torch_state_dict_sha256_v1",
+            "architecture": "dense_decoder",
+            "dtype": "float32",
+            "quantization": "none",
+            "adapter": null,
+            "hiddenSize": 4,
+            "intermediateSizes": [
+              6,
+              6
+            ]
+          },
+          "hook": "mlp.down_proj.input",
+          "operation": "add",
+          "normalization": {
+            "mode": "baseline_prompt_residual_median",
+            "statistic": "midpoint_median_fp32",
+            "sample": "non_padding_prompt_after_position_zero"
+          },
+          "tokenScope": {
+            "phase": "decode_only",
+            "positions": "all_non_padding"
+          },
+          "entries": [
+            {
+              "layer": 0,
+              "neuron": 1,
+              "dose": 1
+            }
+          ],
+          "contentHash": "bef253b4f8ee525e3d58ce42f507f2ce86bd03e4f2e1fd09d6ec4a33d873065b"
+        }
+      },
+      {
+        "id": "layer-one",
+        "profile": {
+          "schemaVersion": "openpond.neuronSteeringProfile.v1",
+          "model": {
+            "schemaVersion": "openpond.neuronSteeringModel.v1",
+            "modelId": "openpond/dense-reference-demo",
+            "revision": "reference-v1",
+            "configHash": "93eb02e10435b29fbc31b78beb92804924a5673854b99c3e2f19db1e5b4b632a",
+            "weightsHash": "a2c6109d87fbca6a1d657e91bdf136e64cdded1f678267de36ad2f02d19a2132",
+            "tokenizerHash": "61053e20944c5f1c5164d1d243513aefcadfc740dfbf0d3171ec5ad5cb21965f",
+            "weightIdentity": "torch_state_dict_sha256_v1",
+            "architecture": "dense_decoder",
+            "dtype": "float32",
+            "quantization": "none",
+            "adapter": null,
+            "hiddenSize": 4,
+            "intermediateSizes": [
+              6,
+              6
+            ]
+          },
+          "hook": "mlp.down_proj.input",
+          "operation": "add",
+          "normalization": {
+            "mode": "baseline_prompt_residual_median",
+            "statistic": "midpoint_median_fp32",
+            "sample": "non_padding_prompt_after_position_zero"
+          },
+          "tokenScope": {
+            "phase": "prompt_and_decode",
+            "positions": "all_non_padding"
+          },
+          "entries": [
+            {
+              "layer": 1,
+              "neuron": 1,
+              "dose": -1
+            }
+          ],
+          "contentHash": "c7011f0208a8177c2e2a0cd9d8d4f393367230782151ad4e6c181c59b6906eef"
+        }
+      },
+      {
+        "id": "combined",
+        "profile": {
+          "schemaVersion": "openpond.neuronSteeringProfile.v1",
+          "model": {
+            "schemaVersion": "openpond.neuronSteeringModel.v1",
+            "modelId": "openpond/dense-reference-demo",
+            "revision": "reference-v1",
+            "configHash": "93eb02e10435b29fbc31b78beb92804924a5673854b99c3e2f19db1e5b4b632a",
+            "weightsHash": "a2c6109d87fbca6a1d657e91bdf136e64cdded1f678267de36ad2f02d19a2132",
+            "tokenizerHash": "61053e20944c5f1c5164d1d243513aefcadfc740dfbf0d3171ec5ad5cb21965f",
+            "weightIdentity": "torch_state_dict_sha256_v1",
+            "architecture": "dense_decoder",
+            "dtype": "float32",
+            "quantization": "none",
+            "adapter": null,
+            "hiddenSize": 4,
+            "intermediateSizes": [
+              6,
+              6
+            ]
+          },
+          "hook": "mlp.down_proj.input",
+          "operation": "add",
+          "normalization": {
+            "mode": "baseline_prompt_residual_median",
+            "statistic": "midpoint_median_fp32",
+            "sample": "non_padding_prompt_after_position_zero"
+          },
+          "tokenScope": {
+            "phase": "prompt_and_decode",
+            "positions": "all_non_padding"
+          },
+          "entries": [
+            {
+              "layer": 0,
+              "neuron": 1,
+              "dose": 1
+            },
+            {
+              "layer": 1,
+              "neuron": 1,
+              "dose": -1
+            }
+          ],
+          "contentHash": "1e41735ce0957805b44100896b578a5156f176b593274217a12ee378ad8d97fa"
+        }
+      }
+    ],
+    "capture": [
+      {
+        "layer": 0,
+        "neurons": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      {
+        "layer": 1,
+        "neurons": [
+          1
+        ]
+      }
+    ],
+    "maxNewTokens": 2,
+    "eosTokenIds": [],
+    "maximumCapturedValues": 4096,
+    "maximumForwardTokenWork": 4096,
+    "maximumDurationSeconds": 30
+  },
+  "result": {
+    "schemaVersion": "openpond.activationReferenceResult.v1",
+    "requestHash": "65302fd625c9a6dd2f87f74d353664e4b0862d602d74f1d5f705e13292194d27",
+    "modelHash": "463bae362b71b71fde921b3f90f33f148600f4aa1f25f4ca77044adf4f0fddf7",
+    "runtime": {
+      "implementation": "torch_dense_serial_reference_v1",
+      "implementationHash": "7c36113c58131f77ce51ea07007b1f7ca810db5095805eff2caa951517dfa159",
+      "torchVersion": "2.8.0+cpu",
+      "device": "cpu"
+    },
+    "outcomes": [
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "profileHash": null,
+        "generatedTokenIds": [
+          9,
+          1
+        ],
+        "forwardTokenWork": 12,
+        "calibration": [],
+        "durationMs": 1.5449139755219221,
+        "captureCount": 35
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "profileHash": "3433255a1f39a025060c88acf1bb36514a306cd35c705d6be527504fabadf302",
+        "generatedTokenIds": [
+          9,
+          1
+        ],
+        "forwardTokenWork": 15,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.455612014979124,
+        "captureCount": 35
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "profileHash": "233b5a8c4b56256f459b8546dabc47403b026c895f52189e8232311961cdccfa",
+        "generatedTokenIds": [
+          1,
+          4
+        ],
+        "forwardTokenWork": 15,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.6125919646583498,
+        "captureCount": 35
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "profileHash": "b28372ffbbb158352d4a22fb6431d39db9f558ae9e05b829d8869ef5ab1dd670",
+        "generatedTokenIds": [
+          3,
+          3
+        ],
+        "forwardTokenWork": 15,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.5743919648230076,
+        "captureCount": 35
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "profileHash": "b2400b4c887abeebeb4a098fd1c87b8f68e621e26844c63c1f33368fe37c3e14",
+        "generatedTokenIds": [
+          1,
+          4
+        ],
+        "forwardTokenWork": 15,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.6227709711529315,
+        "captureCount": 35
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "profileHash": "bef253b4f8ee525e3d58ce42f507f2ce86bd03e4f2e1fd09d6ec4a33d873065b",
+        "generatedTokenIds": [
+          9,
+          4
+        ],
+        "forwardTokenWork": 15,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.4979660045355558,
+        "captureCount": 35
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "profileHash": "c7011f0208a8177c2e2a0cd9d8d4f393367230782151ad4e6c181c59b6906eef",
+        "generatedTokenIds": [
+          1,
+          4
+        ],
+        "forwardTokenWork": 15,
+        "calibration": [
+          {
+            "layer": 1,
+            "median": 0.14538311958312988,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.08050788193941116
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.5423430013470352,
+        "captureCount": 35
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "profileHash": "1e41735ce0957805b44100896b578a5156f176b593274217a12ee378ad8d97fa",
+        "generatedTokenIds": [
+          1,
+          4
+        ],
+        "forwardTokenWork": 15,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          },
+          {
+            "layer": 1,
+            "median": 0.14538311958312988,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.08050788193941116
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.9393970142118633,
+        "captureCount": 35
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "profileHash": null,
+        "generatedTokenIds": [
+          9,
+          1
+        ],
+        "forwardTokenWork": 15,
+        "calibration": [],
+        "durationMs": 1.0324920294806361,
+        "captureCount": 35
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "profileHash": "3433255a1f39a025060c88acf1bb36514a306cd35c705d6be527504fabadf302",
+        "generatedTokenIds": [
+          9,
+          1
+        ],
+        "forwardTokenWork": 19,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.2384949950501323,
+        "captureCount": 35
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "profileHash": "233b5a8c4b56256f459b8546dabc47403b026c895f52189e8232311961cdccfa",
+        "generatedTokenIds": [
+          1,
+          4
+        ],
+        "forwardTokenWork": 19,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.5471029910258949,
+        "captureCount": 35
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "profileHash": "b28372ffbbb158352d4a22fb6431d39db9f558ae9e05b829d8869ef5ab1dd670",
+        "generatedTokenIds": [
+          3,
+          3
+        ],
+        "forwardTokenWork": 19,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.5487520140595734,
+        "captureCount": 35
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "profileHash": "b2400b4c887abeebeb4a098fd1c87b8f68e621e26844c63c1f33368fe37c3e14",
+        "generatedTokenIds": [
+          1,
+          4
+        ],
+        "forwardTokenWork": 19,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.5812020283192396,
+        "captureCount": 35
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "profileHash": "bef253b4f8ee525e3d58ce42f507f2ce86bd03e4f2e1fd09d6ec4a33d873065b",
+        "generatedTokenIds": [
+          9,
+          4
+        ],
+        "forwardTokenWork": 19,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.523234008345753,
+        "captureCount": 35
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "profileHash": "c7011f0208a8177c2e2a0cd9d8d4f393367230782151ad4e6c181c59b6906eef",
+        "generatedTokenIds": [
+          1,
+          4
+        ],
+        "forwardTokenWork": 19,
+        "calibration": [
+          {
+            "layer": 1,
+            "median": 0.14538311958312988,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.08050788193941116
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.5577379963360727,
+        "captureCount": 35
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "profileHash": "1e41735ce0957805b44100896b578a5156f176b593274217a12ee378ad8d97fa",
+        "generatedTokenIds": [
+          1,
+          4
+        ],
+        "forwardTokenWork": 19,
+        "calibration": [
+          {
+            "layer": 0,
+            "median": 0.14594656229019165,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.09755386412143707
+              }
+            ]
+          },
+          {
+            "layer": 1,
+            "median": 0.14538311958312988,
+            "sampleCount": 2,
+            "columnNorms": [
+              {
+                "neuron": 1,
+                "norm": 0.08050788193941116
+              }
+            ]
+          }
+        ],
+        "durationMs": 1.9050579867325723,
+        "captureCount": 35
+      }
+    ],
+    "captures": [
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -0.00472254678606987
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 0.008440942503511906
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0063496907241642475,
+        "after": 0.0063496907241642475
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.00881922710686922,
+        "after": -0.00881922710686922
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.010592890903353691,
+        "after": -0.010592890903353691
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.002754711778834462,
+        "after": 0.002754711778834462
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0071139042265713215,
+        "after": 0.0071139042265713215
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.011995620094239712,
+        "after": -0.011995620094239712
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.008728308603167534,
+        "after": 0.008728308603167534
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0007793791010044515,
+        "after": 0.0007793791010044515
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.004275122657418251,
+        "after": -0.004275122657418251
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -0.00472254678606987
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 0.008440942503511906
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0063496907241642475,
+        "after": 0.0063496907241642475
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.00881922710686922,
+        "after": -0.00881922710686922
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.010592890903353691,
+        "after": -0.010592890903353691
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.002754711778834462,
+        "after": 0.002754711778834462
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0071139042265713215,
+        "after": 0.0071139042265713215
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.011995620094239712,
+        "after": -0.011995620094239712
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.008728308603167534,
+        "after": 0.008728308603167534
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0007793791010044515,
+        "after": 0.0007793791010044515
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.004275122657418251,
+        "after": -0.004275122657418251
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": 1.4913387298583984
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 1.504502296447754
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": 0.0027165089268237352
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.008394468575716019,
+        "after": 0.008394468575716019
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006724097300320864,
+        "after": -0.006724097300320864
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": 0.0027165089268237352
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": 1.4898930788040161
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "plain",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007354383356869221,
+        "after": 0.007354383356869221
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -1.4981979131698608
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -1.500783920288086
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": -1.4876203536987305
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0013809928204864264,
+        "after": -0.0013809928204864264
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.004279904533177614,
+        "after": 0.004279904533177614
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.010939369909465313,
+        "after": -0.010939369909465313
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": -1.4876203536987305
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.010939369909465313,
+        "after": -0.010939369909465313
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": -1.4876203536987305
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.010939369909465313,
+        "after": -0.010939369909465313
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": 1.4913387298583984
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 1.504502296447754
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.008394468575716019,
+        "after": 0.008394468575716019
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006724097300320864,
+        "after": -0.006724097300320864
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": 0.0027165089268237352
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": 1.4898930788040161
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "plain",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007354383356869221,
+        "after": 0.007354383356869221
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -0.00472254678606987
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 0.008440942503511906
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0063496907241642475,
+        "after": 0.0063496907241642475
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.00881922710686922,
+        "after": -0.00881922710686922
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.010592890903353691,
+        "after": -0.010592890903353691
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.002754711778834462,
+        "after": 1.4988160133361816
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0071139042265713215,
+        "after": 0.0071139042265713215
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.011995620094239712,
+        "after": -0.011995620094239712
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.008728308603167534,
+        "after": 0.008728308603167534
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0007793791010044515,
+        "after": 0.0007793791010044515
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.002216062042862177,
+        "after": -0.002216062042862177
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": 1.4898930788040161
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "plain",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007354383356869221,
+        "after": 0.007354383356869221
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -0.00472254678606987
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 0.008440942503511906
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": -1.8051444292068481
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0063496907241642475,
+        "after": -1.7994749546051025
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.00881922710686922,
+        "after": -1.8146438598632812
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": -1.8051444292068481
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": -0.006168194580823183
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "plain",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.005333612207323313,
+        "after": -1.8004909753799438
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": 1.4913387298583984
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 1.504502296447754
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": -1.8031080961227417
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.008394468575716019,
+        "after": -1.797430157661438
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006724097300320864,
+        "after": -1.8125487565994263
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": -1.8031080961227417
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": 1.4898930788040161
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "plain",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007354383356869221,
+        "after": -1.7984702587127686
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -0.00472254678606987
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 0.008440942503511906
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0063496907241642475,
+        "after": 0.0063496907241642475
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.00881922710686922,
+        "after": -0.00881922710686922
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.010592890903353691,
+        "after": -0.010592890903353691
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.002754711778834462,
+        "after": 0.002754711778834462
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0071139042265713215,
+        "after": 0.0071139042265713215
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.011995620094239712,
+        "after": -0.011995620094239712
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.008728308603167534,
+        "after": 0.008728308603167534
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0007793791010044515,
+        "after": 0.0007793791010044515
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.004275122657418251,
+        "after": -0.004275122657418251
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "off",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -0.00472254678606987
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 0.008440942503511906
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0063496907241642475,
+        "after": 0.0063496907241642475
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.00881922710686922,
+        "after": -0.00881922710686922
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.010592890903353691,
+        "after": -0.010592890903353691
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.002754711778834462,
+        "after": 0.002754711778834462
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0071139042265713215,
+        "after": 0.0071139042265713215
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.011995620094239712,
+        "after": -0.011995620094239712
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.008728308603167534,
+        "after": 0.008728308603167534
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0007793791010044515,
+        "after": 0.0007793791010044515
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.004275122657418251,
+        "after": -0.004275122657418251
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "zero",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": 1.4913387298583984
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 1.504502296447754
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": 0.0027165089268237352
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.008394468575716019,
+        "after": 0.008394468575716019
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006724097300320864,
+        "after": -0.006724097300320864
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": 0.0027165089268237352
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": 1.4898930788040161
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "positive",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007354383356869221,
+        "after": 0.007354383356869221
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -1.4981979131698608
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -1.500783920288086
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": -1.4876203536987305
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0013809928204864264,
+        "after": -0.0013809928204864264
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.004279904533177614,
+        "after": 0.004279904533177614
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.010939369909465313,
+        "after": -0.010939369909465313
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": -1.4876203536987305
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 3,
+        "before": -0.010939369909465313,
+        "after": -0.010939369909465313
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": -1.4876203536987305
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "negative",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 3,
+        "before": -0.010939369909465313,
+        "after": -0.010939369909465313
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": 1.4913387298583984
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 1.504502296447754
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.008394468575716019,
+        "after": 0.008394468575716019
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006724097300320864,
+        "after": -0.006724097300320864
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": 0.0027165089268237352
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": 1.4898930788040161
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "after-first",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007354383356869221,
+        "after": 0.007354383356869221
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -0.00472254678606987
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 0.008440942503511906
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": 0.0006802591378800571
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0063496907241642475,
+        "after": 0.0063496907241642475
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.00881922710686922,
+        "after": -0.00881922710686922
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.010592890903353691,
+        "after": -0.010592890903353691
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.002754711778834462,
+        "after": 1.4988160133361816
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0071139042265713215,
+        "after": 0.0071139042265713215
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.011995620094239712,
+        "after": -0.011995620094239712
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.008728308603167534,
+        "after": 0.008728308603167534
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": 0.0007793791010044515,
+        "after": 0.0007793791010044515
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 9,
+        "before": -0.002216062042862177,
+        "after": -0.002216062042862177
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": 1.4898930788040161
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "decode-only",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007354383356869221,
+        "after": 0.007354383356869221
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": -0.00472254678606987
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 0.008440942503511906
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": -1.8051444292068481
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0063496907241642475,
+        "after": -1.7994749546051025
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.00881922710686922,
+        "after": -1.8146438598632812
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": -0.0021366034634411335
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0006802591378800571,
+        "after": -1.8051444292068481
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": -0.006168194580823183
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "layer-one",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.005333612207323313,
+        "after": -1.8004909753799438
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.01175190880894661,
+        "after": 0.01175190880894661
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00472254678606987,
+        "after": 1.4913387298583984
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.00542709743604064,
+        "after": -0.00542709743604064
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.011875215917825699,
+        "after": 0.011875215917825699
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": -0.009959113784134388,
+        "after": -0.009959113784134388
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.0013521654764190316,
+        "after": 0.0013521654764190316
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.008990406058728695,
+        "after": -0.008990406058728695
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.008440942503511906,
+        "after": 1.504502296447754
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.0019155065529048443,
+        "after": -0.0019155065529048443
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.005862364079803228,
+        "after": -0.005862364079803228
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": 0.009616956114768982,
+        "after": 0.009616956114768982
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006607032846659422,
+        "after": -0.006607032846659422
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 0,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": -1.8031080961227417
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 1,
+        "tokenId": 2,
+        "before": 0.008394468575716019,
+        "after": -1.797430157661438
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 2,
+        "tokenId": 3,
+        "before": -0.006724097300320864,
+        "after": -1.8125487565994263
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.006146591156721115,
+        "after": -0.006146591156721115
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.0021366034634411335,
+        "after": 1.4939247369766235
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.008989150635898113,
+        "after": 0.008989150635898113
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": -0.00954341795295477,
+        "after": -0.00954341795295477
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0036321040242910385,
+        "after": 0.0036321040242910385
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.004897003527730703,
+        "after": 0.004897003527730703
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 3,
+        "tokenId": 1,
+        "before": 0.0027165089268237352,
+        "after": -1.8031080961227417
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 0,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.00013492254947777838,
+        "after": 0.00013492254947777838
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.006168194580823183,
+        "after": 1.4898930788040161
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 2,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007962298579514027,
+        "after": 0.007962298579514027
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 3,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0041576894000172615,
+        "after": -0.0041576894000172615
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 4,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": -0.0024529562797397375,
+        "after": -0.0024529562797397375
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 0,
+        "neuron": 5,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.0073915887624025345,
+        "after": 0.0073915887624025345
+      },
+      {
+        "promptId": "left-padded",
+        "variantId": "combined",
+        "layer": 1,
+        "neuron": 1,
+        "tokenIndex": 4,
+        "tokenId": 4,
+        "before": 0.007354383356869221,
+        "after": -1.7984702587127686
+      }
+    ],
+    "contentHash": "38398996586a64080eb0de2dde353dfdf71ccd726ed81f82a5c084160f786cf5"
+  }
+}

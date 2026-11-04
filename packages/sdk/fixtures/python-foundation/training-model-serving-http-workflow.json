@@ -1,0 +1,1181 @@
+{
+  "modelProjectId": "hosted-project-fixture",
+  "query": {
+    "teamId": "team-fixture",
+    "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+  },
+  "response": {
+    "schemaVersion": "openpond.trainingModelServing.v1",
+    "teamId": "team-fixture",
+    "modelProjectId": "hosted-project-fixture",
+    "observedAt": "2026-11-01T12:00:00.000Z",
+    "version": {
+      "schemaVersion": "openpond.trainingModelVersion.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "portableProjectId": "project-fixture",
+      "jobId": "job-fixture",
+      "request": {
+        "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+        "source": {
+          "modelProject": {
+            "id": "hosted-project-fixture",
+            "portableProjectId": "project-fixture",
+            "revision": 3,
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "harnessRunManifest": {
+            "id": "manifest-fixture",
+            "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "harnessRelease": {
+            "id": "harness-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "taskset": {
+            "id": "taskset-fixture",
+            "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "revision": 2
+          },
+          "tasksetRelease": {
+            "id": "taskset-release-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "evaluation": {
+            "taskset": {
+              "id": "held-out-fixture",
+              "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+              "revision": 1
+            },
+            "dataset": {
+              "id": "evaluation-dataset-fixture",
+              "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+            }
+          },
+          "dataset": {
+            "id": "dataset-fixture",
+            "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          },
+          "evidenceSets": []
+        },
+        "baseModel": {
+          "schemaVersion": "openpond.baseModelPreference.v1",
+          "modelId": "model-fixture",
+          "revision": "revision-fixture",
+          "tokenizerRevision": "tokenizer-fixture",
+          "chatTemplateHash": "template-fixture",
+          "modelAssetId": null,
+          "source": "managed"
+        },
+        "recipe": {
+          "schemaVersion": "openpond.rftRecipe.v1",
+          "method": "grpo",
+          "parameterization": "lora",
+          "optimizer": {
+            "maximumSteps": 1
+          }
+        }
+      },
+      "candidate": {
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture",
+        "composition": "base",
+        "parent": null
+      },
+      "executionReceipt": {
+        "id": "receipt-fixture",
+        "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+      },
+      "createdAt": "2026-11-01T00:00:00.000Z",
+      "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+    },
+    "control": null,
+    "cleanup": [],
+    "registry": {
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "baseProfileId": "profile-fixture",
+      "state": "promotable",
+      "qualified": true,
+      "revoked": false,
+      "deleted": false,
+      "reason": "qualified",
+      "source": {
+        "jobId": "job-fixture",
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture"
+      }
+    },
+    "deployments": [
+      {
+        "id": "deployment-fixture",
+        "artifactId": "registry-fixture",
+        "poolId": "pool-fixture",
+        "revision": 2,
+        "state": "ready",
+        "revoked": false,
+        "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+        "updatedAt": "2026-11-01T12:00:00.000Z"
+      }
+    ],
+    "pools": [
+      {
+        "id": "pool-fixture",
+        "provider": "fixture_serving",
+        "state": "ready",
+        "workersMin": 0,
+        "workersMax": 1,
+        "idleTimeoutSeconds": 300,
+        "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "endpointRecorded": true,
+        "activeDeployments": 1,
+        "activeBindings": 1,
+        "activeRequests": 0,
+        "unsettledRequests": 0,
+        "retirementBlocked": true
+      }
+    ],
+    "bindings": [
+      {
+        "id": "binding-fixture",
+        "modelId": "personalized:model-fixture",
+        "artifactId": "registry-fixture",
+        "deploymentId": "deployment-fixture",
+        "revision": 1
+      }
+    ],
+    "lastVerifiedInference": {
+      "requestId": "request-fixture",
+      "receipt": {
+        "id": "request-fixture",
+        "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "deploymentId": "deployment-fixture",
+      "poolId": "pool-fixture",
+      "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "completedAt": "2026-11-01T12:00:00.000Z"
+    },
+    "state": "active",
+    "contentHash": "51f986f9185fb1e6308980a11609127fb4bfe863151017e4abb2cdec679dd1f7"
+  },
+  "invalid": [
+    {
+      "kind": "model",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServing.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "another-model",
+        "observedAt": "2026-11-01T12:00:00.000Z",
+        "version": {
+          "schemaVersion": "openpond.trainingModelVersion.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "portableProjectId": "project-fixture",
+          "jobId": "job-fixture",
+          "request": {
+            "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+            "source": {
+              "modelProject": {
+                "id": "hosted-project-fixture",
+                "portableProjectId": "project-fixture",
+                "revision": 3,
+                "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "harnessRunManifest": {
+                "id": "manifest-fixture",
+                "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "harnessRelease": {
+                "id": "harness-fixture",
+                "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "taskset": {
+                "id": "taskset-fixture",
+                "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "revision": 2
+              },
+              "tasksetRelease": {
+                "id": "taskset-release-fixture",
+                "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              },
+              "evaluation": {
+                "taskset": {
+                  "id": "held-out-fixture",
+                  "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+                  "revision": 1
+                },
+                "dataset": {
+                  "id": "evaluation-dataset-fixture",
+                  "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+                }
+              },
+              "dataset": {
+                "id": "dataset-fixture",
+                "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+              },
+              "evidenceSets": []
+            },
+            "baseModel": {
+              "schemaVersion": "openpond.baseModelPreference.v1",
+              "modelId": "model-fixture",
+              "revision": "revision-fixture",
+              "tokenizerRevision": "tokenizer-fixture",
+              "chatTemplateHash": "template-fixture",
+              "modelAssetId": null,
+              "source": "managed"
+            },
+            "recipe": {
+              "schemaVersion": "openpond.rftRecipe.v1",
+              "method": "grpo",
+              "parameterization": "lora",
+              "optimizer": {
+                "maximumSteps": 1
+              }
+            }
+          },
+          "candidate": {
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture",
+            "composition": "base",
+            "parent": null
+          },
+          "executionReceipt": {
+            "id": "receipt-fixture",
+            "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+          },
+          "createdAt": "2026-11-01T00:00:00.000Z",
+          "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+        },
+        "control": null,
+        "cleanup": [],
+        "registry": {
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "baseProfileId": "profile-fixture",
+          "state": "promotable",
+          "qualified": true,
+          "revoked": false,
+          "deleted": false,
+          "reason": "qualified",
+          "source": {
+            "jobId": "job-fixture",
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture"
+          }
+        },
+        "deployments": [
+          {
+            "id": "deployment-fixture",
+            "artifactId": "registry-fixture",
+            "poolId": "pool-fixture",
+            "revision": 2,
+            "state": "ready",
+            "revoked": false,
+            "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+            "updatedAt": "2026-11-01T12:00:00.000Z"
+          }
+        ],
+        "pools": [
+          {
+            "id": "pool-fixture",
+            "provider": "fixture_serving",
+            "state": "ready",
+            "workersMin": 0,
+            "workersMax": 1,
+            "idleTimeoutSeconds": 300,
+            "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "endpointRecorded": true,
+            "activeDeployments": 1,
+            "activeBindings": 1,
+            "activeRequests": 0,
+            "unsettledRequests": 0,
+            "retirementBlocked": true
+          }
+        ],
+        "bindings": [
+          {
+            "id": "binding-fixture",
+            "modelId": "personalized:model-fixture",
+            "artifactId": "registry-fixture",
+            "deploymentId": "deployment-fixture",
+            "revision": 1
+          }
+        ],
+        "lastVerifiedInference": {
+          "requestId": "request-fixture",
+          "receipt": {
+            "id": "request-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "completedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "state": "active",
+        "contentHash": "1275f5f7dffaa05432247f7d0a13503f99cec34e4d458c4a6becf0bce716dcd9"
+      }
+    },
+    {
+      "kind": "native_checkpoint",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServing.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "observedAt": "2026-11-01T12:00:00.000Z",
+        "version": {
+          "schemaVersion": "openpond.trainingModelVersion.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "portableProjectId": "project-fixture",
+          "jobId": "job-fixture",
+          "request": {
+            "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+            "source": {
+              "modelProject": {
+                "id": "hosted-project-fixture",
+                "portableProjectId": "project-fixture",
+                "revision": 3,
+                "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "harnessRunManifest": {
+                "id": "manifest-fixture",
+                "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "harnessRelease": {
+                "id": "harness-fixture",
+                "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "taskset": {
+                "id": "taskset-fixture",
+                "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "revision": 2
+              },
+              "tasksetRelease": {
+                "id": "taskset-release-fixture",
+                "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              },
+              "evaluation": {
+                "taskset": {
+                  "id": "held-out-fixture",
+                  "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+                  "revision": 1
+                },
+                "dataset": {
+                  "id": "evaluation-dataset-fixture",
+                  "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+                }
+              },
+              "dataset": {
+                "id": "dataset-fixture",
+                "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+              },
+              "evidenceSets": []
+            },
+            "baseModel": {
+              "schemaVersion": "openpond.baseModelPreference.v1",
+              "modelId": "model-fixture",
+              "revision": "revision-fixture",
+              "tokenizerRevision": "tokenizer-fixture",
+              "chatTemplateHash": "template-fixture",
+              "modelAssetId": null,
+              "source": "managed"
+            },
+            "recipe": {
+              "schemaVersion": "openpond.rftRecipe.v1",
+              "method": "grpo",
+              "parameterization": "lora",
+              "optimizer": {
+                "maximumSteps": 1
+              }
+            }
+          },
+          "candidate": {
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "another-checkpoint",
+            "composition": "base",
+            "parent": null
+          },
+          "executionReceipt": {
+            "id": "receipt-fixture",
+            "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+          },
+          "createdAt": "2026-11-01T00:00:00.000Z",
+          "contentHash": "deed2457d87d9f354ea74997e49655f6f887cb940c583877b4b9a9d8be0fa0f8"
+        },
+        "control": null,
+        "cleanup": [],
+        "registry": {
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "baseProfileId": "profile-fixture",
+          "state": "promotable",
+          "qualified": true,
+          "revoked": false,
+          "deleted": false,
+          "reason": "qualified",
+          "source": {
+            "jobId": "job-fixture",
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture"
+          }
+        },
+        "deployments": [
+          {
+            "id": "deployment-fixture",
+            "artifactId": "registry-fixture",
+            "poolId": "pool-fixture",
+            "revision": 2,
+            "state": "ready",
+            "revoked": false,
+            "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+            "updatedAt": "2026-11-01T12:00:00.000Z"
+          }
+        ],
+        "pools": [
+          {
+            "id": "pool-fixture",
+            "provider": "fixture_serving",
+            "state": "ready",
+            "workersMin": 0,
+            "workersMax": 1,
+            "idleTimeoutSeconds": 300,
+            "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "endpointRecorded": true,
+            "activeDeployments": 1,
+            "activeBindings": 1,
+            "activeRequests": 0,
+            "unsettledRequests": 0,
+            "retirementBlocked": true
+          }
+        ],
+        "bindings": [
+          {
+            "id": "binding-fixture",
+            "modelId": "personalized:model-fixture",
+            "artifactId": "registry-fixture",
+            "deploymentId": "deployment-fixture",
+            "revision": 1
+          }
+        ],
+        "lastVerifiedInference": {
+          "requestId": "request-fixture",
+          "receipt": {
+            "id": "request-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "completedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "state": "active",
+        "contentHash": "7acacca37b07c3759be4756299c74d389c002062462d8685bd15b15bc8b24dc0"
+      }
+    },
+    {
+      "kind": "registry_inventory_hash",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServing.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "observedAt": "2026-11-01T12:00:00.000Z",
+        "version": {
+          "schemaVersion": "openpond.trainingModelVersion.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "portableProjectId": "project-fixture",
+          "jobId": "job-fixture",
+          "request": {
+            "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+            "source": {
+              "modelProject": {
+                "id": "hosted-project-fixture",
+                "portableProjectId": "project-fixture",
+                "revision": 3,
+                "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "harnessRunManifest": {
+                "id": "manifest-fixture",
+                "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "harnessRelease": {
+                "id": "harness-fixture",
+                "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "taskset": {
+                "id": "taskset-fixture",
+                "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "revision": 2
+              },
+              "tasksetRelease": {
+                "id": "taskset-release-fixture",
+                "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              },
+              "evaluation": {
+                "taskset": {
+                  "id": "held-out-fixture",
+                  "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+                  "revision": 1
+                },
+                "dataset": {
+                  "id": "evaluation-dataset-fixture",
+                  "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+                }
+              },
+              "dataset": {
+                "id": "dataset-fixture",
+                "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+              },
+              "evidenceSets": []
+            },
+            "baseModel": {
+              "schemaVersion": "openpond.baseModelPreference.v1",
+              "modelId": "model-fixture",
+              "revision": "revision-fixture",
+              "tokenizerRevision": "tokenizer-fixture",
+              "chatTemplateHash": "template-fixture",
+              "modelAssetId": null,
+              "source": "managed"
+            },
+            "recipe": {
+              "schemaVersion": "openpond.rftRecipe.v1",
+              "method": "grpo",
+              "parameterization": "lora",
+              "optimizer": {
+                "maximumSteps": 1
+              }
+            }
+          },
+          "candidate": {
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture",
+            "composition": "base",
+            "parent": null
+          },
+          "executionReceipt": {
+            "id": "receipt-fixture",
+            "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+          },
+          "createdAt": "2026-11-01T00:00:00.000Z",
+          "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+        },
+        "control": null,
+        "cleanup": [],
+        "registry": {
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "baseProfileId": "profile-fixture",
+          "state": "promotable",
+          "qualified": true,
+          "revoked": false,
+          "deleted": false,
+          "reason": "qualified",
+          "source": {
+            "jobId": "job-fixture",
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "checkpointId": "checkpoint-fixture"
+          }
+        },
+        "deployments": [
+          {
+            "id": "deployment-fixture",
+            "artifactId": "registry-fixture",
+            "poolId": "pool-fixture",
+            "revision": 2,
+            "state": "ready",
+            "revoked": false,
+            "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+            "updatedAt": "2026-11-01T12:00:00.000Z"
+          }
+        ],
+        "pools": [
+          {
+            "id": "pool-fixture",
+            "provider": "fixture_serving",
+            "state": "ready",
+            "workersMin": 0,
+            "workersMax": 1,
+            "idleTimeoutSeconds": 300,
+            "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "endpointRecorded": true,
+            "activeDeployments": 1,
+            "activeBindings": 1,
+            "activeRequests": 0,
+            "unsettledRequests": 0,
+            "retirementBlocked": true
+          }
+        ],
+        "bindings": [
+          {
+            "id": "binding-fixture",
+            "modelId": "personalized:model-fixture",
+            "artifactId": "registry-fixture",
+            "deploymentId": "deployment-fixture",
+            "revision": 1
+          }
+        ],
+        "lastVerifiedInference": {
+          "requestId": "request-fixture",
+          "receipt": {
+            "id": "request-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "completedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "state": "active",
+        "contentHash": "11e9266dab2df93030c59796a494b0ee4e14c974cf1008f9b2599c1144c99712"
+      }
+    },
+    {
+      "kind": "false_active",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServing.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "observedAt": "2026-11-01T12:00:00.000Z",
+        "version": {
+          "schemaVersion": "openpond.trainingModelVersion.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "portableProjectId": "project-fixture",
+          "jobId": "job-fixture",
+          "request": {
+            "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+            "source": {
+              "modelProject": {
+                "id": "hosted-project-fixture",
+                "portableProjectId": "project-fixture",
+                "revision": 3,
+                "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "harnessRunManifest": {
+                "id": "manifest-fixture",
+                "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "harnessRelease": {
+                "id": "harness-fixture",
+                "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "taskset": {
+                "id": "taskset-fixture",
+                "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "revision": 2
+              },
+              "tasksetRelease": {
+                "id": "taskset-release-fixture",
+                "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              },
+              "evaluation": {
+                "taskset": {
+                  "id": "held-out-fixture",
+                  "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+                  "revision": 1
+                },
+                "dataset": {
+                  "id": "evaluation-dataset-fixture",
+                  "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+                }
+              },
+              "dataset": {
+                "id": "dataset-fixture",
+                "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+              },
+              "evidenceSets": []
+            },
+            "baseModel": {
+              "schemaVersion": "openpond.baseModelPreference.v1",
+              "modelId": "model-fixture",
+              "revision": "revision-fixture",
+              "tokenizerRevision": "tokenizer-fixture",
+              "chatTemplateHash": "template-fixture",
+              "modelAssetId": null,
+              "source": "managed"
+            },
+            "recipe": {
+              "schemaVersion": "openpond.rftRecipe.v1",
+              "method": "grpo",
+              "parameterization": "lora",
+              "optimizer": {
+                "maximumSteps": 1
+              }
+            }
+          },
+          "candidate": {
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture",
+            "composition": "base",
+            "parent": null
+          },
+          "executionReceipt": {
+            "id": "receipt-fixture",
+            "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+          },
+          "createdAt": "2026-11-01T00:00:00.000Z",
+          "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+        },
+        "control": null,
+        "cleanup": [],
+        "registry": {
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "baseProfileId": "profile-fixture",
+          "state": "promotable",
+          "qualified": true,
+          "revoked": false,
+          "deleted": false,
+          "reason": "qualified",
+          "source": {
+            "jobId": "job-fixture",
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture"
+          }
+        },
+        "deployments": [
+          {
+            "id": "deployment-fixture",
+            "artifactId": "registry-fixture",
+            "poolId": "pool-fixture",
+            "revision": 2,
+            "state": "ready",
+            "revoked": false,
+            "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+            "updatedAt": "2026-11-01T12:00:00.000Z"
+          }
+        ],
+        "pools": [
+          {
+            "id": "pool-fixture",
+            "provider": "fixture_serving",
+            "state": "ready",
+            "workersMin": 0,
+            "workersMax": 1,
+            "idleTimeoutSeconds": 300,
+            "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "endpointRecorded": true,
+            "activeDeployments": 1,
+            "activeBindings": 1,
+            "activeRequests": 0,
+            "unsettledRequests": 0,
+            "retirementBlocked": true
+          }
+        ],
+        "bindings": [],
+        "lastVerifiedInference": {
+          "requestId": "request-fixture",
+          "receipt": {
+            "id": "request-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "completedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "state": "active",
+        "contentHash": "43782e882556c0383272cca43cc81f31c4beefed32126f1aa858b54054f72138"
+      }
+    },
+    {
+      "kind": "foreign_pool",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServing.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "observedAt": "2026-11-01T12:00:00.000Z",
+        "version": {
+          "schemaVersion": "openpond.trainingModelVersion.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "portableProjectId": "project-fixture",
+          "jobId": "job-fixture",
+          "request": {
+            "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+            "source": {
+              "modelProject": {
+                "id": "hosted-project-fixture",
+                "portableProjectId": "project-fixture",
+                "revision": 3,
+                "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "harnessRunManifest": {
+                "id": "manifest-fixture",
+                "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "harnessRelease": {
+                "id": "harness-fixture",
+                "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "taskset": {
+                "id": "taskset-fixture",
+                "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "revision": 2
+              },
+              "tasksetRelease": {
+                "id": "taskset-release-fixture",
+                "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              },
+              "evaluation": {
+                "taskset": {
+                  "id": "held-out-fixture",
+                  "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+                  "revision": 1
+                },
+                "dataset": {
+                  "id": "evaluation-dataset-fixture",
+                  "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+                }
+              },
+              "dataset": {
+                "id": "dataset-fixture",
+                "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+              },
+              "evidenceSets": []
+            },
+            "baseModel": {
+              "schemaVersion": "openpond.baseModelPreference.v1",
+              "modelId": "model-fixture",
+              "revision": "revision-fixture",
+              "tokenizerRevision": "tokenizer-fixture",
+              "chatTemplateHash": "template-fixture",
+              "modelAssetId": null,
+              "source": "managed"
+            },
+            "recipe": {
+              "schemaVersion": "openpond.rftRecipe.v1",
+              "method": "grpo",
+              "parameterization": "lora",
+              "optimizer": {
+                "maximumSteps": 1
+              }
+            }
+          },
+          "candidate": {
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture",
+            "composition": "base",
+            "parent": null
+          },
+          "executionReceipt": {
+            "id": "receipt-fixture",
+            "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+          },
+          "createdAt": "2026-11-01T00:00:00.000Z",
+          "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+        },
+        "control": null,
+        "cleanup": [],
+        "registry": {
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "baseProfileId": "profile-fixture",
+          "state": "promotable",
+          "qualified": true,
+          "revoked": false,
+          "deleted": false,
+          "reason": "qualified",
+          "source": {
+            "jobId": "job-fixture",
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture"
+          }
+        },
+        "deployments": [
+          {
+            "id": "deployment-fixture",
+            "artifactId": "registry-fixture",
+            "poolId": "another-pool",
+            "revision": 2,
+            "state": "ready",
+            "revoked": false,
+            "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+            "updatedAt": "2026-11-01T12:00:00.000Z"
+          }
+        ],
+        "pools": [
+          {
+            "id": "pool-fixture",
+            "provider": "fixture_serving",
+            "state": "ready",
+            "workersMin": 0,
+            "workersMax": 1,
+            "idleTimeoutSeconds": 300,
+            "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "endpointRecorded": true,
+            "activeDeployments": 1,
+            "activeBindings": 1,
+            "activeRequests": 0,
+            "unsettledRequests": 0,
+            "retirementBlocked": true
+          }
+        ],
+        "bindings": [
+          {
+            "id": "binding-fixture",
+            "modelId": "personalized:model-fixture",
+            "artifactId": "registry-fixture",
+            "deploymentId": "deployment-fixture",
+            "revision": 1
+          }
+        ],
+        "lastVerifiedInference": {
+          "requestId": "request-fixture",
+          "receipt": {
+            "id": "request-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "completedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "state": "active",
+        "contentHash": "1d3db9acb66ef0829b0870297ee4ed373606ef00f97f587f807cf6f3a0731396"
+      }
+    },
+    {
+      "kind": "load_identity",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServing.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "observedAt": "2026-11-01T12:00:00.000Z",
+        "version": {
+          "schemaVersion": "openpond.trainingModelVersion.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "portableProjectId": "project-fixture",
+          "jobId": "job-fixture",
+          "request": {
+            "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+            "source": {
+              "modelProject": {
+                "id": "hosted-project-fixture",
+                "portableProjectId": "project-fixture",
+                "revision": 3,
+                "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "harnessRunManifest": {
+                "id": "manifest-fixture",
+                "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "harnessRelease": {
+                "id": "harness-fixture",
+                "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "taskset": {
+                "id": "taskset-fixture",
+                "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "revision": 2
+              },
+              "tasksetRelease": {
+                "id": "taskset-release-fixture",
+                "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              },
+              "evaluation": {
+                "taskset": {
+                  "id": "held-out-fixture",
+                  "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+                  "revision": 1
+                },
+                "dataset": {
+                  "id": "evaluation-dataset-fixture",
+                  "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+                }
+              },
+              "dataset": {
+                "id": "dataset-fixture",
+                "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+              },
+              "evidenceSets": []
+            },
+            "baseModel": {
+              "schemaVersion": "openpond.baseModelPreference.v1",
+              "modelId": "model-fixture",
+              "revision": "revision-fixture",
+              "tokenizerRevision": "tokenizer-fixture",
+              "chatTemplateHash": "template-fixture",
+              "modelAssetId": null,
+              "source": "managed"
+            },
+            "recipe": {
+              "schemaVersion": "openpond.rftRecipe.v1",
+              "method": "grpo",
+              "parameterization": "lora",
+              "optimizer": {
+                "maximumSteps": 1
+              }
+            }
+          },
+          "candidate": {
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture",
+            "composition": "base",
+            "parent": null
+          },
+          "executionReceipt": {
+            "id": "receipt-fixture",
+            "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+          },
+          "createdAt": "2026-11-01T00:00:00.000Z",
+          "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+        },
+        "control": null,
+        "cleanup": [],
+        "registry": {
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "baseProfileId": "profile-fixture",
+          "state": "promotable",
+          "qualified": true,
+          "revoked": false,
+          "deleted": false,
+          "reason": "qualified",
+          "source": {
+            "jobId": "job-fixture",
+            "artifact": {
+              "id": "artifact-fixture",
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "checkpointId": "checkpoint-fixture"
+          }
+        },
+        "deployments": [
+          {
+            "id": "deployment-fixture",
+            "artifactId": "registry-fixture",
+            "poolId": "pool-fixture",
+            "revision": 2,
+            "state": "ready",
+            "revoked": false,
+            "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+            "updatedAt": "2026-11-01T12:00:00.000Z"
+          }
+        ],
+        "pools": [
+          {
+            "id": "pool-fixture",
+            "provider": "fixture_serving",
+            "state": "ready",
+            "workersMin": 0,
+            "workersMax": 1,
+            "idleTimeoutSeconds": 300,
+            "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "endpointRecorded": true,
+            "activeDeployments": 1,
+            "activeBindings": 1,
+            "activeRequests": 0,
+            "unsettledRequests": 0,
+            "retirementBlocked": true
+          }
+        ],
+        "bindings": [
+          {
+            "id": "binding-fixture",
+            "modelId": "personalized:model-fixture",
+            "artifactId": "registry-fixture",
+            "deploymentId": "deployment-fixture",
+            "revision": 1
+          }
+        ],
+        "lastVerifiedInference": {
+          "requestId": "request-fixture",
+          "receipt": {
+            "id": "request-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "workerImageDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "completedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "state": "active",
+        "contentHash": "2359b69efe2388d87051a561536271d4473b264d1249fd41e8ccb5d1519934a5"
+      }
+    }
+  ]
+}

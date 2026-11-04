@@ -1,3 +1,4 @@
+import { DropdownSelect } from "../../DropdownSelect";
 import type { OpenPondLearningClient } from "openpond-sdk/learning";
 import { useRef, useState } from "react";
 import { learningRef, sameLearningRef, TaskAdmissionDecisionSchema, TaskGradeRunSchema, TaskRatingSchema, TaskFeedbackSchema, type TaskEvidence, type TaskGradeRun } from "openpond-sdk/learning";
@@ -8,6 +9,7 @@ import { LearningFeedback } from "./LearningFeedback";
 import { RewardCompositionDetails } from "./RewardCompositionView";
 import { emptyTaskRating, TaskRatingFields } from "./TaskRatingFields";
 import { useDraftNavigation } from "../useDraftNavigation";
+import { taskInputSummary } from "../ReadableTaskValue";
 
 export function LearningReviewPage({ canManage = true, client, selectedId, after, sourceId = null, onClearSource, onSelect, onPage, onBatches }: { canManage?: boolean; client: OpenPondLearningClient | null; selectedId: string | null; after: string | null; sourceId?: string | null; onClearSource?: () => void; onSelect: (id: string | null) => void; onPage: (cursor: string | null) => void; onBatches?: () => void }) {
   const [reviewState, setReviewState] = useState<"inbox" | "reviewed">("inbox");
@@ -16,7 +18,7 @@ export function LearningReviewPage({ canManage = true, client, selectedId, after
   if (selectedId) return <EvidenceLoader canManage={canManage} key={selectedId} client={client} id={selectedId} sourceId={sourceId} onBack={() => { evidence.refresh(); onSelect(null); }} onBatches={onBatches} />;
   return <div className="labs-flat-body labs-resource-page learning-workspace">
     <ModelProjectPageHeader title="Labeling" description={sourceId ? `Review tasks from ${source.resource?.name ?? sourceId}. Task validity and target approval remain separate decisions.` : "Label observed responses, propose corrections, and approve tasks independently. Examples are shared across Models in this workspace."} actions={<><button type="button" className="training-button secondary" onClick={onBatches}>Approved batches</button>{sourceId && onClearSource ? <button type="button" className="training-button secondary" onClick={onClearSource}>All workspace examples</button> : null}</>} />
-    <LearningActions>{(["inbox", "reviewed"] as const).map(state => <button key={state} type="button" className="training-button secondary" aria-pressed={reviewState === state} onClick={() => { setReviewState(state); onPage(null); }}>{state === "inbox" ? "Inbox" : "Reviewed"}</button>)}<button type="button" className="training-button" disabled={evidence.loading || !evidence.page?.items.length} onClick={() => { const next = evidence.page?.items[0]; if (next) onSelect(next.id); }}>Review next</button></LearningActions>
+    <LearningActions><DropdownSelect label="Review status" floating value={reviewState} options={[{ value: "inbox", label: "Inbox" }, { value: "reviewed", label: "Reviewed" }]} onChange={value => { setReviewState(value as typeof reviewState); onPage(null); }} /><button type="button" className="training-button" disabled={evidence.loading || !evidence.page?.items.length} onClick={() => { const next = evidence.page?.items[0]; if (next) onSelect(next.id); }}>Review next</button></LearningActions>
     <LearningError error={evidence.error ?? source.error} /><div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Request</th><th>Source</th><th>Split</th><th>Attempt</th></tr></thead><tbody>{evidence.page?.items.map(entry => <EvidenceRow key={entry.id} client={client} evidence={entry} onSelect={onSelect} />)}</tbody></table></div>
     {evidence.loading ? <p role="status">Loading examples…</p> : !evidence.page?.items.length ? <p>No retained examples are available for labeling in this scope.</p> : null}<LearningPager after={after} next={evidence.page?.nextCursor} onPage={onPage} />
   </div>;
@@ -24,12 +26,7 @@ export function LearningReviewPage({ canManage = true, client, selectedId, after
 
 function EvidenceRow({ client, evidence, onSelect }: { client: OpenPondLearningClient | null; evidence: TaskEvidence; onSelect: (id: string) => void }) {
   const source = useLearningResource(client, "source", evidence.source.id, evidence.source.revision);
-  return <tr><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(evidence.id)}><strong>{requestSummary(evidence.submission.input) || "Open request"}</strong></button></td><td>{source.resource?.name ?? "Source"}<LearningError error={source.error} /></td><td>{evidence.submission.split}</td><td>{evidence.submission.attemptId}</td></tr>;
-}
-function requestSummary(value: unknown): string {
-  if (typeof value === "string") return value.slice(0, 180);
-  if (!value || typeof value !== "object") return "";
-  return Object.values(value).map(requestSummary).filter(Boolean).join(" · ").slice(0, 180);
+  return <tr><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(evidence.id)}><strong>{taskInputSummary(evidence.submission.input) || "Open request"}</strong></button></td><td>{source.resource?.name ?? "Source"}<LearningError error={source.error} /></td><td>{evidence.submission.split}</td><td>{evidence.submission.attemptId}</td></tr>;
 }
 
 function EvidenceLoader({ canManage, client, id, sourceId, onBack, onBatches }: { canManage: boolean; client: OpenPondLearningClient | null; id: string; sourceId: string | null; onBack: () => void; onBatches?: () => void }) {
@@ -124,7 +121,7 @@ function EvidenceReview({ canManage, client, evidence, onBack, onBatches, onChan
         </section>
         <section className="learning-review-surface"><fieldset disabled={!canManage || mutation.busy}><TaskRatingFields value={rating} onChange={setRating} />
           <details><summary>Corrected answer</summary><label className="learning-inline-choice"><input type="checkbox" checked={correctAnswer} onChange={event => setCorrectAnswer(event.target.checked)} />Provide an answer for supervised training</label>{correctAnswer ? <><LearningJsonField label="Corrected answer" hint="Match the task's output fields. The answer must pass its reward checks before approval." value={target} onChange={setTarget} /><button type="button" className="training-button secondary" disabled={!inspection?.taskReady || Boolean(activeGrade)} onClick={() => { void grade("proposed_target"); }}>Check corrected answer</button><p>{targetGrade ? gradeSummary(targetGrade) : "Check this answer before saving."}</p></> : null}</details>
-          <details><summary>Training use · {trainingUse === "approved" ? "Allowed" : trainingUse === "rejected" ? "Excluded" : "Undecided"}</summary><p>A low response rating can still be useful for training. Exclude an example when the task itself should not be used.</p>{(["approved", "rejected", "pending"] as const).map(value => <label className="learning-inline-choice" key={value}><input type="radio" name="training-use" value={value} checked={trainingUse === value} onChange={() => setTrainingUse(value)} />{value === "approved" ? "Allow training" : value === "rejected" ? "Exclude this task" : "Decide later"}</label>)}{inspection?.issues.length ? <ul>{inspection.issues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul> : null}</details>
+          <details><summary>Training use · {trainingUse === "approved" ? "Allowed" : trainingUse === "rejected" ? "Excluded" : "Undecided"}</summary><p>A low response rating can still be useful for training. Exclude an example when the task itself should not be used.</p><DropdownSelect label="Training use" floating value={trainingUse} options={[{ value: "approved", label: "Allow training" }, { value: "rejected", label: "Exclude this task" }, { value: "pending", label: "Decide later" }]} onChange={value => setTrainingUse(value as typeof trainingUse)} />{inspection?.issues.length ? <ul>{inspection.issues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul> : null}</details>
           <label>Review note<textarea value={note} onChange={event => setNote(event.target.value)} /></label>
         </fieldset></section>
       </aside>

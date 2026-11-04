@@ -1,13 +1,24 @@
+import { TrainingUsageFundingRequestSchema, TrainingUsageQuoteSchema, verifyTrainingUsageQuote } from "./training-usage-funding.js";
 import { TrainingHandoffOriginSchema } from "./post-training.js";
 import { z } from "zod";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
-import { TrainingJobSourceSchema } from "./training.js";
+import { TrainingJobSourceSchema } from "./training-job-contracts.js";
 import { TrainingPhysicalPlacementSchema } from "./training-physical-placement.js";
 import { canonicalSha256, OpenPondProtocolError } from "./protocol.js";
 import { TrainingEstimateReviewSchema, TrainingGpuSelectionSchema } from "./training-compute-selection.js";
 
 const Id = z.string().trim().min(1).max(191);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
+
+/** An exact retained GRPO checkpoint, never an inference alias or Model label.
+ * Preparation verifies ownership and durability; execution rechecks runtime compatibility. */
+export const TrainingPreparationParentSchema = z.object({
+  jobId: Id,
+  artifact: z.object({ id: Id, contentHash: Hash }).strict(),
+  checkpointId: Id,
+  adapterMode: z.enum(["residual_append", "shared", "sequential_merge"]),
+}).strict();
+export type TrainingPreparationParent = z.infer<typeof TrainingPreparationParentSchema>;
 
 /** Manual training compiles an already reviewed batch. It creates no recurring policy. */
 export const TrainingPreparationRequestSchema = z
@@ -20,9 +31,12 @@ export const TrainingPreparationRequestSchema = z
       .object({ id: Id, expectedRevision: z.number().int().positive(), expectedEtag: Hash })
       .strict(),
     origin: TrainingHandoffOriginSchema.optional(),
+    parent: TrainingPreparationParentSchema.optional(),
     batch: ModelProjectVersionedRefSchema,
     name: z.string().trim().min(1).max(191),
+    // Compiler resource safety budget; actual-usage customer cap is separate.
     maximumSpendUsd: z.number().finite().positive().max(1_000_000),
+    usageFunding: TrainingUsageFundingRequestSchema.optional(),
     gpuSelection: TrainingGpuSelectionSchema.optional(),
     physicalPlacement: TrainingPhysicalPlacementSchema.optional(),
   })
@@ -36,6 +50,7 @@ export const TrainingPreparationPlanContentSchema = z
     requestHash: Hash,
     source: z.lazy(() => TrainingJobSourceSchema),
     submissionHash: Hash,
+    usageQuote: TrainingUsageQuoteSchema.optional(),
     createdAt: z.string().datetime({ offset: true }),
   })
   .strict();
@@ -65,6 +80,7 @@ export const TrainingPreparationControlSchema = z
     planHash: Hash,
     expectedRevision: z.number().int().positive(),
     estimateReview: TrainingEstimateReviewSchema.optional(),
+    usageQuoteHash: Hash.optional(),
   })
   .strict();
 export const TrainingPreparationListQuerySchema = z
@@ -93,6 +109,12 @@ export type TrainingPreparationPage = z.infer<typeof TrainingPreparationPageSche
 export async function parseAndVerifyTrainingPreparationReceipt(value: unknown) {
   const receipt = TrainingPreparationReceiptSchema.parse(value);
   const { contentHash, ...plan } = receipt.plan;
+  const usageFunding = plan.request.usageFunding;
+  if (Boolean(usageFunding) !== Boolean(plan.usageQuote))
+    throw new OpenPondProtocolError("training_usage_quote_mismatch", "Retain the reviewed complete Job price before starting.");
+  if (plan.usageQuote && usageFunding)
+    await verifyTrainingUsageQuote(plan.usageQuote, { teamId: plan.request.teamId, actorUserId: plan.creatorUserId,
+      preparationId: plan.id, submissionHash: plan.submissionHash, customerCapUsd: usageFunding.customerCapUsd });
   if (
     (await canonicalSha256(plan)) !== contentHash ||
     (await canonicalSha256(plan.request)) !== plan.requestHash ||
@@ -192,7 +214,8 @@ export function createTrainingPreparationClient(
         parsed.teamId,
         id,
       );
-      if (receipt.plan.contentHash !== parsed.planHash || receipt.state !== "submitted")
+      if (receipt.plan.contentHash !== parsed.planHash || receipt.state !== "submitted" ||
+        receipt.plan.usageQuote?.contentHash !== parsed.usageQuoteHash)
         throw new OpenPondProtocolError(
           "training_preparation_start_mismatch",
           "The submitted run does not match the approved preparation.",

@@ -67,6 +67,9 @@
     "input": {
       "$ref": "#/$defs/__schema2"
     },
+    "policyVisibleContext": {
+      "$ref": "#/$defs/__schema2"
+    },
     "observedOutput": {
       "anyOf": [
         {

@@ -7,7 +7,7 @@ import { RewardCompositionSchema } from "@openpond/evals/rewards";
 import { TaskGradeSchema } from "@openpond/evals/graders";
 import { TaskSplitSchema } from "@openpond/evals/tasksets";
 import { ExperimentAttemptGradeSchema } from "./experiment-grading-contracts.js";
-import { ModelProjectVersionedRefSchema } from "./model-projects.js";
+import { ModelProjectVersionedRefSchema, ModelProjectBaseModelSchema } from "./model-projects.js";
 import { canonicalJson, canonicalSha256 } from "./protocol.js";
 import { StandaloneHarnessExperimentSourceSchema, NativeHarnessExperimentEvidenceSchema } from "@openpond/evals/experiments";
 import { contentHash } from "@openpond/harness";
@@ -32,7 +32,7 @@ export type ModelStarterAttemptRequest = z.infer<typeof ModelStarterAttemptReque
 export const ModelStarterAttemptChoicesQuerySchema = z.object({ modelProjectId: IdSchema.nullable(), taskset: ModelProjectVersionedRefSchema, afterTaskId: IdSchema.optional(), limit: z.number().int().min(1).max(100).default(25) }).strict();
 export const ModelStarterAttemptChoicesSchema = z.object({
   modelProjectId: IdSchema.nullable(), taskset: ModelProjectVersionedRefSchema, available: z.boolean(), unavailableReason: z.string().max(1_000).nullable(),
-  models: z.array(z.object({ id: IdSchema, name: z.string().max(500), maximumOutputTokens: z.number().int().min(1).max(1_000_000).optional() }).strict()).max(200),
+  models: z.array(z.object({ id: IdSchema, name: z.string().max(500), maximumOutputTokens: z.number().int().min(1).max(1_000_000).optional(), baseModel: ModelProjectBaseModelSchema.nullable().optional() }).strict()).max(200),
   tasks: z.array(z.object({ id: IdSchema, split: TaskSplitSchema, inputPreview: z.string().max(500), fixtures: z.array(z.object({ id: IdSchema, label: z.string().max(200) }).strict()).max(1_000) }).strict()).max(100),
   nextCursor: IdSchema.nullable(),
 }).strict();

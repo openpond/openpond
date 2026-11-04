@@ -185,8 +185,10 @@ Options:
 Usage:
   openpond experiments <signal-plan|signal-report> --input-file <path> [--json]
   openpond experiments <models|run|run-cloud|list|read|status|cancel|result|compare|case> [id] [candidate-id] --local [--server-url <loopback-origin>] [--input-file <path>] [--receipt-id <id>] [--json]
+  openpond experiments <record-modification|modification|modifications> [id] --local --team <id> [--input-file <command.json>] [--project <id>] [--search <text>] [--cursor <opaque>] [--limit <1..100>] [--json]
   openpond experiments <profile-catalog|prepare-profile|run-profile|inspect-profile> --local [--server-url <loopback-origin>] [--input-file <path>] [--json]
   openpond experiments <prepare-harness|run|read|list|status|diagnostics|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>] [--local --server-url <loopback-origin>] [--receipt-id <id>] [--json]
+  Local activation observations: record-modification retains a verified {schemaVersion: openpond.modificationRecordingRequest.v1, teamId, operationId, name, projectId, method, request, result} command of at most 8 MiB. Reuse the exact command/operationId after a lost reply. modification reads one immutable record; modifications lists owner-scoped metadata. Measurements remain externally supplied, ungraded and on this device; these commands never start hosted execution.
   Case inspection: experiments case <run-id> --local --receipt-id <retained-receipt-id> [--after-sequence <nonnegative-integer>] [--limit <1..500>] --json. Only compare accepts a second positional run id; a task id is not a receipt id.
   Find retained receipt IDs with experiments result <run-id> --local --json (independent saved Dataset runs: evidence.cases[].receiptId; workspace runs: cases[].receiptId). Case inspection reads retained output/grading/trace and never executes inference or grading.
   Independent saved Dataset input (use --local without --team): {"datasetId":"<saved-id>","revision":3,"operationId":"reviewed-evaluation-1","maximumCostUsd":1,"taskLimit":10,"seed":0,"maxOutputTokens":1024,"models":[{"providerId":"openpond","modelId":"<exact catalog id>"}]}
@@ -201,6 +203,7 @@ Options:
   --after-id <string>
   --after-sequence <integer>
   --content-hash <string>
+  --cursor <string>
   --dataset-hash <string>
   --input-file <string>
   --json
@@ -997,6 +1000,8 @@ Usage:
   openpond training <projects|inspect-project|create-project|prepare-project|pull-project|estimate|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]
   openpond training estimate <hosted-model-project-id> --team-id <id> [--batch-id <id>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--gpu-count <1|2>] [--api-base-url <url>] [--json]
   openpond training hosted-estimate <input.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-funding <input.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-funding-handoff <input.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training prepare-project <input.json> [--dry-run] [--output <receipt.json>] [--json]
   openpond training prepare-project <reviewed-receipt.json> --apply [--output <saved.json>] [--json]
   openpond training pull-project <hosted-model-project-id> --profile <local-profile-id> [--snapshot-file <verified-package-and-projection.json>] [--json]
@@ -1005,7 +1010,63 @@ Usage:
   openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]
   openpond training start <hosted-model-project-id> --team-id <id> --batch-id <id> [--max-spend <usd>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--gpu-count <1|2>] [--yes] [--detach] [--json]
   openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
-  openpond training hosted-models|hosted-batches|hosted-preparations|hosted-jobs|hosted-capabilities|hosted-gpu-catalog --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-models|hosted-batches|hosted-preparations|hosted-jobs|hosted-capabilities|hosted-gpu-catalog|hosted-hardware-catalog --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-gpu-catalog [workload-query.json] --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-drafts --team-id <id> [--project-id <id>] [--search <text>] [--archived] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-modification-capabilities <input.json> --team-id <id> [--json]
+  openpond training hosted-draft <draft-id> --team-id <id> [--json]
+  openpond training hosted-save-draft <input.json> --team-id <id> [--json]
+  openpond training hosted-archive-draft <draft-id> --team-id <id> --operation-id <id> --expected-revision <n> [--json]
+  openpond training hosted-executions --team-id <id> [--project-id <id>] [--dataset-hash <sha256>] [--search <text>] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-modification-executions --team-id <id> [--id <execution-id>] [--project-id <id>] [--method <neuron_steering|inspect_activations>] [--phase <phase>] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-modification-execution <execution-id> --team-id <id> [--json]
+  openpond training hosted-compare-modification <execution-id> --team-id <id> --baseline <variant-id> --candidate <variant-id> [--prompt <prompt-id>] [--json]
+  openpond training hosted-alphaedit-capability <query.json> --team-id <id> [--json]
+  openpond training hosted-compile-alphaedit <input.json> --team-id <id> [--json]
+  openpond training hosted-prepare-alphaedit <input.json> --team-id <id> [--json]
+  openpond training hosted-start-alphaedit <input.json> --team-id <id> --yes [--json]
+  openpond training hosted-cancel-alphaedit <input.json> --team-id <id> [--json]
+  openpond training hosted-alphaedit-execution <execution-id> --team-id <id> [--json]
+  openpond training hosted-alphaedit-executions --team-id <id> [--id <execution-id>] [--project-id <id>] [--phase <phase>] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-save-alphaedit-model <input.json> --team-id <id> [--json]
+  openpond training hosted-alphaedit-serving <selection.json> --team-id <id> [--json]
+  openpond training hosted-control-alphaedit-serving <command.json> --team-id <id> [--yes] [--json]
+  openpond training hosted-neuron-training-capability <query.json> --team-id <id> [--json]
+  openpond training hosted-compile-neuron-training <input.json> --team-id <id> [--json]
+  openpond training hosted-prepare-neuron-training <input.json> --team-id <id> [--json]
+  openpond training hosted-start-neuron-training <input.json> --team-id <id> --yes [--json]
+  openpond training hosted-cancel-neuron-training <input.json> --team-id <id> [--json]
+  openpond training hosted-neuron-training-execution <execution-id> --team-id <id> [--json]
+  openpond training hosted-neuron-training-executions --team-id <id> [--id <execution-id>] [--project-id <id>] [--phase <phase>] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-save-neuron-training-model <input.json> --team-id <id> [--json]
+  openpond training hosted-neuron-training-serving <selection.json> --team-id <id> [--json]
+  openpond training hosted-control-neuron-training-serving <command.json> --team-id <id> [--yes] [--json]
+  openpond training hosted-engram-capability <query.json> --team-id <id> [--json]
+  openpond training hosted-compile-engram <input.json> --team-id <id> [--json]
+  openpond training hosted-prepare-engram <input.json> --team-id <id> [--json]
+  openpond training hosted-start-engram <input.json> --team-id <id> --yes [--json]
+  openpond training hosted-cancel-engram <input.json> --team-id <id> [--json]
+  openpond training hosted-engram-execution <execution-id> --team-id <id> [--json]
+  openpond training hosted-engram-executions --team-id <id> [--id <execution-id>] [--project-id <id>] [--phase <phase>] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-save-engram-model <input.json> --team-id <id> [--json]
+  openpond training hosted-decision-capability <query.json> --team-id <id> [--json]
+  openpond training hosted-compile-decision <input.json> --team-id <id> [--json]
+  openpond training hosted-prepare-decision <input.json> --team-id <id> [--json]
+  openpond training hosted-start-decision <input.json> --team-id <id> --yes [--json]
+  openpond training hosted-cancel-decision <input.json> --team-id <id> [--json]
+  openpond training hosted-decision-execution <execution-id> --team-id <id> [--json]
+  openpond training hosted-decision-executions --team-id <id> [--id <execution-id>] [--project-id <id>] [--mode <train|score>] [--phase <phase>] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-save-decision-model <input.json> --team-id <id> [--json]
+  openpond training hosted-score-decision <command.json> --team-id <id> --yes [--json]
+  openpond training hosted-decision-serving <selection.json> --team-id <id> [--json]
+  openpond training hosted-control-decision-serving <command.json> --team-id <id> [--yes] [--json]
+  openpond training hosted-compile-modification <input.json> --team-id <id> [--json]
+  openpond training hosted-prepare-modification <input.json> --team-id <id> [--json]
+  openpond training hosted-start-modification <input.json> --team-id <id> --yes [--json]
+  openpond training hosted-cancel-modification <input.json> --team-id <id> [--json]
+  openpond training hosted-preparations --team-id <id> [--project-id <id>] [--cursor <id>] [--limit <1..100>] [--json]
+  openpond training hosted-preparation <preparation-id> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-cancel-preparation <receipt.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-learning-inspect <model-project-id> --team-id <id> [--cursor <id>] [--limit <1..100>] [--api-base-url <url>] [--json]
   openpond training hosted-corrections <model-project-id> --team-id <id> [--run-id <id>] [--api-base-url <url>] [--json]
   openpond training hosted-workers --team-id <id> [--api-base-url <url>] [--json]
@@ -1019,16 +1080,34 @@ Usage:
   openpond training hosted-worker-rebind <worker-and-job.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-worker-enroll|hosted-worker-verify <physical-worker-id> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-worker-stop|hosted-worker-resume|hosted-worker-retire|hosted-worker-warm-idle|hosted-worker-retain-session <control.json> --team-id <id> [--api-base-url <url>] --yes [--json]
+  openpond training hosted-tasksets [taskset-id] --team-id <id> [--project-id <id>] [--cursor <cursor>] [--limit <1..100>] [--search <text>] [--api-base-url <url>] [--json]
   openpond training hosted-model <model-project-id> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-sync-model <input.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-publish-taskset <publication.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-review-dataset <input.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-evaluate-checkpoint <request.json> --team-id <id> [--api-base-url <url>] --yes [--json]
-  openpond training hosted-prepare|hosted-start|hosted-stage|hosted-submit <input.json> --team-id <id> [--api-base-url <url>] [--yes] [--json]
+  openpond training hosted-prepare|hosted-prepare-experiment|hosted-start|hosted-stage|hosted-submit <input.json> --team-id <id> [--api-base-url <url>] [--yes] [--json]
   openpond training hosted-qualify <input.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-trajectory <job-id> --trajectory-id <receipt-id> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-feedback <job-id> --trajectory-id <receipt-id> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-feedback <job-id> --evaluation-id <id> --task-id <id> --team-id <id> [--api-base-url <url>] [--json]
-  openpond training hosted-status|hosted-inspect|hosted-report|hosted-watch|hosted-cancel|hosted-artifacts|hosted-logs|hosted-events <job-id> --team-id <id> [--api-base-url <url>] [--interval-ms <ms>] [--json]
+  openpond training hosted-save-steering-model <input.json> --team-id <id> [--json]
+  openpond training hosted-saved-model-serving <selection.json> --team-id <id> [--json]
+  openpond training hosted-control-steering-serving <command.json> --team-id <id> [--yes] [--json]
+  openpond training hosted-control-engram-serving <command.json> --team-id <id> [--yes] [--json]
+  openpond training hosted-import-calibration <input.json> --team-id <id> [--json]
+  openpond training hosted-calibration <calibration-id> --team-id <id> [--json]
+  openpond training hosted-calibrations --team-id <id> [--project-id <id>] [--model-hash <sha256>] [--archived] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-archive-calibration <command.json> --team-id <id> [--json]
+  openpond training hosted-steering-profiles --team-id <id> [--project-id <id>] [--model-project-id <id>] [--archived] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-steering-profile <profile-id> --team-id <id> [--json]
+  openpond training hosted-archive-steering-profile <input.json> --team-id <id> [--json]
+  openpond training hosted-model-version <model-project-id> --team-id <id> [--version-hash <sha256>] [--json]
+  openpond training hosted-save-model <input.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-saved-model <model-project-id> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-model-serving <input.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-control-model-serving <input.json> --team-id <id> [--yes] [--api-base-url <url>] [--json]
+  openpond training hosted-status|hosted-result|hosted-inspect|hosted-report|hosted-watch|hosted-cancel|hosted-artifacts|hosted-logs|hosted-events <job-id> --team-id <id> [--api-base-url <url>] [--interval-ms <ms>] [--json]
   openpond training hosted-recover <input.json> --team-id <id> --yes [--api-base-url <url>] [--json]
   openpond training hosted-stop-after-group <job-id> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-evaluation-tasks <job-id> --evaluation-id <id> --team-id <id> [--cursor <cursor>] [--limit <1..100>] [--api-base-url <url>] [--json]
@@ -1045,35 +1124,44 @@ Options:
   --account <string>
   --api-base-url <string>
   --apply
+  --archived
   --availability-id <string>
+  --baseline <string>
   --batch-id <string>
   --cancel-on-infrastructure-error
+  --candidate <string>
   --cleanup-reserve-ms <integer>
   --cleanup-timeout-ms <integer>
   --comparison-series-entry <string>
   --cursor <string>
+  --dataset-hash <string>
   --deadline-at <string>
   --destination <string>
   --detach
   --dry-run
   --evaluation-id <string>
+  --expected-revision <integer>
   --export-approved
   --gpu-count <string>
   --gpu-placement-objective <string>
   --gpu-type <string>
+  --id <string>
   --interval-ms <integer>
   --job-id <string>
   --json
   --limit <integer>
   --manifest <string>
   --max-spend <number>
+  --mode <string>
   --model <string>
   --name <string>
   --objective <string>
   --operation-id <string>
   --output <string>
+  --phase <string>
   --profile <string>
   --project-id <string>
+  --prompt <string>
   --provider <string>
   --reasoning-effort <string>
   --recipe <string>
@@ -1081,11 +1169,13 @@ Options:
   --rollout-placement <string>
   --run-id <string>
   --run-preset <string>
+  --search <string>
   --snapshot-file <string>
   --task-id <string>
   --team-id <string>
   --timeout-ms <integer>
   --trajectory-id <string>
+  --version-hash <string>
   --wait-for-cleanup
   --watch
   --worker-id <string>

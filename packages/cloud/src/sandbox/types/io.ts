@@ -136,6 +136,9 @@ export type SandboxPtyStartInput = {
 
 export type SandboxPtyInput = {
   dataBase64: string;
+  /** Resize without stdin by passing an empty dataBase64 and both dimensions. */
+  rows?: number;
+  cols?: number;
 };
 
 export type SandboxPtyStatus =

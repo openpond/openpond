@@ -1,7 +1,7 @@
 import { ConnectionRequestError, connectionStatus, reportConnectionFailure } from "./connection-status";
 
 export class ApiRequestError extends Error {
-  constructor(message: string, readonly status: number) { super(message); this.name = "ApiRequestError"; }
+  constructor(message: string, readonly status: number, readonly code?: string, readonly retryable?: boolean) { super(message); this.name = "ApiRequestError"; }
 }
 
 export type ClientConnection = {
@@ -79,7 +79,7 @@ async function performFetch<T>(connection: ClientConnection, path: string, init?
     const error = typeof message === "string" && message.trim()
       ? message
       : response.statusText || `Request failed (${response.status}).`;
-    throw new ApiRequestError(error, response.status);
+    throw new ApiRequestError(error, response.status, typeof payload?.code === "string" ? payload.code : undefined, typeof payload?.retryable === "boolean" ? payload.retryable : undefined);
   }
   if (response.status === 204) return undefined as T;
   let payload;

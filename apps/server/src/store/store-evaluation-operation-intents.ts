@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
+import { RecoverableEvaluationActionSchema } from "@openpond/contracts";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 
 const Hash=z.string().regex(/^[a-f0-9]{64}$/);
 export const EvaluationOperationScopeSchema=z.object({scopeHash:Hash,action:z.string().trim().min(1).max(100),intentHash:Hash}).strict();
 export type EvaluationOperationScope=z.infer<typeof EvaluationOperationScopeSchema>;
-export const recoverableEvaluationActions=["advanced-refiner-start","experiment-evaluation-schedule"] as const;
+export const recoverableEvaluationActions=RecoverableEvaluationActionSchema.options;
 export type EvaluationOperationPhase="reviewed"|"dispatching";
 export const EVALUATION_OPERATION_SCHEMA_SQL=`CREATE TABLE IF NOT EXISTS evaluation_operation_intents (
  scope_hash TEXT NOT NULL,action TEXT NOT NULL,intent_hash TEXT NOT NULL,
@@ -32,12 +33,13 @@ function retainedRow(db:OpenPondSqliteConnection,input:EvaluationOperationScope&
 function archiveAcknowledged(db:OpenPondSqliteConnection,scope:EvaluationOperationScope,id:string) {
   db.run(`INSERT OR IGNORE INTO evaluation_operation_acknowledged_history(scope_hash,action,intent_hash,operation_id,created_at,acknowledged_at,payload,command,phase) SELECT i.scope_hash,i.action,i.intent_hash,i.operation_id,i.created_at,i.acknowledged_at,p.payload,p.command,p.phase FROM evaluation_operation_intents i LEFT JOIN evaluation_operation_reviewed_payloads p USING(scope_hash,action,intent_hash,operation_id) WHERE i.scope_hash=? AND i.action=? AND i.intent_hash=? AND i.operation_id=? AND i.acknowledged_at IS NOT NULL`,[scope.scopeHash,scope.action,scope.intentHash,id]);
 }
-function bounded(value:unknown){const raw=JSON.stringify(value);if(raw===undefined||Buffer.byteLength(raw,"utf8")>1_048_576)throw new Error("Reviewed operation payload exceeds 1 MiB.");return raw;}
+function activationOperation(action:string){return action==="training:prepare-modification"||action==="training:start-modification"||action==="training:cancel-modification";}
+function bounded(value:unknown,action:string){const raw=JSON.stringify(value),maximum=activationOperation(action)?1_064_960:1_048_576;if(raw===undefined||Buffer.byteLength(raw,"utf8")>maximum)throw new Error("Reviewed operation payload exceeds its bounded journal limit.");return raw;}
 function retainable(action:string){if(!recoverableEvaluationActions.some(value=>value===action))throw new Error("This action does not admit recoverable reviewed payloads.");}
 export function prepareEvaluationOperation(db:OpenPondSqliteConnection,input:EvaluationOperationScope&{reviewedIntent?:unknown}) {
   const scope=EvaluationOperationScopeSchema.parse({scopeHash:input.scopeHash,action:input.action,intentHash:input.intentHash});
   let payload:string|undefined;
-  if(input.reviewedIntent!==undefined){retainable(scope.action);if(contentHash(input.reviewedIntent)!==scope.intentHash)throw new Error("Reviewed intent changed its exact hash.");payload=bounded(input.reviewedIntent);}
+  if(input.reviewedIntent!==undefined){retainable(scope.action);if(contentHash(input.reviewedIntent)!==scope.intentHash)throw new Error("Reviewed intent changed its exact hash.");payload=bounded(input.reviewedIntent,scope.action);}
   const row=db.get<{operation_id:string;created_at:string;acknowledged_at:string|null}>(
     "SELECT operation_id,created_at,acknowledged_at FROM evaluation_operation_intents WHERE scope_hash=? AND action=? AND intent_hash=?",
     [scope.scopeHash,scope.action,scope.intentHash]);
@@ -59,11 +61,11 @@ export function prepareEvaluationOperation(db:OpenPondSqliteConnection,input:Eva
   return {id,createdAt};
 }
 export function retainEvaluationOperation(db:OpenPondSqliteConnection,input:EvaluationOperationScope&{id:string;command:unknown;phase:EvaluationOperationPhase}) {
-  retainable(input.action);const scope=EvaluationOperationScopeSchema.parse({scopeHash:input.scopeHash,action:input.action,intentHash:input.intentHash}),command=bounded(input.command);
+  retainable(input.action);const scope=EvaluationOperationScopeSchema.parse({scopeHash:input.scopeHash,action:input.action,intentHash:input.intentHash}),command=bounded(input.command,input.action);
   const row=retainedRow(db,{...scope,id:input.id});
   if(!row?.payload||contentHash(JSON.parse(row.payload))!==scope.intentHash)throw new Error("The reviewed command requires its exact retained operation.");
   if(row.command&&contentHash(JSON.parse(row.command))!==contentHash(input.command))throw new Error("The reviewed command is immutable.");
-  if(Buffer.byteLength(row.payload,"utf8")+Buffer.byteLength(command,"utf8")>1_048_576)throw new Error("Reviewed intent and command exceed 1 MiB.");
+  if(Buffer.byteLength(row.payload,"utf8")+Buffer.byteLength(command,"utf8")>(activationOperation(scope.action)?2_129_920:1_048_576))throw new Error("Reviewed intent and command exceed the bounded journal limit.");
   const phase=row.phase==="dispatching"?"dispatching":input.phase;
   if(row.acknowledged_at){
     if(!row.command||row.phase!=="dispatching")throw new Error("The original reviewed command was discarded before dispatch.");

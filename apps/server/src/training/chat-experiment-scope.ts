@@ -11,8 +11,10 @@ import {
   type ChatExperimentContext,
   type ChatExperimentScope,
   type ChatResourceSummary,
+  type StoredExperimentDraftReference,
 } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
+import { canonicalJson, parseAndVerifyExperimentDraft, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
 
 const empty = (): ChatExperimentContext => ({ scopes: [], activeScopeId: null, selectionVersion: 0, selectedAt: null, selectionOperations:{} });
 function sameResourcePin(first: ChatResourceSummary | null, second: ChatResourceSummary) {
@@ -33,8 +35,9 @@ export function createChatExperimentScopes(store: SqliteStore) {
     const session = await store.updateSession(sessionId, current => {
       if (current.systemKind || ["sandbox", "sandbox_template"].includes(current.workspaceKind ?? "")) throw new Error("This conversation cannot select local resources.");
       const state = chatExperimentContext(current.metadata);
-      apply(state, current.metadata ?? {});
-      return { ...current, metadata: { ...current.metadata, chatExperimentContext: ChatExperimentContextSchema.parse(state) } };
+      const metadata = { ...current.metadata };
+      apply(state, metadata);
+      return { ...current, metadata: { ...metadata, chatExperimentContext: ChatExperimentContextSchema.parse(state) } };
     });
     if (!session) throw new Error("Conversation was not found.");
     return chatExperimentContext(session.metadata);
@@ -116,6 +119,71 @@ export function createChatExperimentScopes(store: SqliteStore) {
       state.activeScopeId = scope.id;
       state.selectionVersion++;
       state.selectedAt = now;
+    });
+  }
+
+  async function createDraft(sessionId: string, raw: ExperimentDraft, expected?: { version: number; target: ChatContextTarget | null }) {
+    const draft = await parseAndVerifyExperimentDraft(raw);
+    const hash = createHash("sha256").update(canonicalJson(draft)).digest("hex");
+    return change(sessionId, (state, metadata) => {
+      const prior = state.scopes.find(scope => scope.operationId === draft.id);
+      if (prior) {
+        if (prior.creationHash !== hash) throw new Error("This draft identity was already used for different settings.");
+        // Reconcile a lost reply without taking focus from a newer selection.
+        return;
+      }
+      const target = ChatContextTargetSchema.nullable().optional().parse(metadata.chatContextSelection);
+      if (expected && (state.selectionVersion !== expected.version || canonicalJson(target ?? null) !== canonicalJson(expected.target)))
+        throw new Error("The chat context changed before the experiment was prepared.");
+      const now = new Date().toISOString();
+      const scope = make(state, draft.id, now);
+      scope.draft = draft;
+      scope.draftRevision = 1;
+      scope.creationHash = hash;
+      scope.name = draft.name;
+      state.activeScopeId = scope.id;
+      state.selectionVersion++;
+      state.selectedAt = now;
+      metadata.chatContextSelection = { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" };
+      metadata.chatContextSelectionVersion = state.selectionVersion;
+      // Force current() to derive fresh focus rather than retaining an older key.
+      delete metadata.chatContextFocusKey;
+    });
+  }
+
+  async function linkStoredDraft(sessionId: string, record: ExperimentDraftRecord, reference: StoredExperimentDraftReference,
+    expected?: { version: number; target: ChatContextTarget | null }, scopeId?: string) {
+    if (record.id !== reference.id || record.teamId !== reference.teamId)
+      throw new Error("The stored experiment reference does not match its document.");
+    const identity = createHash("sha256").update(canonicalJson(reference)).digest("hex");
+    return change(sessionId, (state, metadata) => {
+      const prior = scopeId ? state.scopes.find(scope => scope.id === scopeId)
+        : state.scopes.find(scope => scope.operationId === `stored-draft:${identity}`);
+      if (prior) {
+        if (prior.storedDraft ? canonicalJson(prior.storedDraft) !== canonicalJson(reference) : prior.draft?.id !== record.id)
+          throw new Error("This stored draft does not belong to the intended experiment scope.");
+        prior.storedDraft = reference;
+        delete prior.draft;
+        // Keep only display metadata and the canonical pointer. An old retry
+        // must not regress the revision/name observed by this chat.
+        if (!prior.draftRevision || prior.draftRevision <= record.revision) {
+          prior.draftRevision = record.revision;
+          prior.name = record.draft.name; prior.updatedAt = record.updatedAt;
+        }
+        return;
+      }
+      if (scopeId) throw new Error("The experiment scope is unavailable.");
+      const target = ChatContextTargetSchema.nullable().optional().parse(metadata.chatContextSelection);
+      if (expected && (state.selectionVersion !== expected.version || canonicalJson(target ?? null) !== canonicalJson(expected.target)))
+        throw new Error("The chat context changed before the experiment was attached.");
+      const scope = make(state, `stored-draft:${identity}`, new Date().toISOString());
+      scope.storedDraft = reference; scope.draftRevision = record.revision;
+      scope.creationHash = identity;
+      scope.name = record.draft.name;
+      state.activeScopeId = scope.id; state.selectionVersion++; state.selectedAt = scope.createdAt;
+      metadata.chatContextSelection = { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" };
+      metadata.chatContextSelectionVersion = state.selectionVersion;
+      delete metadata.chatContextFocusKey;
     });
   }
 
@@ -287,5 +355,23 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
-  return { ensure, create, createForDataset, select, attach, attachTraining };
+  // GUI Start has no agent turn. Associate its canonical returned Job with the
+  // originating draft, preserving newer focus rather than inventing a turn.
+  async function associateDraftTraining(sessionId: string, draftId: string, input: ChatTrainingAttachment) {
+    const training = ChatTrainingAttachmentSchema.parse(input);
+    return change(sessionId, state => {
+      const scope = state.scopes.find(item => item.draft?.id === draftId || item.storedDraft?.id === draftId);
+      if (!scope) throw new Error("The originating experiment draft is not in this conversation.");
+      if (scope.storedDraft && (scope.storedDraft.teamId !== training.owner.teamId ||
+        training.location !== "cloud" || scope.storedDraft.apiOrigin !== training.apiOrigin))
+        throw new Error("The training Job and originating draft belong to different accounts.");
+      const records = scope.training ??= [], key = chatTrainingAttachmentKey(training);
+      const index = records.findIndex(record => chatTrainingAttachmentKey(record) === key);
+      if (index < 0) records.push(training);
+      else if (records[index]!.updatedAt <= training.updatedAt) records[index] = training;
+      if (state.activeScopeId === scope.id) scope.selectedTrainingKey = key;
+      scope.updatedAt = new Date().toISOString();
+    });
+  }
+  return { ensure, create, createForDataset, createDraft, linkStoredDraft, select, attach, attachTraining, associateDraftTraining };
 }

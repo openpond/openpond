@@ -17,6 +17,59 @@ import { prepareImportedTasksetPackage } from "../src/taskset-package-projection
 import { buildTasksetTrainingBundle } from "../src/training-bundle.js";
 import { computeTasksetHash } from "../src/taskset-authored-validation.js";
 import { materializePortableTasksetRelease } from "../src/taskset-authored-portable-release.js";
+import { prepareDatasetTrainingReview } from "../src/dataset-training-review-preparation.js";
+import { datasetTrainingReviewFiles } from "../src/dataset-training-review-files.js";
+import { inspectDatasetTrainingReviewPackage } from "../src/dataset-training-review-source.js";
+import { taskRecordFromEvidence } from "@openpond/evals/learning";
+
+// Failure story: copying a Dataset into review must not expose private grading
+// state to the policy, move held-out families into training, or copy approval.
+it("prepares Dataset review without approval or policy leakage", () => {
+  const source = ordinaryToolTaskset();
+  const originalBytes = JSON.stringify(source);
+  const grader = source.verifierSet.graders[0]!;
+  if (grader.kind !== "custom_verifier") throw new Error("Expected the real verifier fixture");
+  const file = source.files.find(item => item.asset.id === grader.verifierRef.id)!;
+  const asset = createLearningTextAsset({ path: file.asset.path, mediaType: file.asset.mediaType,
+    visibility: file.asset.visibility, text: new TextDecoder().decode(decodeTasksetPackageFile(file)) });
+  const reward = RewardReleaseSchema.parse(sealLearningContent({ schemaVersion: "openpond.rewardRelease.v1", id: "dataset-review-reward", revision: 1,
+    name: "Recorded environment", description: "", implementation: { kind: "custom_verifier", verifierRef: asset.asset,
+      exportName: "verify", timeoutMs: 1000, networkPolicy: "none" }, rawScore: { minimum: 0, maximum: 1 }, assets: [asset.asset] }));
+  const binding = createRewardBinding({ schemaVersion: "openpond.rewardBinding.v1", id: "dataset-review-binding", revision: 1,
+    sources: [{ graderId: "recorded", reward: learningRef(reward), role: "training", normalization: { kind: "identity" },
+      weight: 1, required: true, hardGate: true, privileged: true, fixtureRefs: [] }], aggregation: "weighted_mean",
+    unscorable: "exclude_optional_require_all_required" }, [reward]);
+  const request = { schemaVersion: "openpond.datasetTrainingReviewRequest.v1" as const, teamId: "team-fixture", operationId: "review-operation",
+    dataset: learningRef(source.taskset), packageHash: source.contentHash, taskIds: [source.taskset.tasks[0]!.id],
+    purpose: "supervised_training" as const, shareWithWorkspace: true as const, rewardBindingRef: learningRef(binding),
+    definition: { instructions: "Inspect and report the public value.", outputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
+    targetSource: "expected_output" as const };
+  const input = { request, actorId: "actor-fixture", package: source, now: "2026-11-01T12:00:00Z", familyNamespace: "dataset-family", graph: { binding, rewards: [reward], assets: [asset] } };
+  const result = prepareDatasetTrainingReview(input);
+  const evidence = result.evidence[0]!;
+  const task = taskRecordFromEvidence(evidence, result.definition);
+  expect(task.split).toBe(source.taskset.tasks[0]!.split);
+  expect(task.clusterKey).toBe(source.taskset.tasks[0]!.clusterKey);
+  expect(task.input).toEqual(source.taskset.tasks[0]!.input);
+  expect(JSON.stringify([task.input, task.policyVisibleContext])).not.toContain("private-initial-state");
+  expect(evidence.submission.evaluatorContext).toEqual({ privateToken: "private-initial-state" });
+  expect(evidence.submission.observedOutput).toBeNull();
+  expect(result.proposals[0]?.status).toBe("pending_review");
+  expect(result.proposals[0]?.review).toBeNull();
+  expect(result).not.toHaveProperty("decisions");
+  const sharedFiles = datasetTrainingReviewFiles(source, request.taskIds);
+  expect(sharedFiles.map(file => file.asset.id)).toEqual([resolveTasksetPackageExecution(source)!.execution.javascript.module.id]);
+  expect(JSON.stringify(sharedFiles)).not.toContain("environment/state.json");
+  const preview = inspectDatasetTrainingReviewPackage(source);
+  expect(preview).toMatchObject({ dataset: learningRef(source.taskset), packageHash: source.contentHash,
+    taskCount: 1, rewardBinding: null, hasParentTargets: false });
+  expect(JSON.stringify(preview)).not.toContain("private-initial-state");
+  expect(preview).not.toHaveProperty("files");
+  expect(preview).not.toHaveProperty("tasks");
+  expect(JSON.stringify(source)).toBe(originalBytes);
+  expect(() => prepareDatasetTrainingReview({ ...input, request: { ...request, packageHash: "a".repeat(64) } })).toThrow();
+  expect(() => prepareDatasetTrainingReview({ ...input, request: { ...request, taskIds: ["missing-task"] } })).toThrow();
+});
 
 // Ordinary executable packages must close their private graph at admission,
 // and owned revisions must execute changed code without altering the source.

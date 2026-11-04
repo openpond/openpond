@@ -1,3 +1,4 @@
+import { DropdownSelect } from "../../DropdownSelect";
 import { ErrorToast } from "../../common/ErrorToast";
 import type { ExperimentSetupDraft } from "./EvaluationSetupState";
 import type { useExperimentSources } from "./useExperimentSources";
@@ -21,107 +22,102 @@ export function ExperimentSourceControls({
     <EvaluationCard title="Execution">
       <label>
         Execution selection
-        <select
+        <DropdownSelect
+          label="Execution selection"
           value={draft.mode}
-          onChange={(event) =>
+          floating
+          options={[
+            { value: "model", label: "Model only" },
+            { value: "model_harness", label: "Model + Harness" },
+            { value: "model_harness_profile", label: "Model + Harness + Profile" },
+          ]}
+          onChange={(value) =>
             patch({
-              mode: event.target.value as ExperimentSetupDraft["mode"],
+              mode: value as ExperimentSetupDraft["mode"],
               targetId: "model",
               sourceId: "",
               profileChoiceId: "",
             })
           }
-        >
-          <option value="model">Model only</option>
-          <option value="model_harness">Model + Harness</option>
-          <option value="model_harness_profile">Model + Harness + Profile</option>
-        </select>
+        />
       </label>
       {draft.mode === "model_harness" ? (
         <label>
           Released Harness
-          <select
+          <DropdownSelect
+            label="Released Harness"
+            searchable
+            floating
             value={
               draft.sourceId ||
               (api.location === "hosted" && sources.selected?.target.kind === "agent"
                 ? `target:${draft.targetId}`
                 : "")
             }
-            onChange={(event) =>
+            options={[
+              { value: "", label: "Choose released Harness" },
+              ...(api.location === "local"
+                ? (sources.local.data?.harnesses ?? []).map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                  }))
+                : [
+                    ...(sources.retainedHostedSource &&
+                    !sources.hostedHarnesses.some((item) => item.id === draft.sourceId)
+                      ? [
+                          {
+                            value: draft.sourceId,
+                            label: `Retained Harness · ${sources.retainedHostedSource.harnessRelease.id}`,
+                          },
+                        ]
+                      : []),
+                    ...sources.hostedHarnesses.map((item) => ({
+                      value: item.id,
+                      label: item.name,
+                      disabled: !item.ready,
+                      description: item.ready ? undefined : (item.reason ?? undefined),
+                    })),
+                    ...standalone.map((item, index) => ({
+                      value: `target:${item.id}`,
+                      label: item.name,
+                      description: "Project target",
+                      separatorBefore: index === 0,
+                    })),
+                  ]),
+            ]}
+            onChange={(value) =>
               patch(
-                event.target.value.startsWith("target:")
-                  ? { sourceId: "", targetId: event.target.value.slice(7) }
-                  : { sourceId: event.target.value, targetId: "" },
+                value.startsWith("target:")
+                  ? { sourceId: "", targetId: value.slice(7) }
+                  : { sourceId: value, targetId: "" },
               )
             }
-          >
-            <option value="">Choose released Harness</option>
-            {api.location === "local" ? (
-              sources.local.data?.harnesses.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))
-            ) : (
-              <>
-                <optgroup label="Workspace releases">
-                  {sources.retainedHostedSource &&
-                  !sources.hostedHarnesses.some((item) => item.id === draft.sourceId) ? (
-                    <option value={draft.sourceId}>
-                      Retained Harness · {sources.retainedHostedSource.harnessRelease.id}
-                    </option>
-                  ) : null}
-                  {sources.hostedHarnesses.map((item) => (
-                    <option key={item.id} value={item.id} disabled={!item.ready}>
-                      {item.name}
-                      {item.ready ? "" : ` · ${item.reason}`}
-                    </option>
-                  ))}
-                </optgroup>
-                {standalone.length ? (
-                  <optgroup label="Project targets">
-                    {standalone.map((item) => (
-                      <option key={item.id} value={`target:${item.id}`}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-              </>
-            )}
-          </select>
+          />
         </label>
       ) : null}
       {draft.mode === "model_harness_profile" ? (
         <label>
           Released Profile evaluation
-          <select
+          <DropdownSelect
+            label="Released Profile evaluation"
+            searchable
+            floating
             value={
               api.location === "local"
                 ? (sources.profile?.id ?? draft.profileChoiceId)
                 : draft.targetId
             }
-            onChange={(event) =>
-              patch(
-                api.location === "local"
-                  ? { profileChoiceId: event.target.value }
-                  : { targetId: event.target.value },
-              )
+            options={[
+              { value: "", label: "Choose compatible Profile evaluation" },
+              ...(api.location === "local" ? sources.compatibleProfiles : profiles).map((item) => ({
+                value: item.id,
+                label: item.name,
+              })),
+            ]}
+            onChange={(value) =>
+              patch(api.location === "local" ? { profileChoiceId: value } : { targetId: value })
             }
-          >
-            <option value="">Choose compatible Profile evaluation</option>
-            {api.location === "local"
-              ? sources.compatibleProfiles.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))
-              : profiles.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-          </select>
+          />
         </label>
       ) : null}
       {sources.harnessSource ? (
@@ -192,9 +188,11 @@ export function ExperimentSourceControls({
         <p role="status">Loading authorized local sources…</p>
       ) : null}
       {sources.local.error ? (
-        <ErrorToast error={sources.local.error.message}><button type="button" onClick={() => void sources.local.refetch()}>
+        <ErrorToast error={sources.local.error.message}>
+          <button type="button" onClick={() => void sources.local.refetch()}>
             Retry source discovery
-          </button></ErrorToast>
+          </button>
+        </ErrorToast>
       ) : null}
       {sources.unavailable ? <ErrorToast error={sources.unavailable} /> : null}
       {api.location === "hosted" && draft.mode === "model_harness" ? (
@@ -203,9 +201,11 @@ export function ExperimentSourceControls({
             <p role="status">Loading published Harness sources…</p>
           ) : null}
           {sources.hosted.error ? (
-            <ErrorToast error={sources.hosted.error.message}><button type="button" onClick={() => void sources.hosted.refetch()}>
+            <ErrorToast error={sources.hosted.error.message}>
+              <button type="button" onClick={() => void sources.hosted.refetch()}>
                 Retry source discovery
-              </button></ErrorToast>
+              </button>
+            </ErrorToast>
           ) : null}
           {sources.hosted.hasNextPage ? (
             <button

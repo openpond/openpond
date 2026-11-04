@@ -16,7 +16,11 @@ def limits(operation: dict[str,Any]) -> dict[str,Any]:
         return {'media':media,'request_limit':16777216,'response_limit':16777216}
     if path.startswith('/v1/model-projects'):
         return {'media':media,'request_limit':524288,'response_limit':8388608}
+    if path.startswith('/v1/modification-recordings'):
+        return {'media':media,'request_limit':8388608,'response_limit':8454144}
     large='/harness-sources/' in path or path=='/v1/training/artifacts'
+    if path.startswith('/v1/training/modification-executions/'):
+        return {'media':media,'request_limit':1048576,'response_limit':10485760}
     return {'media':media,'request_limit':67108864 if large or path.startswith('/v1/dataset-workspaces') else 1048576,'response_limit':67108864 if large else 138412032 if '/operations/' in path and path.startswith('/v1/dataset-workspaces') else 8388608}
 
 class Resource:

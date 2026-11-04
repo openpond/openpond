@@ -1,0 +1,1633 @@
+{
+  "modelProjectId": "hosted-project-fixture",
+  "request": {
+    "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+    "teamId": "team-fixture",
+    "operationId": "activate-model-fixture",
+    "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+    "artifact": {
+      "id": "registry-fixture",
+      "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "expectedRevision": 0,
+    "action": "activate",
+    "idleTimeoutSeconds": 300
+  },
+  "receipt": {
+    "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+    "teamId": "team-fixture",
+    "modelProjectId": "hosted-project-fixture",
+    "actorId": "actor-fixture",
+    "request": {
+      "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+      "teamId": "team-fixture",
+      "operationId": "activate-model-fixture",
+      "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "expectedRevision": 0,
+      "action": "activate",
+      "idleTimeoutSeconds": 300
+    },
+    "control": {
+      "schemaVersion": "openpond.trainingModelServingControl.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "actorId": "actor-fixture",
+      "operationId": "activate-model-fixture",
+      "revision": 1,
+      "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "desiredState": "active",
+      "phase": "starting",
+      "capacityState": "pending",
+      "modelId": "personalized:model:hosted-project-fixture",
+      "deploymentId": "deployment-fixture",
+      "poolId": "pool-fixture",
+      "idleTimeoutSeconds": 300,
+      "failureCode": null,
+      "updatedAt": "2026-11-01T12:00:00.000Z"
+    },
+    "contentHash": "d559f3db8285a72384137b8d6a7641df8cdcd3804fdf66f1b1768ddeed4e45e1"
+  },
+  "stopRequest": {
+    "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+    "teamId": "team-fixture",
+    "operationId": "stop-model-fixture",
+    "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+    "artifact": {
+      "id": "registry-fixture",
+      "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "expectedRevision": 1,
+    "action": "stop",
+    "idleTimeoutSeconds": 300
+  },
+  "stopReceipt": {
+    "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+    "teamId": "team-fixture",
+    "modelProjectId": "hosted-project-fixture",
+    "actorId": "actor-fixture",
+    "request": {
+      "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+      "teamId": "team-fixture",
+      "operationId": "stop-model-fixture",
+      "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "expectedRevision": 1,
+      "action": "stop",
+      "idleTimeoutSeconds": 300
+    },
+    "control": {
+      "schemaVersion": "openpond.trainingModelServingControl.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "actorId": "actor-fixture",
+      "operationId": "stop-model-fixture",
+      "revision": 2,
+      "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "desiredState": "stopped",
+      "phase": "stopping",
+      "capacityState": "retiring",
+      "modelId": "personalized:model:hosted-project-fixture",
+      "deploymentId": "deployment-fixture",
+      "poolId": "pool-fixture",
+      "idleTimeoutSeconds": 300,
+      "failureCode": null,
+      "updatedAt": "2026-11-01T12:00:00.000Z"
+    },
+    "contentHash": "6f9413d95fdb63c4ac884b8ddfe4478ff3a0ed3b1129138c3d18aebc0e231609"
+  },
+  "active": {
+    "schemaVersion": "openpond.trainingModelServing.v1",
+    "teamId": "team-fixture",
+    "modelProjectId": "hosted-project-fixture",
+    "observedAt": "2026-11-01T12:00:00.000Z",
+    "version": {
+      "schemaVersion": "openpond.trainingModelVersion.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "portableProjectId": "project-fixture",
+      "jobId": "job-fixture",
+      "request": {
+        "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+        "source": {
+          "modelProject": {
+            "id": "hosted-project-fixture",
+            "portableProjectId": "project-fixture",
+            "revision": 3,
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "harnessRunManifest": {
+            "id": "manifest-fixture",
+            "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "harnessRelease": {
+            "id": "harness-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "taskset": {
+            "id": "taskset-fixture",
+            "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "revision": 2
+          },
+          "tasksetRelease": {
+            "id": "taskset-release-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "evaluation": {
+            "taskset": {
+              "id": "held-out-fixture",
+              "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+              "revision": 1
+            },
+            "dataset": {
+              "id": "evaluation-dataset-fixture",
+              "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+            }
+          },
+          "dataset": {
+            "id": "dataset-fixture",
+            "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          },
+          "evidenceSets": []
+        },
+        "baseModel": {
+          "schemaVersion": "openpond.baseModelPreference.v1",
+          "modelId": "model-fixture",
+          "revision": "revision-fixture",
+          "tokenizerRevision": "tokenizer-fixture",
+          "chatTemplateHash": "template-fixture",
+          "modelAssetId": null,
+          "source": "managed"
+        },
+        "recipe": {
+          "schemaVersion": "openpond.rftRecipe.v1",
+          "method": "grpo",
+          "parameterization": "lora",
+          "optimizer": {
+            "maximumSteps": 1
+          }
+        }
+      },
+      "candidate": {
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture",
+        "composition": "base",
+        "parent": null
+      },
+      "executionReceipt": {
+        "id": "receipt-fixture",
+        "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+      },
+      "createdAt": "2026-11-01T00:00:00.000Z",
+      "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+    },
+    "control": {
+      "schemaVersion": "openpond.trainingModelServingControl.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "actorId": "actor-fixture",
+      "operationId": "activate-model-fixture",
+      "revision": 1,
+      "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "desiredState": "active",
+      "phase": "active",
+      "capacityState": "pending",
+      "modelId": "personalized:model:hosted-project-fixture",
+      "deploymentId": "deployment-fixture",
+      "poolId": "pool-fixture",
+      "idleTimeoutSeconds": 300,
+      "failureCode": null,
+      "updatedAt": "2026-11-01T12:00:00.000Z"
+    },
+    "cleanup": [],
+    "registry": {
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "baseProfileId": "profile-fixture",
+      "state": "promotable",
+      "qualified": true,
+      "revoked": false,
+      "deleted": false,
+      "reason": "qualified",
+      "source": {
+        "jobId": "job-fixture",
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture"
+      }
+    },
+    "deployments": [
+      {
+        "id": "deployment-fixture",
+        "artifactId": "registry-fixture",
+        "poolId": "pool-fixture",
+        "revision": 2,
+        "state": "ready",
+        "revoked": false,
+        "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+        "updatedAt": "2026-11-01T12:00:00.000Z"
+      }
+    ],
+    "pools": [
+      {
+        "id": "pool-fixture",
+        "provider": "fixture_serving",
+        "state": "ready",
+        "workersMin": 0,
+        "workersMax": 1,
+        "idleTimeoutSeconds": 300,
+        "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "endpointRecorded": true,
+        "activeDeployments": 1,
+        "activeBindings": 1,
+        "activeRequests": 0,
+        "unsettledRequests": 0,
+        "retirementBlocked": true
+      }
+    ],
+    "bindings": [
+      {
+        "id": "binding-fixture",
+        "modelId": "personalized:model-fixture",
+        "artifactId": "registry-fixture",
+        "deploymentId": "deployment-fixture",
+        "revision": 1
+      }
+    ],
+    "lastVerifiedInference": {
+      "requestId": "request-fixture",
+      "receipt": {
+        "id": "request-fixture",
+        "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "deploymentId": "deployment-fixture",
+      "poolId": "pool-fixture",
+      "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "completedAt": "2026-11-01T12:00:00.000Z"
+    },
+    "state": "active",
+    "contentHash": "ae53bd7ed09037ebe25e9f5f2117425d9f272400cf6cda0119f8700d864549ae"
+  },
+  "starting": {
+    "schemaVersion": "openpond.trainingModelServing.v1",
+    "teamId": "team-fixture",
+    "modelProjectId": "hosted-project-fixture",
+    "observedAt": "2026-11-01T12:00:00.000Z",
+    "version": {
+      "schemaVersion": "openpond.trainingModelVersion.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "portableProjectId": "project-fixture",
+      "jobId": "job-fixture",
+      "request": {
+        "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+        "source": {
+          "modelProject": {
+            "id": "hosted-project-fixture",
+            "portableProjectId": "project-fixture",
+            "revision": 3,
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "harnessRunManifest": {
+            "id": "manifest-fixture",
+            "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "harnessRelease": {
+            "id": "harness-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "taskset": {
+            "id": "taskset-fixture",
+            "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "revision": 2
+          },
+          "tasksetRelease": {
+            "id": "taskset-release-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "evaluation": {
+            "taskset": {
+              "id": "held-out-fixture",
+              "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+              "revision": 1
+            },
+            "dataset": {
+              "id": "evaluation-dataset-fixture",
+              "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+            }
+          },
+          "dataset": {
+            "id": "dataset-fixture",
+            "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          },
+          "evidenceSets": []
+        },
+        "baseModel": {
+          "schemaVersion": "openpond.baseModelPreference.v1",
+          "modelId": "model-fixture",
+          "revision": "revision-fixture",
+          "tokenizerRevision": "tokenizer-fixture",
+          "chatTemplateHash": "template-fixture",
+          "modelAssetId": null,
+          "source": "managed"
+        },
+        "recipe": {
+          "schemaVersion": "openpond.rftRecipe.v1",
+          "method": "grpo",
+          "parameterization": "lora",
+          "optimizer": {
+            "maximumSteps": 1
+          }
+        }
+      },
+      "candidate": {
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture",
+        "composition": "base",
+        "parent": null
+      },
+      "executionReceipt": {
+        "id": "receipt-fixture",
+        "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+      },
+      "createdAt": "2026-11-01T00:00:00.000Z",
+      "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+    },
+    "control": {
+      "schemaVersion": "openpond.trainingModelServingControl.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "actorId": "actor-fixture",
+      "operationId": "activate-model-fixture",
+      "revision": 1,
+      "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "desiredState": "active",
+      "phase": "starting",
+      "capacityState": "pending",
+      "modelId": "personalized:model:hosted-project-fixture",
+      "deploymentId": "deployment-fixture",
+      "poolId": "pool-fixture",
+      "idleTimeoutSeconds": 300,
+      "failureCode": null,
+      "updatedAt": "2026-11-01T12:00:00.000Z"
+    },
+    "cleanup": [],
+    "registry": {
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "baseProfileId": "profile-fixture",
+      "state": "promotable",
+      "qualified": true,
+      "revoked": false,
+      "deleted": false,
+      "reason": "qualified",
+      "source": {
+        "jobId": "job-fixture",
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture"
+      }
+    },
+    "deployments": [
+      {
+        "id": "deployment-fixture",
+        "artifactId": "registry-fixture",
+        "poolId": "pool-fixture",
+        "revision": 2,
+        "state": "ready",
+        "revoked": false,
+        "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+        "updatedAt": "2026-11-01T12:00:00.000Z"
+      }
+    ],
+    "pools": [
+      {
+        "id": "pool-fixture",
+        "provider": "fixture_serving",
+        "state": "ready",
+        "workersMin": 0,
+        "workersMax": 1,
+        "idleTimeoutSeconds": 300,
+        "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "endpointRecorded": true,
+        "activeDeployments": 1,
+        "activeBindings": 1,
+        "activeRequests": 0,
+        "unsettledRequests": 0,
+        "retirementBlocked": true
+      }
+    ],
+    "bindings": [],
+    "lastVerifiedInference": {
+      "requestId": "request-fixture",
+      "receipt": {
+        "id": "request-fixture",
+        "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "deploymentId": "deployment-fixture",
+      "poolId": "pool-fixture",
+      "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "completedAt": "2026-11-01T12:00:00.000Z"
+    },
+    "state": "starting",
+    "contentHash": "6d5586e4feafac84c649fba4308236e3b3e42cf5ca0b18d2c423b5f773eef691"
+  },
+  "stopped": {
+    "schemaVersion": "openpond.trainingModelServing.v1",
+    "teamId": "team-fixture",
+    "modelProjectId": "hosted-project-fixture",
+    "observedAt": "2026-11-01T12:00:00.000Z",
+    "version": {
+      "schemaVersion": "openpond.trainingModelVersion.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "portableProjectId": "project-fixture",
+      "jobId": "job-fixture",
+      "request": {
+        "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+        "source": {
+          "modelProject": {
+            "id": "hosted-project-fixture",
+            "portableProjectId": "project-fixture",
+            "revision": 3,
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "harnessRunManifest": {
+            "id": "manifest-fixture",
+            "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "harnessRelease": {
+            "id": "harness-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "taskset": {
+            "id": "taskset-fixture",
+            "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "revision": 2
+          },
+          "tasksetRelease": {
+            "id": "taskset-release-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "evaluation": {
+            "taskset": {
+              "id": "held-out-fixture",
+              "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+              "revision": 1
+            },
+            "dataset": {
+              "id": "evaluation-dataset-fixture",
+              "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+            }
+          },
+          "dataset": {
+            "id": "dataset-fixture",
+            "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          },
+          "evidenceSets": []
+        },
+        "baseModel": {
+          "schemaVersion": "openpond.baseModelPreference.v1",
+          "modelId": "model-fixture",
+          "revision": "revision-fixture",
+          "tokenizerRevision": "tokenizer-fixture",
+          "chatTemplateHash": "template-fixture",
+          "modelAssetId": null,
+          "source": "managed"
+        },
+        "recipe": {
+          "schemaVersion": "openpond.rftRecipe.v1",
+          "method": "grpo",
+          "parameterization": "lora",
+          "optimizer": {
+            "maximumSteps": 1
+          }
+        }
+      },
+      "candidate": {
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture",
+        "composition": "base",
+        "parent": null
+      },
+      "executionReceipt": {
+        "id": "receipt-fixture",
+        "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+      },
+      "createdAt": "2026-11-01T00:00:00.000Z",
+      "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+    },
+    "control": {
+      "schemaVersion": "openpond.trainingModelServingControl.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "actorId": "actor-fixture",
+      "operationId": "stop-model-fixture",
+      "revision": 2,
+      "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "desiredState": "stopped",
+      "phase": "stopping",
+      "capacityState": "retiring",
+      "modelId": "personalized:model:hosted-project-fixture",
+      "deploymentId": "deployment-fixture",
+      "poolId": "pool-fixture",
+      "idleTimeoutSeconds": 300,
+      "failureCode": null,
+      "updatedAt": "2026-11-01T12:00:00.000Z"
+    },
+    "cleanup": [],
+    "registry": {
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "baseProfileId": "profile-fixture",
+      "state": "promotable",
+      "qualified": true,
+      "revoked": false,
+      "deleted": false,
+      "reason": "qualified",
+      "source": {
+        "jobId": "job-fixture",
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture"
+      }
+    },
+    "deployments": [
+      {
+        "id": "deployment-fixture",
+        "artifactId": "registry-fixture",
+        "poolId": "pool-fixture",
+        "revision": 2,
+        "state": "deleting",
+        "revoked": false,
+        "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+        "updatedAt": "2026-11-01T12:00:00.000Z"
+      }
+    ],
+    "pools": [
+      {
+        "id": "pool-fixture",
+        "provider": "fixture_serving",
+        "state": "deleting",
+        "workersMin": 0,
+        "workersMax": 1,
+        "idleTimeoutSeconds": 300,
+        "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "endpointRecorded": true,
+        "activeDeployments": 0,
+        "activeBindings": 0,
+        "activeRequests": 0,
+        "unsettledRequests": 0,
+        "retirementBlocked": false
+      }
+    ],
+    "bindings": [],
+    "lastVerifiedInference": {
+      "requestId": "request-fixture",
+      "receipt": {
+        "id": "request-fixture",
+        "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "deploymentId": "deployment-fixture",
+      "poolId": "pool-fixture",
+      "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "completedAt": "2026-11-01T12:00:00.000Z"
+    },
+    "state": "retiring",
+    "contentHash": "7532242aa8cfd22ba53ecdf46596d8a80f0746bde22ab9af177330a801f5fd94"
+  },
+  "invalid": [
+    {
+      "kind": "operation",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "request": {
+          "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+          "teamId": "team-fixture",
+          "operationId": "activate-model-fixture",
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "expectedRevision": 0,
+          "action": "activate",
+          "idleTimeoutSeconds": 300
+        },
+        "control": {
+          "schemaVersion": "openpond.trainingModelServingControl.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "actorId": "actor-fixture",
+          "operationId": "another-operation",
+          "revision": 1,
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "desiredState": "active",
+          "phase": "starting",
+          "capacityState": "pending",
+          "modelId": "personalized:model:hosted-project-fixture",
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "idleTimeoutSeconds": 300,
+          "failureCode": null,
+          "updatedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "contentHash": "fc3e64f38312d166867ffcead0d11a597cd9a9f78c2c6c26a9b284eae543e85f"
+      }
+    },
+    {
+      "kind": "version",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "request": {
+          "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+          "teamId": "team-fixture",
+          "operationId": "activate-model-fixture",
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "expectedRevision": 0,
+          "action": "activate",
+          "idleTimeoutSeconds": 300
+        },
+        "control": {
+          "schemaVersion": "openpond.trainingModelServingControl.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "actorId": "actor-fixture",
+          "operationId": "activate-model-fixture",
+          "revision": 1,
+          "versionHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "desiredState": "active",
+          "phase": "starting",
+          "capacityState": "pending",
+          "modelId": "personalized:model:hosted-project-fixture",
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "idleTimeoutSeconds": 300,
+          "failureCode": null,
+          "updatedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "contentHash": "26756e24a095a17d95f224d9c2733d8b53c9f071e78a779152f6026054a9a105"
+      }
+    },
+    {
+      "kind": "artifact",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "request": {
+          "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+          "teamId": "team-fixture",
+          "operationId": "activate-model-fixture",
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "expectedRevision": 0,
+          "action": "activate",
+          "idleTimeoutSeconds": 300
+        },
+        "control": {
+          "schemaVersion": "openpond.trainingModelServingControl.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "actorId": "actor-fixture",
+          "operationId": "activate-model-fixture",
+          "revision": 1,
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "desiredState": "active",
+          "phase": "starting",
+          "capacityState": "pending",
+          "modelId": "personalized:model:hosted-project-fixture",
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "idleTimeoutSeconds": 300,
+          "failureCode": null,
+          "updatedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "contentHash": "69b9c907ee1e510525491e76023e2d85a19c6d1f595c68ea2ecd86cba6d8efdf"
+      }
+    },
+    {
+      "kind": "revision",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "request": {
+          "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+          "teamId": "team-fixture",
+          "operationId": "activate-model-fixture",
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "expectedRevision": 0,
+          "action": "activate",
+          "idleTimeoutSeconds": 300
+        },
+        "control": {
+          "schemaVersion": "openpond.trainingModelServingControl.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "actorId": "actor-fixture",
+          "operationId": "activate-model-fixture",
+          "revision": 2,
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "desiredState": "active",
+          "phase": "starting",
+          "capacityState": "pending",
+          "modelId": "personalized:model:hosted-project-fixture",
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "idleTimeoutSeconds": 300,
+          "failureCode": null,
+          "updatedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "contentHash": "4a5bc8e5742e549868add5d39928d59eef12d9d8bcad4bc87688d476cb072862"
+      }
+    },
+    {
+      "kind": "actor",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "request": {
+          "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+          "teamId": "team-fixture",
+          "operationId": "activate-model-fixture",
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "expectedRevision": 0,
+          "action": "activate",
+          "idleTimeoutSeconds": 300
+        },
+        "control": {
+          "schemaVersion": "openpond.trainingModelServingControl.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "actorId": "another-actor",
+          "operationId": "activate-model-fixture",
+          "revision": 1,
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "desiredState": "active",
+          "phase": "starting",
+          "capacityState": "pending",
+          "modelId": "personalized:model:hosted-project-fixture",
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "idleTimeoutSeconds": 300,
+          "failureCode": null,
+          "updatedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "contentHash": "aa2840d4666bc11c37e36e7d46a11560b01e14deee8301f03ad25150ac1a5716"
+      }
+    },
+    {
+      "kind": "alias",
+      "response": {
+        "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "request": {
+          "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+          "teamId": "team-fixture",
+          "operationId": "activate-model-fixture",
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "expectedRevision": 0,
+          "action": "activate",
+          "idleTimeoutSeconds": 300
+        },
+        "control": {
+          "schemaVersion": "openpond.trainingModelServingControl.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "actorId": "actor-fixture",
+          "operationId": "activate-model-fixture",
+          "revision": 1,
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "artifact": {
+            "id": "registry-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "desiredState": "active",
+          "phase": "starting",
+          "capacityState": "pending",
+          "modelId": "personalized:model:another-model",
+          "deploymentId": "deployment-fixture",
+          "poolId": "pool-fixture",
+          "idleTimeoutSeconds": 300,
+          "failureCode": null,
+          "updatedAt": "2026-11-01T12:00:00.000Z"
+        },
+        "contentHash": "9e2520c7c73d0f59efe6dadff6e1f936ec1da9b760e5a3b230aa3851bc565998"
+      }
+    }
+  ],
+  "usageScenario": {
+    "request": {
+      "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+      "teamId": "team-fixture",
+      "operationId": "activate-model-fixture",
+      "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+      "artifact": {
+        "id": "registry-fixture",
+        "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "expectedRevision": 0,
+      "action": "activate",
+      "idleTimeoutSeconds": 300,
+      "usageApproval": {
+        "schemaVersion": "openpond.managedServingUsageApproval.v1",
+        "reviewHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b",
+        "customerCapUsd": "1.000000"
+      }
+    },
+    "receipt": {
+      "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "actorId": "actor-fixture",
+      "request": {
+        "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+        "teamId": "team-fixture",
+        "operationId": "activate-model-fixture",
+        "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "expectedRevision": 0,
+        "action": "activate",
+        "idleTimeoutSeconds": 300,
+        "usageApproval": {
+          "schemaVersion": "openpond.managedServingUsageApproval.v1",
+          "reviewHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b",
+          "customerCapUsd": "1.000000"
+        }
+      },
+      "control": {
+        "schemaVersion": "openpond.trainingModelServingControl.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "operationId": "activate-model-fixture",
+        "revision": 1,
+        "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "desiredState": "active",
+        "phase": "starting",
+        "capacityState": "pending",
+        "modelId": "personalized:model:hosted-project-fixture",
+        "deploymentId": "deployment-fixture",
+        "poolId": "pool-fixture",
+        "idleTimeoutSeconds": 300,
+        "failureCode": null,
+        "updatedAt": "2026-11-01T12:00:00.000Z",
+        "usage": {
+          "schemaVersion": "openpond.managedServingUsage.v1",
+          "deploymentKey": "fixture-priced-deployment",
+          "reviewHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b",
+          "price": {
+            "schemaVersion": "openpond.computeAppliedPrice.v1",
+            "version": "fixture-serving-retail",
+            "service": "model_serving",
+            "profileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "currency": "USD",
+            "unit": "resource_hour",
+            "hourlyUsd": "1.000000"
+          },
+          "customerCapUsd": "1.000000",
+          "fundingState": "pending",
+          "stopReason": null,
+          "startedAt": null,
+          "lastActivityAt": null,
+          "idleExpiresAt": null,
+          "billableStoppedAt": null,
+          "quantityMillis": 0,
+          "chargedUsd": "0.000000",
+          "reservationId": null
+        }
+      },
+      "contentHash": "97679992709537352358fae25ba96394f61e75a4931334dfdd5e9954a0aba02e"
+    },
+    "status": {
+      "schemaVersion": "openpond.trainingModelServing.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "observedAt": "2026-11-01T12:00:00.000Z",
+      "version": {
+        "schemaVersion": "openpond.trainingModelVersion.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "portableProjectId": "project-fixture",
+        "jobId": "job-fixture",
+        "request": {
+          "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+          "source": {
+            "modelProject": {
+              "id": "hosted-project-fixture",
+              "portableProjectId": "project-fixture",
+              "revision": 3,
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "harnessRunManifest": {
+              "id": "manifest-fixture",
+              "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "harnessRelease": {
+              "id": "harness-fixture",
+              "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "taskset": {
+              "id": "taskset-fixture",
+              "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "revision": 2
+            },
+            "tasksetRelease": {
+              "id": "taskset-release-fixture",
+              "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            },
+            "evaluation": {
+              "taskset": {
+                "id": "held-out-fixture",
+                "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+                "revision": 1
+              },
+              "dataset": {
+                "id": "evaluation-dataset-fixture",
+                "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+              }
+            },
+            "dataset": {
+              "id": "dataset-fixture",
+              "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            },
+            "evidenceSets": []
+          },
+          "baseModel": {
+            "schemaVersion": "openpond.baseModelPreference.v1",
+            "modelId": "model-fixture",
+            "revision": "revision-fixture",
+            "tokenizerRevision": "tokenizer-fixture",
+            "chatTemplateHash": "template-fixture",
+            "modelAssetId": null,
+            "source": "managed"
+          },
+          "recipe": {
+            "schemaVersion": "openpond.rftRecipe.v1",
+            "method": "grpo",
+            "parameterization": "lora",
+            "optimizer": {
+              "maximumSteps": 1
+            }
+          }
+        },
+        "candidate": {
+          "artifact": {
+            "id": "artifact-fixture",
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "checkpointId": "checkpoint-fixture",
+          "composition": "base",
+          "parent": null
+        },
+        "executionReceipt": {
+          "id": "receipt-fixture",
+          "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+        },
+        "createdAt": "2026-11-01T00:00:00.000Z",
+        "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+      },
+      "control": {
+        "schemaVersion": "openpond.trainingModelServingControl.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "operationId": "activate-model-fixture",
+        "revision": 1,
+        "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "desiredState": "active",
+        "phase": "starting",
+        "capacityState": "pending",
+        "modelId": "personalized:model:hosted-project-fixture",
+        "deploymentId": "deployment-fixture",
+        "poolId": "pool-fixture",
+        "idleTimeoutSeconds": 300,
+        "failureCode": null,
+        "updatedAt": "2026-11-01T12:00:00.000Z",
+        "usage": {
+          "schemaVersion": "openpond.managedServingUsage.v1",
+          "deploymentKey": "fixture-priced-deployment",
+          "reviewHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b",
+          "price": {
+            "schemaVersion": "openpond.computeAppliedPrice.v1",
+            "version": "fixture-serving-retail",
+            "service": "model_serving",
+            "profileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "currency": "USD",
+            "unit": "resource_hour",
+            "hourlyUsd": "1.000000"
+          },
+          "customerCapUsd": "1.000000",
+          "fundingState": "pending",
+          "stopReason": null,
+          "startedAt": null,
+          "lastActivityAt": null,
+          "idleExpiresAt": null,
+          "billableStoppedAt": null,
+          "quantityMillis": 0,
+          "chargedUsd": "0.000000",
+          "reservationId": null
+        }
+      },
+      "cleanup": [],
+      "registry": {
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "baseProfileId": "profile-fixture",
+        "state": "promotable",
+        "qualified": true,
+        "revoked": false,
+        "deleted": false,
+        "reason": "qualified",
+        "source": {
+          "jobId": "job-fixture",
+          "artifact": {
+            "id": "artifact-fixture",
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "checkpointId": "checkpoint-fixture"
+        }
+      },
+      "deployments": [
+        {
+          "id": "deployment-fixture",
+          "artifactId": "registry-fixture",
+          "poolId": "pool-fixture",
+          "revision": 2,
+          "state": "ready",
+          "revoked": false,
+          "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+          "updatedAt": "2026-11-01T12:00:00.000Z"
+        }
+      ],
+      "pools": [
+        {
+          "id": "pool-fixture",
+          "provider": "fixture_serving",
+          "state": "ready",
+          "workersMin": 0,
+          "workersMax": 1,
+          "idleTimeoutSeconds": 300,
+          "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "endpointRecorded": true,
+          "activeDeployments": 1,
+          "activeBindings": 1,
+          "activeRequests": 0,
+          "unsettledRequests": 0,
+          "retirementBlocked": true
+        }
+      ],
+      "bindings": [],
+      "lastVerifiedInference": {
+        "requestId": "request-fixture",
+        "receipt": {
+          "id": "request-fixture",
+          "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "deploymentId": "deployment-fixture",
+        "poolId": "pool-fixture",
+        "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "completedAt": "2026-11-01T12:00:00.000Z"
+      },
+      "state": "starting",
+      "usageBilling": {
+        "schemaVersion": "openpond.managedServingUsageReviewResult.v1",
+        "availability": "reviewable",
+        "reason": null,
+        "review": {
+          "schemaVersion": "openpond.managedServingUsageReview.v1",
+          "teamId": "team-fixture",
+          "modelProjectId": "hosted-project-fixture",
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "method": "training",
+          "price": {
+            "schemaVersion": "openpond.computeAppliedPrice.v1",
+            "version": "fixture-serving-retail",
+            "service": "model_serving",
+            "profileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "currency": "USD",
+            "unit": "resource_hour",
+            "hourlyUsd": "1.000000"
+          },
+          "runtimeHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "workerImageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "providerConfigurationHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "idleTimeoutSeconds": 300,
+          "rules": {
+            "billableStart": "provider_allocation",
+            "startupBillable": true,
+            "idleBillable": true,
+            "explicitStop": "logical_admission_closed",
+            "postTrainingReuseBillable": false,
+            "minimumBillableMillis": 0,
+            "tokenRetailUsd": "0.000000"
+          },
+          "nativeControl": {
+            "protocol": "openpond.workerComputeControl.v1",
+            "executionLeaseMillis": 30000,
+            "stopHeadroomMillis": 60000,
+            "qualificationHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          },
+          "workDeadlineAt": "2035-01-02T00:00:00.000Z",
+          "expiresAt": "2035-01-01T00:00:00.000Z",
+          "contentHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b"
+        },
+        "usage": {
+          "schemaVersion": "openpond.managedServingUsage.v1",
+          "deploymentKey": "fixture-priced-deployment",
+          "reviewHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b",
+          "price": {
+            "schemaVersion": "openpond.computeAppliedPrice.v1",
+            "version": "fixture-serving-retail",
+            "service": "model_serving",
+            "profileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "currency": "USD",
+            "unit": "resource_hour",
+            "hourlyUsd": "1.000000"
+          },
+          "customerCapUsd": "1.000000",
+          "fundingState": "pending",
+          "stopReason": null,
+          "startedAt": null,
+          "lastActivityAt": null,
+          "idleExpiresAt": null,
+          "billableStoppedAt": null,
+          "quantityMillis": 0,
+          "chargedUsd": "0.000000",
+          "reservationId": null
+        }
+      },
+      "contentHash": "729be611e92bfdb2cef1195f24eb759898ae632be9982ec8541fbbbb98b045d3"
+    },
+    "invalidControl": {
+      "schemaVersion": "openpond.trainingModelServingControlReceipt.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "actorId": "actor-fixture",
+      "request": {
+        "schemaVersion": "openpond.trainingModelServingControlRequest.v1",
+        "teamId": "team-fixture",
+        "operationId": "activate-model-fixture",
+        "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "expectedRevision": 0,
+        "action": "activate",
+        "idleTimeoutSeconds": 300,
+        "usageApproval": {
+          "schemaVersion": "openpond.managedServingUsageApproval.v1",
+          "reviewHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b",
+          "customerCapUsd": "1.000000"
+        }
+      },
+      "control": {
+        "schemaVersion": "openpond.trainingModelServingControl.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "operationId": "activate-model-fixture",
+        "revision": 1,
+        "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "desiredState": "active",
+        "phase": "starting",
+        "capacityState": "pending",
+        "modelId": "personalized:model:hosted-project-fixture",
+        "deploymentId": "deployment-fixture",
+        "poolId": "pool-fixture",
+        "idleTimeoutSeconds": 300,
+        "failureCode": null,
+        "updatedAt": "2026-11-01T12:00:00.000Z",
+        "usage": {
+          "schemaVersion": "openpond.managedServingUsage.v1",
+          "deploymentKey": "fixture-priced-deployment",
+          "reviewHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b",
+          "price": {
+            "schemaVersion": "openpond.computeAppliedPrice.v1",
+            "version": "fixture-serving-retail",
+            "service": "model_serving",
+            "profileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "currency": "USD",
+            "unit": "resource_hour",
+            "hourlyUsd": "1.000000"
+          },
+          "customerCapUsd": "2.000000",
+          "fundingState": "pending",
+          "stopReason": null,
+          "startedAt": null,
+          "lastActivityAt": null,
+          "idleExpiresAt": null,
+          "billableStoppedAt": null,
+          "quantityMillis": 0,
+          "chargedUsd": "0.000000",
+          "reservationId": null
+        }
+      },
+      "contentHash": "d405a757d97c78e525e35a429b38d03379c6add07add6c4e03918e8805b27acc"
+    },
+    "invalidStatus": {
+      "schemaVersion": "openpond.trainingModelServing.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "observedAt": "2026-11-01T12:00:00.000Z",
+      "version": {
+        "schemaVersion": "openpond.trainingModelVersion.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "portableProjectId": "project-fixture",
+        "jobId": "job-fixture",
+        "request": {
+          "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+          "source": {
+            "modelProject": {
+              "id": "hosted-project-fixture",
+              "portableProjectId": "project-fixture",
+              "revision": 3,
+              "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "harnessRunManifest": {
+              "id": "manifest-fixture",
+              "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "harnessRelease": {
+              "id": "harness-fixture",
+              "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "taskset": {
+              "id": "taskset-fixture",
+              "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "revision": 2
+            },
+            "tasksetRelease": {
+              "id": "taskset-release-fixture",
+              "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            },
+            "evaluation": {
+              "taskset": {
+                "id": "held-out-fixture",
+                "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+                "revision": 1
+              },
+              "dataset": {
+                "id": "evaluation-dataset-fixture",
+                "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+              }
+            },
+            "dataset": {
+              "id": "dataset-fixture",
+              "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            },
+            "evidenceSets": []
+          },
+          "baseModel": {
+            "schemaVersion": "openpond.baseModelPreference.v1",
+            "modelId": "model-fixture",
+            "revision": "revision-fixture",
+            "tokenizerRevision": "tokenizer-fixture",
+            "chatTemplateHash": "template-fixture",
+            "modelAssetId": null,
+            "source": "managed"
+          },
+          "recipe": {
+            "schemaVersion": "openpond.rftRecipe.v1",
+            "method": "grpo",
+            "parameterization": "lora",
+            "optimizer": {
+              "maximumSteps": 1
+            }
+          }
+        },
+        "candidate": {
+          "artifact": {
+            "id": "artifact-fixture",
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "checkpointId": "checkpoint-fixture",
+          "composition": "base",
+          "parent": null
+        },
+        "executionReceipt": {
+          "id": "receipt-fixture",
+          "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+        },
+        "createdAt": "2026-11-01T00:00:00.000Z",
+        "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+      },
+      "control": {
+        "schemaVersion": "openpond.trainingModelServingControl.v1",
+        "teamId": "team-fixture",
+        "modelProjectId": "hosted-project-fixture",
+        "actorId": "actor-fixture",
+        "operationId": "activate-model-fixture",
+        "revision": 1,
+        "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "desiredState": "active",
+        "phase": "starting",
+        "capacityState": "pending",
+        "modelId": "personalized:model:hosted-project-fixture",
+        "deploymentId": "deployment-fixture",
+        "poolId": "pool-fixture",
+        "idleTimeoutSeconds": 300,
+        "failureCode": null,
+        "updatedAt": "2026-11-01T12:00:00.000Z",
+        "usage": {
+          "schemaVersion": "openpond.managedServingUsage.v1",
+          "deploymentKey": "fixture-priced-deployment",
+          "reviewHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b",
+          "price": {
+            "schemaVersion": "openpond.computeAppliedPrice.v1",
+            "version": "fixture-serving-retail",
+            "service": "model_serving",
+            "profileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "currency": "USD",
+            "unit": "resource_hour",
+            "hourlyUsd": "1.000000"
+          },
+          "customerCapUsd": "1.000000",
+          "fundingState": "pending",
+          "stopReason": null,
+          "startedAt": null,
+          "lastActivityAt": null,
+          "idleExpiresAt": null,
+          "billableStoppedAt": null,
+          "quantityMillis": 0,
+          "chargedUsd": "0.000000",
+          "reservationId": null
+        }
+      },
+      "cleanup": [],
+      "registry": {
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "baseProfileId": "profile-fixture",
+        "state": "promotable",
+        "qualified": true,
+        "revoked": false,
+        "deleted": false,
+        "reason": "qualified",
+        "source": {
+          "jobId": "job-fixture",
+          "artifact": {
+            "id": "artifact-fixture",
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "checkpointId": "checkpoint-fixture"
+        }
+      },
+      "deployments": [
+        {
+          "id": "deployment-fixture",
+          "artifactId": "registry-fixture",
+          "poolId": "pool-fixture",
+          "revision": 2,
+          "state": "ready",
+          "revoked": false,
+          "lastReadyCheckAt": "2026-11-01T12:00:00.000Z",
+          "updatedAt": "2026-11-01T12:00:00.000Z"
+        }
+      ],
+      "pools": [
+        {
+          "id": "pool-fixture",
+          "provider": "fixture_serving",
+          "state": "ready",
+          "workersMin": 0,
+          "workersMax": 1,
+          "idleTimeoutSeconds": 300,
+          "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "endpointRecorded": true,
+          "activeDeployments": 1,
+          "activeBindings": 1,
+          "activeRequests": 0,
+          "unsettledRequests": 0,
+          "retirementBlocked": true
+        }
+      ],
+      "bindings": [],
+      "lastVerifiedInference": {
+        "requestId": "request-fixture",
+        "receipt": {
+          "id": "request-fixture",
+          "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "artifact": {
+          "id": "registry-fixture",
+          "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "deploymentId": "deployment-fixture",
+        "poolId": "pool-fixture",
+        "workerImageDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "completedAt": "2026-11-01T12:00:00.000Z"
+      },
+      "state": "starting",
+      "usageBilling": {
+        "schemaVersion": "openpond.managedServingUsageReviewResult.v1",
+        "availability": "reviewable",
+        "reason": null,
+        "review": {
+          "schemaVersion": "openpond.managedServingUsageReview.v1",
+          "teamId": "another-workspace",
+          "modelProjectId": "hosted-project-fixture",
+          "versionHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d",
+          "method": "training",
+          "price": {
+            "schemaVersion": "openpond.computeAppliedPrice.v1",
+            "version": "fixture-serving-retail",
+            "service": "model_serving",
+            "profileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "currency": "USD",
+            "unit": "resource_hour",
+            "hourlyUsd": "1.000000"
+          },
+          "runtimeHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "workerImageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "providerConfigurationHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "idleTimeoutSeconds": 300,
+          "rules": {
+            "billableStart": "provider_allocation",
+            "startupBillable": true,
+            "idleBillable": true,
+            "explicitStop": "logical_admission_closed",
+            "postTrainingReuseBillable": false,
+            "minimumBillableMillis": 0,
+            "tokenRetailUsd": "0.000000"
+          },
+          "nativeControl": {
+            "protocol": "openpond.workerComputeControl.v1",
+            "executionLeaseMillis": 30000,
+            "stopHeadroomMillis": 60000,
+            "qualificationHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          },
+          "workDeadlineAt": "2035-01-02T00:00:00.000Z",
+          "expiresAt": "2035-01-01T00:00:00.000Z",
+          "contentHash": "548cfb357d48c58320ed29557e9f5ec4f074b3ecba19052d02ccf15636e34723"
+        },
+        "usage": {
+          "schemaVersion": "openpond.managedServingUsage.v1",
+          "deploymentKey": "fixture-priced-deployment",
+          "reviewHash": "023bff6044340ba392124ab173c272ffa90d173148853e45a0d42ee3267e3b2b",
+          "price": {
+            "schemaVersion": "openpond.computeAppliedPrice.v1",
+            "version": "fixture-serving-retail",
+            "service": "model_serving",
+            "profileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "currency": "USD",
+            "unit": "resource_hour",
+            "hourlyUsd": "1.000000"
+          },
+          "customerCapUsd": "1.000000",
+          "fundingState": "pending",
+          "stopReason": null,
+          "startedAt": null,
+          "lastActivityAt": null,
+          "idleExpiresAt": null,
+          "billableStoppedAt": null,
+          "quantityMillis": 0,
+          "chargedUsd": "0.000000",
+          "reservationId": null
+        }
+      },
+      "contentHash": "baeeb828a845b76446dd224df936cf25bf24ed32e9ff51abdc05f5d47220a9a2"
+    },
+    "boundary": "HTTP protocol fixtures only; no paid activation, native qualification or provider effect"
+  }
+}

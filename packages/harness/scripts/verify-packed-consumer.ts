@@ -51,6 +51,10 @@ import {
   contentHash,
   admitLocalHarnessRefinerDecision,
 } from "@openpond/harness";
+import { contentHash as commonContentHash } from "@openpond/harness/common";
+if (commonContentHash !== contentHash) {
+  throw new Error("packed common entrypoint must share the canonical hash implementation");
+}
 import {
   HarnessCrossRunRefinementRequestSchema,
   HarnessRefinementCandidateSchema,
@@ -118,6 +122,9 @@ import type {
   HarnessRefinerActivityReceipt,
 } from "@openpond/harness/refinement-lifecycle";
 import type { ChatModelRef, ProviderId } from "@openpond/harness/models";
+import { contentHash, type ImmutableReleaseRef } from "@openpond/harness/common";
+const commonRef: ImmutableReleaseRef = { id: "packed-consumer", contentHash: contentHash({ harness: true }) };
+void commonRef;
 import { harnessRuntimeModuleSource, harnessRuntimeModuleSha256 } from "@openpond/harness/runtime-source";
 const runtimeDistribution: string[] = [harnessRuntimeModuleSource, harnessRuntimeModuleSha256];
 void runtimeDistribution;
@@ -142,7 +149,9 @@ void (null as unknown as
     cwd: temporary,
     stdio: "inherit",
   });
-  execFileSync(path.resolve(root, "../../node_modules/.bin/tsc"), [
+  execFileSync(process.execPath, [
+    path.resolve(root, "../../scripts/run-typescript.mjs"),
+    "tsc",
     "--noEmit",
     "--strict",
     "--skipLibCheck",
@@ -153,7 +162,7 @@ void (null as unknown as
     "--moduleResolution",
     "NodeNext",
     path.join(temporary, "verify-types.mts"),
-  ], { cwd: temporary, stdio: "inherit" });
+  ], { cwd: path.resolve(root, "../.."), stdio: "inherit" });
   const manifest = JSON.parse(await readFile(
     path.join(temporary, "node_modules/@openpond/harness/package.json"),
     "utf8",

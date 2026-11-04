@@ -573,7 +573,7 @@ export function validateSandboxTemplateManifest(
           path: "$.databases",
           code: "database_resources_removed",
           message:
-            "managed database requests are unsupported for Firecracker sandbox templates; use a durable volume with SQLite or files instead",
+            "managed database requests are unsupported for sandbox templates; use a durable volume with SQLite or files instead",
         },
       ],
     };

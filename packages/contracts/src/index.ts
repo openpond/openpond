@@ -111,6 +111,7 @@ export * from "./local-experiment-sources.js";
 export * from "./local-experiment-runs.js";
 
 export * from "./evaluation-operation-recovery.js";
+export * from "./training-experiment-recovery.js";
 export * from "./provider-plan-usage.js";
 export * from "./ponder-desktop.js";
 
@@ -123,3 +124,20 @@ export * from "./chat-context-selection.js";
 export * from "./chat-next-step.js";
 
 export * from "./ponder-hosted.js";
+
+export * from "./activation-experiment-recovery.js";
+
+export * from "./steering-model-save-recovery.js";
+
+export * from "./engram-experiment-recovery.js";
+
+export * from "./engram-model-save-recovery.js";
+
+export * from "./decision-experiment-recovery.js";
+export * from "./decision-model-save-recovery.js";
+export * from "./decision-model-score-recovery.js";
+
+export * from "./alphaedit-experiment-recovery.js";
+export * from "./alphaedit-model-save-recovery.js";
+export * from "./neuron-training-experiment-recovery.js";
+export * from "./neuron-training-model-save-recovery.js";

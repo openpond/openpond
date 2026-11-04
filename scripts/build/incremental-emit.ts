@@ -12,6 +12,7 @@ export async function incrementalEmit(
   root: string,
   declarationsOnly = false,
   project = "tsconfig.build.json",
+  compiler: "tsc" | "tsgo" = "tsgo",
 ): Promise<string> {
   const cache = path.join(root, "node_modules/.cache/compiler");
   const output = path.join(cache, "emit");
@@ -30,6 +31,7 @@ export async function incrementalEmit(
   // Removed/renamed source files need a clean emit: incremental tsc does not
   // delete their old outputs. Content edits can retain compiler state.
   const shape = JSON.stringify({
+    compiler,
     files: config.fileNames.sort(),
     options: config.options,
     toolchain: await digest([
@@ -45,7 +47,7 @@ export async function incrementalEmit(
   await fs.rm(receiptFile, { force: true });
   const args = [
     path.join(workspace, "scripts/run-typescript.mjs"),
-    "tsgo",
+    compiler,
     "--project",
     project,
     "--outDir",

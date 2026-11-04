@@ -1,3 +1,6 @@
+import { ManagedModificationPriceSchema } from "openpond-sdk/training";
+import { ActivationExperimentControlIntentSchema } from "@openpond/contracts";
+import { canonicalSha256, TrainingExperimentSetupRequestSchema, trainingExperimentConfigurationIdentity } from "openpond-sdk/training";
 import { closeCoordinatedEvaluations } from "./coordinated-qualification-runtime.js";
 import { createHostedEvaluationWorkspace } from "../training/hosted-evaluation-workspace.js";
 import { ExperimentEvaluationScheduleInputSchema,OpenPondExperimentEvaluationScheduleClient,sealExperimentEvaluationSchedule,verifyExperimentEvaluationSchedule } from "openpond-sdk/experiment-evaluation-schedules";
@@ -5,7 +8,7 @@ import { createExperimentEvaluationScheduleService } from "./experiment-evaluati
 import { createExperimentEvaluationScheduleStore } from "./experiment-evaluation-schedule-store.js";
 import { createLocalScheduledExperimentRuntime } from "./experiment-evaluation-schedule-runtime.js";
 import { createExperimentEvaluationSchedulePayload } from "./experiment-evaluation-schedule-payload.js";
-import { mkdir,mkdtemp,rm,writeFile } from "node:fs/promises";
+import { mkdir,mkdtemp,rm,writeFile,readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createServer } from "node:http";
@@ -24,7 +27,7 @@ import { createLocalExperimentService } from "./local-experiment-service.js";
 import { createHttpRequestHandler,type HttpRouteDeps } from "../api/http-routes.js";
 import { LocalExperimentExecutionSchema } from "./local-experiment-contract.js";
 import { localExperimentAdmissions } from "./local-experiment-admission.js";
-import { LocalExperimentRecordSchema,LocalExperimentPublicExecutionSchema,LocalExperimentComparisonSchema } from "@openpond/contracts";
+import { TrainingExperimentRecoveryIntentSchema, TrainingExperimentControlIntentSchema, LocalExperimentRecordSchema,LocalExperimentPublicExecutionSchema,LocalExperimentComparisonSchema } from "@openpond/contracts";
 import { compareExperiments, createExperimentManifest, createExperimentResult } from "@openpond/evals/experiments";
 
 const catalog:typeof loadOpenPondHostedModels=async()=>({error:null,models:[{id:"local-qualified-model",displayName:"Local model",ownedBy:"test",streaming:true,
@@ -274,6 +277,139 @@ test("scheduled canonical SDK/HTTP/SQLite lifecycle recovers and refuses cancell
   try {
     await experiments.recover();await experiments.authorize({configuration:savedInput().configuration});
     const journal=async(operation:string,value:unknown)=>{const response=await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/v1/training/evaluation-workspace`,{method:"POST",headers:{authorization:"Bearer schedule-proof-capability","content-type":"application/json"},body:JSON.stringify({teamId:"owned-workspace",projectId:null,operation,value})});const result=await response.json();if(!response.ok)throw new Error(JSON.stringify(result));return result as unknown;};
+    // Failure story: a priced modification Start must retain its actual rate
+    // and optional cap across HTTP/SQLite reopen. A changed approval must never
+    // replace the original uncertain command. This does not dispatch compute.
+    const profileHash="b".repeat(64), planHash="d".repeat(64), reviewedAt=new Date().toISOString();
+    const computePrice=ManagedModificationPriceSchema.parse({schemaVersion:"openpond.modificationPrice.v1",
+      appliedPrice:{schemaVersion:"openpond.computeAppliedPrice.v1",version:"journal-fixture-rate",
+        service:"model_modification",profileHash,currency:"USD",unit:"resource_hour",hourlyUsd:"3.600000"},
+      billingBoundary:"active_allocation_until_verified_cleanup",startupBillable:true,
+      postCompletionIdleBillable:false,minimumBillableSeconds:0,warmReuseSeconds:300});
+    const modificationIntent=ActivationExperimentControlIntentSchema.parse({
+      account:{actorId,teamId:"owned-workspace",apiOrigin:"https://api.example.test"},
+      draftId:null,preparationOperationId:null,
+      execution:{id:"journal-priced-modification",teamId:"owned-workspace",ownerUserId:actorId,projectId:null,
+        name:"Reviewed modification",method:"inspect_activations",phase:"prepared",revision:1,
+        sourceContentHash:"c".repeat(64),plan:{contentHash:planHash,inputHash:"e".repeat(64),runtimeHash:profileHash,
+          maximumSpendUsd:null,computePrice,createdAt:reviewedAt,expiresAt:new Date(Date.now()+60_000).toISOString()},updatedAt:reviewedAt},
+      request:{teamId:"owned-workspace",id:"journal-priced-modification",expectedRevision:1,planHash,action:"start",
+        approvedMaximumSpendUsd:null,approvedPriceHash:await canonicalSha256(computePrice)}});
+    const modificationAction="training:start-modification", modificationHash=contentHash(modificationIntent);
+    for(const approvedPriceHash of [undefined,"0".repeat(64)]) {
+      const changed={...modificationIntent,request:{...modificationIntent.request,approvedPriceHash}};
+      await expect(journal("prepareOperation",{action:modificationAction,intentHash:contentHash(changed),reviewedIntent:changed})).rejects.toThrow();
+    }
+    const modificationOperation=await journal("prepareOperation",{action:modificationAction,intentHash:modificationHash,reviewedIntent:modificationIntent}) as {id:string};
+    const modificationCommand={...modificationIntent.request,operationId:modificationOperation.id};
+    await journal("retainOperation",{action:modificationAction,intentHash:modificationHash,id:modificationOperation.id,command:modificationCommand,phase:"dispatching"});
+    const reopenedModification=new SqliteStore(home);
+    try {
+      const scopeHash=contentHash({actorId,apiOrigin:"https://api.example.test",teamId:"owned-workspace",projectId:null});
+      expect(await reopenedModification.pendingEvaluationOperations({scopeHash,action:modificationAction})).toMatchObject({items:[{
+        id:modificationOperation.id,reviewedIntent:modificationIntent,command:modificationCommand,phase:"dispatching",recoveryReady:true}]});
+    } finally { await reopenedModification.close(); }
+    await expect(journal("retainOperation",{action:modificationAction,intentHash:modificationHash,id:modificationOperation.id,
+      command:{...modificationCommand,approvedPriceHash:"0".repeat(64)},phase:"dispatching"})).rejects.toThrow();
+    await journal("acknowledgeOperation",{action:modificationAction,intentHash:modificationHash,id:modificationOperation.id});
+    expect(await journal("pendingOperations",{action:modificationAction})).toMatchObject({items:[]});
+    // Training recovery must keep the exact prepared request and signed Start
+    // approval after device reopen. An edited/foreign command must not replace
+    // an uncertain paid submission. This exercises the actual HTTP/SQLite owner.
+    const trainingFixture=JSON.parse(await readFile(new URL("../../../../packages/sdk/fixtures/training/v2/policy-optimize.valid.json",import.meta.url),"utf8"));
+    const trainingForm={baseModel:trainingFixture.job.baseModel,recipe:trainingFixture.job.recipe,
+      batch:trainingFixture.source.taskset,evaluation:trainingFixture.source.taskset,validationSplit:"validation",name:"Retained training review",budget:"2",
+      gpuSelection:{mode:"automatic",objective:"balanced",gpuCount:1}};
+    const trainingIntent=TrainingExperimentRecoveryIntentSchema.parse({draftId:"retained-training-draft",form:trainingForm,
+      request:{schemaVersion:"openpond.trainingExperimentSetupRequest.v1",teamId:"owned-workspace",projectId:null,
+        baseModel:trainingForm.baseModel,batch:trainingForm.batch,name:trainingForm.name,maximumSpendUsd:2,gpuSelection:trainingForm.gpuSelection,
+        settings:{method:"grpo",recipe:{...trainingForm.recipe,dataset:{...trainingForm.recipe.dataset,validationSplit:"validation"}},evaluationTasksetRef:trainingForm.evaluation}}});
+    const trainingAction="training:prepare-draft",trainingHash=contentHash(trainingIntent);
+    const changedCapIntent={...trainingIntent,form:{...trainingForm,customerCapUsd:"1"},
+      request:{...trainingIntent.request,usageFunding:{schemaVersion:"openpond.trainingUsageFundingRequest.v1",billingMode:"actual_usage",customerCapUsd:"2.000000"}}};
+    // A journaled review must not replace the user's cap before a lost-reply retry.
+    await expect(journal("prepareOperation",{action:trainingAction,intentHash:contentHash(changedCapIntent),reviewedIntent:changedCapIntent})).rejects.toThrow();
+    const foreignTrainingIntent={...trainingIntent,request:{...trainingIntent.request,teamId:"foreign-workspace"}};
+    await expect(journal("prepareOperation",{action:trainingAction,intentHash:contentHash(foreignTrainingIntent),reviewedIntent:foreignTrainingIntent})).rejects.toThrow("another workspace");
+    const trainingOperation=await journal("prepareOperation",{action:trainingAction,intentHash:trainingHash,reviewedIntent:trainingIntent}) as {id:string};
+    const trainingRequest=TrainingExperimentSetupRequestSchema.parse({...trainingIntent.request,operationId:trainingOperation.id});
+    await journal("retainOperation",{action:trainingAction,intentHash:trainingHash,id:trainingOperation.id,command:trainingRequest,phase:"dispatching"});
+    const {schemaVersion:_trainingSchema,baseModel:_trainingBase,settings:_trainingSettings,...trainingRun}=trainingRequest;
+    const preparedSource={...trainingFixture.source,modelProject:{...trainingFixture.source.modelProject,portableProjectId:await trainingExperimentConfigurationIdentity(trainingRequest,actorId)}};
+    const preparedRequest={...trainingRun,schemaVersion:"openpond.trainingPreparationRequest.v1",configuration:{id:preparedSource.modelProject.id,expectedRevision:preparedSource.modelProject.revision,expectedEtag:preparedSource.modelProject.contentHash}};
+    const planContent={schemaVersion:"openpond.trainingPreparationPlan.v1",id:"journal-preparation",creatorUserId:actorId,
+      request:preparedRequest,requestHash:await canonicalSha256(preparedRequest),source:preparedSource,submissionHash:"c".repeat(64),createdAt:new Date().toISOString()};
+    const plan={...planContent,contentHash:await canonicalSha256(planContent)};
+    const estimateFixture=JSON.parse(await readFile(new URL("../../../../packages/sdk/fixtures/python-foundation/training-estimate-http-workflow.json",import.meta.url),"utf8"));
+    const controlIntent=TrainingExperimentControlIntentSchema.parse({draftId:trainingIntent.draftId,method:"grpo",preparationOperationId:trainingOperation.id,
+      receipt:{schemaVersion:"openpond.trainingPreparationReceipt.v1",plan,revision:1,state:"prepared",jobId:null},
+      command:{action:"start",id:plan.id,control:{teamId:"owned-workspace",planHash:plan.contentHash,expectedRevision:1,estimateReview:estimateFixture.response.review}}});
+    const controlAction="training:control-preparation",controlHash=contentHash(controlIntent);
+    const controlOperation=await journal("prepareOperation",{action:controlAction,intentHash:controlHash,reviewedIntent:controlIntent}) as {id:string};
+    await journal("retainOperation",{action:controlAction,intentHash:controlHash,id:controlOperation.id,command:controlIntent.command,phase:"dispatching"});
+    const reopenedTraining=new SqliteStore(home);
+    try {
+      const scopeHash=contentHash({actorId,apiOrigin:"https://api.example.test",teamId:"owned-workspace",projectId:null});
+      expect(await reopenedTraining.pendingEvaluationOperations({scopeHash,action:trainingAction})).toMatchObject({items:[{id:trainingOperation.id,command:trainingRequest,reviewedIntent:trainingIntent}]});
+      expect(await reopenedTraining.pendingEvaluationOperations({scopeHash,action:controlAction})).toMatchObject({items:[{id:controlOperation.id,command:controlIntent.command,reviewedIntent:controlIntent,phase:"dispatching"}]});
+    }finally{await reopenedTraining.close();}
+    // Run the renderer's actual client in its own process. Server compilation
+    // must not absorb the renderer source tree or change its module resolution.
+    const recoveryScript=`
+      import { createWorkspaceApi } from './apps/web/src/components/labs/workspace/workspace-api.ts';
+      import { loadTrainingExperimentRecovery } from './apps/web/src/components/labs/workspace/useTrainingExperimentRecovery.ts';
+      const input=JSON.parse(process.argv[1]);
+      const api=createWorkspaceApi(input.connection,input.scope);
+      const recovered=await loadTrainingExperimentRecovery(api,input.intent.draftId,'grpo');
+      const unrelated=await loadTrainingExperimentRecovery(api,'another-draft','grpo');
+      const operation=await api.operation(input.action,input.intent);
+      console.log(JSON.stringify({recovered,unrelated,operationId:operation.id}));
+    `;
+    const recoveredTraining=JSON.parse((await promisify(execFile)(process.execPath,
+      ['--import','tsx','--input-type','module','-e',recoveryScript,JSON.stringify({
+        connection:{serverUrl:`http://127.0.0.1:${(server.address() as AddressInfo).port}`,token:'schedule-proof-capability',platform:'linux'},
+        scope:{teamId:'owned-workspace',projectId:null,actorId,accountKey:'native-training-recovery'},intent:trainingIntent,action:trainingAction,
+      })],{timeout:30000,maxBuffer:1048576})).stdout);
+    expect(recoveredTraining.recovered.review?.request).toEqual(trainingRequest);
+    expect(recoveredTraining.recovered.control?.command).toEqual(controlIntent.command);
+    expect(recoveredTraining.unrelated).toEqual({review:null,control:null});
+    expect(recoveredTraining.operationId).toBe(trainingOperation.id);
+    await expect(journal("retainOperation",{action:trainingAction,intentHash:trainingHash,id:trainingOperation.id,command:{...trainingRequest,maximumSpendUsd:3},phase:"dispatching"})).rejects.toThrow();
+    await expect(journal("retainOperation",{action:controlAction,intentHash:controlHash,id:controlOperation.id,command:{...controlIntent.command,control:{...controlIntent.command.control,estimateReview:{...controlIntent.command.control.estimateReview,token:"substituted-review"}}},phase:"dispatching"})).rejects.toThrow();
+    actorId="another-actor";expect(await journal("pendingOperations",{action:trainingAction})).toMatchObject({items:[]});expect(await journal("pendingOperations",{action:controlAction})).toMatchObject({items:[]});actorId="local-proof-actor";
+    await expect(journal("acknowledgeOperation",{action:controlAction,intentHash:controlHash,id:controlOperation.id,expectedPhase:"reviewed"})).rejects.toThrow("crossed dispatch");
+    await journal("acknowledgeOperation",{action:controlAction,intentHash:controlHash,id:controlOperation.id});
+    await journal("acknowledgeOperation",{action:trainingAction,intentHash:trainingHash,id:trainingOperation.id});
+    // A Model save must survive device reopen with its exact name/checkpoint,
+    // and cannot be recovered or changed through a different actor's journal.
+    const saveFixture=JSON.parse(await readFile(new URL("../../../../packages/sdk/fixtures/python-foundation/training-model-save-http-workflow.json",import.meta.url),"utf8"));
+    const {operationId:_saveOperation,...saveBody}={...saveFixture.command.request,teamId:"owned-workspace"};
+    const saveAction="training-result-save",saveIntent={...saveBody,jobId:saveFixture.command.jobId},saveHash=contentHash(saveIntent);
+    const saveOperation=await journal("prepareOperation",{action:saveAction,intentHash:saveHash,reviewedIntent:saveIntent}) as {id:string};
+    const saveCommand={jobId:saveIntent.jobId,request:{...saveBody,operationId:saveOperation.id}};
+    await journal("retainOperation",{action:saveAction,intentHash:saveHash,id:saveOperation.id,command:saveCommand,phase:"dispatching"});
+    const reopenedJournal=new SqliteStore(home);
+    try { expect(await reopenedJournal.pendingEvaluationOperations({scopeHash:contentHash({actorId,apiOrigin:"https://api.example.test",teamId:"owned-workspace",projectId:null}),action:saveAction})).toMatchObject({items:[{id:saveOperation.id,reviewedIntent:saveIntent,command:saveCommand,recoveryReady:true}]}); }
+    finally { await reopenedJournal.close(); }
+    await expect(journal("retainOperation",{action:saveAction,intentHash:saveHash,id:saveOperation.id,command:{...saveCommand,request:{...saveCommand.request,artifact:{...saveCommand.request.artifact,contentHash:"e".repeat(64)}}},phase:"dispatching"})).rejects.toThrow();
+    actorId="another-actor";expect(await journal("pendingOperations",{action:saveAction})).toMatchObject({items:[]});actorId="local-proof-actor";
+    await journal("acknowledgeOperation",{action:saveAction,intentHash:saveHash,id:saveOperation.id});
+    // Serving recovery must retain action/version/revision across real HTTP and
+    // SQLite reopen, so a lost activation cannot become a fresh paid command.
+    const servingFixture=JSON.parse(await readFile(new URL("../../../../packages/sdk/fixtures/python-foundation/training-model-serving-control-http-workflow.json",import.meta.url),"utf8"));
+    // Retain a historical ten-minute approval exactly; the host rejects new
+    // activations outside the current five-minute policy after operation replay.
+    const {operationId:_servingOperation,...servingBody}={...servingFixture.request,teamId:"owned-workspace",idleTimeoutSeconds:600};
+    const servingAction="training-model-serving-control",servingIntent={...servingBody,modelProjectId:servingFixture.modelProjectId},servingHash=contentHash(servingIntent);
+    const servingOperation=await journal("prepareOperation",{action:servingAction,intentHash:servingHash,reviewedIntent:servingIntent}) as {id:string};
+    const servingCommand={modelProjectId:servingFixture.modelProjectId,request:{...servingBody,operationId:servingOperation.id}};
+    await journal("retainOperation",{action:servingAction,intentHash:servingHash,id:servingOperation.id,command:servingCommand,phase:"dispatching"});
+    const reopenedServing=new SqliteStore(home);
+    try { expect(await reopenedServing.pendingEvaluationOperations({scopeHash:contentHash({actorId,apiOrigin:"https://api.example.test",teamId:"owned-workspace",projectId:null}),action:servingAction})).toMatchObject({items:[{id:servingOperation.id,reviewedIntent:servingIntent,command:servingCommand,recoveryReady:true}]}); }
+    finally { await reopenedServing.close(); }
+    await expect(journal("retainOperation",{action:servingAction,intentHash:servingHash,id:servingOperation.id,command:{...servingCommand,request:{...servingCommand.request,action:"stop"}},phase:"dispatching"})).rejects.toThrow();
+    actorId="another-actor";expect(await journal("pendingOperations",{action:servingAction})).toMatchObject({items:[]});actorId="local-proof-actor";
+    await journal("acknowledgeOperation",{action:servingAction,intentHash:servingHash,id:servingOperation.id});
     const {operationId:_unused,...reviewedIntent}=input("journal-original"),intentHash=contentHash(reviewedIntent),action="experiment-evaluation-schedule";
     const operation=await journal("prepareOperation",{action,intentHash,reviewedIntent}) as {id:string};
     const frozenCommand={operation:"publish",request:{...reviewedIntent,operationId:operation.id}};

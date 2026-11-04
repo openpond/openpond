@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { RftRecipeSchema, type ModelProject } from "@openpond/contracts";
 import { TrainingRunSizeControl } from "../training/TrainingRunSizeControl";
 import { trainingSmokeIncompatibility, trainingSmokeRecipe } from "../training/training-run-presets";
+import { SupervisedTrainingSettings, supervisedTrainingSettingsProblem } from "./SupervisedTrainingSettings";
 
 type Recipe = ModelProject["trainingSetup"]["recipe"];
 const fields = [
@@ -15,6 +16,7 @@ function record(value: unknown): Record<string, unknown> {
 }
 
 export function modelTrainingSettingsProblem(recipe: Recipe): string | null {
+  if (recipe?.method === "sft") return supervisedTrainingSettingsProblem(recipe);
   if (recipe?.method !== "grpo") return null;
   for (const field of fields) {
     const value = record(recipe[field.section])[field.key];
@@ -25,6 +27,12 @@ export function modelTrainingSettingsProblem(recipe: Recipe): string | null {
 }
 
 export function ModelTrainingSettings({ recipe, onChange }: { recipe: Recipe; onChange: (recipe: Recipe) => void }) {
+  if (recipe?.method === "sft") return <SupervisedTrainingSettings recipe={recipe} onChange={onChange} />;
+  if (recipe?.method !== "grpo") return null;
+  return <GrpoTrainingSettings recipe={recipe} onChange={onChange} />;
+}
+
+function GrpoTrainingSettings({ recipe, onChange }: { recipe: Recipe; onChange: (recipe: Recipe) => void }) {
   const initial = useRef(recipe);
   const [custom, setCustom] = useState(false);
   const parsed = RftRecipeSchema.safeParse(recipe);
@@ -48,13 +56,13 @@ export function ModelTrainingSettings({ recipe, onChange }: { recipe: Recipe; on
     onChange(next);
   }
   return <>
-    <TrainingRunSizeControl method="grpo" value={preset} disabled={!current}
+    {current ? <TrainingRunSizeControl method="grpo" value={preset} disabled={!current}
       sizing={current ? { prompts: current.dataset.maxExamples, rollouts: current.rollout.groupSize, groups: current.optimizer.maxSteps, iterations: current.optimizer.iterations, concurrency: current.rollout.concurrency } : undefined}
       onSizingChange={value => { if (current) { setCustom(true); onChange({ ...current, dataset: { ...current.dataset, maxExamples: value.prompts }, rollout: { ...current.rollout, groupSize: value.rollouts, concurrency: value.concurrency }, optimizer: { ...current.optimizer, maxSteps: value.groups, iterations: value.iterations }, resourceLimits: { ...current.resourceLimits, maxRollouts: value.rollouts * value.groups }, policyOptimization: null }); } }} onChange={next => {
       setCustom(next === "custom");
       if (next === "small_experiment" && current) onChange(trainingSmokeRecipe(current));
       else if (next === "standard") onChange(initial.current);
-    }} />
+    }} /> : <label className="model-build-field"><span>Training steps</span><input type="number" min={1} max={100_000} value={typeof record(recipe.optimizer).maxSteps === "number" || typeof record(recipe.optimizer).maxSteps === "string" ? String(record(recipe.optimizer).maxSteps) : ""} onChange={event => update("optimizer", "maxSteps", event.target.value)} /></label>}
     <details className="model-training-settings">
     <summary>Training settings</summary>
     <p>GRPO with LoRA. Review the cost and budget before starting a Run.</p>

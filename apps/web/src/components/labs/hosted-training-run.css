@@ -1,3 +1,6 @@
 .hosted-training-spinner{display:inline-block;width:12px;height:12px;margin-inline-end:6px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:hosted-training-rotate 1s linear infinite}
 @keyframes hosted-training-rotate{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.hosted-training-spinner{animation:none}}
+.training-result-details pre{max-height:24rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.training-result-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.saved-model-version-reference{max-height:24rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}

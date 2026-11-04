@@ -2,7 +2,7 @@
 
 Run in a fresh systemd user unit with MemoryMax=1G and MemorySwapMax=0.
 The model is copied to tmpfs inside the unit so its pages count toward the cap.
-The bounded local hash fixture executes sha256sum; it is not Firecracker or TVC.
+The bounded local hash fixture executes sha256sum; it is not runtime isolation or TVC.
 """
 import argparse
 import base64
@@ -57,7 +57,7 @@ def main():
     result = {'location': 'local Linux, not TVC', 'limits': limits, 'contextTokens': 4096,
               'kvCache': args.kv, 'batch': args.batch, 'threads': 2, 'turns': [],
               'modelFileBytes': args.model.stat().st_size, 'hashFixtureExecutions': 0,
-              'sandbox': 'local sha256sum HTTP fixture, not Firecracker', 'samples': {}}
+              'sandbox': 'local sha256sum HTTP fixture, not runtime isolation', 'samples': {}}
     def memory_sample(label):
         result['samples'][label] = {key: int((cgroup / key).read_text()) for key in ['memory.current', 'memory.peak']}
         stats = dict(line.split() for line in (cgroup / 'memory.stat').read_text().splitlines())

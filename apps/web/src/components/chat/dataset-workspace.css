@@ -362,3 +362,5 @@
 .dataset-row-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-secondary); font-size: 11px; }
 .dataset-workspace-section-heading > .dataset-workspace-title { min-width: 0; }
 .dataset-workspace-title h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+
+.chat-experiment-tool .chat-experiment-editor { width: 100%; border-left: 0; padding: 16px; overflow: visible; }

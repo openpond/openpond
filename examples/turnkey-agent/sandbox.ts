@@ -6,7 +6,7 @@ import { readResponseJson } from "./http-json.js";
 export const hashInput = z.object({ text: z.string().max(4096) }).strict();
 export const hashTool = {
   name: "sandbox_sha256",
-  description: "Compute SHA-256 of the exact UTF-8 text by executing a command in the authorized external Firecracker sandbox. Use this tool when asked for a hash; never invent its output.",
+  description: "Compute SHA-256 of the exact UTF-8 text by executing a command in the authorized external sandbox. Use this tool when asked for a hash; never invent its output.",
   sideEffect: "read" as const, timeoutMs: 30_000, inputSchema: hashInput,
 };
 export type ToolEvidence = { sandboxId: string; commandId: string; sha256: string };

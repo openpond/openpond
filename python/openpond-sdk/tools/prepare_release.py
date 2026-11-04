@@ -14,7 +14,7 @@ artifacts=sorted(file for file in (output/'distributions').glob('*') if file.nam
 if len(artifacts)!=2 or {file.suffix for file in artifacts}!={'.whl','.gz'}:raise SystemExit('Expected exactly one wheel and one source distribution.')
 sha=lambda file:hashlib.sha256(file.read_bytes()).hexdigest()
 source={str(file.relative_to(ROOT)):sha(file) for directory in ('src','tools','examples','tests') for file in sorted((ROOT/directory).rglob('*')) if file.is_file() and '__pycache__' not in file.parts}
-for name in ('pyproject.toml','uv.lock','README.md','LICENSE'):source[name]=sha(ROOT/name)
+for name in ('pyproject.toml','uv.lock','README.md','LICENSE','hatch_build.py','.gitignore'):source[name]=sha(ROOT/name)
 manifest={'schemaVersion':'openpond.pythonSdkReleaseCandidate.v1','distribution':metadata['name'],'version':metadata['version'],'artifacts':{file.name:sha(file) for file in artifacts},'sourceFiles':source,'publication':'HELD: reviewed exact artifacts and independently verified PyPI publisher ownership required; no publish attempted','hostedQualification':'not inferred from build/consumer proofs'}
 (output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
 print(json.dumps({'manifest':str(output/'manifest.json'),'sha256':sha(output/'manifest.json'),'publication':'NOT_ATTEMPTED'}))

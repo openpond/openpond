@@ -8,6 +8,7 @@ Start here:
 - [Agents and skills](agents-and-skills.md): choose between reusable instructions and full agent packages, then manage their profile-backed lifecycle.
 - [Hybrid execution](local-cloud.md): keep the conversation, model, and approvals local while work runs in an isolated cloud sandbox.
 - [Training from real work](training.md): selected evidence, Tasksets, graders, baselines, readiness, bundles, and training destinations.
+- [Model modifications](model-modifications.md): how training, activation interventions and learned memory differ, with planned experimental methods and serving compatibility.
 - [OpenPond Cloud](cloud.md): hosted runtime workspaces, Hybrid sandbox edits, handoff, source preservation, and replayable runs.
 - [OpenPond Git](openpond-git.md): git-backed source ownership, managed workspaces, commits, sync, and cloud handoff.
 - [OpenPond Agent SDK](agent-sdk.md): TypeScript source, generated artifacts, validation, evals, traces, and edit policy for durable agents.

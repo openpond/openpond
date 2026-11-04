@@ -7,7 +7,7 @@ import { runHostedServingCommand } from "../src/cli/training-hosted-serving";
 // confirmation, or report success for a different returned serving resource.
 test("serving capacity mutations require confirmation and matching resource identity", async () => {
   const requests: string[] = [];
-  const pool = { id: "owned-pool", baseProfileId: "qwen3-8b-b968826d", provider: "runpod_vllm", state: "ready", workersMin: 0, workersMax: 1 };
+  const pool = { id: "owned-pool", baseProfileId: "qwen3-8b-b968826d", provider: "fixture_serving", state: "ready", workersMin: 0, workersMax: 1 };
   const server = createServer((request, response) => {
     requests.push(request.method!);
     response.setHeader("content-type", "application/json");

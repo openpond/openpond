@@ -103,12 +103,14 @@ export type SandboxCostSummary = {
 export type SandboxBillingStatus = {
   sandboxId: string;
   state: SandboxState;
-  billingModel: "reserve_capture" | "session";
+  billingModel: "reserve_capture" | "session" | "actual_usage";
+  computeUsage?: SandboxComputeUsageStatus;
+  nativeRootStorage?: SandboxNativeRootStorageStatus;
   reservationStatus: SandboxReservation["status"];
-  budgetUsd: string;
+  budgetUsd: string | null;
   reservedUsd: string;
   capturedUsd: string;
-  remainingBudgetUsd: string;
+  remainingBudgetUsd: string | null;
   mppMode: NonNullable<SandboxReservation["mpp"]>["mode"] | null;
   sessionRef: string | null;
   channelId: string | null;
@@ -127,6 +129,7 @@ export type SandboxReservation = {
   status: "reserved" | "captured" | "released";
   reservedUsd: string;
   capturedUsd: string;
+  usageFunding?: SandboxUsageFundingRef;
   mpp?: {
     mode: "simulated_poc" | "mpp_service_hook" | "mpp_session_hook";
     settlementRail: "tempo_usdce";
@@ -143,6 +146,29 @@ export type SandboxReservation = {
   };
   createdAt: string;
   updatedAt: string;
+};
+
+export type SandboxUsageFundingRef = {
+  schemaVersion: "openpond.sandboxUsageFundingRef.v1";
+  capacityLeaseId: string;
+  authorizationHash: string;
+  profileHash: string;
+};
+
+export type SandboxComputeUsageSummary = {
+  schemaVersion: "openpond.sandboxComputeUsageSummary.v1";
+  fundingReservationId: string;
+  capacityLeaseId: string;
+  authorizationHash: string;
+  closureEvidenceHash: string;
+  price: { version: string; profileHash: string; currency: "USD"; unit: "resource_hour"; hourlyUsd: string };
+  observedQuantityMillis: number;
+  billableQuantityMillis: number;
+  ratedUsd: string;
+  chargedUsd: string;
+  includedStandardUsd: string;
+  prepaidStandardUsd: string;
+  prepaidPayableUsd: string;
 };
 
 export type SandboxReceiptLineItem = {
@@ -162,16 +188,18 @@ export type SandboxReceipt = {
     | "stopped"
     | "deleted"
     | "archived"
+    | "create_failed"
     | "budget_exhausted"
     | "duration_exceeded"
     | "idle_timeout"
     | "manual_capture";
   totalUsd: string;
+  retailTotalUsd?: string;
   durationSeconds: number;
   lineItems: SandboxReceiptLineItem[];
   mpp: {
-    mode: "simulated_poc" | "mpp_service_hook" | "mpp_session_hook";
-    settlementRail: "tempo_usdce";
+    mode: "simulated_poc" | "mpp_service_hook" | "mpp_session_hook" | "account_usage";
+    settlementRail: "tempo_usdce" | "stripe_credit";
     receiptRef: string;
     sessionRef?: string | null;
     channelId?: string | null;
@@ -179,6 +207,14 @@ export type SandboxReceipt = {
     depositUsd?: string | null;
     remainingUsd?: string | null;
   };
+  fundingAllocation?: {
+    includedStandardUsd: string;
+    prepaidStandardUsd: string;
+    postpaidStandardUsd: string;
+    customerFundedStandardUsd: string;
+    unfundedStandardUsd: string;
+  };
+  usageSummary?: SandboxComputeUsageSummary;
   createdAt: string;
 };
 
@@ -207,3 +243,37 @@ export type SandboxPreviewPort = {
   token: string;
   createdAt: string;
 };
+
+/** Current original actual-use funding; customer retail amounts only. */
+export interface SandboxComputeUsageStatus {
+  state: "active" | "exhausted" | "closed";
+  stopReason: "credit_exhausted" | "cap_reached" | "control_expired" | "policy_changed" | "member_cap_reached" | null;
+  customerCapUsd: string | null;
+  price: { version: string; currency: "USD"; unit: "resource_hour"; hourlyUsd: string };
+  observedQuantityMillis: number;
+  billableQuantityMillis: number;
+  ratedUsd: string;
+  chargedUsd: string;
+  includedStandardUsd: string;
+  prepaidStandardUsd: string;
+  prepaidPayableUsd: string;
+  observedAt: string;
+  closedAt: string | null;
+}
+
+/** Retained native root storage is independent of active compute. */
+export interface SandboxNativeRootStorageStatus {
+  phase: "executing" | "retained" | "deleted";
+  phaseAt: string;
+  diskGiB: number;
+  price: { version: string; currency: "USD"; unit: "GiB-second"; unitPriceUsd: string };
+  quantityGiBMillis: number;
+  ratedUsd: string;
+  chargedUsd: string;
+  includedStandardUsd: string;
+  prepaidStandardUsd: string;
+  prepaidPayableUsd: string;
+  meteredTo: string;
+  status: "current" | "funding_shortfall";
+  shortfallReason: "credit_exhausted" | "member_cap_reached" | "billing_suspended" | null;
+}

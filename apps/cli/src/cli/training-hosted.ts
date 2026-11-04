@@ -1,3 +1,8 @@
+import { alphaEditHostedActions } from "./training-hosted-alphaedit";
+import { neuronTrainingHostedActions } from "./training-hosted-neuron-training";
+import { engramHostedActions } from "./training-hosted-engram";
+import { decisionHostedActions } from "./training-hosted-decision";
+import { steeringHostedActions } from "./training-hosted-steering";
 import { attachHostedTrainingToChat } from "./training-chat-attachment";
 import { readFile } from "node:fs/promises";
 import { hostedTrainingAccount } from "./hosted-training-account";
@@ -17,12 +22,15 @@ const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
 export async function runHostedTrainingCommand(options: Options, rest: string[]): Promise<void> {
   const action = rest[0], target = rest[1];
   const watchOptions = action === "hosted-watch" ? parseHostedWatchOptions(options) : null;
+  // The synchronous typed scorer admits up to 300s of work; allow its bounded
+  // response to arrive without changing the request's worker/spend authority.
+  const maximumRequestMs = action === "hosted-score-decision" ? 330_000 : 180_000;
   const requestBound = { deadlineAt: watchOptions?.deadlineAt ?? null };
   const { context, baseUrl, teamId, headers } = await hostedTrainingAccount(options);
   const request: typeof fetch = (url, init) => {
     const remaining = requestBound.deadlineAt === null ? Infinity : requestBound.deadlineAt - Date.now();
     if (remaining <= 0) throw new DOMException("Hosted watch deadline reached", "TimeoutError");
-    const timeout = AbortSignal.timeout(Math.max(1, Math.min(watchOptions ? 10_000 : 180_000, remaining)));
+    const timeout = AbortSignal.timeout(Math.max(1, Math.min(watchOptions ? 10_000 : maximumRequestMs, remaining)));
     return fetch(url, {
       ...init, redirect: "error", signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
     });
@@ -35,6 +43,15 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     const bytes = await readFile(target);
     if (bytes.byteLength > 64 * 1024 * 1024) throw new Error("Hosted training input exceeds 64 MiB.");
     return JSON.parse(bytes.toString("utf8"));
+  };
+  const readPreparationInput = async () => {
+    const raw = await readInput();
+    const { TrainingExperimentSetupReceiptSchema, parseAndVerifyTrainingExperimentSetupReceipt } = await import("openpond-sdk/training");
+    const receipt = TrainingExperimentSetupReceiptSchema.safeParse(raw).success
+      ? (await parseAndVerifyTrainingExperimentSetupReceipt(raw)).preparation
+      : await parseAndVerifyTrainingPreparationReceipt(raw);
+    if (receipt.plan.request.teamId !== teamId) throw new Error("Preparation belongs to a different workspace.");
+    return receipt;
   };
   const readNativeInspection = async (jobId: string): Promise<unknown> => {
     const response = await request(new URL(`/v1/managed-rl/jobs/${encodeURIComponent(jobId)}`, baseUrl), { headers });
@@ -51,6 +68,26 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
       action: action!, target, baseUrl, headers, request, readInput,
       confirmed: parseBooleanOption(options.yes),
     })); return;
+  }
+  if (action && alphaEditHostedActions.has(action)) {
+    const { runHostedAlphaEditCommand } = await import("./training-hosted-alphaedit");
+    print(await runHostedAlphaEditCommand({ action, target, teamId, options, client, readInput })); return;
+  }
+  if (action && neuronTrainingHostedActions.has(action)) {
+    const { runHostedNeuronTrainingCommand } = await import("./training-hosted-neuron-training");
+    print(await runHostedNeuronTrainingCommand({ action, target, teamId, options, client, readInput })); return;
+  }
+  if (action && engramHostedActions.has(action)) {
+    const { runHostedEngramCommand } = await import("./training-hosted-engram");
+    print(await runHostedEngramCommand({ action, target, teamId, options, client, readInput })); return;
+  }
+  if (action && decisionHostedActions.has(action)) {
+    const { runHostedDecisionCommand } = await import("./training-hosted-decision");
+    print(await runHostedDecisionCommand({ action, target, teamId, options, client, readInput })); return;
+  }
+  if (action && steeringHostedActions.has(action)) {
+    const { runHostedSteeringCommand } = await import("./training-hosted-steering");
+    print(await runHostedSteeringCommand({ action, target, teamId, options, client, readInput })); return;
   }
   if (action === "hosted-evaluate-checkpoint") {
     if (!parseBooleanOption(options.yes)) throw new Error("Paid checkpoint evaluation requires --yes.");
@@ -90,6 +127,16 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
       confirmed: parseBooleanOption(options.yes),
     })); return;
   }
+  if (action === "hosted-tasksets") {
+    const { OpenPondTasksetCatalogClient } = await import("openpond-sdk/taskset-catalog");
+    const catalog = new OpenPondTasksetCatalogClient({ baseUrl, apiKey: context.token, teamId, fetch: request });
+    const cursor = optionString(options, "cursor"), projectId = optionString(options, "projectId"), search = optionString(options, "search");
+    const limit = options.limit === undefined ? undefined : parseIntegerOption(options.limit, "limit");
+    print(target ? await catalog.get(target) : await catalog.list({
+      ...(cursor ? { afterId: cursor } : {}), ...(projectId ? { projectId } : {}),
+      ...(search ? { search } : {}), ...(limit === undefined ? {} : { limit }),
+    })); return;
+  }
   if (action === "hosted-models") {
     print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).list()); return;
   }
@@ -116,7 +163,39 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     print(await new OpenPondTasksetPackageClient({ baseUrl, apiKey: context.token, teamId, fetch: request }).publish(input)); return;
   }
   if (action === "hosted-capabilities") { print(await client.capabilities()); return; }
-  if (action === "hosted-gpu-catalog") { print(await client.gpuCatalog()); return; }
+  if (action === "hosted-modification-capabilities") {
+    const { ModelModificationCapabilitiesQuerySchema } = await import("openpond-sdk/training");
+    const query = ModelModificationCapabilitiesQuerySchema.parse(await readInput());
+    if (query.teamId !== teamId) throw new Error("Choose this workspace's model capability query.");
+    print(await client.modificationCapabilities(query)); return;
+  }
+  if (action === "hosted-review-dataset") {
+    const { DatasetTrainingReviewRequestSchema } = await import("openpond-sdk/training");
+    const input = DatasetTrainingReviewRequestSchema.parse(await readInput());
+    if (input.teamId !== teamId) throw new Error("Choose this workspace's Dataset review request.");
+    print(await client.reviewDataset(input)); return;
+  }
+  if (action === "hosted-funding" || action === "hosted-funding-handoff") {
+    const { TrainingFundingRequestSchema, TrainingFundingHandoffRequestSchema } = await import("openpond-sdk/training");
+    const raw = await readInput();
+    if (action === "hosted-funding") {
+      const input = TrainingFundingRequestSchema.parse(raw);
+      if (input.teamId !== teamId) throw new Error("Choose this workspace's funding request.");
+      print(await client.funding(input));
+    } else {
+      const input = TrainingFundingHandoffRequestSchema.parse(raw);
+      if (input.teamId !== teamId) throw new Error("Choose this workspace's funding request.");
+      print(await client.fundingHandoff(input));
+    }
+    return;
+  }
+  if (action === "hosted-gpu-catalog") {
+    const { TrainingGpuCatalogQuerySchema } = await import("openpond-sdk/training");
+    const query = target ? TrainingGpuCatalogQuerySchema.parse(await readInput()) : undefined;
+    if (query && query.teamId !== teamId) throw new Error("Choose this workspace's GPU query.");
+    print(await client.gpuCatalog(query)); return;
+  }
+  if (action === "hosted-hardware-catalog") { print(await client.hardwareCatalog()); return; }
   if (action === "hosted-start-model") {
     if (!target) throw new Error("training start requires a saved hosted Model Project ID.");
     const result = await (await import("./training-model-start")).startHostedModel({
@@ -158,7 +237,114 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     const learning = new OpenPondLearningClient({ baseUrl, apiKey: context.token, scope: teamId, fetch: request });
     print(await learning.list("batch", { limit: 100 })); return;
   }
-  if (action === "hosted-preparations") { print(await client.listPreparations(teamId)); return; }
+  if (action === "hosted-drafts") {
+    if (target) throw new Error("hosted-drafts accepts filters, not an identifier.");
+    const cursor = optionString(options, "cursor"), projectId = optionString(options, "projectId"), search = optionString(options, "search");
+    const limit = parseIntegerOption(options.limit, "--limit");
+    print(await client.listExperimentDrafts(teamId, { archived: parseBooleanOption(options.archived),
+      ...(cursor ? { cursor } : {}), ...(projectId ? { projectId } : {}), ...(search ? { search } : {}), ...(limit === undefined ? {} : { limit }) })); return;
+  }
+  if (action === "hosted-draft") {
+    if (!target) throw new Error("hosted-draft requires a draft ID.");
+    print(await client.getExperimentDraft(teamId, target)); return;
+  }
+  if (action === "hosted-save-draft") {
+    const { ExperimentDraftSaveSchema } = await import("openpond-sdk/training");
+    const input = ExperimentDraftSaveSchema.parse(await readInput());
+    if (input.teamId !== teamId) throw new Error("This draft belongs to another workspace.");
+    print(await client.saveExperimentDraft(input)); return;
+  }
+  if (action === "hosted-archive-draft") {
+    const operationId = optionString(options, "operationId"), expectedRevision = parseIntegerOption(options.expectedRevision, "--expected-revision");
+    if (!target || !operationId || expectedRevision === undefined) throw new Error("hosted-archive-draft requires an ID, --operation-id and --expected-revision.");
+    print(await client.archiveExperimentDraft(target, { schemaVersion: "openpond.experimentDraftArchive.v1", teamId, operationId, expectedRevision })); return;
+  }
+  if (action === "hosted-executions") {
+    if (target) throw new Error("hosted-executions accepts filters, not an identifier.");
+    const cursor = optionString(options, "cursor"), projectId = optionString(options, "projectId");
+    const datasetHash = optionString(options, "datasetHash"), search = optionString(options, "search");
+    const limit = parseIntegerOption(options.limit, "--limit");
+    print(await client.listExecutions(teamId, {
+      ...(cursor ? { cursor } : {}), ...(projectId ? { projectId } : {}),
+      ...(datasetHash ? { datasetHash } : {}), ...(search ? { search } : {}), ...(limit === undefined ? {} : { limit }),
+    })); return;
+  }
+  if (action === "hosted-save-steering-model") { const {SteeringProfileSaveRequestSchema} = await import("openpond-sdk/training");
+    const command = SteeringProfileSaveRequestSchema.parse(await readInput()); if (command.teamId !== teamId) throw new Error("Use this result's original workspace.");
+    print(await client.saveModificationResultModel(command)); return; }
+  if (action === "hosted-steering-profiles") { print(await client.listSteeringProfiles(teamId, {projectId: optionString(options, "projectId") || undefined, modelProjectId: optionString(options, "modelProjectId") || undefined, cursor: optionString(options, "cursor") || undefined,
+    archived: parseBooleanOption(options.archived), limit: parseIntegerOption(options.limit, "--limit")})); return; }
+  if (action === "hosted-steering-profile") { if (!target) throw new Error("Supply a profile ID."); print(await client.getSteeringProfile(teamId, target)); return; }
+  if (action === "hosted-archive-steering-profile") { const command = await readInput(); print(await client.archiveSteeringProfile(command.id, command.request)); return; }
+  if (action === "hosted-model-version") { if (!target) throw new Error("Supply a Model ID.");
+    const versionHash = optionString(options, "versionHash");
+    print(await client.modelVersion(target, {teamId, ...(versionHash ? {versionHash} : {})})); return; }
+  if (action === "hosted-modification-executions") {
+    if (target) throw new Error("hosted-modification-executions accepts filters, not an identifier.");
+    const {ManagedModificationExecutionListQuerySchema} = await import("openpond-sdk/training");
+    const raw: Record<string, unknown> = {};
+    for (const key of ["id", "projectId", "method", "phase", "cursor"]) {
+      const value = optionString(options, key); if (value) raw[key] = value;
+    }
+    const limit = parseIntegerOption(options.limit, "--limit");
+    if (limit !== undefined) raw.limit = limit;
+    print(await client.listModificationExecutions(teamId, ManagedModificationExecutionListQuerySchema.parse(raw))); return;
+  }
+  if (action === "hosted-modification-execution") {
+    if (!target) throw new Error("hosted-modification-execution requires an execution ID.");
+    print(await client.getModificationExecution(teamId, target)); return;
+  }
+  if (action === "hosted-compare-modification") {
+    const { compareHostedModification, printHostedModificationComparison } = await import("./training-hosted-modification-comparison");
+    const value = await compareHostedModification({ client, teamId, executionId: target ?? "",
+      baselineId: optionString(options, "baseline"), candidateId: optionString(options, "candidate"),
+      promptId: optionString(options, "prompt") || undefined });
+    printHostedModificationComparison(value, parseBooleanOption(options.json)); return;
+  }
+  if (action === "hosted-compile-modification") {
+    const { parseManagedModificationCompile } = await import("openpond-sdk/training");
+    const input = parseManagedModificationCompile(await readInput());
+    if (input.teamId !== teamId) throw new Error("Modification input belongs to a different workspace.");
+    print(await client.compileModificationExecution(input)); return;
+  }
+  if (action === "hosted-prepare-modification") {
+    const { ManagedModificationPrepareSchema } = await import("openpond-sdk/training");
+    const input = ManagedModificationPrepareSchema.parse(await readInput());
+    if (input.teamId !== teamId) throw new Error("Modification input belongs to a different workspace.");
+    print(await client.prepareModificationExecution(input)); return;
+  }
+  if (action === "hosted-start-modification" || action === "hosted-cancel-modification") {
+    const { ManagedModificationStartSchema, ManagedModificationCancelSchema } = await import("openpond-sdk/training");
+    const starting = action === "hosted-start-modification";
+    const input = starting ? ManagedModificationStartSchema.parse(await readInput()) : ManagedModificationCancelSchema.parse(await readInput());
+    if (input.teamId !== teamId) throw new Error("Modification input belongs to a different workspace.");
+    if (starting && !parseBooleanOption(options.yes)) throw new Error("Starting paid hosted modification requires --yes.");
+    print(input.action === "start" ? await client.startModificationExecution(input) : await client.cancelModificationExecution(input)); return;
+  }
+  if (action === "hosted-preparations") {
+    const cursor = optionString(options, "cursor"), projectId = optionString(options, "projectId");
+    const limit = parseIntegerOption(options.limit, "--limit");
+    print(await client.listPreparations(teamId, {
+      ...(cursor ? { afterId: cursor } : {}), ...(projectId ? { projectId } : {}),
+      ...(limit === undefined ? {} : { limit }),
+    })); return;
+  }
+  if (action === "hosted-preparation") {
+    if (!target) throw new Error("hosted-preparation requires a preparation ID.");
+    print(await client.getPreparation(teamId, target)); return;
+  }
+  if (action === "hosted-cancel-preparation") {
+    const receipt = await readPreparationInput();
+    print(await client.cancelPreparation(receipt.plan.id, {
+      teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision,
+    })); return;
+  }
+  if (action === "hosted-prepare-experiment") {
+    const { TrainingExperimentSetupRequestSchema } = await import("openpond-sdk/training");
+    const input = TrainingExperimentSetupRequestSchema.parse(await readInput());
+    if (input.teamId !== teamId) throw new Error("Experiment input belongs to a different workspace.");
+    print(await client.prepareExperiment(input)); return;
+  }
   if (action === "hosted-jobs") { print(await client.listJobs({ limit: 100 })); return; }
   if (action === "hosted-prepare") {
     const input = TrainingPreparationRequestSchema.parse(await readInput());
@@ -166,10 +352,14 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     print(await client.prepareRun(input)); return;
   }
   if (action === "hosted-start") {
-    const receipt = await parseAndVerifyTrainingPreparationReceipt(await readInput());
-    if (receipt.plan.request.teamId !== teamId) throw new Error("Preparation belongs to a different workspace.");
+    const receipt = await readPreparationInput();
     if (!parseBooleanOption(options.yes)) throw new Error("Starting paid hosted training requires --yes.");
-    const submitted = await client.startPreparation(receipt.plan.id, { teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision });
+    const submitted = await client.startPreparation(receipt.plan.id, {
+      teamId,
+      planHash: receipt.plan.contentHash,
+      expectedRevision: receipt.revision,
+      ...(receipt.plan.usageQuote ? { usageQuoteHash: receipt.plan.usageQuote.contentHash } : {}),
+    });
     print(submitted);
     if (submitted.jobId) await attach(submitted.jobId);
     return;
@@ -201,6 +391,28 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   }
   if (!target) throw new Error(`${action} requires a hosted job ID.`);
   if (action === "hosted-status") { await printAttached(await client.getJob(target),target); return; }
+  if (action === "hosted-save-model") {
+    const { TrainingResultSaveCommandSchema } = await import("openpond-sdk/training");
+    const command = TrainingResultSaveCommandSchema.parse(await readInput());
+    if (command.request.teamId !== teamId) throw new Error("Save this result in its original workspace.");
+    await printAttached(await client.saveResultModel(command.jobId, command.request), command.jobId); return;
+  }
+  if (action === "hosted-saved-model") { print(await client.savedModel(target, { teamId })); return; }
+  if (action === "hosted-model-serving") {
+    const input = await readInput();
+    print(await client.modelServing(input.modelProjectId, { teamId, versionHash: input.versionHash })); return;
+  }
+  if (action === "hosted-control-model-serving") {
+    const { TrainingModelServingControlCommandSchema } = await import("openpond-sdk/training");
+    const command = TrainingModelServingControlCommandSchema.parse(await readInput());
+    if (command.request.teamId !== teamId) throw new Error("Control serving in its original workspace.");
+    if (command.request.action === "activate" && !parseBooleanOption(options.yes)) throw new Error("Activating billed serving capacity requires --yes.");
+    print(await client.controlModelServing(command.modelProjectId, command.request)); return;
+  }
+  if (action === "hosted-result") {
+    const result = await client.result(target, { teamId });
+    await printAttached(result, target); return;
+  }
   if (action === "hosted-report") {
     const before = await client.getJob(target);
     const [events, outputs] = await Promise.all([client.events(target), client.outputs(target)]);

@@ -89,7 +89,7 @@ export function taskRecordFromEvidence(evidence: TaskEvidence, definition: TaskD
   return TaskRecordSchema.parse({
     id: evidence.id, clusterKey: evidence.submission.familyKey!, split: evidence.submission.split,
     input: evidence.submission.input, expectedOutput: evidence.submission.expected,
-    policyVisibleContext: { instructions: definition.instructions },
+    policyVisibleContext: evidence.submission.policyVisibleContext ?? { instructions: definition.instructions },
     privilegedContextRef: evidence.submission.evaluatorContext === null ? null : `task-evidence:${evidence.contentHash}`,
     artifactRefs: evidence.submission.assets, tags: [definition.category],
     ...(requiredOutputs === undefined ? {} : { requiredOutputs }),

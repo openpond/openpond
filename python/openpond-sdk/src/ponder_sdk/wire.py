@@ -113,6 +113,8 @@ def normalize(schema: dict[str,Any], value: Any, root: dict[str,Any] | None = No
 def verify_preparation(value: Any, team_id: str, preparation_id: str | None = None) -> Any:
     validate('TrainingPreparationReceiptSchema', value)
     plan=value['plan']; request=plan['request']; content={k:v for k,v in plan.items() if k!='contentHash'}
+    from .training_usage_identity import verify_training_usage_quote
+    verify_training_usage_quote(plan)
     if canonical_sha256(content)!=plan['contentHash'] or canonical_sha256(request)!=plan['requestHash'] or plan['source']['modelProject']['id']!=request['configuration']['id'] or canonical_sha256(plan['source'].get('origin'))!=canonical_sha256(request.get('origin')):
         raise ProtocolError('training_preparation_mismatch')
     if request['teamId']!=team_id or preparation_id is not None and plan['id']!=preparation_id:

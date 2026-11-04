@@ -244,7 +244,7 @@
     ],
     "modelFileBytes": 484220320,
     "hashFixtureExecutions": 3,
-    "sandbox": "local sha256sum HTTP fixture, not Firecracker",
+    "sandbox": "local sha256sum HTTP fixture, not runtime isolation",
     "samples": {
       "modelStaged": {
         "memory.current": 875839488,

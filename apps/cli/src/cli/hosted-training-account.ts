@@ -4,7 +4,7 @@ import { resolveApiBaseUrlOption } from "./common/urls";
 
 export async function hostedTrainingAccount(options: Record<string, string | boolean>) {
   const context = await accountContext(options);
-  if (!context.token)
+  if (!context.account || !context.token)
     throw new Error("Sign in to an OpenPond account before using hosted training.");
   const baseUrl = resolveApiBaseUrlOption(options) ?? context.apiBaseUrl;
   if (new URL(baseUrl).origin !== new URL(context.apiBaseUrl).origin)
