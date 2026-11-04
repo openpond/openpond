@@ -158,6 +158,11 @@ test("links chat drafts to canonical storage across save, reopen, retry and focu
           status: "draft" as const, draft: input.draft, createdAt: previous?.createdAt ?? time, updatedAt: time };
         const record = { ...content, contentHash: await canonicalSha256(content) };
         const receipt = { schemaVersion: "openpond.experimentDraftReceipt.v1" as const, operationId: input.operationId, requestHash, record };
+        // Hashing yields to other requests. Recheck operation/revision authority
+        // immediately before committing both maps without another await.
+        const committed = receipts.get(input.operationId);
+        if (committed) { reply(committed.requestHash === requestHash ? committed : { message: "Operation reused with different settings." }, committed.requestHash === requestHash ? 200 : 409); return; }
+        if ((records.get(input.draft.id)?.revision ?? 0) !== input.expectedRevision) { reply({ message: "Newer draft revision." }, 409); return; }
         records.set(record.id, record); receipts.set(input.operationId, receipt); mutations++; reply(receipt); return;
       }
       expect(url.searchParams.get("teamId")).toBe("team");
