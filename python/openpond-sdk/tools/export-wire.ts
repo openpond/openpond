@@ -146,7 +146,10 @@ const generator=await readFile(import.meta.url.startsWith('file:')?new URL(impor
 const sourcePaths=[...generator.matchAll(/from '(\.\.\/\.\.\/\.\.\/packages\/[^']+)'/g)].map(match=>match[1]!);
 const sourceFiles=Object.fromEntries(await Promise.all([...new Set(sourcePaths)].sort().map(async path=>[path.replace('../../../',''),createHash('sha256').update(await readFile(new URL(path,import.meta.url))).digest('hex')])));
 const sdkMetadata=JSON.parse(await readFile(new URL('../../../packages/sdk/package.json',import.meta.url),'utf8'));
-const provenance={sourceBase:'0bf7b6be48ae1d3a94f1266d41c695c992d05b48',candidateSdkVersion:sdkMetadata.version,pythonVersion:'0.1.2',sourceFiles};
+const pythonProject=await readFile(new URL('../pyproject.toml',import.meta.url),'utf8');
+const pythonVersion=/^version = "([0-9]+\.[0-9]+\.[0-9]+)"$/m.exec(pythonProject)?.[1];
+if(!pythonVersion)throw Error('Missing stable Python package version.');
+const provenance={sourceBase:'0bf7b6be48ae1d3a94f1266d41c695c992d05b48',candidateSdkVersion:sdkMetadata.version,pythonVersion,sourceFiles};
 // Lossless transport interning only: expand before interpreting any JSON Schema.
 // Every source object is a reference, so source keys cannot collide with tags.
 // Child-first references preserve root-local $refs and original property order.

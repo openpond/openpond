@@ -3,13 +3,13 @@
 Native synchronous and asynchronous access to existing OpenPond training,
 evaluation, dataset and continual-learning APIs. Python3.10+; no Node subprocess,
 Desktop application, or uv installation is required to use the installed wheel.
-Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.2. Name and
+Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.3. Name and
 publisher ownership must be verified before publication; this source is not a
 claim that a registry release exists.
 
 ```sh
-pip install ponder-sdk==0.1.2
-# or: uv add ponder-sdk==0.1.2
+pip install ponder-sdk==0.1.3
+# or: uv add ponder-sdk==0.1.3
 ```
 
 Use an existing workspace API credential and explicit API origin. Do not put
@@ -209,13 +209,13 @@ same artifacts with their exact source/run/version/manifest binding:
 
 ```sh
 # Run from the reviewed source ref; these are operator commands, not yet run.
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.2
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.3
 gh run download REVIEWED_BUILD_RUN -n ponder-python-candidate -D reviewed-python-candidate
 sha256sum reviewed-python-candidate/manifest.json
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.2 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.3 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
 ```
 
-The publish lane requires the protected `pypi-production` environment and
+The publish lane requires the `pypi-production` environment and
 `PONDER_SDK_PYPI_OWNER_VERIFIED=true`, set only after independent project ownership
 and exact repository/workflow/environment trusted-publisher bootstrap. No token
 or first-publication authority is inferred from the package name or build. It
