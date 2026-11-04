@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { canonicalJson, ExperimentDraftSchema, type ExperimentDraft, type ExperimentDraftRecord, type ExperimentDraftSave } from "openpond-sdk/training";
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChatContextSelectionSchema, ChatContextOptionSchema, type ChatContextSelection, type ChatContextTarget } from "@openpond/contracts";
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type UseInfiniteQueryResult, type UseQueryResult } from "@tanstack/react-query";
+import { ChatContextSelectionSchema, ChatContextOptionSchema, type ChatContextOption, type ChatContextSelection, type ChatContextTarget } from "@openpond/contracts";
 import { chatResourceRequest } from "../api/chat-resource-api";
 import type { ClientConnection } from "../api";
 import { connectionQueryScope } from "../lib/query-scope";
@@ -14,9 +14,30 @@ const selections = new Map<string, ChatContextSelection | null>();
 const pending = new Set<string>();
 const configureDrafts = new Map<string, string>();
 const listeners = new Set<() => void>();
+type ChatContextCatalogPage = {
+  options: ChatContextOption[];
+  warning: string | null;
+  nextDraftCursor: string | null;
+};
+type ChatContextSelectionState = {
+  associateTraining: (jobId: string, apiOrigin: string, draftId: string) => Promise<void>;
+  selection: ChatContextSelection | null;
+  selecting: boolean;
+  configureDraftId: string | null;
+  closeDraftEditor: () => void;
+  catalog: Omit<UseInfiniteQueryResult<InfiniteData<ChatContextCatalogPage>, Error>, "data"> & {
+    data: { options: ChatContextOption[]; warning: string | null } | undefined;
+  };
+  runs: UseQueryResult<{ runs: ChatContextOption[] }, Error>;
+  select: (target: ChatContextTarget | null, options?: { newExperiment?: boolean }) => Promise<boolean>;
+  saveDraft: (draft: ExperimentDraft, base?: ExperimentDraftRecord | null) => Promise<ChatContextSelection>;
+  selectionError: Error | null;
+  moveToSession: (id: string) => void;
+  scope: string;
+};
 function publish(key: string, value: ChatContextSelection | null) { selections.set(key, value); for (const listener of listeners) listener(); }
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
-export function useChatContextSelection(connection: ClientConnection | null, sessionId: string | null, scopeOverride?: string) {
+export function useChatContextSelection(connection: ClientConnection | null, sessionId: string | null, scopeOverride?: string): ChatContextSelectionState {
   const inheritedScope = useContext(ChatContextAccountScope);
   const workspace = useContext(ChatExperimentWorkspaceContext);
   const scope = `${connection ? connectionQueryScope(connection) : "disconnected"}:${scopeOverride ?? inheritedScope}`;
