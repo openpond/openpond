@@ -5,6 +5,7 @@ import {
   parseNumberOption,
   resolveSandboxClient,
 } from "./common";
+import { checkpointQuoteInput, checkpointRestoreInput, checkpointStartInput } from "./sandbox-checkpoint-inputs";
 import { handleSandboxFilesCommand } from "./sandbox-files-command";
 import { handleSandboxGitCommand } from "./sandbox-git-command";
 import { handleSandboxProcessCommand } from "./sandbox-process-command";
@@ -351,9 +352,7 @@ export async function runSandboxCommand(
       throw new Error("snapshot-validate requires <sandboxId> <snapshotId>");
     }
     const cleanup = normalizeSnapshotValidationCleanup(options.cleanup);
-    const result = await client.validateSnapshot(sandboxId, snapshotId, {
-      ...(cleanup ? { cleanup } : {}),
-    });
+    const result = await client.validateSnapshot(sandboxId, snapshotId, cleanup ? { cleanup } : {});
     console.log(JSON.stringify(result, null, 2));
     return;
   }
@@ -524,21 +523,37 @@ export async function runSandboxCommand(
     return;
   }
 
+  if (subcommand === "restore") {
+    const sandboxId = rest[1];
+    if (!sandboxId || rest.length !== 2)
+      throw new Error(
+        "usage: sandbox restore <sandboxId> [--operation-id <uuid> --snapshot-id <id> --checkpoint-custody-id <sha256> --expected-source-updated-at <timestamp> --replace-stopped-root]",
+      );
+    const result = await client.restore(sandboxId, checkpointRestoreInput(options));
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
   if (subcommand === "start") {
     const sandboxId = rest[1];
     if (!sandboxId) {
       throw new Error("usage: sandbox start <sandboxId>");
     }
-    const result = await client.start(sandboxId);
+    const result = await client.start(sandboxId, {
+      ...checkpointStartInput(options),
+      async: parseSandboxAsyncOption(options),
+    });
     console.log(
       JSON.stringify(
         {
-          sandbox: await waitForSandboxCreateReady(client, result.sandbox),
+          sandbox: parseSandboxAsyncOption(options)
+            ? result.sandbox
+            : await waitForSandboxCreateReady(client, result.sandbox),
           receipt: (result as { receipt?: unknown }).receipt,
         },
         null,
-        2
-      )
+        2,
+      ),
     );
     return;
   }
@@ -597,7 +612,7 @@ export async function runSandboxCommand(
     if (!sandboxId) {
       throw new Error("usage: sandbox billing <sandboxId>");
     }
-    const result = await client.billing(sandboxId);
+    const result = await client.billing(sandboxId, checkpointQuoteInput(options));
     console.log(
       JSON.stringify(
         {

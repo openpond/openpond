@@ -851,6 +851,7 @@ Options:
   --branch <string>
   --budget <number>
   --budget-usd <number>
+  --checkpoint-custody-id <string>
   --cleanup
   --cols <integer>
   --command <string>
@@ -873,7 +874,9 @@ Options:
   --env-literal <string>
   --env-name <string>
   --env-ref <string>
+  --execution-until <string>
   --expected-mpp-mode <string>
+  --expected-source-updated-at <string>
   --expected-version <integer>
   --fail-on-unpreserved-changes
   --ff-only
@@ -899,12 +902,14 @@ Options:
   --max-bytes <integer>
   --max-duration-seconds <integer>
   --max-entries <number>
+  --maximum-usd <string>
   --max-results <number>
   --memory-gb <number>
   --message <string>
   --name <string>
   --no-preview
   --offset-bytes <integer>
+  --operation-id <string>
   --overwrite
   --params <json>
   --path <string>
@@ -920,9 +925,15 @@ Options:
   --recursive
   --registry-secret-ref <string>
   --remote <string>
+  --replace-stopped-root
   --replay-state <string>
   --repo <string>
   --respond-async
+  --restore-intent-sha256 <string>
+  --retention-class <string>
+  --retention-max-usd <string>
+  --retention-terms-sha256 <string>
+  --retention-ttl-seconds <integer>
   --rows <integer>
   --runtime-agent-id <string>
   --runtime-base-branch <string>

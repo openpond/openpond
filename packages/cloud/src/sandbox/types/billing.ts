@@ -106,6 +106,8 @@ export type SandboxBillingStatus = {
   billingModel: "reserve_capture" | "session" | "actual_usage";
   computeUsage?: SandboxComputeUsageStatus;
   nativeRootStorage?: SandboxNativeRootStorageStatus;
+  snapshotRetention?: SandboxSnapshotRetentionStatus[];
+  snapshotRetentionOffer?: SandboxSnapshotRetentionOffer;
   reservationStatus: SandboxReservation["status"];
   budgetUsd: string | null;
   reservedUsd: string;
@@ -277,3 +279,59 @@ export interface SandboxNativeRootStorageStatus {
   status: "current" | "funding_shortfall";
   shortfallReason: "credit_exhausted" | "member_cap_reached" | "billing_suspended" | null;
 }
+
+/** Finite reserved-source-disk retail; captured snapshot byte size is unknown. */
+export type SandboxSnapshotRetentionStatus = {
+  snapshotId: string;
+  phase: "reserved" | "capture_submitted" | "ready" | "deleting" | "deleted" | "cancelled";
+  termsSha256: string;
+  reservedDiskGiB: number;
+  ttlSeconds: number;
+  expiresAt: string;
+  maximumUsd: string;
+  quotedUsd: string;
+  price: { version: string; currency: "USD"; unit: "GiB-second"; unitPriceUsd: string };
+  quantityGiBMillis: number;
+  ratedUsd: string;
+  chargedUsd: string;
+  includedStandardUsd: string;
+  prepaidStandardUsd: string;
+  prepaidPayableUsd: string;
+  heldIncludedStandardUsd: string;
+  heldPrepaidPayableUsd: string;
+  releasedUnusedStandardUsd: string | null;
+  meteredTo: string;
+  closedAt: string | null;
+  status: "current" | "funding_shortfall" | "external_settlement" | "internal_tracked";
+  shortfallReason: "credit_exhausted" | "member_cap_reached" | "billing_suspended" | null;
+};
+
+export type SandboxSnapshotRetentionQuoteInput = {
+  snapshotRetentionTtlSeconds: number;
+  snapshotRetentionClass: "ephemeral" | "cached" | "pinned";
+};
+
+/** Discovery/quote only; creates no reservation or execution authority. */
+export type SandboxSnapshotRetentionOffer =
+  | {
+      available: false;
+      reason:
+        | "unsupported_source"
+        | "source_unavailable"
+        | "billing_unavailable"
+        | "terms_unavailable"
+        | "retention_out_of_range";
+    }
+  | {
+      available: true;
+      termsSha256: string;
+      price: SandboxSnapshotRetentionStatus["price"];
+      reservedDiskGiB: number;
+      maximumTtlSeconds: number;
+      maximumCustomerUsd: string;
+      quote: null | {
+        retentionClass: "ephemeral" | "cached" | "pinned";
+        ttlSeconds: number;
+        quotedUsd: string;
+      };
+    };
