@@ -152,6 +152,7 @@ export const ExperimentDraftSchema = z.object({
     settings: TrainingExperimentSetupRequestSchema.shape.settings.optional(),
     batch: TrainingExperimentSetupRequestSchema.shape.batch.optional(),
     maximumSpendUsd: TrainingExperimentSetupRequestSchema.shape.maximumSpendUsd.optional(),
+    usageFunding: TrainingExperimentSetupRequestSchema.shape.usageFunding,
   }).strict().optional(),
 }).strict().superRefine((draft, context) => {
   const source = draft.startingModel;

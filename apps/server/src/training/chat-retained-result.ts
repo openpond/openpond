@@ -37,7 +37,7 @@ export async function readChatRetainedResult(target: ChatContextTarget,
     selection = { target, label: value.name, detail: `Retained training checkpoint · ${pin.jobId}`,
       results: [pin], trainingResult: value };
   } else if (pin.kind === "managed_modification_result") {
-    const value = await client.getModificationExecution(original.teamId, pin.executionId, { ownerUserId: original.actorId });
+    const value = await client.getModificationExecution(original.teamId, pin.executionId);
     selection = { target, label: value.name, detail: `Completed ${value.method} · ${value.id}`,
       results: [pin], managedModificationResult: value };
   } else if (pin.kind === "engram_result") {

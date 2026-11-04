@@ -212,7 +212,7 @@ it("verifies standalone draft CRUD and retained receipts across real HTTP", asyn
       schemaVersion: "openpond.managedModificationExecution.v1", id: "execution-fixture", teamId: "team", ownerUserId: "owner", projectId: null,
       name: "Capture evidence", method: "neuron_steering", phase: "dispatching", revision: 3, sourceContentHash: "a".repeat(64),
       plan: { contentHash: "b".repeat(64), inputHash: await canonicalSha256(document.request), runtimeHash: "c".repeat(64),
-        maximumSpendUsd: "2", createdAt: "2026-11-01T00:00:00Z", expiresAt: "2026-11-01T00:05:00Z" },
+        maximumSpendUsd: "2.000000", createdAt: "2026-11-01T00:00:00Z", expiresAt: "2026-11-01T00:05:00Z" },
       request: document.request, result: document.result, resultRecordedAt: "2026-11-01T00:01:00Z", updatedAt: "2026-11-01T00:01:00Z",
     };
     executionReply = { ...execution, contentHash: await canonicalSha256(execution) };
