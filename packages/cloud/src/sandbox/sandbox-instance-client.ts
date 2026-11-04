@@ -32,6 +32,10 @@ import type {
   SandboxSnapshotValidateInput,
   SandboxSnapshotUpdateInput,
   SandboxSnapshotInput,
+  SandboxSnapshotRetentionQuoteInput,
+  SandboxSnapshotJobResponse,
+  SandboxRestoreInput,
+  SandboxStartInput,
   SandboxRecord,
   SandboxCreateResponse,
   SandboxIntegrationLeasesResponse,
@@ -420,14 +424,26 @@ export class OpenPondSandboxInstanceClient {
 
   createSnapshot(
     sandboxId: string,
-    input: SandboxSnapshotInput
-  ): Promise<SandboxSnapshotResponse> {
-    return this.request<SandboxSnapshotResponse>(
+    input: SandboxSnapshotInput & { async: true },
+  ): Promise<SandboxSnapshotJobResponse>;
+  createSnapshot(
+    sandboxId: string,
+    input: SandboxSnapshotInput & { async?: false },
+  ): Promise<SandboxSnapshotResponse>;
+  createSnapshot(
+    sandboxId: string,
+    input: SandboxSnapshotInput,
+  ): Promise<SandboxSnapshotResponse | SandboxSnapshotJobResponse>;
+  createSnapshot(
+    sandboxId: string,
+    input: SandboxSnapshotInput,
+  ): Promise<SandboxSnapshotResponse | SandboxSnapshotJobResponse> {
+    return this.request<SandboxSnapshotResponse | SandboxSnapshotJobResponse>(
       `/${encodeURIComponent(sandboxId)}/snapshots`,
       {
         method: "POST",
         body: JSON.stringify(input),
-      }
+      },
     );
   }
 
@@ -511,24 +527,20 @@ export class OpenPondSandboxInstanceClient {
 
   start(
     sandboxId: string,
-    options: SandboxAsyncRequestOptions = {}
+    options: SandboxAsyncRequestOptions & SandboxStartInput = {},
   ): Promise<SandboxStartResponse> {
-    return this.request<SandboxStartResponse>(
-      `/${encodeURIComponent(sandboxId)}/start`,
-      {
-        method: "POST",
-        headers: asyncRequestHeaders(options),
-      }
-    );
+    return this.request<SandboxStartResponse>(`/${encodeURIComponent(sandboxId)}/start`, {
+      method: "POST",
+      headers: asyncRequestHeaders(options),
+      ...(options.restore ? { body: JSON.stringify({ restore: options.restore }) } : {}),
+    });
   }
 
-  restore(sandboxId: string): Promise<SandboxRestoreResponse> {
-    return this.request<SandboxRestoreResponse>(
-      `/${encodeURIComponent(sandboxId)}/restore`,
-      {
-        method: "POST",
-      }
-    );
+  restore(sandboxId: string, input?: SandboxRestoreInput): Promise<SandboxRestoreResponse> {
+    return this.request<SandboxRestoreResponse>(`/${encodeURIComponent(sandboxId)}/restore`, {
+      method: "POST",
+      ...(input ? { body: JSON.stringify(input) } : {}),
+    });
   }
 
   delete(
@@ -646,9 +658,17 @@ export class OpenPondSandboxInstanceClient {
     );
   }
 
-  billing(sandboxId: string): Promise<SandboxBillingStatusResponse> {
+  billing(
+    sandboxId: string,
+    input?: SandboxSnapshotRetentionQuoteInput,
+  ): Promise<SandboxBillingStatusResponse> {
+    const query = new URLSearchParams();
+    if (input) {
+      query.set("snapshotRetentionTtlSeconds", String(input.snapshotRetentionTtlSeconds));
+      query.set("snapshotRetentionClass", input.snapshotRetentionClass);
+    }
     return this.request<SandboxBillingStatusResponse>(
-      `/${encodeURIComponent(sandboxId)}/billing`
+      `/${encodeURIComponent(sandboxId)}/billing${query.size ? `?${query}` : ""}`,
     );
   }
 

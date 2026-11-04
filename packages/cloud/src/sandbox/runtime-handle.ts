@@ -11,6 +11,9 @@ import type {
   SandboxFileSearchInput,
   SandboxOpenPortInput,
   SandboxRecord,
+  SandboxRestoreInput,
+  SandboxRestoreResponse,
+  SandboxStartInput,
   SandboxRuntime,
   SandboxRuntimeCheckpointInput,
   SandboxRuntimeEventInput,
@@ -71,9 +74,9 @@ export type SandboxRuntimeHandleClient = {
   get(sandboxId: string): Promise<SandboxRecord>;
   start(
     sandboxId: string,
-    options?: SandboxAsyncRequestOptions
+    options?: SandboxAsyncRequestOptions & SandboxStartInput
   ): Promise<{ sandbox: SandboxRecord }>;
-  restore(sandboxId: string): Promise<{ sandbox: SandboxRecord }>;
+  restore(sandboxId: string, input?: SandboxRestoreInput): Promise<SandboxRestoreResponse>;
   uploadFile(
     sandboxId: string,
     path: string,
