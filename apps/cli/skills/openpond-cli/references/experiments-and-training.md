@@ -254,6 +254,25 @@ wrapper directly. On a lost preparation reply, reconcile the same operation and
 exact input; changed inputs require a new operation. Never recreate a submitted
 job because its chat attachment failed.
 
+To explicitly save an experiment's recurring SFT or GRPO learning policy, use
+`training hosted-save-experiment-learning <request.json> --team-id <id> --json`.
+Its `openpond.trainingExperimentLearning.v1` input contains `teamId`, `projectId`
+(or null), stable `draftId` and `form` (the training form without
+`learningConfiguration`). The form's `learningIntent` holds the enabled state,
+schedule and spending limits. Incomplete intent may remain in a saved draft;
+policy save requires an exact pinned base, sealed reviewed batch, retained
+evaluation and name. Obtain the user's authority for that schedule and its
+limits before saving an enabled policy. This command saves the policy; it does
+not start the manual experiment or activate serving.
+
+Retain the exact request and returned `inputHash`, `configuration` and `policy`
+references. On an uncertain response, retry the unchanged file so the service
+can recover the same save. Updating or disabling the saved policy requires both
+`expectedConfiguration` (`id`, `expectedRevision`, `expectedEtag`) and the exact
+`expectedPolicy` reference. A subsequent `hosted-prepare-experiment` request can
+select that saved configuration through `configuration`, with the exact saved
+base and settings. Preparing never enables or changes the recurring policy.
+
 Read a retained preparation with `training hosted-preparation <preparation-id>
 --team-id <id> --json`. Discover preparations with `hosted-preparations`, following
 `nextCursor` through `--cursor`; `--project-id` and `--limit` narrow that read.

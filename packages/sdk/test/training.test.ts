@@ -868,6 +868,17 @@ describe("manual training preparation boundary", () => {
     expect((await client.prepareExperiment(request)).preparation.state).toBe("prepared");
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher).toHaveBeenCalledWith("https://training.example/v1/training/preparations/from-draft", expect.objectContaining({ method: "POST" }));
+    const configuredRequest = TrainingExperimentSetupRequestSchema.parse({ ...request, configuration: content.request.configuration });
+    response.request = configuredRequest;
+    response.requestHash = await canonicalSha256(configuredRequest);
+    content.source.modelProject.portableProjectId = "explicit-owned-model";
+    response.preparation.plan = { ...content, contentHash: await canonicalSha256(content) };
+    expect((await client.prepareExperiment(configuredRequest)).preparation.plan.source.modelProject.id).toBe(configuredRequest.configuration!.id);
+    response.request = { ...configuredRequest, configuration: { ...configuredRequest.configuration!, expectedEtag: "c".repeat(64) } };
+    response.requestHash = await canonicalSha256(response.request);
+    await expect(client.prepareExperiment(configuredRequest)).rejects.toMatchObject({ code: "training_experiment_setup_mismatch" });
+    content.source.modelProject.portableProjectId = await trainingExperimentConfigurationIdentity(request, "user-a");
+    response.preparation.plan = { ...content, contentHash: await canonicalSha256(content) };
     response.request = { ...request, name: "Another draft" };
     response.requestHash = await canonicalSha256(response.request);
     await expect(client.prepareExperiment(request)).rejects.toMatchObject({ code: "training_experiment_setup_mismatch" });
