@@ -8,6 +8,9 @@ requires-python = ">=3.10"
 dependencies = ["httpx>=0.28.1,<1", "jsonschema[format]>=4.23,<5", "rfc8785>=0.1.4,<1", "typing-extensions>=4.12,<5"]
 classifiers = ["Typing :: Typed", "Programming Language :: Python :: 3"]
 
+[project.optional-dependencies]
+inference = ["torch==2.8.0", "transformers==5.17.0", "safetensors==0.8.0", "peft==0.21.0", "accelerate==1.15.0", "sentencepiece==0.2.2", "pillow==12.3.0", "huggingface-hub==1.16.1"]
+
 [dependency-groups]
 dev = ["pytest>=8.3,<10", "tomli>=2,<3; python_version < '3.11'"]
 
@@ -15,11 +18,17 @@ dev = ["pytest>=8.3,<10", "tomli>=2,<3; python_version < '3.11'"]
 requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build]
+artifacts = ["src/ponder_sdk/models/*.py", "src/ponder_sdk/inputs/*.py"]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/ponder_sdk"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "examples", "tools", "tests", "README.md", "LICENSE", "pyproject.toml", "uv.lock"]
+include = ["src", "examples", "tools", "tests", "reference-tests", "README.md", "LICENSE", "pyproject.toml", "uv.lock", "hatch_build.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

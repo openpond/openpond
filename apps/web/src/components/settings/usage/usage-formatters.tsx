@@ -59,9 +59,9 @@ export function numericValue(value: number | string | undefined): number {
   return 0;
 }
 export function providerLabel(provider: string, route?: string): string {
-  if (route === "openpond_hosted" || provider === "openpond" || (!route && ["fireworks", "runpod", "huggingface"].includes(provider))) return "OpenPond Chat";
+  if (route === "openpond_hosted" || provider === "openpond") return "OpenPond Chat";
   const known: Record<string, string> = { openai: "OpenAI", anthropic: "Anthropic", google: "Google", openpond: "OpenPond Chat", openrouter: "OpenRouter", codex: "Codex" };
-  return known[provider] ?? titleFromIdentifier(provider);
+  return known[provider] ?? (!route ? "OpenPond Chat" : titleFromIdentifier(provider));
 }
 export function routeLabel(route: string): string {
   if (route === "openpond_hosted") return "OpenPond hosted";

@@ -217,7 +217,7 @@ export function LabsRoute(props: LabsRouteProps) {
   }
   else if (route.page === "runs" && route.resourceId?.startsWith("hosted-run:")) {
     const teamId = training.settingsPreferences.defaultTeamId, actorId=props.account?.profile?.id;
-    page = profileView.connection && teamId && actorId ? <HostedTrainingRunRoute key={`${workspaceKey}:${route.resourceId}`} connection={profileView.connection} teamId={teamId} actorId={actorId} projectId={route.projectId??null} jobId={route.resourceId.slice(11)} diagnostics={route.detailTab==="diagnostics"} onDiagnostics={value=>open({...route,detailTab:value?"diagnostics":"details"})} onOpenExperiment={id => open(modelsLocation("experiments",null,{resourceId:id,projectId:route.projectId}))} /> : unavailable("Sign in and select a workspace to open this training run.");
+    page = profileView.connection && teamId && actorId ? <HostedTrainingRunRoute key={`${workspaceKey}:${route.resourceId}`} connection={profileView.connection} teamId={teamId} actorId={actorId} projectId={route.projectId??null} jobId={route.resourceId.slice(11)} accountKey={workspaceKey} loadModel={async id => (await training.training.actions.pullHostedModelProject(id))?.project.id ?? null} diagnostics={route.detailTab==="diagnostics"} onDiagnostics={value=>open({...route,detailTab:value?"diagnostics":"details"})} onOpenExperiment={id => open(modelsLocation("experiments",null,{resourceId:id,projectId:route.projectId}))} /> : unavailable("Sign in and select a workspace to open this training run.");
   }
   else if (route.modelId && !state) page = <p role="status">Loading model…</p>;
   else if (route.modelId && !selected && training.training.loading) page = <p role="status">Loading model…</p>;
@@ -292,7 +292,7 @@ export function LabsRoute(props: LabsRouteProps) {
     const ownerId = modelResourceOwner(route, state);
     const owner = models.find((model) => model.id === ownerId) ?? null;
     page = !owner && training.training.loading ? <p role="status">Loading training run…</p> : owner ? <>
-      <ModelsResourceDetail key={`${workspaceKey}:${owner.id}:${route.page}`} props={props} model={owner} profile={profile} runs={createImprove.runs} route={route} />
+      <ModelsResourceDetail key={`${workspaceKey}:${owner.id}:${route.page}`} accountKey={workspaceKey} props={props} model={owner} profile={profile} runs={createImprove.runs} route={route} />
     </> : unavailable("This resource is unavailable in the active workspace.", () => open(modelsLocation(route.page, route.modelId)));
   }
   const tab: LabPrimaryTab = (route?.page === "home" || route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" || route?.page === "labeling" ? "evals" : route?.page === "tasks" ? "tasksets" : route?.page === "datasets" ? "tasksets" : route?.page === "graders" ? "rewards" : route?.page === "experiments" || route?.page === "inbox" ? "evals" : route?.page ?? "overview";

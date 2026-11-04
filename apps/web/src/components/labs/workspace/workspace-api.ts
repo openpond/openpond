@@ -1,4 +1,4 @@
-import {EvaluationOperationRecoverySchema,EvaluationOperationRecoveryPageSchema,type EvaluationOperationRecovery} from "@openpond/contracts";
+import {EvaluationOperationRecoverySchema,EvaluationOperationRecoveryPageSchema,RecoverableEvaluationActionSchema,type EvaluationOperationRecovery} from "@openpond/contracts";
 import type { HumanInboxContext } from "../../human-review/api";
 import { apiFetch, type ClientConnection } from "../../../api/api-client";
 import { contentHash } from "@openpond/harness";
@@ -82,7 +82,7 @@ export function createWorkspaceApi(
     },
   };
   async function prepareOperation(action: string, value: unknown) {
-    const retainsReview=action==="advanced-refiner-start"||action==="experiment-evaluation-schedule";
+    const retainsReview=RecoverableEvaluationActionSchema.safeParse(action).success;
     const intentHash = contentHash(value),
       operationScope = { teamId: scope.teamId, projectId: scope.projectId };
     const prepared = await apiFetch<{ id: string; createdAt: string }>(
@@ -100,9 +100,10 @@ export function createWorkspaceApi(
     return retainedOperation(action,intentHash,prepared);
   }
   function retainedOperation(action:string,intentHash:string,prepared:{id:string;createdAt:string}){
-    const retainsReview=action==="advanced-refiner-start"||action==="experiment-evaluation-schedule",operationScope={teamId:scope.teamId,projectId:scope.projectId};
+    const retainsReview=RecoverableEvaluationActionSchema.safeParse(action).success,operationScope={teamId:scope.teamId,projectId:scope.projectId};
     return {
       ...prepared,
+      intentHash,
       async retainCommand(command:unknown,phase:"reviewed"|"dispatching"="reviewed"){
         if(!retainsReview)throw new Error("This evaluation operation has no reviewed command catalog.");
         return apiFetch(connection,"/v1/training/evaluation-workspace",{method:"POST",body:JSON.stringify({...operationScope,operation:"retainOperation",value:{action,intentHash,id:prepared.id,command,phase}})});

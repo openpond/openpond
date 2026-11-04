@@ -22,7 +22,7 @@ helpers for OpenPond's mutable Harness:
 npm install @openpond/harness
 ```
 
-Node.js 22.14 or newer is required. `@openpond/harness` depends only on Zod; it
+Node.js 22.14 or newer is required. `@openpond/harness` uses Zod, YAML and AJV; it
 does not install or invoke `openpond-sdk`, `openpond-agent-sdk`, an OpenPond
 server, or a model-provider SDK.
 
@@ -38,7 +38,15 @@ import {
 } from "@openpond/harness";
 ```
 
-Subpath exports are available at `/harness`, `/evaluation-review`, `/refiner`,
+Use the `/common` entrypoint when you only need content hashes, canonical JSON,
+or shared release-reference schemas. It loads the common helpers and Zod without
+loading the execution, refinement, YAML or JSON Schema validation modules:
+
+```ts
+import { contentHash, ImmutableReleaseRefSchema } from "@openpond/harness/common";
+```
+
+Subpath exports are also available at `/harness`, `/evaluation-review`, `/refiner`,
 `/harness-improvements`, `/harness-workspaces`, `/refinement-lifecycle`,
 `/models`, and `/tools`.
 

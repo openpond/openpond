@@ -17,13 +17,26 @@ export function printTrainingEstimate(estimate: TrainingEstimate, json: boolean)
   console.log(`Expected cost: ${cost.expectedUsd === null ? "Not yet calibrated" : money(cost.expectedUsd)}`);
   if (cost.planningRangeUsd) console.log(`Planning range: ${money(cost.planningRangeUsd.low)}–${money(cost.planningRangeUsd.high)}`);
   console.log(`Execution time: ${estimate.executionSeconds.expected === null ? "Not yet calibrated" : duration(estimate.executionSeconds.expected)}`);
+  if (estimate.executionSeconds.planningRange)
+    console.log(`Execution planning range: ${duration(estimate.executionSeconds.planningRange.low)}–${duration(estimate.executionSeconds.planningRange.high)}`);
   console.log(`Queue wait: ${estimate.queueWaitSeconds === null ? "Start time not yet known" : `about ${duration(estimate.queueWaitSeconds.expected)}`}`);
+  const workload = estimate.workload;
+  if (workload) {
+    const population = workload.method === "sft" ? workload.trainingRows : workload.trainingInitialRequests;
+    console.log(`${workload.method === "sft" ? "Examples" : "Initial prompts"} counted: ${population.coverage === "unavailable" ? "Unavailable" : `${population.counted} of ${population.total ?? "unknown"} (${population.coverage})`}`);
+    const tokens = workload.method === "sft" ? workload.trainingRows.totals?.inputTokens : workload.trainingInitialRequests.totals?.promptTokens;
+    console.log(`Tokens in counted inputs: ${tokens ?? "Unavailable"}`);
+    if (workload.method === "sft" && workload.planned.exampleExposures !== null)
+      console.log(`Planned workload: ${workload.planned.exampleExposures} example exposures, ${workload.planned.optimizerSteps} optimizer steps`);
+    if (population.reason) console.log(`Token evidence: ${population.reason}`);
+  }
   console.log(`Recommended maximum budget: ${cost.recommendedMaximumUsd === null ? "Unavailable with current evidence" : money(cost.recommendedMaximumUsd)}`);
   console.log(`Approved hard cap: ${config.approvedMaximumUsd === null ? "Not approved" : money(config.approvedMaximumUsd)}`);
   if (config.approvedMaximumUsd !== null && cost.expectedUsd !== null && cost.expectedUsd > config.approvedMaximumUsd)
     console.log("Expected cost exceeds the approved cap. Change the run or explicitly approve a different budget before submission.");
   for (const component of cost.components) {
     if (component.expectedUsd !== null) console.log(`  ${component.phase.replaceAll("_", " ")} / ${component.resource}: ${money(component.expectedUsd)}`);
+    else if (component.evidence === "configured_rate") console.log(`  ${component.phase.replaceAll("_", " ")} / ${component.resource}: configured rate; expected usage unknown. ${component.reason ?? ""}`);
   }
   for (const assumption of estimate.assumptions) console.log(`Assumption: ${assumption}`);
   for (const unknown of estimate.unknowns) console.log(`Unknown: ${unknown}`);

@@ -24,7 +24,7 @@ import {
   trainingInputArtifactUploadHash,
   trainingJobSubmissionHash,
   type TrainingJobSubmission,
-} from "./training.js";
+} from "./training-job-contracts.js";
 
 type PolicyJob = Extract<TrainingJobSubmission["job"], { kind: "policy_optimize" }>;
 export type TrainingPreparationFile = TrainingEvaluationSource["assets"][number];

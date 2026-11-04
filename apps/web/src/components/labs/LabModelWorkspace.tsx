@@ -588,16 +588,15 @@ export function modelRunEntries(
       jobs.find((candidate) => candidate.id === lifecycleRun.id) ??
       null;
     if (job) matchedJobIds.add(job.id);
+    const jobVersion = job ? versionByJobId.get(job.id) : undefined;
+    const lineageVersion = lifecycleRun.adapterArtifactLineageId
+      ? versionByLineageId.get(lifecycleRun.adapterArtifactLineageId)
+      : undefined;
     return {
       key: `model-run:${lifecycleRun.id}`,
       job,
       lifecycleRun,
-      version:
-        (job ? versionByJobId.get(job.id) ?? null : null) ??
-        (lifecycleRun.adapterArtifactLineageId
-          ? versionByLineageId.get(lifecycleRun.adapterArtifactLineageId) ??
-            null
-          : null),
+      version: jobVersion ?? lineageVersion ?? null,
     };
   });
   for (const job of jobs) {

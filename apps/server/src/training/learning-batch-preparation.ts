@@ -36,6 +36,8 @@ export async function prepareLocalLearningBatch(store: SqliteStore, storeDir: st
     return { batch, definition, binding, rewards, evidence, decisions, assets, inputAssets, sources };
   });
   const existingId = `learning-${contentHash([input.profileId, snapshot.batch.contentHash]).slice(0, 40)}`;
+  if (snapshot.sources.some(source => source.datasetOrigin))
+    throw new Error("Dataset review preparation requires verified retained package custody. This source path is not available yet.");
   const existing = await store.getTaskset(existingId);
   if (existing) {
     if (existing.profileId !== input.profileId) throw new Error("Learning batch Taskset belongs to a different profile.");

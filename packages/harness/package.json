@@ -19,6 +19,10 @@
       "types": "./dist/types/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./common": {
+      "types": "./dist/types/common.d.ts",
+      "import": "./dist/common.js"
+    },
     "./harness": {
       "types": "./dist/types/harness.d.ts",
       "import": "./dist/harness.js"

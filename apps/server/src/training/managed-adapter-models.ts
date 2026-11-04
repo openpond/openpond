@@ -1,3 +1,6 @@
+import { listManagedSteeringChatModels } from "./managed-steering-chat.js";
+import { listManagedEngramChatModels } from "./managed-engram-chat.js";
+import { listManagedWeightChatModels } from "./managed-weight-chat.js";
 import {
   ProviderModelCacheSchema,
   ProviderModelSchema,
@@ -65,7 +68,13 @@ export async function listManagedAdapterProviderModels(
     );
   if (!teamId) return { models: [], error: null };
   try {
-    const remote = await readManagedModelCatalog(teamId);
+    const [adapterCatalog, steeringCatalog, engramCatalog, weightCatalog] = await Promise.allSettled([readManagedModelCatalog(teamId), listManagedSteeringChatModels(store, teamId), listManagedEngramChatModels(store, teamId), listManagedWeightChatModels(store, teamId)]);
+    const remote = adapterCatalog.status === "fulfilled" ? adapterCatalog.value : [];
+    const steeringModels = steeringCatalog.status === "fulfilled" ? steeringCatalog.value : [];
+    const engramModels = engramCatalog.status === "fulfilled" ? engramCatalog.value : [];
+    const weightModels = weightCatalog.status === "fulfilled" ? weightCatalog.value : [];
+    const errors = [adapterCatalog, steeringCatalog, engramCatalog, weightCatalog].flatMap(value => value.status === "rejected"
+      ? [value.reason instanceof Error ? value.reason.message : "Managed model catalog unavailable."] : []);
     const remoteModels = remote.map((model) =>
       ProviderModelSchema.parse({
         id: managedCatalogModelId(teamId, model.id),
@@ -83,12 +92,15 @@ export async function listManagedAdapterProviderModels(
     const remoteArtifacts = new Set(remote.map((model) => model.metadata.artifact_id));
     return {
       models: [
+        ...weightModels,
+        ...steeringModels,
+        ...engramModels,
         ...remoteModels,
         ...localModels.filter(
           (model) => !remoteArtifacts.has(String(model.raw?.canonicalArtifactId)),
         ),
       ],
-      error: null,
+      error: errors.length ? errors.join(" ") : null,
     };
   } catch (error) {
     return {

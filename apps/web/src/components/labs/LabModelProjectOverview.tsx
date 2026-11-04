@@ -1,22 +1,18 @@
 import { ModelTrainingJourney } from "./ModelTrainingJourney";
 import type { ClientConnection } from "../../api/api-client";
 import type { ReactNode } from "react";
-import type {
-  ModelProject,
-  TrainingStateResponse,
-} from "@openpond/contracts";
+import type { ModelProject, TrainingStateResponse } from "@openpond/contracts";
 
 import { formatDateTime, statusLabel } from "../training/training-model-data";
 import type { LabModelVersion } from "./lab-models";
 import { LabContinualLearningSeries } from "./LabContinualLearningSeries";
-import {
-  isActiveRunStatus,
-  LabRunStatusBadge,
-} from "./LabRunStatusBadge";
+import { isActiveRunStatus, LabRunStatusBadge } from "./LabRunStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { LabProjectMetricCharts } from "./LabProjectMetricCharts";
 import { modelProjectTasksetIds } from "./models-resource-scope";
 import type { ModelOverviewRun } from "./model-overview-runs";
+import { SavedTrainingModel, useSavedTrainingModel } from "./SavedTrainingModel";
+import type { WorkspaceApi } from "./workspace/workspace-api";
 
 export function LabModelProjectOverview({
   actions,
@@ -30,7 +26,9 @@ export function LabModelProjectOverview({
   versions,
   hostedWebBaseUrl,
   hostedApiOrigin,
+  servingApi,
 }: {
+  servingApi?: WorkspaceApi;
   hostedWebBaseUrl?: string | null;
   hostedApiOrigin?: string | null;
   actions?: ReactNode;
@@ -47,45 +45,105 @@ export function LabModelProjectOverview({
     right.updatedAt.localeCompare(left.updatedAt),
   );
   const currentRun =
-    orderedRuns.find((run) => isActiveRunStatus(run.status)) ??
-    orderedRuns[0] ??
-    null;
-  const latestEvaluation = orderedRuns.find((run) => run.evaluation || run.kind === "evaluation") ?? null;
+    orderedRuns.find((run) => isActiveRunStatus(run.status)) ?? orderedRuns[0] ?? null;
+  const latestEvaluation =
+    orderedRuns.find((run) => run.evaluation || run.kind === "evaluation") ?? null;
   const evaluation = latestEvaluation?.evaluation;
   const currentVersion = versions.find((version) => version.current) ?? versions[0] ?? null;
-  const trainingModel = modelProject?.trainingSetup.baseModel ?? modelProject?.defaultBaseModel ?? null;
+  const savedModel = useSavedTrainingModel(
+    connection,
+    modelProject?.hosted && modelProject.hosted.apiOrigin === hostedApiOrigin
+      ? modelProject.hosted
+      : undefined,
+  );
+  const savedVersion = savedModel.data?.version;
+  const trainingModel =
+    (savedVersion?.schemaVersion === "openpond.steeringModelVersion.v1"
+      ? savedVersion.publication.baseModel
+      : savedVersion?.schemaVersion === "openpond.engramModelVersion.v1" ||
+          savedVersion?.schemaVersion === "openpond.decisionModelVersion.v1" ||
+          savedVersion?.schemaVersion === "openpond.alphaEditModelVersion.v1" ||
+          savedVersion?.schemaVersion === "openpond.neuronTrainingModelVersion.v1"
+        ? savedVersion.baseModel
+        : savedVersion?.request.baseModel) ??
+    modelProject?.trainingSetup.baseModel ??
+    modelProject?.defaultBaseModel ??
+    null;
   const servingReady = currentVersion?.lineage.managedServing?.customerBindingAllowed ?? false;
   const tasksetCount = modelProjectTasksetIds(modelProject).size;
-  const toolLearningUrl = hostedWebBaseUrl && modelProject?.hosted &&
-    modelProject.hosted.apiOrigin === hostedApiOrigin
-    ? new URL(`/console/models/${encodeURIComponent(modelProject.hosted.projectId)}`, hostedWebBaseUrl).href
-    : null;
+  const toolLearningUrl =
+    hostedWebBaseUrl && modelProject?.hosted && modelProject.hosted.apiOrigin === hostedApiOrigin
+      ? new URL(
+          `/console/models/${encodeURIComponent(modelProject.hosted.projectId)}`,
+          hostedWebBaseUrl,
+        ).href
+      : null;
 
   return (
     <div className="labs-model-overview">
       <ModelProjectPageHeader
         actions={actions}
-        description={modelProject?.objective ?? "Training, evaluation, version, and serving state for this Model Project."}
+        description={
+          modelProject?.objective ??
+          "Training, evaluation, version, and serving state for this Model Project."
+        }
         metrics={[
           {
-            label: "Training model",
+            label: savedVersion ? "Base model" : "Training model",
             value: trainingModel?.modelId ?? "Choose a model",
-            hint: modelProject?.trainingSetup.method
-              ? `${modelProject.trainingSetup.method.toUpperCase()} · ${trainingModel?.source ?? "unconfigured"}`
-              : "Training setup is not configured",
+            hint: savedVersion
+              ? savedVersion.schemaVersion === "openpond.steeringModelVersion.v1"
+                ? "Neuron steering · Saved profile"
+                : savedVersion.schemaVersion === "openpond.engramModelVersion.v1"
+                  ? "Engram memory · Saved module"
+                  : savedVersion.schemaVersion === "openpond.decisionModelVersion.v1"
+                    ? "Decision model · Saved adapter"
+                    : savedVersion.schemaVersion === "openpond.alphaEditModelVersion.v1"
+                      ? "AlphaEdit · Saved matrix patch"
+                      : savedVersion.schemaVersion === "openpond.neuronTrainingModelVersion.v1"
+                        ? "Neuron training · Saved delta"
+                        : `${String(savedVersion.request.recipe.method).toUpperCase()} · Saved checkpoint`
+              : modelProject?.trainingSetup.method
+                ? `${modelProject.trainingSetup.method.toUpperCase()} · ${trainingModel?.source ?? "unconfigured"}`
+                : "Training setup is not configured",
           },
           {
             label: "Current version",
-            value: currentVersion ? `Version ${currentVersion.number}` : "Base only",
-            hint: currentVersion
-              ? servingReady ? "Ready to serve" : "Not serving"
-              : `${versions.length} trained version${versions.length === 1 ? "" : "s"}`,
+            value: savedVersion
+              ? savedVersion.schemaVersion === "openpond.steeringModelVersion.v1"
+                ? "Saved steering profile"
+                : savedVersion.schemaVersion === "openpond.engramModelVersion.v1"
+                  ? "Saved memory module"
+                  : savedVersion.schemaVersion === "openpond.decisionModelVersion.v1"
+                    ? "Saved Decision adapter"
+                    : savedVersion.schemaVersion === "openpond.alphaEditModelVersion.v1"
+                      ? "Saved AlphaEdit matrices"
+                      : savedVersion.schemaVersion === "openpond.neuronTrainingModelVersion.v1"
+                        ? "Saved neuron delta"
+                        : "Saved checkpoint"
+              : currentVersion
+                ? `Version ${currentVersion.number}`
+                : "Base only",
+            hint: savedVersion
+              ? "See saved modifications below"
+              : currentVersion
+                ? servingReady
+                  ? "Ready to serve"
+                  : "Not serving"
+                : `${versions.length} trained version${versions.length === 1 ? "" : "s"}`,
           },
           {
             label: "Current run",
-            value: currentRun
-              ? <span><LabRunStatusBadge status={currentRun.status} />{currentRun.continuation ? <small className="training-continual-status">Continual learning on</small> : null}</span>
-              : "Not started",
+            value: currentRun ? (
+              <span>
+                <LabRunStatusBadge status={currentRun.status} />
+                {currentRun.continuation ? (
+                  <small className="training-continual-status">Continual learning on</small>
+                ) : null}
+              </span>
+            ) : (
+              "Not started"
+            ),
             hint: currentRun
               ? `${currentRun.label} · ${formatDateTime(currentRun.updatedAt)}`
               : `${tasksetCount} attached Taskset release${tasksetCount === 1 ? "" : "s"}`,
@@ -97,39 +155,67 @@ export function LabModelProjectOverview({
           {
             label: "Latest evaluation",
             value: evaluation
-              ? evaluation.passRate ? percent(evaluation.score) : evaluation.score.toFixed(3)
-              : latestEvaluation ? statusLabel(latestEvaluation.status) : "Not run",
+              ? evaluation.passRate
+                ? percent(evaluation.score)
+                : evaluation.score.toFixed(3)
+              : latestEvaluation
+                ? statusLabel(latestEvaluation.status)
+                : "Not run",
             hint: evaluation
-              ? evaluation.baseline === null ? "Retained candidate score" : evaluation.passRate
-                ? `${signedPercent(evaluation.score - evaluation.baseline)} · retention ${evaluation.retentionPassed ? "passed" : "failed"}`
-                : `Baseline ${evaluation.baseline.toFixed(3)} · retained evaluation`
+              ? evaluation.baseline === null
+                ? "Retained candidate score"
+                : evaluation.passRate
+                  ? `${signedPercent(evaluation.score - evaluation.baseline)} · retention ${evaluation.retentionPassed ? "passed" : "failed"}`
+                  : `Baseline ${evaluation.baseline.toFixed(3)} · retained evaluation`
               : "No comparable evaluation result",
           },
         ]}
         status={status}
         title={modelProject?.name ?? "Model Project"}
       />
+      {connection && modelProject?.hosted && modelProject.hosted.apiOrigin === hostedApiOrigin ? (
+        <SavedTrainingModel query={savedModel} connection={connection} api={servingApi} />
+      ) : null}
       {toolLearningUrl ? (
         <section className="training-detail-section" aria-label="Tool learning">
           <div className="labs-project-trends-heading">
             <div>
               <h2>Tool learning</h2>
-              <p>Capture tool errors from OpenPond, Claude Code, OpenCode, or Codex CLI into your private Fix-it dataset, then review the saved examples.</p>
-              <p>OpenPond and Claude Code can consult a qualified specialist. OpenCode and Codex CLI currently support capture.</p>
-              <p>Capture is opt-in. Training and learned specialist activation require reviewed evidence and separate qualification.</p>
+              <p>
+                Capture tool errors from OpenPond, Claude Code, OpenCode, or Codex CLI into your
+                private Fix-it dataset, then review the saved examples.
+              </p>
+              <p>
+                OpenPond and Claude Code can consult a qualified specialist. OpenCode and Codex CLI
+                currently support capture.
+              </p>
+              <p>
+                Capture is opt-in. Training and learned specialist activation require reviewed
+                evidence and separate qualification.
+              </p>
             </div>
-            <a className="training-button secondary" href={toolLearningUrl} target="_blank" rel="noreferrer">
+            <a
+              className="training-button secondary"
+              href={toolLearningUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
               Set up tool learning
             </a>
           </div>
         </section>
       ) : null}
-      {connection && modelProject?.hosted && currentRun?.hostedJobId ? <ModelTrainingJourney
-        key={`${modelProject.hosted.projectId}:${currentRun.hostedJobId}`}
-        connection={connection} teamId={modelProject.hosted.teamId} projectId={modelProject.hosted.projectId}
-        jobId={currentRun.hostedJobId} onOpenRun={() => onOpenRun(currentRun.key)}
-        initialStatus={currentRun.status}
-      /> : null}
+      {connection && modelProject?.hosted && currentRun?.hostedJobId ? (
+        <ModelTrainingJourney
+          key={`${modelProject.hosted.projectId}:${currentRun.hostedJobId}`}
+          connection={connection}
+          teamId={modelProject.hosted.teamId}
+          projectId={modelProject.hosted.projectId}
+          jobId={currentRun.hostedJobId}
+          onOpenRun={() => onOpenRun(currentRun.key)}
+          initialStatus={currentRun.status}
+        />
+      ) : null}
       <LabProjectMetricCharts runs={modelRuns} />
       <LabContinualLearningSeries
         modelProjectId={modelProject?.id ?? null}

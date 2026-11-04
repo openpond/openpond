@@ -2,6 +2,35 @@
 import { z } from 'zod';
 import { writeFile, mkdir, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import * as alphaedit from '../../../packages/sdk/src/alphaedit.ts';
+import * as alphaeditArtifact from '../../../packages/sdk/src/alphaedit-artifact.ts';
+import * as alphaeditDraft from '../../../packages/sdk/src/alphaedit-experiment-draft.ts';
+import * as alphaeditExecutions from '../../../packages/sdk/src/managed-alphaedit-executions.ts';
+import * as alphaeditServing from '../../../packages/sdk/src/alphaedit-model-serving.ts';
+import * as neuronTraining from '../../../packages/sdk/src/neuron-training.ts';
+import * as neuronTrainingArtifact from '../../../packages/sdk/src/neuron-training-artifact.ts';
+import * as neuronTrainingResult from '../../../packages/sdk/src/neuron-training-result.ts';
+import * as neuronTrainingDraft from '../../../packages/sdk/src/neuron-training-experiment-draft.ts';
+import * as neuronTrainingExecutions from '../../../packages/sdk/src/managed-neuron-training-executions.ts';
+import * as neuronTrainingServing from '../../../packages/sdk/src/neuron-training-model-serving.ts';
+import * as weightModels from '../../../packages/sdk/src/weight-model-versions.ts';
+import * as weightInference from '../../../packages/sdk/src/weight-inference.ts';
+import * as engramAdapter from '../../../packages/sdk/src/engram-adapter.ts';
+import * as engramDraft from '../../../packages/sdk/src/engram-experiment-draft.ts';
+import * as engramExecutions from '../../../packages/sdk/src/managed-engram-executions.ts';
+import * as engramInference from '../../../packages/sdk/src/engram-inference.ts';
+import * as engramModels from '../../../packages/sdk/src/engram-model-version.ts';
+import * as engramServing from '../../../packages/sdk/src/engram-model-serving.ts';
+import * as decisionModel from '../../../packages/sdk/src/decision-model.ts';
+import * as decisionData from '../../../packages/sdk/src/decision-model-data.ts';
+import * as decisionArtifact from '../../../packages/sdk/src/decision-model-artifact.ts';
+import * as decisionTraining from '../../../packages/sdk/src/decision-model-training.ts';
+import * as decisionDraft from '../../../packages/sdk/src/decision-experiment-draft.ts';
+import * as decisionAuthoring from '../../../packages/sdk/src/decision-experiment-authoring.ts';
+import * as decisionExecutions from '../../../packages/sdk/src/managed-decision-executions.ts';
+import * as decisionModels from '../../../packages/sdk/src/decision-model-version.ts';
+import * as decisionScoring from '../../../packages/sdk/src/decision-model-scoring.ts';
+import * as decisionServing from '../../../packages/sdk/src/decision-model-serving.ts';
 import * as evaluation from '../../../packages/sdk/src/training-evaluation-results.ts';
 import * as datasetPreparation from '../../../packages/sdk/src/dataset-preparation-contracts.ts';
 import * as datasetOperations from '../../../packages/sdk/src/dataset-workspace-operations.ts';
@@ -12,11 +41,36 @@ import * as harnessClient from '../../../packages/sdk/src/training-harness-sourc
 import * as credentials from '../../../packages/sdk/src/learning-credentials.ts';
 import * as learningIndex from '../../../packages/evals/src/learning/index.ts';
 import * as training from '../../../packages/sdk/src/training.ts';
+import * as trainingContracts from '../../../packages/sdk/src/training-job-contracts.ts';
+import * as trainingResult from '../../../packages/sdk/src/training-result.ts';
+import * as trainingModelSave from '../../../packages/sdk/src/training-model-save.ts';
+import * as trainingModelServing from '../../../packages/sdk/src/training-model-serving.ts';
+import * as trainingModelServingControl from '../../../packages/sdk/src/training-model-serving-control.ts';
+import * as managedServingUsage from '../../../packages/sdk/src/managed-serving-usage.ts';
+import * as trainingUsageFunding from '../../../packages/sdk/src/training-usage-funding.ts';
+import * as trainingUsageStatus from '../../../packages/sdk/src/training-usage-status.ts';
+import * as neuronSteering from '../../../packages/sdk/src/neuron-steering.ts';
+import * as steeringSelection from '../../../packages/sdk/src/steering-model-selection.ts';
+import * as steeringServing from '../../../packages/sdk/src/steering-model-serving.ts';
+import * as steeringInference from '../../../packages/sdk/src/steering-inference.ts';
+import * as residualCalibration from '../../../packages/sdk/src/neuron-residual-calibration.ts';
+import * as calibrationRecords from '../../../packages/sdk/src/neuron-calibration-records.ts';
+import * as activationReference from '../../../packages/sdk/src/activation-reference.ts';
 import * as preparation from '../../../packages/sdk/src/training-preparations.ts';
+import * as experimentSetup from '../../../packages/sdk/src/training-experiment-setup.ts';
+import * as evaluationDrafts from '../../../packages/sdk/src/evaluation-experiment-draft.ts';
+import * as hostedEvaluationDrafts from '../../../packages/sdk/src/hosted-evaluation-experiment-draft.ts';
+import * as activationDrafts from '../../../packages/sdk/src/activation-experiment-draft.ts';
+import * as modificationCapabilities from '../../../packages/sdk/src/model-modification-capabilities.ts';
+import * as modificationRecordings from '../../../packages/sdk/src/modification-recordings.ts';
+import * as experimentDraftStorage from '../../../packages/sdk/src/experiment-draft-storage.ts';
 import * as models from '../../../packages/sdk/src/model-projects.ts';
 import * as learning from '../../../packages/evals/src/learning/contracts.ts';
 import * as datasets from '../../../packages/sdk/src/dataset-workspace-contracts.ts';
 import * as estimates from '../../../packages/sdk/src/training-estimates.ts';
+import * as funding from '../../../packages/sdk/src/training-funding.ts';
+import * as hardwareCatalog from '../../../packages/sdk/src/training-hardware-catalog.ts';
+import * as computeSelection from '../../../packages/sdk/src/training-compute-selection.ts';
 import * as postTraining from '../../../packages/sdk/src/post-training.ts';
 import * as candidate from '../../../packages/sdk/src/training-candidate-decisions.ts';
 import * as acceptance from '../../../packages/sdk/src/training-acceptance.ts';
@@ -44,7 +98,7 @@ const override=({zodSchema,jsonSchema}:any)=>{
  });
  jsonSchema['x-openpond-string-transforms']=transforms;
 };
-for(const module of [training,preparation,models,learning,datasets,estimates,postTraining,candidate,acceptance,recovery,evaluation,datasetPreparation,datasetOperations,tasksetRuns,harness,credentials,learningIndex,learningClient,harnessClient,toolLearning,toolLearningClient,toolLearningResponses,toolLearningEpisodes]){
+for(const module of [alphaedit,alphaeditArtifact,alphaeditDraft,alphaeditExecutions,alphaeditServing,neuronTraining,neuronTrainingArtifact,neuronTrainingResult,neuronTrainingDraft,neuronTrainingExecutions,neuronTrainingServing,weightModels,weightInference,engramAdapter,engramDraft,engramExecutions,engramInference,engramModels,engramServing,decisionModel,decisionData,decisionArtifact,decisionTraining,decisionDraft,decisionAuthoring,decisionExecutions,decisionModels,decisionScoring,decisionServing,training,trainingContracts,trainingResult,trainingModelSave,trainingModelServing,trainingModelServingControl,managedServingUsage,trainingUsageFunding,trainingUsageStatus,neuronSteering,steeringSelection,steeringServing,steeringInference,residualCalibration,calibrationRecords,activationReference,funding,hardwareCatalog,computeSelection,preparation,experimentSetup,evaluationDrafts,hostedEvaluationDrafts,activationDrafts,modificationCapabilities,modificationRecordings,experimentDraftStorage,models,learning,datasets,estimates,postTraining,candidate,acceptance,recovery,evaluation,datasetPreparation,datasetOperations,tasksetRuns,harness,credentials,learningIndex,learningClient,harnessClient,toolLearning,toolLearningClient,toolLearningResponses,toolLearningEpisodes]){
  for(const [name,value] of Object.entries(module)){
   if(!name.endsWith('Schema')||!(value instanceof z.ZodType))continue;
   const schema=z.toJSONSchema(value,{target:'draft-2020-12',io:'output',override});
@@ -91,7 +145,8 @@ await mkdir(root,{recursive:true});
 const generator=await readFile(import.meta.url.startsWith('file:')?new URL(import.meta.url):import.meta.url,'utf8');
 const sourcePaths=[...generator.matchAll(/from '(\.\.\/\.\.\/\.\.\/packages\/[^']+)'/g)].map(match=>match[1]!);
 const sourceFiles=Object.fromEntries(await Promise.all([...new Set(sourcePaths)].sort().map(async path=>[path.replace('../../../',''),createHash('sha256').update(await readFile(new URL(path,import.meta.url))).digest('hex')])));
-const provenance={sourceBase:'0bf7b6be48ae1d3a94f1266d41c695c992d05b48',candidateSdkVersion:'0.12.12',pythonVersion:'0.1.2',sourceFiles};
+const sdkMetadata=JSON.parse(await readFile(new URL('../../../packages/sdk/package.json',import.meta.url),'utf8'));
+const provenance={sourceBase:'0bf7b6be48ae1d3a94f1266d41c695c992d05b48',candidateSdkVersion:sdkMetadata.version,pythonVersion:'0.1.2',sourceFiles};
 // Lossless transport interning only: expand before interpreting any JSON Schema.
 // Every source object is a reference, so source keys cannot collide with tags.
 // Child-first references preserve root-local $refs and original property order.

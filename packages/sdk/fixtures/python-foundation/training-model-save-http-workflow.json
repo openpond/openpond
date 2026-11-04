@@ -1,0 +1,302 @@
+{
+  "command": {
+    "jobId": "job-fixture",
+    "request": {
+      "schemaVersion": "openpond.trainingResultSave.v1",
+      "teamId": "team-fixture",
+      "operationId": "save-fixture",
+      "name": "Saved specialist",
+      "expectedModelRevision": 3,
+      "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+      "artifact": {
+        "id": "artifact-fixture",
+        "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "checkpointId": "checkpoint-fixture"
+    }
+  },
+  "receipt": {
+    "schemaVersion": "openpond.trainingResultSaveReceipt.v1",
+    "teamId": "team-fixture",
+    "actorId": "actor-fixture",
+    "operationId": "save-fixture",
+    "requestHash": "a4c6f8bb9085865f16ccef8d79740488f02984e3b930eed9e9b90999fea5f09d",
+    "model": {
+      "id": "hosted-project-fixture",
+      "teamId": "team-fixture",
+      "portableProjectId": "project-fixture",
+      "name": "Saved specialist",
+      "objective": null,
+      "defaultBaseModel": {
+        "schemaVersion": "openpond.baseModelPreference.v1",
+        "modelId": "model-fixture",
+        "revision": "revision-fixture",
+        "tokenizerRevision": "tokenizer-fixture",
+        "chatTemplateHash": "template-fixture",
+        "modelAssetId": null,
+        "source": "managed"
+      },
+      "defaultDestinationId": null,
+      "trainingSetup": {
+        "tasksetRef": null,
+        "tasksetRelease": null,
+        "harnessRelease": null,
+        "baseModel": {
+          "schemaVersion": "openpond.baseModelPreference.v1",
+          "modelId": "model-fixture",
+          "revision": "revision-fixture",
+          "tokenizerRevision": "tokenizer-fixture",
+          "chatTemplateHash": "template-fixture",
+          "modelAssetId": null,
+          "source": "managed"
+        },
+        "method": "grpo",
+        "destinationId": null,
+        "managedRolloutPlacement": "remote",
+        "managedGpuPlacementObjective": "balanced",
+        "managedGpuRequirement": "any",
+        "runPreset": null,
+        "recipe": {
+          "schemaVersion": "openpond.rftRecipe.v1",
+          "method": "grpo",
+          "parameterization": "lora",
+          "optimizer": {
+            "maximumSteps": 1
+          }
+        },
+        "preferredMaximumSpendUsd": null,
+        "preferredRetentionDays": null
+      },
+      "sourceRevision": 4,
+      "sourceUpdatedAt": "2026-11-01T00:00:00.000Z",
+      "revision": 4,
+      "etag": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "createdAt": "2026-11-01T00:00:00.000Z",
+      "updatedAt": "2026-11-01T00:00:00.000Z"
+    },
+    "version": {
+      "schemaVersion": "openpond.trainingModelVersion.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "portableProjectId": "project-fixture",
+      "jobId": "job-fixture",
+      "request": {
+        "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+        "source": {
+          "modelProject": {
+            "id": "hosted-project-fixture",
+            "portableProjectId": "project-fixture",
+            "revision": 3,
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "harnessRunManifest": {
+            "id": "manifest-fixture",
+            "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "harnessRelease": {
+            "id": "harness-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "taskset": {
+            "id": "taskset-fixture",
+            "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "revision": 2
+          },
+          "tasksetRelease": {
+            "id": "taskset-release-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "evaluation": {
+            "taskset": {
+              "id": "held-out-fixture",
+              "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+              "revision": 1
+            },
+            "dataset": {
+              "id": "evaluation-dataset-fixture",
+              "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+            }
+          },
+          "dataset": {
+            "id": "dataset-fixture",
+            "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          },
+          "evidenceSets": []
+        },
+        "baseModel": {
+          "schemaVersion": "openpond.baseModelPreference.v1",
+          "modelId": "model-fixture",
+          "revision": "revision-fixture",
+          "tokenizerRevision": "tokenizer-fixture",
+          "chatTemplateHash": "template-fixture",
+          "modelAssetId": null,
+          "source": "managed"
+        },
+        "recipe": {
+          "schemaVersion": "openpond.rftRecipe.v1",
+          "method": "grpo",
+          "parameterization": "lora",
+          "optimizer": {
+            "maximumSteps": 1
+          }
+        }
+      },
+      "candidate": {
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture",
+        "composition": "base",
+        "parent": null
+      },
+      "executionReceipt": {
+        "id": "receipt-fixture",
+        "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+      },
+      "createdAt": "2026-11-01T00:00:00.000Z",
+      "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+    },
+    "contentHash": "df57609c448b3d24d0d4803086d403d6904e24558a3dcfa6473f7a9d8658ec35"
+  },
+  "savedModel": {
+    "schemaVersion": "openpond.trainingSavedModel.v1",
+    "teamId": "team-fixture",
+    "model": {
+      "id": "hosted-project-fixture",
+      "teamId": "team-fixture",
+      "portableProjectId": "project-fixture",
+      "name": "Saved specialist",
+      "objective": null,
+      "defaultBaseModel": {
+        "schemaVersion": "openpond.baseModelPreference.v1",
+        "modelId": "model-fixture",
+        "revision": "revision-fixture",
+        "tokenizerRevision": "tokenizer-fixture",
+        "chatTemplateHash": "template-fixture",
+        "modelAssetId": null,
+        "source": "managed"
+      },
+      "defaultDestinationId": null,
+      "trainingSetup": {
+        "tasksetRef": null,
+        "tasksetRelease": null,
+        "harnessRelease": null,
+        "baseModel": {
+          "schemaVersion": "openpond.baseModelPreference.v1",
+          "modelId": "model-fixture",
+          "revision": "revision-fixture",
+          "tokenizerRevision": "tokenizer-fixture",
+          "chatTemplateHash": "template-fixture",
+          "modelAssetId": null,
+          "source": "managed"
+        },
+        "method": "grpo",
+        "destinationId": null,
+        "managedRolloutPlacement": "remote",
+        "managedGpuPlacementObjective": "balanced",
+        "managedGpuRequirement": "any",
+        "runPreset": null,
+        "recipe": {
+          "schemaVersion": "openpond.rftRecipe.v1",
+          "method": "grpo",
+          "parameterization": "lora",
+          "optimizer": {
+            "maximumSteps": 1
+          }
+        },
+        "preferredMaximumSpendUsd": null,
+        "preferredRetentionDays": null
+      },
+      "sourceRevision": 4,
+      "sourceUpdatedAt": "2026-11-01T00:00:00.000Z",
+      "revision": 4,
+      "etag": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "createdAt": "2026-11-01T00:00:00.000Z",
+      "updatedAt": "2026-11-01T00:00:00.000Z"
+    },
+    "version": {
+      "schemaVersion": "openpond.trainingModelVersion.v1",
+      "teamId": "team-fixture",
+      "modelProjectId": "hosted-project-fixture",
+      "portableProjectId": "project-fixture",
+      "jobId": "job-fixture",
+      "request": {
+        "submissionHash": "8c6dd386807805af6f5fae5969b1562c2788f85dd5724ae654316342959bb83b",
+        "source": {
+          "modelProject": {
+            "id": "hosted-project-fixture",
+            "portableProjectId": "project-fixture",
+            "revision": 3,
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "harnessRunManifest": {
+            "id": "manifest-fixture",
+            "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "harnessRelease": {
+            "id": "harness-fixture",
+            "contentHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "taskset": {
+            "id": "taskset-fixture",
+            "contentHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "revision": 2
+          },
+          "tasksetRelease": {
+            "id": "taskset-release-fixture",
+            "contentHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "evaluation": {
+            "taskset": {
+              "id": "held-out-fixture",
+              "contentHash": "6666666666666666666666666666666666666666666666666666666666666666",
+              "revision": 1
+            },
+            "dataset": {
+              "id": "evaluation-dataset-fixture",
+              "contentHash": "7777777777777777777777777777777777777777777777777777777777777777"
+            }
+          },
+          "dataset": {
+            "id": "dataset-fixture",
+            "contentHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          },
+          "evidenceSets": []
+        },
+        "baseModel": {
+          "schemaVersion": "openpond.baseModelPreference.v1",
+          "modelId": "model-fixture",
+          "revision": "revision-fixture",
+          "tokenizerRevision": "tokenizer-fixture",
+          "chatTemplateHash": "template-fixture",
+          "modelAssetId": null,
+          "source": "managed"
+        },
+        "recipe": {
+          "schemaVersion": "openpond.rftRecipe.v1",
+          "method": "grpo",
+          "parameterization": "lora",
+          "optimizer": {
+            "maximumSteps": 1
+          }
+        }
+      },
+      "candidate": {
+        "artifact": {
+          "id": "artifact-fixture",
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "checkpointId": "checkpoint-fixture",
+        "composition": "base",
+        "parent": null
+      },
+      "executionReceipt": {
+        "id": "receipt-fixture",
+        "contentHash": "b8fb1cde134dedfb9f19127fef08154ef65f033d4a7b53e80774ade094b8320b"
+      },
+      "createdAt": "2026-11-01T00:00:00.000Z",
+      "contentHash": "36d05bf73fa0baec4244ca473774048de156d5be33cd2b51fff0d9592485593d"
+    }
+  }
+}

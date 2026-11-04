@@ -1,5 +1,55 @@
+export * from "./training-usage-funding.js";
+export * from "./managed-serving-usage.js";
+export * from "./managed-compute-price.js";
+import { createEngramModelServingClient } from "./engram-model-serving.js";
+export * from "./engram-model-serving.js";
+import { createSteeringProfileClient } from "./steering-profile-publication.js";
+export * from "./steering-profile-publication.js";
+import { createExperimentDraftClient } from "./experiment-draft-storage.js";
+import { createManagedModificationExecutionClient } from "./managed-modification-executions.js";
+import { createManagedEngramExecutionClient } from "./managed-engram-executions.js";
+import { createManagedDecisionExecutionClient } from "./managed-decision-executions.js";
+import { createManagedAlphaEditExecutionClient } from "./managed-alphaedit-executions.js";
+import { createManagedNeuronTrainingExecutionClient } from "./managed-neuron-training-executions.js";
+import { createWeightModelClient } from "./weight-model-versions.js";
+import { createAlphaEditModelServingClient } from "./alphaedit-model-serving.js";
+import { createNeuronTrainingModelServingClient } from "./neuron-training-model-serving.js";
+import { createDecisionModelClient } from "./decision-model-version.js";
+import { createDecisionModelScoringClient } from "./decision-model-scoring.js";
+import { createDecisionModelServingClient } from "./decision-model-serving.js";
+import { createEngramModelClient } from "./engram-model-version.js";
+export * from "./managed-engram-executions.js";
+export * from "./decision-model.js";
+export * from "./decision-model-data.js";
+export * from "./decision-model-artifact.js";
+export * from "./decision-model-training.js";
+export * from "./decision-experiment-draft.js";
+export * from "./decision-experiment-authoring.js";
+export * from "./managed-decision-executions.js";
+export * from "./decision-model-version.js";
+export * from "./decision-model-scoring.js";
+export * from "./decision-model-serving.js";
+export * from "./alphaedit.js";
+export * from "./alphaedit-artifact.js";
+export * from "./alphaedit-experiment-draft.js";
+export * from "./managed-alphaedit-executions.js";
+export * from "./neuron-training.js";
+export * from "./neuron-training-artifact.js";
+export * from "./neuron-training-result.js";
+export * from "./neuron-training-experiment-draft.js";
+export * from "./managed-neuron-training-executions.js";
+export * from "./weight-model-versions.js";
+export * from "./weight-experiment-authoring.js";
+export * from "./weight-inference.js";
+export * from "./alphaedit-model-serving.js";
+export * from "./neuron-training-model-serving.js";
+export * from "./engram-inference.js";
+export * from "./engram-model-version.js";
+export * from "./engram-experiment-authoring.js";
+export * from "./experiment-draft-storage.js";
+import { createTrainingExecutionClient } from "./training-executions.js";
+export { TrainingExecutionSummarySchema, TrainingExecutionPageSchema, TrainingExecutionListQuerySchema, type TrainingExecutionSummary, type TrainingExecutionPage, type TrainingExecutionListQuery } from "./training-executions.js";
 import { createTrainingRequest } from "./training-transport.js";
-import { SftRecipeSchema } from "./training-supervised.js";
 export { SftRecipeSchema, ManagedSftRecipeSchema, type SftRecipe } from "./training-supervised.js";
 export { TrainingApiErrorSchema, OpenPondTrainingApiError } from "./training-transport.js";
 import { createTrainingAcceptanceClient } from "./training-acceptance.js";
@@ -7,7 +57,6 @@ import { createTrainingHardwareClient } from "./training-hardware.js";
 export { HardwareObservationSchema, HardwareFleetSnapshotSchema,
   HardwareAvailabilitySchema, HardwareGpuObservationSchema,
   type HardwareObservation, type HardwareFleetSnapshot, type HardwareObservationQuery } from "./training-hardware.js";
-import { TrainingHandoffOriginSchema } from "./post-training.js";
 import { createPostTrainingClient } from "./post-training.js";
 export {
   TrainingAcceptanceGroupReferenceSchema,
@@ -21,16 +70,52 @@ export {
   type TrainingAcceptanceTarget,
 } from "./training-acceptance.js";
 import { z } from "zod";
-import { TrainingCheckpointRecoveryRequestSchema, TrainingCheckpointRecoveryResourceApprovalSchema } from "./training-recovery.js";
+import { TrainingCheckpointRecoveryRequestSchema } from "./training-recovery.js";
 export { TrainingCheckpointRecoveryRequestSchema, TrainingCheckpointRecoveryResourceApprovalSchema,
   createTrainingCheckpointRecoveryResourceApproval } from "./training-recovery.js";
-import { TrainingPhysicalPlacementSchema } from "./training-physical-placement.js";
 export { TrainingPhysicalPlacementSchema, type TrainingPhysicalPlacement } from "./training-physical-placement.js";
 import { createTrainingPreparationClient } from "./training-preparations.js";
+import { createTrainingExperimentSetupClient } from "./training-experiment-setup.js";
+export {
+  TrainingExperimentSetupRequestSchema, TrainingExperimentSetupReceiptSchema,
+  TrainingExperimentInputsPageSchema, type TrainingExperimentInputsPage,
+  parseAndVerifyTrainingExperimentSetupReceipt, trainingExperimentConfigurationIdentity,
+  type TrainingExperimentSetupRequest, type TrainingExperimentSetupReceipt,
+} from "./training-experiment-setup.js";
 import { createTrainingEstimateClient } from "./training-estimates.js";
-import { TrainingGpuSelectionSchema, TrainingGpuCatalogSchema } from "./training-compute-selection.js";
-export { TrainingGpuCatalogSchema, type TrainingGpuCatalog } from "./training-compute-selection.js";
-import { TrainingQueueStatusSchema } from "./training-queue.js";
+import { createTrainingFundingClient } from "./training-funding.js";
+export * from "./training-funding.js";
+import { createDatasetTrainingReviewClient } from "./dataset-training-review.js";
+import { createTrainingResultClient } from "./training-result.js";
+import { createTrainingModelSaveClient } from "./training-model-save.js";
+import { createTrainingModelServingClient } from "./training-model-serving.js";
+export * from "./training-model-serving.js";
+import { createTrainingModelServingControlClient } from "./training-model-serving-control.js";
+export * from "./training-model-serving-control.js";
+import { createSavedModelServingClient } from "./steering-model-serving.js";
+export * from "./steering-model-serving.js";
+export * from "./steering-inference.js";
+export * from "./neuron-residual-calibration.js";
+import { createNeuronCalibrationClient } from "./neuron-calibration-records.js";
+export * from "./neuron-calibration-records.js";
+export * from "./neuron-steering.js";
+export * from "./activation-result-comparison.js";
+export * from "./activation-reference.js";
+export * from "./engram-adapter.js";
+export * from "./engram-experiment-draft.js";
+import { createModelModificationCapabilitiesClient } from "./model-modification-capabilities.js";
+export * from "./model-modification-capabilities.js";
+import { createModificationRecordingsClient } from "./modification-recordings.js";
+export * from "./modification-recordings.js";
+export * from "./training-model-save.js";
+export * from "./training-result.js";
+export * from "./experiment-result-reference.js";
+export * from "./dataset-training-review.js";
+import { createTrainingGpuCatalogClient } from "./training-compute-selection.js";
+import { createTrainingHardwareCatalogClient } from "./training-hardware-catalog.js";
+export * from "./training-hardware-catalog.js";
+export { TrainingGpuCatalogSchema, TrainingGpuCatalogQuerySchema, TrainingGpuCatalogScopeSchema,
+  parseAndVerifyTrainingGpuCatalog, type TrainingGpuCatalog, type TrainingGpuCatalogQuery, type TrainingGpuCatalogScope } from "./training-compute-selection.js";
 export { TrainingQueueStatusSchema, type TrainingQueueStatus } from "./training-queue.js";
 export {
   TrainingGpuSelectionSchema,
@@ -39,13 +124,17 @@ export {
   TrainingEstimateComponentSchema,
   TrainingEstimateReviewSchema,
   TrainingEstimateSchema,
+  TrainingEstimateWorkloadSchema,
   trainingEstimateSourceIdentity,
   type TrainingGpuSelection,
   type TrainingEstimateRequest,
   type TrainingEstimate,
+  type TrainingEstimateWorkload,
   type TrainingEstimateReview,
 } from "./training-estimates.js";
 export {
+  TrainingPreparationParentSchema,
+  type TrainingPreparationParent,
   TrainingPreparationRequestSchema,
   TrainingPreparationPlanContentSchema,
   TrainingPreparationPlanSchema,
@@ -94,19 +183,8 @@ export {
   type TrainingEvaluationTaskPage,
 } from "./training-evaluation-results.js";
 
-import {
-  ModelProjectBaseModelSchema,
-  ModelProjectImmutableRefSchema,
-  ModelProjectRecipeDocumentSchema,
-  ModelProjectVersionedRefSchema,
-} from "./model-projects.js";
-import {
-  TRAINING_INPUT_ARTIFACT_MAX_BYTES,
-  TRAINING_JOB_SUBMISSION_MAX_BYTES,
-  OpenPondProtocolError,
-  assertCanonicalPayloadSize,
-  canonicalSha256,
-} from "./protocol.js";
+import { ModelProjectImmutableRefSchema } from "./model-projects.js";
+import { OpenPondProtocolError, canonicalSha256 } from "./protocol.js";
 
 export {
   OPENPOND_TRAINING_MEDIA_TYPE,
@@ -122,609 +200,16 @@ export {
   parseBoundedJson,
 } from "./protocol.js";
 
+import {
+  TrainingCapabilitiesSchema, TrainingInputArtifactSchema, TrainingJobSchema, TrainingJobPageSchema,
+  TrainingJobControlRequestSchema, TrainingJobEventSchema, TrainingJobOutputsSchema, TrainingJobLogSchema,
+  parseAndVerifyTrainingInputArtifactUpload, parseAndVerifyTrainingJobSubmission,
+  type TrainingInputArtifactUpload, type TrainingJobSubmission,
+} from "./training-job-contracts.js";
+export * from "./training-job-contracts.js";
+export * from "./training-usage-status.js";
+
 const IdSchema = z.string().trim().min(1).max(500);
-const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
-const TimestampSchema = z.string().datetime({ offset: true });
-
-/**
- * Stages a content-addressed immutable input before Job admission. The payload
- * is deliberately opaque to the transport contract: its declared kind owns
- * the executable schema, while the envelope provides bounded bytes,
- * idempotency, and a stable manifest lookup key.
- */
-export const TrainingInputArtifactUploadSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingInputArtifactUpload.v2"),
-    kind: z.enum(["portable_training_bundle", "reward_model_dataset"]),
-    idempotencyKey: z.string().trim().min(1).max(500),
-    sourceManifest: ModelProjectImmutableRefSchema,
-    payload: z.unknown(),
-    contentHash: HashSchema,
-  })
-  .strict();
-
-export const TrainingInputArtifactSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingInputArtifact.v2"),
-    kind: z.enum(["portable_training_bundle", "reward_model_dataset"]),
-    sourceManifest: ModelProjectImmutableRefSchema,
-    artifactRef: z.string().trim().min(1).max(2_000),
-    contentHash: HashSchema,
-    sizeBytes: z.number().int().positive(),
-    createdAt: TimestampSchema,
-  })
-  .strict();
-
-export async function trainingInputArtifactUploadHash(
-  upload: Omit<TrainingInputArtifactUpload, "contentHash"> | TrainingInputArtifactUpload,
-): Promise<string> {
-  const { contentHash: _contentHash, ...content } = upload as TrainingInputArtifactUpload;
-  return canonicalSha256(content);
-}
-
-export async function parseAndVerifyTrainingInputArtifactUpload(
-  value: unknown,
-): Promise<TrainingInputArtifactUpload> {
-  assertCanonicalPayloadSize(value, TRAINING_INPUT_ARTIFACT_MAX_BYTES, "Training input artifact");
-  const parsed = TrainingInputArtifactUploadSchema.parse(value);
-  const expectedHash = await trainingInputArtifactUploadHash(parsed);
-  if (parsed.contentHash !== expectedHash) {
-    throw new OpenPondProtocolError(
-      "content_hash_mismatch",
-      `Training input artifact contentHash ${parsed.contentHash} does not match ${expectedHash}.`,
-    );
-  }
-  return parsed;
-}
-
-export const TrainingJobKindSchema = z.enum(["reward_model_train", "policy_optimize"]);
-
-export const TrainingJobStateSchema = z.enum([
-  "queued",
-  "admitting",
-  "provisioning",
-  "running",
-  "stopping",
-  "cancelling",
-  "succeeded",
-  "failed",
-  "cancelled",
-]);
-
-export const TrainingCapabilityRequirementSchema = z
-  .object({
-    id: IdSchema,
-    version: z.string().trim().min(1).max(200).nullable().default(null),
-    required: z.boolean().default(true),
-  })
-  .strict();
-
-export const TrainingJobSourceSchema = z
-  .object({
-    origin: TrainingHandoffOriginSchema.optional(),
-    modelProject: z
-      .object({
-        id: IdSchema,
-        portableProjectId: IdSchema,
-        revision: z.number().int().positive(),
-        contentHash: HashSchema,
-      })
-      .strict(),
-    harnessRunManifest: ModelProjectImmutableRefSchema,
-    harnessRelease: ModelProjectImmutableRefSchema,
-    taskset: ModelProjectVersionedRefSchema,
-    tasksetRelease: ModelProjectImmutableRefSchema,
-    evaluation: z
-      .object({
-        taskset: ModelProjectVersionedRefSchema,
-        dataset: ModelProjectImmutableRefSchema,
-      })
-      .strict()
-      .nullable()
-      .optional(),
-    dataset: ModelProjectImmutableRefSchema,
-    evidenceSets: z.array(ModelProjectImmutableRefSchema).max(10_000),
-  })
-  .strict();
-
-export const RewardModelTrainingRequestSchema = z
-  .object({
-    kind: z.literal("reward_model_train"),
-    baseModel: ModelProjectBaseModelSchema,
-    preferenceDatasetRelease: ModelProjectImmutableRefSchema,
-    processorRelease: ModelProjectImmutableRefSchema,
-    recipe: z
-      .object({
-        schemaVersion: z.literal("openpond.rewardModelRecipe.v1"),
-        method: z.literal("reward_model"),
-        parameterization: z.literal("lora_with_scalar_head"),
-      })
-      .catchall(z.unknown()),
-  })
-  .strict();
-
-const DeterministicRewardSourceSchema = z
-  .object({
-    kind: z.literal("deterministic"),
-    grader: ModelProjectImmutableRefSchema,
-    composer: ModelProjectImmutableRefSchema.nullable().default(null),
-  })
-  .strict();
-
-const LearnedRewardSourceSchema = z
-  .object({
-    kind: z.literal("learned_reward"),
-    rewardModelVersion: ModelProjectImmutableRefSchema,
-    qualificationReport: ModelProjectImmutableRefSchema.nullable().default(null),
-    evaluationReferences: z.array(ModelProjectImmutableRefSchema).max(1_000).default([]),
-    scorerArtifact: z
-      .object({
-        artifactRef: z.string().trim().min(1).max(2_000),
-        contentHash: HashSchema,
-        executionReceipt: ModelProjectImmutableRefSchema,
-      })
-      .strict(),
-    processorRelease: ModelProjectImmutableRefSchema,
-    rewardComposerRelease: ModelProjectImmutableRefSchema,
-  })
-  .strict();
-
-export const TrainingQualificationBaseModelSchema = ModelProjectBaseModelSchema.extend({
-  revision: z.string().regex(/^[a-f0-9]{40,64}$/),
-  tokenizerRevision: z.string().regex(/^[a-f0-9]{40,64}$/),
-  chatTemplateHash: HashSchema,
-}).strict();
-
-export const PolicyOptimizationRequestSchema = z
-  .object({
-    kind: z.literal("policy_optimize"),
-    /** Collect and grade one original-learner group without optimizer work. */
-    executionMode: z.literal("qualification").optional(),
-    baseModel: ModelProjectBaseModelSchema,
-    recipe: ModelProjectRecipeDocumentSchema,
-    rewardSource: z.discriminatedUnion("kind", [
-      DeterministicRewardSourceSchema,
-      LearnedRewardSourceSchema,
-    ]),
-    resumeFrom: ModelProjectImmutableRefSchema.nullable().default(null),
-  })
-  .strict()
-  .superRefine((job, context) => {
-    if (job.recipe.method !== "sft") return;
-    const recipe = SftRecipeSchema.safeParse(job.recipe);
-    if (!recipe.success) {
-      context.addIssue({
-        code: "custom",
-        path: ["recipe"],
-        message: "The SFT recipe is incomplete or invalid.",
-      });
-      return;
-    }
-    if (job.executionMode || job.resumeFrom || "continuation" in job.recipe)
-      context.addIssue({
-        code: "custom",
-        message:
-          "Initial managed SFT requires a fresh supervised run without rollout qualification or continuation.",
-      });
-    if (
-      recipe.data.baseModel.id !== job.baseModel.modelId ||
-      recipe.data.baseModel.revision !== job.baseModel.revision ||
-      recipe.data.baseModel.tokenizerRevision !== job.baseModel.tokenizerRevision ||
-      recipe.data.baseModel.chatTemplateHash !== job.baseModel.chatTemplateHash
-    )
-      context.addIssue({
-        code: "custom",
-        path: ["baseModel"],
-        message: "The SFT recipe must pin the exact submitted base and tokenizer.",
-      });
-  });
-
-export const TrainingJobRequestSchema = z.discriminatedUnion("kind", [
-  RewardModelTrainingRequestSchema,
-  PolicyOptimizationRequestSchema,
-]);
-
-export const TrainingJobApprovalSchema = z
-  .object({
-    approvalHash: HashSchema,
-    approvedAt: TimestampSchema,
-    exportApproved: z.boolean(),
-    maximumSpendUsd: z.number().nonnegative(),
-    retentionDays: z.number().int().nonnegative().nullable(),
-    region: z.string().trim().min(1).max(200).nullable().default(null),
-  })
-  .strict();
-
-export const TrainingJobSubmissionSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingJobSubmission.v2"),
-    idempotencyKey: z.string().trim().min(1).max(500),
-    name: z.string().trim().min(1).max(200),
-    source: TrainingJobSourceSchema,
-    job: TrainingJobRequestSchema,
-    requestedCapabilities: z.array(TrainingCapabilityRequirementSchema).max(1_000),
-    placementObjective: z.enum(["fast", "balanced", "economical"]),
-    gpuSelection: TrainingGpuSelectionSchema.optional(),
-    physicalPlacement: TrainingPhysicalPlacementSchema.optional(),
-    budget: z
-      .object({
-        maximumSpendUsd: z.number().nonnegative(),
-        maximumWallSeconds: z.number().int().positive(),
-      })
-      .strict(),
-    approval: TrainingJobApprovalSchema,
-    contentHash: HashSchema,
-  })
-  .strict()
-  .superRefine((submission, context) => {
-    const distributed = (submission.gpuSelection?.gpuCount ?? 1) === 2;
-    const distributedRequirement = submission.requestedCapabilities.some(requirement =>
-      requirement.id === "managed_rl.policy.data_parallel" && requirement.version === "1" && requirement.required);
-    if (distributed !== distributedRequirement) {
-      context.addIssue({ code: "custom", path: ["requestedCapabilities"], message: "Two-GPU training must require managed_rl.policy.data_parallel@1 and bind gpuSelection.gpuCount to 2." });
-    }
-    if (distributed && (submission.job.kind !== "policy_optimize" || submission.job.executionMode ||
-      submission.job.recipe.method !== "grpo" || submission.physicalPlacement)) {
-      context.addIssue({ code: "custom", path: ["gpuSelection"], message: "Two-GPU execution requires exclusive GRPO policy training." });
-    }
-    if (submission.physicalPlacement && (submission.job.kind !== "policy_optimize" ||
-      submission.job.resumeFrom || submission.job.executionMode || submission.job.recipe.continuation !== undefined)) {
-      context.addIssue({ code: "custom", path: ["physicalPlacement"], message: "Reuse-only placement requires fresh-base policy training without continuation." });
-    }
-    if (submission.job.kind === "policy_optimize" && submission.job.executionMode === "qualification") {
-      const job = submission.job;
-      if (!TrainingQualificationBaseModelSchema.safeParse(job.baseModel).success) {
-        context.addIssue({ code: "custom", path: ["job", "baseModel"], message: "Qualification requires immutable model and tokenizer revisions and a SHA-256 chat-template pin." });
-      }
-      if (job.resumeFrom || job.recipe.continuation !== undefined || job.rewardSource.kind !== "deterministic" || job.recipe.method !== "grpo") {
-        context.addIssue({
-          code: "custom", path: ["job"],
-          message: "Qualification requires the original GRPO learner, deterministic reward, and no resume or continuation.",
-        });
-      }
-      if (!submission.requestedCapabilities.some(requirement => requirement.required && requirement.id === "managed_rl.policy.qualification" && requirement.version === "1")) {
-        context.addIssue({
-          code: "custom", path: ["requestedCapabilities"],
-          message: "Qualification must require managed_rl.policy.qualification@1.",
-        });
-      }
-    }
-    if (submission.approval.maximumSpendUsd !== submission.budget.maximumSpendUsd) {
-      context.addIssue({
-        code: "custom",
-        path: ["approval", "maximumSpendUsd"],
-        message: "Approved spend must equal the immutable Job budget.",
-      });
-    }
-  });
-
-export async function trainingJobSubmissionHash(
-  submission: Omit<TrainingJobSubmission, "contentHash"> | TrainingJobSubmission,
-): Promise<string> {
-  const { contentHash: _contentHash, ...content } = submission as TrainingJobSubmission;
-  return canonicalSha256(content);
-}
-
-export async function parseAndVerifyTrainingJobSubmission(
-  value: unknown,
-): Promise<TrainingJobSubmission> {
-  assertCanonicalPayloadSize(value, TRAINING_JOB_SUBMISSION_MAX_BYTES, "Training Job submission");
-  const parsed = TrainingJobSubmissionSchema.parse(value);
-  const expectedHash = await trainingJobSubmissionHash(parsed);
-  if (parsed.contentHash !== expectedHash) {
-    throw new OpenPondProtocolError(
-      "content_hash_mismatch",
-      `Training Job contentHash ${parsed.contentHash} does not match ${expectedHash}.`,
-    );
-  }
-  return parsed;
-}
-
-export const TrainingJobRecoverySchema = z.object({
-  resourceApproval: TrainingCheckpointRecoveryResourceApprovalSchema.optional(),
-  mode: z.literal("evaluation_only").optional(),
-  trainingWorkloadComplete: z.boolean().optional(),
-  sourceJobId: IdSchema,
-  checkpointId: IdSchema,
-  policyVersion: z.number().int().positive(),
-  completedGroups: z.number().int().positive(),
-  optimizerMode: z.literal("continue"),
-}).strict();
-
-export const TrainingJobSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingJob.v2"),
-    id: IdSchema,
-    teamId: IdSchema,
-    kind: TrainingJobKindSchema,
-    executionMode: z.literal("qualification").optional(),
-    recovery: TrainingJobRecoverySchema.optional(),
-    modelProjectId: IdSchema,
-    portableProjectId: IdSchema,
-    sourceProjectRevision: z.number().int().positive(),
-    submissionHash: HashSchema,
-    state: TrainingJobStateSchema,
-    queue: TrainingQueueStatusSchema.optional(),
-    phase: z.string().trim().min(1).max(200),
-    version: z.number().int().nonnegative(),
-    progress: z.number().min(0).max(1),
-    rolloutProgress: z
-      .object({
-        groupsCompleted: z.number().int().nonnegative(),
-        groupsTarget: z.number().int().nonnegative(),
-        optimizerUpdatesApplied: z.number().int().nonnegative(),
-        optimizerUpdatesSkipped: z.number().int().nonnegative(),
-      })
-      .strict(),
-    accruedSpendUsd: z.number().nonnegative(),
-    terminalReason: z.string().trim().min(1).max(5_000).nullable(),
-    createdAt: TimestampSchema,
-    updatedAt: TimestampSchema,
-    completedAt: TimestampSchema.nullable(),
-  })
-  .strict();
-
-export const TrainingJobPageSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingJobPage.v2"),
-    jobs: z.array(TrainingJobSchema).max(1_000),
-    nextCursor: z.string().trim().min(1).max(2_000).nullable(),
-  })
-  .strict();
-
-export const TrainingJobEventSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingJobEvent.v2"),
-    id: IdSchema,
-    jobId: IdSchema,
-    sequence: z.number().int().nonnegative(),
-    type: IdSchema,
-    phase: z.string().trim().min(1).max(200),
-    message: z.string().trim().min(1).max(5_000).nullable(),
-    data: z.record(z.string(), z.unknown()).default({}),
-    createdAt: TimestampSchema,
-  })
-  .strict();
-
-export const TrainingJobLogSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingJobLog.v2"),
-    jobId: IdSchema,
-    sequence: z.number().int().nonnegative(),
-    level: z.enum(["debug", "info", "warning", "error"]),
-    message: z.string().max(20_000),
-    createdAt: TimestampSchema,
-  })
-  .strict();
-
-export const TrainingJobControlRequestSchema = z
-  .object({ expectedVersion: z.number().int().nonnegative() })
-  .strict();
-
-export const TrainingJobOutputSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingJobOutput.v2"),
-    id: IdSchema,
-    jobId: IdSchema,
-    kind: z.enum(["checkpoint", "adapter", "scorer", "metrics", "evaluation", "trace", "receipt"]),
-    artifactRef: z.string().trim().min(1).max(2_000),
-    contentHash: HashSchema,
-    sizeBytes: z.number().int().nonnegative(),
-    metadata: z.record(z.string(), z.unknown()).default({}),
-    createdAt: TimestampSchema,
-  })
-  .strict();
-
-/** Evidence that collection used the pinned original learner and never updated it. */
-export const TrainingQualificationEvidenceSchema = z.object({
-  schemaVersion: z.literal("openpond.trainingQualificationEvidence.v1"),
-  baseModel: TrainingQualificationBaseModelSchema,
-  group: ModelProjectImmutableRefSchema,
-  rolloutReceipts: z.array(ModelProjectImmutableRefSchema).min(1).max(1_000),
-  rewardEvidenceHash: HashSchema,
-  groupsCompleted: z.literal(1),
-  optimizerUpdatesApplied: z.literal(0),
-  optimizerUpdatesSkipped: z.literal(0),
-  trainingStepsCreated: z.literal(0),
-  checkpointsCreated: z.literal(0),
-  artifactsCreated: z.literal(0),
-}).strict().superRefine((evidence, context) => {
-  if (new Set(evidence.rolloutReceipts.map(receipt => receipt.id)).size !== evidence.rolloutReceipts.length) {
-    context.addIssue({ code: "custom", path: ["rolloutReceipts"], message: "Qualification rollout receipt identities must be unique." });
-  }
-});
-
-export const TrainingExecutionReceiptSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingExecutionReceipt.v2"),
-    id: IdSchema,
-    teamId: IdSchema,
-    jobId: IdSchema,
-    submissionHash: HashSchema,
-    manifestHash: HashSchema,
-    recipeHash: HashSchema,
-    capabilityHash: HashSchema,
-    runtimeRelease: ModelProjectImmutableRefSchema,
-    inputs: z.array(ModelProjectImmutableRefSchema).max(10_000),
-    outputs: z.array(ModelProjectImmutableRefSchema).max(10_000),
-    spendUsd: z.number().nonnegative(),
-    durationSeconds: z.number().nonnegative(),
-    cleanupComplete: z.boolean(),
-    qualification: TrainingQualificationEvidenceSchema.optional(),
-    issuer: IdSchema,
-    issuedAt: TimestampSchema,
-    signature: z.string().trim().min(1).max(10_000).nullable(),
-  })
-  .strict();
-
-export async function trainingExecutionReceiptHash(
-  receipt: TrainingExecutionReceipt,
-): Promise<string> {
-  return canonicalSha256(TrainingExecutionReceiptSchema.parse(receipt));
-}
-
-export async function parseAndVerifyTrainingExecutionReceipt(
-  value: unknown,
-  expected: {
-    id: string;
-    contentHash: string;
-    teamId?: string;
-    jobId?: string;
-    requireCleanup?: boolean;
-    qualificationSubmission?: TrainingJobSubmission;
-    outputs?: TrainingJobOutput[];
-  },
-): Promise<TrainingExecutionReceipt> {
-  const receipt = TrainingExecutionReceiptSchema.parse(value);
-  const expectedId = IdSchema.parse(expected.id);
-  const expectedHash = HashSchema.parse(expected.contentHash);
-  const actualHash = await trainingExecutionReceiptHash(receipt);
-  if (receipt.id !== expectedId || actualHash !== expectedHash) {
-    throw new OpenPondProtocolError(
-      "execution_receipt_mismatch",
-      "The execution receipt identity or canonical content hash did not match.",
-    );
-  }
-  if (expected.teamId !== undefined && receipt.teamId !== IdSchema.parse(expected.teamId)) {
-    throw new OpenPondProtocolError(
-      "execution_receipt_team_mismatch",
-      "The execution receipt belongs to a different team.",
-    );
-  }
-  if (expected.jobId !== undefined && receipt.jobId !== IdSchema.parse(expected.jobId)) {
-    throw new OpenPondProtocolError(
-      "execution_receipt_job_mismatch",
-      "The execution receipt belongs to a different Training Job.",
-    );
-  }
-  if ((expected.requireCleanup ?? true) && !receipt.cleanupComplete) {
-    throw new OpenPondProtocolError(
-      "execution_cleanup_incomplete",
-      "The execution receipt does not attest complete terminal cleanup.",
-    );
-  }
-  if (expected.qualificationSubmission) {
-    const submission = await parseAndVerifyTrainingJobSubmission(expected.qualificationSubmission);
-    if (submission.job.kind !== "policy_optimize" || submission.job.executionMode !== "qualification") {
-      throw new OpenPondProtocolError("qualification_submission_required", "Expected an immutable qualification submission.");
-    }
-    await assertTrainingQualificationReceipt(receipt, { submissionHash: submission.contentHash, baseModel: submission.job.baseModel, outputs: expected.outputs });
-  }
-  return receipt;
-}
-
-export async function assertTrainingQualificationReceipt(
-  receipt: TrainingExecutionReceipt,
-  expected: { submissionHash: string; baseModel?: z.infer<typeof ModelProjectBaseModelSchema>; outputs?: TrainingJobOutput[] },
-): Promise<void> {
-  const evidence = TrainingQualificationEvidenceSchema.parse(receipt.qualification);
-  if (receipt.submissionHash !== expected.submissionHash || !receipt.cleanupComplete) {
-    throw new OpenPondProtocolError("qualification_receipt_mismatch", "Qualification must attest the expected submission and complete cleanup.");
-  }
-  if (expected.baseModel && await canonicalSha256(evidence.baseModel) !== await canonicalSha256(expected.baseModel)) {
-    throw new OpenPondProtocolError("qualification_learner_mismatch", "Qualification used a different original learner or tokenizer.");
-  }
-  if (expected.outputs?.some(output => ["checkpoint", "adapter", "scorer"].includes(output.kind))) {
-    throw new OpenPondProtocolError("qualification_updated_artifact", "Qualification must not publish trained artifacts or checkpoints.");
-  }
-}
-
-export const TrainingJobOutputsSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingJobOutputs.v2"),
-    outputs: z.array(TrainingJobOutputSchema).max(10_000),
-    receipt: TrainingExecutionReceiptSchema.nullable(),
-  })
-  .strict();
-
-export const TrainingPolicyLoraCapabilitiesSchema = z.object({
-  workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  envelopeRank: z.number().int().positive().max(256),
-  supportedRanks: z.array(z.number().int().positive().max(256)).max(256),
-  qualification: z.object({ evidenceRef: z.string().min(1), evidenceSha256: HashSchema }).strict().nullable(),
-  continuation: z.object({
-    sharedRequiresSameRank: z.literal(true),
-    mergedRequiresSameRank: z.literal(true),
-    residualAppendRequiresFreeCapacity: z.literal(true),
-    stageOptimizer: z.literal("reset"),
-    interruptedRecoveryOptimizer: z.literal("restore"),
-  }).strict(),
-}).strict().superRefine((value, context) => {
-  if (new Set(value.supportedRanks).size !== value.supportedRanks.length || value.supportedRanks.some(rank => rank > value.envelopeRank))
-    context.addIssue({ code: "custom", path: ["supportedRanks"], message: "Supported ranks must be unique and fit the physical adapter envelope." });
-  if (value.supportedRanks.length && !value.qualification)
-    context.addIssue({ code: "custom", path: ["qualification"], message: "Advertised ranks require immutable image qualification evidence." });
-});
-export type TrainingPolicyLoraCapabilities = z.infer<typeof TrainingPolicyLoraCapabilitiesSchema>;
-
-export function supportsTrainingPolicyLoraRank(capabilities: TrainingPolicyLoraCapabilities, rank: number,
-  continuation?: { mode: "shared" | "sequential_merge" | "residual_append"; parentEnabledRank: number }): boolean {
-  if (!capabilities.supportedRanks.includes(rank)) return false;
-  if (!continuation) return true;
-  return continuation.mode === "residual_append"
-    ? continuation.parentEnabledRank + rank <= capabilities.envelopeRank
-    : continuation.parentEnabledRank === rank;
-}
-
-export const TrainingCapabilitiesSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.trainingCapabilities.v2"),
-    capabilityHash: HashSchema,
-    jobKinds: z.array(TrainingJobKindSchema),
-    methods: z.array(z.string().trim().min(1).max(200)),
-    executionModes: z.array(z.enum(["training", "qualification"])).optional(),
-    policyLora: TrainingPolicyLoraCapabilitiesSchema.optional(),
-    policyDataParallel: z.object({
-      capability: z.literal("managed_rl.policy.data_parallel"),
-      version: z.literal("1"),
-      gpuCount: z.literal(2),
-      worldSize: z.literal(2),
-      backend: z.literal("nccl"),
-      allocationMode: z.literal("exclusive"),
-      workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-    }).strict().optional(),
-    structuredOutputs: z.object({
-      capability: z.literal("work.structured-output.v1"),
-      harnessRuntimeHash: HashSchema,
-      workHarnessHash: HashSchema,
-      schemaHash: HashSchema,
-      artifactHash: HashSchema,
-      invalidDataRejected: z.literal(true),
-      invalidBytesRejected: z.literal(true),
-    }).strict().optional(),
-    placements: z.array(z.enum(["local", "remote", "colocated", "provider_native"])),
-    controls: z
-      .object({
-        cancel: z.boolean(),
-        stopAfterGroup: z.boolean(),
-        resumeFromCheckpoint: z.boolean(),
-      })
-      .strict(),
-    estimates: z.object({ schemaVersion: z.literal("openpond.trainingEstimate.v1") }).strict().optional(),
-    limits: z
-      .object({
-        maximumSpendUsd: z.number().nonnegative(),
-        maximumWallSeconds: z.number().int().positive(),
-        maximumArtifactBytes: z.number().int().positive(),
-      })
-      .strict(),
-    checkedAt: TimestampSchema,
-    expiresAt: TimestampSchema,
-  })
-  .strict();
-
-export type TrainingJobSubmission = z.infer<typeof TrainingJobSubmissionSchema>;
-export type TrainingQualificationEvidence = z.infer<typeof TrainingQualificationEvidenceSchema>;
-export type TrainingInputArtifactUpload = z.infer<typeof TrainingInputArtifactUploadSchema>;
-export type TrainingInputArtifact = z.infer<typeof TrainingInputArtifactSchema>;
-export type TrainingJob = z.infer<typeof TrainingJobSchema>;
-export type TrainingJobPage = z.infer<typeof TrainingJobPageSchema>;
-export type TrainingJobEvent = z.infer<typeof TrainingJobEventSchema>;
-export type TrainingJobLog = z.infer<typeof TrainingJobLogSchema>;
-export type TrainingJobOutput = z.infer<typeof TrainingJobOutputSchema>;
-export type TrainingJobOutputs = z.infer<typeof TrainingJobOutputsSchema>;
-export type TrainingExecutionReceipt = z.infer<typeof TrainingExecutionReceiptSchema>;
-export type TrainingCapabilities = z.infer<typeof TrainingCapabilitiesSchema>;
 
 export function createTrainingClient(input: {
   baseUrl: string;
@@ -736,18 +221,44 @@ export function createTrainingClient(input: {
   return {
     postTraining: createPostTrainingClient({ request }),
     ...createTrainingPreparationClient(request),
+    ...createTrainingExperimentSetupClient(request),
     ...createTrainingEstimateClient(request),
+    ...createTrainingFundingClient(request),
+    ...createDatasetTrainingReviewClient(request),
+    ...createTrainingResultClient(request),
+    ...createTrainingModelSaveClient(request),
+    ...createSteeringProfileClient(request),
+    ...createTrainingModelServingClient(request),
+    ...createTrainingModelServingControlClient(request),
+    ...createSavedModelServingClient(request),
+    ...createEngramModelServingClient(request),
+    ...createNeuronCalibrationClient(request),
     ...createTrainingAcceptanceClient(request),
     ...createTrainingHardwareClient(request),
+    ...createTrainingHardwareCatalogClient(request),
+    ...createTrainingGpuCatalogClient(request),
+    ...createModelModificationCapabilitiesClient(request),
+    ...createModificationRecordingsClient(request),
     ...createTrainingHarnessSourceClient(request),
     ...createTrainingCandidateDecisionClient(request),
+    ...createTrainingExecutionClient(request),
+    ...createExperimentDraftClient(request),
+    ...createManagedModificationExecutionClient(request),
+    ...createManagedEngramExecutionClient(request),
+    ...createManagedDecisionExecutionClient(request),
+    ...createManagedAlphaEditExecutionClient(request),
+    ...createManagedNeuronTrainingExecutionClient(request),
+    ...createWeightModelClient(request),
+    ...createAlphaEditModelServingClient(request),
+    ...createNeuronTrainingModelServingClient(request),
+    ...createDecisionModelClient(request),
+    ...createDecisionModelScoringClient(request),
+    ...createDecisionModelServingClient(request),
+    ...createEngramModelClient(request),
     async capabilities() {
       return TrainingCapabilitiesSchema.parse(
         unwrapObject(await request("/v1/training/capabilities"), "capabilities"),
       );
-    },
-    async gpuCatalog() {
-      return TrainingGpuCatalogSchema.parse(unwrapObject(await request("/v1/training/gpu-catalog"), "catalog"));
     },
     async stageArtifact(upload: TrainingInputArtifactUpload) {
       const parsed = await parseAndVerifyTrainingInputArtifactUpload(upload);
@@ -898,3 +409,17 @@ function unwrapObject(value: unknown, key: string): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
   return key in value ? (value as Record<string, unknown>)[key] : value;
 }
+
+export { ExperimentDraftSchema, parseAndVerifyExperimentDraft, ExperimentOperationTypeSchema, ExperimentStartingModelSchema, parseAndVerifyExperimentStartingModel, experimentOperationLabel, type ExperimentDraft, type ExperimentOperationType, type ExperimentStartingModel } from "./training-experiment-setup.js";
+export * from "./activation-experiment-draft.js";
+
+export { TrainingExperimentFormDraftSchema, ExperimentDraftUpdateSchema, type TrainingExperimentFormDraft, type ExperimentDraftUpdate } from "./training-experiment-setup.js";
+export * from "./evaluation-experiment-draft.js";
+export * from "./managed-modification-executions.js";
+export * from "./activation-form-compiler.js";
+
+export { parseAndVerifyTrainingEstimate } from "./training-estimates.js";
+
+export * from "./steering-experiment-source.js";
+export * from "./steering-experiment-source-verification.js";
+export * from "./steering-experiment-authoring.js";

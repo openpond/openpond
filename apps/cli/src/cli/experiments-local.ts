@@ -6,6 +6,7 @@ import { LocalExperimentComparisonSchema, LocalExperimentRecordSchema } from "@o
 import { RunExperimentSchema } from "openpond-sdk/experiments";
 import { compareExperiments } from "@openpond/evals/experiments";
 import { runLocalProfileExperimentCommand } from "./experiments-profile-local";
+import { runLocalModificationRecordingCommand } from "./experiments-modifications-local";
 
 /** --local selects the running local server, never a hosted Experiment client.
  * The existing capability loader keeps its token out of arguments and output. */
@@ -24,6 +25,7 @@ export async function runLocalExperimentsCommand(options:Record<string,string|bo
     throw new Error("Local Experiments require an HTTP loopback server origin.");
   // Preparation/admission can load a released Work closure before returning an ID.
   const request=await createLocalAuthenticatedRequest(base.origin,{timeoutMs:["prepare-harness","run"].includes(action)?1_200_000:60_000});
+  if (await runLocalModificationRecordingCommand(options, rest, base.origin, request, teamId)) return;
   async function command(action:string,payload:unknown):Promise<Record<string,unknown>> {
     const response=await request(new URL(teamId ? "/v1/local-experiments" : "/v1/chat-experiments",base),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...teamId ? {teamId} : {},...process.env.OPENPOND_CHAT_INVOCATION ? {invocationToken:process.env.OPENPOND_CHAT_INVOCATION} : {},action,payload})});
     const reply=await response.json() as Record<string,unknown>;

@@ -110,6 +110,7 @@ import { MainPanePonder } from "./MainPanePonder";
 import { mainPaneAccountScopeKey } from "./main-pane-account-scope";
 import { RightSidebarHomeActions } from "./RightSidebarHomePanel";
 import { RightSidebarOverview } from "./RightSidebarOverview";
+import { ChatExperimentWorkspaceContext } from "../chat/ChatExperimentWorkspaceContext";
 import { ChatDatasetSidebar } from "../chat/ChatDatasetSidebar";
 import { activeRun } from "../chat/dataset-workspace-data";
 import { useBrowserSidebar } from "../../hooks/useBrowserSidebar";
@@ -367,6 +368,10 @@ export function MainPane({
     bootstrap?.profileLibrary?.lastUsed ??
     null;
   const accountTeamScopeKey = mainPaneAccountScopeKey(bootstrap);
+  const experimentTeamId = bootstrap?.preferences.defaultTeamId ?? null;
+  const experimentActorId = bootstrap?.account.profile?.id ?? null;
+  const experimentWorkspaceScope = useMemo(() => ({ accountKey: accountTeamScopeKey, teamId: experimentTeamId,
+    actorId: experimentActorId }), [accountTeamScopeKey, experimentTeamId, experimentActorId]);
   const trainingLabel = useTrainingSidebarContext({ connection, sessionId: selectedSessionId, accountScope: accountTeamScopeKey,
     active: view === "chat", onOpen: onShowExperimentsPanel });
   const selectedProfileState =
@@ -1508,7 +1513,7 @@ export function MainPane({
     </Suspense>
   );
   return (
-    <ChatContextAccountScope.Provider value={accountTeamScopeKey}><OpenHtmlVisualContext.Provider value={openHtmlVisual}><SelectHtmlResourceContext.Provider value={selectHtmlResource}>
+    <ChatContextAccountScope.Provider value={accountTeamScopeKey}><ChatExperimentWorkspaceContext.Provider value={experimentWorkspaceScope}><OpenHtmlVisualContext.Provider value={openHtmlVisual}><SelectHtmlResourceContext.Provider value={selectHtmlResource}>
     <main tabIndex={-1} data-thread-session={view === "chat" && !ponderMode ? selectedSessionId ?? undefined : undefined}
       className={`main-pane ${viewClass} ${
         terminalOpen ? "terminal-open" : ""
@@ -1929,7 +1934,7 @@ export function MainPane({
         </>
       )}
     </main>
-    </SelectHtmlResourceContext.Provider></OpenHtmlVisualContext.Provider></ChatContextAccountScope.Provider>
+    </SelectHtmlResourceContext.Provider></OpenHtmlVisualContext.Provider></ChatExperimentWorkspaceContext.Provider></ChatContextAccountScope.Provider>
   );
 }
 

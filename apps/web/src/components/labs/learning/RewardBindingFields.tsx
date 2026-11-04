@@ -1,3 +1,4 @@
+import { DropdownSelect } from "../../DropdownSelect";
 import { useState } from "react";
 import { learningRef, type OpenPondLearningClient, type RewardBindingSource, type RewardRelease } from "openpond-sdk/learning";
 import { LearningActions, LearningError, LearningPager } from "./LearningFields";
@@ -9,7 +10,6 @@ export function rewardBindingSource(reward: RewardRelease): RewardBindingSource 
 
 export function RewardBindingFields({ client, sources, onChange }: { client: OpenPondLearningClient | null; sources: RewardBindingSource[]; onChange: (sources: RewardBindingSource[]) => void }) {
   const [after, setAfter] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
   const rewards = useLearningResources(client, "reward", { limit: 30, ...(after ? { afterId: after } : {}) });
   return <section className="learning-binding-fields" aria-label="Reward sources">
     <h3>Reward sources</h3>
@@ -17,8 +17,9 @@ export function RewardBindingFields({ client, sources, onChange }: { client: Ope
     {sources.map((source, index) => <BoundSource key={source.graderId} client={client} source={source} onChange={(next) => onChange(sources.map((item, position) => position === index ? next : item))} onRemove={() => onChange(sources.filter((_, position) => position !== index))} />)}
     <details open={!sources.length}><summary>Add a published Reward</summary>
       <LearningError error={rewards.error} />
-      <label>Filter this page<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-      <div className="learning-actions">{rewards.page?.items.filter((reward) => `${reward.name} ${reward.description}`.toLowerCase().includes(search.toLowerCase())).map((reward) => <button key={reward.id} type="button" className="training-button secondary" disabled={sources.length >= 100} onClick={() => onChange([...sources, rewardBindingSource(reward)])}>{reward.name} · release {reward.revision}</button>)}</div>
+      <label>Published Reward<DropdownSelect label="Add published Reward" floating searchable value="" disabled={sources.length >= 100}
+        options={[{ value: "", label: "Choose a Reward" }, ...(rewards.page?.items ?? []).map(reward => ({ value: reward.contentHash, label: `${reward.name} · release ${reward.revision}` }))]}
+        onChange={value => { const reward = rewards.page?.items.find(item => item.contentHash === value); if (reward) onChange([...sources, rewardBindingSource(reward)]); }} /></label>
       {rewards.loading ? <p role="status">Loading Rewards…</p> : !rewards.page?.items.length ? <p>Publish a Reward in the Rewards library to add it here.</p> : null}
       <LearningPager after={after} next={rewards.page?.nextCursor} onPage={setAfter} />
     </details>
@@ -35,9 +36,9 @@ function BoundSource({ client, source, onChange, onRemove }: { client: OpenPondL
     <legend>{reward?.name ?? source.reward.id} · release {source.reward.revision}</legend>
     <LearningError error={exact.error ?? mutation.error} />
     <div className="learning-binding-grid">
-      <label>Role<select value={source.role} onChange={(event) => patch({ role: event.target.value as RewardBindingSource["role"] })}><option value="training" disabled={reward?.implementation.kind === "human"}>Training</option><option value="evaluation">Evaluation</option></select></label>
+      <label>Role<DropdownSelect label="Reward role" floating value={source.role} onChange={value => patch({ role: value as RewardBindingSource["role"] })} options={[{ value: "training", label: "Training", disabled: reward?.implementation.kind === "human" }, { value: "evaluation", label: "Evaluation" }]} /></label>
       <label>Weight<input type="number" min={0} max={1000} step="any" value={source.weight} onChange={(event) => patch({ weight: Number(event.target.value) })} /></label>
-      <label>Score direction<select value={source.normalization.kind === "identity" ? "higher" : source.normalization.direction} disabled={!reward} onChange={(event) => { if (reward) patch({ normalization: { kind: "linear", ...reward.rawScore, direction: event.target.value as "higher" | "lower" } }); }}><option value="higher">Higher is better</option><option value="lower">Lower is better</option></select><small>{reward ? `Raw scores ${reward.rawScore.minimum}–${reward.rawScore.maximum} become 0–1 before combining.` : "Loading score contract…"}</small></label>
+      <label>Score direction<DropdownSelect label="Score direction" floating value={source.normalization.kind === "identity" ? "higher" : source.normalization.direction} disabled={!reward} onChange={value => { if (reward) patch({ normalization: { kind: "linear", ...reward.rawScore, direction: value as "higher" | "lower" } }); }} options={[{ value: "higher", label: "Higher is better" }, { value: "lower", label: "Lower is better" }]} /><small>{reward ? `Raw scores ${reward.rawScore.minimum}–${reward.rawScore.maximum} become 0–1 before combining.` : "Loading score contract…"}</small></label>
       <label>Exact release<input type="number" min={1} step={1} value={release} onChange={(event) => setRelease(event.target.value)} /><button className="training-button secondary" type="button" disabled={mutation.busy || Number(release) === source.reward.revision} onClick={async () => { const selected = await mutation.run((api) => api.get("reward", source.reward.id, Number(release))); if (selected) { const defaults = rewardBindingSource(selected); patch({ reward: defaults.reward, normalization: defaults.normalization, ...(selected.implementation.kind === "human" ? { role: "evaluation" } : {}) }); } }}>Use release</button></label>
     </div>
     <LearningActions>
