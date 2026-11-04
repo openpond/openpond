@@ -25,6 +25,7 @@ import {
   TrainingPreparationRequestSchema,
   TrainingPreparationControlSchema,
   TrainingExperimentSetupRequestSchema,
+  TrainingExperimentLearningRequestSchema,
   TrainingExperimentInputsPageSchema,
   ExperimentDraftSaveSchema,
   ExperimentDraftArchiveSchema,
@@ -396,6 +397,11 @@ export function createHostedTrainingSetup(input: {
         await fence();
         if (receipt.record.ownerUserId !== input.actorId) throw new Error("The saved draft belongs to another owner.");
         return receipt;
+      }
+      if (action === "save-experiment-learning") {
+        const body = TrainingExperimentLearningRequestSchema.parse(raw);
+        if (body.teamId !== input.teamId) throw new Error("Training workspace changed.");
+        return train.saveExperimentLearning(body);
       }
       if (action === "prepare-draft") {
         const body = TrainingExperimentSetupRequestSchema.parse(raw);

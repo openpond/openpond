@@ -323,6 +323,7 @@ export const HostedTrainingSetupActionSchema = z.enum([
   "list-drafts", "get-draft", "save-draft", "archive-draft",
   "prepare",
   "prepare-draft",
+  "save-experiment-learning",
   "review-dataset",
   "start",
   "cancel",

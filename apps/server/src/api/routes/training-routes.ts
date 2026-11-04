@@ -222,7 +222,7 @@ export async function handleTrainingRoutes({
     return true;
   }
   const trainingSetup =
-    /^\/v1\/training\/setup(?:\/(prepare|prepare-draft|review-dataset|start|cancel|publish|attach|estimate|funding|funding-handoff|hardware-catalog|gpu-catalog|modification-capabilities))?$/.exec(
+    /^\/v1\/training\/setup(?:\/(prepare|prepare-draft|save-experiment-learning|review-dataset|start|cancel|publish|attach|estimate|funding|funding-handoff|hardware-catalog|gpu-catalog|modification-capabilities))?$/.exec(
       requestUrl.pathname,
     );
   if (

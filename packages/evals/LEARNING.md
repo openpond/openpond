@@ -217,6 +217,11 @@ approved-batch methods are SFT, GRPO and PPO with human admission; qualified
 automatic admission and automatic acceptance/serving are rejected until their
 execution paths are implemented.
 
+Hosted SFT continual learning schedules reviewed retraining from the pinned base
+model. An accepted SFT candidate remains review evidence; the next SFT iteration
+does not reuse its adapter or optimizer checkpoint. GRPO retains its accepted
+parent checkpoint selection and the host's continuation qualification checks.
+
 Manual triggers carry a stable `identity`; scheduled triggers carry a concrete
 `scheduledAt`. Equivalent timestamp offsets denote the same fire. A manual
 trigger can use a policy with a saved schedule without editing that policy.

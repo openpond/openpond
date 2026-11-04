@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ModelProjectBaseModelSchema, ModelProjectBaseModelCandidateSchema, ModelProjectVersionedRefSchema, ModelProjectTrainingSetupSchema, ModelProjectRecipeDocumentSchema } from "./model-projects.js";
+import { ModelProjectBaseModelSchema, ModelProjectBaseModelCandidateSchema, ModelProjectVersionedRefSchema, ModelProjectTrainingSetupSchema, ModelProjectRecipeDocumentSchema, HostedModelProjectSummarySchema } from "./model-projects.js";
 import {
   TrainingPreparationRequestSchema,
   TrainingPreparationReceiptSchema,
@@ -14,6 +14,8 @@ import { EngramExperimentFormDraftSchema } from "./engram-experiment-draft.js";
 import { DecisionExperimentFormDraftSchema } from "./decision-experiment-draft.js";
 import { AlphaEditExperimentFormDraftSchema } from "./alphaedit-experiment-draft.js";
 import { NeuronTrainingExperimentFormDraftSchema } from "./neuron-training-experiment-draft.js";
+import { LearningRevisionRefSchema } from "@openpond/evals/learning";
+import { TrainingExperimentLearningIntentSchema } from "./training-experiment-learning-intent.js";
 import { TrainingBillingModesSchema } from "./training-usage-funding.js";
 export * from "./evaluation-experiment-draft.js";
 export * from "./activation-experiment-draft.js";
@@ -32,6 +34,7 @@ export const TrainingExperimentSetupRequestSchema = TrainingPreparationRequestSc
   .omit({ configuration: true, origin: true })
   .extend({
     schemaVersion: z.literal("openpond.trainingExperimentSetupRequest.v1"),
+    configuration: TrainingPreparationRequestSchema.shape.configuration.optional(),
     baseModel: ModelProjectBaseModelSchema,
     settings: ModelProjectTrainingSetupSchema.omit({ baseModel: true }),
   })
@@ -68,15 +71,18 @@ export async function trainingExperimentConfigurationIdentity(
 export async function parseAndVerifyTrainingExperimentSetupReceipt(raw: unknown) {
   const result = TrainingExperimentSetupReceiptSchema.parse(raw);
   const preparation = await parseAndVerifyTrainingPreparationReceipt(result.preparation);
-  const { schemaVersion: _schema, baseModel: _base, settings: _settings, ...run } = result.request;
+  const { schemaVersion: _schema, baseModel: _base, settings: _settings, configuration: selectedConfiguration, ...run } = result.request;
   const { schemaVersion: _preparedSchema, configuration, ...preparedRun } = preparation.plan.request;
   const portableId = await trainingExperimentConfigurationIdentity(result.request, preparation.plan.creatorUserId);
   if (
     result.requestHash !== await canonicalSha256(result.request) ||
     await canonicalSha256(run) !== await canonicalSha256(preparedRun) ||
-    preparation.plan.source.modelProject.portableProjectId !== portableId ||
+    (selectedConfiguration
+      ? configuration.id !== selectedConfiguration.id || configuration.expectedRevision !== selectedConfiguration.expectedRevision || configuration.expectedEtag !== selectedConfiguration.expectedEtag
+      : preparation.plan.source.modelProject.portableProjectId !== portableId) ||
     preparation.plan.source.modelProject.revision !== configuration.expectedRevision ||
-    preparation.plan.source.modelProject.contentHash !== configuration.expectedEtag
+    preparation.plan.source.modelProject.contentHash !== configuration.expectedEtag ||
+    preparation.plan.source.modelProject.id !== configuration.id
   ) throw new OpenPondProtocolError("training_experiment_setup_mismatch", "The prepared experiment does not match its reviewed draft.");
   return { ...result, preparation };
 }
@@ -128,6 +134,13 @@ export const TrainingExperimentFormDraftSchema = z.object({
   gpuSelection: TrainingGpuSelectionSchema.optional(),
   parent: TrainingPreparationRequestSchema.shape.parent,
   startingModelLabel: z.string().trim().min(1).max(500).optional(),
+  learningIntent: TrainingExperimentLearningIntentSchema.optional(),
+  learningConfiguration: z.object({
+    inputHash: z.string().regex(/^[a-f0-9]{64}$/),
+    trainingInputHash: z.string().regex(/^[a-f0-9]{64}$/),
+    configuration: HostedModelProjectSummarySchema,
+    policy: LearningRevisionRefSchema,
+  }).strict().optional(),
 }).strict();
 export type TrainingExperimentFormDraft = z.infer<typeof TrainingExperimentFormDraftSchema>;
 
