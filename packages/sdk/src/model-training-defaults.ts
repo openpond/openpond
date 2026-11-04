@@ -14,8 +14,9 @@ function fields(value: unknown): Record<string, unknown> {
 export function createModelTrainingRecipeDefaults(
   saved?: ModelProjectTrainingSetup["recipe"],
   method: "grpo" | "sft" = saved?.method === "sft" ? "sft" : "grpo",
+  baseModel?: ModelProjectTrainingSetup["baseModel"],
 ): NonNullable<ModelProjectTrainingSetup["recipe"]> {
-  if (method === "sft") return createSupervisedTrainingRecipeDefaults(saved);
+  if (method === "sft") return createSupervisedTrainingRecipeDefaults(saved, baseModel);
   const grpo = saved?.method === "grpo" ? saved : undefined;
   const defaults = {
     schemaVersion: "openpond.rftRecipe.v1", method: "grpo" as const, parameterization: "lora" as const,
@@ -79,7 +80,7 @@ export function prepareModelTrainingDefaults(input: {
       || !base.tokenizerRevision || !base.chatTemplateHash) return setup;
     const training = source.taskset.tasks.filter(task => task.split === "train");
     if (!training.length) return setup;
-    const recipe = createSupervisedTrainingRecipeDefaults(setup.recipe);
+    const recipe = createSupervisedTrainingRecipeDefaults(setup.recipe, base);
     const dataset = fields(recipe.dataset);
     const sameEvaluation = setup.evaluationTasksetRef?.id === setup.tasksetRef?.id
       && setup.evaluationTasksetRef?.contentHash === setup.tasksetRef?.contentHash;

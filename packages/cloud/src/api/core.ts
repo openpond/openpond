@@ -1,3 +1,5 @@
+import { apiClientIdentity } from "./client-context.js";
+
 const DEFAULT_API_TIMEOUT_MS = 30_000;
 const DEFAULT_API_RESPONSE_BYTES = 8 * 1024 * 1024;
 export const LONG_STREAM_API_OPTIONS = { timeoutMs: 15 * 60 * 1000, maxResponseBytes: 64 * 1024 * 1024 } as const;
@@ -52,6 +54,8 @@ export async function apiFetch(
   const { timeoutMs = DEFAULT_API_TIMEOUT_MS, maxResponseBytes = DEFAULT_API_RESPONSE_BYTES, explicitBearerAuth = false, ...init } = options;
   const requestUrl = `${baseUrl}${requestPath}`;
   const headers = new Headers(init.headers);
+  const clientIdentity = apiClientIdentity();
+  if (clientIdentity && !explicitBearerAuth) headers.set("x-openpond-client", clientIdentity);
   headers.set("Content-Type", "application/json");
   const apiKey = !explicitBearerAuth ? process.env.OPENPOND_API_KEY : undefined;
   const trimmedToken = token?.trim() || "";

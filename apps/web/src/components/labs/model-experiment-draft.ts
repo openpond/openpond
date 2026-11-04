@@ -135,7 +135,7 @@ export async function modelExperimentDraft(input: {
   if (!base?.revision || base.source !== "managed")
     throw new Error("Choose an exact managed base Model before preparing hosted training.");
   const method = parent || project.trainingSetup.method === "grpo" ? "grpo" : "sft";
-  const defaults = createModelTrainingRecipeDefaults(project.trainingSetup.recipe, method);
+  const defaults = createModelTrainingRecipeDefaults(project.trainingSetup.recipe, method, base);
   const { continuation: _oldParent, ...recipe } = ModelProjectRecipeDocumentSchema.parse(
     rebindModelTrainingRecipe(defaults),
   );

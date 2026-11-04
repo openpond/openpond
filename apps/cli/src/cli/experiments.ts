@@ -1,3 +1,4 @@
+import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { readFile, stat } from "node:fs/promises";
 import { OpenPondExperimentsClient, ExperimentListQuerySchema, OpenPondExperimentInspectionClient, ExperimentScoringRequestSchema } from "openpond-sdk/experiments";
 import { loadConfig } from "../config";
@@ -13,7 +14,7 @@ export async function runExperimentsCommand(options: Record<string, string | boo
   const teamId = optionString(options, "team");
   if (!teamId || !action || rest.length > (action === "compare" ? 3 : 2)) throw new Error("usage: experiments <defaults|create-comparison|comparison-budget|prepare-harness|run|read|list|status|diagnostics|cancel|duplicate|score|passes|pass|cancel-pass|pass-result|result|compare|case> [id] [candidate-id] --team <id> [--input-file <path>] [--operation-id <id>]");
   const config = await loadConfig();
-  const credentials = { teamId, apiKey: await ensureApiKey(config, resolveBaseUrl(config)),
+  const credentials = { teamId, fetch: hostedCliFetch, apiKey: await ensureApiKey(config, resolveBaseUrl(config)),
     baseUrl: resolveApiBaseUrlOption(options) ?? config.apiBaseUrl ?? DEFAULT_OPENPOND_API_BASE_URL };
   const experiments = new OpenPondExperimentsClient(credentials);
   let result: unknown;
