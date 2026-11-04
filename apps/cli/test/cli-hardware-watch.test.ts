@@ -4,6 +4,7 @@ import { runHardwareObservations } from "../src/cli/training-hardware";
 
 vi.mock("@openpond/runtime", () => ({
   loadOpenPondAccountContext: async () => ({
+    account: { handle: "fixture", apiKey: "opk_private_fixture", apiBaseUrl: "https://api.fixture.test" },
     token: "opk_private_fixture",
     apiBaseUrl: "https://api.fixture.test",
   }),
