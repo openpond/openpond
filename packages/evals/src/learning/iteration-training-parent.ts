@@ -33,7 +33,9 @@ export async function latestAcceptedLearningParent(tx: LearningTransaction, chai
 /** Reservation captures an accepted revision before dispatch or later reviews.
  * Switching the underlying base requires a separately reviewed learning chain. */
 export async function resolveLearningTrainingParent(tx: LearningTransaction, policy: LearningPolicy, selection: AcceptedParent | null) {
-  if (!selection) return { trainingParent: policy.trainingParent, trainingParentSelection: null };
+  // Supervised iterations retrain the reviewed batch from the pinned base.
+  // Accepted SFT candidates remain review evidence, never a GRPO checkpoint handoff.
+  if (!selection || policy.training.method === "sft") return { trainingParent: policy.trainingParent, trainingParentSelection: null };
   const parent = await requireLearningResource(tx, "iteration", selection.iterationId, selection.iterationRevision);
   const sourcePolicy = await requireLearningRelease(tx, "policy", parent.policy);
   if (parent.status !== "accepted" || !parent.candidateVersion || !parent.candidateDecision || !parent.trainingJob

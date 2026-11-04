@@ -340,6 +340,12 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
       teamId, planHash: receipt.plan.contentHash, expectedRevision: receipt.revision,
     })); return;
   }
+  if (action === "hosted-save-experiment-learning") {
+    const { TrainingExperimentLearningRequestSchema } = await import("openpond-sdk/training");
+    const input = TrainingExperimentLearningRequestSchema.parse(await readInput());
+    if (input.teamId !== teamId) throw new Error("Experiment learning input belongs to a different workspace.");
+    print(await client.saveExperimentLearning(input)); return;
+  }
   if (action === "hosted-prepare-experiment") {
     const { TrainingExperimentSetupRequestSchema } = await import("openpond-sdk/training");
     const input = TrainingExperimentSetupRequestSchema.parse(await readInput());

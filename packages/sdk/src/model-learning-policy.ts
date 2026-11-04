@@ -78,8 +78,8 @@ export function createHostedLearningPolicyContent(input: {
   const refs = applyModel ? hostedLearningPolicyReferences(project) : null;
   const method = applyModel ? project.trainingSetup.recipe?.method : previous?.training.method;
   const trigger = settings.trigger ?? (settings.scheduled ? { kind: "schedule" as const, intervalSeconds: settings.intervalSeconds } : { kind: "manual" as const });
-  if (settings.enabled && method !== "grpo") {
-    throw new LearningDomainError("learning_training_method_unsupported", 422, "Hosted continual learning currently supports GRPO.");
+  if (settings.enabled && method !== "grpo" && method !== "sft") {
+    throw new LearningDomainError("learning_training_method_unsupported", 422, "Hosted continual learning supports reviewed SFT and GRPO.");
   }
   return LearningPolicyContentSchema.parse({
     schemaVersion: "openpond.learningPolicy.v1", id: input.policyId, revision: (previous?.revision ?? 0) + 1,

@@ -12,13 +12,16 @@ import { incrementalEmit } from "../../../scripts/build/incremental-emit.ts";
 import { publishBuild, stageEmit } from "../../../scripts/build/publish.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const compilerArg = process.argv.find((arg) => arg.startsWith("--compiler="));
+const compiler = compilerArg?.slice("--compiler=".length) ?? "tsgo";
+if (compiler !== "tsc" && compiler !== "tsgo") throw new Error("Use --compiler=tsc or --compiler=tsgo");
 const dist = path.join(root, "dist");
 const staging = path.join(root, "node_modules", ".cache", `evals-dist-${randomUUID()}`);
 
 await withBuildLock(path.join(root, "node_modules/.cache/build.lock"), async () => {
   await mkdir(staging, { recursive: true });
   try {
-    await stageEmit(await incrementalEmit(root), staging, dist);
+    await stageEmit(await incrementalEmit(root, false, "tsconfig.build.json", compiler), staging, dist);
     const worker = await build({
       entryPoints: [path.join(root, "src/javascript-verifier-worker.ts")],
       bundle: true,

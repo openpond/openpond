@@ -75,6 +75,8 @@ export { TrainingCheckpointRecoveryRequestSchema, TrainingCheckpointRecoveryReso
   createTrainingCheckpointRecoveryResourceApproval } from "./training-recovery.js";
 export { TrainingPhysicalPlacementSchema, type TrainingPhysicalPlacement } from "./training-physical-placement.js";
 import { createTrainingPreparationClient } from "./training-preparations.js";
+import { createTrainingExperimentLearningClient } from "./training-experiment-learning.js";
+export * from "./training-experiment-learning.js";
 import { createTrainingExperimentSetupClient } from "./training-experiment-setup.js";
 export {
   TrainingExperimentSetupRequestSchema, TrainingExperimentSetupReceiptSchema,
@@ -222,6 +224,7 @@ export function createTrainingClient(input: {
     postTraining: createPostTrainingClient({ request }),
     ...createTrainingPreparationClient(request),
     ...createTrainingExperimentSetupClient(request),
+    ...createTrainingExperimentLearningClient(request),
     ...createTrainingEstimateClient(request),
     ...createTrainingFundingClient(request),
     ...createDatasetTrainingReviewClient(request),
