@@ -7,7 +7,7 @@ import { LocalExperimentSourceChoicesSchema } from "@openpond/contracts";
 import { DatasetPopulationPageSchema, type DatasetPopulationPage } from "openpond-sdk/dataset-workspaces";
 import type { WorkspaceApi } from "./workspace-api";
 import type { ModelsRoute } from "../models-route";
-import { DatasetTaskCheckbox, DatasetTaskSelection, useDatasetTaskSelection } from "./DatasetTaskSelection";
+import { DatasetExperimentButton, DatasetTaskCheckbox, DatasetTaskSelection } from "./DatasetTaskSelection";
 import { useEvaluationSetup } from "./EvaluationSetupState";
 import { WorkspacePanel, useWorkspaceActions, useWorkspaceResourceName, useWorkspacePanelControls } from "./WorkspacePanel";
 import { EvaluationTableState } from "./EvaluationTableState";
@@ -63,13 +63,13 @@ export function LocalProfileDatasetPage({
         ),
       ),
   });
-  const select = useWorkspaceActions(
+  useWorkspaceActions(
     [
       ...(source ? [
           {
             id: "experiment",
             label: "Experiment",
-            onSelect: () => setup.openSelection(source.taskset, route),
+            onSelect: () => { void setup.requestSelection(source.taskset, route); },
           },
         ] : []),
       ...(task ? [{ id: "task", label: "Task", onSelect: () => {} }] : []),
@@ -77,7 +77,6 @@ export function LocalProfileDatasetPage({
   );
   useWorkspaceResourceName(source?.name ?? null);
   const release = page.data?.release;
-  useDatasetTaskSelection(release ?? null);
   const tab = route.detailTab ?? "tasks";
   function inspectTask(value: DatasetPopulationPage["items"][number]) {
     setInspection({ scope: taskScope, task: value });
@@ -93,9 +92,7 @@ export function LocalProfileDatasetPage({
     <>
       <header className="evaluation-workspace-header">
         <h1 className="sr-only">{source?.name ?? "Local Dataset"}</h1>
-        <button className="training-button" disabled={!source} onClick={() => select("experiment")}>
-          + Experiment
-        </button>
+        {release ? <DatasetExperimentButton release={release} route={route} /> : null}
       </header>
       <p>
         Released on this computer, {release?.id}, Revision {release?.revision}

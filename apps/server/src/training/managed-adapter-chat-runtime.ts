@@ -1,3 +1,6 @@
+import { isManagedSteeringChatModel, resolveManagedSteeringChat } from "./managed-steering-chat.js";
+import { isManagedEngramChatModel, resolveManagedEngramChat } from "./managed-engram-chat.js";
+import { isManagedWeightChatModel, resolveManagedWeightChat } from "./managed-weight-chat.js";
 import type { HostedChatMessage, HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
 import type { ManagedAdapterServingProjection, ModelBinding } from "@openpond/contracts";
 import { managedAdapterProjectionReady } from "@openpond/contracts";
@@ -49,7 +52,7 @@ export function createManagedAdapterChatRuntime(dependencies: {
     // degraded, or failed. Returning false here would silently route a
     // retired remote route through local inference, bypassing the production
     // gateway, billing, and kill switch.
-    return modelId?.startsWith("managed:") === true || Boolean(await context(modelId));
+    return isManagedWeightChatModel(modelId) || isManagedSteeringChatModel(modelId) || isManagedEngramChatModel(modelId) || modelId?.startsWith("managed:") === true || Boolean(await context(modelId));
   }
 
   async function* stream(input: {
@@ -61,12 +64,54 @@ export function createManagedAdapterChatRuntime(dependencies: {
     temperature?: number;
     tools?: HostedChatTool[];
     toolChoice?: HostedChatToolChoice;
-  }) {
+  } & import("openpond-sdk/training").SteeringInferenceOptions & import("openpond-sdk/training").EngramInferenceOptions) {
     if (input.messages.some((message) => message.images?.length)) {
       throw new Error(
         "The selected trained Model does not support native image review. Use a vision-capable reviewer; the comparison will remain unscorable otherwise.",
       );
     }
+    const options = {
+      ...(input.savedModel === undefined ? {} : {savedModel: input.savedModel}),
+      ...(input.steering === undefined ? {} : {steering: input.steering}),
+    };
+    if (isManagedWeightChatModel(input.modelId)) {
+      if (!input.modelId || input.steering !== undefined || input.engram !== undefined)
+        throw new Error("Select the exact learned-weight Model without an activation or memory override.");
+      const resolved = await resolveManagedWeightChat({store: dependencies.store, modelId: input.modelId,
+        selectedTeamId: await dependencies.resolveSelectedTeamId?.() ?? null,
+        options: input.savedModel === undefined ? {} : {savedModel: input.savedModel}});
+      if (!resolved) throw new Error("The saved learned-weight Model selection is unavailable.");
+      yield* dependencies.client.streamChat({teamId: resolved.teamId, logicalModelName: resolved.logicalModelName,
+        ...resolved.options, weightAdmission: resolved.admission,
+        messages: input.messages, requestId: input.requestId, signal: input.signal,
+        maxNewTokens: input.maxNewTokens, temperature: input.temperature, tools: input.tools, toolChoice: input.toolChoice});
+      return;
+    }
+    if (isManagedEngramChatModel(input.modelId)) {
+      if (!input.modelId || input.steering !== undefined) throw new Error("Select the exact saved memory Model without a steering override.");
+      const resolved = await resolveManagedEngramChat({store: dependencies.store, modelId: input.modelId,
+        selectedTeamId: await dependencies.resolveSelectedTeamId?.() ?? null,
+        options: {...(input.savedModel === undefined ? {} : {savedModel: input.savedModel}), ...(input.engram === undefined ? {} : {engram: input.engram})}});
+      if (!resolved) throw new Error("The saved memory Model selection is unavailable.");
+      yield* dependencies.client.streamChat({teamId: resolved.teamId, logicalModelName: resolved.logicalModelName,
+        ...resolved.options, engramAdmission: resolved.admission,
+        messages: input.messages, requestId: input.requestId, signal: input.signal,
+        maxNewTokens: input.maxNewTokens, temperature: input.temperature, tools: input.tools, toolChoice: input.toolChoice});
+      return;
+    }
+    if (input.engram !== undefined) throw new Error("Memory module options require an exact saved memory Model selection.");
+    if (isManagedSteeringChatModel(input.modelId)) {
+      if (!input.modelId) throw new Error("Select the exact saved steering Model.");
+      const resolved = await resolveManagedSteeringChat({store: dependencies.store, modelId: input.modelId,
+        selectedTeamId: await dependencies.resolveSelectedTeamId?.() ?? null, options});
+      if (!resolved) throw new Error("The saved steering Model selection is unavailable.");
+      yield* dependencies.client.streamChat({teamId: resolved.teamId, logicalModelName: resolved.logicalModelName,
+        ...resolved.options, steeringAdmission: resolved.admission,
+        messages: input.messages, requestId: input.requestId, signal: input.signal,
+        maxNewTokens: input.maxNewTokens, temperature: input.temperature, tools: input.tools, toolChoice: input.toolChoice});
+      return;
+    }
+    if (Object.keys(options).length) throw new Error("Steering options require an exact saved steering Model selection.");
     const selection = managedCatalogSelection(input.modelId);
     if (selection) {
       const selectedTeamId = await dependencies.resolveSelectedTeamId?.();
@@ -82,6 +127,8 @@ export function createManagedAdapterChatRuntime(dependencies: {
       yield* dependencies.client.streamChat({
         teamId: selection.teamId,
         logicalModelName: model.logicalModelName,
+        ...(input.savedModel === undefined ? {} : { savedModel: input.savedModel }),
+        ...(input.steering === undefined ? {} : { steering: input.steering }),
         messages: managedAdapterMessages(input.messages, model.metadata.base_profile_id),
         requestId: input.requestId,
         signal: input.signal,
@@ -103,6 +150,8 @@ export function createManagedAdapterChatRuntime(dependencies: {
     yield* dependencies.client.streamChat({
       teamId,
       logicalModelName: managedBindingLogicalModelName(resolved.binding),
+      ...(input.savedModel === undefined ? {} : { savedModel: input.savedModel }),
+      ...(input.steering === undefined ? {} : { steering: input.steering }),
       messages: managedAdapterMessages(input.messages, resolved.baseModelId),
       requestId: input.requestId,
       signal: input.signal,

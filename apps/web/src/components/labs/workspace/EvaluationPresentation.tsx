@@ -11,8 +11,8 @@ export const evaluationRelativeTime = (value: string) => dayjs(value).isValid() 
 
 export function EvaluationStatus({ status, iconOnly=false }: { status: string; iconOnly?:boolean }) {
   const value = status.toLowerCase();
-  const success = ["completed", "passed", "ready", "published", "scored"].includes(value);
-  const failure = ["failed", "error", "rejected"].includes(value);
+  const success = ["completed", "passed", "ready", "published", "scored", "succeeded"].includes(value);
+  const failure = ["failed", "error", "rejected", "budget_exhausted"].includes(value);
   const progress = ["queued", "running", "cancelling", "checking", "pending"].includes(value);
   const Icon = success ? Check : failure ? X : progress ? LoaderCircle : Circle;
   return <span title={status.replaceAll("_", " ")} aria-label={status.replaceAll("_", " ")} className={`evaluation-status evaluation-status-${success ? "success" : failure ? "error" : progress ? "progress" : "neutral"}`}><Icon size={13} aria-hidden="true" />{iconOnly ? null : status.replaceAll("_", " ")}</span>;

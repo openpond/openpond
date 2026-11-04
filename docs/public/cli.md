@@ -97,3 +97,14 @@ Unknown options are rejected by the selected command schema. Arguments after `--
 The complete package guide lives in [apps/cli/README.md](../../apps/cli/README.md).
 
 See [configuration, storage and recovery](configuration.md) for the shared home, settings, migration and backup commands.
+
+AlphaEdit and selective neuron training use the existing hosted training account:
+`openpond training hosted-alphaedit-capability <query.json> --team-id <id> --json`
+and `hosted-neuron-training-capability` read exact availability. Their
+`hosted-compile-*`, `hosted-prepare-*`, `hosted-start-*`, `hosted-cancel-*`,
+`hosted-*-execution`, `hosted-*-executions`, `hosted-save-*-model`,
+`hosted-*-serving` and `hosted-control-*-serving` commands retain original
+operation, Model version and approval identities. Start and serving activation
+require `--yes`. See [Model modifications](model-modifications.md) for reviewed
+data, exact artifact and retry semantics; use `openpond training --help` for
+complete syntax.

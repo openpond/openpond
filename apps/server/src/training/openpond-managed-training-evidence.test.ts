@@ -20,7 +20,7 @@ describe("managed training evidence projection", () => {
         { type: "rollout_metric", data: { metricKind: "rollout_trajectory", rewardEligible: true, reward: -0.5, inputTokens: 10, outputTokens: 4 } },
         { type: "rollout_metric", data: { metricKind: "rollout_trajectory", rewardEligible: true, reward: 0.5, inputTokens: 12, outputTokens: 5 } },
         { type: "optimizer_metric", data: { adapterDeltaNorm: 0.125 } },
-        { type: "gpu_allocation_state", data: { provider: "runpod", gpuType: "A100", gpuCount: 2, hourlyCostUsd: 1.5 } },
+        { type: "gpu_allocation_state", data: { provider: "fixture_provider", gpuType: "A100", gpuCount: 2, hourlyCostUsd: 1.5 } },
       ] as never,
       outputs: {
         outputs: [

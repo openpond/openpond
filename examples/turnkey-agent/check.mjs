@@ -1,5 +1,5 @@
 // Manual packaged integration check. Fixtures exercise HTTP contracts; this is
-// not evidence of real model inference, Firecracker isolation, or TVC execution.
+// not evidence of real model inference, runtime isolation, or TVC execution.
 // Failure story: an unauthorized caller or wrong-owner sandbox must never cause
 // external execution; a packaged real app-server must preserve that boundary.
 import assert from "node:assert/strict";

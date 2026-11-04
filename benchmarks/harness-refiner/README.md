@@ -101,7 +101,7 @@ the run and remain failed evidence.
 The canonical runner uses OpenPond Desktop's local Work runtime. Every attempt
 gets an isolated managed local directory with the standard
 `/workspace/inputs`, `/workspace/work`, and `/workspace/outputs` contract. It
-does not provision a hosted Sandbox or a Latitude lease. Hosted Taskset
+does not provision a hosted Sandbox or an infrastructure lease. Hosted Taskset
 Evaluation is a separate deployment qualification and is not interchangeable
 benchmark evidence.
 

@@ -2,6 +2,8 @@
 
 Use this guidance when the user asks to create or inspect a dataset, author a grader, run or improve an experiment, train a model, or learn from selected logs. The CLI is the execution interface. Guide the conversation and return useful inline UI through the available host; the app owns persisted resource attachment and the Training picker and resource sidebar.
 
+Before preparing hosted SFT or GRPO, use `training hosted-tasksets --team-id <id> --json` to list authorized Dataset metadata, or `training hosted-tasksets <taskset-id> --team-id <id> --json` to read one exact released reference. Supply its returned `release` for the validation Dataset; the catalog record ID and release ID are different identities. The selected reward binding needs a positive evaluation grader, and validation rows must use the chosen validation split and remain separate from training families. Catalog reads do not start compute.
+
 ## Work from the conversation
 
 Treat ordinary requests such as “check this dataset,” “edit these examples,” or “run this grader” as enough to begin. Resolve the referenced resource from the current conversation and attached experiment, read what you need, and do the requested work. Keep command syntax, executor names, invocation context, and internal IDs out of conversational replies unless they help diagnose an error or the user asks for them. The user does not need to tell you to load this skill or call a particular tool.
@@ -45,7 +47,7 @@ families apart across training and frozen evaluation.
 
 ## Discovery and inline selection
 
-For “list my datasets” or similar discovery, use the scoped CLI. Local discovery uses `"$OPENPOND_CLI_NODE" "$OPENPOND_CLI_ENTRY" datasets list --local --json`; omitting `--local` selects the hosted/team command family. Discovery opens dataset focus without creating an experiment, selecting a returned dataset, or starting compute. Dataset-only focus has no experiment number. The composer’s Training picker selects Experiment or Model. Under Experiment, New experiment… opens a dataset chooser; confirming creates a configuration without compute. The right sidebar holds its inputs, results and training controls. Reuse an existing experiment when the request concerns it. Keep the response bounded and relevant: a short summary usually suffices; a compact selectable table is useful when the user needs to choose among records. Do not attach all discovery results. For a specific dataset, read that resource through the CLI so its canonical reference attaches. Inspect `datasets context --local --json` if the saved selection appears missing, and surface attachment failures instead of claiming selection succeeded.
+For “list my datasets” or similar discovery, use the scoped CLI. Local discovery uses `"$OPENPOND_CLI_NODE" "$OPENPOND_CLI_ENTRY" datasets list --local --json`; omitting `--local` selects the hosted/team command family. Discovery opens dataset focus without creating an experiment, selecting a returned dataset, or starting compute. Dataset-only focus has no experiment number. The composer’s Training picker selects Experiment or Model. Under Experiment, New experiment… opens the shared setup directly. Choose Evaluate, SFT or RL there and fill the relevant inputs; opening setup does not create a chat or start compute. The right sidebar holds its inputs, results and training controls. Reuse an existing experiment when the request concerns it. Keep the response bounded and relevant: a short summary usually suffices; a compact selectable table is useful when the user needs to choose among records. Do not attach all discovery results. For a specific dataset, read that resource through the CLI so its canonical reference attaches. Inspect `datasets context --local --json` if the saved selection appears missing, and surface attachment failures instead of claiming selection succeeded.
 
 For a published OpenPond HTML picker, render Select buttons with `data-openpond-resource-kind="dataset"`, `data-openpond-resource-id="<exact-id>"`, and `data-openpond-resource-revision="<revision>"`; experiments use kind `experiment`. The host validates a real click, selects the resource, collapses the picker with Change, and queues a canonical selection message. Keep this presentation compact and use a saved-record table. Do not add scripts that call APIs or manufacture selection messages.
 
@@ -227,6 +229,40 @@ Do not reauthor an old published dataset to substitute for a newer canonical pac
 
 Use the current CLI's prepare/start/status/watch/artifacts operations for the selected backend. Return retained job/model references and read saved completion state; a submitted job is not a trained model. CLI flags that acknowledge submission do not create user authorization or enlarge a budget.
 
+For a new GRPO stage from a trained version, retain `parent` in the preparation
+JSON: producing `jobId`, exact `artifact` (`id` and `contentHash`), `checkpointId`
+and `adapterMode` (`residual_append`, `shared` or `sequential_merge`). Obtain the
+references from the owned producing Job and its retained outputs, not its name
+or an inference alias. Both ordinary preparation and model-first preparation
+accept this contract when activated by the host. Admission still checks the
+published final checkpoint and qualified runtime/composition. A mode appearing
+in a schema does not establish its availability. New stages reset the optimizer;
+interrupted recovery is separate. Current SFT cannot continue a checkpoint.
+Preserve an unavailable parent and report the reason; never silently start from
+the base instead. Saving a draft with a parent starts no compute.
+
+For model-first manual SFT/GRPO setup, use `training hosted-prepare-experiment
+<draft.json> --team-id <id> --json` when the host supports draft preparation.
+Its input uses `openpond.trainingExperimentSetupRequest.v1`: exact base model,
+method-specific settings, a sealed reviewed batch, stable operation ID, name,
+Project (or null) and maximum spend. The service owns configuration creation;
+do not send the user through New Model first. Retain the request and the full
+returned wrapper receipt. This prepares without starting compute or a recurring
+policy. After reviewing its limits and obtaining the user's execution authority,
+`training hosted-start <receipt.json> --team-id <id> --yes --json` accepts the
+wrapper directly. On a lost preparation reply, reconcile the same operation and
+exact input; changed inputs require a new operation. Never recreate a submitted
+job because its chat attachment failed.
+
+Read a retained preparation with `training hosted-preparation <preparation-id>
+--team-id <id> --json`. Discover preparations with `hosted-preparations`, following
+`nextCursor` through `--cursor`; `--project-id` and `--limit` narrow that read.
+To cancel before a job is submitted, use `training hosted-cancel-preparation
+<receipt.json> --team-id <id> --json` with the exact retained receipt/revision.
+This accepts either the model-first wrapper or the ordinary preparation receipt.
+Once submitted, use the job cancellation operation instead. Reads never start,
+cancel or replay a run.
+
 For learning from logs, resolve the selected sources and the requested recurrence and budget. Inspect `openpond continual` capabilities before promising unattended scheduling; a manifest run is not proof of an enabled background learning policy. Importing or syncing logs alone does not enable training.
 
 ## Chat resource attachment
@@ -255,3 +291,427 @@ The experiment remembers executionLocation (local or cloud), independently of ev
 For independent installation datasets, experiments run --local orchestrates locally; experiments run-cloud --local requests hosted execution through the local app bridge and publishes the required version using the existing owner. Hosted execution supports available OpenPond models, not Codex subscription models. Team/Profile resources have separate capability and ownership rules: inspect those commands and report an unsupported combination instead of moving the resource or guessing a fallback. Merely choosing Hosted does not upload data or run anything.
 
 Train prepares hosted training separately from this evaluation setting. Inspect supported preparation and publishing commands, upload only the required saved assets, and retain the local source and upload lineage.
+
+### Training history in Experiments
+
+`openpond training hosted-executions --team-id <id> --project-id <id> --limit 30 --json` reads the canonical training history with names, method, exact retained model/data references, current state, reported spend and a continuation cursor. Optional `--dataset-hash`, `--search` and `--cursor` filters run before pagination. This is read-only and creates no preparation or Job. Training entries retain their Job IDs and use normal training status/results/cancel commands; they are not graded evaluation manifests. Missing historical references remain unknown. Source support does not establish that a particular hosted release has activated the endpoint.
+
+## Standalone experiment drafts
+
+Use `openpond training hosted-drafts --team-id <id> --json` to find creator-owned
+saved drafts, with `--project-id`, `--search`, `--archived`, `--cursor` and
+`--limit` as needed. Read an exact document with `hosted-draft <id>`.
+`hosted-save-draft <input.json>` accepts the shared ExperimentDraftSave contract:
+workspace, stable operation ID, expected revision, optional Project and typed
+draft. Revision zero creates; editing uses the returned revision. On a lost
+reply, explicitly retry the same operation and request before making another
+edit. Preserve local edits on revision conflict; do not force a newer revision.
+
+`hosted-archive-draft <id> --operation-id <id> --expected-revision <n>` retains the
+document/history. A save against its current archived revision restores it.
+These authoring operations do not require paid-execution confirmation and never
+start training, stage examples or create an immutable experiment run. A returned
+draft is not a run attachment. Use a supplied canonical draft reference, or list
+and read records; do not derive a hosted draft ID from a chat scope or label.
+Normal preparation, funding and explicit start controls still apply to execution.
+
+Training drafts can retain `trainingForm.gpuSelection` with either an automatic
+objective or an exact manual offering and GPU count. Keep that choice when saving,
+reopening or editing a draft; do not replace an unavailable explicit offer with an
+automatic choice. Draft selection is authoring state. Current live eligibility,
+preparation, exact estimate review and funded start remain separate checks.
+
+Saved chat experiment settings use this same standalone draft owner when the host supports it. Chat scopes retain an authorized reference; reopening reads the canonical document instead of treating a chat metadata snapshot as current settings. Saving before the first message creates no chat. Discover a saved draft through the commands above or the host picker; its draft ID is not an execution ID. Preserve the editor's reviewed revision during a save, reconcile the original operation after a lost reply, and do not silently replace newer settings discovered by background refresh.
+
+
+Read `openpond training hosted-hardware-catalog --team-id <id> --json` for versioned hardware specifications and refresh metadata. This catalog stores no prices or stock; `requires_live_workload_check` is a candidate, not execution approval. Use `hosted-gpu-catalog` for current offers and canonical preparation/estimate review before starting work. A listed GPU or its maximum per-Pod count does not establish capacity, supported model size, or runtime compatibility.
+
+
+For a selected model and method, pass `hosted-gpu-catalog workload-query.json --team-id <id> --json`. The query contains `teamId`, exact `modelId`/`modelRevision`/`tokenizerRevision`/`chatTemplateHash`, `method`, `loraRank` and `gpuCount`. It returns the query hash, an opaque provider account scope, Pod/cloud/country/CUDA constraints, short expiry and list-price basis. Unsupported inputs return their reason and no offers. Without a workload query, this command is only an overview. Neither response approves execution; reprepare changed inputs and obtain the current canonical cost review before paid start. Expired, missing-scope or substituted replies fail instead of becoming a selection.
+
+
+For exact estimate review, use `openpond training hosted-estimate <request.json> --team-id <id> --json`.
+The source request may reference a saved preparation, a configuration revision or
+an exact submission. Availability and calibration evidence depend on the configured
+host; a missing route is not a zero-cost estimate. Retain explicit unknowns and keep current hourly rates
+separate from expected totals. A preparation estimate's `review` can be supplied
+to the existing start control; changed inputs, provider context, runtime, expired
+review or increased rate require another review. Estimates do not reserve credit,
+allocate compute or increase the run's approved cap.
+
+The prepaid training policy is implemented in source; hosted qualification is
+pending. On hosts with this policy, new managed training Jobs reserve the full
+approved cap from available included/prepaid credit. Workspace owner or overage
+permissions do not replace credit, and a parent reservation cannot lend postpaid
+funds to a training Job. Preserve the current preparation on a credit denial;
+adding settled credit and retrying the same retained operation is separate from
+creating a new run. An estimate or pending credit purchase is not spendable money.
+
+Timing calibration source can return a `partial` estimate after at least three
+clean matching completed runs. Read the sample counts, unknowns and execution
+planning range together. The range is an observed minimum/maximum, not a confidence
+interval or promised completion time. Current calibration stays within the same
+actor/workspace and exact data, recipe, budget, GPU/count, placement and image;
+it does not scale by model size or reuse another customer's private history.
+Queue wait and costs without complete measured coverage remain unknown.
+A `gpu_allocation` cost component can reprice conserved billable allocation time
+from at least three exact completed runs at the current GPU-plus-disk Pod rate.
+It includes shared allocation weights and GPU count once. Other GPU phase rows
+are included in that aggregate; do not sum another phase charge or multiply by
+GPU count. A numeric GPU component does not establish a whole-run total, a
+minimum charge, available credit or permission to increase the cap.
+
+
+On hosts implementing funding reads, use `openpond training hosted-funding request.json --team-id <id> --json` before requesting paid start. The `openpond.trainingFundingRequest.v1` request includes `teamId`, positive `maximumSpendUsd` and an optional exact saved `draft` reference (`id`, `revision`, `contentHash`, `projectId`). This advisory read checks the whole cap, current holds and member policy without reserving credit. Restricted viewers receive no account balances. Available usage coverage and prepaid wallet dollars are different values; discounts can make their amounts differ.
+
+After saving the exact draft, `hosted-funding-handoff request.json --team-id <id> --json` accepts `openpond.trainingFundingHandoffRequest.v1` with the same workspace/cap and a required draft reference. It returns a grantless Billing link only for current purchase permission. The command does not open a browser, save a card, buy credit, reserve funds or start training. Web sign-in remains separate from CLI authentication. Preserve the original experiment, recheck settled funding and obtain a fresh estimate/review on return; never treat a link, pending payment or a covered preview as admission authority. Hosted deployment and complete UI return qualification remain open.
+
+
+Training-data authoring uses the existing learning owner. Create/publish an exact task format and direct source, submit complete example envelopes or JSONL with stable producer keys, grade/review the actual evidence and targets, then seal a `supervised_training` or `reward_training` batch. Importing is not approval. Use `openpond learning <get|list> <kind> ... --team-id <id>` and `openpond learning command --input-file <path> --team-id <id>` with the existing command schemas; keep operation IDs stable on retries. The SDK's `OpenPondLearningClient` and native Python learning operations expose the same commands.
+
+For model-first experiments, pass the exact sealed batch reference to canonical experiment preparation. Do not create a saved Model merely to select a batch, and do not replace target approval, reward grading, split/family separation or immutable references with a dataset label. The shared UI can open the existing import/review/batch tools inside the retained experiment and select the batch without starting training. Its import editor pins the format release until an explicit release change.
+
+For a retained published Dataset, the new `training hosted-review-dataset <input.json> --team-id <id> --json` command copies selected examples into workspace review. Check installed help and host support first; deployed qualification of this path is pending. The `openpond.datasetTrainingReviewRequest.v1` input requires `teamId`, a stable `operationId`, exact `dataset` release, complete `packageHash`, `purpose` and explicit `shareWithWorkspace: true`. `taskIds` selects exact tasks; null selects the whole release. For an authored Dataset, `datasets read <id> --team <id>` retains its publication release and package hash; SDK consumers can use the exact Taskset package read. Ordinary packages also need an exact saved `rewardBindingRef` and actual task instructions/output schema in `definition` if the package does not retain them. Do not invent a grader or infer an approval contract from expected answers.
+
+Explain workspace sharing before copying personal data. The operation creates a source, task format and unapproved evidence; `targetSource: "expected_output"` or `"approved_parent"` creates supervised target proposals requiring fresh grading/review. It creates no Model, batch, preparation or Job. Retain the receipt after success and retry the identical request after an uncertain response. Continue with the existing learning review and seal commands using its source/evidence references. The original Dataset's splits and family boundaries remain enforced; importing held-out examples does not make them training examples. The shared training-data panel now has a Published Dataset view in source: choose a release, select examples using policy-visible previews, retain its format or choose a workspace format, then explicitly confirm sharing before import. Its verified receipt opens the existing source-filtered review tools. Keep the original request on uncertain retries. Hosted import/review qualification remains pending; local Dataset-review preparation remains unavailable.
+
+For an exact trained result, use `openpond training hosted-result <job-id>
+--team-id <id> --json` with the configured account home. This source addition
+requires a compatible hosted release. It returns original base/settings/data
+references, retained outputs/receipt and the verified final checkpoint when
+available. An unavailable request or unfinished publication is explicit. The
+read does not save a Model or activate serving; a registry artifact ID alone
+is not readiness. Never replace a missing trained checkpoint with its base.
+
+To save a completed trained result, read `training hosted-result` and require
+its retained candidate and current Model revision. Create a command file with
+`jobId` and `request` matching `TrainingResultSaveCommandSchema`. The request
+contains `schemaVersion: "openpond.trainingResultSave.v1"`, workspace `teamId`,
+one stable `operationId`, editable Model `name`, `expectedModelRevision`,
+`submissionHash`, candidate `artifact` and `checkpointId`. Run
+`openpond training hosted-save-model <input.json> --team-id <id> --json`.
+Retry an uncertain response with that original command. This selects the exact
+checkpoint as a version of the producing Model; its name applies to that Model.
+Use `training hosted-saved-model <model-project-id> --team-id <id> --json` to
+read the explicitly saved version. Saving does not activate serving. These
+source additions require a compatible hosted release; deployed lifecycle proof
+remains pending.
+
+
+For a saved Model's serving state, retain its saved version `contentHash` and
+write a JSON input containing `modelProjectId` and `versionHash`. Run
+`openpond training hosted-model-serving <input.json> --team-id <id> --json`.
+This read distinguishes publication/qualification, routing, shared pool consumers
+and historical verified inference. It creates no capacity and stops no routes.
+Active routing does not prove warm GPU residency; a past inference does not
+prove current load, scale-to-zero or completed provider billing. Hosted runtime/lifecycle qualification remains pending; explicit controls are
+described below.
+
+
+To activate a saved Model, read its current serving state and retain a command
+file `{ "modelProjectId": "…", "request": { … } }`. The request uses
+`openpond.trainingModelServingControlRequest.v1`, `teamId`, one `operationId`,
+`versionHash`, the observed registry `artifact`, `expectedRevision` (zero before
+its first serving request), `action: "activate"`, and `idleTimeoutSeconds`
+(60–3600). Run `openpond training hosted-control-model-serving <input.json>
+--team-id <id> --yes --json` only after the user authorizes billed serving.
+For Stop, read fresh state, retain the control's exact version/artifact/revision/
+idle timeout and use a new operation ID with `action: "stop"`; `--yes` is not
+required for Stop. Do not substitute artifact revocation for stopping a Model.
+
+Never mint a new command on a timeout: explicitly retry the original file and
+operation ID, then read serving state. Receipt acceptance is separate from worker
+readiness and physical retirement. Shared consumers, original calls and pending
+settlement can retain capacity after routing stops. Failed allocation cleanup
+must reconcile before replacement capacity. These contracts are implemented in
+source; hosted activation, stop and provider settlement qualification stay open.
+
+Neuron steering and activation inspection have shared draft, compilation and
+managed lifecycle commands, plus an optional local Python numerical reference.
+Managed execution still requires a qualified runtime; current discovery advertises
+none. The source distribution's `examples/activation_reference.py`
+uses a synthetic dense CPU model and separately installed PyTorch; it makes no
+authenticated API call or paid allocation. Its before/after coordinate captures
+and signed/zero-dose checks do not qualify a pretrained checkpoint, adapter,
+quantized runtime, batching or managed serving. Do not translate its result into
+a training Job or claim that a saved profile changes checkpoint weights. Consult
+installed help for actual commands and keep proposed capabilities distinct from
+executable ones.
+
+Their authoring configurations now use ordinary standalone drafts on compatible
+hosts. Use `training hosted-save-draft <input.json> --team-id <id> --json`, then
+`hosted-draft`, `hosted-drafts` or `hosted-archive-draft` with the existing owner,
+expected revision and retained operation-ID semantics. The document's
+`operationType` is `neuron_steering` or `inspect_activations`; `activationForm`
+contains the nullable model preference, stable prompt/coordinate row IDs,
+string-valued editable numbers, dose multipliers, normalization, token scope
+and capture/work/time limits. Use the exported `ActivationExperimentFormDraftSchema`
+or native generated input rather than guessing fields. Keep documents within
+the existing 32 KiB limit and never put tensors/capture payloads in them.
+
+An incomplete saved configuration is not an admitted profile or execution. Do
+not send it to SFT/GRPO preparation or mint a training Job, Dataset or spend cap.
+Hosted steering/inspection Run is still unavailable; saving a draft and installing
+this skill do not establish a worker capability.
+
+Discover activation-runtime support with `openpond training
+hosted-modification-capabilities <input.json> --team-id <id> --json`. Check
+installed help and use the configured account home. The query file contains
+`teamId`, `modelId`, `source` and any known exact `revision`, `tokenizerRevision`,
+`chatTemplateHash` or `modelAssetId`; omit unknown fields. Verify the echoed query,
+workspace/actor, observation hash/expiry and method entry. Current source returns
+`model_not_supported` or `runtime_not_qualified`; it does not advertise an
+executable activation worker. A future ready entry requires exact tensor/runtime
+identity, qualification evidence and resource bounds. Revalidate at admission;
+the read is not a quote, spend approval, reservation or warm-worker receipt.
+Do not replace an unavailable intervention with ordinary inference.
+
+
+For local text-to-request compilation, the native Python SDK provides
+`ponder_sdk.activation_forms.compile_activation_form` with an explicit exact
+model identity and trusted `ActivationFormTokenizer`. Reuse the source example
+rather than inventing token IDs or filling blank numeric controls. This is a local
+Python function, not a CLI command or hosted admission. Fixed calibration artifacts
+must be retained and supplied to the executor as well.
+
+### Local activation observations
+
+Use installed `openpond experiments --help` and the running app's configured
+`--home`/loopback `--server-url`. The official CLI supports:
+
+- `experiments record-modification --local --team <id> --input-file <command.json> --json`
+- `experiments modification <recording-id> --local --team <id> --json`
+- `experiments modifications --local --team <id> [--project <id>] [--search <text>] [--cursor <opaque>] [--limit <1..100>] --json`
+
+The command file is `ModificationRecordingRequestSchema`: schema version
+`openpond.modificationRecordingRequest.v1`, workspace, retained operation ID,
+name, nullable Project, method and exact activation-reference request/result.
+Keep the canonical payload within 8 MiB. A pure inspection has no intervention;
+a steering comparison includes Off and an intervention. Reconcile/retry the
+original command after a lost reply; never change it under the same operation.
+
+These commands retain/read local, immutable, externally supplied observations.
+They verify integrity/coverage and do not attest measurements, infer semantic
+features, assign grades or report provider spend. They never start training,
+reserve credits or activate serving. Account/API-origin and workspace scope are
+enforced by the existing app service. They do not upload captures to a hosted
+endpoint. Do not treat an imported observation as a managed execution receipt.
+
+### Inspect retained managed capture evidence
+
+Use `openpond training hosted-modification-executions --team-id <id> --json` to discover the current creator's canonical execution history, independently of local drafts or browser recovery journals. Optional `--id`, `--project-id`, `--method`, `--phase`, `--limit` and `--cursor` retain the same scope on every page. The metadata list includes immutable execution and plan identity, exact model, current phase and spend cap; it reads no capture artifacts and starts no work. Open a listed execution by its exact ID for verified request and result evidence.
+
+Use `openpond training hosted-modification-execution <execution-id> --team-id <id> --json` for an existing owned execution on a compatible host. This read verifies its exact request and any complete retained activation capture. Report the returned lifecycle phase: a capture can be available while dispatch or cleanup is still active. Do not describe capture availability as completed execution, released GPU capacity or settled billing. This command starts no work. Use the following separate commands only for an explicit managed execution request:
+
+- `training hosted-prepare-modification <input.json> --team-id <id> --json`
+- `training hosted-start-modification <input.json> --team-id <id> --yes --json`
+- `training hosted-cancel-modification <input.json> --team-id <id> --json`
+
+Compare two retained variants with `openpond training hosted-compare-modification
+<execution-id> --team-id <id> --baseline <variant-id> --candidate <variant-id>
+[--prompt <prompt-id>] --json`. Both variant IDs and any prompt must come from
+that exact execution request. Either variant can be a profile, so the same
+command covers Off/profile and profile/dose comparisons. It reads the existing
+canonical execution, verifies retained request/result identity and starts no
+work. The JSON includes original prompt tokens and masks, retained generated IDs,
+coordinate captures and candidate-minus-reference differences. Capture differences
+are unavailable after a causal token-prefix divergence, even when token IDs later
+match again. Missing evidence stays explicit. Dose differences require matching
+model, normalization, token scope and targeted coordinates; they are requested
+doses, not measured quality or a grade. The native Python helper
+`ponder_sdk.activation_comparison.verify_and_compare_activation_reference_result`
+provides the same verified projection for retained bytes, with
+`activation_dose_comparison` for profile doses.
+
+On a compatible host, inspect saved profile Models with
+`training hosted-steering-profiles --team-id <id> --json`,
+`training hosted-steering-profile <profile-id> --team-id <id> --json` and
+`training hosted-model-version <model-project-id> --team-id <id> --json`.
+Use `training hosted-save-steering-model <input.json> --team-id <id> --json`
+only for an explicit Save Model request: its schema binds the exact execution,
+variant, result/profile hashes, retained operation ID and expected Model revision.
+`training hosted-archive-steering-profile <input.json> --team-id <id> --json`
+uses the current profile revision and original retry semantics. Saving or
+archiving a profile does not change checkpoint weights, establish serving
+readiness or authorize paid execution.
+
+Prepare accepts the existing complete activation-reference request, exact model capability query, retained operation ID, name, nullable Project and maximum spend in USD. The host resolves runtime authority; never put capabilities, worker claims, provider identifiers or ledger records in the command. Local tokenization adapters do not establish hosted qualification.
+
+Start and Cancel retain the execution ID, new operation ID, exact preparation `planHash`, `expectedRevision` and action. Start also requires the explicitly approved full `approvedMaximumSpendUsd`; `--yes` authorizes that paid request. Mutation receipts contain immutable public metadata from the original operation, while the separate read returns current state and retained capture. After a lost reply, reconcile the exact original command and operation ID; do not automatically repeat Start with a new operation.
+
+The current server capability reader admits neither Prepare nor Start until both an exact qualified runtime and its production dispatcher are registered. An unavailable response starts no compute. Cancel follows the existing cleanup owner; an issued effect remains owned until positive cleanup and settlement. Public result upload remains unsupported.
+
+`openpond training hosted-compile-modification <input.json> --team-id <id>` compiles bounded raw activation prompts and coordinates using the host’s exact registered tokenizer. Verify the returned form and input hashes before preparation. This read-only CPU operation reserves no funding or GPU and grants no execution authority. It remains unavailable until exact tokenizer assets and a qualified runtime are registered.
+
+## Saved steering Models and original calibration
+
+For saved steering Models, use `training hosted-model-version <model-project-id>` to read the verified version. A new neuron experiment retains its compact version/publication/profile pin. Compile through `hosted-compile-modification`; the server resolves that exact source. Off and the original saved profile remain distinct comparison variants. Editing coordinates replaces the intervention; it does not stack profiles. Other experiment types must not silently drop the saved steering source.
+
+`training hosted-saved-model-serving <selection.json>` reads serving state for `{modelProjectId, versionHash}`. `hosted-control-steering-serving <command.json>` sends `{modelProjectId, request}` with the exact version, CAS revision, operation ID, default publication and idle timeout. Activate requires `--yes`; stopping retains cleanup and outstanding-request evidence. A saved version alone does not prove that a compatible runtime is available.
+
+Use `training hosted-import-calibration <input.json>`, `hosted-calibration <id>`, `hosted-calibrations`, and `hosted-archive-calibration <command.json>` for original fixed-calibration custody. Import takes the full original sealed export plus team, nullable Project, name and operation ID. Archive takes `{id, request}` with the retained export hash and record revision. History is metadata only. Reuse the original operation ID and exact request when reconciling an unknown response. Importing a measured artifact proves its retained bytes and scope; runtime qualification is separate. Never construct a fixed calibration from displayed run scales.
+
+When using the Python dense reference SDK with an already loaded supported model, `executor.calibrate(request)` performs one bounded unsteered forward and returns that original export. This is computation; review its model, token, duration and resource bounds before running it. No CLI custody command starts calibration or rents compute implicitly.
+
+### Engram module training
+
+Use `training hosted-engram-capability <query.json> --team-id <id> --json` before preparing an Engram experiment. A source contract or paper configuration does not establish a qualified training or serving runtime. An unavailable capability is an explicit result; do not substitute SFT, Spark rows, activation steering or a LoRA artifact.
+
+Compile the exact base and reviewed supervised batch with `hosted-compile-engram <input.json>`, then use `hosted-prepare-engram <input.json>`. Retain the returned canonical request, operation ID, plan hash, revision and spend cap. Compilation and preparation do not start training. Only `hosted-start-engram <input.json> --yes` authorizes the prepared paid operation. Status/results use `hosted-engram-execution <execution-id>`; history uses `hosted-engram-executions` with project, phase, cursor and limit filters. Cancel through `hosted-cancel-engram <input.json>` using the original execution and current revision; reconcile unknown outcomes before retrying.
+
+`hosted-save-engram-model <input.json>` saves a verified completed result with its exact result/artifact hashes and Model revision. It does not activate serving or prove improvement. The saved version retains the full learned memory module and exact base. Parent continuation selects an exact committed parent artifact and starts a fresh optimizer; it is not an interrupted optimizer/RNG resume. Training controls are learning rate, weight decay, optimizer steps, gradient accumulation, sequence length, seed, duration and checkpoint-byte bounds. Batch size is one and clipping is fixed by the implementation. Qualification, reload equivalence and held-out behavior remain separate evidence.
+
+When continuing from a saved Engram Model, retain the compact `startingModule` pin (Model ID/version hash, artifact ID/content hash and full base model hash) alongside `parentArtifact`. Compile and prepare must preserve that named source; an artifact reference alone does not preserve which saved Model was selected.
+
+Read exact Engram serving state with `training hosted-saved-model-serving <selection.json> --team-id <id> --json`, where the selection is `{modelProjectId, versionHash}`. Use `training hosted-control-engram-serving <command.json> --team-id <id> [--yes] --json` with `{modelProjectId, request}`. The request has schemaVersion `openpond.engramModelServingControlRequest.v1`, teamId, original operationId, exact versionHash, expectedRevision, action `activate` or `stop`, defaultEnabled and idleTimeoutSeconds (60–3600). Activation requires `--yes`; retain the same operation and request when reconciling a lost acknowledgement. This controls the genuine learned module, without an adapter or checkpoint alias. Read capacity, binding, cleanup and outstanding-request evidence before treating Stop as released; a saved module alone does not establish a qualified runtime.
+
+### Typed decision models
+
+Use `training hosted-decision-capability <query.json> --team-id <id> --json`
+before preparing decision training or scoring. The exact selected release is
+`bespokelabs/Bespoke-Nimble-9B@e93fabce8fcee46e7e8b45e2d955b8a4f0035917`,
+including its own tokenizer and chat template. Its separately pinned frozen
+backbone is the complete Qwen3.5 conditional-generation model. Never substitute
+a dense Qwen3 model, generic chat JSON, sampled answers or partial logprobs.
+Current runtime qualification remains unavailable; a source contract or a
+successful capability read does not authorize execution or prove readiness.
+
+Compile with `hosted-compile-decision <input.json>`. The input has `method:
+"decision_model"`, mode `train` or `score`, workspace, nullable Project, exact
+source query and raw `form`. A train form requires an exact reviewed supervised
+batch reference and raw training settings; the host resolves and reauthorizes
+approved examples/targets. Do not supply unreviewed raw rows as a bypass. A score
+form contains `stateJson`, ordered named questions/choices and bounds, without
+targets or a training batch. Choice, boolean and integer-level questions retain
+their real values. Labels stay outside the model prompt. Compilation grants no
+execution authority.
+
+Retain the returned compiled request and its input/form hashes. Prepare through
+`hosted-prepare-decision <input.json>` with the same mode/query, stable operation
+ID, name, Project, approved spend cap and original `sourceForm` when authored
+through the form. The host resolves the actual qualified runtime. Start only
+the reviewed plan with `hosted-start-decision <input.json> --yes`; its command
+retains the execution ID, operation ID, plan hash, revision and full approved
+cap. Read both modes with `hosted-decision-execution <execution-id>` and discover
+creator-owned history with `hosted-decision-executions`, following every cursor.
+Use `--mode train|score`, `--id`, `--project-id`, `--phase` and `--limit` as needed.
+Cancel through `hosted-cancel-decision <input.json>` and retain custody until
+cleanup/settlement completes. A result alone does not prove capacity release.
+
+`hosted-save-decision-model <input.json>` accepts only a completed training
+result's exact execution/result/artifact hashes, desired name, nullable target
+Model and CAS revision. It preserves the genuine decision adapter and original
+source request, not a fabricated training Job/checkpoint. Read the exact saved
+version with `hosted-model-version <model-project-id> --version-hash <sha256>`;
+omitting that option explicitly requests the current version. Saving does not
+activate serving or establish measured quality.
+
+Read exact serving state with `hosted-decision-serving <selection.json>`, using
+`{modelProjectId, versionHash}`. Control it through
+`hosted-control-decision-serving <command.json>` with `{modelProjectId, request}`.
+The request uses `openpond.decisionModelServingControlRequest.v1`, workspace,
+operation ID, exact version, expected control revision, action `activate` or
+`stop`, and idle timeout 60–3600 seconds. Activate requires `--yes`; Stop does
+not. Respect active/unsettled requests, shared capacity and retained cleanup
+before declaring it released. A `decision:model:<id>` binding is for the typed
+decision scorer and must not be used as a generic chat alias.
+
+For an active saved version, `hosted-score-decision <command.json> --yes` accepts
+`{modelProjectId, request}`. The request uses
+`openpond.decisionModelScoreRequest.v1`, team ID, a stable `requestId`, exact
+`versionHash`, `input: {state, questions}` and explicit prompt-token, forward-work
+and duration limits. There are no targets or Dataset approval requirements for
+this unlabeled inference request. It returns the verified full candidate
+distribution, actual model/artifact/runtime pins and completed receipt. T1
+softmax probabilities are model outputs, not evidence of empirical calibration.
+
+Use the same configured account, workspace, API origin and OpenPond home for
+every operation and reconciliation. Never replace a timed-out mutation with a
+new operation ID; retry the exact original command only after reconciling its
+state. Scoring similarly retains its original `requestId`, Model/version, input
+and bounds. A changed question or bound is a new request. CLI `--yes` records an
+explicit paid action; it does not enlarge the user's authorization or budget.
+
+Decision authoring uses the existing `hosted-save-draft`, `hosted-draft` and
+`hosted-drafts` commands with `operationType: "decision_model"` and raw
+`decisionForm`. To copy settings, read the original draft or retained execution
+`sourceForm`, then save a distinct draft with a new draft/operation ID. Preserve
+the exact base, parent artifact and compact `startingDecision`/starting-model
+pin; do not reconstruct missing authoring from displayed probabilities or
+silently follow the latest Model version. Compile/prepare anew after edits;
+never reuse an old Start approval for copied settings.
+
+Standalone drafts retain the existing 32 KiB settings limit. The separately
+bounded compile/scoring request can accept larger inference state; do not claim
+that every permitted runtime payload fits in a saved draft or hide a failed save.
+
+### AlphaEdit and selective neuron training
+
+Use the existing hosted commands and configured account. Read capability first:
+`training hosted-alphaedit-capability <query.json>` or
+`training hosted-neuron-training-capability <query.json>` with `--team-id` and
+`--json`. An unavailable exact-model runtime is a result, never permission to
+substitute another base, LoRA, or activation steering.
+
+For either method, use `hosted-compile-<method>` and `hosted-prepare-<method>`
+with bounded JSON inputs. Here `<method>` is `alphaedit` or `neuron-training`.
+Compilation resolves reviewed Dataset batches and exact source/model settings;
+preparation returns the immutable execution, plan, revision and spend cap.
+Neither starts paid work. Retain those bytes and the original operation ID.
+`hosted-start-<method> <command.json> --yes` starts only that approved plan.
+Read canonical status and retained results with `hosted-<method>-execution <id>`;
+use `hosted-<method>-executions` for creator-owned history with Project, phase,
+ID and cursor filters. Follow every cursor when listing all records.
+`hosted-cancel-<method> <command.json>` uses the exact execution/plan/current
+revision. On an unknown response, reconcile the original operation before
+issuing another one; never start another optimizer to recover an upload ACK.
+
+AlphaEdit edits use reviewed task input `{subject,promptTemplate}` with exactly
+one `{}` subject placeholder and a string target. Preservation uses reviewed
+`{text}` rows. Approved Dataset instructions remain part of the compiled text.
+The result retains actual BF16 matrix replacements and per-layer covariance,
+projector and sequential state files. A parent must be the exact compatible
+committed AlphaEdit artifact; the next edit uses fresh latent optimization and
+retained sequential state. It does not resume an interrupted optimizer. Latent
+optimization loss is not post-edit quality evidence. Read `comparisons` for
+measured starting/edited/fresh-reload target NLL, preservation next-token KL and
+reload-equivalence diagnostics. These scores use the reviewed inputs, not a
+held-out evaluation set; preserve a recorded false equivalence result.
+
+Selective neuron training uses a reviewed target batch, named reviewed
+background batches and optional reviewed preservation data. Selection preserves
+span/statistic, background ratio, gradient example bound and optional exact
+layer/neuron coordinates. It optimizes selected `down_proj` columns; its saved
+artifact is a true column delta, not a LoRA adapter. A saved neuron patch supports
+serving; new training cannot silently discard it or claim optimizer continuation.
+
+`hosted-save-alphaedit-model` and `hosted-save-neuron-training-model` take the
+completed result/artifact hashes, original save operation and Model CAS revision.
+Saving grants no serving authority. `hosted-alphaedit-serving` and
+`hosted-neuron-training-serving` read `{modelProjectId,versionHash}`. Their
+`hosted-control-<method>-serving` commands take `{modelProjectId,request}` with
+team, operation ID, exact version hash, expected revision, action `activate|stop`
+and idle timeout. Activation requires `--yes`; Stop must retain outstanding
+request, binding, shared-capacity and cleanup evidence until actually settled.
+The installed patch is always the selected weight Model; compare an unmodified
+base as a separate explicit source. Runtime and method-quality qualification are
+separate from retained artifact identity.
+
+Raw settings can be saved using existing `hosted-save-draft`, `hosted-draft` and
+`hosted-drafts`: operation type `alphaedit` uses `alphaEditForm`; operation type
+`selective_neuron_training` uses `neuronTrainingForm`. Keep incomplete fields as
+strings. A named AlphaEdit parent retains both `startingModel.alphaedit` and
+`alphaEditForm.startingModule`, not just its base or tensor artifact.
+
+
+### Reviewed actual-usage funding
+
+- Read `openpond training hosted-capabilities` before choosing billing. `billingModes` reports whether `actual_usage` can reach preparation; an unavailable mode must not replace an existing qualified reserved-budget workflow. Choose the mode before preparing and retain it through recovery. Never switch modes automatically after a rejected review.
+- A compatible training preparation can explicitly request `usageFunding: {"schemaVersion":"openpond.trainingUsageFundingRequest.v1","billingMode":"actual_usage","customerCapUsd":null}`. Null uses eligible credits; a positive canonical six-decimal amount sets the whole-Job limit. It never grants debt.
+- Keep `maximumSpendUsd` as the preparation/compiler safety budget required by the current contract. It is distinct from an actual-usage customer limit; do not present it as the latter.
+- Review returned `plan.usageQuote`: exact training/environment/storage rates, judge prices, startup and retention rules. Retain the whole receipt. `training hosted-start <receipt.json> --yes` carries its exact `usageQuoteHash`; SDK callers must retain that hash explicitly. Preparing or reading a quote does not start work.
+- Serving status may include `usageBilling`. When it is reviewable, approve its exact review with `createManagedServingUsageApproval(review, limit)` and pass the result as `usageApproval` in the normal serving control request. A blank limit uses credits. Inspect unavailable reasons; never manufacture a price or bypass runtime qualification.
+- Omitting serving `usageApproval` preserves an existing token-billed contract. Never add a deployment charge to token usage or silently change an accepted activation's terms.
+- Treat source/schema availability separately from hosted qualification. Physical cutoff, actual debit, output and cleanup still need real acceptance through the normal hosted API. A saved Model or a successful preparation is insufficient proof.
+
+LoRA is the adapter parameterization for both current SFT and GRPO. For a compatible trained GRPO parent, `parent.adapterMode` selects `shared` (update the existing adapter), `residual_append` (freeze the parent and train a stacked adapter), or `sequential_merge` (merge the parent into a derived backbone before training a new adapter). Preserve the exact parent artifact/checkpoint and rank constraints. Current SFT continuation is unavailable; these are continuation choices rather than new method names.

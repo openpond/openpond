@@ -190,7 +190,8 @@
     "mcp:check": "pnpm --dir packages/mcp run check",
     "ponder-sdk:check": "pnpm --dir packages/ponder-sdk run check",
     "ponder-sdk:publish:check": "pnpm --dir packages/ponder-sdk run publish:check",
-    "test:python:sdk": "uv run --project python/openpond-sdk --frozen pytest python/openpond-sdk/tests"
+    "python:sdk:generate": "uv run --no-project python python/openpond-sdk/tools/generate_types.py",
+    "test:python:sdk": "pnpm run python:sdk:generate && uv run --project python/openpond-sdk --frozen pytest python/openpond-sdk/tests"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "1.7.0",

@@ -3,3 +3,7 @@
 __pycache__/
 *.pyc
 dist/
+
+# Recreated from the packaged schema authority before development and builds.
+/src/ponder_sdk/models/
+/src/ponder_sdk/inputs/

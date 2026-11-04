@@ -1,5 +1,6 @@
-import {EvaluationOperationRecoveryPageSchema} from "@openpond/contracts";
-import { createModelProjectsClient } from "openpond-sdk/model-projects";
+import { createTrainingClient, TrainingExecutionListQuerySchema } from "openpond-sdk/training";
+import {EvaluationOperationRecoveryPageSchema,RecoverableEvaluationActionSchema} from "@openpond/contracts";
+import { ModelProjectBaseModelSchema, createModelProjectsClient } from "openpond-sdk/model-projects";
 import { OpenPondToolLearningClient } from "openpond-sdk/tool-learning";
 import {validateReviewedEvaluationIntent,validateReviewedEvaluationCommand} from "./reviewed-evaluation-operation.js";
 import {OpenPondProfileEvaluationDiscoveryClient} from "openpond-sdk/experiments";
@@ -23,12 +24,13 @@ import { OpenPondTrainingProjectClient } from "openpond-sdk/training-projects";
 import { OpenPondDatasetPopulationClient, DatasetPopulationQuerySchema, OpenPondDatasetWorkspaceClient, DatasetWorkspaceListQuerySchema, DatasetWorkspaceWriteSchema, DatasetWorkspacePublishSchema } from "openpond-sdk/dataset-workspaces";
 import { OpenPondDatasetMarketplaceClient, CatalogBrowse, CatalogCategoriesQuerySchema, AdoptCatalogDataset, PublishCatalogDataset, CatalogVisibilityChange } from "openpond-sdk/dataset-marketplace";
 import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
+import { OpenPondTasksetPackageClient, inspectDatasetTrainingReviewPackage } from "openpond-sdk/taskset-packages";
 
 const Id = z.string().trim().min(1).max(240);
 const Envelope = z.object({ teamId: Id, projectId: Id.nullable().default(null), operation: z.enum([
-  ...connectedWorkspaceOperations, "connectedSummary", "recordedExecution", "toolConnections", "datasets",
+  ...connectedWorkspaceOperations, "connectedSummary", "recordedExecution", "toolConnections", "datasets", "datasetReviewSource",
   "prepareOperation", "acknowledgeOperation", "retainOperation", "pendingOperations", "feedbackSummary", "harnessSources", "profileEvaluationDiscovery", "diagnostics",
-  "datasetExperiments", "experiments", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "run", "prepareHarness", "experiment", "duplicate", "result", "cancel", "score", "passes", "pass", "passResult", "cancelPass", "compare",
+  "datasetExperiments", "experiments", "trainingExecutions", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "run", "prepareHarness", "experiment", "duplicate", "result", "cancel", "score", "passes", "pass", "passResult", "cancelPass", "compare",
 ]), value: z.unknown().optional() }).strict();
 const Identity = z.object({ id: Id }).passthrough();
 
@@ -66,7 +68,7 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
       if(!actorId?.trim())throw new Error("An authenticated account identity is required to retain operation recovery.");
       const scopeHash=contentHash({actorId,apiOrigin:new URL(access.apiBaseUrl).origin,teamId:access.teamId,projectId:request.projectId});
       const fence=async()=> {if(await input.resolveActorId?.()!==actorId||contentHash(await input.resolveAccess())!==contentHash(access))throw new Error("Reviewed operation authority changed.");};
-      const Action=z.enum(["advanced-refiner-start","experiment-evaluation-schedule"]);
+      const Action=RecoverableEvaluationActionSchema;
       if(request.operation==="pendingOperations") {
         const data=z.object({action:Action,cursor:z.string().optional(),limit:z.number().int().min(1).max(100).default(100)}).strict().parse(request.value);
         const result=EvaluationOperationRecoveryPageSchema.parse(await input.store.pendingEvaluationOperations({...data,scopeHash}));await fence();return result;
@@ -84,7 +86,7 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
         const validated=validateReviewedEvaluationCommand({...scope,id,actorId,teamId:access.teamId,projectId:request.projectId,intent:original.reviewedIntent,command});
         const result=await input.store.retainEvaluationOperation({...scope,id,command:validated,phase:z.enum(["reviewed","dispatching"]).parse("phase" in data?data.phase:"reviewed")});await fence();return result;
       }
-      const result=request.operation==="prepareOperation"?await input.store.prepareEvaluationOperation({...scope,...("reviewedIntent" in data&&data.reviewedIntent!==undefined?{reviewedIntent:validateReviewedEvaluationIntent(data.action,data.reviewedIntent)}:{})})
+      const result=request.operation==="prepareOperation"?await input.store.prepareEvaluationOperation({...scope,...("reviewedIntent" in data&&data.reviewedIntent!==undefined?{reviewedIntent:validateReviewedEvaluationIntent(data.action,data.reviewedIntent,{actorId,teamId:access.teamId,projectId:request.projectId})}:{})})
         :await input.store.acknowledgeEvaluationOperation({...scope,id:z.uuid().parse("id" in data?data.id:undefined),...("expectedPhase" in data&&data.expectedPhase!==undefined?{expectedPhase:z.literal("reviewed").parse(data.expectedPhase)}:{})});
       await fence();return result;
     }
@@ -131,11 +133,14 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
       const query = ExperimentListQuerySchema.pick({ datasetHash: true, afterId: true, search: true, limit: true }).extend({ datasetHash: ExperimentListQuerySchema.shape.datasetHash.unwrap() }).strict().parse(request.value);
       return experiments.list({ ...query, ...(request.projectId ? { projectId: request.projectId } : {}) });
     }
+    if (request.operation === "trainingExecutions") return createTrainingClient({
+      baseUrl: access.apiBaseUrl, headers: { Authorization: `Bearer ${access.token}`, "X-OpenPond-Team-Id": access.teamId }, fetch: input.fetch,
+    }).listExecutions(access.teamId, { ...TrainingExecutionListQuerySchema.parse(request.value ?? {}), ...(request.projectId ? { projectId: request.projectId } : {}) });
     if (request.operation === "experiments") return experiments.list({ ...ExperimentListQuerySchema.parse(request.value ?? {}), ...(request.projectId ? { projectId: request.projectId } : {}) });
     if (request.operation === "projects") return projects.list(z.object({ cursor: Id.optional() }).strict().parse(request.value ?? {}));
     if (request.operation === "graderModels") {
-      const models = z.object({ data: z.array(z.object({ id: z.string().min(1).max(500), display_name: z.string().max(500).optional(), endpoints: z.array(z.string()).optional(), capabilities: z.object({ samplingParameters: z.boolean().optional() }).passthrough().optional() }).passthrough()).max(200) }).passthrough().parse(await listOpChatModels({ apiBaseUrl: `${access.apiBaseUrl}/v1`, token: access.token }));
-      return { models: models.data.filter(model => model.endpoints?.includes("chat.completions")).map(model => ({ id: model.id, name: model.display_name ?? model.id, supportsSampling: model.capabilities?.samplingParameters === true })) };
+      const models = z.object({ data: z.array(z.object({ id: z.string().min(1).max(500), display_name: z.string().max(500).optional(), endpoints: z.array(z.string()).optional(), capabilities: z.object({ samplingParameters: z.boolean().optional() }).passthrough().optional(), metadata: z.object({ baseModel: ModelProjectBaseModelSchema.optional() }).passthrough().optional() }).passthrough()).max(200) }).passthrough().parse(await listOpChatModels({ apiBaseUrl: `${access.apiBaseUrl}/v1`, token: access.token }));
+      return { models: models.data.filter(model => model.endpoints?.includes("chat.completions")).map(model => ({ id: model.id, name: model.display_name ?? model.id, supportsSampling: model.capabilities?.samplingParameters === true, baseModel: model.metadata?.baseModel ?? null })) };
     }
     if (request.operation === "graderCatalog") { const { allProjects, ...query } = z.object({ allProjects: z.boolean().optional() }).passthrough().parse(request.value ?? {}); return inspection.catalog(GraderCatalogQuerySchema.parse({ ...query, ...(request.projectId && !allProjects ? { projectId: request.projectId } : {}) })); }
     if (request.operation === "graderVersions") { const data = z.object({ id: Id, beforeRevision: z.number().int().positive().optional() }).parse(request.value); return inspection.versions(data.id, { beforeRevision: data.beforeRevision }); }
@@ -159,10 +164,10 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     if (request.operation === "learningRelay") {
       const relay = z.object({ endpoint: z.enum(["read", "commands"]), request: z.unknown() }).strict().parse(request.value);
       const body = (relay.endpoint === "read" ? LearningReadRequestSchema : LearningCommandRequestSchema).parse(relay.request);
-      if (body.scope !== access.teamId) throw new Error("Grader workspace differs from the active connection.");
+      if (body.scope !== access.teamId) throw new Error("Learning workspace differs from the active connection.");
       const response = await (input.fetch ?? fetch)(`${access.apiBaseUrl}/v1/learning/${relay.endpoint}`, { method: "POST", redirect: "error", headers: { Authorization: `Bearer ${access.token}`, "X-OpenPond-Team-Id": access.teamId, "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const result = await response.json();
-      if (!response.ok) throw new Error(z.object({ message: z.string().optional() }).passthrough().parse(result).message ?? `Grader request failed (${response.status}).`);
+      if (!response.ok) throw new Error(z.object({ message: z.string().optional() }).passthrough().parse(result).message ?? `Workspace learning request failed (${response.status}).`);
       return result;
     }
     const marketplace = new OpenPondDatasetMarketplaceClient(options);
@@ -179,6 +184,10 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     if (request.operation === "catalogDatasets") return catalog.list({ ...z.object({ afterId: Id.optional(), limit: z.number().int().min(1).max(100).optional() }).strict().parse(request.value ?? {}), ...(request.projectId ? {projectId:request.projectId} : {}) });
     if (request.operation === "catalogDataset") return catalog.get(Identity.parse(request.value).id);
     if (request.operation === "resolveDataset") return catalog.resolve(z.object({ release: DatasetPopulationQuerySchema.shape.release }).strict().parse(request.value).release);
+    if (request.operation === "datasetReviewSource") {
+      const { release } = z.object({ release: DatasetPopulationQuerySchema.shape.release }).strict().parse(request.value);
+      return inspectDatasetTrainingReviewPackage(await new OpenPondTasksetPackageClient(options).getByRelease(release));
+    }
     if (request.operation === "datasetPopulation") return new OpenPondDatasetPopulationClient(options).read(DatasetPopulationQuerySchema.parse(request.value));
     if (request.operation === "inventory") {
       const query = z.object({ cursor: z.string().max(2_000).optional(), catalogCursor: z.string().max(2_000).optional(), afterId: Id.optional(), search: z.string().max(100).optional(), sort: z.enum(["id", "name", "updated"]).optional() }).parse(request.value ?? {});

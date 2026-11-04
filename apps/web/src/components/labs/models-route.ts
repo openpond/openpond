@@ -27,6 +27,7 @@ export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
   "get-started": "Get started", home: "Home", inbox: "Inbox", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Experiments", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Training", versions: "Versions", serving: "Inference",
 };
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
+  experiments: ["drafts"],
   tasks: ["drafts"], tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
 };
 const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {

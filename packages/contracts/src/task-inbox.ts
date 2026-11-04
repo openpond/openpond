@@ -1,4 +1,5 @@
 import { ChatTrainingReferenceSchema } from "./chat-training-reference.js";
+import { StoredExperimentResultReferenceSchema } from "openpond-sdk/training";
 import { z } from "zod";
 import { OpenPondProfileRefSchema } from "./profile-ref.js";
 import { ChatAttachmentSchema, CHAT_ATTACHMENT_LIMITS } from "./requests.js";
@@ -45,6 +46,7 @@ export const TaskResourceContextSchema = z.object({
   evaluationModel: z.string().min(1).max(500).optional(),
   executionLocation: z.enum(["local", "cloud"]).optional(),
   training: z.array(ChatTrainingReferenceSchema).max(16).optional(),
+  results: z.array(StoredExperimentResultReferenceSchema).max(16).optional(),
   resources: z.array(z.object({
     kind: z.enum(["dataset", "grader", "experiment"]),
     id: z.string().trim().min(1).max(240),

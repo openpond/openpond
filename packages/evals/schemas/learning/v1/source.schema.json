@@ -160,6 +160,26 @@
       ],
       "additionalProperties": false
     },
+    "datasetOrigin": {
+      "type": "object",
+      "properties": {
+        "receiptId": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "packageHash": {
+          "$ref": "#/$defs/__schema2"
+        },
+        "taskset": {
+          "$ref": "#/$defs/__schema1"
+        }
+      },
+      "required": [
+        "receiptId",
+        "packageHash",
+        "taskset"
+      ],
+      "additionalProperties": false
+    },
     "capturedOrigin": {
       "type": "object",
       "properties": {

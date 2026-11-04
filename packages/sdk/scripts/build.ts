@@ -11,6 +11,9 @@ import { incrementalEmit } from "../../../scripts/build/incremental-emit.ts";
 import { publishBuild, stageEmit } from "../../../scripts/build/publish.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const compilerArg = process.argv.find((arg) => arg.startsWith("--compiler="));
+const compiler = compilerArg?.slice("--compiler=".length) ?? "tsgo";
+if (compiler !== "tsc" && compiler !== "tsgo") throw new Error("Use --compiler=tsc or --compiler=tsgo");
 const target = path.join(root, "dist");
 const dist = path.join(root, "node_modules/.cache", `sdk-dist-${randomUUID()}`);
 
@@ -86,7 +89,7 @@ await withBuildLock(path.join(root, "node_modules/.cache/build.lock"), async () 
     }
 
     await stageEmit(
-      await incrementalEmit(root, true),
+      await incrementalEmit(root, true, "tsconfig.build.json", compiler),
       path.join(dist, "types"),
       path.join(target, "types"),
     );

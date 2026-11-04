@@ -6,7 +6,7 @@ import { prepareImportedTasksetPackage } from "./taskset-package-projection.js";
 import { buildTasksetTrainingBundle } from "./training-bundle.js";
 import { prepareManagedTrainingSubmission, type ManagedTrainingPreparationInput } from "./managed-training-preparation.js";
 import { deterministicTrainingRewardSource } from "./training-grading-plan.js";
-import { TrainingCapabilitiesSchema, type TrainingCapabilities } from "./training.js";
+import { TrainingCapabilitiesSchema, type TrainingCapabilities } from "./training-job-contracts.js";
 import { qualificationVerifierAssets } from "./training-verifier-assets.js";
 
 export type OrdinaryTasksetQualificationInput = Omit<Parameters<typeof buildTasksetTrainingBundle>[0],

@@ -37,7 +37,7 @@
 .evaluation-panel-toolbar nav button{display:flex;align-items:center;padding:14px 0;font-size:13px;line-height:20px}
 .evaluation-workspace-header{justify-content:flex-end}.evaluation-workspace-header .training-button:not(.secondary){background:var(--accent-primary-fill);color:var(--text-on-accent);border-color:var(--accent-primary)}.evaluation-workspace-header .training-button:not(.secondary):hover{background:var(--accent-primary-fill);color:var(--text-on-accent)}
 
-.evaluation-setup-pane{display:grid;gap:16px;padding-top:16px}.evaluation-setup-pane[hidden]{display:none}.evaluation-grader-badges{display:flex;flex-wrap:wrap;gap:6px}
+.evaluation-grader-badges{display:flex;flex-wrap:wrap;gap:6px}
 
 .evaluation-score-skeleton{display:block;width:80px;height:16px;background:var(--surface-raised);border-radius:4px;animation:evaluation-loading 1.2s ease-in-out infinite alternate}
 
@@ -183,3 +183,20 @@
 .evaluation-resource-table th:first-child{width:240px}
 .evaluation-resource-table th:nth-child(2){width:140px}
 .evaluation-resource-table th:nth-child(3){width:160px}
+.training-compute-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;font-size:12px}.training-compute-summary dt{color:var(--text-muted)}.training-compute-summary dd{margin:0;overflow-wrap:anywhere;text-align:right}
+
+/* Existing review/import pages also run inside the experiment sidebar. */
+.experiment-training-data-workspace .labs-resource-page{padding:0;min-width:0}
+.experiment-training-data-workspace .model-project-page-header{align-items:stretch;margin-block:16px;padding-inline:0}
+.experiment-training-data-workspace .model-project-page-heading{flex-direction:column;align-items:stretch;gap:12px}
+.experiment-training-data-workspace .model-project-page-actions{align-self:flex-start}
+.experiment-training-data-workspace .model-project-page-header h1{font-size:16px}
+.experiment-training-data-workspace .model-project-page-header button{white-space:nowrap}
+.experiment-training-data-workspace .learning-review-layout{grid-template-columns:minmax(0,1fr)}
+.experiment-training-data-workspace .learning-review-content,.experiment-training-data-workspace .learning-review-sidebar{min-width:0}
+.experiment-training-data-workspace .training-table-wrap{max-width:100%;overflow:auto}
+.experiment-training-data-workspace .labs-version-row-button small{font-family:inherit}
+.experiment-training-data-header{flex-wrap:wrap;gap:8px}
+.experiment-training-data-workspace .dataset-review-example{white-space:normal;min-width:180px;max-width:260px;overflow-wrap:anywhere}
+
+.activation-coordinate-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.activation-coordinate-fields:has(>label:last-child:nth-child(2)){grid-template-columns:repeat(2,minmax(0,1fr))}

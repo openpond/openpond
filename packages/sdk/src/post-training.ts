@@ -315,7 +315,15 @@ export const HostedTrainingSetupCatalogSchema = z
 export type HostedTrainingSetupCatalog = z.infer<typeof HostedTrainingSetupCatalogSchema>;
 
 export const HostedTrainingSetupActionSchema = z.enum([
+  "hardware-catalog",
+  "gpu-catalog",
+  "modification-capabilities",
+  "estimate",
+  "funding", "funding-handoff",
+  "list-drafts", "get-draft", "save-draft", "archive-draft",
   "prepare",
+  "prepare-draft",
+  "review-dataset",
   "start",
   "cancel",
   "publish",

@@ -56,6 +56,9 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       const record = await datasets.readListing(dataset.id, dataset.revision);
       await scopes.createForDataset(sessionId, { dataset: localDatasetSummary(record), graders: localGraderSummaries(record), operationId: `experiment-${randomUUID()}`, expected });
     },
+    associateDraftTraining: async (sessionId, draftId, training) => { await scopes.associateDraftTraining(sessionId, draftId, training); },
+    createDraft: async (sessionId, draft, expected) => { await scopes.createDraft(sessionId, draft, expected); },
+    linkStoredDraft: async (sessionId, record, reference, expected, scopeId) => { await scopes.linkStoredDraft(sessionId, record, reference, expected, scopeId); },
     inspectResource: async resource => {
       if (resource.owner || resource.profileRef) {
         const result = resource.kind === "experiment" ? await dispatch("experiment", { action: "result", payload: { id: resource.id } }) as { inputs?: ChatResourceSummary[] } : null;
@@ -142,12 +145,13 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const {context:requestedContext,invocationToken,...input} = envelope;
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
     if (kind === "dataset" && input.action === "next_step") return nextSteps.request(input.payload, context);
-    if (kind === "dataset" && ["context_catalog", "context_resolve", "context_runs", "context_select", "context_selection"].includes(String(input.action))) {
-      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional() }).strict().parse(input.payload ?? {});
-      if (input.action === "context_catalog") return browser.catalog(true, query.sessionId);
+    if (kind === "dataset" && ["context_catalog", "context_resolve", "context_runs", "context_select", "context_selection", "context_save_draft"].includes(String(input.action))) {
+      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
+      if (input.action === "context_save_draft") return browser.updateDraft(query.sessionId, query.target, query.update);
+      if (input.action === "context_catalog") return browser.catalog(true, query.sessionId, query.draftCursor);
       if (input.action === "context_runs") return { runs: await browser.runs(query.target) };
       if (input.action === "context_resolve") return { selection: await browser.resolve(query.target) };
-      if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId, query.newExperiment) };
+      if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId) };
       return { selection: query.sessionId ? await browser.current(query.sessionId) : null };
     }
     if (kind === "experiment" && ["attach_training", "read_training"].includes(String(input.action))) {

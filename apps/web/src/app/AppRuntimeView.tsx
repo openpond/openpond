@@ -77,7 +77,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [scheduledDetailOpen, setScheduledDetailOpen] = useState(false);
   const [evaluationSidebar, setEvaluationSidebar] = useState<import("../components/labs/workspace/WorkspacePanel").EvaluationSidebarControl | null>(null);
   const desktopRoute = useDesktopRoute();
-  const hostedEvaluationRoute = desktopRoute?.kind === "models" && ["home", "inbox", "datasets", "graders", "experiments"].includes(desktopRoute.route.page);
+  const workspaceSidebarActive = desktopRoute?.kind === "models" && (evaluationSidebar !== null || ["home", "inbox", "datasets", "graders", "experiments"].includes(desktopRoute.route.page));
   const {
     composerDraftStore,
     appDispatch,
@@ -1119,13 +1119,13 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           diffPanelOpen,
           terminalOpen,
           rightSidebarAvailable: rightSidebarAvailableForView,
-          rightSidebarOpen: view === "labs" && hostedEvaluationRoute ? evaluationSidebar?.open ?? false : view === "scheduled" ? scheduledDetailOpen : diffPanelOpen,
+          rightSidebarOpen: view === "labs" && workspaceSidebarActive ? evaluationSidebar?.open ?? false : view === "scheduled" ? scheduledDetailOpen : diffPanelOpen,
           onToggleDiffPanel: () => {
             if(view === "chat" && ponderMode && !diffPanelOpen) showRightPanelDiffTab("outputs", "agents");
             else toggleRightSidebar();
           },
           onToggleRightSidebar:
-            view === "labs" && hostedEvaluationRoute ? evaluationSidebar?.toggle : view === "scheduled"
+            view === "labs" && workspaceSidebarActive ? evaluationSidebar?.toggle : view === "scheduled"
               ? () => setScheduledDetailOpen((open) => !open)
               : view === "team" && Boolean(teamAiThreadId)
               ? toggleTeamAiSidebar
@@ -1354,7 +1354,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             if (session) openRightChatPanel(session, { preserveView: true });
           },
           onLabDetailOpenChange: labDetailNavigation.onDetailOpenChange,
-          evaluationSidebarActive: view === "labs" && hostedEvaluationRoute,
+          evaluationSidebarActive: view === "labs" && workspaceSidebarActive,
           onEvaluationSidebarControl: setEvaluationSidebar,
           scheduledDetailOpen,
           onScheduledDetailOpenChange: setScheduledDetailOpen,
