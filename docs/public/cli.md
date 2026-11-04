@@ -108,3 +108,7 @@ operation, Model version and approval identities. Start and serving activation
 require `--yes`. See [Model modifications](model-modifications.md) for reviewed
 data, exact artifact and retry semantics; use `openpond training --help` for
 complete syntax.
+
+## Filesystem checkpoints
+
+Use `sandbox billing`, `sandbox snapshot-create`, `sandbox get`, `sandbox restore` and `sandbox start` for the quote, capture job, readiness, restore intent and separately funded Start. See [filesystem checkpoints](sandbox-checkpoints.md) for accepted inputs, retention charges and retry boundaries.

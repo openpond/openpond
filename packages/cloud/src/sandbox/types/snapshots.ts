@@ -1,4 +1,4 @@
-import type { SandboxCommand, SandboxState } from "./index.js";
+import type { SandboxCommand, SandboxState, SandboxSnapshotRetentionStatus } from "./index.js";
 export type SandboxSnapshotTemplateVisibility = "private" | "team";
 
 export type SandboxSnapshotTemplateInput = {
@@ -96,14 +96,58 @@ export type SandboxSnapshotUpdateInput = {
   retention?: SandboxSnapshotRetentionUpdateInput;
 };
 
-export type SandboxSnapshotInput = Record<string, unknown>;
+/** Capture options. Native filesystem capture requires finite retention and
+ * an accepted funding quote; template/cache operations depend on capability. */
+export type SandboxSnapshotInput = Record<string, unknown> & {
+  name: string;
+  template?: SandboxSnapshotTemplateInput;
+  replay?: Record<string, unknown> & {
+    retention?: { class?: SandboxSnapshotReplayRetentionClass; ttlSeconds?: number | null };
+  };
+  cachePolicy?: {
+    packageCaches?: "keep" | "clean_before_capture";
+    hotCache?: "eligible" | "disabled";
+  };
+  async?: boolean;
+  retentionFunding?: { termsSha256: string; maxUsd: string };
+};
+
+/** Descriptor identity does not imply a measured filesystem checksum. */
+export type SandboxFilesystemCheckpoint = {
+  custodyId: string;
+  descriptorSha256: string | null;
+  phase: "reserved" | "capture_submitted" | "ready" | "deleting" | "deleted" | "cancelled";
+  measuredSizeBytes: number | null;
+  checksumSha256: string | null;
+};
+
+/** Prepares replacement of an already stopped root. Does not start compute. */
+export type SandboxRestoreInput = {
+  operationId: string;
+  checkpointId: string;
+  checkpointCustodyId: string;
+  expectedSourceUpdatedAt: string;
+  replaceStoppedRoot: true;
+};
+
+export type SandboxStartInput = {
+  restore?: {
+    operationId: string;
+    intentSha256: string;
+    /** Positive USD with six decimal places. */
+    maximumUsd: string;
+    /** Absolute accepted deadline; retries cannot extend it. */
+    executionUntil: string;
+  };
+};
 
 export type SandboxSnapshot = {
   id: string;
   sandboxId: string;
   name: string;
   state: "ready";
-  sizeGb: number;
+  sizeGb: number | null;
+  checkpoint?: SandboxFilesystemCheckpoint;
   template?: SandboxSnapshotTemplate | null;
   replay?: SandboxSnapshotReplayManifest | null;
   metadata?: Record<string, unknown>;
@@ -130,6 +174,7 @@ export type SandboxArchiveRef = {
 };
 
 export type SandboxSnapshotCatalogEntry = {
+  checkpoint?: SandboxFilesystemCheckpoint;
   id: string;
   kind: "snapshot" | "archive";
   sandboxId: string;
@@ -148,6 +193,7 @@ export type SandboxSnapshotCatalogEntry = {
     retentionClass: SandboxSnapshotReplayRetentionClass | null;
     estimatedMonthlyUsd: string | null;
     pricingSource: "configured" | "not_configured";
+    retention?: SandboxSnapshotRetentionStatus;
   };
   template: SandboxSnapshotTemplate | null;
   replay?: SandboxSnapshotReplayManifest | null;
