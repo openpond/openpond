@@ -1,3 +1,4 @@
+import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { createHardwareObservationClient } from "openpond-sdk/training-hardware";
@@ -43,7 +44,7 @@ export async function runHardwareObservations(
     baseUrl,
     headers,
     fetch: (url, init) =>
-      fetch(url, {
+      hostedCliFetch(url, {
         ...init,
         redirect: "error",
         signal: AbortSignal.any([

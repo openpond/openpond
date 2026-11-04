@@ -1,3 +1,4 @@
+import { hostedCliFetch } from "../common/hosted-cli-fetch";
 export * from "@openpond/local-server/tool-learning";
 import { OpenPondToolLearningClient } from "openpond-sdk/tool-learning";
 import { hostedTrainingAccount } from "../hosted-training-account";
@@ -22,6 +23,7 @@ export async function toolLearningOwner(
     account: optionString(options, "account") || record.ownerAccount || "",
   });
   return new OpenPondToolLearningClient({
+    fetch: hostedCliFetch,
     baseUrl,
     apiKey: context.token,
     teamId: record.teamId,

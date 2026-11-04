@@ -6,9 +6,14 @@ import { getInstalledCliVersion } from "./common/version";
 import { runCliCommand } from "./command-registry";
 import { resolveCliTopLevelAction } from "./top-level-action";
 import { CliReportedError } from "./common/reported-error";
+import { withApiClientIdentity } from "@openpond/cloud/api/client-context";
 
 export async function runOpenPondCli(argv = process.argv.slice(2)): Promise<void> {
   if (await runEmbeddedCompanion(argv)) return;
+  return withApiClientIdentity("openpond-cli", () => runCommandLine(argv));
+}
+
+async function runCommandLine(argv: string[]): Promise<void> {
   const { command, options, rest } = parseArgs(argv);
   if (typeof options.home === "string") process.env.OPENPOND_HOME = (await import("@openpond/persistence")).resolveOpenPondHome({ home: options.home });
   const action = resolveCliTopLevelAction({ command, options });

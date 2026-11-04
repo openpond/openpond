@@ -1,3 +1,4 @@
+import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { captureTasksetDraftWorkspace } from "@openpond/taskset-sdk";
 import { OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
 import { loadConfig } from "../config";
@@ -13,13 +14,13 @@ export async function runDatasetsCommand(options: Record<string, string | boolea
   if (action === "preparation") {
     if (!teamId || !baseUrl) throw new Error(`usage: ${DATASET_PREPARATION_USAGE}`);
     const config = await loadConfig();
-    const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
+    const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
     return runDatasetPreparationCommand(client.preparations, options, rest.slice(1));
   }
   if (!teamId || !baseUrl || !action || rest.length > 2 || !["upload", "save", "read", "list", "validate", "publish"].includes(action))
     throw new Error("usage: datasets <upload|save|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>]");
   const config = await loadConfig();
-  const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
+  const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
   const operationId = optionString(options, "operationId");
   let result: unknown;
   if (action === "save") {
