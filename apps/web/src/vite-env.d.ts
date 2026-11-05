@@ -252,10 +252,6 @@ type BrowserDiagnostics = {
 };
 
 interface Window {
-  __OPENPOND_WEB_CONNECTION__?: {
-    serverUrl?: string;
-    token?: string;
-  };
   openpond?: {
     setAppearance?: (preference: "light" | "dark" | "system") => Promise<void>;
     updates?: import("@openpond/contracts").DesktopUpdatesBridge;

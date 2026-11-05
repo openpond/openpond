@@ -34,13 +34,6 @@ function writeStoredConnection(storage: Storage, connection: ConnectionBase): vo
   storage.setItem(TOKEN_STORAGE_KEY, connection.token);
 }
 
-function connectionFromInjectedWebConfig(): ConnectionBase | null {
-  const injected = window.__OPENPOND_WEB_CONNECTION__;
-  const serverUrl = injected?.serverUrl?.trim();
-  const token = injected?.token?.trim();
-  return serverUrl && token ? { serverUrl, token } : null;
-}
-
 function connectionFromDevHash(): ConnectionBase | null {
   const hash = window.location.hash.startsWith("#")
     ? window.location.hash.slice(1)
@@ -124,15 +117,6 @@ export async function resolveConnection(): Promise<ClientConnection> {
     clearConnectionHash();
     return {
       ...devHashConnection,
-      platform: navigator.platform,
-    };
-  }
-  const injectedConnection = connectionFromInjectedWebConfig();
-  if (injectedConnection && (await serverIsReachable(injectedConnection.serverUrl))) {
-    if (localStorage) writeStoredConnection(localStorage, injectedConnection);
-    if (sessionStorage) writeStoredConnection(sessionStorage, injectedConnection);
-    return {
-      ...injectedConnection,
       platform: navigator.platform,
     };
   }
