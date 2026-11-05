@@ -7,7 +7,7 @@ import { steeringHostedActions } from "./training-hosted-steering";
 import { attachHostedTrainingToChat } from "./training-chat-attachment";
 import { readFile } from "node:fs/promises";
 import { hostedTrainingAccount } from "./hosted-training-account";
-import { createTrainingClient, OpenPondTrainingApiError, parseAndVerifyTrainingJobSubmission, parseAndVerifyTrainingPreparationReceipt, TrainingPreparationRequestSchema, type TrainingInputArtifactUpload } from "openpond-sdk/training";
+import { createTrainingClient, OpenPondTrainingApiError, parseAndVerifyTrainingJobSubmission, parseAndVerifyTrainingPreparationReceipt, TrainingPreparationRequestSchema, type TrainingInputArtifactUpload, type TrainingEstimateReview } from "openpond-sdk/training";
 import { createModelProjectsClient, HostedModelProjectSyncSchema } from "openpond-sdk/model-projects";
 import { OpenPondCorrectionMetricsClient, OpenPondLearningClient } from "openpond-sdk/learning";
 import { optionString, parseBooleanOption, parseIntegerOption } from "./common/options";
@@ -361,10 +361,29 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   if (action === "hosted-start") {
     const receipt = await readPreparationInput();
     if (!parseBooleanOption(options.yes)) throw new Error("Starting paid hosted training requires --yes.");
+    const estimateReviewFile = optionString(options, "estimateReviewFile");
+    let estimateReview: TrainingEstimateReview | undefined;
+    if (estimateReviewFile) {
+      const bytes = await readFile(estimateReviewFile);
+      if (bytes.byteLength > 64 * 1024 * 1024) throw new Error("Training estimate review input exceeds 64 MiB.");
+      const raw: unknown = JSON.parse(bytes.toString("utf8"));
+      const { TrainingEstimateSchema, TrainingEstimateReviewSchema } = await import("openpond-sdk/training");
+      const review = TrainingEstimateReviewSchema.safeParse(raw);
+      if (review.success) estimateReview = review.data;
+      else {
+        const estimate = TrainingEstimateSchema.parse(raw);
+        if (estimate.teamId !== teamId || estimate.source.kind !== "preparation" ||
+            estimate.source.id !== receipt.plan.id || estimate.source.contentHash !== receipt.plan.contentHash ||
+            estimate.source.revision !== receipt.revision)
+          throw new Error("Training estimate belongs to a different workspace or prepared plan.");
+        estimateReview = estimate.review;
+      }
+    }
     const submitted = await client.startPreparation(receipt.plan.id, {
       teamId,
       planHash: receipt.plan.contentHash,
       expectedRevision: receipt.revision,
+      ...(estimateReview ? { estimateReview } : {}),
       ...(receipt.plan.usageQuote ? { usageQuoteHash: receipt.plan.usageQuote.contentHash } : {}),
     });
     print(submitted);
