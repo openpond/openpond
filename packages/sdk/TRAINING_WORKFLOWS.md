@@ -623,3 +623,18 @@ This read returns the owned execution's exact request, lifecycle phase and any r
 On a compatible host, `compileModificationExecution(input)` compiles a bounded raw form with the exact registered tokenizer. `prepareModificationExecution(input)` retains the compiled request, Project, name and maximum spend without starting compute. After explicit review, `startModificationExecution(input)` uses the returned execution ID, revision, plan hash, approved cap and a stable operation ID. `cancelModificationExecution(input)` retains that exact execution identity while cleanup proceeds.
 
 The CLI equivalents are `training hosted-compile-modification`, `hosted-prepare-modification`, `hosted-start-modification --yes` and `hosted-cancel-modification`, each taking `<input.json> --team-id <id>`. Native Python provides corresponding snake_case methods in both clients. Use the exported input schemas or installed help; preserve the original command and operation ID after an uncertain reply. Start is the funded execution boundary. An unavailable capability never grants permission to start an unsupported model.
+
+## Continual-learning grader selection
+
+An experiment draft's `trainingForm.learningIntent.graders` optionally stores
+exact learning revision references for recurring tasks. Omitting the field uses
+the reviewed batch's whole grader pool. An explicit subset must retain required
+gates and the training/evaluation roles needed by the hosted loop. Hosts validate
+these references against the exact reviewed batch before publishing the policy.
+
+The learning save hashes this selection and retains it in the immutable policy;
+it does not rewrite the manual experiment's batch or grader binding. The retained
+evaluation remains an independent candidate check. A nightly schedule uses the
+authored time and timezone, waits for approved unused examples, and respects the
+saved task threshold and spend limits. It does not itself enable conversation
+collection, automatic data approval, or automatic serving.
