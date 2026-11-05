@@ -1097,7 +1097,8 @@ Usage:
   openpond training hosted-publish-taskset <publication.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-review-dataset <input.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-evaluate-checkpoint <request.json> --team-id <id> [--api-base-url <url>] --yes [--json]
-  openpond training hosted-prepare|hosted-prepare-experiment|hosted-start|hosted-stage|hosted-submit <input.json> --team-id <id> [--api-base-url <url>] [--yes] [--json]
+  openpond training hosted-prepare|hosted-prepare-experiment|hosted-stage|hosted-submit <input.json> --team-id <id> [--api-base-url <url>] [--yes] [--json]
+  openpond training hosted-start <preparation.json> --team-id <id> [--estimate-review-file <estimate-or-review.json>] --yes [--api-base-url <url>] [--json]
   openpond training hosted-save-experiment-learning <request.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-qualify <input.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-trajectory <job-id> --trajectory-id <receipt-id> --team-id <id> [--api-base-url <url>] [--json]
@@ -1151,6 +1152,7 @@ Options:
   --destination <string>
   --detach
   --dry-run
+  --estimate-review-file <string>
   --evaluation-id <string>
   --expected-revision <integer>
   --export-approved
