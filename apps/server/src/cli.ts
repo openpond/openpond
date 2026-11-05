@@ -252,7 +252,10 @@ export async function resolveWebLaunchMessages(
     return { stdout: [`OpenPond access URL: ${accessUrl}`], stderr: [] };
   }
   if (!input.openBrowser) {
-    return { stdout: [`OpenPond web UI: ${input.baseUrl}`], stderr: [] };
+    return {
+      stdout: [`OpenPond web UI: ${input.baseUrl}`, "For a new browser session, launch with --open-browser or --print-access-url to authenticate."],
+      stderr: [],
+    };
   }
 
   const handoff = await handOffToBrowser(accessUrl);

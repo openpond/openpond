@@ -26,7 +26,7 @@ describe("static web security", () => {
       writeFile(path.join(webRoot, "assets", "chunk.js"), "export const loaded = true;"),
       writeFile(path.join(webRoot, "assets", "app.css"), "body { display: block; }"),
     ]);
-    const handler = createStaticWebHandler({ logger: { warn: () => undefined }, token: "fixture-token", webRoot });
+    const handler = createStaticWebHandler({ logger: { warn: () => undefined }, webRoot });
     const server = createServer((request, response) => handler(request, response, (_request, next) => next.writeHead(404).end()));
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     try {
@@ -53,7 +53,7 @@ describe("static web security", () => {
     }
   });
 
-  test("serves the loopback bootstrap with a CSP nonce and hardened headers", async () => {
+  test("serves credential-free HTML despite forged loopback and proxy headers", async () => {
     const webRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-static-web-"));
     cleanupPaths.push(webRoot);
     await writeFile(
@@ -62,7 +62,6 @@ describe("static web security", () => {
     );
     const handler = createStaticWebHandler({
       logger: { warn: () => undefined },
-      token: "test-token",
       webRoot,
     });
     const server = createServer((request, response) =>
@@ -70,25 +69,32 @@ describe("static web security", () => {
         nextResponse.writeHead(404).end();
       }),
     );
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => server.listen(0, "0.0.0.0", resolve));
 
     try {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Static test server did not bind.");
-      const response = await fetch(`http://127.0.0.1:${address.port}/`);
-      const html = await response.text();
-      const nonce = /<script nonce="([^"]+)">window\.__OPENPOND_WEB_CONNECTION__/.exec(html)?.[1];
-      const policy = response.headers.get("content-security-policy") ?? "";
-
-      expect(response.status).toBe(200);
-      expect(nonce).toBeTruthy();
-      expect(policy).toContain(`script-src 'self' 'nonce-${nonce}'`);
-      expect(policy).not.toContain("'unsafe-eval'");
-      expect(policy).not.toContain("script-src 'self' 'unsafe-inline'");
-      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-      expect(response.headers.get("x-frame-options")).toBe("DENY");
-      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
-      expect(html).toContain('"token":"test-token"');
+      // A network listener/proxy must never mint an owner credential from Host.
+      // Exercise both the actual index and SPA fallback over real HTTP.
+      for (const route of ["/", "/index.html", "/console/models"]) {
+        for (const host of ["localhost", "127.0.0.1", "[::1]", "public.example.test"]) {
+          const response = await fetch(`http://127.0.0.1:${address.port}${route}`, {
+            headers: { host, forwarded: "for=127.0.0.1;host=localhost", "x-forwarded-host": "localhost" },
+          });
+          const html = await response.text();
+          const policy = response.headers.get("content-security-policy") ?? "";
+          expect(response.status).toBe(200);
+          expect(policy).toContain("script-src 'self'");
+          expect(policy).not.toContain("'unsafe-eval'");
+          expect(policy).not.toContain("script-src 'self' 'unsafe-inline'");
+          expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+          expect(response.headers.get("x-frame-options")).toBe("DENY");
+          expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+          expect(response.headers.get("cache-control")).toBe("no-store");
+          expect(html).not.toContain("__OPENPOND_WEB_CONNECTION__");
+          expect(html).not.toContain('"token":');
+        }
+      }
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

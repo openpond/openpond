@@ -25,7 +25,7 @@ export function createOpenPondHttpSurface({
   const handler = createRoutes(routeOptions), home = resolveOpenPondHome();
   const routeHandler: typeof handler = (request, response) => withOpenPondHome(home, () => handler(request, response));
   const webHandler = webRoot
-    ? createStaticWebHandler({ logger: routeOptions.logger, token: routeOptions.token, webRoot })
+    ? createStaticWebHandler({ logger: routeOptions.logger, webRoot })
     : null;
   const httpServer = createServer((request, response) => {
     if (!webHandler) {

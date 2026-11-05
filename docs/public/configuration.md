@@ -2,6 +2,10 @@
 
 Desktop, Web, CLI and TUI share one OpenPond home. Stable defaults to `~/.openpond`; nightly defaults to `~/.openpond-nightly`. Set `OPENPOND_HOME` or pass `--home <directory>` to choose another home. Development keeps its existing isolated home under `~/.openpond/openpond-app-dev` (nightly: `openpond-app-nightly-dev`).
 
+## Browser authentication
+
+Start `openpond ui` and open its full authenticated URL. For the app-server web command, use `--open-browser` or `--print-access-url`. The URL fragment hands the credential to the browser; the browser stores the connection and removes the fragment after connecting. Treat the authenticated URL as a credential. A bare server URL works only after that browser has a saved connection. Served HTML never contains the server token, including on loopback listeners or behind proxies.
+
 ## Settings and ownership
 
 Open **Settings → Customization → Configuration** for the TOML editor, effective values, source provenance and verified configuration revisions. General and context controls on this page, along with provider, account and notification settings, use the same backing services as the CLI. Saving applies to the next turn. Current tool execution still checks revocation and trust.

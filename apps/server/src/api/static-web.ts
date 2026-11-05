@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { createReadStream, type Stats } from "node:fs";
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -23,12 +22,12 @@ function staticSecurityHeaders(): Record<string, string> {
   };
 }
 
-function indexSecurityHeaders(nonce: string): Record<string, string> {
+function indexSecurityHeaders(): Record<string, string> {
   return {
     ...staticSecurityHeaders(),
     "Content-Security-Policy": [
       "default-src 'self'",
-      `script-src 'self' 'nonce-${nonce}'`,
+      "script-src 'self'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
@@ -117,49 +116,25 @@ function sendFile(request: IncomingMessage, response: ServerResponse, filePath: 
   createReadStream(filePath).pipe(response);
 }
 
-function isLoopbackHost(hostname: string): boolean {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
-}
-
-function escapeScriptJson(json: string): string {
-  return json.replace(/</g, "\\u003c");
-}
-
 async function sendIndex({
   request,
-  requestUrl,
   response,
   indexPath,
-  token,
 }: {
   request: IncomingMessage;
-  requestUrl: URL;
   response: ServerResponse;
   indexPath: string;
-  token: string;
 }): Promise<void> {
   let html = await fs.readFile(indexPath, "utf8");
   // The same build uses relative assets for Electron. HTTP routes can be
   // arbitrarily deep, so resolve shell assets from the web root when served.
   html = html.replace(/\b(src|href)(\s*=\s*)(["'])\.\/([^"']*)\3/g, "$1$2$3/$4$3");
-  const nonce = randomBytes(18).toString("base64url");
-  if (isLoopbackHost(requestUrl.hostname)) {
-    const connectionScript = `<script nonce="${nonce}">window.__OPENPOND_WEB_CONNECTION__=${escapeScriptJson(
-      JSON.stringify({
-        serverUrl: requestUrl.origin,
-        token,
-      })
-    )};</script>`;
-    html = html.includes("</head>")
-      ? html.replace("</head>", `    ${connectionScript}\n  </head>`)
-      : `${connectionScript}\n${html}`;
-  }
   const body = Buffer.from(html, "utf8");
   response.writeHead(200, {
-    ...indexSecurityHeaders(nonce),
+    ...indexSecurityHeaders(),
     "Content-Length": body.byteLength,
     "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": "no-cache",
+    "Cache-Control": "no-store",
   });
   if (request.method === "HEAD") {
     response.end();
@@ -179,11 +154,9 @@ function sendNotFound(response: ServerResponse): void {
 
 export function createStaticWebHandler({
   logger,
-  token,
   webRoot,
 }: {
   logger: StaticWebLogger;
-  token: string;
   webRoot: string;
 }): StaticWebHandler {
   const root = path.resolve(webRoot);
@@ -206,7 +179,7 @@ export function createStaticWebHandler({
       const directStat = await fileStat(resolved);
       if (directStat) {
         if (resolved === indexPath) {
-          await sendIndex({ request, requestUrl, response, indexPath, token });
+          await sendIndex({ request, response, indexPath });
           return;
         }
         sendFile(request, response, resolved, directStat);
@@ -220,7 +193,7 @@ export function createStaticWebHandler({
 
       const indexStat = await fileStat(indexPath);
       if (indexStat) {
-        await sendIndex({ request, requestUrl, response, indexPath, token });
+        await sendIndex({ request, response, indexPath });
         return;
       }
 
