@@ -67,6 +67,8 @@ export function trainingExperimentLearningSettings(form: TrainingExperimentFormD
     method: form.recipe.method, baseModel: form.baseModel,
     recipe: { ...form.recipe, dataset: { ...(form.recipe.dataset && typeof form.recipe.dataset === "object" ? form.recipe.dataset : {}), validationSplit: form.validationSplit } },
     evaluationTasksetRef: form.evaluation, managedRolloutPlacement: "remote",
+    ...(form.recipe.method === "grpo" && form.learningIntent?.continuationAdapterMode
+      ? { continuationAdapterMode: form.learningIntent.continuationAdapterMode } : {}),
   });
 }
 export function createTrainingExperimentLearningClient(request: (path: string, init?: RequestInit) => Promise<unknown>) {
