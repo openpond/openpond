@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { LearningRevisionRefSchema } from "@openpond/evals/learning";
 
 /** Incomplete authoring values may be saved before datasets are selected. */
 export const TrainingExperimentLearningIntentSchema = z.object({
   enabled: z.boolean(),
+  graders: z.array(LearningRevisionRefSchema).max(100).optional(),
   mode: z.enum(["nightly", "approved_count"]),
   minimumTasks: z.string().max(100),
   localTime: z.string().max(100),
