@@ -72,6 +72,18 @@ Preparation and apply do not qualify graders, approve source/privacy reviews, ch
 
 Project Actions use `openpond/actions` by default. `actions check` validates and builds their registry, `actions build` produces the deterministic local bundle, `actions run` invokes one built action in a child process, and `actions dev` watches the source tree and rebuilds after changes. These commands do not use hosted sandboxes or require an OpenPond API key.
 
+## Starting a reviewed hosted preparation
+
+`openpond training hosted-start` accepts an existing preparation receipt and an optional signed estimate review:
+
+```bash
+openpond training hosted-start preparation.json --team-id <workspace-id> --estimate-review-file estimate.json --yes --json
+```
+
+The review file can contain the complete JSON receipt from `hosted-estimate` or its exact `review` object. A complete estimate must match the preparation's workspace, plan ID, plan hash and revision. The CLI validates the file with the SDK schemas and forwards the signed review unchanged; the server verifies its binding, expiry and current pricing. Treat the file as private because it contains the signed review token.
+
+This command retains the preparation's original cap, revision, plan hash and any usage-quote hash. It does not request a new estimate or preparation, reserve a different offering, or raise the budget. `--yes` remains required. Omitting `--estimate-review-file` preserves the existing Start behavior. If the response is uncertain, reconcile the original preparation and Job before retrying that same reviewed input.
+
 ## Authentication and configuration
 
 `openpond login` stores account credentials in the encrypted vault under `~/.openpond/secrets/`; non-secret account definitions live in `config.toml`. Use `--account` or `OPENPOND_ACCOUNT` to select a saved account, and `--base-url` when the same handle exists at more than one endpoint. Configuration and caches are private, atomic, and locked across concurrent CLI processes.
