@@ -1,4 +1,5 @@
-import { canonicalSha256, canonicalJson, OpenPondProtocolError } from "./protocol.js";
+import { contentHash as learningContentHash } from "@openpond/harness";
+import { canonicalJson, OpenPondProtocolError } from "./protocol.js";
 import { DatasetTrainingReviewRequestSchema, DatasetTrainingReviewReceiptSchema,
   type DatasetTrainingReviewRequest } from "./dataset-training-review-contracts.js";
 
@@ -8,8 +9,10 @@ export async function parseAndVerifyDatasetTrainingReviewReceipt(raw: unknown, i
   const request = DatasetTrainingReviewRequestSchema.parse(input);
   const value = DatasetTrainingReviewReceiptSchema.parse(raw);
   const { contentHash, ...content } = value;
-  if (contentHash !== await canonicalSha256(content) || value.requestHash !== await canonicalSha256(request)
-    || value.id !== `dataset-review-${await canonicalSha256([value.teamId, value.actorId, value.operationId])}`
+  // The review owner seals this receipt and its operation identity with the
+  // learning resource encoding, independently of the training HTTP transport.
+  if (contentHash !== learningContentHash(content) || value.requestHash !== learningContentHash(request)
+    || value.id !== `dataset-review-${learningContentHash([value.teamId, value.actorId, value.operationId])}`
     || value.teamId !== request.teamId || actorId && value.actorId !== actorId
     || value.operationId !== request.operationId || value.packageHash !== request.packageHash
     || canonicalJson(value.dataset) !== canonicalJson(request.dataset) || value.purpose !== request.purpose)

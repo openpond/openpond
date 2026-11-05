@@ -2,6 +2,9 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
+import { contentHash as learningContentHash } from "@openpond/harness";
+import { sealLearningContent } from "@openpond/evals/learning";
+import { datasetTrainingReviewIdentity } from "../src/dataset-training-review-preparation.js";
 import { canonicalSha256, createTrainingClient, OPENPOND_TRAINING_MEDIA_TYPE,
   TrainingEstimateRequestSchema, TrainingEstimateSchema } from "../src/training.js";
 
@@ -9,6 +12,11 @@ import { canonicalSha256, createTrainingClient, OPENPOND_TRAINING_MEDIA_TYPE,
 // and operation even when the HTTP response itself is well-formed and rehashed.
 it("verifies Dataset review receipt bindings over actual HTTP", async () => {
   const fixture = JSON.parse(await readFile(new URL("../fixtures/python-foundation/dataset-training-review-http-workflow.json", import.meta.url), "utf8"));
+  const { contentHash: _fixtureHash, ...receipt } = fixture.response;
+  fixture.response = sealLearningContent({ ...receipt,
+    id: datasetTrainingReviewIdentity(receipt.teamId, receipt.actorId, receipt.operationId),
+    requestHash: learningContentHash(fixture.request),
+  });
   let mode = "valid", posts = 0;
   const server = createServer(async (incoming, outgoing) => {
     expect(incoming.method).toBe("POST");
@@ -25,8 +33,13 @@ it("verifies Dataset review receipt bindings over actual HTTP", async () => {
     if (mode === "request") value.requestHash = "e".repeat(64);
     if (mode === "inventory") value.evidence.push(value.evidence[0]);
     if (mode === "sharing") value.shareWithWorkspace = false;
+    if (mode === "training_encoding") {
+      value.id = `dataset-review-${await canonicalSha256([value.teamId, value.actorId, value.operationId])}`;
+      value.requestHash = await canonicalSha256(fixture.request);
+    }
     const { contentHash: _hash, ...content } = value;
-    value.contentHash = mode === "hash" ? "e".repeat(64) : await canonicalSha256(content);
+    value.contentHash = mode === "hash" ? "e".repeat(64)
+      : mode === "training_encoding" ? await canonicalSha256(content) : learningContentHash(content);
     outgoing.writeHead(200, { "content-type": OPENPOND_TRAINING_MEDIA_TYPE }); outgoing.end(JSON.stringify(value));
   });
   server.listen(0, "127.0.0.1"); await once(server, "listening");
@@ -34,7 +47,7 @@ it("verifies Dataset review receipt bindings over actual HTTP", async () => {
     const address = server.address(); if (!address || typeof address === "string") throw new Error("Expected HTTP listener");
     const client = createTrainingClient({ baseUrl: `http://127.0.0.1:${address.port}` });
     expect(await client.reviewDataset(fixture.request)).toEqual(fixture.response);
-    for (const invalid of ["dataset", "team", "operation", "id", "request", "inventory", "sharing", "hash"]) {
+    for (const invalid of ["dataset", "team", "operation", "id", "request", "inventory", "sharing", "hash", "training_encoding"]) {
       mode = invalid; await expect(client.reviewDataset(fixture.request)).rejects.toBeDefined();
     }
     const before = posts;
