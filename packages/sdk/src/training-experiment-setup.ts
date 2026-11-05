@@ -25,7 +25,7 @@ export type ExperimentOperationType = z.infer<typeof ExperimentOperationTypeSche
 import { ExperimentStartingModelSchema, parseAndVerifyExperimentStartingModel } from "./experiment-starting-model.js";
 export { ExperimentStartingModelSchema, parseAndVerifyExperimentStartingModel, type ExperimentStartingModel } from "./experiment-starting-model.js";
 export function experimentOperationLabel(type: ExperimentOperationType): string {
-  return { evaluate: "Evaluate", sft: "SFT + LoRA", grpo: "RL (GRPO) + LoRA", neuron_steering: "Neuron steering", inspect_activations: "Inspect activations", engram_adapter: "Engram memory", decision_model: "Decision model", alphaedit: "AlphaEdit", selective_neuron_training: "Neuron training" }[type];
+  return { evaluate: "Evaluate", sft: "SFT", grpo: "RL", neuron_steering: "Neuron steering", inspect_activations: "Inspect activations", engram_adapter: "Engram memory", decision_model: "Decision model", alphaedit: "AlphaEdit", selective_neuron_training: "Neuron training" }[type];
 }
 
 /** Model-first manual training. The service owns configuration identity and

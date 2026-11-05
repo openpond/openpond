@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { expect, it } from "vitest";
 import { createRewardRelease } from "@openpond/evals/rewards";
 import { canonicalSha256, createTrainingClient, OPENPOND_TRAINING_MEDIA_TYPE,
-  parseAndVerifyModelModificationCapabilities, compileActivationForm, ExperimentDraftSaveSchema,
+  parseAndVerifyModelModificationCapabilities, compileActivationForm, ExperimentDraftSaveSchema, trainingExperimentLearningSettings,
   type ExperimentDraftRecord, type ExperimentDraftReceipt, type ExperimentDraftSave, type ActivationExperimentFormDraft,
   type HostedEvaluationExperimentFormDraft } from "../src/training.js";
 
@@ -173,8 +173,14 @@ it("verifies standalone draft CRUD and retained receipts across real HTTP", asyn
         hostedEvaluationForm,
         trainingForm: { baseModel: null, recipe: { schemaVersion: "openpond.rftRecipe.v1", method: "grpo", parameterization: "lora" },
           batch: null, evaluation: null, validationSplit: "validation", name: "Continued training", budget: "", parent, gpuSelection: { mode: "manual", availabilityId: "reviewed-offer", gpuType: "reviewed-gpu", gpuCount: 2 },
+          learningIntent: { enabled: false, mode: "nightly", minimumTasks: "2", localTime: "20:00", timeZone: "UTC", maximumSpendUsd: "1", maximumDailySpendUsd: "1", continuationAdapterMode: "sequential_merge" },
           startingModelLabel: "Model / Version 2" } } });
-    expect((await client.getExperimentDraft("team", "draft")).draft.trainingForm?.parent).toEqual(parent);
+    const reopenedTraining = (await client.getExperimentDraft("team", "draft")).draft.trainingForm!;
+    expect(reopenedTraining.parent).toEqual(parent);
+    // A future scheduled mode survives draft transport independently of this
+    // stage's parent mode, then reaches the saved Model configuration owner.
+    expect(reopenedTraining.learningIntent?.continuationAdapterMode).toBe("sequential_merge");
+    expect(trainingExperimentLearningSettings(reopenedTraining).continuationAdapterMode).toBe("sequential_merge");
     expect(await client.saveExperimentDraft(input)).toEqual(first);
     expect(continued.record.draft.trainingForm?.gpuSelection).toEqual({ mode: "manual", availabilityId: "reviewed-offer", gpuType: "reviewed-gpu", gpuCount: 2 });
     expect((await client.getExperimentDraft("team", "draft")).draft.hostedEvaluationForm).toEqual(hostedEvaluationForm);
@@ -330,6 +336,24 @@ it("verifies standalone draft CRUD and retained receipts across real HTTP", asyn
       await expect(async () => client.saveExperimentDraft(ExperimentDraftSaveSchema.parse({...input, operationId: `reject-${change}`, expectedRevision: trainedRevision, draft}))).rejects.toThrow();
     }
     expect(mutations).toBe(beforeInvalid);
+
+    // Future update preferences must survive reopening without fabricating a
+    // first-stage parent or enabling a recurring schedule on a fresh base.
+    const { parent: _parent, ...freshTraining } = continued.record.draft.trainingForm!;
+    for (const continuationAdapterMode of ["residual_append", "sequential_merge"] as const) {
+      const freshForm = { ...freshTraining, baseModel: trainedSource.baseModel,
+        learningIntent: { ...freshTraining.learningIntent!, enabled: false, continuationAdapterMode } };
+      const receipt = await client.saveExperimentDraft({ ...input, operationId: `fresh-future-${continuationAdapterMode}`, expectedRevision: trainedRevision,
+        draft: { schemaVersion: "openpond.experimentDraft.v1", id: "draft", operationType: "grpo", name: "Fresh base with future updates",
+          startingModel: { source: "managed", label: "Fresh base", baseModel: trainedSource.baseModel, inferenceModelId: null }, trainingForm: freshForm } });
+      trainedRevision = receipt.record.revision;
+      const reopened = (await client.getExperimentDraft("team", "draft")).draft.trainingForm!;
+      expect(reopened.parent).toBeUndefined();
+      expect(reopened.learningIntent).toEqual(freshForm.learningIntent);
+      const settings = trainingExperimentLearningSettings(reopened);
+      expect(settings.continuationAdapterMode).toBe(continuationAdapterMode);
+      expect(settings.recipe?.continuation).toBeUndefined();
+    }
 
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
