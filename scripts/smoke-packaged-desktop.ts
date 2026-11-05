@@ -151,11 +151,18 @@ async function main(): Promise<void> {
     if (contentSecurityPolicy.includes("'unsafe-eval'") || /script-src[^;]*'unsafe-inline'/.test(contentSecurityPolicy)) {
       throw new Error(`Packaged renderer uses an unsafe script policy: ${contentSecurityPolicy}`);
     }
-    if (!/script-src[^;]*'nonce-[^']+'/.test(contentSecurityPolicy)) {
-      throw new Error(`Packaged renderer script policy is missing its bootstrap nonce: ${contentSecurityPolicy}`);
+    if (!/(?:^|;)\s*script-src\s+'self'\s*(?:;|$)/.test(contentSecurityPolicy)) {
+      throw new Error(`Packaged renderer script policy must allow only same-origin scripts: ${contentSecurityPolicy}`);
     }
+    const rendererHtml = await rendererDocument.text();
+    const exposesConnectionToken = await evaluateValue<boolean>(
+      cdp,
+      `window.openpond.getConnection().then(({ token }) => ${JSON.stringify(rendererHtml)}.includes(token))`,
+    );
+    if (exposesConnectionToken) throw new Error("Unauthenticated packaged renderer HTML exposes the local API token.");
     const rendererSecurity = {
       contentSecurityPolicy,
+      exposesConnectionToken,
       contentTypeOptions: rendererDocument.headers.get("x-content-type-options"),
       frameOptions: rendererDocument.headers.get("x-frame-options"),
       referrerPolicy: rendererDocument.headers.get("referrer-policy"),
