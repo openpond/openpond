@@ -23,6 +23,7 @@ await withBuildLock(path.join(root, "node_modules/.cache/build.lock"), async () 
 
     await build({
       entryPoints: {
+        opentelemetry: path.join(root, "src/opentelemetry.ts"),
         "tool-learning": path.join(root, "src/tool-learning.ts"),
         "tool-learning-local-store": path.join(root, "src/tool-learning-local-store.ts"),
         "human-review": path.join(root, "src/human-review.ts"),

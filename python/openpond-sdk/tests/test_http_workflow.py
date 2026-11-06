@@ -54,9 +54,13 @@ def server():
         def auth(self):
             assert self.headers['Authorization']=='Bearer secret-fixture'
             assert self.headers['X-OpenPond-Team-Id']==TEAM
-            assert self.headers['Accept']==('application/json' if self.path.startswith(('/v1/model-projects/configuration/','/v1/tool-learning/')) else 'application/vnd.openpond.training+json;version=2')
+            assert self.headers['Accept']==('application/json' if self.path.startswith(('/v1/model-projects/configuration/','/v1/tool-learning/','/v1/dataset-workspaces/')) else 'application/vnd.openpond.training+json;version=2')
         def do_POST(self):
             self.auth()
+            if self.path == '/v1/dataset-workspaces/task-destination/tasks':
+                data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                state.setdefault('task_append_requests',[]).append(data)
+                self.reply(200,{'schemaVersion':'openpond.datasetTaskReceipt.v1','teamId':TEAM if not state.get('wrong_task_team') else 'other-team','datasetId':'task-destination','operationId':data['operationId'],'taskId':'task-one','receivedAt':'2026-11-06T16:00:00Z','revision':2,'state':'saved','trainingUseAuthorized':False});return
             if self.path.startswith('/v1/training/modification-executions/'):
                 data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 assert self.headers['Content-Type']=='application/vnd.openpond.training+json;version=2'
@@ -1046,3 +1050,21 @@ def test_managed_modification_workflow_binds_receipts_and_complete_capture_in_bo
     async def run():
         async with AsyncClient(base_url=url,api_key='secret-fixture',team_id=TEAM,read_attempts=1) as client:await flow(client)
     asyncio.run(run())
+
+
+def test_flat_task_submission_in_sync_and_async_clients(server):
+    """A repeated source key stays identical and a foreign receipt is rejected."""
+    url,state=server
+    task={"name":"Expired token","input":{"error":"Token expired"}}
+    with Client(base_url=url,api_key='secret-fixture',team_id=TEAM) as client:
+        receipt=client.add_task('task-destination',task,idempotency_key='event-one')
+        assert receipt['trainingUseAuthorized'] is False
+    async def submit():
+        async with AsyncClient(base_url=url,api_key='secret-fixture',team_id=TEAM) as client:
+            assert await client.add_task('task-destination',task,idempotency_key='event-one') == receipt
+            state['wrong_task_team']=True
+            with pytest.raises(ProtocolError) as failure:
+                await client.add_task('task-destination',task,idempotency_key='event-two')
+            assert failure.value.operation_id == 'event-two'
+    asyncio.run(submit())
+    assert state['task_append_requests'][0] == state['task_append_requests'][1]

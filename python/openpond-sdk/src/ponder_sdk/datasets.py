@@ -42,6 +42,10 @@ class Datasets(Resource):
         """POST /v1/dataset-workspaces/{id}/publish. Explicit operation; never automatically replayed."""
         return cast('models.DatasetWorkspaceReceipt', self._execute('OpenPondDatasetWorkspaceClient.publish', {'id': id}, input, query, expected))
 
+    def add_task(self, id: str, input: inputs.DatasetTaskAppendRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.DatasetTaskAppendReceipt:
+        """POST /v1/dataset-workspaces/{id}/tasks. Explicit operation; never automatically replayed."""
+        return cast('models.DatasetTaskAppendReceipt', self._execute('OpenPondDatasetWorkspaceClient.add_task', {'id': id}, input, query, expected))
+
 class AsyncDatasets(AsyncResource):
     async def list(self, input: inputs.DatasetWorkspaceListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.DatasetWorkspaceList:
         """GET /v1/dataset-workspaces. Read/reconcile; no mutation."""
@@ -78,3 +82,7 @@ class AsyncDatasets(AsyncResource):
     async def publish(self, id: str, input: inputs.DatasetWorkspacePublish, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.DatasetWorkspaceReceipt:
         """POST /v1/dataset-workspaces/{id}/publish. Explicit operation; never automatically replayed."""
         return cast('models.DatasetWorkspaceReceipt', await self._execute('OpenPondDatasetWorkspaceClient.publish', {'id': id}, input, query, expected))
+
+    async def add_task(self, id: str, input: inputs.DatasetTaskAppendRequest, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.DatasetTaskAppendReceipt:
+        """POST /v1/dataset-workspaces/{id}/tasks. Explicit operation; never automatically replayed."""
+        return cast('models.DatasetTaskAppendReceipt', await self._execute('OpenPondDatasetWorkspaceClient.add_task', {'id': id}, input, query, expected))

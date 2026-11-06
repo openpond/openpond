@@ -2,6 +2,8 @@
 from __future__ import annotations
 from .transport import Transport,AsyncTransport
 from .errors import PonderError
+from . import inputs, models
+from uuid import uuid4
 from .training import Training,AsyncTraining
 from .models_client import Models,AsyncModels
 from .learning import Learning,AsyncLearning
@@ -22,6 +24,14 @@ class Client:
         self.evaluation_runs=EvaluationRuns(self._transport,team_id)
         self.datasets=Datasets(self._transport,team_id)
         self.dataset_preparations=DatasetPreparations(self._transport,team_id)
+    def add_task(self, dataset_id: str, task: inputs.DatasetTaskInput, *, idempotency_key: str | None = None) -> models.DatasetTaskAppendReceipt:
+        """Durably add a task; retain an explicit key when retrying across calls."""
+        operation_id = idempotency_key if idempotency_key is not None else str(uuid4())
+        try:
+            return self.datasets.add_task(dataset_id, {"schemaVersion": "openpond.datasetTaskAppend.v1", "operationId": operation_id, "task": task})
+        except PonderError as error:
+            error.operation_id = operation_id
+            raise
     def tool_learning(self, *, project_id: str) -> ToolLearning:
         """Bind tool learning to one project without creating another HTTP pool."""
         return ToolLearning(self._transport, self.team_id, project_id)
@@ -43,6 +53,14 @@ class AsyncClient:
         self.evaluation_runs=AsyncEvaluationRuns(self._transport,team_id)
         self.datasets=AsyncDatasets(self._transport,team_id)
         self.dataset_preparations=AsyncDatasetPreparations(self._transport,team_id)
+    async def add_task(self, dataset_id: str, task: inputs.DatasetTaskInput, *, idempotency_key: str | None = None) -> models.DatasetTaskAppendReceipt:
+        """Async counterpart of Client.add_task using the existing HTTP pool."""
+        operation_id = idempotency_key if idempotency_key is not None else str(uuid4())
+        try:
+            return await self.datasets.add_task(dataset_id, {"schemaVersion": "openpond.datasetTaskAppend.v1", "operationId": operation_id, "task": task})
+        except PonderError as error:
+            error.operation_id = operation_id
+            raise
     def tool_learning(self, *, project_id: str) -> AsyncToolLearning:
         """Bind tool learning to one project using this client's async pool."""
         return AsyncToolLearning(self._transport, self.team_id, project_id)

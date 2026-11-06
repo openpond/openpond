@@ -1,6 +1,6 @@
 {
   "name": "ponder-sdk",
-  "version": "0.12.20",
+  "version": "0.12.21",
   "description": "Ponder distribution of the complete OpenPond TypeScript SDK",
   "license": "MIT",
   "type": "module",
@@ -157,10 +157,14 @@
     "./training-hardware": {
       "types": "./dist/training-hardware.d.ts",
       "import": "./dist/training-hardware.js"
+    },
+    "./opentelemetry": {
+      "types": "./dist/opentelemetry.d.ts",
+      "import": "./dist/opentelemetry.js"
     }
   },
   "dependencies": {
-    "openpond-sdk": "0.12.20"
+    "openpond-sdk": "0.12.21"
   },
   "engines": {
     "node": ">=22.14.0 <25"
@@ -178,5 +182,13 @@
     "build": "node scripts/build.mjs",
     "check": "node scripts/build.mjs && node scripts/check-published-consumer.mjs",
     "publish:check": "node scripts/build.mjs && node scripts/check-published-consumer.mjs && npm pack --dry-run"
+  },
+  "peerDependencies": {
+    "@opentelemetry/sdk-trace": ">=3.1.0 <4"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/sdk-trace": {
+      "optional": true
+    }
   }
 }

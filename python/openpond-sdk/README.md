@@ -3,13 +3,13 @@
 Native synchronous and asynchronous access to existing OpenPond training,
 evaluation, dataset and continual-learning APIs. Python3.10+; no Node subprocess,
 Desktop application, or uv installation is required to use the installed wheel.
-Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.3. Name and
+Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.4. Name and
 publisher ownership must be verified before publication; this source is not a
 claim that a registry release exists.
 
 ```sh
-pip install ponder-sdk==0.1.3
-# or: uv add ponder-sdk==0.1.3
+pip install ponder-sdk==0.1.4
+# or: uv add ponder-sdk==0.1.4
 ```
 
 Use an existing workspace API credential and explicit API origin. Do not put
@@ -59,6 +59,33 @@ deadline. Async callers can also bound an entire multi-call workflow. Responses 
 requested or accepted, and redirects are refused. Structured `PonderError`
 exposes only a safe code/status/outcome_unknown flag, never raw remote messages,
 request bodies, transport URLs or credentials.
+
+## Add production tasks
+
+Use a Dataset ID from your workspace. A successful receipt means the task is
+saved in that Dataset's Tasks view. It does not authorize training or create a Model.
+
+```python
+from ponder_sdk import Client
+
+with Client(base_url=api_base_url, api_key=api_key, team_id=team_id) as client:
+    receipt = client.add_task(dataset_id, {
+        "name": "Expired token",
+        "input": {"prompt": "Refresh the token and retry the request"},
+        "source": {"kind": "production", "eventId": event_id},
+    }, idempotency_key=event_id)
+```
+
+`AsyncClient.add_task` has the same arguments and is awaited. Retain a stable
+idempotency key for each source event and reuse it for uncertain delivery; writes
+are never automatically retried. A repeated key with changed content is rejected.
+For flat task calls, `PonderError.operation_id` also retains the generated key
+when the server response or transport fails. Async cancellation requires retaining
+your own explicit key before starting the call. Each request is limited to128KiB.
+
+Optional standard OpenTelemetry span exporters are described in
+[Optional OpenTelemetry](#optional-opentelemetry-adapter). They require an explicit task projection;
+`add_task` accepts structured OpenPond tasks, not OTLP payloads or arbitrary logs.
 
 ## API and authoring boundary
 
@@ -209,10 +236,10 @@ same artifacts with their exact source/run/version/manifest binding:
 
 ```sh
 # Run from the reviewed source ref; these are operator commands, not yet run.
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.3
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.4
 gh run download REVIEWED_BUILD_RUN -n ponder-python-candidate -D reviewed-python-candidate
 sha256sum reviewed-python-candidate/manifest.json
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.3 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.4 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
 ```
 
 The publish lane requires the `pypi-production` environment and
@@ -528,3 +555,73 @@ native calls. CPU file, projection, history and installed-package checks cover
 these boundaries; exact-model trained-result reload/forward and model-quality
 acceptance still require separate native evidence. No such acceptance is implied
 by installing the extra or passing the reference workflow.
+
+## Optional OpenTelemetry adapter
+
+Install `pip install 'ponder-sdk[opentelemetry]'` to use the standard
+[Python SpanExporter interface](https://opentelemetry-python.readthedocs.io/en/latest/sdk/trace.export.html).
+The base SDK has no OpenTelemetry dependency. Configure the exporter in your
+existing OTel provider, or create an explicitly owned provider:
+
+```python
+from ponder_sdk import Client
+from ponder_sdk.opentelemetry import OpenPondSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+
+def project_span(span):
+    attributes = span.attributes or {}
+    # Application-owned selection and redaction, not automatic prompt capture.
+    if attributes.get("app.learning_task") is not True:
+        return None
+    prompt = attributes.get("app.sanitized_task_input")
+    if not isinstance(prompt, str) or not prompt.strip():
+        return None
+    return {"name": span.name, "input": {"prompt": prompt}, "split": "validation"}
+
+
+with Client(base_url=api_base_url, api_key=api_key, team_id=team_id,
+            timeout=5) as client:
+    exporter = OpenPondSpanExporter(client=client, dataset_id=dataset_id,
+                                   project_span=project_span,
+                                   max_export_batch_size=32)
+    provider = TracerProvider()
+    provider.add_span_processor(BatchSpanProcessor(
+        exporter, max_export_batch_size=32, max_queue_size=256,
+        export_timeout_millis=30000))
+    try:
+        tracer = provider.get_tracer("production-agent")
+        # Supply tracer to your agent or use existing framework instrumentation.
+    finally:
+        provider.shutdown()  # Drain before closing the shared OpenPond client.
+    if exporter.last_export_error is not None:
+        # Report through your application's diagnostics, without raw task content.
+        report_telemetry_failure(exporter.last_export_error)
+```
+
+The required projection selects completed useful runs and redacts any sensitive
+content. Only the returned structured task plus trace/span source IDs are sent to
+`add_task`; attributes, prompts, events and outputs are never copied implicitly.
+Span events can carry logs/exceptions for an explicit projection. This does not
+install instrumentation, change the global provider, accept OTLP, or export
+standalone logs or metrics. The OTel processor owns background buffering; the
+synchronous `Client` is intentional because Python's exporter API is synchronous,
+even in an otherwise asynchronous application.
+
+Each trace/span pair gets a stable dataset-scoped idempotency key. Keep projections
+deterministic so replaying after a lost reply cannot create a duplicate task or
+conflict with an altered payload. Oversized/concurrent batches fail; per-task
+HTTP/validation errors return `SpanExportResult.FAILURE` and expose bounded
+`last_export_error.failures` with trace/span IDs. A 25s batch budget prevents new
+submissions after its deadline; an already running synchronous HTTP call uses the
+client's finite timeout and cannot be cancelled by the exporter. Use small batches
+and a short client timeout. No retry thread or durable outbox is created. OTel
+queues can drop full/failed batches; use direct `add_task` with an application
+outbox when delivery must be durable. Upload does not authorize training.
+
+Flush the provider to drain its queue; exporter `force_flush(timeout_millis)` only
+waits for its active export. Flush success does not prove every write succeeded;
+inspect `last_export_error` and OTel diagnostics. Exporter shutdown rejects new
+batches and waits up to 30s for active work. If it times out, keep the client open
+until work completes. It never closes the application-owned client.

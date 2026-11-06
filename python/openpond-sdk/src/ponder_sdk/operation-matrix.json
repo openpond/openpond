@@ -2738,6 +2738,23 @@
       "proofState": "source_only_actual_integration_pending",
       "requestMediaType": "application/vnd.openpond.training+json;version=2",
       "requestMediaTypeAuthority": "packages/sdk/src/training.ts:createTrainingClient.request default headers"
+    },
+    {
+      "client": "OpenPondDatasetWorkspaceClient",
+      "typescriptMethod": "addTask",
+      "pythonMethod": "add_task",
+      "source": "packages/sdk/src/dataset-workspace-client.ts",
+      "httpMethod": "POST",
+      "path": "/v1/dataset-workspaces/{id}/tasks",
+      "requestSchema": "DatasetTaskAppendRequestSchema",
+      "responseSchema": "DatasetTaskAppendReceiptSchema",
+      "responseUnwrap": null,
+      "writeReplay": "exact operation id and bytes only; caller retains idempotency key",
+      "authorityDomain": "datasets",
+      "classification": "existing_public_client",
+      "proofState": "source_only_actual_integration_pending",
+      "requestMediaType": "application/json",
+      "requestMediaTypeAuthority": "Existing JSON client headers and domain route adapter"
     }
   ],
   "laterFeatures": [

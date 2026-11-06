@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.12.20",
+  "version": "0.12.21",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -17,7 +17,9 @@
     "LEARNING.md",
     "TASKSETS.md",
     "MODEL_STARTERS.md",
-    "TRAINING_WORKFLOWS.md"
+    "TRAINING_WORKFLOWS.md",
+    "TASK_INGESTION.md",
+    "OPENTELEMETRY.md"
   ],
   "exports": {
     "./experiment-improvements": {
@@ -164,6 +166,10 @@
     "./tool-learning/node": {
       "types": "./dist/types/packages/sdk/src/tool-learning-local-store.d.ts",
       "import": "./dist/tool-learning-local-store.js"
+    },
+    "./opentelemetry": {
+      "types": "./dist/types/packages/sdk/src/opentelemetry.d.ts",
+      "import": "./dist/opentelemetry.js"
     }
   },
   "publishConfig": {
@@ -198,6 +204,7 @@
   "devDependencies": {
     "@openpond/actions": "workspace:*",
     "@openpond/cloud": "workspace:*",
+    "@opentelemetry/sdk-trace": "^3.1.0",
     "@types/node": "24.13.3",
     "esbuild": "0.28.1",
     "tsx": "4.23.1",
@@ -207,8 +214,16 @@
   "dependencies": {
     "@openpond/evals": "^0.12.6",
     "@openpond/harness": "^0.4.11",
-    "yaml": "^2.9.0",
     "esbuild": "0.28.1",
+    "yaml": "^2.9.0",
     "zod": "^4.1.13"
+  },
+  "peerDependencies": {
+    "@opentelemetry/sdk-trace": ">=3.1.0 <4"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/sdk-trace": {
+      "optional": true
+    }
   }
 }
