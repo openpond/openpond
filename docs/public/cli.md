@@ -110,14 +110,22 @@ The complete package guide lives in [apps/cli/README.md](../../apps/cli/README.m
 
 See [configuration, storage and recovery](configuration.md) for the shared home, settings, migration and backup commands.
 
-AlphaEdit and selective neuron training use the existing hosted training account:
+UI workflows map to existing command families. SFT + LoRA and RL use ordinary
+supervised and GRPO operations. SFT + Engram uses the Engram family, including
+`hosted-compile-engram`; SFT + Neuron training uses the neuron-training family,
+including `hosted-compile-neuron-training`. Decision Model retains Decision
+train/score operations; Alpha Edit retains the AlphaEdit family, including
+`hosted-compile-alphaedit`. Use installed help for each exact command. Workflow
+labels do not rename commands or change saved artifact formats.
+
+Alpha Edit is not offered in the UI; its technical CLI interfaces remain documented. Alpha Edit and selective neuron training use the existing hosted training account:
 `openpond training hosted-alphaedit-capability <query.json> --team-id <id> --json`
 and `hosted-neuron-training-capability` read exact availability. Their
 `hosted-compile-*`, `hosted-prepare-*`, `hosted-start-*`, `hosted-cancel-*`,
 `hosted-*-execution`, `hosted-*-executions`, `hosted-save-*-model`,
 `hosted-*-serving` and `hosted-control-*-serving` commands retain original
 operation, Model version and approval identities. Start and serving activation
-require `--yes`. See [Model modifications](model-modifications.md) for reviewed
+require `--yes`. See [Workflows and adapters](model-modifications.md) for reviewed
 data, exact artifact and retry semantics; use `openpond training --help` for
 complete syntax.
 

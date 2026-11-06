@@ -1,24 +1,58 @@
-# Model modifications
+# Workflows and adapters
 
-Model modification changes learned parameters or the internal computation of an open-weight model. A useful workflow keeps the original model, records an exact change, compares the result, and retains a version that can be reproduced.
+Adapters change learned parameters or add computation to an open-weight model. A useful workflow keeps the original model, records an exact change, compares the result, and retains a version that can be reproduced.
 
-OpenPond's [training workflow](training.md) covers reviewed examples, model recipes, evaluation and artifacts. The modifications below use the shared experiment setup and draft API/SDK/CLI. Managed compilation, preparation, explicit Start/Cancel and history operations are implemented on compatible hosts. The new modification runtimes still require qualification before hosted execution is available. Availability applies to the exact checkpoint, modification and runtime.
+OpenPond's [training workflow](training.md) connects reviewed examples, model recipes, evaluation and artifacts. Choose a workflow, then a compatible adapter and exact starting model. Compilation, preparation, explicit Start/Cancel and history reuse the existing operation families. Execution and serving availability are checked separately for the selected checkpoint, adapter and runtime.
 
-## What changes
+## Workflows and adapters
 
-| Method | Change | Availability |
+| Workflow | Adapter | What learns or changes |
 | --- | --- | --- |
-| SFT with LoRA | Trains adapter matrices while preserving the original checkpoint. | Existing SFT recipes use LoRA; destination and recipe compatibility still apply. |
-| RL / GRPO | Trains a policy adapter using rewards over generated candidates. | Existing GRPO recipes; destination, reward and runtime compatibility apply. |
-| Neuron or direction steering | Adds, scales or suppresses selected internal activations during inference. The checkpoint weights stay unchanged. | Drafts, local dense reference and managed lifecycle interfaces available. Managed execution requires a qualified runtime. |
-| Activation inspection | Measures selected activations. Inspection alone changes no model parameters. | Drafts, local selected-coordinate reference and managed lifecycle interfaces available. Semantic feature descriptions require separate interpretability assets. |
-| Engram-style conditional memory | Trains additional n-gram memory embeddings, projections and gates over a frozen backbone. | Training, saved-Model and serving interfaces implemented; execution requires an exact qualified runtime, currently unavailable. |
-| Decision training and scoring | Adapts a decision model and scores its allowed choices with complete candidate distributions. | Train/score, saved-Model and serving interfaces implemented; an exact qualified runtime is required. |
-| Selective neuron training | Learns weight changes to selected MLP output columns while freezing the original checkpoint. | Training, saved-Model and serving interfaces implemented; an exact qualified runtime is required. |
-| AlphaEdit | Updates selected original model matrices and retains exact replacements plus sequential editing state. | Editing, saved-Model and serving interfaces implemented; an exact qualified runtime is required. |
-| LoReFT | Trains a low-rank intervention on hidden representations while freezing the original checkpoint. | Deferred; no supported execution or serving runtime is claimed. |
+| SFT | LoRA | Learns low-rank weight updates from reviewed answers. |
+| SFT | Engram adapter | Learns n-gram memory tables, projections and gates over a frozen base. |
+| SFT | Neuron training | Learns deltas for selected MLP output-projection columns using target and background examples. |
+| RL / GRPO | LoRA | Learns policy updates from rewards over generated response groups. |
+| Decision Model | LoRA | Trains the specialized Decision adapter or scores allowed choices with its original or saved weights. |
+| Alpha Edit — Technical reference | Alpha Edit | Edits selected original matrices using reviewed factual edits and preservation data; not offered in the UI. |
 
-SFT describes a training objective; LoRA describes which parameters are adapted. Full-parameter SFT updates original weights, but it is not an admitted OpenPond SFT recipe. A learned module, an activation profile and an edited full checkpoint are different artifacts. A saved activation profile does not become a permanent weight edit.
+SFT and RL describe how a model learns. LoRA, Engram and neuron training describe which parameters learn. Decision Model describes a scoring task; its current implementation uses a particular LoRA release and backbone. Alpha Edit is its own editing procedure. It remains documented as a technical reference and is not offered in the UI. Adapters is the product category for these saved changes; LoRA weights, Engram memory, neuron patches and Alpha Edit matrix replacements retain different technical formats.
+
+The ordinary SFT recipe uses LoRA. Supervised Engram and neuron training retain their dedicated requests and executors. The current RL and Decision implementations use LoRA; Engram or neuron-training alternatives for those workflows require further integration. Full-parameter training is not an admitted ordinary SFT recipe. A starting base is a checkpoint choice, not a separate training objective.
+
+### Current support matrix
+
+| Workflow | LoRA | Engram | Neuron training | Alpha Edit |
+| --- | --- | --- | --- | --- |
+| SFT | Implemented | Implemented | Implemented | Separate workflow |
+| RL | Implemented | Not supported yet | Not supported yet | Separate workflow |
+| Decision Model | Implemented | Not supported yet | Not supported yet | Separate workflow |
+| Alpha Edit | Not applicable | Not applicable | Not applicable | Not offered in the UI; technical interfaces retained |
+
+Implemented means an execution contract and dedicated implementation exist. Exact model/runtime availability and qualification are checked separately. Not supported yet identifies a plausible combination requiring integration; it cannot currently be selected. New model shows these unavailable adapter choices grayed out. Alpha Edit is absent from UI workflow choices; its retained technical interfaces are documented below. This matrix does not imply that different adapters can be stacked or merged together.
+
+The implemented operation families require compatible model and runtime evidence; source implementation does not enable a disabled product workflow. Engram, neuron training and Alpha Edit currently target the pinned dense BF16 Qwen3-8B; Decision uses its separate Nimble/Qwen3.5 release. Changing the UI workflow does not change the artifact format or make an arbitrary model compatible.
+
+## Inference interventions and inspection
+
+| Operation | What changes | Relationship to training |
+| --- | --- | --- |
+| Neuron steering | Adds, scales or suppresses selected internal activations during a forward pass. | A saved inference profile; it does not train model weights. |
+| Activation inspection | Measures selected activations. | Observation only; it can inform later neuron selection. |
+
+Neuron steering is retained here as an inference-only reference for its existing profiles and interfaces. It is outside the standard new-model training choices. Neuron training produces a learned patch; it does not convert or replace an existing steering profile. Activation inspection remains separate. Each operation still needs a compatible runtime.
+
+## Continuation and scheduled learning
+
+| Adapter / workflow | New training or editing stage from a saved parent | Scheduled learning |
+| --- | --- | --- |
+| SFT + LoRA | Ordinary SFT starts from its pinned base; generic checkpoint continuation is unavailable. | Where a compatible policy is available, it can schedule fresh-base supervised runs. |
+| RL + LoRA | Admitted exact-parent Shared, Stacked or Merged modes, with their own compatibility rules. | Uses the selected policy's review, schedule, budget and candidate authority. |
+| Engram adapter | Reloads an exact compatible learned module with a fresh optimizer. | No standard recurring policy. |
+| Decision Model | Reloads an exact compatible adapter with a fresh optimizer. | No standard recurring policy. |
+| Neuron training | Saved patches support inference; training continuation/composition is unavailable. | No standard recurring policy. |
+| Alpha Edit | Retains exact parent replacements and sequential/preservation state for further edits. | No standard recurring policy. |
+
+Parent continuation, recovery of an interrupted run and a recurring learning policy are different capabilities. A learned artifact alone supplies no schedule or serving authority. Keeping the base frozen does not guarantee that earlier behavior is preserved; compare independent held-out and unrelated tasks.
 
 The small-model conditional-memory approach has research on Qwen3-4B and Qwen3-8B. It does not require the large DeepSeek model, but it is also not a table of editable text facts. [Engram Adapter](https://arxiv.org/abs/2608.29327). LoReFT is one method in the Representation Finetuning family. [ReFT](https://arxiv.org/abs/2404.03592). Neither paper establishes that an arbitrary OpenPond model or hosted worker supports the method.
 
@@ -67,7 +101,7 @@ record-modification`, `modification` and `modifications` with `--local --team`.
 Use the configured app home and local server origin. These observation endpoints
 are local; they do not add hosted execution or cloud storage.
 
-The shared experiment flow selects a starting model, experiment type and method-specific inputs. A neuron test may use fixed prompts and a set of intervention strengths. Training requires suitable examples. Graded batch evaluation uses the exact Dataset and grader releases. Chat can assist with setup or inspection; it is not a required starting point.
+The shared model setup selects a workflow, adapter and compatible starting model before its required inputs and review. An experiment may instead evaluate a model or inspect activations without producing changed weights. Existing steering evidence can compare fixed prompts and intervention strengths. Training requires suitable examples; graded batch evaluation uses exact Dataset and grader releases. Chat can assist with setup or inspection; it is not a required starting point.
 
 For example, compare an unmodified model with several steering strengths on the same prompts. Keep the checkpoint, input, sampling and evaluation conditions fixed so the intervention is the intended difference. Record answer quality, target behavior and runtime overhead. An ungraded observation remains ungraded.
 
@@ -77,17 +111,19 @@ Selected candidates can be retained as deliberate model versions once the corres
 
 ## Method settings
 
-These are proposed controls, not a declaration of fields currently accepted by OpenPond clients. A method's actual capabilities determine which settings are offered and which combinations execute.
+Settings follow the selected method's typed form and exact runtime. Architectural choices are not interchangeable controls: the current Engram runtime owns its fixed memory configuration, while neuron training requires target/background selection and Alpha Edit requires edit/preservation inputs.
 
 | Area | Useful settings | When the setting takes effect |
 | --- | --- | --- |
 | LoRA training | Target modules/layers, rank, alpha, dropout, learning rate and training steps | A new training run; changing these does not rewrite a completed adapter. |
 | Neuron/direction steering | Layer or hook point, neuron/direction, signed strength, supported operation, normalization and token scope | A new inference run with that profile. |
-| Conditional memory | N-gram channels, table capacity, embedding width, injection layers and trainable gate configuration | Module construction/training; changing dimensions or indexing requires a compatible new artifact. |
-| LoReFT | Rank, intervention layers/components and token-position selection | A new intervention training/configuration, subject to exact runtime support. |
+| Engram adapter | Learning rate, steps, accumulation, sequence length, seed, duration and checkpoint limits | Supervised memory training under the runtime's fixed architecture; continuation retains the exact parent module. |
+| Neuron training | Selection count, target/background criteria, optional explicit coordinates, learning rate and preservation settings | Select and train column deltas; a saved patch does not become a continuation parent. |
+| Decision Model | Train: reviewed targets and optimizer limits. Score: structured state, allowed choices and scoring limits | Training updates the specialized adapter; scoring measures the selected original or saved version. |
+| Alpha Edit | Edit/preservation data, selected layers, context templates and editing limits | Produces exact replacement matrices and retained sequential state. |
 | Inspection | Selected layers/tokens, top-k results and capture bounds | Measurement and retained output; inspection limits do not themselves modify learned parameters. |
 
-LoRA's reference library exposes module/layer selection and rank/scaling settings. [PEFT configuration](https://huggingface.co/docs/peft/en/package_reference/lora). ReFT explicitly supports layer/component and position-specific interventions. [pyreft](https://github.com/stanfordnlp/pyreft). Conditional-memory settings must follow a reproduced implementation, not arbitrary combinations inferred from a paper.
+LoRA's reference library exposes module/layer selection and rank/scaling settings. [PEFT configuration](https://huggingface.co/docs/peft/en/package_reference/lora). LoReFT remains outside the current supported workflow choices; its layer/component and position-specific interventions are a different method. [pyreft](https://github.com/stanfordnlp/pyreft). Conditional-memory settings must follow the admitted implementation, not arbitrary combinations inferred from a paper.
 
 A possible later training extension is updating selected token embeddings while freezing the remainder. PEFT provides a Trainable Tokens implementation, but OpenPond has not qualified it. Exact tokenizer identity, embedding resizing and tied output weights need explicit handling; this is distinct from n-gram conditional memory. [Trainable Tokens](https://huggingface.co/docs/peft/en/package_reference/trainable_tokens).
 
@@ -102,15 +138,15 @@ A research candidate, a version compatible with a serving destination, and a ver
 The SDK's `modificationCapabilities` read and CLI's
 `training hosted-modification-capabilities` query the exact selected base-model
 identity on compatible hosts. The response separates draft format support from
-execution support and retains its workspace, actor and expiry. Current source
-reports unsupported models or unqualified activation runtimes; it does not
-advertise managed steering or inspection execution. The shared form retains
-edits while checking availability. A fresh capability read is still separate
-from execution approval or GPU allocation.
+execution support and retains its workspace, actor and expiry. Inspect the
+returned exact runtime evidence and any unsupported/unqualified reason rather
+than inferring readiness from a catalog entry. The shared form retains edits
+while checking availability. A fresh capability read is still separate from
+execution approval or GPU allocation.
 
 Use the same lifecycle interfaces from the UI or your harness. Training and managed activation operations retain separate typed results. An activation capture is not a deployable Model; saving or serving a modification needs its own compatible artifact and runtime. The installed skill describes supported commands and capability checks; installing instructions adds no worker capability.
 
-For current operations, use the [CLI command reference](../../apps/cli/docs/command-reference.md) and the installed command help. Do not infer new commands from this guide's proposed workflow.
+For current operations, use the [CLI command reference](../../apps/cli/docs/command-reference.md) and the installed command help. Workflow labels do not rename commands or combine separate operation families.
 
 ## Inspect a managed modification execution
 
@@ -126,7 +162,7 @@ The matching native Python method is `client.training.get_modification_execution
 openpond training hosted-modification-execution <execution-id> --team-id <id> --json
 ```
 
-This read returns the owned execution's exact request, lifecycle phase and any retained capture. Clients verify the response hash, execution/workspace identity, request hash and complete capture coverage. A capture can be present while the phase is still `dispatching` or `stopping`; its presence does not establish resource cleanup or final cost settlement. Terminal phases are server-authored lifecycle observations; clients do not independently verify cleanup or billing receipts. This read starts no compute. Current runtime discovery advertises no qualified managed steering or inspection runtime.
+This read returns the owned execution's exact request, lifecycle phase and any retained capture. Clients verify the response hash, execution/workspace identity, request hash and complete capture coverage. A capture can be present while the phase is still `dispatching` or `stopping`; its presence does not establish resource cleanup or final cost settlement. Terminal phases are server-authored lifecycle observations; clients do not independently verify cleanup or billing receipts. This read starts no compute. Check current capability discovery for exact execution availability.
 
 ## Managed activation lifecycle
 
@@ -165,7 +201,7 @@ The Python dense reference executor exposes `calibrate(request)` to measure an o
 
 ## Conditional-memory lifecycle
 
-The Engram path implements an independent post-hoc memory adapter for an exact Qwen3-8B BF16 target. It trains additional n-gram tables, projections and gates while freezing the base weights. This is separate from native DeepSeek conditional memory and from neuron steering. Current runtime discovery returns `runtime_not_qualified`; source delivery does not establish that training, reload or serving has passed real-model qualification.
+The Engram path implements an independent post-hoc memory adapter for an exact Qwen3-8B BF16 target. It uses a supervised objective to train additional n-gram tables, projections and gates while freezing the base weights. The module participates in forward passes during both training and inference; only training updates its learned weights. This is separate from native DeepSeek conditional memory and from neuron steering. Query exact runtime availability; training, retained artifacts, independent reload, serving and model quality require their own evidence.
 
 For example, select a reviewed supervised batch of fictional product-support examples. On a qualified host, train a memory module, inspect its retained training result, save the exact module as a Model version and activate that version for serving. Compare held-out support questions and unrelated questions with the module enabled and Off. This example describes the intended workflow, not a measured quality result.
 
@@ -192,8 +228,8 @@ including its released tokenizer/template, over the separately pinned
 Its full conditional-generation source identity is preserved. This is a typed
 candidate scorer, not generated chat JSON. Contracts and CLI integration are
 implemented in source; a compatible host and exact qualified decision runtime
-are required. Runtime qualification is currently unavailable. No training,
-reload, quality or serving performance is claimed from source delivery.
+are required. Query current capability discovery for that exact source. Source
+delivery alone establishes no training, reload, quality or serving performance.
 
 For example, route a fictional support ticket to a team and assess its urgency:
 
@@ -309,6 +345,8 @@ issued work must reconcile before another paid attempt. No CLI mutation is
 automatically retried.
 
 ## AlphaEdit and selective neuron training
+
+Alpha Edit is not offered in the UI. The interfaces below remain documented for retained executions, artifacts and exact capability inspection; their presence does not make the workflow available in the chooser.
 
 Both methods reuse the same configured training account, reviewed Dataset
 batches, preparation approvals, cancellation, artifact custody and saved Model

@@ -10,6 +10,27 @@ OpenPond first diagnoses whether the behavior belongs in model weights. Stable, 
 
 Training examples remain labeled by origin: extracted, corrected, synthetic, or expert-authored. Historical assistant output is candidate evidence, not automatically an approved demonstration.
 
+## Choose a workflow
+
+| Workflow | Purpose | Current adapters |
+| --- | --- | --- |
+| SFT | Learn desired responses from reviewed demonstrations. | LoRA, Engram adapter or Neuron training through their respective trainers. |
+| RL | Learn from rewards on generated attempts. | LoRA with GRPO. |
+| Decision Model | Train or score allowed choices from structured state. | The specialized Decision LoRA adapter. |
+| Alpha Edit — Technical reference | Factual editing; not offered in the UI. | Alpha Edit; technical interfaces remain documented. |
+
+Choose the workflow first, then its adapter and compatible starting model.
+The ordinary SFT recipe is LoRA-specific; Engram and neuron training retain their
+dedicated supervised contracts and required data. Alpha Edit is retained as a technical
+reference and is not offered in the UI; it follows its own editing procedure. Every combination requires an exact compatible runtime;
+serving readiness is checked separately.
+
+Neuron steering changes inference activations without training weights and is
+outside the standard new-model training choices. Activation inspection measures
+internal activity and remains an experiment tool. See
+[Workflows and adapters](model-modifications.md) for the mechanism, compatibility
+and continuation matrix.
+
 ## Build a Taskset
 
 A Taskset is the reviewable contract for training and evaluation. It contains:
@@ -60,7 +81,7 @@ the isolation runtime is unavailable.
 
 Once the Taskset is ready:
 
-1. Choose a base model, SFT recipe, and compatible destination.
+1. Choose the workflow, adapter, exact starting model and compatible destination.
 2. Review compatibility, data policy, retention, region, and estimated cost assumptions.
 3. Approve the exact source set and data export boundary.
 4. Build and validate a content-addressed training bundle.
@@ -79,7 +100,12 @@ and tokenizer pins, adapter ranks, sequence length, epochs and update limits.
 Preparation and Start reject recipes outside the selected image's support
 before paid allocation. An existing image can retain a smaller limit after an
 SDK update; a newly built image needs its own reviewed qualification evidence.
-SFT starts from the pinned base and does not support checkpoint continuation.
+The ordinary SFT + LoRA path starts from the pinned base and does not support
+generic checkpoint continuation. A scheduled SFT policy can start fresh-base
+runs where that policy is supported. Engram and Decision exact-parent
+continuation and Alpha Edit sequential editing use separate reviewed operations;
+they do not imply a recurring learning policy. Saved neuron patches currently
+support inference rather than further training.
 
 ## Inspect supervised training fit
 
