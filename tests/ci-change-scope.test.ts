@@ -55,6 +55,16 @@ describe("CI change scope", () => {
     expect(classifyCiChanges(["packages/evals/python/tests/test_telemetry.py"]).python).toBe(true);
   });
 
+  test("does not schedule Python commands when a documentation-only job skips installation", () => {
+    expect(classifyCiChanges([
+      "docs/public/training.md",
+      "python/openpond-sdk/README.md",
+      "packages/sdk/fixtures/python-foundation/README.md",
+    ])).toMatchObject({ docsOnly: true, install: false, python: false });
+    expect(classifyCiChanges(["python/openpond-sdk/src/ponder_sdk/client.py"]))
+      .toMatchObject({ install: true, python: true });
+  });
+
   test("separates shipped builds from installation and export proofs", () => {
     expect(classifyCiChanges(["apps/cli/src/index.ts"]).distribution).toBe(true);
     expect(classifyCiChanges(["packages/runtime/src/index.ts"])).toMatchObject({ build: true, distribution: false });
