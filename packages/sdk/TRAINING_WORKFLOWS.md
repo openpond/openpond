@@ -58,6 +58,7 @@ Model setup authoring may also retain optional `modelSetup` metadata, exported
 as `ModelSetupDraftSchema` and `ModelSetupDraft` from `openpond-sdk/training`.
 It stores the selected workflow (`sft`, `rl`, `decision`), adapter (`lora`,
 `engram`, `neuron-training`), `continualLearning` choice, current setup section
+(`model`, `dataset`, `graders`, `learning` or `settings`)
 and an optional editable Dataset `{ id, revision }`. That Dataset reference is
 an authoring destination, not an admitted training batch or immutable release.
 These choices survive the same revisioned draft save/read lifecycle. They do

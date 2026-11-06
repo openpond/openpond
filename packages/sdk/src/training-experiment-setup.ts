@@ -155,7 +155,7 @@ export const ModelSetupDraftSchema = z.object({
     id: z.string().trim().min(1).max(240),
     revision: z.number().int().positive(),
   }).strict().optional(),
-  section: z.enum(["model", "dataset", "graders", "settings"]),
+  section: z.enum(["model", "dataset", "graders", "learning", "settings"]),
 }).strict();
 export type ModelSetupDraft = z.infer<typeof ModelSetupDraftSchema>;
 
