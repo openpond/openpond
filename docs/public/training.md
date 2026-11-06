@@ -17,13 +17,11 @@ Training examples remain labeled by origin: extracted, corrected, synthetic, or 
 | SFT | Learn desired responses from reviewed demonstrations. | LoRA, Engram adapter or Neuron training through their respective trainers. |
 | RL | Learn from rewards on generated attempts. | LoRA with GRPO. |
 | Decision Model | Train or score allowed choices from structured state. | The specialized Decision LoRA adapter. |
-| Alpha Edit — Technical reference | Factual editing; not offered in the UI. | Alpha Edit; technical interfaces remain documented. |
 
 Choose the workflow first, then its adapter and compatible starting model.
 The ordinary SFT recipe is LoRA-specific; Engram and neuron training retain their
-dedicated supervised contracts and required data. Alpha Edit is retained as a technical
-reference and is not offered in the UI; it follows its own editing procedure. Every combination requires an exact compatible runtime;
-serving readiness is checked separately.
+dedicated supervised contracts and required data. Every combination requires an
+exact compatible runtime; serving readiness is checked separately.
 
 Neuron steering changes inference activations without training weights and is
 outside the standard new-model training choices. Activation inspection measures
@@ -103,7 +101,7 @@ SDK update; a newly built image needs its own reviewed qualification evidence.
 The ordinary SFT + LoRA path starts from the pinned base and does not support
 generic checkpoint continuation. A scheduled SFT policy can start fresh-base
 runs where that policy is supported. Engram and Decision exact-parent
-continuation and Alpha Edit sequential editing use separate reviewed operations;
+continuation paths use separate reviewed operations;
 they do not imply a recurring learning policy. Saved neuron patches currently
 support inference rather than further training.
 
