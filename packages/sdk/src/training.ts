@@ -414,7 +414,7 @@ function unwrapObject(value: unknown, key: string): unknown {
   return key in value ? (value as Record<string, unknown>)[key] : value;
 }
 
-export { ExperimentDraftSchema, parseAndVerifyExperimentDraft, ExperimentOperationTypeSchema, ExperimentStartingModelSchema, parseAndVerifyExperimentStartingModel, experimentOperationLabel, type ExperimentDraft, type ExperimentOperationType, type ExperimentStartingModel } from "./training-experiment-setup.js";
+export { ExperimentDraftSchema, ModelSetupDraftSchema, assertModelSetupExecutionIntent, parseAndVerifyExperimentDraft, ExperimentOperationTypeSchema, ExperimentStartingModelSchema, parseAndVerifyExperimentStartingModel, experimentOperationLabel, type ExperimentDraft, type ModelSetupDraft, type ExperimentOperationType, type ExperimentStartingModel } from "./training-experiment-setup.js";
 export * from "./activation-experiment-draft.js";
 
 export { TrainingExperimentFormDraftSchema, ExperimentDraftUpdateSchema, type TrainingExperimentFormDraft, type ExperimentDraftUpdate } from "./training-experiment-setup.js";

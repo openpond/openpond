@@ -54,6 +54,20 @@ execution location. Training authoring uses `trainingForm`. Cleared evaluation
 numeric controls remain `null`; blank training spend fields remain strings.
 These incomplete values can be retained without becoming executable requests.
 
+Model setup authoring may also retain optional `modelSetup` metadata, exported
+as `ModelSetupDraftSchema` and `ModelSetupDraft` from `openpond-sdk/training`.
+It stores the selected workflow (`sft`, `rl`, `decision`), adapter (`lora`,
+`engram`, `neuron-training`), `continualLearning` choice, current setup section
+and an optional editable Dataset `{ id, revision }`. That Dataset reference is
+an authoring destination, not an admitted training batch or immutable release.
+These choices survive the same revisioned draft save/read lifecycle. They do
+not publish a learning policy or establish executor compatibility. Call
+`assertModelSetupExecutionIntent(draft, requestedOperation)` when converting a
+retained setup draft into a preparation request. It rejects a different or
+unsupported workflow/adapter operation; executor admission still owns runtime,
+permissions and resource checks. Direct explicit-method APIs remain independent
+of this authoring metadata.
+
 Use `training.saveExperimentDraft(request)` with
 `schemaVersion: "openpond.experimentDraftSave.v1"`, `teamId`, a stable
 `operationId`, `expectedRevision`, optional `projectId`, and an
