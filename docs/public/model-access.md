@@ -40,4 +40,4 @@ OpenPond's orchestration layer is designed to help open source models operate wi
 
 The model can change; the agent workflow should remain understandable and reviewable.
 
-See [Model modifications](model-modifications.md) for the distinction between existing training workflows and proposed activation, memory and weight-editing capabilities. Access to a hosted chat model does not imply access to its internal activations or weights.
+See [Workflows and adapters](model-modifications.md) for SFT, RL and Decision Model workflows, their supported adapters, the coming-soon Alpha Edit workflow, and separate inference interventions. Training or editing needs exact checkpoint and runtime access; a hosted chat connection alone does not provide model weights or internal hooks.

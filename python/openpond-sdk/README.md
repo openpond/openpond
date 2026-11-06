@@ -390,6 +390,21 @@ switches cannot read the previous account's observations. Importing the CPU
 example in the shared UI uses this same local storage and never creates a Job,
 credit reservation or served model. HTTP helpers remain independent of Torch.
 
+## Model workflows and adapters
+
+The model-building workflows are SFT, RL and Decision Model. Alpha Edit is
+coming soon and disabled in standard new-model setup; its technical interfaces
+remain documented. SFT
+can train LoRA, Engram memory or selected-neuron patches through their separate
+operation families; current RL and Decision training use LoRA. Alpha Edit
+produces exact matrix replacements. The workflow/adapter distinction does
+not add new API operations or make these methods interchangeable on every base.
+See the [workflow and continuation matrix](../../docs/public/model-modifications.md).
+
+Neuron steering is a separate inference intervention, documented here for its
+existing profiles and interfaces. It does not train weights. Activation
+inspection produces observations and can inform neuron selection.
+
 ## Managed activation lifecycle
 
 Compatible hosts expose `training.compile_modification_execution(request)`,
@@ -405,8 +420,8 @@ hash and cap. Retry an uncertain command with its unchanged operation ID.
 `list_modification_executions(query)` returns creator-scoped metadata history;
 `get_modification_execution(execution_id)` reads its verified request and any
 retained capture. A capture does not establish cleanup or final settlement.
-Current capability discovery advertises no qualified managed activation runtime,
-so these interfaces do not imply that an arbitrary checkpoint can execute.
+Read current capability discovery for the exact model/runtime; these interfaces
+do not establish that an arbitrary checkpoint can execute.
 
 Preparations may include `sourceForm` to retain the exact text and controls.
 Fresh preparation recompiles that form against the host's exact tokenizer;
