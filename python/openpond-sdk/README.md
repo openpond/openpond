@@ -392,12 +392,10 @@ credit reservation or served model. HTTP helpers remain independent of Torch.
 
 ## Model workflows and adapters
 
-The model-building workflows are SFT, RL and Decision Model. Alpha Edit is
-not offered in the UI; its technical interfaces remain documented. SFT
+The model-building workflows are SFT, RL and Decision Model. SFT
 can train LoRA, Engram memory or selected-neuron patches through their separate
-operation families; current RL and Decision training use LoRA. Alpha Edit
-produces exact matrix replacements. The workflow/adapter distinction does
-not add new API operations or make these methods interchangeable on every base.
+operation families; current RL and Decision training use LoRA. The
+workflow/adapter distinction does not add new API operations or make these methods interchangeable on every base.
 See the [workflow and continuation matrix](../../docs/public/model-modifications.md).
 
 Neuron steering is a separate inference intervention, documented here for its
@@ -537,17 +535,6 @@ Use `with patch.request(enabled=True): output = snapshot.model(...)`; Off is an
 explicit `enabled=False` request, and `patch.detach()` removes every hook.
 An optional original `request=` additionally verifies training provenance.
 The sealed coordinate/delta artifact is sufficient for inference loading.
-
-`reference.alphaedit.load_alphaedit(snapshot, directory,
-expected_content_hash=...)` checks the manifest, `patch.safetensors` and all
-`state-N.safetensors` files. AlphaEdit's patch contains **exact replacement BF16
-matrices**, not additive deltas. Installation requires a fresh exact base,
-validates all tensors first, stages device copies, and restores original weights
-if installation fails. A native device failure that also prevents rollback
-marks the snapshot unusable; discard that snapshot/model. Inference uses the
-replacement weights directly; covariance/projector/cache state is verified in
-bounded slices without running editing or optimization. A second installation
-against the already edited base is refused.
 
 `reference.decision.load_decision(directory, expected_content_hash=...,
 artifact_id=..., model_identity=..., source_directories=..., device="cuda:0")`

@@ -114,13 +114,12 @@ UI workflows map to existing command families. SFT + LoRA and RL use ordinary
 supervised and GRPO operations. SFT + Engram uses the Engram family, including
 `hosted-compile-engram`; SFT + Neuron training uses the neuron-training family,
 including `hosted-compile-neuron-training`. Decision Model retains Decision
-train/score operations; Alpha Edit retains the AlphaEdit family, including
-`hosted-compile-alphaedit`. Use installed help for each exact command. Workflow
+train/score operations. Use installed help for each exact command. Workflow
 labels do not rename commands or change saved artifact formats.
 
-Alpha Edit is not offered in the UI; its technical CLI interfaces remain documented. Alpha Edit and selective neuron training use the existing hosted training account:
-`openpond training hosted-alphaedit-capability <query.json> --team-id <id> --json`
-and `hosted-neuron-training-capability` read exact availability. Their
+Selective neuron training uses the existing hosted training account:
+`openpond training hosted-neuron-training-capability <query.json> --team-id <id> --json`
+reads exact availability. The
 `hosted-compile-*`, `hosted-prepare-*`, `hosted-start-*`, `hosted-cancel-*`,
 `hosted-*-execution`, `hosted-*-executions`, `hosted-save-*-model`,
 `hosted-*-serving` and `hosted-control-*-serving` commands retain original

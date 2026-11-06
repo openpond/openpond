@@ -40,4 +40,4 @@ OpenPond's orchestration layer is designed to help open source models operate wi
 
 The model can change; the agent workflow should remain understandable and reviewable.
 
-See [Workflows and adapters](model-modifications.md) for SFT, RL and Decision Model workflows, their supported adapters, the Alpha Edit technical reference, and separate inference interventions. Training or editing needs exact checkpoint and runtime access; a hosted chat connection alone does not provide model weights or internal hooks.
+See [Workflows and adapters](model-modifications.md) for SFT, RL and Decision Model workflows, their supported adapters, and separate inference interventions. Training or editing needs exact checkpoint and runtime access; a hosted chat connection alone does not provide model weights or internal hooks.

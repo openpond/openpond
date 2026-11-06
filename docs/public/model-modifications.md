@@ -13,24 +13,22 @@ OpenPond's [training workflow](training.md) connects reviewed examples, model re
 | SFT | Neuron training | Learns deltas for selected MLP output-projection columns using target and background examples. |
 | RL / GRPO | LoRA | Learns policy updates from rewards over generated response groups. |
 | Decision Model | LoRA | Trains the specialized Decision adapter or scores allowed choices with its original or saved weights. |
-| Alpha Edit — Technical reference | Alpha Edit | Edits selected original matrices using reviewed factual edits and preservation data; not offered in the UI. |
 
-SFT and RL describe how a model learns. LoRA, Engram and neuron training describe which parameters learn. Decision Model describes a scoring task; its current implementation uses a particular LoRA release and backbone. Alpha Edit is its own editing procedure. It remains documented as a technical reference and is not offered in the UI. Adapters is the product category for these saved changes; LoRA weights, Engram memory, neuron patches and Alpha Edit matrix replacements retain different technical formats.
+SFT and RL describe how a model learns. LoRA, Engram and neuron training describe which parameters learn. Decision Model describes a scoring task; its current implementation uses a particular LoRA release and backbone. Adapters is the product category for these saved changes; LoRA weights, Engram memory and neuron patches retain different technical formats.
 
 The ordinary SFT recipe uses LoRA. Supervised Engram and neuron training retain their dedicated requests and executors. The current RL and Decision implementations use LoRA; Engram or neuron-training alternatives for those workflows require further integration. Full-parameter training is not an admitted ordinary SFT recipe. A starting base is a checkpoint choice, not a separate training objective.
 
 ### Current support matrix
 
-| Workflow | LoRA | Engram | Neuron training | Alpha Edit |
-| --- | --- | --- | --- | --- |
-| SFT | Implemented | Implemented | Implemented | Separate workflow |
-| RL | Implemented | Not supported yet | Not supported yet | Separate workflow |
-| Decision Model | Implemented | Not supported yet | Not supported yet | Separate workflow |
-| Alpha Edit | Not applicable | Not applicable | Not applicable | Not offered in the UI; technical interfaces retained |
+| Workflow | LoRA | Engram | Neuron training |
+| --- | --- | --- | --- |
+| SFT | Implemented | Implemented | Implemented |
+| RL | Implemented | Not supported yet | Not supported yet |
+| Decision Model | Implemented | Not supported yet | Not supported yet |
 
-Implemented means an execution contract and dedicated implementation exist. Exact model/runtime availability and qualification are checked separately. Not supported yet identifies a plausible combination requiring integration; it cannot currently be selected. New model shows these unavailable adapter choices grayed out. Alpha Edit is absent from UI workflow choices; its retained technical interfaces are documented below. This matrix does not imply that different adapters can be stacked or merged together.
+Implemented means an execution contract and dedicated implementation exist. Exact model/runtime availability and qualification are checked separately. Not supported yet identifies a plausible combination requiring integration; it cannot currently be selected. New model shows these unavailable adapter choices grayed out. This matrix does not imply that different adapters can be stacked or merged together.
 
-The implemented operation families require compatible model and runtime evidence; source implementation does not enable a disabled product workflow. Engram, neuron training and Alpha Edit currently target the pinned dense BF16 Qwen3-8B; Decision uses its separate Nimble/Qwen3.5 release. Changing the UI workflow does not change the artifact format or make an arbitrary model compatible.
+The implemented operation families require compatible model and runtime evidence; source implementation does not enable a disabled product workflow. Engram and neuron training currently target the pinned dense BF16 Qwen3-8B; Decision uses its separate Nimble/Qwen3.5 release. Changing the UI workflow does not change the artifact format or make an arbitrary model compatible.
 
 ## Inference interventions and inspection
 
@@ -41,16 +39,15 @@ The implemented operation families require compatible model and runtime evidence
 
 Neuron steering is retained here as an inference-only reference for its existing profiles and interfaces. It is outside the standard new-model training choices. Neuron training produces a learned patch; it does not convert or replace an existing steering profile. Activation inspection remains separate. Each operation still needs a compatible runtime.
 
-## Continuation and scheduled learning
+## Continuation and continual learning
 
-| Adapter / workflow | New training or editing stage from a saved parent | Scheduled learning |
+| Adapter / workflow | New training stage from a saved parent | Continual learning |
 | --- | --- | --- |
-| SFT + LoRA | Ordinary SFT starts from its pinned base; generic checkpoint continuation is unavailable. | Where a compatible policy is available, it can schedule fresh-base supervised runs. |
-| RL + LoRA | Admitted exact-parent Shared, Stacked or Merged modes, with their own compatibility rules. | Uses the selected policy's review, schedule, budget and candidate authority. |
-| Engram adapter | Reloads an exact compatible learned module with a fresh optimizer. | No standard recurring policy. |
-| Decision Model | Reloads an exact compatible adapter with a fresh optimizer. | No standard recurring policy. |
-| Neuron training | Saved patches support inference; training continuation/composition is unavailable. | No standard recurring policy. |
-| Alpha Edit | Retains exact parent replacements and sequential/preservation state for further edits. | No standard recurring policy. |
+| SFT + LoRA | Ordinary SFT starts from its pinned base; generic checkpoint continuation is unavailable. | Yes |
+| RL + LoRA | Admitted exact-parent Shared, Stacked or Merged modes, with their own compatibility rules. | Yes |
+| Engram adapter | Reloads an exact compatible learned module with a fresh optimizer. | No |
+| Decision Model | Reloads an exact compatible adapter with a fresh optimizer. | No |
+| Neuron training | Saved patches support inference; training continuation/composition is unavailable. | No |
 
 Parent continuation, recovery of an interrupted run and a recurring learning policy are different capabilities. A learned artifact alone supplies no schedule or serving authority. Keeping the base frozen does not guarantee that earlier behavior is preserved; compare independent held-out and unrelated tasks.
 
@@ -111,7 +108,7 @@ Selected candidates can be retained as deliberate model versions once the corres
 
 ## Method settings
 
-Settings follow the selected method's typed form and exact runtime. Architectural choices are not interchangeable controls: the current Engram runtime owns its fixed memory configuration, while neuron training requires target/background selection and Alpha Edit requires edit/preservation inputs.
+Settings follow the selected method's typed form and exact runtime. Architectural choices are not interchangeable controls: the current Engram runtime owns its fixed memory configuration, while neuron training requires target/background selection.
 
 | Area | Useful settings | When the setting takes effect |
 | --- | --- | --- |
@@ -120,7 +117,6 @@ Settings follow the selected method's typed form and exact runtime. Architectura
 | Engram adapter | Learning rate, steps, accumulation, sequence length, seed, duration and checkpoint limits | Supervised memory training under the runtime's fixed architecture; continuation retains the exact parent module. |
 | Neuron training | Selection count, target/background criteria, optional explicit coordinates, learning rate and preservation settings | Select and train column deltas; a saved patch does not become a continuation parent. |
 | Decision Model | Train: reviewed targets and optimizer limits. Score: structured state, allowed choices and scoring limits | Training updates the specialized adapter; scoring measures the selected original or saved version. |
-| Alpha Edit | Edit/preservation data, selected layers, context templates and editing limits | Produces exact replacement matrices and retained sequential state. |
 | Inspection | Selected layers/tokens, top-k results and capture bounds | Measurement and retained output; inspection limits do not themselves modify learned parameters. |
 
 LoRA's reference library exposes module/layer selection and rank/scaling settings. [PEFT configuration](https://huggingface.co/docs/peft/en/package_reference/lora). LoReFT remains outside the current supported workflow choices; its layer/component and position-specific interventions are a different method. [pyreft](https://github.com/stanfordnlp/pyreft). Conditional-memory settings must follow the admitted implementation, not arbitrary combinations inferred from a paper.
@@ -344,61 +340,41 @@ complete version/input/bounds. Changing inputs requires a new request; unknown
 issued work must reconcile before another paid attempt. No CLI mutation is
 automatically retried.
 
-## AlphaEdit and selective neuron training
+## Selective neuron training
 
-Alpha Edit is not offered in the UI. The interfaces below remain documented for retained executions, artifacts and exact capability inspection; their presence does not make the workflow available in the chooser.
+Neuron training uses the configured training account, reviewed target and
+background Dataset batches, preparation approval, cancellation, artifact custody
+and saved Model owners. Availability requires an exact qualified runtime.
 
-Both methods reuse the same configured training account, reviewed Dataset
-batches, preparation approvals, cancellation, artifact custody and saved Model
-owners. They have separate typed requests and artifacts. Availability requires
-an exact qualified runtime; these source interfaces do not qualify a model.
+| Operation | Selective neuron SDK |
+| --- | --- |
+| Capability | `neuronTrainingExecutionCapability(query)` |
+| Compile raw reviewed form | `compileNeuronTrainingExecution(input)` |
+| Prepare | `prepareNeuronTrainingExecution(input)` |
+| Start approved plan | `startNeuronTrainingExecution(command)` |
+| Cancel | `cancelNeuronTrainingExecution(command)` |
+| Exact result | `getNeuronTrainingExecution(teamId, id)` |
+| Creator-owned history | `listNeuronTrainingExecutions(teamId, query)` |
+| Save completed result | `saveNeuronTrainingResultModel(input)` |
+| Exact serving state | `neuronTrainingModelServing(modelProjectId, query)` |
+| Activate/stop | `controlNeuronTrainingModelServing(modelProjectId, request)` |
 
-| Operation | AlphaEdit SDK | Selective neuron SDK |
-| --- | --- | --- |
-| Capability | `alphaEditExecutionCapability(query)` | `neuronTrainingExecutionCapability(query)` |
-| Compile raw reviewed form | `compileAlphaEditExecution(input)` | `compileNeuronTrainingExecution(input)` |
-| Prepare | `prepareAlphaEditExecution(input)` | `prepareNeuronTrainingExecution(input)` |
-| Start approved plan | `startAlphaEditExecution(command)` | `startNeuronTrainingExecution(command)` |
-| Cancel | `cancelAlphaEditExecution(command)` | `cancelNeuronTrainingExecution(command)` |
-| Exact result | `getAlphaEditExecution(teamId, id)` | `getNeuronTrainingExecution(teamId, id)` |
-| Creator-owned history | `listAlphaEditExecutions(teamId, query)` | `listNeuronTrainingExecutions(teamId, query)` |
-| Save completed result | `saveAlphaEditResultModel(input)` | `saveNeuronTrainingResultModel(input)` |
-| Exact serving state | `alphaEditModelServing(modelProjectId, query)` | `neuronTrainingModelServing(modelProjectId, query)` |
-| Activate/stop | `controlAlphaEditModelServing(modelProjectId, request)` | `controlNeuronTrainingModelServing(modelProjectId, request)` |
+Use a reviewed target batch containing desired behavior, named background-domain
+batches and optional preservation examples. Selection records target/background
+activation and gradient criteria; the optimizer changes only the chosen
+`down_proj` columns. The retained delta can be saved and served against the exact
+base. Training from an already modified neuron Model is unsupported.
 
-For example, correct a product fact with an AlphaEdit reviewed edit whose input
-is `{ "subject": "Harbor", "promptTemplate": "{} supports" }` and string target
-`"offline exports"`. Supply a separate reviewed preservation batch of literal
-texts. Compile `alphaEditForm`, retain the returned request and preparation, then
-start that original plan explicitly. The artifact stores the actual BF16
-`down_proj` replacements and per-layer FP32 covariance, projector and sequential
-cache. It is not serialized as an approximate LoRA. Continuing edits requires the
-exact compatible parent artifact and named saved source pin when selected.
-
-The result includes target negative log-likelihood before editing, after editing
-and after a fresh reload, plus preservation next-token KL and measured reload
-diagnostics. These use the same reviewed inputs; they are not held-out quality
-measurements. Latent optimization losses remain separate from these scores.
-
-For selective neuron training, use a reviewed target batch containing desired
-behavior, named background-domain batches and optional preservation examples.
-The selection records target/background activation and gradient criteria; the
-optimizer changes only the chosen `down_proj` columns. The retained delta can
-be saved and served against the exact base. Training from an already modified
-neuron Model is explicitly unsupported rather than replaced with its base.
-
-The official CLI uses `hosted-alphaedit-capability`, `hosted-compile-alphaedit`,
-`hosted-prepare-alphaedit`, `hosted-start-alphaedit`, `hosted-cancel-alphaedit`,
-`hosted-alphaedit-execution`, `hosted-alphaedit-executions`,
-`hosted-save-alphaedit-model`, `hosted-alphaedit-serving` and
-`hosted-control-alphaedit-serving`; substitute `neuron-training` for `alphaedit`
-for the other method. Pass `--team-id <workspace-id>` and `--json`; paid Start
-and serving activation also require `--yes`. Use the running app's configured
-`--home <selected-home>` when reusing its account. Exact command syntax is in
-`openpond training --help`.
+Use the official CLI's `hosted-neuron-training-capability`,
+`hosted-compile-neuron-training`, `hosted-prepare-neuron-training`,
+`hosted-start-neuron-training`, `hosted-cancel-neuron-training`,
+`hosted-neuron-training-execution`, `hosted-neuron-training-executions`,
+`hosted-save-neuron-training-model`, `hosted-neuron-training-serving` and
+`hosted-control-neuron-training-serving` commands. Pass `--team-id <workspace-id>`
+and `--json`; paid Start and serving activation also require `--yes`.
+Use the running app's configured `--home <selected-home>` when reusing its
+account. Read `openpond training --help` for exact syntax.
 
 After a lost acknowledgement, reconcile the same immutable operation and exact
-command. Completed tensor upload is distinct from positive process cleanup and
-settled allocation billing. A saved version is distinct from active routing;
-read its binding, capacity and outstanding cleanup before claiming Stop released
-resources. Optimization losses do not establish held-out quality or improvement.
+command. Tensor upload, cleanup, settled billing and active serving are separate
+states. Optimization losses do not establish held-out quality or improvement.
