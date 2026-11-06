@@ -5,7 +5,17 @@ import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { runTrainingCommand } from "../src/cli/training";
+import { parseArgs } from "../src/cli/common/args";
+import { runCliCommand } from "../src/cli/command-registry";
 import { parseModelProjectSaveRequest } from "openpond-sdk/model-projects";
+import { canonicalSha256 } from "openpond-sdk/training";
+
+vi.mock("../src/cli/hosted-training-account", () => ({
+  hostedTrainingAccount: async (options: Record<string, string | boolean>) => ({
+    context: {}, baseUrl: "https://api.example.test", teamId: options.teamId,
+    headers: new Headers({ "x-openpond-team-id": String(options.teamId) }),
+  }),
+}));
 
 const logs: string[] = [];
 const originalLog = console.log;
@@ -16,6 +26,37 @@ afterEach(() => {
 });
 
 describe("training CLI", () => {
+  // Failure story: an advertised Model filter must survive argv validation and
+  // reach the API, or profile history is rejected or broadened to other Models.
+  test("forwards exact hosted steering profile Model scope through the CLI parser", async () => {
+    console.log = (message?: unknown) => logs.push(String(message ?? ""));
+    let requestCount = 0;
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      expect(url.origin + url.pathname).toBe("https://api.example.test/v1/training/steering-profiles");
+      expect(init?.method ?? "GET").toBe("GET");
+      expect(new Headers(init?.headers).get("x-openpond-team-id")).toBe("team-fixture");
+      const expectedProject = ++requestCount === 1 ? { projectId: "project-fixture" } : {};
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        teamId: "team-fixture", modelProjectId: "model-fixture",
+        ...expectedProject, archived: "false", limit: "25",
+      });
+      const content = {
+        schemaVersion: "openpond.steeringProfilePage.v1", teamId: "team-fixture", ownerUserId: "owner-fixture",
+        query: { modelProjectId: "model-fixture", ...expectedProject, archived: false, limit: 25 },
+        items: [], nextCursor: null,
+      };
+      return jsonResponse({ ...content, contentHash: await canonicalSha256(content) });
+    });
+    for (const projectArgs of [["--project-id", "project-fixture"], []]) {
+      const parsed = parseArgs(["training", "hosted-steering-profiles", "--team-id", "team-fixture",
+        "--model-project-id", "model-fixture", ...projectArgs, "--json"]);
+      expect(await runCliCommand(parsed)).toBe(true);
+      expect(JSON.parse(logs.at(-1)!)).toMatchObject({ query: { modelProjectId: "model-fixture" } });
+    }
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
   // Failure story: pulling a reviewed hosted package must use the canonical
   // local importer and explicit Profile, without syncing or starting training.
   test("pulls an exact hosted Model into an explicitly selected local Profile", async () => {
