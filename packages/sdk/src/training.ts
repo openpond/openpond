@@ -50,7 +50,8 @@ export * from "./experiment-draft-storage.js";
 import { createTrainingExecutionClient } from "./training-executions.js";
 export { TrainingExecutionSummarySchema, TrainingExecutionPageSchema, TrainingExecutionListQuerySchema, type TrainingExecutionSummary, type TrainingExecutionPage, type TrainingExecutionListQuery } from "./training-executions.js";
 import { createTrainingRequest } from "./training-transport.js";
-export { SftRecipeSchema, ManagedSftRecipeSchema, type SftRecipe } from "./training-supervised.js";
+export { SftRecipeSchema, ManagedSftRecipeSchema, TrainingSftImageCapabilitiesSchema,
+  supportsTrainingSftRecipe, type SftRecipe, type TrainingSftImageCapabilities } from "./training-supervised.js";
 export { TrainingApiErrorSchema, OpenPondTrainingApiError } from "./training-transport.js";
 import { createTrainingAcceptanceClient } from "./training-acceptance.js";
 import { createTrainingHardwareClient } from "./training-hardware.js";
