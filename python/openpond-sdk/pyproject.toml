@@ -1,6 +1,6 @@
 [project]
 name = "ponder-sdk"
-version = "0.1.3"
+version = "0.1.4"
 description = "Typed native Python access to OpenPond training and learning"
 readme = "README.md"
 license = "MIT"
@@ -9,6 +9,7 @@ dependencies = ["httpx>=0.28.1,<1", "jsonschema[format]>=4.23,<5", "rfc8785>=0.1
 classifiers = ["Typing :: Typed", "Programming Language :: Python :: 3"]
 
 [project.optional-dependencies]
+opentelemetry = ["opentelemetry-sdk>=1.38,<2"]
 inference = ["torch==2.8.0", "transformers==5.17.0", "safetensors==0.8.0", "peft==0.21.0", "accelerate==1.15.0", "sentencepiece==0.2.2", "pillow==12.3.0", "huggingface-hub==1.16.1"]
 
 [dependency-groups]

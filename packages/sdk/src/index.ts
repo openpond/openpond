@@ -1,4 +1,10 @@
 import {
+  addDatasetTask,
+  type DatasetTaskInput,
+  type AddTaskOptions,
+  type DatasetTaskAppendReceipt,
+} from "./dataset-task-ingestion.js";
+import {
   createOpenPondSandboxClient,
   type OpenPondSandboxClient,
 } from "@openpond/cloud/sandbox/client";
@@ -16,6 +22,11 @@ import { OpenPondHumanReviewClient } from "./human-review-client.js";
 import { configuredEndpoint, configuredKey } from "./work-sandbox.js";
 
 export class OpenPondClient {
+  readonly addTask: (
+    datasetId: string,
+    task: DatasetTaskInput,
+    options?: AddTaskOptions,
+  ) => Promise<DatasetTaskAppendReceipt>;
   readonly sandboxes: OpenPondSandboxClient;
   readonly work: OpenPondWorkClient;
   readonly workflows: OpenPondWorkflowsClient;
@@ -30,22 +41,37 @@ export class OpenPondClient {
     const apiKey = options.apiKey?.trim() ?? "";
     if (!apiKey && (!options.sandbox || !options.model))
       throw new Error("OpenPond API key is required when using a default sandbox or model");
-    const sandbox = options.sandbox ? {
-      ...options.sandbox,
-      endpoint: configuredEndpoint(options.sandbox.endpoint, "Sandbox endpoint"),
-      apiKey: configuredKey(options.sandbox.apiKey, "Sandbox API key"),
-    } : undefined;
-    const model = options.model ? {
-      endpoint: configuredEndpoint(options.model.endpoint, "Model endpoint"),
-      apiKey: configuredKey(options.model.apiKey, "Model API key"),
-      model: configuredKey(options.model.model, "Model ID"),
-    } : undefined;
+    const sandbox = options.sandbox
+      ? {
+          ...options.sandbox,
+          endpoint: configuredEndpoint(options.sandbox.endpoint, "Sandbox endpoint"),
+          apiKey: configuredKey(options.sandbox.apiKey, "Sandbox API key"),
+        }
+      : undefined;
+    const model = options.model
+      ? {
+          endpoint: configuredEndpoint(options.model.endpoint, "Model endpoint"),
+          apiKey: configuredKey(options.model.apiKey, "Model API key"),
+          model: configuredKey(options.model.model, "Model ID"),
+        }
+      : undefined;
 
     const apiBaseUrl = options.baseUrl?.trim() || "https://api.openpond.ai";
+    const taskTeamId = options.teamId ?? "";
+    this.addTask = (datasetId, task, taskOptions) =>
+      addDatasetTask(
+        { apiKey, baseUrl: apiBaseUrl, teamId: taskTeamId },
+        datasetId,
+        task,
+        taskOptions,
+      );
     this.learning = (scope) => new OpenPondLearningClient({ apiKey, baseUrl: apiBaseUrl, scope });
-    this.experiments = (teamId) => new OpenPondExperimentsClient({ apiKey, baseUrl: apiBaseUrl, teamId });
-    this.connectedEvidence = (teamId) => new ConnectedEvidenceClient({ apiKey, baseUrl: apiBaseUrl, teamId });
-    this.humanReview = (scope) => new OpenPondHumanReviewClient({ apiKey, baseUrl: apiBaseUrl, scope });
+    this.experiments = (teamId) =>
+      new OpenPondExperimentsClient({ apiKey, baseUrl: apiBaseUrl, teamId });
+    this.connectedEvidence = (teamId) =>
+      new ConnectedEvidenceClient({ apiKey, baseUrl: apiBaseUrl, teamId });
+    this.humanReview = (scope) =>
+      new OpenPondHumanReviewClient({ apiKey, baseUrl: apiBaseUrl, scope });
     this.sandboxes = createOpenPondSandboxClient({
       apiKey: sandbox?.apiKey ?? apiKey,
       baseUrl: apiBaseUrl,
@@ -56,7 +82,8 @@ export class OpenPondClient {
       apiKey: model?.apiKey ?? apiKey,
       apiBaseUrl,
       chatApiBaseUrl:
-        model?.endpoint || options.chatApiUrl?.trim() ||
+        model?.endpoint ||
+        options.chatApiUrl?.trim() ||
         resolveOpChatApiBaseUrl({ apiBaseUrl, env: {} }),
       sandboxes: this.sandboxes,
       sandboxConfig: sandbox,
@@ -151,3 +178,10 @@ export * from "./experiment-improvements.js";
 
 export * from "./experiment-evaluation-schedules.js";
 export * from "./advanced-refiner-evaluations.js";
+
+export { createTaskAdder, DatasetTaskIngestionError } from "./dataset-task-ingestion.js";
+export type {
+  DatasetTaskInput,
+  DatasetTaskAppendReceipt,
+  AddTaskOptions,
+} from "./dataset-task-ingestion.js";
