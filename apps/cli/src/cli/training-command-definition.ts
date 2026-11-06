@@ -178,6 +178,7 @@ export const TRAINING_COMMAND_DEFINITION: CliCommandDefinition = {
     manifest: "string",
     maxSpend: "number",
     model: "string",
+    modelProjectId: "string",
     name: "string",
     objective: "string",
     profile: "string",
