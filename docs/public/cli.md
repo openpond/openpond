@@ -118,7 +118,7 @@ train/score operations; Alpha Edit retains the AlphaEdit family, including
 `hosted-compile-alphaedit`. Use installed help for each exact command. Workflow
 labels do not rename commands or change saved artifact formats.
 
-Alpha Edit is coming soon and disabled in standard New model setup; its technical CLI interfaces remain documented. Alpha Edit and selective neuron training use the existing hosted training account:
+Alpha Edit is not offered in the UI; its technical CLI interfaces remain documented. Alpha Edit and selective neuron training use the existing hosted training account:
 `openpond training hosted-alphaedit-capability <query.json> --team-id <id> --json`
 and `hosted-neuron-training-capability` read exact availability. Their
 `hosted-compile-*`, `hosted-prepare-*`, `hosted-start-*`, `hosted-cancel-*`,

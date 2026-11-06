@@ -393,8 +393,7 @@ credit reservation or served model. HTTP helpers remain independent of Torch.
 ## Model workflows and adapters
 
 The model-building workflows are SFT, RL and Decision Model. Alpha Edit is
-coming soon and disabled in standard new-model setup; its technical interfaces
-remain documented. SFT
+not offered in the UI; its technical interfaces remain documented. SFT
 can train LoRA, Engram memory or selected-neuron patches through their separate
 operation families; current RL and Decision training use LoRA. Alpha Edit
 produces exact matrix replacements. The workflow/adapter distinction does

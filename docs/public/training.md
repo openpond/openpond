@@ -17,12 +17,12 @@ Training examples remain labeled by origin: extracted, corrected, synthetic, or 
 | SFT | Learn desired responses from reviewed demonstrations. | LoRA, Engram adapter or Neuron training through their respective trainers. |
 | RL | Learn from rewards on generated attempts. | LoRA with GRPO. |
 | Decision Model | Train or score allowed choices from structured state. | The specialized Decision LoRA adapter. |
-| Alpha Edit — Coming soon | Factual editing; visible but disabled in New model. | Alpha Edit; technical interfaces remain documented. |
+| Alpha Edit — Technical reference | Factual editing; not offered in the UI. | Alpha Edit; technical interfaces remain documented. |
 
 Choose the workflow first, then its adapter and compatible starting model.
 The ordinary SFT recipe is LoRA-specific; Engram and neuron training retain their
-dedicated supervised contracts and required data. Alpha Edit is coming soon and
-disabled in standard creation; it follows its own editing procedure. Every combination requires an exact compatible runtime;
+dedicated supervised contracts and required data. Alpha Edit is retained as a technical
+reference and is not offered in the UI; it follows its own editing procedure. Every combination requires an exact compatible runtime;
 serving readiness is checked separately.
 
 Neuron steering changes inference activations without training weights and is

@@ -13,9 +13,9 @@ OpenPond's [training workflow](training.md) connects reviewed examples, model re
 | SFT | Neuron training | Learns deltas for selected MLP output-projection columns using target and background examples. |
 | RL / GRPO | LoRA | Learns policy updates from rewards over generated response groups. |
 | Decision Model | LoRA | Trains the specialized Decision adapter or scores allowed choices with its original or saved weights. |
-| Alpha Edit — Coming soon | Alpha Edit | Edits selected original matrices using reviewed factual edits and preservation data; disabled in standard new-model setup. |
+| Alpha Edit — Technical reference | Alpha Edit | Edits selected original matrices using reviewed factual edits and preservation data; not offered in the UI. |
 
-SFT and RL describe how a model learns. LoRA, Engram and neuron training describe which parameters learn. Decision Model describes a scoring task; its current implementation uses a particular LoRA release and backbone. Alpha Edit is its own editing procedure. It is coming soon in standard setup: the Alpha Edit workflow is visible but disabled, and cannot enter a new editing run. Adapters is the product category for these saved changes; LoRA weights, Engram memory, neuron patches and Alpha Edit matrix replacements retain different technical formats.
+SFT and RL describe how a model learns. LoRA, Engram and neuron training describe which parameters learn. Decision Model describes a scoring task; its current implementation uses a particular LoRA release and backbone. Alpha Edit is its own editing procedure. It remains documented as a technical reference and is not offered in the UI. Adapters is the product category for these saved changes; LoRA weights, Engram memory, neuron patches and Alpha Edit matrix replacements retain different technical formats.
 
 The ordinary SFT recipe uses LoRA. Supervised Engram and neuron training retain their dedicated requests and executors. The current RL and Decision implementations use LoRA; Engram or neuron-training alternatives for those workflows require further integration. Full-parameter training is not an admitted ordinary SFT recipe. A starting base is a checkpoint choice, not a separate training objective.
 
@@ -26,9 +26,9 @@ The ordinary SFT recipe uses LoRA. Supervised Engram and neuron training retain 
 | SFT | Implemented | Implemented | Implemented | Separate workflow |
 | RL | Implemented | Not supported yet | Not supported yet | Separate workflow |
 | Decision Model | Implemented | Not supported yet | Not supported yet | Separate workflow |
-| Alpha Edit | Not applicable | Not applicable | Not applicable | Coming soon; disabled in New model |
+| Alpha Edit | Not applicable | Not applicable | Not applicable | Not offered in the UI; technical interfaces retained |
 
-Implemented means an execution contract and dedicated implementation exist. Exact model/runtime availability and qualification are checked separately. Not supported yet identifies a plausible combination requiring integration; it cannot currently be selected. New model shows these unavailable adapter choices grayed out. Alpha Edit is marked Coming soon and disabled in New model; its retained technical interfaces are documented below. This matrix does not imply that different adapters can be stacked or merged together.
+Implemented means an execution contract and dedicated implementation exist. Exact model/runtime availability and qualification are checked separately. Not supported yet identifies a plausible combination requiring integration; it cannot currently be selected. New model shows these unavailable adapter choices grayed out. Alpha Edit is absent from UI workflow choices; its retained technical interfaces are documented below. This matrix does not imply that different adapters can be stacked or merged together.
 
 The implemented operation families require compatible model and runtime evidence; source implementation does not enable a disabled product workflow. Engram, neuron training and Alpha Edit currently target the pinned dense BF16 Qwen3-8B; Decision uses its separate Nimble/Qwen3.5 release. Changing the UI workflow does not change the artifact format or make an arbitrary model compatible.
 
@@ -346,7 +346,7 @@ automatically retried.
 
 ## AlphaEdit and selective neuron training
 
-Alpha Edit is coming soon in standard new-model setup and is currently disabled there. The interfaces below remain documented for retained executions, artifacts and exact capability inspection; their presence does not make the workflow available in the chooser.
+Alpha Edit is not offered in the UI. The interfaces below remain documented for retained executions, artifacts and exact capability inspection; their presence does not make the workflow available in the chooser.
 
 Both methods reuse the same configured training account, reviewed Dataset
 batches, preparation approvals, cancellation, artifact custody and saved Model
