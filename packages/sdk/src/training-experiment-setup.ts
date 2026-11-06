@@ -144,6 +144,21 @@ export const TrainingExperimentFormDraftSchema = z.object({
 }).strict();
 export type TrainingExperimentFormDraft = z.infer<typeof TrainingExperimentFormDraftSchema>;
 
+/** Resumable Model authoring choices, independent of executor availability.
+ * Dataset revisions identify editable destinations, not admitted training input.
+ * Saving this metadata never enables a policy, prepares a run or serves a Model. */
+export const ModelSetupDraftSchema = z.object({
+  workflow: z.enum(["sft", "rl", "decision"]),
+  adapter: z.enum(["lora", "engram", "neuron-training"]),
+  continualLearning: z.boolean(),
+  dataset: z.object({
+    id: z.string().trim().min(1).max(240),
+    revision: z.number().int().positive(),
+  }).strict().optional(),
+  section: z.enum(["model", "dataset", "graders", "settings"]),
+}).strict();
+export type ModelSetupDraft = z.infer<typeof ModelSetupDraftSchema>;
+
 /** An authoring snapshot may be incomplete. It is never a preparation, an
  * execution, or evidence that a model/method is available to this account. */
 export const ExperimentDraftSchema = z.object({
@@ -151,6 +166,7 @@ export const ExperimentDraftSchema = z.object({
   id: z.string().trim().min(1).max(240),
   operationType: ExperimentOperationTypeSchema,
   name: z.string().trim().min(1).max(500),
+  modelSetup: ModelSetupDraftSchema.optional(),
   startingModel: ExperimentStartingModelSchema.optional(),
   evaluationForm: EvaluationExperimentDraftSchema.optional(),
   hostedEvaluationForm: HostedEvaluationExperimentFormDraftSchema.optional(),
@@ -257,6 +273,23 @@ export const ExperimentDraftSchema = z.object({
     context.addIssue({ code: "custom", path: ["training"], message: "Training settings must match the experiment type." });
 });
 export type ExperimentDraft = z.infer<typeof ExperimentDraftSchema>;
+
+/** Guard draft-to-preparation dispatch against silently substituting a method.
+ * This validates authoring intent only; runtime/ownership admission remains
+ * with the requested executor. Read/save intentionally accept these choices. */
+export function assertModelSetupExecutionIntent(draft: ExperimentDraft, requestedOperation: ExperimentOperationType): void {
+  const parsed = ExperimentDraftSchema.parse(draft);
+  const setup = parsed.modelSetup;
+  if (!setup) return;
+  const operation: ExperimentOperationType | null = setup.workflow === "sft"
+    ? setup.adapter === "lora" ? "sft" : setup.adapter === "engram" ? "engram_adapter" : "selective_neuron_training"
+    : setup.adapter === "lora" ? setup.workflow === "rl" ? "grpo" : "decision_model" : null;
+  if (!operation)
+    throw new OpenPondProtocolError("model_setup_execution_unsupported", "The selected workflow and adapter do not have a supported execution operation.");
+  if (parsed.operationType !== operation || requestedOperation !== operation)
+    throw new OpenPondProtocolError("model_setup_execution_mismatch", "The requested operation differs from the Model setup's selected workflow and adapter.");
+}
+
 /** Nested saved evidence is verified independently of an outer draft hash. */
 export async function parseAndVerifyExperimentDraft(raw: unknown, expected: Parameters<typeof parseAndVerifyExperimentStartingModel>[1] = {}): Promise<ExperimentDraft> {
   const draft = ExperimentDraftSchema.parse(raw);
