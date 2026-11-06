@@ -71,6 +71,16 @@ Bundles contain approved training records, the recipe, policy, and provenance. T
 
 The open-source repository provides bundle export and an optional non-production local CPU training fixture. OpenPond Managed is the hosted compute option when it is available for the signed-in account. Connected and direct-provider destinations appear only when their required worker and destination integrations are configured. The local worker lives in `python/openpond-training` and requires Python `>=3.10,<3.13` plus `uv`.
 
+Managed SFT authoring accepts at most 20 epochs and 400 optimizer updates.
+These are authoring ceilings, not a guarantee that every worker can execute
+that recipe. Inspect `openpond training hosted-capabilities`: each
+`supervisedTraining` entry binds an immutable worker image, exact base-model
+and tokenizer pins, adapter ranks, sequence length, epochs and update limits.
+Preparation and Start reject recipes outside the selected image's support
+before paid allocation. An existing image can retain a smaller limit after an
+SDK update; a newly built image needs its own reviewed qualification evidence.
+SFT starts from the pinned base and does not support checkpoint continuation.
+
 ## Inspect supervised training fit
 
 Use `openpond training hosted-evaluate-checkpoint <request.json> --team-id <id> --yes`

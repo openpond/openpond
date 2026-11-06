@@ -4,7 +4,7 @@ import { z } from "zod";
 import { TrainingHandoffOriginSchema } from "@openpond/evals/learning";
 import { ModelProjectBaseModelSchema, ModelProjectImmutableRefSchema,
   ModelProjectRecipeDocumentSchema, ModelProjectVersionedRefSchema } from "./model-projects.js";
-import { SftRecipeSchema } from "./training-supervised.js";
+import { SftRecipeSchema, TrainingSftImageCapabilitiesSchema } from "./training-supervised.js";
 import { TrainingCheckpointRecoveryResourceApprovalSchema } from "./training-recovery.js";
 import { TrainingPhysicalPlacementSchema } from "./training-physical-placement.js";
 import { TrainingGpuSelectionSchema } from "./training-compute-selection.js";
@@ -568,6 +568,7 @@ export const TrainingCapabilitiesSchema = z
     billingModes: TrainingBillingModesSchema.optional(),
     executionModes: z.array(z.enum(["training", "qualification"])).optional(),
     policyLora: TrainingPolicyLoraCapabilitiesSchema.optional(),
+    supervisedTraining: z.array(TrainingSftImageCapabilitiesSchema).min(1).max(100).optional(),
     policyDataParallel: z.object({
       capability: z.literal("managed_rl.policy.data_parallel"),
       version: z.literal("1"),
