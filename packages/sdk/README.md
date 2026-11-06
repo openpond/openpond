@@ -389,3 +389,7 @@ is immutable and owner-scoped. `comparisonBudget(id)` returns each operation's
 run ID, known settled spend, pending reservations and remaining allowance.
 Registering a comparison does not start any work. Independent experiments do
 not implicitly share a spending cap.
+
+## Add production tasks
+
+Use the flat `client.addTask(datasetId, task)` operation, or bind one destination with `createTaskAdder` and call `addTask(task)`. See [task ingestion](TASK_INGESTION.md) for TypeScript/Python examples, receipt semantics and duplicate-safe retries. Task uploads do not enable training.

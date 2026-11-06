@@ -368,6 +368,7 @@ def finish(operation: dict[str,Any], team_id: str, parameters: dict[str,Any], bo
     if operation['client']=='OpenPondDatasetWorkspaceClient' and isinstance(response,dict):
         if 'id' in parameters and 'datasetId' in response and parameters['id']!=response['datasetId']:raise ProtocolError('dataset_identity_mismatch')
         if method=='operation_result' and (response['operationId']!=parameters['operationId'] or response['kind']!=(query or {}).get('kind') or (query or {}).get('datasetId') and response['receipt']['datasetId']!=query['datasetId'] or (query or {}).get('requestHash') and response['requestHash']!=query['requestHash']):raise ProtocolError('dataset_operation_mismatch')
+        if method=='add_task' and response['operationId']!=body['operationId']:raise ProtocolError('dataset_task_operation_mismatch')
         if method=='validate' and response['revision']!=body['expectedRevision']:raise ProtocolError('dataset_revision_mismatch')
         if method=='versions':
             revisions=[item['workspaceRevision'] for item in response['items']]

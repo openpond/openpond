@@ -11,3 +11,5 @@ export * from "./dataset-preparation-qualification-contracts.js";
 export { OpenPondDatasetPreparationClient, DatasetPreparationRequestError } from "./dataset-preparation-client.js";
 
 export { assemblePreparedTaskWorkspaces } from "./dataset-preparation-assembly.js";
+
+export * from "./dataset-task-ingestion.js";

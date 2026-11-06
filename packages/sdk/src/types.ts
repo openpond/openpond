@@ -1,4 +1,6 @@
 export type OpenPondClientOptions = {
+  /** Workspace used by flat task ingestion methods. */
+  teamId?: string;
   /** OpenPond server API key. Keep this value on the server. */
   apiKey?: string;
   /** Omit for hosted OpenPond. An explicit endpoint uses its own runtime key. */
