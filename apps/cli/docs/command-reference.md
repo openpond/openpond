@@ -1168,6 +1168,7 @@ Options:
   --max-spend <number>
   --mode <string>
   --model <string>
+  --model-project-id <string>
   --name <string>
   --objective <string>
   --operation-id <string>
