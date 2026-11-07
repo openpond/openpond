@@ -33,6 +33,8 @@ def verify_neuron_training_request(raw: Any) -> dict[str, Any]:
     coordinates = selection['explicitCoordinates']
     if (model['modelId'] != 'Qwen/Qwen3-8B' or model['revision'] != 'b968826d9c46dd6066d109eabc6255188de91218'
             or model['dtype'] != 'bfloat16' or model['hiddenSize'] != 4096 or model['intermediateSizes'] != [12288] * 36
+            or model['adapter'] is not None
+            or (len(data['background']) != 0 if value['parentArtifact'] else len(data['background']) == 0)
             or len({row['domain'] for row in data['background']}) != len(data['background'])
             or coordinates is not None and (len(coordinates) != selection['count']
                 or len({(row['layer'], row['neuron']) for row in coordinates}) != selection['count'])
@@ -59,7 +61,9 @@ def verify_neuron_training_selection(raw: Any, request: dict[str, Any]) -> dict[
     selection, entries = request['selection'], value['entries']
     coordinates = [{'layer': row['layer'], 'neuron': row['neuron']} for row in entries]
     if (value['contentHash'] != _content_hash(value) or value['modelHash'] != canonical_sha256(request['model'])
-            or value['dataHash'] != canonical_sha256(request['data']) or value['selectionConfigHash'] != canonical_sha256(selection)
+            or (value['contentHash'] != request['parentArtifact']['selectionHash'] if request['parentArtifact']
+                else value['dataHash'] != canonical_sha256(request['data']))
+            or value['selectionConfigHash'] != canonical_sha256(selection)
             or len(entries) != selection['count'] or value['eligibleCount'] < len(entries)
             or len({(row['layer'], row['neuron']) for row in entries}) != len(entries)
             or len(set(value['targetExampleIds'])) != len(value['targetExampleIds'])
@@ -75,7 +79,8 @@ def verify_neuron_training_selection(raw: Any, request: dict[str, Any]) -> dict[
                 or row['backgroundTargetRatio'] > selection['maximumBackgroundTargetRatio'] + 1e-6
                 or not _close(row['backgroundTargetRatio'], row['backgroundMeanAbsolute'] / row['targetMeanAbsolute'])
                 or not _close(row['score'], row['gradientNorm'] / max(row['backgroundMeanAbsolute'], 0.000001))
-                or [item['domainIndex'] for item in domains] != list(range(len(request['data']['background'])))):
+                or [item['domainIndex'] for item in domains] != list(range(
+                    len(entries[0]['backgroundByDomain']) if request['parentArtifact'] else len(request['data']['background'])))):
             _fail()
         background = (max(item['meanAbsolute'] for item in domains) if selection['backgroundStatistic'] == 'max_domains'
                       else sum(item['meanAbsolute'] for item in domains) / len(domains))
@@ -107,8 +112,19 @@ def verify_neuron_training_artifact(raw: Any, request: dict[str, Any], runtime_h
             or pins['dataHash'] != canonical_sha256(request['data'])
             or pins['selectionConfigHash'] != canonical_sha256(request['selection'])
             or pins['trainingConfigHash'] != canonical_sha256(request['training']) or pins['runtimeHash'] != runtime_hash
+            or pins['parentArtifactHash'] != (request['parentArtifact']['contentHash'] if request['parentArtifact'] else None)
             or payload['tensors'] != neuron_training_tensor_inventory(selection)
             or payload['sizeBytes'] > request['training']['maxCheckpointBytes']):
+        _fail()
+    parent, continuation = request['parentArtifact'], value.get('continuation')
+    if parent:
+        if (not continuation or continuation['parentArtifactHash'] != parent['contentHash']
+                or continuation['parentSelectionHash'] != parent['selectionHash']
+                or continuation['parentPayloadSha256'] != parent['payloadSha256']
+                or continuation['parentPatchStateSha256'] != continuation['initialPatchStateSha256']
+                or continuation['finalPatchStateSha256'] == continuation['initialPatchStateSha256']):
+            _fail()
+    elif continuation is not None:
         _fail()
     return value
 
@@ -124,7 +140,8 @@ def verify_neuron_training_result(raw: Any, request: dict[str, Any], runtime_has
     preserve = settings['preservationWeight'] > 0
     if (value['contentHash'] != _content_hash(value) or value['inputHash'] != canonical_sha256(request)
             or value['modelHash'] != canonical_sha256(request['model']) or value['dataHash'] != canonical_sha256(request['data'])
-            or value['runtimeHash'] != runtime_hash or value['preparedRowsHash'] != value['selection']['preparedRowsHash']
+            or value['runtimeHash'] != runtime_hash
+            or not request['parentArtifact'] and value['preparedRowsHash'] != value['selection']['preparedRowsHash']
             or value['selection'] != manifest['selection'] or value['artifact']['contentHash'] != manifest['contentHash']
             or value['baseWeightsHashBefore'] != request['model']['weightsHash']
             or value['baseWeightsHashAfter'] != value['baseWeightsHashBefore']
@@ -134,7 +151,9 @@ def verify_neuron_training_result(raw: Any, request: dict[str, Any], runtime_has
             or value['durationMs'] > settings['maxDurationSeconds'] * 1000
             or value['forwardTokenWork'] > settings['maximumForwardTokenWork'] or value['forwardTokenWork'] != sum(work.values())
             or value['backwardTokenWork'] != work['selectionGradient'] + work['training'] + work['preservationEdited']
-            or value['targetTokens'] > work['training'] or work['selectionTarget'] <= 0 or work['selectionBackground'] <= 0
+            or value['targetTokens'] > work['training']
+            or (work['selectionTarget'] != 0 or work['selectionBackground'] != 0 or work['selectionGradient'] != 0
+                if request['parentArtifact'] else work['selectionTarget'] <= 0 or work['selectionBackground'] <= 0)
             or work['selectionGradient'] != work['selectionTarget'] or work['verification'] <= 0
             or preserve != (value['meanPreservationKl'] is not None) or work['preservationOriginal'] != work['preservationEdited']
             or not preserve and (value['preservationTokens'] != 0 or work['preservationOriginal'] != 0)

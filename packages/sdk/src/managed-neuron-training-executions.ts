@@ -22,6 +22,7 @@ export const NeuronTrainingExecutionCapabilityContentSchema = z.object({
   execution: z.discriminatedUnion("state", [
     z.object({state: z.literal("unavailable"), code: z.enum(["model_not_supported", "runtime_not_qualified"]), reason: z.string().min(1).max(1000)}).strict(),
     z.object({state: z.literal("ready"), model: NeuronSteeringModelSchema,
+      continuation: z.literal("frozen_parent_fresh_residual_adam_v1").optional(),
       runtime: z.object({id: Id, releaseHash: Hash, imageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
         requestSchema: z.literal("openpond.selectiveNeuronTrainingRequest.v1"), evidence: z.object({id: Id, contentHash: Hash}).strict()}).strict(),
       limits: z.object({maximumExamples: z.number().int().min(1).max(4096), maximumDataBytes: z.number().int().positive().max(8_388_608),
@@ -111,9 +112,13 @@ async function checkForm(form: z.infer<typeof NeuronTrainingExperimentFormDraftS
     || canonicalJson(form.background.map(row => ({domain: row.domain.trim(), batch: row.batch})))
       !== canonicalJson(request.data.background.map(row => ({domain: row.domain, batch: row.batch})))
     || canonicalJson(form.preservationBatch) !== canonicalJson(request.data.preservation?.batch ?? null)
+    || canonicalJson(form.parentArtifact) !== canonicalJson(request.parentArtifact)
     || canonicalJson(parseNeuronTrainingFormSelection(form.selection)) !== canonicalJson(request.selection)
     || canonicalJson(parseNeuronTrainingFormTraining(form.training)) !== canonicalJson(request.training)) fail();
-  if (form.inspectionSource && (!request.selection.explicitCoordinates
+  if (form.startingModule && (!request.parentArtifact
+    || canonicalJson(form.startingModule.artifact) !== canonicalJson({id: request.parentArtifact.id, contentHash: request.parentArtifact.contentHash})
+    || form.startingModule.modelHash !== await canonicalSha256(request.model))) fail();
+  if (form.inspectionSource && (request.parentArtifact !== null || !request.selection.explicitCoordinates
     || form.inspectionSource.modelHash !== await canonicalSha256(request.model))) fail();
 }
 function checkFormQuery(form: z.infer<typeof NeuronTrainingExperimentFormDraftSchema>, query: z.infer<typeof Query>) {

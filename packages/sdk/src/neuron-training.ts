@@ -7,6 +7,13 @@ import { canonicalSha256, OpenPondProtocolError } from "./protocol.js";
 export const NEURON_TRAINING_MAX_BYTES = 16_777_216;
 export const NEURON_TRAINING_UPSTREAM_REVISION = "8a55f3159f735eb0823d7a894f67f632bf568bb3";
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
+/** Exact inference-state continuation. Optimizer/RNG state is never resumed;
+ * the parent remains frozen while fresh column parameters learn a residual. */
+export const NeuronTrainingParentArtifactReferenceSchema = z.object({
+  id: z.string().trim().min(1).max(500), contentHash: Hash,
+  selectionHash: Hash, payloadSha256: Hash,
+  mode: z.literal("frozen_parent_fresh_residual_adam_v1"),
+}).strict();
 export const NeuronTrainingCoordinateSchema = z.object({
   layer: z.number().int().min(0).max(35), neuron: z.number().int().min(0).max(12_287),
 }).strict();
@@ -27,7 +34,7 @@ export const NeuronTrainingDataReferenceSchema = z.object({
 }).strict();
 export const NeuronTrainingDataSchema = z.object({
   target: NeuronTrainingDataReferenceSchema,
-  background: z.array(NeuronTrainingDataReferenceSchema.extend({domain: z.string().trim().min(1).max(100)}).strict()).min(1).max(8),
+  background: z.array(NeuronTrainingDataReferenceSchema.extend({domain: z.string().trim().min(1).max(100)}).strict()).max(8),
   preservation: NeuronTrainingDataReferenceSchema.nullable(),
 }).strict().superRefine((value, context) => {
   if (new Set(value.background.map(row => row.domain)).size !== value.background.length)
@@ -50,16 +57,17 @@ export const NeuronTrainingRequestSchema = z.object({
   schemaVersion: z.literal("openpond.selectiveNeuronTrainingRequest.v1"),
   model: NeuronSteeringModelSchema, data: NeuronTrainingDataSchema,
   selection: NeuronTrainingSelectionSchema, training: NeuronTrainingSettingsSchema,
-  /** The exported inference delta has no optimizer state. Never silently reset a continuation. */
-  parentArtifact: z.null(),
+  parentArtifact: NeuronTrainingParentArtifactReferenceSchema.nullable(),
 }).strict().superRefine((value, context) => {
   if (value.model.modelId !== "Qwen/Qwen3-8B" || value.model.revision !== "b968826d9c46dd6066d109eabc6255188de91218"
     || value.model.dtype !== "bfloat16" || value.model.hiddenSize !== 4096 || value.model.intermediateSizes.length !== 36
-    || value.model.intermediateSizes.some(size => size !== 12288))
+    || value.model.intermediateSizes.some(size => size !== 12288) || value.model.adapter !== null)
     context.addIssue({code: "custom", path: ["model"], message: "Use the exact supported dense BF16 Qwen3-8B source identity."});
   const preserve = value.training.preservationWeight > 0;
   if (preserve !== (value.data.preservation !== null) || preserve !== (value.training.preservationExamplesPerStep > 0))
     context.addIssue({code: "custom", path: ["training", "preservationWeight"], message: "Preservation data, weight and per-step work must be present together."});
+  if (value.parentArtifact ? value.data.background.length !== 0 : value.data.background.length === 0)
+    context.addIssue({code: "custom", path: ["data", "background"], message: "Fresh selection requires reviewed background domains; inherited selection retains its parent observations without new selection data."});
 });
 export type NeuronTrainingRequest = z.infer<typeof NeuronTrainingRequestSchema>;
 export type NeuronTrainingSelection = z.infer<typeof NeuronTrainingSelectionSchema>;

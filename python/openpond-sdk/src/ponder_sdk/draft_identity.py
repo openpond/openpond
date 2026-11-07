@@ -27,12 +27,16 @@ def validate_draft_document(draft: dict[str, Any], team_id: str | None = None) -
     elif alpha and alpha.get('startingModule') is not None:
         raise ProtocolError('experiment_draft_alphaedit_source_mismatch')
     if draft['operationType'] == 'selective_neuron_training' and selected:
-        if (selected['source'] != 'managed'
+        if (selected['source'] not in ('managed', 'neuron_training')
                 or neuron is not None and neuron.get('baseModel') is not None and neuron['baseModel'] != selected['baseModel']):
             raise ProtocolError('experiment_draft_neuron_training_source_mismatch')
-    # Learned column deltas have no continuation optimizer. Never drop a saved
-    # patch implicitly, even when a different operation is selected.
     if selected and selected['source'] == 'neuron_training':
+        parent = neuron.get('parentArtifact') if neuron else None
+        if (draft['operationType'] != 'selective_neuron_training' or not neuron
+                or neuron['baseModel'] != selected['baseModel'] or neuron.get('startingModule') != selected['neuronTraining']
+                or not parent or {key: parent[key] for key in ('id', 'contentHash')} != selected['neuronTraining']['artifact']):
+            raise ProtocolError('experiment_draft_neuron_training_source_mismatch')
+    elif neuron and neuron.get('startingModule') is not None:
         raise ProtocolError('experiment_draft_neuron_training_source_mismatch')
     if decision is not None and draft['operationType'] != 'decision_model':
         raise ProtocolError('experiment_draft_decision_source_mismatch')

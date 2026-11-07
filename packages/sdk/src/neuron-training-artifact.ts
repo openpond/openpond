@@ -45,7 +45,8 @@ export async function parseAndVerifyNeuronTrainingSelection(raw: unknown, reques
   const value = NeuronTrainingSelectionResultSchema.parse(raw), {contentHash, ...content} = value;
   const coordinates = value.entries.map(({layer, neuron}) => ({layer, neuron}));
   if (contentHash !== await canonicalSha256(content) || value.modelHash !== await canonicalSha256(request.model)
-    || value.dataHash !== await canonicalSha256(request.data) || value.selectionConfigHash !== await canonicalSha256(request.selection)
+    || (request.parentArtifact ? value.contentHash !== request.parentArtifact.selectionHash
+      : value.dataHash !== await canonicalSha256(request.data)) || value.selectionConfigHash !== await canonicalSha256(request.selection)
     || value.entries.length !== request.selection.count || value.eligibleCount < value.entries.length
     || new Set(value.entries.map(row => `${row.layer}:${row.neuron}`)).size !== value.entries.length
     || new Set(value.targetExampleIds).size !== value.targetExampleIds.length || value.targetExampleIds.length > request.selection.gradientExamples
@@ -61,7 +62,8 @@ export async function parseAndVerifyNeuronTrainingSelection(raw: unknown, reques
       || row.backgroundTargetRatio > request.selection.maximumBackgroundTargetRatio + 1e-6
       || !close(row.backgroundTargetRatio, row.backgroundMeanAbsolute / row.targetMeanAbsolute)
       || !close(row.score, row.gradientNorm / Math.max(row.backgroundMeanAbsolute, 0.000001))
-      || canonicalJson(row.backgroundByDomain.map(item => item.domainIndex)) !== canonicalJson(request.data.background.map((_item, index) => index))) fail();
+      || canonicalJson(row.backgroundByDomain.map(item => item.domainIndex)) !== canonicalJson(Array.from({length:
+        request.parentArtifact ? value.entries[0]!.backgroundByDomain.length : request.data.background.length}, (_item, index) => index))) fail();
     const background = request.selection.backgroundStatistic === "max_domains"
       ? Math.max(...row.backgroundByDomain.map(item => item.meanAbsolute))
       : row.backgroundByDomain.reduce((sum, item) => sum + item.meanAbsolute, 0) / row.backgroundByDomain.length;
@@ -85,8 +87,16 @@ export const NeuronTrainingArtifactContentSchema = z.object({
   schemaVersion: z.literal("openpond.neuronTrainingArtifact.v1"), method: z.literal("selective_neuron_training"),
   algorithm: NeuronTrainingAlgorithmSchema,
   pins: z.object({baseModel: NeuronSteeringModelSchema, inputHash: Hash, data: NeuronTrainingDataSchema, dataHash: Hash,
-    selectionConfigHash: Hash, trainingConfigHash: Hash, runtimeHash: Hash, parentArtifactHash: z.null()}).strict(),
+    selectionConfigHash: Hash, trainingConfigHash: Hash, runtimeHash: Hash, parentArtifactHash: Hash.nullable()}).strict(),
   selection: NeuronTrainingSelectionResultSchema,
+  continuation: z.object({
+    mode: z.literal("frozen_parent_fresh_residual_adam_v1"),
+    selectionProvenance: z.literal("inherited_parent_observations"),
+    parameterAnchor: z.literal("original_dense_base_columns_v1"),
+    parentArtifactHash: Hash, parentSelectionHash: Hash, parentPayloadSha256: Hash,
+    parentPatchStateSha256: Hash, initialPatchStateSha256: Hash, finalPatchStateSha256: Hash,
+    installedBeforeOptimizer: z.literal(true), optimizerState: z.literal("fresh"),
+  }).strict().optional(),
   payload: z.object({path: z.literal("patch.safetensors"), sha256: Hash,
     sizeBytes: z.number().int().positive().max(NEURON_TRAINING_MAX_BYTES),
     tensors: z.array(NeuronTrainingPatchTensorSchema).min(2).max(72)}).strict(),
@@ -102,7 +112,13 @@ export async function parseAndVerifyNeuronTrainingArtifact(raw: unknown, expecte
     || canonicalJson(value.pins.data) !== canonicalJson(request.data) || value.pins.inputHash !== await canonicalSha256(request)
     || value.pins.dataHash !== await canonicalSha256(request.data) || value.pins.selectionConfigHash !== await canonicalSha256(request.selection)
     || value.pins.trainingConfigHash !== await canonicalSha256(request.training) || value.pins.runtimeHash !== expected.runtimeHash
+    || value.pins.parentArtifactHash !== (request.parentArtifact?.contentHash ?? null)
     || canonicalJson(value.payload.tensors) !== canonicalJson(neuronTrainingPatchTensorInventory(value.selection))
     || value.payload.sizeBytes > request.training.maxCheckpointBytes) fail();
+  const continuation = value.continuation, parent = request.parentArtifact;
+  if (parent ? !continuation || continuation.parentArtifactHash !== parent.contentHash
+    || continuation.parentSelectionHash !== parent.selectionHash || continuation.parentPayloadSha256 !== parent.payloadSha256
+    || continuation.parentPatchStateSha256 !== continuation.initialPatchStateSha256
+    || continuation.finalPatchStateSha256 === continuation.initialPatchStateSha256 : continuation !== undefined) fail();
   return value;
 }

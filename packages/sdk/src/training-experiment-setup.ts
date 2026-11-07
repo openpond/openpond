@@ -205,13 +205,22 @@ export const ExperimentDraftSchema = z.object({
     context.addIssue({code: "custom", path: ["startingModel"], message: "Retain the saved AlphaEdit Model rather than substituting its original base."});
   }
   if (draft.operationType === "selective_neuron_training" && source) {
-    if (source.source !== "managed")
-      context.addIssue({code: "custom", path: ["startingModel"], message: "Neuron training currently starts from its exact managed base; learned patches are not reset or silently discarded."});
+    if (source.source !== "managed" && source.source !== "neuron_training")
+      context.addIssue({code: "custom", path: ["startingModel"], message: "Neuron training requires its exact dense base or compatible saved neuron patch."});
     else if (draft.neuronTrainingForm?.baseModel && canonicalJson(source.baseModel) !== canonicalJson(draft.neuronTrainingForm.baseModel))
       context.addIssue({code: "custom", path: ["neuronTrainingForm", "baseModel"], message: "Retain the selected exact neuron-training base."});
   }
-  if (source?.source === "neuron_training")
-    context.addIssue({code: "custom", path: ["startingModel"], message: "This neuron patch supports saved serving, but experiment continuation/composition is not supported. Explicitly select a compatible base to start a fresh experiment."});
+  if (source?.source === "neuron_training") {
+    const form = draft.neuronTrainingForm;
+    if (draft.operationType !== "selective_neuron_training" || !form
+      || canonicalJson(form.baseModel) !== canonicalJson(source.baseModel)
+      || canonicalJson(form.startingModule ?? null) !== canonicalJson(source.neuronTraining)
+      || form.parentArtifact?.id !== source.neuronTraining.artifact.id
+      || form.parentArtifact?.contentHash !== source.neuronTraining.artifact.contentHash)
+      context.addIssue({code: "custom", path: ["neuronTrainingForm"], message: "Retain the exact saved neuron Model and cumulative patch for continuation."});
+  } else if (draft.neuronTrainingForm?.startingModule) {
+    context.addIssue({code: "custom", path: ["startingModel"], message: "Retain the saved neuron Model rather than substituting its ancestor base."});
+  }
   if (draft.decisionForm && draft.operationType !== "decision_model")
     context.addIssue({code: "custom", path: ["decisionForm"], message: "Decision settings require a decision-model experiment."});
   if (draft.operationType === "decision_model" && source) {

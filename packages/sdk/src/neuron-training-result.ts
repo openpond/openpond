@@ -32,7 +32,7 @@ export async function parseAndVerifyNeuronTrainingResult(raw: unknown, expected:
   const tensor = value.artifact.files.find(row => row.path === "patch.safetensors"), metadata = value.artifact.files.find(row => row.path === "manifest.json");
   if (contentHash !== await canonicalSha256(content) || value.inputHash !== await canonicalSha256(request)
     || value.modelHash !== await canonicalSha256(request.model) || value.dataHash !== await canonicalSha256(request.data)
-    || value.runtimeHash !== expected.runtimeHash || value.preparedRowsHash !== value.selection.preparedRowsHash
+    || value.runtimeHash !== expected.runtimeHash || !request.parentArtifact && value.preparedRowsHash !== value.selection.preparedRowsHash
     || canonicalJson(value.selection) !== canonicalJson(manifest.selection) || value.artifact.contentHash !== manifest.contentHash
     || value.baseWeightsHashBefore !== request.model.weightsHash || value.baseWeightsHashAfter !== value.baseWeightsHashBefore
     || value.trainableParameterCount !== request.selection.count * (request.model.hiddenSize + 1)
@@ -40,7 +40,9 @@ export async function parseAndVerifyNeuronTrainingResult(raw: unknown, expected:
     || value.durationMs > request.training.maxDurationSeconds * 1000 || value.forwardTokenWork > request.training.maximumForwardTokenWork
     || value.forwardTokenWork !== Object.values(value.work).reduce((sum, work) => sum + work, 0)
     || value.backwardTokenWork !== value.work.selectionGradient + value.work.training + value.work.preservationEdited
-    || value.targetTokens > value.work.training || value.work.selectionTarget <= 0 || value.work.selectionBackground <= 0
+    || value.targetTokens > value.work.training
+    || (request.parentArtifact ? value.work.selectionTarget !== 0 || value.work.selectionBackground !== 0 || value.work.selectionGradient !== 0
+      : value.work.selectionTarget <= 0 || value.work.selectionBackground <= 0)
     || value.work.selectionGradient !== value.work.selectionTarget || value.work.verification <= 0
     || (request.training.preservationWeight > 0) !== (value.meanPreservationKl !== null)
     || value.work.preservationOriginal !== value.work.preservationEdited
