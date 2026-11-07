@@ -93,6 +93,7 @@ export const TRAINING_COMMAND_DEFINITION: CliCommandDefinition = {
     "openpond training hosted-review-dataset <input.json> --team-id <id> [--api-base-url <url>] [--json]",
     "openpond training hosted-evaluate-checkpoint <request.json> --team-id <id> [--api-base-url <url>] --yes [--json]",
     "openpond training hosted-prepare|hosted-prepare-experiment|hosted-stage|hosted-submit <input.json> --team-id <id> [--api-base-url <url>] [--yes] [--json]",
+    "openpond training hosted-import-sft-qualification <input.json> --team-id <id> [--api-base-url <url>] [--json]",
     "openpond training hosted-start <preparation.json> --team-id <id> [--estimate-review-file <estimate-or-review.json>] --yes [--api-base-url <url>] [--json]",
     "openpond training hosted-save-experiment-learning <request.json> --team-id <id> [--api-base-url <url>] [--json]",
     "openpond training hosted-qualify <input.json> --team-id <id> [--api-base-url <url>] --yes [--json]",
