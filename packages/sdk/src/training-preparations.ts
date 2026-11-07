@@ -1,8 +1,8 @@
-import { TrainingUsageFundingRequestSchema, TrainingUsageQuoteSchema, verifyTrainingUsageQuote } from "./training-usage-funding.js";
+import { TrainingUsageFundingRequestSchema, TrainingUsageQuoteSchema, TrainingUsageQualificationRefSchema, verifyTrainingUsageQuote } from "./training-usage-funding.js";
 import { TrainingHandoffOriginSchema } from "./post-training.js";
 import { z } from "zod";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
-import { TrainingJobSourceSchema } from "./training-job-contracts.js";
+import { TrainingJobSourceSchema, TrainingJobSubmissionSchema, parseAndVerifyTrainingJobSubmission } from "./training-job-contracts.js";
 import { TrainingPhysicalPlacementSchema } from "./training-physical-placement.js";
 import { canonicalSha256, OpenPondProtocolError } from "./protocol.js";
 import { TrainingEstimateReviewSchema, TrainingGpuSelectionSchema } from "./training-compute-selection.js";
@@ -106,6 +106,29 @@ export type TrainingPreparationControl = z.infer<typeof TrainingPreparationContr
 export type TrainingPreparationListQuery = z.input<typeof TrainingPreparationListQuerySchema>;
 export type TrainingPreparationPage = z.infer<typeof TrainingPreparationPageSchema>;
 
+/** Imports an unchanged authored SFT artifact into the existing preparation
+ * owner. The reference is a lookup/binding, never permission to run an
+ * unqualified image. Only an exact live server-owned staging grant may admit it. */
+export const TrainingSftQualificationPreparationImportSchema = z.object({
+  schemaVersion: z.literal("openpond.trainingSftQualificationPreparationImport.v1"),
+  preparationId: Id,
+  qualification: TrainingUsageQualificationRefSchema,
+  request: TrainingPreparationRequestSchema,
+  submission: TrainingJobSubmissionSchema,
+}).strict().superRefine((value, context) => {
+  const {request, submission} = value;
+  if (submission.job.kind !== "policy_optimize" || submission.job.recipe.method !== "sft" ||
+    submission.job.executionMode !== undefined || submission.job.resumeFrom ||
+    request.parent || request.physicalPlacement || submission.physicalPlacement ||
+    (request.gpuSelection?.gpuCount ?? 1) !== 1 || (submission.gpuSelection?.gpuCount ?? 1) !== 1 ||
+    !request.usageFunding || request.usageFunding.customerCapUsd === null ||
+    submission.idempotencyKey !== `manual:${value.preparationId}` ||
+    submission.source.modelProject.id !== request.configuration.id ||
+    submission.name !== request.name || submission.budget.maximumSpendUsd !== request.maximumSpendUsd)
+    context.addIssue({code: "custom", message: "Qualification import requires an exact fresh single-GPU SFT preparation with finite whole-job pricing."});
+});
+export type TrainingSftQualificationPreparationImport = z.infer<typeof TrainingSftQualificationPreparationImportSchema>;
+
 export async function parseAndVerifyTrainingPreparationReceipt(value: unknown) {
   const receipt = TrainingPreparationReceiptSchema.parse(value);
   const { contentHash, ...plan } = receipt.plan;
@@ -143,6 +166,24 @@ export function createTrainingPreparationClient(
     return receipt;
   }
   return {
+    /** Preparation only: retains the original source and accepted usage quote;
+     * starting paid compute still requires startPreparation separately. */
+    async importSftQualificationPreparation(input: TrainingSftQualificationPreparationImport) {
+      const parsed = TrainingSftQualificationPreparationImportSchema.parse(input);
+      await parseAndVerifyTrainingJobSubmission(parsed.submission);
+      const receipt = await read(await request("/v1/training/preparations/import-sft-qualification", {
+        method: "POST", body: JSON.stringify(parsed),
+      }), parsed.request.teamId, parsed.preparationId);
+      if (receipt.plan.requestHash !== await canonicalSha256(parsed.request) ||
+        receipt.plan.submissionHash !== parsed.submission.contentHash ||
+        await canonicalSha256(receipt.plan.source) !== await canonicalSha256(parsed.submission.source) ||
+        receipt.plan.usageQuote?.maximumWallSeconds !== parsed.submission.budget.maximumWallSeconds ||
+        receipt.plan.usageQuote?.retentionDays !== parsed.submission.approval.retentionDays ||
+        await canonicalSha256(receipt.plan.usageQuote?.qualification ?? null) !== await canonicalSha256(parsed.qualification))
+        throw new OpenPondProtocolError("training_qualification_preparation_mismatch",
+          "The imported preparation differs from the reviewed source or qualification authority.");
+      return receipt;
+    },
     /** Discover the authenticated user's retained preparations without creating jobs. */
     async listPreparations(teamId: string, input: TrainingPreparationListQuery = {}) {
       const scope = Id.parse(teamId);

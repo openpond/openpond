@@ -229,6 +229,21 @@ Do not reauthor an old published dataset to substitute for a newer canonical pac
 
 Use the current CLI's prepare/start/status/watch/artifacts operations for the selected backend. Return retained job/model references and read saved completion state; a submitted job is not a trained model. CLI flags that acknowledge submission do not create user authorization or enlarge a budget.
 
+For an explicitly authorized first-image SFT qualification on a host that has
+activated this operator path, `training hosted-import-sft-qualification
+<input.json> --team-id <id> --json` retains an unchanged, already staged
+submission in the normal preparation owner. The strict input has
+`schemaVersion: openpond.trainingSftQualificationPreparationImport.v1`, a known
+`preparationId`, the reviewed `qualification` reference (`authorizationId`,
+`operationId`, `authorizationSha256`), a real ordinary preparation `request`
+and the exact authored `submission`. Author its idempotency key as
+`manual:<preparationId>` before staging and grant review. The server must match
+the current grant, configuration, sealed reviewed batch, evaluation source and
+finite whole-job usage quote. This command neither grants image support nor
+starts compute. Retain its receipt and use the separate normal `hosted-start`
+with explicit authorization; an unavailable operator path is not permission to
+submit directly or change immutable source bytes.
+
 For a new GRPO stage from a trained version, retain `parent` in the preparation
 JSON: producing `jobId`, exact `artifact` (`id` and `contentHash`), `checkpointId`
 and `adapterMode` (`residual_append`, `shared` or `sequential_merge`). Obtain the

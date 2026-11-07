@@ -43,10 +43,18 @@ export const TrainingUsageFundingRequestSchema = z.object({
 }).strict();
 export type TrainingUsageFundingRequest = z.infer<typeof TrainingUsageFundingRequestSchema>;
 
+/** A server-signed reference to a bounded operator qualification. This pointer
+ * confers no authority and does not advertise ordinary image support. */
+export const TrainingUsageQualificationRefSchema = z.object({
+  authorizationId: z.uuid(), operationId: Id, authorizationSha256: Hash,
+}).strict();
+export type TrainingUsageQualificationRef = z.infer<typeof TrainingUsageQualificationRefSchema>;
+
 export const TrainingUsageQuoteContentSchema = z.object({
   schemaVersion: z.literal("openpond.trainingUsageQuote.v1"), teamId: Id, actorUserId: Id,
   preparationId: Id, submissionHash: Hash, workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   customerCapUsd: Cap, maximumWallSeconds: z.number().int().positive(), retentionDays: z.number().int().nonnegative(),
+  qualification: TrainingUsageQualificationRefSchema.optional(),
   gpu: Price, guests: Guests, judges: Judges,
   storage: z.object({ price: Price, storageClass: z.literal("STANDARD"), quantityBasis: z.literal("gib_milliseconds"),
     onCreditExhaustion: z.literal("retain_objects_and_stop_new_storage") }).strict(),

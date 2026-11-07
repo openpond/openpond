@@ -358,6 +358,12 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     if (input.teamId !== teamId) throw new Error("Preparation input belongs to a different workspace.");
     print(await client.prepareRun(input)); return;
   }
+  if (action === "hosted-import-sft-qualification") {
+    const { TrainingSftQualificationPreparationImportSchema } = await import("openpond-sdk/training");
+    const input = TrainingSftQualificationPreparationImportSchema.parse(await readInput());
+    if (input.request.teamId !== teamId) throw new Error("Qualification preparation belongs to a different workspace.");
+    print(await client.importSftQualificationPreparation(input)); return;
+  }
   if (action === "hosted-start") {
     const receipt = await readPreparationInput();
     if (!parseBooleanOption(options.yes)) throw new Error("Starting paid hosted training requires --yes.");

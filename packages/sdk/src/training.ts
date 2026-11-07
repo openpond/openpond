@@ -143,11 +143,13 @@ export {
   TrainingPreparationPlanSchema,
   TrainingPreparationReceiptSchema,
   TrainingPreparationControlSchema,
+  TrainingSftQualificationPreparationImportSchema,
   parseAndVerifyTrainingPreparationReceipt,
   type TrainingPreparationRequest,
   type TrainingPreparationPlan,
   type TrainingPreparationReceipt,
   type TrainingPreparationControl,
+  type TrainingSftQualificationPreparationImport,
 } from "./training-preparations.js";
 export {
   TrainingPreparationListQuerySchema,
