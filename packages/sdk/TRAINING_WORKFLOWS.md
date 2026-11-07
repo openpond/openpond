@@ -653,3 +653,19 @@ evaluation remains an independent candidate check. A nightly schedule uses the
 authored time and timezone, waits for approved unused examples, and respects the
 saved task threshold and spend limits. It does not itself enable conversation
 collection, automatic data approval, or automatic serving.
+
+
+Selective neuron continuation uses an exact compatible saved neuron version.
+`neuronTrainingFormFromModelVersion` retains that version and its cumulative
+patch, copies the parent's selection configuration, clears the target choice,
+and requires reviewed new target data. `background=[]` retains the original
+selection as inherited evidence; it does not report selection on the new data.
+The explicit mode is `frozen_parent_fresh_residual_adam_v1`: the parent stays
+frozen, fresh zero column parameters use the original dense base as their
+anchors, and a fresh Adam optimizer learns a residual. No optimizer or RNG
+checkpoint is resumed. Optional preservation compares against the starting
+base plus parent patch. The worker verifies the exact parent bytes before
+optimizer creation and exports a cumulative patch with parent, initial and
+final state hashes. A runtime must explicitly advertise this mode before
+admission; source packaging alone does not establish native qualification or
+old/new held-out retention.

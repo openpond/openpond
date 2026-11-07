@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ModelProjectBaseModelSchema, ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { StoredManagedModificationResultReferenceSchema } from "./experiment-result-reference.js";
-import { NeuronTrainingSelectionSchema, NeuronTrainingSettingsSchema } from "./neuron-training.js";
+import { NeuronTrainingSelectionSchema, NeuronTrainingSettingsSchema, NeuronTrainingParentArtifactReferenceSchema } from "./neuron-training.js";
 
 const Id = z.string().trim().min(1).max(240), Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const SavedNeuronTrainingExperimentSourceSchema = z.object({
@@ -43,7 +43,9 @@ export const NeuronTrainingExperimentFormDraftSchema = z.object({
   preservationBatch: ModelProjectVersionedRefSchema.nullable(),
   name: z.string().max(500), maximumSpendUsd: Field,
   selection: NeuronTrainingSelectionFormDraftSchema, training: NeuronTrainingSettingsFormDraftSchema,
-  parentArtifact: z.null(), inspectionSource: NeuronTrainingInspectionSourceSchema.optional(),
+  parentArtifact: NeuronTrainingParentArtifactReferenceSchema.nullable(),
+  startingModule: SavedNeuronTrainingExperimentSourceSchema.optional(),
+  inspectionSource: NeuronTrainingInspectionSourceSchema.optional(),
 }).strict();
 export type NeuronTrainingExperimentFormDraft = z.infer<typeof NeuronTrainingExperimentFormDraftSchema>;
 export function newNeuronTrainingExperimentForm(baseModel: z.infer<typeof ModelProjectBaseModelSchema> | null = null): NeuronTrainingExperimentFormDraft {

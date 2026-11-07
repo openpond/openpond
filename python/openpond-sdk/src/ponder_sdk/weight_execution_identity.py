@@ -98,10 +98,15 @@ def form_request(prefix, form, request):
                 or [{'domain': row['domain'].strip(_JS_SPACE), 'batch': row['batch']} for row in form['background']]
                 != [{'domain': row['domain'], 'batch': row['batch']} for row in request['data']['background']]
                 or form['preservationBatch'] != (request['data']['preservation']['batch'] if request['data']['preservation'] else None)
-                or selection != request['selection']):
+                or form['parentArtifact'] != request['parentArtifact'] or selection != request['selection']):
+            fail()
+        pin = form.get('startingModule')
+        if pin is not None and (request['parentArtifact'] is None
+                or pin['artifact'] != {key:request['parentArtifact'][key] for key in ('id','contentHash')}
+                or pin['modelHash'] != canonical_sha256(request['model'])):
             fail()
         pin = form.get('inspectionSource')
-        if pin is not None and (not request['selection']['explicitCoordinates'] or pin['modelHash'] != canonical_sha256(request['model'])):
+        if pin is not None and (request['parentArtifact'] is not None or not request['selection']['explicitCoordinates'] or pin['modelHash'] != canonical_sha256(request['model'])):
             fail()
 
 
