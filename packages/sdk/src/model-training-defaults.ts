@@ -21,7 +21,7 @@ export function createModelTrainingRecipeDefaults(
   const defaults = {
     schemaVersion: "openpond.rftRecipe.v1", method: "grpo" as const, parameterization: "lora" as const,
     lora: { rank: 2 },
-    rollout: { groupSize: 8, concurrency: 4, maxOutputTokens: 1_024, temperature: 0.8, topP: 0.95, seed: 17 },
+    rollout: { groupSize: 8, concurrency: 4, maxOutputTokens: 1_024, temperature: 0.8, topP: 1, seed: 17 },
     optimizer: { learningRate: 0.0001, maxSteps: 8, clipRange: 0.2, iterations: 2,
       microbatchSize: 1, gradientAccumulationSteps: 8, advantageEpsilon: 1e-8,
       adamw: { name: "adamw", weightDecay: 0, beta1: 0.9, beta2: 0.999, epsilon: 1e-8 } },
@@ -85,7 +85,7 @@ export function prepareModelTrainingDefaults(input: {
     const sameEvaluation = setup.evaluationTasksetRef?.id === setup.tasksetRef?.id
       && setup.evaluationTasksetRef?.contentHash === setup.tasksetRef?.contentHash;
     if (!dataset.validationSplit && !sameEvaluation)
-      throw new Error("Choose the optimizer validation split from the selected evaluation dataset.");
+      throw new Error("Choose the held-out split from the selected evaluation dataset.");
     return ModelProjectTrainingSetupSchema.parse({
       ...setup,
       recipe: ManagedSftRecipeSchema.parse({

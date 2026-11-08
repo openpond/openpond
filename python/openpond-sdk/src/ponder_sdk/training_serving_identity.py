@@ -2,6 +2,7 @@
 from typing import Any
 from .errors import ProtocolError
 from .managed_serving_usage_identity import approval_matches, verify_usage_billing
+from .serverless_serving import serverless_approval_matches, verify_serverless_review
 from .wire import canonical_sha256
 from .training_model_identity import verify_training_model_version
 
@@ -37,6 +38,11 @@ def verify_training_model_serving(value: dict[str, Any], team_id: str, model_id:
     def fail() -> None:
         raise ProtocolError('training_model_serving_mismatch')
     verify_usage_billing(value, team_id, model_id, version_hash, 'training')
+    if value.get('serverlessReview') is not None:
+        verify_serverless_review(value['serverlessReview'], team_id, model_id, version_hash, (value.get('registry') or {}).get('artifact'))
+    retained = value.get('control') or {}
+    if retained.get('serverless') is not None:
+        verify_serverless_review(retained['serverless']['review'], team_id, model_id, retained['versionHash'], retained['artifact'])
     version = value['version']
     verify_training_model_version(version, team_id, model_id)
     if (len({row['operationId'] for row in value['cleanup']}) != len(value['cleanup'])
@@ -79,7 +85,9 @@ def verify_training_model_serving(value: dict[str, Any], team_id: str, model_id:
 
 def verify_training_serving_control(value: dict[str, Any], request: dict[str, Any], team_id: str, model_id: str) -> None:
     control = value['control']
-    if (not approval_matches(request, control) or value['contentHash'] != canonical_sha256({k: v for k, v in value.items() if k != 'contentHash'})
+    if control.get('serverless') is not None:
+        verify_serverless_review(control['serverless']['review'], team_id, model_id, request['versionHash'], request['artifact'])
+    if (not serverless_approval_matches(request, control) or not approval_matches(request, control) or value['contentHash'] != canonical_sha256({k: v for k, v in value.items() if k != 'contentHash'})
             or value['request'] != request or value['teamId'] != team_id or request['teamId'] != team_id
             or value['modelProjectId'] != model_id or control['teamId'] != team_id or control['modelProjectId'] != model_id
             or control['actorId'] != value['actorId'] or control['operationId'] != request['operationId']

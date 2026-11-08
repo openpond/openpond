@@ -205,7 +205,7 @@ and an in-memory asset map without creating a training job or acquiring compute.
 
 The compiler verifies selected release identities and private verifier bytes,
 checks training/evaluation isolation, and rejects missing or unexpected Work
-assets. Callers retain responsibility for authorizing the inputs and staging the
+assets. Callers retain responsibility for authorizing the inputs and preparing the
 result through the training artifact API before job admission. Filesystem cache
 materialization remains a Desktop concern.
 

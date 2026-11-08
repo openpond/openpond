@@ -26,9 +26,8 @@ const receipt = await openpond.addTask({
 console.log(receipt.taskId, receipt.receivedAt);
 ```
 
-Use `baseUrl` for a different OpenPond API origin. Each configured client keeps
-its own credentials and destination; no mutable global account is used. For an
-explicit alternate Dataset:
+The client connects to OpenPond automatically and keeps its own credentials;
+no mutable global account is used. For an explicit alternate Dataset:
 
 ```ts
 await openpond.dataset(otherDatasetId).addTask({
@@ -94,7 +93,7 @@ owned connection pool:
 ```python
 from ponder_sdk import Client
 
-with Client(base_url=api_origin, api_key=api_key, team_id=team_id,
+with Client(api_key=api_key, team_id=team_id,
             dataset_id=dataset_id) as openpond:
     receipt = openpond.add_task({
         "id": source_event_id,

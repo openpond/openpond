@@ -1,4 +1,5 @@
 import { ManagedServingUsageApprovalSchema, ManagedServingUsageSnapshotSchema, managedServingUsageApprovalMatches } from "./managed-serving-usage.js";
+import { ServerlessServingApprovalSchema, ServerlessServingSnapshotSchema, verifyServerlessServingReview } from "./serverless-serving.js";
 import { z } from "zod";
 import { ModelProjectImmutableRefSchema } from "./model-projects.js";
 import { canonicalSha256, OpenPondProtocolError } from "./protocol.js";
@@ -6,22 +7,24 @@ import { canonicalSha256, OpenPondProtocolError } from "./protocol.js";
 const Id = z.string().trim().min(1).max(500);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const TrainingModelServingControlSchema = z.object({
+  serverless: ServerlessServingSnapshotSchema.optional(),
   usage: ManagedServingUsageSnapshotSchema.optional(),
   schemaVersion: z.literal("openpond.trainingModelServingControl.v1"),
   teamId: Id, modelProjectId: Id, versionHash: Hash, artifact: ModelProjectImmutableRefSchema,
   actorId: Id, operationId: Id, revision: z.number().int().positive(),
   desiredState: z.enum(["active", "stopped"]), phase: z.enum(["starting", "active", "stopping", "stopped", "failed"]),
   capacityState: z.enum(["pending", "shared", "retiring", "released"]),
-  modelId: Id, deploymentId: Id, poolId: Id, idleTimeoutSeconds: z.number().int().min(60).max(3600),
+  modelId: Id, deploymentId: Id, poolId: Id, idleTimeoutSeconds: z.number().int().min(5).max(3600),
   failureCode: Id.nullable(), updatedAt: z.string().datetime({ offset: true }),
 }).strict();
 export type TrainingModelServingControl = z.infer<typeof TrainingModelServingControlSchema>;
 export const TrainingModelServingControlRequestSchema = z.object({
+  serverlessApproval: ServerlessServingApprovalSchema.optional(),
   usageApproval: ManagedServingUsageApprovalSchema.optional(),
   schemaVersion: z.literal("openpond.trainingModelServingControlRequest.v1"), teamId: Id, operationId: Id,
   artifact: ModelProjectImmutableRefSchema,
   versionHash: Hash, expectedRevision: z.number().int().nonnegative(), action: z.enum(["activate", "stop"]),
-  idleTimeoutSeconds: z.number().int().min(60).max(3600),
+  idleTimeoutSeconds: z.number().int().min(5).max(3600),
 }).strict();
 export type TrainingModelServingControlRequest = z.infer<typeof TrainingModelServingControlRequestSchema>;
 export const TrainingModelServingControlIntentSchema = TrainingModelServingControlRequestSchema.omit({ operationId: true }).extend({ modelProjectId: Id }).strict();
@@ -37,6 +40,19 @@ export async function parseAndVerifyTrainingModelServingControl(raw: unknown, ex
 }) {
   const value = TrainingModelServingControlReceiptSchema.parse(raw), request = TrainingModelServingControlRequestSchema.parse(expected.request);
   const { contentHash, ...content } = value, control = value.control;
+  if (control.serverless) await verifyServerlessServingReview(control.serverless.review, {
+    teamId: request.teamId, modelProjectId: expected.modelProjectId, versionHash: request.versionHash, artifact: request.artifact,
+  });
+  if (request.action === "activate" && (request.serverlessApproval
+    ? request.usageApproval || !control.serverless || control.usage ||
+      control.serverless.review.contentHash !== request.serverlessApproval.reviewHash ||
+      control.serverless.customerCapUsd !== request.serverlessApproval.customerCapUsd ||
+      control.serverless.review.versionHash !== request.versionHash ||
+      control.serverless.review.artifact.id !== request.artifact.id ||
+      control.serverless.review.artifact.contentHash !== request.artifact.contentHash ||
+      control.idleTimeoutSeconds !== control.serverless.review.workerIdleTimeoutSeconds
+    : control.serverless !== undefined))
+    throw new OpenPondProtocolError("training_model_serving_control_mismatch", "Serving differs from its accepted usage terms.");
   if (!managedServingUsageApprovalMatches(request, control) || contentHash !== await canonicalSha256(content) || await canonicalSha256(value.request) !== await canonicalSha256(request)
     || value.modelProjectId !== expected.modelProjectId || value.teamId !== request.teamId
     || expected.actorId && value.actorId !== expected.actorId || control.actorId !== value.actorId

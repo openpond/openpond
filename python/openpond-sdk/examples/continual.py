@@ -13,7 +13,7 @@ async def main():
     raw=args.input.read_bytes()
     if len(raw)>16777216:raise ProtocolError('input_too_large')
     value=json.loads(raw)
-    async with AsyncClient(base_url=os.environ['OPENPOND_API_URL'],api_key=os.environ['OPENPOND_API_KEY'],team_id=os.environ['OPENPOND_TEAM_ID']) as client:
+    async with AsyncClient(api_key=os.environ['OPENPOND_API_KEY'],team_id=os.environ['OPENPOND_TEAM_ID']) as client:
         scope=client.team_id
         if args.action=='inspect':response=await client.learning.inspect_policy({'action':'inspect_policy','scope':scope,'policy':value})
         elif args.action=='reconcile':

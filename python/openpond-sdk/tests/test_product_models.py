@@ -3,6 +3,7 @@ stream EOF must not masquerade as complete, and sync/async share owned pools."""
 import asyncio
 import json
 import threading
+import httpx
 from importlib.resources import files
 from jsonschema import Draft202012Validator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -59,9 +60,22 @@ def test_sync_async_model_routing_receipts_and_stream_failure(serving):
         state['mode']='reject';before=state['calls']
         with pytest.raises(PonderError):client.models.support.generate(prompt='hello')
         assert state['calls']==before+1
+    # Keep the public key-only destination under the real HTTP consumer boundary.
+    def forward_production(request):
+        assert str(request.url)=='https://api.openpond.ai/v1/chat/completions'
+        request.url=httpx.URL(origin+'/personalized/v1/chat/completions')
+    state['mode']='normal'
+    with Client(api_key='serving-key',team_id='team-one',model_aliases={'support':'saved-model-one'}) as default_client:
+        default_client._transport.client.event_hooks['request'].append(forward_production)
+        assert default_client.models.support.generate(prompt='hello')==answer
     async def run():
         state['mode']='normal'
         async with AsyncClient(**config) as client:
             assert await client.models.support.generate(prompt='hello')==answer
             assert [event async for event in client.models.support.stream(prompt='hello')][-1].result==answer
+        async def forward_production_async(request):
+            forward_production(request)
+        async with AsyncClient(api_key='serving-key',team_id='team-one',model_aliases={'support':'saved-model-one'}) as default_client:
+            default_client._transport.client.event_hooks['request'].append(forward_production_async)
+            assert await default_client.models.support.generate(prompt='hello')==answer
     asyncio.run(run())

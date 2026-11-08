@@ -8,11 +8,18 @@ import { connectionQueryScope } from "../../lib/query-scope";
 import { DropdownSelect } from "../DropdownSelect";
 import { ErrorToast } from "../common/ErrorToast";
 import { JsonObjectField } from "../datasets/TasksetDraftEditorPrimitives";
-import { newTask } from "../datasets/taskset-draft-editor-helpers";
+import { ListFilter } from "../icons";
 import { useDraftNavigation } from "../labs/useDraftNavigation";
-import { addResourceRequestToChat } from "./composer-resource-request";
 
-export function PonderDatasetTasks({ connection, dataset, sessionId, contexts, onSaved }: {
+const splitOptions = [
+  { value: "all", label: "All splits" },
+  { value: "train", label: "Training" },
+  { value: "validation", label: "Validation" },
+  { value: "test", label: "Test" },
+  { value: "frozen_eval", label: "Held-out evaluation" },
+];
+
+export function PonderDatasetTasks({ connection, dataset, onSaved }: {
   connection: ClientConnection; dataset: ChatResourceSummary; sessionId: string | null; contexts: TaskResourceContext[];
   onSaved: (summary: ChatResourceSummary) => Promise<void>;
 }) {
@@ -25,17 +32,16 @@ export function PonderDatasetTasks({ connection, dataset, sessionId, contexts, o
   return <>
     <ErrorToast error={query.error}>{query.error ? <button type="button" onClick={() => void query.refetch()}>Retry tasks</button> : null}</ErrorToast>
     {query.isPending ? <p role="status">Loading tasks…</p> : query.data ? <TaskEditor key={`${dataset.id}:${dataset.revision}`} record={query.data}
-      connection={connection} sessionId={sessionId} contexts={contexts} onSaved={onSaved} /> : null}
+      connection={connection} onSaved={onSaved} /> : null}
   </>;
 }
 
-function TaskEditor({ record, connection, sessionId, contexts, onSaved }: {
-  record: LocalDatasetRecord; connection: ClientConnection; sessionId: string | null; contexts: TaskResourceContext[];
+function TaskEditor({ record, connection, onSaved }: {
+  record: LocalDatasetRecord; connection: ClientConnection;
   onSaved: (summary: ChatResourceSummary) => Promise<void>;
 }) {
   const [baseline, setBaseline] = useState(record.workspace.draft);
   const [draft, setDraft] = useState(baseline);
-  const [search, setSearch] = useState("");
   const [split, setSplit] = useState("all");
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -44,8 +50,8 @@ function TaskEditor({ record, connection, sessionId, contexts, onSaved }: {
   const pending = useRef<{ operationId: string; draft: typeof draft } | null>(null);
   const dirty = JSON.stringify(draft) !== JSON.stringify(baseline) || Boolean(pending.current);
   const guard = useDraftNavigation({ name: "Dataset tasks", dirty, busy, onLeave: () => setDraft(baseline) });
-  const rows = draft.tasks.filter(task => (split === "all" || task.split === split)
-    && `${task.id} ${JSON.stringify(task.input)} ${JSON.stringify(task.expectedOutput)}`.toLowerCase().includes(search.toLowerCase()));
+  const rows = draft.tasks.filter(task => split === "all" || task.split === split);
+  const splitLabel = splitOptions.find(option => option.value === split)!.label;
   const current = Math.min(page, Math.max(0, Math.ceil(rows.length / 20) - 1));
   const task = draft.tasks.find(item => item.id === selected);
   const disabled = busy || Boolean(pending.current);
@@ -69,21 +75,8 @@ function TaskEditor({ record, connection, sessionId, contexts, onSaved }: {
     }
     finally { setBusy(false); }
   }
-  function discuss() {
-    addResourceRequestToChat({ sessionId,
-      text: task ? `Review task ${task.id} in ${baseline.name}, revision ${baseline.revision}. Inspect its input, reference answer and retained grader results, explain any defect, and make the requested evidence-backed correction. Preserve prior run inputs. Do not start paid work.`
-        : `Review ${baseline.name}, revision ${baseline.revision}. Inspect task coverage, labels, duplicates and graders, and explain the next useful changes. Do not start paid work.`,
-      contexts,
-    });
-  }
   return <>
     {guard.dialog}<ErrorToast error={error} />
-    <div className="ponder-workbench-actions">
-      <button type="button" className="training-button secondary" disabled={disabled} onClick={() => { const added = newTask(); setDraft(value => ({ ...value, tasks: [...value.tasks, added] })); setSelected(added.id); }}>Add task</button>
-      <button type="button" className="training-button secondary" disabled={dirty || busy} onClick={discuss}>{task ? "Discuss task" : "Discuss dataset"}</button>
-      <button type="button" className="training-button" disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving…" : pending.current ? "Retry save" : "Save revision"}</button>
-    </div>
-    <p>{baseline.name} · revision {baseline.revision}{dirty ? " · Unsaved task changes" : ""}</p>
     {task ? <section className="ponder-task-inspector" aria-label={`Task ${task.id}`}>
       <header><h3>{task.id}</h3><button type="button" className="training-text-button" onClick={() => setSelected(null)}>Back to tasks</button></header>
       <JsonObjectField label="Input" value={task.input} disabled={disabled} onChange={input => { if (input) update({ ...task, input }); }} />
@@ -94,10 +87,13 @@ function TaskEditor({ record, connection, sessionId, contexts, onSaved }: {
         setDraft(value => ({ ...value, tasks: value.tasks.filter(item => item.id !== task.id), graderFixtures: value.graderFixtures.filter(item => item.taskId !== task.id) })); setSelected(null);
       }}>Remove task</button>
     </section> : <>
-      <input className="training-input" aria-label="Search tasks" placeholder="Search tasks…" value={search} onChange={event => { setSearch(event.target.value); setPage(0); }} />
-      <DropdownSelect label="Task split filter" floating value={split} options={[{ value: "all", label: "All splits" }, ...["train", "validation", "test", "frozen_eval"].map(value => ({ value, label: value }))]} onChange={value => { setSplit(value); setPage(0); }} />
       <div className="training-table-wrap"><table className="training-data-table evaluation-workspace-table ponder-task-table ponder-task-table-with-reference">
-        <thead><tr><th>Task</th><th>Input</th><th>Reference</th><th>Split</th></tr></thead>
+        <thead><tr><th>Task</th><th>Input</th><th>Reference</th><th><div className="ponder-split-heading">Split
+          <DropdownSelect label={`Filter tasks by split: ${splitLabel}`} tooltip={splitLabel} floating floatingMenuWidth={200}
+            className={`ponder-split-filter${split !== "all" ? " filtered" : ""}`} value={split} options={splitOptions}
+            triggerContent={<><ListFilter size={14} aria-hidden="true" />{split !== "all" ? <span>{splitLabel}</span> : null}</>}
+            onChange={value => { setSplit(value); setPage(0); }} />
+        </div></th></tr></thead>
         <tbody>{rows.slice(current * 20, current * 20 + 20).map(item => <tr key={item.id}>
           <td><button type="button" className="training-text-button" onClick={() => setSelected(item.id)}>{item.id}</button></td>
           <td><span className="ponder-task-preview">{(typeof item.input.prompt === "string" ? item.input.prompt : JSON.stringify(item.input)).slice(0, 160)}</span></td>
@@ -108,5 +104,8 @@ function TaskEditor({ record, connection, sessionId, contexts, onSaved }: {
       {rows.length > 20 ? <div className="training-rollout-pagination"><button type="button" disabled={!current} onClick={() => setPage(current - 1)}>Previous</button>
         <span>{current * 20 + 1}–{Math.min(rows.length, current * 20 + 20)} of {rows.length}</span><button type="button" disabled={(current + 1) * 20 >= rows.length} onClick={() => setPage(current + 1)}>Next</button></div> : null}
     </>}
+    {dirty ? <div className="ponder-workbench-actions">
+      <button type="button" className="training-button" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : pending.current ? "Retry save" : "Save changes"}</button>
+    </div> : null}
   </>;
 }
