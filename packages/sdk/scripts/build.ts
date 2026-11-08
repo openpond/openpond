@@ -13,7 +13,8 @@ import { publishBuild, stageEmit } from "../../../scripts/build/publish.ts";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const compilerArg = process.argv.find((arg) => arg.startsWith("--compiler="));
 const compiler = compilerArg?.slice("--compiler=".length) ?? "tsgo";
-if (compiler !== "tsc" && compiler !== "tsgo") throw new Error("Use --compiler=tsc or --compiler=tsgo");
+if (compiler !== "tsc" && compiler !== "tsgo")
+  throw new Error("Use --compiler=tsc or --compiler=tsgo");
 const target = path.join(root, "dist");
 const dist = path.join(root, "node_modules/.cache", `sdk-dist-${randomUUID()}`);
 
@@ -23,6 +24,7 @@ await withBuildLock(path.join(root, "node_modules/.cache/build.lock"), async () 
 
     await build({
       entryPoints: {
+        "ai-sdk": path.join(root, "src/ai-sdk.ts"),
         opentelemetry: path.join(root, "src/opentelemetry.ts"),
         "tool-learning": path.join(root, "src/tool-learning.ts"),
         "tool-learning-local-store": path.join(root, "src/tool-learning-local-store.ts"),
@@ -73,7 +75,15 @@ await withBuildLock(path.join(root, "node_modules/.cache/build.lock"), async () 
       target: "node22.14",
       format: "esm",
       legalComments: "none",
-      external: ["esbuild", "zod", "yaml", "@openpond/evals", "@openpond/evals/*"],
+      external: [
+        "@ai-sdk/openai-compatible",
+        "ai",
+        "esbuild",
+        "zod",
+        "yaml",
+        "@openpond/evals",
+        "@openpond/evals/*",
+      ],
       sourcemap: true,
       logLevel: "info",
     });
