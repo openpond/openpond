@@ -73,6 +73,6 @@ For source-mapped retained-heap profiling and fresh-process RSS measurements, se
 
 Pinned model: [SmolLM2 135M Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct) (Apache-2.0), [GGUF conversion](https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/tree/09816acd5d99df7be770d85ea30822623dab342c) at revision `09816acd5d99df7be770d85ea30822623dab342c`, file SHA-256 `2e8040ceae7815abe0dcb3540b9995eaa1fa0d2ca9e797d0a635ae4433c68c2d`. [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/5ad1c5da0ad7f6176256b823925aad19134f0263) is MIT licensed. Preserve upstream license obligations when distributing builds.
 
-## Verified deployment
+## Historical acceptance summary
 
-The [2026-10-07 release evidence](packaging/embedded-release-proof.json) records the immutable image and pivot hashes, three healthy non-debug replicas with egress disabled, authenticated real remote answers and the complete local cgroup/lifecycle check. The diagnostic deployment was deleted after acceptance.
+The [sanitized 2026-10-07 acceptance summary](packaging/embedded-release-proof.json) records synthetic prompt outcomes, authentication and validation checks, artifact sizes and local cgroup measurements. Operator deployment locations, binary digests and resource identifiers are omitted. Rebuild and deploy the example with your own configured registry and endpoint to obtain current verification evidence. The diagnostic deployment was deleted after acceptance.
