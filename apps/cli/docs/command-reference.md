@@ -1042,7 +1042,7 @@ Usage:
   openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]
   openpond training start <hosted-model-project-id> --team-id <id> --batch-id <id> [--max-spend <usd>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--gpu-count <1|2>] [--yes] [--detach] [--json]
   openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
-  openpond training hosted-models|hosted-batches|hosted-preparations|hosted-jobs|hosted-capabilities|hosted-gpu-catalog|hosted-hardware-catalog --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-models|hosted-model-candidates|hosted-batches|hosted-preparations|hosted-jobs|hosted-capabilities|hosted-gpu-catalog|hosted-hardware-catalog --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-gpu-catalog [workload-query.json] --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-drafts --team-id <id> [--project-id <id>] [--search <text>] [--archived] [--cursor <cursor>] [--limit <1..100>] [--json]
   openpond training hosted-modification-capabilities <input.json> --team-id <id> [--json]

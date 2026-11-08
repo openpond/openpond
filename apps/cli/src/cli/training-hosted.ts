@@ -141,6 +141,10 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   if (action === "hosted-models") {
     print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).list()); return;
   }
+  if (action === "hosted-model-candidates") {
+    if (target) throw new Error("hosted-model-candidates does not accept an identifier.");
+    print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).configurationCandidates()); return;
+  }
   if (action === "hosted-model") {
     if (!target) throw new Error("hosted-model requires a Model Project ID.");
     print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).get(target)); return;
