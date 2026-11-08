@@ -7,16 +7,14 @@ const [action, inputPath, outputPath] = process.argv.slice(2);
 if (!["prepare", "start", "status", "results", "cancel"].includes(action ?? "") || !inputPath || !outputPath) {
   throw new Error("Usage: manual.ts <prepare|start|status|results|cancel> <request-or-receipt.json> <new-receipt.json>");
 }
-const baseUrl = process.env.OPENPOND_API_URL;
 const apiKey = process.env.OPENPOND_API_KEY;
 const teamId = process.env.OPENPOND_TEAM_ID;
-if (!baseUrl || !apiKey || !teamId) throw new Error("Set OPENPOND_API_URL, OPENPOND_API_KEY and OPENPOND_TEAM_ID.");
+if (!apiKey || !teamId) throw new Error("Set OPENPOND_API_KEY and OPENPOND_TEAM_ID.");
 const bytes = await readFile(inputPath);
 if (bytes.byteLength > 1_048_576) throw new Error("Input exceeds the preparation limit.");
 const input: unknown = JSON.parse(bytes.toString("utf8"));
 const signal = AbortSignal.timeout(120_000);
 const training = createTrainingClient({
-  baseUrl,
   headers: { Authorization: `Bearer ${apiKey}`, "X-OpenPond-Team-Id": teamId },
   fetch: (url, init) => fetch(url, { ...init, signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal, redirect: "error" }),
 });

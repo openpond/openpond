@@ -56,6 +56,14 @@ test("flat and bound task submission preserve retry identity and check the desti
     await expect(
       client.addTask({ ...task, id: "other" }, { idempotencyKey: "source-event" }),
     ).rejects.toThrow("same source event");
+    const productionDefault = new OpenPondClient({
+      apiKey: "test-key", teamId: "workspace", datasetId: "dataset/one",
+      fetch: async (input, init) => {
+        expect(String(input)).toBe("https://api.openpond.ai/v1/dataset-workspaces/dataset%2Fone/tasks");
+        return fetch(config.baseUrl + new URL(String(input)).pathname, init);
+      },
+    });
+    expect(await productionDefault.addTask({ ...task, id: "source-event" })).toEqual(first);
     wrongWorkspace = true;
     await expect(addTask(task)).rejects.toThrow("receipt identity mismatch");
   } finally {

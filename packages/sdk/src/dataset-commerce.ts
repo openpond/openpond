@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { OpenPondCommerceFiles } from "./dataset-commerce-files.js";
 export * from "./dataset-commerce-files.js";
 import { z } from "zod";
@@ -33,7 +34,7 @@ export * from "./dataset-commerce-contracts.js";
 export * from "./dataset-commerce-responses.js";
 
 export interface DatasetCommerceClientOptions {
-  baseUrl: string;
+  baseUrl?: string;
   apiKey?: string;
   teamId?: string;
   fetch?: typeof globalThis.fetch;
@@ -54,7 +55,7 @@ export class OpenPondDatasetCommerceClient {
   readonly #options: DatasetCommerceClientOptions;
   readonly files: OpenPondCommerceFiles;
   constructor(options: DatasetCommerceClientOptions) {
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (
       !["https:", "http:"].includes(url.protocol) ||
       url.username ||

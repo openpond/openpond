@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { assertBoundedTaskJson } from "@openpond/evals/task-schema";
 import { readBoundedJsonResponse } from "./protocol.js";
@@ -52,7 +53,7 @@ export type AddTaskOptions = {
 };
 export type DatasetTaskClientOptions = {
   apiKey: string;
-  baseUrl: string;
+  baseUrl?: string;
   teamId: string;
   fetch?: typeof fetch;
 };
@@ -82,7 +83,7 @@ export async function addDatasetTask(
   task: DatasetTaskInput,
   options: AddTaskOptions = {},
 ): Promise<DatasetTaskAppendReceipt> {
-  const url = new URL(config.baseUrl);
+  const url = new URL(config.baseUrl ?? DEFAULT_API_BASE_URL);
   if (
     !["http:", "https:"].includes(url.protocol) ||
     url.username ||

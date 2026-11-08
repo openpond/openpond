@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import {
@@ -38,13 +39,13 @@ export class OpenPondDatasetPreparationClient {
   private readonly baseUrl: string;
   constructor(
     private readonly options: {
-      baseUrl: string;
+      baseUrl?: string;
       apiKey: string;
       teamId: string;
       fetch?: typeof fetch;
     },
   ) {
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (
       !["http:", "https:"].includes(url.protocol) ||
       url.username ||

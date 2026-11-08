@@ -95,7 +95,7 @@ export function SavedModelServing({
         ? value.availability.state === "qualified" &&
           value.control?.phase !== "stopping" &&
           !value.cleanup.some((row) => !["shared", "released"].includes(row.capacityState))
-        : value.registry?.qualified && value.control?.phase !== "stopping");
+        : value.registry?.qualified && Boolean(value.serverlessReview) && value.control?.phase !== "stopping");
   return (
     <section aria-label="Serving state">
       <div className="labs-project-trends-heading">
@@ -141,6 +141,14 @@ export function SavedModelServing({
       {value ? (
         <>
           <dl className="model-project-page-metrics">
+            {value.schemaVersion === "openpond.trainingModelServing.v1" && value.control?.serverless ? (
+              <>
+                <div><dt>Serving usage</dt><dd>{(value.control.serverless.quantityMicros / 1_000_000).toFixed(3)} allocated seconds</dd></div>
+                <div><dt>Serving charged</dt><dd>US${value.control.serverless.chargedUsd}</dd></div>
+                <div><dt>Reserved for requests</dt><dd>US${value.control.serverless.reservedUsd}</dd></div>
+                <div><dt>Serving spending limit</dt><dd>{value.control.serverless.customerCapUsd ? `US$${value.control.serverless.customerCapUsd}` : "Available workspace credit"}</dd></div>
+              </>
+            ) : null}
             <div>
               <dt>Routing</dt>
               <dd>

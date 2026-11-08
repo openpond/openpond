@@ -18,6 +18,7 @@ import {
   EngramModelServingControlIntentSchema,
   parseAndVerifyEngramModelServingControl,
   type EngramModelServingControlReceipt,
+  createServerlessServingApproval,
   TrainingModelServingControlCommandSchema,
   TrainingModelServingControlIntentSchema,
   SteeringModelServingControlCommandSchema,
@@ -103,7 +104,7 @@ async function verifyReceipt(
                 actorId,
               });
 }
-function freshIntent(
+async function freshIntent(
   api: WorkspaceApi,
   modelProjectId: string,
   value: SavedModelServing,
@@ -111,6 +112,7 @@ function freshIntent(
   idleTimeoutSeconds: number,
   defaultPublication: SteeringPublicationReference | null,
   defaultEnabled: boolean,
+  spendingLimit?: string | null,
 ) {
   if (
     value.schemaVersion === "openpond.alphaEditModelServing.v1" ||
@@ -164,6 +166,8 @@ function freshIntent(
   }
   return Intent.parse({
     schemaVersion: "openpond.trainingModelServingControlRequest.v1",
+    ...(action === "activate" ? {serverlessApproval: await createServerlessServingApproval(
+      value.serverlessReview ?? (() => { throw new Error("Refresh this Model's serverless price before activation."); })(), spendingLimit)} : {}),
     teamId: api.teamId,
     modelProjectId,
     expectedRevision: value.control?.revision ?? 0,
@@ -298,6 +302,7 @@ export function useModelServingControl(
     idleTimeoutSeconds: number,
     defaultPublication: SteeringPublicationReference | null = null,
     defaultEnabled = true,
+    spendingLimit?: string | null,
   ) {
     if (active.current.has(scope) || (!original && !pending.isSuccess)) return null;
     active.current.add(scope);
@@ -310,7 +315,7 @@ export function useModelServingControl(
       if (!saved) {
         if (!value)
           throw new Error("Read the exact saved version before reviewing a fresh serving command.");
-        const intent = freshIntent(
+        const intent = await freshIntent(
           api,
           modelProjectId,
           value,
@@ -318,6 +323,7 @@ export function useModelServingControl(
           idleTimeoutSeconds,
           defaultPublication,
           defaultEnabled,
+          spendingLimit,
         );
         const operation = await api.operation(ACTION, intent);
         if (!current()) return null;

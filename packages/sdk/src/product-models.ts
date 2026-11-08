@@ -1,3 +1,4 @@
+import { DEFAULT_MODEL_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { readBoundedJsonResponse } from "./protocol.js";
 
@@ -124,9 +125,9 @@ export class ProductModel {
       structuredOutput: false,
       ...(typeof binding === "string" ? {} : binding.capabilities),
     };
-    if (!connection.baseUrl || !connection.apiKey.trim())
-      throw new Error("Named models require an explicit serving.baseUrl and API key.");
-    productModelEndpoint(connection.baseUrl);
+    if (!connection.apiKey.trim())
+      throw new Error("Named models require an API key.");
+    this.connection = { ...connection, baseUrl: productModelEndpoint(connection.baseUrl ?? DEFAULT_MODEL_BASE_URL) };
     if (
       connection.timeoutMs !== undefined &&
       (!Number.isFinite(connection.timeoutMs) ||

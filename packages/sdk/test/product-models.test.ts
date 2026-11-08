@@ -204,6 +204,18 @@ test("named models and AI SDK consumer preserve exact routing, usage and no-repl
       }),
     ).rejects.toMatchObject({ code: "tools_unsupported" });
     expect(calls).toBe(before + 1);
+    // Exercise the documented key-only setup through the same HTTP consumer.
+    // Assert the production destination before forwarding to the local listener.
+    mode = "normal";
+    const productionDefault = createOpenPondClient({
+      apiKey: "serving-key", teamId: "team-one",
+      models: { support: "saved-model-one" },
+      fetch: async (input, init) => {
+        expect(String(input)).toBe("https://api.openpond.ai/v1/chat/completions");
+        return fetch(`http://127.0.0.1:${address.port}/personalized/v1/chat/completions`, init);
+      },
+    });
+    expect((await productionDefault.models.support.generate({ prompt: "hi" })).text).toBe("hello");
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

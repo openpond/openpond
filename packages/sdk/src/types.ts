@@ -8,8 +8,8 @@ export type OpenPondClientOptions<
 > = {
   /** Default destination for addTask(task). No implicit Dataset creation. */
   datasetId?: string;
-  /** Explicit personalized Chat Completions base URL (including /v1). */
-  serving?: { baseUrl: string; apiKey?: string; timeoutMs?: number };
+  /** Optional personalized inference connection overrides. */
+  serving?: { baseUrl?: string; apiKey?: string; timeoutMs?: number };
   /** Application-owned aliases bound to exact callable model IDs. */
   models?: Models;
   /** Custom HTTP transport, useful for application instrumentation. */

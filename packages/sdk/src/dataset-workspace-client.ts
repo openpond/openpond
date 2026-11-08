@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import {
   addDatasetTask,
   type DatasetTaskInput,
@@ -29,13 +30,13 @@ export class OpenPondDatasetWorkspaceClient {
   readonly preparations: OpenPondDatasetPreparationClient;
   constructor(
     private readonly options: {
-      baseUrl: string;
+      baseUrl?: string;
       apiKey: string;
       teamId: string;
       fetch?: typeof fetch;
     },
   ) {
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (
       !["http:", "https:"].includes(url.protocol) ||
       url.username ||

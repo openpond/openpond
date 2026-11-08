@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { LearningRevisionRefSchema } from "@openpond/evals/learning";
@@ -170,7 +171,7 @@ export class OpenPondToolLearningError extends Error {
 /** Owner credentials register/control installations. External hooks and MCP
  * use only the separate installation credential returned by registration. */
 type ToolLearningClientOptions = {
-  baseUrl: string;
+  baseUrl?: string;
   apiKey: string;
   teamId: string;
   projectId: string;
@@ -183,7 +184,7 @@ export class OpenPondToolLearningClient {
   constructor(options: ToolLearningClientOptions) {
     this.#options = { ...options };
 
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (
       !["https:", "http:"].includes(url.protocol) ||
       url.username ||

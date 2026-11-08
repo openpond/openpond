@@ -8,7 +8,6 @@ Use `openpond tool-learning --help` for setup and lifecycle operations. `setup` 
 import { OpenPondToolLearningClient } from "openpond-sdk/tool-learning";
 
 const owner = new OpenPondToolLearningClient({
-  baseUrl: apiOrigin,
   apiKey: ownerApiKey,
   teamId,
   projectId: modelId,
