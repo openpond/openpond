@@ -24,6 +24,8 @@ type DevtoolsTarget = {
 };
 
 type CdpResponse = {
+  method?: string;
+  params?: Record<string, unknown>;
   id?: number;
   result?: unknown;
   error?: { message?: string; data?: string };
@@ -67,6 +69,7 @@ async function main(): Promise<void> {
   let renderer: ProcessHandle | null = null;
   let desktop: ProcessHandle | null = null;
   let cdp: CdpClient | null = null;
+  const renderEvidence: Record<string, unknown> = { phase: "startup" };
 
   try {
     runSetup("bundle-server", [pnpmBinary(), "run", "bundle:server"]);
@@ -91,6 +94,7 @@ async function main(): Promise<void> {
     );
     const devtoolsTargetMs = Date.now() - launchedAt;
     cdp = await CdpClient.connect(target.webSocketDebuggerUrl);
+    await cdp.send("Network.enable");
     // Headless X11 runners have no window manager to activate the test window.
     // Keep keyboard focus and animation-frame delivery deterministic there.
     await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
@@ -169,8 +173,9 @@ async function main(): Promise<void> {
       );
     }
 
+    renderEvidence.phase = "navigation";
     const navigation = await verifyDesktopNavigation(cdp);
-    const renderCommits = await runComposerCommitProof(cdp);
+    const renderCommits = await runComposerCommitProof(cdp, renderEvidence);
 
     const chat = options.skipChat
       ? null
@@ -244,6 +249,7 @@ async function main(): Promise<void> {
       chat,
       navigation,
       renderCommits,
+      renderEvidence,
       timings: {
         totalSmokeMs: Date.now() - startedAt,
         devtoolsTargetMs,
@@ -258,6 +264,16 @@ async function main(): Promise<void> {
     };
     await writeSmokeReport(report, options.jsonPath);
     console.log(JSON.stringify(report, null, 2));
+  } catch (error) {
+    // Preserve diagnostics before cleanup; never retain credentials or API payloads.
+    if (cdp) {
+      renderEvidence.atFailure = await readRenderEvidence(cdp).catch(() => null);
+      renderEvidence.network = cdp.networkSnapshot();
+    }
+    await writeSmokeReport({
+      ok: false, mode: "dev", platform: process.platform, renderEvidence,
+    }, options.jsonPath).catch(() => console.error("Could not save failed renderer smoke report."));
+    throw error;
   } finally {
     cdp?.close();
     await stopDesktopHarnessProcess(desktop);
@@ -349,7 +365,40 @@ async function selectDesktopDestination(cdp: CdpClient, label: string): Promise<
   );
 }
 
-async function runComposerCommitProof(cdp: CdpClient): Promise<{
+async function readRenderEvidence(cdp: CdpClient) {
+  return evaluateValue<{
+    now: number;
+    metrics: Record<string, { commits?: number }>;
+    trace: Array<{ id: string; phase: string; startTime: number; commitTime: number }>;
+  }>(cdp, `(() => {
+    const api = window.__OPENPOND_RENDER_COMMITS__;
+    if (!api) throw new Error("Renderer commit instrumentation is missing.");
+    return { now: performance.now(), metrics: api.get(), trace: api.getTrace() };
+  })()`);
+}
+
+async function flushRendererFrames(cdp: CdpClient): Promise<void> {
+  await evaluateValue(cdp, `new Promise(resolve => requestAnimationFrame(() =>
+    requestAnimationFrame(() => resolve(true))))`);
+}
+
+async function settleRenderer(cdp: CdpClient): Promise<void> {
+  // Observe actual loading/commits instead of assuming a fixed startup delay.
+  // EventSource/WebSocket streams do not block this finite-request boundary.
+  let stableSince = Date.now();
+  let previous = "";
+  await waitFor(async () => {
+    const renderer = await readRenderEvidence(cdp);
+    const network = cdp.networkSnapshot();
+    const current = JSON.stringify([renderer.metrics.sidebar?.commits ?? 0, network.activity]);
+    if (network.pendingFetchXhr > 0 || current !== previous) stableSince = Date.now();
+    previous = current;
+    return network.pendingFetchXhr === 0 && Date.now() - stableSince >= 500;
+  }, 10_000, "Renderer navigation/loading did not settle before commit measurement.");
+  await flushRendererFrames(cdp);
+}
+
+async function runComposerCommitProof(cdp: CdpClient, evidence: Record<string, unknown>): Promise<{
   composerCommits: number;
   sidebarBaselineCommits: number;
   sidebarCommitBudget: number;
@@ -370,17 +419,25 @@ async function runComposerCommitProof(cdp: CdpClient): Promise<{
     throw new Error(
       "Composer input could not be focused for the commit-budget proof."
     );
-  await delay(300);
+  evidence.phase = "settle";
+  await settleRenderer(cdp);
+  evidence.settled = await readRenderEvidence(cdp);
+  evidence.phase = "baseline";
   await evaluateValue<boolean>(
     cdp,
     "(window.__OPENPOND_RENDER_COMMITS__?.reset(), true)"
   );
+  const baselineStart = await readRenderEvidence(cdp);
   for (const _character of proofText) {
+    await evaluateValue<number>(cdp, "performance.now()");
     await cdp.send("Runtime.evaluate", { expression: "true" });
+    await flushRendererFrames(cdp);
+    await evaluateValue<number>(cdp, "performance.now()");
   }
-  const baselineMetrics = await evaluateValue<
-    Record<string, { commits?: number }>
-  >(cdp, "window.__OPENPOND_RENDER_COMMITS__?.get() ?? {}");
+  await flushRendererFrames(cdp);
+  const baselineEnd = await readRenderEvidence(cdp);
+  evidence.baseline = { ...baselineEnd, elapsedMs: baselineEnd.now - baselineStart.now };
+  const baselineMetrics = baselineEnd.metrics;
   const sidebarBaselineCommits = baselineMetrics.sidebar?.commits ?? 0;
   const sidebarCommitBudget = Math.max(
     BACKGROUND_SIDEBAR_COMMIT_TOLERANCE,
@@ -390,9 +447,18 @@ async function runComposerCommitProof(cdp: CdpClient): Promise<{
     cdp,
     "(window.__OPENPOND_RENDER_COMMITS__?.reset(), true)"
   );
+  evidence.phase = "typing";
+  const typingStart = await readRenderEvidence(cdp);
+  const inputs: Array<{ index: number; before: number; after: number }> = [];
+  evidence.inputs = inputs;
   for (const character of proofText) {
+    const before = await evaluateValue<number>(cdp, "performance.now()");
     await cdp.send("Input.insertText", { text: character });
+    await flushRendererFrames(cdp);
+    const after = await evaluateValue<number>(cdp, "performance.now()");
+    inputs.push({ index: inputs.length, before, after });
   }
+  await flushRendererFrames(cdp);
   await waitFor(
     async () =>
       evaluateValue<boolean>(
@@ -408,10 +474,9 @@ async function runComposerCommitProof(cdp: CdpClient): Promise<{
     5_000,
     "Composer did not accept commit-budget proof input."
   );
-  const metrics = await evaluateValue<Record<string, { commits?: number }>>(
-    cdp,
-    "window.__OPENPOND_RENDER_COMMITS__?.get() ?? {}"
-  );
+  const typingEnd = await readRenderEvidence(cdp);
+  evidence.typing = { ...typingEnd, elapsedMs: typingEnd.now - typingStart.now };
+  const metrics = typingEnd.metrics;
   const composerCommits = metrics.composer?.commits ?? 0;
   const sidebarCommits = metrics.sidebar?.commits ?? 0;
   if (composerCommits < 1 || composerCommits > proofText.length + 2) {
@@ -953,6 +1018,31 @@ function pnpmBinary(): string {
 }
 
 class CdpClient {
+  private readonly finiteRequests = new Set<string>();
+  private networkActivity = 0;
+
+  networkSnapshot() {
+    return { pendingFetchXhr: this.finiteRequests.size, activity: this.networkActivity };
+  }
+
+  private observeNetwork(message: CdpResponse) {
+    const params = message.params;
+    if (!params || typeof params.requestId !== "string") return;
+    const requestId = params.requestId;
+    if (message.method === "Network.requestWillBeSent") {
+      if (params.type === "Fetch" || params.type === "XHR") {
+        this.finiteRequests.add(requestId);
+        this.networkActivity++;
+      }
+    } else if (message.method === "Network.responseReceived") {
+      const response = params.response as { mimeType?: string } | undefined;
+      if (response?.mimeType?.split(";")[0]?.trim() === "text/event-stream") {
+        if (this.finiteRequests.delete(requestId)) this.networkActivity++;
+      }
+    } else if (message.method === "Network.loadingFinished" || message.method === "Network.loadingFailed") {
+      if (this.finiteRequests.delete(requestId)) this.networkActivity++;
+    }
+  }
   private nextId = 1;
   private readonly pending = new Map<
     number,
@@ -967,7 +1057,7 @@ class CdpClient {
       const data =
         typeof event.data === "string" ? event.data : event.data.toString();
       const message = JSON.parse(data) as CdpResponse;
-      if (!message.id) return;
+      if (!message.id) { this.observeNetwork(message); return; }
       const pending = this.pending.get(message.id);
       if (!pending) return;
       this.pending.delete(message.id);
