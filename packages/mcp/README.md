@@ -6,7 +6,7 @@ The exported request handler can be embedded in an MCP host. Configure its URL a
 
 ## Connect an application to the hosted MCP
 
-Customers add the published API deployment's `/mcp/app` URL in their MCP application and complete OpenPond OAuth consent. No local MCP process, npm package, or Desktop installation is required for this connection. The workspace and granted capabilities are selected during consent; access can be revoked from Account → External agents.
+Customers add the published API deployment's `/mcp/app` URL in their MCP application and complete OpenPond OAuth consent. No local MCP process, npm package, or Desktop installation is required for this connection. The workspace and granted capabilities are selected during consent; access can be revoked from Console → Integrations → External agents.
 
 For example, OpenCode uses a remote server configuration:
 
