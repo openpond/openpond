@@ -6,7 +6,15 @@ export type RenderCommitMetric = {
   totalActualDurationMs: number;
 };
 
+type RenderCommitTrace = {
+  id: string;
+  phase: string;
+  startTime: number;
+  commitTime: number;
+};
+
 type RenderCommitMetricsApi = {
+  getTrace(): RenderCommitTrace[];
   get(): Record<string, RenderCommitMetric>;
   reset(): void;
 };
@@ -18,8 +26,11 @@ declare global {
 }
 
 const metrics = new Map<string, RenderCommitMetric>();
+const trace: RenderCommitTrace[] = [];
 
-const onRender: ProfilerOnRenderCallback = (id, _phase, actualDuration) => {
+const onRender: ProfilerOnRenderCallback = (id, phase, actualDuration, _baseDuration, startTime, commitTime) => {
+  trace.push({ id, phase, startTime, commitTime });
+  if (trace.length > 256) trace.shift();
   const current = metrics.get(id) ?? {
     commits: 0,
     maxActualDurationMs: 0,
@@ -40,6 +51,7 @@ if (typeof window !== "undefined") {
     get: () => Object.fromEntries(
       [...metrics.entries()].map(([id, metric]) => [id, { ...metric }]),
     ),
-    reset: () => metrics.clear(),
+    getTrace: () => trace.map((entry) => ({ ...entry })),
+    reset: () => { metrics.clear(); trace.length = 0; },
   };
 }
