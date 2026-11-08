@@ -677,8 +677,8 @@ importers:
         specifier: '>=3.1.0 <4'
         version: 3.1.0(@opentelemetry/api@1.10.0)
       openpond-sdk:
-        specifier: 0.12.24
-        version: 0.12.24(@opentelemetry/sdk-trace@3.1.0(@opentelemetry/api@1.10.0))
+        specifier: 0.12.25
+        version: link:../sdk
 
   packages/runtime:
     dependencies:
@@ -4309,15 +4309,6 @@ packages:
   zrender@6.1.0:
     resolution: {integrity: sha512-oEGMDB6pOP2S6OwRR4PdVv610zrjnA3Bh+JnSG12fYJlBKjtNAoEb5fSUoCOOINlH96I2fU38/A2UpRKs67xYQ==}
 
-  openpond-sdk@0.12.24:
-    resolution: {integrity: sha512-r72wfEv+jCvDlR0c/wwWUg1vsu6FFJgwNIIY1OHFkTTgbdM+c1f5YUs/k2hcRSfZULvLUufuc1Qs5BXt4n3J0A==}
-    engines: {node: '>=22.14.0 <25'}
-    peerDependencies:
-      '@opentelemetry/sdk-trace': '>=3.1.0 <4'
-    peerDependenciesMeta:
-      '@opentelemetry/sdk-trace':
-        optional: true
-
 snapshots:
 
   '@agentclientprotocol/sdk@1.7.0(zod@4.4.3)':
@@ -7613,12 +7604,3 @@ snapshots:
     dependencies:
       tslib: 2.3.0
 
-  openpond-sdk@0.12.24(@opentelemetry/sdk-trace@3.1.0(@opentelemetry/api@1.10.0)):
-    dependencies:
-      '@openpond/evals': 0.12.6(@openpond/harness@0.4.11)
-      '@openpond/harness': 0.4.11
-      esbuild: 0.28.1
-      yaml: 2.9.0
-      zod: 4.4.3
-    optionalDependencies:
-      '@opentelemetry/sdk-trace': 3.1.0(@opentelemetry/api@1.10.0)

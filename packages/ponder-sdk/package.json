@@ -1,6 +1,6 @@
 {
   "name": "ponder-sdk",
-  "version": "0.12.24",
+  "version": "0.12.25",
   "description": "Ponder distribution of the complete OpenPond TypeScript SDK",
   "license": "MIT",
   "type": "module",
@@ -164,7 +164,7 @@
     }
   },
   "dependencies": {
-    "openpond-sdk": "0.12.24"
+    "openpond-sdk": "0.12.25"
   },
   "engines": {
     "node": ">=22.14.0 <25"
