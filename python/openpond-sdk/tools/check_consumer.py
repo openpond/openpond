@@ -13,7 +13,7 @@ proof='''import importlib,json,sys
 from pathlib import Path
 from importlib.metadata import version
 import ponder_sdk
-from ponder_sdk import Client,AsyncClient,models,inputs,canonical_json
+from ponder_sdk import Client,AsyncClient,models,inputs,canonical_json,TaskInput,ModelResult,ModelEvent
 from ponder_sdk.wire import schemas
 origin=Path(ponder_sdk.__file__).resolve()
 assert Path(sys.prefix).resolve() in origin.parents
@@ -26,7 +26,12 @@ assert inputs.ToolLearningConsultationRequest.__annotations__
 for module in ('qwen3', 'engram', 'neuron', 'alphaedit', 'decision'):
     importlib.import_module('ponder_sdk.reference.'+module)
 assert all(name not in sys.modules for name in ('torch','transformers','peft'))
-with Client(base_url='https://example.invalid',api_key='fixture',team_id='team-fixture') as client:
+with Client(base_url='https://example.invalid',api_key='fixture',team_id='team-fixture',dataset_id='dataset-fixture',serving_base_url='https://serving.invalid/v1',model_aliases={'support':'saved-model-fixture'}) as client:
+    assert client.dataset_id=='dataset-fixture'
+    assert client.models.support.id=='saved-model-fixture'
+    assert callable(client.models.support.generate) and callable(client.models.support.stream)
+    assert client.dataset('alternate').dataset_id=='alternate'
+    assert ModelResult.__annotations__ and ModelEvent.__annotations__ and TaskInput.__annotations__
     tools=client.tool_learning(project_id='project-fixture')
     assert tools.project_id=='project-fixture'
     assert callable(tools.consult) and callable(tools.consultation)

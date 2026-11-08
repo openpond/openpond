@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { ProviderModelSchema, type ProviderModel } from "@openpond/contracts";
 import {
-  canonicalJson, canonicalSha256, EngramInferenceOptionsSchema, OpenPondTrainingApiError,
+  canonicalJson, canonicalSha256, EngramInferenceOptionsSchema,
   type EngramInferenceOptions, type ResolvedEngramSelection,
 } from "openpond-sdk/training";
 import type { SqliteStore } from "../store/store.js";
-import { listHostedModelProjectCatalog } from "./hosted-model-project-catalog.js";
-import { accountFence, clientFor, configuredAccess, identity } from "./managed-steering-chat.js";
+import { listManagedSavedModelVersions } from "./managed-saved-model-discovery.js";
+import { accountFence, clientFor, configuredAccess, identity } from "./managed-saved-model-access.js";
 
 const Hash = z.string().regex(/^[a-f0-9]{64}$/), Id = z.string().trim().min(1).max(240);
 const Source = z.object({schemaVersion: z.literal("openpond.desktopEngramChatSelection.v1"),
@@ -24,18 +24,9 @@ export function isManagedEngramChatModel(modelId: string | null | undefined) {
  * module or serving authority; every send reauthorizes the canonical version. */
 export async function listManagedEngramChatModels(store: SqliteStore, teamId: string): Promise<ProviderModel[]> {
   const access = await configuredAccess(teamId), fence = () => accountFence(access), train = clientFor(access, fence);
-  const catalog = await listHostedModelProjectCatalog({store, resolveAccess: async () => access,
-    fetch: async (...args) => {await fence(); const response = await fetch(...args); await fence(); return response;}}, {refresh: true});
-  if (catalog.projects.length > 1000) throw new Error("The saved Model catalog exceeds this Desktop selection bound.");
+  const versions = await listManagedSavedModelVersions(store, access);
   const models: ProviderModel[] = [];
-  for (const {project} of catalog.projects) {
-    let read;
-    try {read = await train.modelVersion(project.id, {teamId});}
-    catch (error) {
-      if (error instanceof OpenPondTrainingApiError && (error.status === 403 || error.status === 404)) continue;
-      throw error;
-    }
-    const version = read.version;
+  for (const {project, version} of versions) {
     if (version?.schemaVersion !== "openpond.engramModelVersion.v1" || version.ownerUserId !== access.actorId) continue;
     const serving = await train.savedModelServing(project.id, {teamId, versionHash: version.contentHash});
     if (serving.schemaVersion !== "openpond.engramModelServing.v1") throw new Error("The saved memory Model changed its serving kind.");

@@ -1,3 +1,5 @@
+import { createTrainingEvidenceClient } from "./training-evidence.js";
+export { TrainingEvidenceWindowSchema, type TrainingEvidenceWindow } from "./training-evidence.js";
 export * from "./training-usage-funding.js";
 export * from "./managed-serving-usage.js";
 export * from "./managed-compute-price.js";
@@ -207,7 +209,7 @@ export {
 
 import {
   TrainingCapabilitiesSchema, TrainingInputArtifactSchema, TrainingJobSchema, TrainingJobPageSchema,
-  TrainingJobControlRequestSchema, TrainingJobEventSchema, TrainingJobOutputsSchema, TrainingJobLogSchema,
+  TrainingJobControlRequestSchema, TrainingJobOutputsSchema,
   parseAndVerifyTrainingInputArtifactUpload, parseAndVerifyTrainingJobSubmission,
   type TrainingInputArtifactUpload, type TrainingJobSubmission,
 } from "./training-job-contracts.js";
@@ -225,6 +227,7 @@ export function createTrainingClient(input: {
 
   return {
     postTraining: createPostTrainingClient({ request }),
+    ...createTrainingEvidenceClient(request),
     ...createTrainingPreparationClient(request),
     ...createTrainingExperimentSetupClient(request),
     ...createTrainingExperimentLearningClient(request),
@@ -354,16 +357,6 @@ export function createTrainingClient(input: {
         { method: "POST", body: JSON.stringify(recovery) },
       ), "job"));
     },
-    async events(jobId: string) {
-      return z
-        .array(TrainingJobEventSchema)
-        .parse(
-          unwrapObject(
-            await request(`/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/events`),
-            "events",
-          ),
-        );
-    },
     async outputs(jobId: string) {
       return TrainingJobOutputsSchema.parse(
         await request(`/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/outputs`),
@@ -397,17 +390,7 @@ export function createTrainingClient(input: {
         { jobId: id, evaluation: reference, offset },
       );
     },
-    async logs(jobId: string) {
-      return z
-        .array(TrainingJobLogSchema)
-        .max(100_000)
-        .parse(
-          unwrapObject(
-            await request(`/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/logs`),
-            "logs",
-          ),
-        );
-    },
+
   };
 }
 

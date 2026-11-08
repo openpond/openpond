@@ -8,11 +8,15 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { DatasetWorkspaceRequestError } from "openpond-sdk/dataset-workspaces";
 import { createClients } from "./clients.js";
 import { addProjectsAndDatasets } from "./projects-datasets.js";
 import { addExperiments } from "./experiments.js";
 import { addTraining } from "./training.js";
 import { addLearning } from "./learning.js";
+import { addTrainingWorkflows } from "./training-workflows.js";
+import { addAccount } from "./account.js";
+import { addAdapterTraining } from "./training-adapters.js";
 import { Empty } from "./common.js";
 import { normalizeOptionalNulls } from "./input-normalization.js";
 import {
@@ -24,6 +28,10 @@ import {
   type OpenPondMcpScope,
 } from "./types.js";
 export { OPENPOND_APP_MCP_SCOPES, OpenPondMcpAuthorizationError } from "./types.js";
+export {
+  trainingLearningCommandScopes,
+  assertTrainingLearningRead,
+} from "./training-learning-policy.js";
 export type {
   OpenPondMcpContext,
   OpenPondMcpOptions,
@@ -55,6 +63,7 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
       output: config.output,
       wireOutput: config.wireOutput,
       idempotent: config.idempotent ?? effect === "read",
+      destructive: config.destructive ?? effect !== "read",
     });
   };
   add(
@@ -73,7 +82,10 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
   addProjectsAndDatasets(add, clients);
   addExperiments(add, clients);
   addTraining(add, clients, options.context.teamId);
-  addLearning(add, clients);
+  addLearning(add, clients, options.context.teamId);
+  addTrainingWorkflows(add, clients, options.context);
+  addAccount(add, clients);
+  addAdapterTraining(add, clients, options.context);
   const names = new Set(definitions.map((v) => v.name));
   if (names.size !== definitions.length) throw new Error("Duplicate OpenPond MCP tool name.");
   const server = new Server(
@@ -116,9 +128,11 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
             : { type: "object" as const, properties: { result: {} }, required: ["result"] },
         annotations: {
           readOnlyHint: v.effect === "read",
-          destructiveHint: v.effect !== "read",
+          destructiveHint: v.destructive,
           idempotentHint: v.idempotent,
-          openWorldHint: true,
+          // This catalog operates inside the verified OpenPond workspace; it
+          // exposes no arbitrary internet search, messaging or public posting.
+          openWorldHint: false,
         },
         _meta: {
           securitySchemes: [{ type: "oauth2", scopes: v.scopes }],
@@ -203,6 +217,7 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
         status?: unknown;
         retryable?: unknown;
         requestId?: unknown;
+        outcomeUnknown?: unknown;
       };
       const code =
         error instanceof z.ZodError
@@ -210,6 +225,8 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
           : typeof known.code === "string"
             ? known.code
             : "operation_failed";
+      const datasetValidation = error instanceof DatasetWorkspaceRequestError && error.status === 422 &&
+        ["dataset_validation_failed", "dataset_grader_invalid", "dataset_grader_source_unavailable", "dataset_feedback_key_conflict"].includes(error.code);
       // Service errors may contain private provider diagnostics. Stable public
       // codes and recovery identifiers are returned without raw exception text.
       return {
@@ -221,9 +238,11 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
               code,
               status: typeof known.status === "number" ? known.status : undefined,
               retryable: known.retryable === true,
+              outcomeUnknown: typeof known.outcomeUnknown === "boolean" ? known.outcomeUnknown : undefined,
               requestId: typeof known.requestId === "string" ? known.requestId : undefined,
-              message:
-                "OpenPond could not complete this operation. Inspect the current resource/operation identity before retrying.",
+              message: datasetValidation
+                ? "Review the saved Dataset source privacy/licensing checks, required approved demonstrations and attached graders, then validate that exact revision again. No publication occurred."
+                : "OpenPond could not complete this operation. Inspect the current resource/operation identity before retrying.",
             }),
           },
         ],

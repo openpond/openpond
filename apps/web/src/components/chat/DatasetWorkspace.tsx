@@ -12,7 +12,6 @@ import type { ClientConnection } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ChatTrainingInputs, TrainingWorkspaceSection } from "./ChatTrainingInputs";
-import { Plus } from "../icons";
 import { chatResourceRequest } from "../../api/chat-resource-api";
 import { DatasetRunEvidence, DatasetRunProgress } from "./DatasetRunProgress";
 import { DatasetTrainingOverview } from "./DatasetTrainingOverview";
@@ -39,6 +38,7 @@ export function DatasetWorkspace({
   events,
   selectedExperiment,
   experimentName,
+  showInputs = true,
 }: {
   connection: ClientConnection;
   sessionId: string | null;
@@ -46,6 +46,7 @@ export function DatasetWorkspace({
   events: RuntimeEvent[];
   selectedExperiment?: ChatResourceSummary | null;
   experimentName?: string;
+  showInputs?: boolean;
 }) {
   const dataset = resources.focus.dataset,
     datasetKey = dataset ? resourceIdentity(dataset) : "";
@@ -99,7 +100,7 @@ export function DatasetWorkspace({
 
         </div>
         <div className="dataset-workspace-actions dataset-workspace-header-actions">
-          <button type="button" className="training-button secondary" disabled={!dataset} onClick={() => request("Run experiment")}>Evaluate</button>
+          <button type="button" className="training-button secondary" disabled={!dataset} onClick={() => request("Run experiment")}>Run experiment</button>
 
           <button
             type="button"
@@ -107,24 +108,10 @@ export function DatasetWorkspace({
             disabled={!dataset || !currentRun}
             onClick={() => request("Diagnose", currentRun ?? undefined)}
           >
-            Diagnose
+            Discuss results
           </button>
-          <button
-            type="button"
-            className="training-button secondary dataset-action"
-            disabled={!dataset || !currentRun || activeRun(currentRun.state)}
-            onClick={() => request("Improve", currentRun ?? undefined)}
-          >
-            Improve
-          </button>
-          <button
-            type="button"
-            className="training-button secondary dataset-action"
-            disabled={!dataset}
-            onClick={() => request("Add grader")}
-          >
-            <Plus size={13} /> Add grader
-          </button>
+
+
         </div>
       </header>
       {resources.error ? (
@@ -156,7 +143,7 @@ export function DatasetWorkspace({
                 Retry
               </button></ErrorToast>
           ) : null}
-          <ChatTrainingInputs connection={connection} dataset={dataset} graders={resources.graders} />
+          {showInputs ? <ChatTrainingInputs connection={connection} dataset={dataset} graders={resources.graders} /> : null}
           {currentRun ? (
             <TrainingWorkspaceSection title="Results">
             <DatasetRunEvidence

@@ -1,0 +1,13 @@
+.connected-home { overflow: auto; }
+.connected-home-content { display: flex; flex-direction: column; gap: 20px; width: 100%; min-width: 0; padding: 20px; }
+.connected-home-content > * { flex-shrink: 0; min-width: 0; }
+.connected-home-content > p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.connected-home-controls { gap: 12px; margin: 0; align-items: flex-end; }
+.connected-home-controls label, .connected-home-project { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+.connected-home-project .dropdown-trigger { height: 32px; min-width: 180px; max-width: 280px; background: var(--surface-raised); border-color: var(--border-default); }
+.connected-home-controls input { height: 32px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 6px; background: var(--surface-raised); color: var(--text-primary); font: inherit; color-scheme: inherit; }
+.connected-home-content > figure { margin: 0; padding: 16px; border: 1px solid var(--border-default); border-radius: 8px; color: var(--accent-primary); }
+.connected-home-content figcaption { margin-bottom: 12px; color: var(--text-primary); font-size: 13px; }
+.connected-home-content > details { overflow-x: auto; }
+.connected-home-content > details > summary { margin-bottom: 12px; cursor: pointer; font-size: 13px; }
+@media (max-width: 767px) { .connected-home-content { padding: 16px; } .connected-home .model-project-page-heading { align-items: flex-start; flex-direction: column; gap: 12px; } }

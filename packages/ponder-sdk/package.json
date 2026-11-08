@@ -1,6 +1,6 @@
 {
   "name": "ponder-sdk",
-  "version": "0.12.24",
+  "version": "0.12.25",
   "description": "Ponder distribution of the complete OpenPond TypeScript SDK",
   "license": "MIT",
   "type": "module",
@@ -161,10 +161,14 @@
     "./opentelemetry": {
       "types": "./dist/opentelemetry.d.ts",
       "import": "./dist/opentelemetry.js"
+    },
+    "./ai-sdk": {
+      "types": "./dist/ai-sdk.d.ts",
+      "import": "./dist/ai-sdk.js"
     }
   },
   "dependencies": {
-    "openpond-sdk": "0.12.24"
+    "openpond-sdk": "0.12.25"
   },
   "engines": {
     "node": ">=22.14.0 <25"
@@ -184,10 +188,18 @@
     "publish:check": "node scripts/build.mjs && node scripts/check-published-consumer.mjs && npm pack --dry-run"
   },
   "peerDependencies": {
-    "@opentelemetry/sdk-trace": ">=3.1.0 <4"
+    "@opentelemetry/sdk-trace": ">=3.1.0 <4",
+    "ai": ">=7.0.165 <8",
+    "@ai-sdk/openai-compatible": ">=3.0.87 <4"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/sdk-trace": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    },
+    "@ai-sdk/openai-compatible": {
       "optional": true
     }
   }

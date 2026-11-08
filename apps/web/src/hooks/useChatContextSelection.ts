@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { canonicalJson, ExperimentDraftSchema, type ExperimentDraft, type ExperimentDraftRecord, type ExperimentDraftSave } from "openpond-sdk/training";
-import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData, type UseInfiniteQueryResult, type UseQueryResult } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChatContextSelectionSchema, ChatContextOptionSchema, type ChatContextOption, type ChatContextSelection, type ChatContextTarget } from "@openpond/contracts";
 import { chatResourceRequest } from "../api/chat-resource-api";
 import type { ClientConnection } from "../api";
@@ -19,16 +19,25 @@ type ChatContextCatalogPage = {
   warning: string | null;
   nextDraftCursor: string | null;
 };
+type PagedContextQuery<T> = {
+  data: T | undefined;
+  error: Error | null;
+  isPending: boolean;
+  isFetching: boolean;
+  isFetchingNextPage: boolean;
+  hasNextPage: boolean;
+  fetchNextPage: () => Promise<unknown>;
+  refetch: () => Promise<unknown>;
+};
 type ChatContextSelectionState = {
   associateTraining: (jobId: string, apiOrigin: string, draftId: string) => Promise<void>;
   selection: ChatContextSelection | null;
   selecting: boolean;
   configureDraftId: string | null;
   closeDraftEditor: () => void;
-  catalog: Omit<UseInfiniteQueryResult<InfiniteData<ChatContextCatalogPage>, Error>, "data"> & {
-    data: { options: ChatContextOption[]; warning: string | null } | undefined;
-  };
-  runs: UseQueryResult<{ runs: ChatContextOption[] }, Error>;
+  catalog: PagedContextQuery<{ options: ChatContextOption[]; warning: string | null }>;
+  refreshLocalCatalog: () => Promise<unknown>;
+  runs: PagedContextQuery<{ runs: ChatContextOption[] }>;
   select: (target: ChatContextTarget | null, options?: { newExperiment?: boolean }) => Promise<boolean>;
   saveDraft: (draft: ExperimentDraft, base?: ExperimentDraftRecord | null) => Promise<ChatContextSelection>;
   selectionError: Error | null;
@@ -53,43 +62,71 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
     getNextPageParam: (page: { nextDraftCursor: string | null }) => page.nextDraftCursor ?? undefined,
     queryFn: async ({ signal, pageParam }) => {
       const result = await chatResourceRequest<{ options: unknown; warning: string | null; nextDraftCursor: string | null }>(connection!, "dataset", {
-        action: "context_catalog", payload: { ...(sessionId ? { sessionId } : {}), ...(pageParam ? { draftCursor: pageParam } : {}) },
+        action: "context_catalog", payload: { source: "drafts", ...(sessionId ? { sessionId } : {}), ...(pageParam ? { draftCursor: pageParam } : {}) },
       }, signal);
       return { ...result, options: ChatContextOptionSchema.array().parse(result.options) };
     } });
-  const catalog = { ...catalogPages, data: useMemo(() => catalogPages.data ? {
-    options: [...new Map(catalogPages.data.pages.flatMap(page => page.options).map(option => [canonicalJson(option.target), option])).values()],
-    warning: [...new Set(catalogPages.data.pages.map(page => page.warning).filter(Boolean))].join(" ") || null,
-  } : undefined, [catalogPages.data]) };
+  function sourceQuery(source: "local" | "models") {
+    return { queryKey: ["chat-context-catalog", source, scope, source === "local" ? sessionId : null], enabled: Boolean(connection), staleTime: 30_000,
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
+        const result = await chatResourceRequest<ChatContextCatalogPage>(connection!, "dataset", {
+          action: "context_catalog", payload: { source, ...(sessionId ? { sessionId } : {}) },
+        }, signal);
+        return { ...result, options: ChatContextOptionSchema.array().parse(result.options) };
+      } };
+  }
+  const localCatalog = useQuery(sourceQuery("local"));
+  const modelCatalog = useQuery(sourceQuery("models"));
+  const catalog = { ...catalogPages,
+    isPending: localCatalog.isPending,
+    isFetching: localCatalog.isFetching || modelCatalog.isFetching || catalogPages.isFetching,
+    error: localCatalog.error ?? modelCatalog.error ?? catalogPages.error,
+    refetch: () => Promise.all([localCatalog.refetch(), modelCatalog.refetch(), catalogPages.refetch()]),
+    data: useMemo(() => {
+      const pages = [localCatalog.data, modelCatalog.data, ...(catalogPages.data?.pages ?? [])].filter(page => page !== undefined);
+      return pages.length ? {
+        options: [...new Map(pages.flatMap(page => page.options).map(option => [canonicalJson(option.target), option])).values()],
+        warning: [...new Set(pages.map(page => page.warning).filter(Boolean))].join(" ") || null,
+      } : undefined;
+    }, [localCatalog.data, modelCatalog.data, catalogPages.data]),
+  };
   const retained = useQuery({ queryKey: ["chat-context-selection", key], enabled: Boolean(connection && sessionId && !selecting), refetchInterval: 10_000,
     queryFn: async ({ signal }) => {
       const result = await chatResourceRequest<{ selection: unknown }>(connection!, "dataset", { action: "context_selection", payload: { sessionId } }, signal);
       const value = result.selection ? ChatContextSelectionSchema.parse(result.selection) : null;
-      const known = queries.getQueryData<{pages: {options: {target: ChatContextTarget}[]}[]}>(["chat-context-catalog", "pages", scope, sessionId]);
-      if (value?.target.scopeId && known && !known.pages.some(page => page.options.some(item => item.target.scopeId === value.target.scopeId)))
-        void queries.invalidateQueries({ queryKey: ["chat-context-catalog", "pages", scope, sessionId] });
       return value;
     } });
   const selection = sessionId ? retained.data === undefined ? staged ?? null : retained.data : staged ?? null;
   useEffect(() => {
     if (!connection || !sessionId) return;
     const changed = (event: Event) => {
-      if ((event as CustomEvent<{sessionId:string}>).detail?.sessionId === sessionId)
+      if ((event as CustomEvent<{sessionId:string}>).detail?.sessionId === sessionId) {
         void queries.invalidateQueries({ queryKey: ["chat-context-selection", key] });
+        void queries.invalidateQueries({ queryKey: ["chat-context-catalog", "local", scope, sessionId] });
+        void queries.invalidateQueries({ queryKey: ["chat-context-catalog", "pages", scope, sessionId] });
+      }
     };
     window.addEventListener("openpond-resource-focus-changed", changed);
     return () => window.removeEventListener("openpond-resource-focus-changed", changed);
-  }, [connection, sessionId, key, queries]);
+  }, [connection, sessionId, key, scope, queries]);
   const modelTarget = selection?.training
     ? selection.training.location === "cloud"
       ? { kind: "model" as const, id: selection.training.job.modelProjectId, location: "cloud" as const, teamId: selection.training.owner.teamId, apiOrigin: selection.training.apiOrigin }
       : { kind: "model" as const, id: selection.training.modelId, location: "local" as const }
     : selection?.model ? selection.target : null;
-  const runs = useQuery({ queryKey: ["chat-context-model-runs", scope, modelTarget], enabled: Boolean(connection && modelTarget),
-    queryFn: async ({ signal }) => {
-      const result = await chatResourceRequest<{ runs: unknown }>(connection!, "dataset", { action: "context_runs", payload: { target: modelTarget } }, signal);
-      return { runs: ChatContextOptionSchema.array().parse(result.runs) };
+  const runPages = useInfiniteQuery({ queryKey: ["chat-context-model-runs", scope, modelTarget], enabled: Boolean(connection && modelTarget),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page: { nextCursor: string | null }) => page.nextCursor ?? undefined,
+    refetchInterval: 10_000,
+    queryFn: async ({ signal, pageParam }) => {
+      const result = await chatResourceRequest<{ runs: unknown; nextCursor: string | null }>(connection!, "dataset", {
+        action: "context_runs", payload: { target: modelTarget, ...(pageParam ? { cursor: pageParam } : {}) },
+      }, signal);
+      return { ...result, runs: ChatContextOptionSchema.array().parse(result.runs) };
     } });
+  const runs = { ...runPages, data: runPages.data ? {
+    runs: [...new Map(runPages.data.pages.flatMap(page => page.runs).map(run => [canonicalJson(run.target), run])).values()],
+  } : undefined };
   const select = useCallback(async (target: ChatContextTarget | null, options?: { newExperiment?: boolean }) => {
     if (!connection) throw new Error("Connect before selecting experiment context.");
     if (pending.has(key)) throw new Error("Wait for the current context selection to finish.");
@@ -109,7 +146,10 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
       await queries.cancelQueries({ queryKey: ["chat-context-selection", key] });
       publish(key, value);
       if (sessionId) queries.setQueryData(["chat-context-selection", key], value);
-      if (options?.newExperiment) void queries.invalidateQueries({ queryKey: ["chat-context-catalog", "pages", scope, sessionId] });
+      if (options?.newExperiment) {
+        void queries.invalidateQueries({ queryKey: ["chat-context-catalog", "local", scope, sessionId] });
+        void queries.invalidateQueries({ queryKey: ["chat-context-catalog", "pages", scope, sessionId] });
+      }
       if (sessionId) window.dispatchEvent(new CustomEvent("openpond-resource-focus-changed", { detail: { sessionId } }));
       if (value) window.dispatchEvent(new CustomEvent(CHAT_CONTEXT_SELECTED, { detail: { sessionId, scope, targetKey: JSON.stringify(value.target) } }));
       return true;
@@ -126,8 +166,9 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
     if (activeKey.current !== key) return;
     configureDrafts.delete(key); publish(key, value);
     if (sessionId) queries.setQueryData(["chat-context-selection", key], value);
+    void queries.invalidateQueries({ queryKey: ["chat-context-model-runs", scope] });
     if (sessionId) window.dispatchEvent(new CustomEvent("openpond-resource-focus-changed", { detail: { sessionId } }));
-  }, [connection, workspace?.teamId, key, sessionId, queries]);
+  }, [connection, workspace?.teamId, key, sessionId, queries, scope]);
   const moveToSession = useCallback((id: string) => {
     const value = selections.get(key);
     if (value !== undefined) {
@@ -185,5 +226,6 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
     } finally { pending.delete(key); for (const listener of listeners) listener(); }
   }, [connection, selection, workspace?.teamId, key, queries, scope, sessionId]);
   const closeDraftEditor = useCallback(() => { configureDrafts.delete(key); for (const listener of listeners) listener(); }, [key]);
-  return { associateTraining, selection, selecting, configureDraftId, closeDraftEditor, catalog, runs, select, saveDraft, selectionError: retained.error, moveToSession, scope };
+  const refreshLocalCatalog = () => connection ? queries.fetchQuery(sourceQuery("local")) : Promise.resolve();
+  return { associateTraining, selection, selecting, configureDraftId, closeDraftEditor, catalog, refreshLocalCatalog, runs, select, saveDraft, selectionError: retained.error, moveToSession, scope };
 }

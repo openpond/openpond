@@ -73,3 +73,7 @@
 .composer-experiment-setup .dropdown-trigger { overflow: hidden; }
 .composer-experiment-setup .dropdown-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer .composer-resource-area .composer-experiment-setup .dropdown-select.compact .dropdown-trigger { max-width: none; }
+
+.composer-resource-summary .composer-resource-bar { gap: 8px; font-size: 12px; }
+.composer-resource-summary .composer-resource-dataset-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-resource-summary-state { flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
