@@ -1,3 +1,4 @@
+import { chatCatalogFetch } from "./chat-catalog-fetch.js";
 import { createTrainingClient, ExperimentDraftSaveSchema, type ExperimentDraftRecord } from "openpond-sdk/training";
 import type { ChatContextSelection, StoredExperimentDraftReference } from "@openpond/contracts";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
@@ -13,7 +14,7 @@ export function createChatExperimentDraftStorage(access: () => Promise<ChatDraft
     const current = { ...await access() };
     const referenceScope = { teamId: current.teamId, apiOrigin: new URL(current.apiBaseUrl).origin };
     const headers = hostedApiAuthHeaders(current.token); headers.set("x-openpond-team-id", current.teamId);
-    const training = createTrainingClient({ baseUrl: current.apiBaseUrl, headers, fetch });
+    const training = createTrainingClient({ baseUrl: current.apiBaseUrl, headers, fetch: chatCatalogFetch });
     async function fence(record?: ExperimentDraftRecord) {
       const active = await access();
       if (active.teamId !== current.teamId || active.actorId !== current.actorId ||

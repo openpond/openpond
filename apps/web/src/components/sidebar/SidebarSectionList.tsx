@@ -366,21 +366,6 @@ export function SidebarSectionList({
   const canShowMoreTasks = visibleTaskRows.length < ordinaryFilteredTaskRows.length;
   const canShowLessTasks =
     visibleTaskRows.length > SIDEBAR_TASK_INITIAL_LIMIT;
-  const forcedExpandedTaskGroupKeys = useMemo(
-    () =>
-      new Set(
-        groupedTaskRows
-          .filter((group) =>
-            group.sessions.some(
-              (session) =>
-                session.id === selectedSessionId ||
-                inProgressSessionIds.has(session.id),
-            ),
-          )
-          .map((group) => group.key),
-      ),
-    [groupedTaskRows, inProgressSessionIds, selectedSessionId],
-  );
   const allManualTaskIds = allManualTaskRows
     .filter((session) => !isSidebarTaskPinned(session))
     .map((session) => session.id);
@@ -734,9 +719,7 @@ export function SidebarSectionList({
   }
 
   function renderTaskGroup(group: SidebarTaskGroup) {
-    const expanded =
-      forcedExpandedTaskGroupKeys.has(group.key) ||
-      taskGroupExpansion.get(group.key) !== false;
+    const expanded = taskGroupExpansion.get(group.key) !== false;
     return (
       <SidebarTaskProjectGroup
         key={group.key}

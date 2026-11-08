@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "openpond": { "type": "http", "url": "https://api.openpond.ai/mcp/app" }
+  }
+}

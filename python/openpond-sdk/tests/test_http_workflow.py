@@ -1058,6 +1058,9 @@ def test_flat_task_submission_in_sync_and_async_clients(server):
     task={"name":"Expired token","input":{"error":"Token expired"}}
     with Client(base_url=url,api_key='secret-fixture',team_id=TEAM) as client:
         receipt=client.add_task('task-destination',task,idempotency_key='event-one')
+        assert client.dataset('task-destination').add_task({**task,'id':'event-one'}) == receipt
+        client.dataset_id='task-destination'
+        assert client.add_task({**task,'id':'event-one'}) == receipt
         assert receipt['trainingUseAuthorized'] is False
     async def submit():
         async with AsyncClient(base_url=url,api_key='secret-fixture',team_id=TEAM) as client:

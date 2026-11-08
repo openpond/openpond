@@ -51,6 +51,7 @@ export type Command =
   | "eval"
   | "run"
   | "extension"
+  | "skills"
   | "sandbox-template"
   | "organization"
   | "organizations"

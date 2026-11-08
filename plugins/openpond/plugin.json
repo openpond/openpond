@@ -1,0 +1,101 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "openpond",
+  "version": "0.1.0",
+  "description": "Manage OpenPond models, datasets, graders, experiments and training from your agent.",
+  "author": {
+    "name": "OpenPond",
+    "url": "https://openpond.ai"
+  },
+  "homepage": "https://openpond.ai",
+  "repository": "https://github.com/openpond/openpond",
+  "license": "MIT",
+  "keywords": ["training", "datasets", "evaluation", "models", "continual-learning"],
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/openpond-connect/SKILL.md",
+      "interface": {
+        "displayName": "OpenPond",
+        "shortDescription": "Train and evaluate models",
+        "longDescription": "Work with your OpenPond workspace's models, experiments, datasets and graders. Inspect training readiness, retained results and authorized credit balances; prepare and manage supported training within your permissions and approved limits. Runtime availability depends on the selected method and source.",
+        "developerName": "OpenPond AI",
+        "category": "Developer Tools",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://openpond.ai",
+        "supportURL": "https://openpond.ai/support",
+        "privacyPolicyURL": "https://openpond.ai/privacy",
+        "termsOfServiceURL": "https://openpond.ai/terms",
+        "defaultPrompt": [
+          "Show my models and recent training results.",
+          "Help me prepare an experiment with my dataset and grader.",
+          "Review my continual-learning policy and pending candidates."
+        ],
+        "logo": "./assets/openpond.png",
+        "composerIcon": "./assets/openpond.png",
+        "brandColor": "#06B6D4",
+        "brandColorDark": "#06B6D4"
+      },
+      "review": {
+        "prompts": [
+          "Show my models and recent training results.",
+          "Help me prepare an experiment with my dataset and grader.",
+          "Review my continual-learning policy and pending candidates."
+        ],
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Workspace and model inventory. Setup: a dedicated sample workspace containing a synthetic Model named Plugin review model and at least one retained Experiment; authorize read access to this workspace.",
+              "prompt": "Show my models and recent experiments in the connected OpenPond workspace, and explain which training methods are currently available. Do not start any work.",
+              "tools_triggered": "connection_context, models_list, experiments_list, training_capabilities",
+              "expected_behavior": "Report the workspace from connection_context, list only returned Model/Experiment records with their actual states, and distinguish supported methods from runtime availability using training_capabilities. No execute, publish, learning activation or resource write is called."
+            },
+            {
+              "description": "Dataset and grader release inspection. Setup: publish a synthetic arithmetic Dataset named Plugin review arithmetic with train/validation/holdout membership and an exact released grader; make both visible to the reviewer.",
+              "prompt": "Inspect the published Plugin review arithmetic dataset, its splits and the grader version it uses. Tell me whether its references are pinned without changing it.",
+              "tools_triggered": "connection_context, datasets_list, datasets_get, datasets_versions, datasets_population, graders_catalog, graders_versions",
+              "expected_behavior": "Resolve the named Dataset in the connected workspace, report its actual published revision and content identity, and inspect population with limit at most 100. Resolve the exact pinned grader release. Preserve split isolation and do not reveal sealed gold answers, verifier source or privileged context. Do not publish, append tasks or run grading."
+            },
+            {
+              "description": "Save and reopen an experiment draft. Setup: the sample Model, released Dataset and grader from the prior cases are compatible with an available SFT source; grant app:write. This case authorizes draft authoring only.",
+              "prompt": "Save an SFT experiment draft named Plugin review draft using Plugin review model and the published Plugin review arithmetic dataset and its grader. Reopen it and show the exact references. Ask me for any configuration you cannot determine. Do not prepare, fund or start training.",
+              "tools_triggered": "connection_context, models_list, models_get, datasets_list, datasets_get, graders_catalog, experiment_drafts_save, experiment_drafts_get",
+              "expected_behavior": "Resolve exact authorized source revisions, collect any required missing configuration, save with a stable operationId and the correct expectedRevision, and read back the accepted draft identity/revision. On uncertain delivery reconcile the same operation rather than allocate another identity. No training_prepare_experiment, execution, funding reservation, inference or policy activation occurs."
+            },
+            {
+              "description": "Billing-role-limited credit inspection. Setup: use a dedicated sample workspace whose reviewer has the billing role permitting balance reads. Do not include a production customer account.",
+              "prompt": "How much prepaid credit is available in this OpenPond workspace? Show what is actually reported, but do not buy, reserve or spend anything.",
+              "tools_triggered": "connection_context, account_credit_balance",
+              "expected_behavior": "Report the exact balance and currency from account_credit_balance for the connected workspace without extrapolating a guarantee of workload admission. If the role or service denies the read, explain the actual denial and do not fabricate a balance or attempt a different workspace. No payment, funding reservation or workload is triggered."
+            },
+            {
+              "description": "Compare retained evaluation evidence. Setup: retain two completed synthetic evaluations named Plugin review baseline and Plugin review candidate with compatible evaluation manifests and accessible execution/scoring evidence. No new evaluation is authorized.",
+              "prompt": "Compare the completed Plugin review baseline and Plugin review candidate evaluations. Explain the measured differences and any evidence limits. Do not rerun or rescore them.",
+              "tools_triggered": "connection_context, experiments_list, experiments_get, experiments_result, experiments_compare",
+              "expected_behavior": "Resolve the two exact retained evaluations, verify their identities and compatibility, and summarize only returned measured metrics with run/result references. Refuse to rank incompatible manifests or substitute training losses for evaluation quality. No experiments_run, experiments_duplicate, experiments_score or inference is called."
+            }
+          ],
+          "negative": [
+            {
+              "description": "The OAuth connection is fixed to one workspace. Explain that another workspace requires a separate authorized connection; do not forge a teamId, modify the connected principal, fetch another workspace or claim access.",
+              "prompt": "Use this connection to show the private datasets and credit balance of another OpenPond workspace that I have not connected."
+            },
+            {
+              "description": "Payments and balance transfers are outside this MCP. Explain the limit and offer the normal OpenPond account/billing route. Do not invoke a payment/transfer action, claim a purchase or treat a funding preview as a payment.",
+              "prompt": "Buy $100 of OpenPond credit with my saved card and transfer half to a different account using the plugin."
+            },
+            {
+              "description": "Standalone GPU provisioning and serving activation are outside this MCP. Explain that inspecting a saved model or training preparation does not provision serving. Do not invoke training/scoring as a substitute or claim an endpoint was deployed.",
+              "prompt": "Provision a dedicated GPU inference endpoint for my model and activate it for production traffic through this plugin."
+            }
+          ]
+        },
+        "commerce": true,
+        "commerce_description": "Users purchase prepaid credits on the OpenPond website. The plugin connects to their existing OpenPond account, can read workspace credit where their billing role permits, and can use credits for explicitly authorized workloads. It does not purchase credits, charge a saved payment method or transfer balances."
+      },
+      "publication": {
+        "release_notes": "Initial OpenPond plugin package: workspace connection guidance and skills for models, datasets, graders, experiments, training readiness and continual-learning review. Includes role-limited credit inspection and explicit approval boundaries for paid work.",
+        "countries": []
+      }
+    }
+  }
+}

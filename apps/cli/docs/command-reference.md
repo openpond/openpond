@@ -4,6 +4,20 @@
 
 Parsing, aliases, command help, and this reference use the same authoritative registry.
 
+## skills
+
+```text
+Usage:
+  openpond skills <install|list> --agent <codex|claude-code|opencode|cursor> [--global] [--copy] [--yes] [--dry-run] [--json]
+
+Options:
+  --agent <string>
+  --copy
+  --dry-run
+  --global
+  --json
+  --yes
+```
 ## learning
 
 ```text
@@ -80,11 +94,13 @@ Options:
 
 ```text
 Usage:
-  openpond datasets <context|select|select-model|select-destination|new-experiment|select-experiment|rename-experiment|schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]
+  openpond datasets <context|model-inputs|select|select-model|select-destination|new-experiment|select-experiment|rename-experiment|schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]
+  openpond datasets model-inputs <model-id> --local [--view summary|tasks|graders] [--role training|evaluation] [--split train|validation|test|frozen_eval] [--task-id <id>] [--limit <1..100>] [--offset <n>] [--location cloud --team <id> --api-origin <origin>] [--json]
   openpond datasets <upload|save|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]
   openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]
 
 Options:
+  --api-origin <string>
   --cursor <string>
   --dataset-id <string>
   --expected-revision <integer>
@@ -93,13 +109,18 @@ Options:
   --json
   --limit <integer>
   --local
+  --location <string>
   --offset <integer>
   --operation-id <string>
   --package-hash <string>
   --project <string>
   --publish
+  --role <string>
   --server-url <string>
+  --split <string>
+  --task-id <string>
   --team <string>
+  --view <string>
   --workspace-hash <string>
 ```
 ## connected-evidence
@@ -1021,7 +1042,7 @@ Usage:
   openpond training create-project <taskset-id> --recipe <path> [--project-id <id>] [--profile <id>] [--name <name>] [--objective <text>] [--destination <id>] [--rollout-placement <local|remote>] [--gpu-placement-objective <fast|balanced|economical>] [--run-preset <preset>] [--max-spend <usd>] [--retention-days <days>] [--json]
   openpond training start <hosted-model-project-id> --team-id <id> --batch-id <id> [--max-spend <usd>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--gpu-count <1|2>] [--yes] [--detach] [--json]
   openpond training start <model-project-id> [--comparison-series-entry <entry-id>] [--manifest <path>] [--yes] [--export-approved] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
-  openpond training hosted-models|hosted-batches|hosted-preparations|hosted-jobs|hosted-capabilities|hosted-gpu-catalog|hosted-hardware-catalog --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-models|hosted-model-candidates|hosted-batches|hosted-preparations|hosted-jobs|hosted-capabilities|hosted-gpu-catalog|hosted-hardware-catalog --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-gpu-catalog [workload-query.json] --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-drafts --team-id <id> [--project-id <id>] [--search <text>] [--archived] [--cursor <cursor>] [--limit <1..100>] [--json]
   openpond training hosted-modification-capabilities <input.json> --team-id <id> [--json]

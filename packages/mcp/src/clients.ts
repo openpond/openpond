@@ -2,18 +2,21 @@ import {
   OpenPondExperimentsClient,
   OpenPondExperimentInspectionClient,
 } from "openpond-sdk/experiments";
-import { OpenPondDatasetWorkspaceClient } from "openpond-sdk/dataset-workspaces";
+import {
+  OpenPondDatasetWorkspaceClient,
+  OpenPondDatasetPopulationClient,
+} from "openpond-sdk/dataset-workspaces";
 import { OpenPondTrainingProjectClient } from "openpond-sdk/training-projects";
 import {
   OpenPondCorrectionMetricsClient,
   OpenPondGraderInspectionClient,
   OpenPondLearningClient,
 } from "openpond-sdk/learning";
-import { OpenPondHumanReviewClient } from "openpond-sdk/human-review";
 import { OpenPondTasksetPackageClient } from "openpond-sdk/taskset-packages";
 import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
 import { createModelProjectsClient } from "openpond-sdk/model-projects";
 import { createTrainingClient } from "openpond-sdk/training";
+import { readAccountBalance } from "./account.js";
 import type { OpenPondMcpOptions } from "./types.js";
 
 export function createClients(options: OpenPondMcpOptions) {
@@ -43,6 +46,8 @@ export function createClients(options: OpenPondMcpOptions) {
     const requestedTeam = headers.get("x-openpond-team-id");
     if (requestedTeam && requestedTeam !== options.context.teamId)
       throw new Error("MCP workspace mismatch.");
+    if (url.searchParams.getAll("teamId").some((teamId) => teamId !== options.context.teamId))
+      throw new Error("MCP workspace mismatch.");
     headers.set("x-openpond-team-id", options.context.teamId);
     if (!options.apiKey) headers.delete("authorization");
     return (options.fetch ?? globalThis.fetch)(
@@ -55,8 +60,15 @@ export function createClients(options: OpenPondMcpOptions) {
     "X-OpenPond-Team-Id": options.context.teamId,
   };
   return {
+    accountBalance: () =>
+      readAccountBalance(
+        new Request(`${baseUrl}/v1/account/balance`, { headers }),
+        transport,
+        options.context,
+      ),
     projects: new OpenPondTrainingProjectClient(config),
     datasets: new OpenPondDatasetWorkspaceClient(config),
+    population: new OpenPondDatasetPopulationClient(config),
     tasksets: new OpenPondTasksetCatalogClient(config),
     packages: new OpenPondTasksetPackageClient(config),
     graders: new OpenPondGraderInspectionClient(config),
@@ -66,7 +78,6 @@ export function createClients(options: OpenPondMcpOptions) {
     models: createModelProjectsClient({ baseUrl, fetch: transport, headers }),
     training: createTrainingClient({ baseUrl, fetch: transport, headers }),
     learning: new OpenPondLearningClient({ ...config, scope: options.context.teamId }),
-    human: new OpenPondHumanReviewClient({ ...config, scope: options.context.teamId }),
   };
 }
 export type Clients = ReturnType<typeof createClients>;

@@ -15,6 +15,7 @@ import {
   DatasetPreparationCreateSchema,
   DatasetPreparationCommandSchema,
   DatasetPreparationGrantCreateSchema,
+  DatasetPopulationQuerySchema,
 } from "openpond-sdk/dataset-workspaces";
 import {
   TasksetCatalogQuerySchema,
@@ -72,6 +73,15 @@ export function addProjectsAndDatasets(add: AddTool, c: Clients) {
     "read",
     (v) => c.datasets.get(v.id),
     { output: DatasetWorkspaceReceiptSchema },
+  );
+  add(
+    "datasets_population",
+    "Read exact released task membership, splits and optional policy-visible inputs with pinned graders. Gold answers, verifier source and privileged context stay sealed.",
+    DatasetPopulationQuerySchema.safeExtend({
+      limit: z.number().int().min(1).max(100).default(100),
+    }),
+    "read",
+    (v) => c.population.read(v),
   );
   add(
     "datasets_save",

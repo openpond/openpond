@@ -186,8 +186,9 @@ export function WorkspaceDiffTabs({
     }
   }
 
+  const trainingView = visibleTab === "outputs" && activeOverviewId === -1;
   const tabNodes = [
-    ...overviewTabs.map(id => (
+    ...overviewTabs.filter(id => !trainingView || id < 0).map(id => (
           <div className={`workspace-diff-tab file ${visibleTab === "outputs" && activeOverviewId === id ? "active" : ""}`} key={`overview-${id}`}>
             <button type="button" className="workspace-diff-tab-main" role="tab" aria-selected={visibleTab === "outputs" && activeOverviewId === id}
               tabIndex={visibleTab === "outputs" && activeOverviewId === id ? 0 : -1}
@@ -315,7 +316,7 @@ export function WorkspaceDiffTabs({
         {additionalTabs}
       </div>
         <div className="workspace-diff-add-anchor" ref={addAnchorRef}>
-          <button
+          {!trainingView ? <button
             type="button"
             className={`workspace-diff-add-tab ${!onNewOverview && (addMenuOpen || searchOpen) ? "active" : ""}`}
             title="Add"
@@ -323,8 +324,8 @@ export function WorkspaceDiffTabs({
             onClick={onNewOverview ?? onToggleAddMenu}
           >
             <Plus size={15} />
-          </button>
-          {addMenuOpen && (
+          </button> : null}
+          {addMenuOpen && !trainingView && (
             <div className="workspace-diff-add-menu" role="menu">
               {onSelectOutputs ? <button type="button" role="menuitem" onClick={onSelectOutputs}><FileText size={14} /><span>Training</span><kbd /></button> : null}
               {onOpenSideChat ? (

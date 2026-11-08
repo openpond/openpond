@@ -20,7 +20,7 @@ import {
 } from "openpond-sdk/training";
 import type { AddTool } from "./types.js";
 import type { Clients } from "./clients.js";
-import { ById, Empty, Id, Ref, Window, page } from "./common.js";
+import { ById, Empty, Id, Ref, Window } from "./common.js";
 
 export function addTraining(add: AddTool, c: Clients, teamId: string) {
   add(
@@ -179,17 +179,17 @@ export function addTraining(add: AddTool, c: Clients, teamId: string) {
   );
   add(
     "training_jobs_events",
-    "Read a bounded window of retained run events. nextOffset follows append-only history; this does not watch or restart work.",
+    "Read a database-paged window of retained run events. Offsets address the current snapshot; lifecycle rows may change while a run is live. This never starts work.",
     Window.extend({ id: Id }),
     "read",
-    async (v) => page(await c.training.events(v.id), v.after, v.limit),
+    async (v) => c.training.eventsPage(v.id, { after: v.after, limit: v.limit }),
   );
   add(
     "training_jobs_logs",
     "Read a bounded window of retained run logs.",
     Window.extend({ id: Id }),
     "read",
-    async (v) => page(await c.training.logs(v.id), v.after, v.limit),
+    async (v) => c.training.logsPage(v.id, { after: v.after, limit: v.limit }),
   );
   add(
     "training_jobs_outputs",

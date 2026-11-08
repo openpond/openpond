@@ -57,8 +57,8 @@ export function useManagedAlphaEditExperiment(
     api.projectId,
     api.connection.serverUrl,
     input.draftId,
-    input.executionId,
-    input.method,
+    input.executionId ?? null,
+    input.method ?? null,
   ]);
   const live = useRef(identity);
   live.current = identity;
