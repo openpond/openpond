@@ -699,3 +699,48 @@ test("training authoring, ingestion and credit preserve fixed principal and retr
     await server.close();
   }
 });
+
+// Failure story: paging only after fetching the whole history defeats the
+// backend bound; trusting a foreign or shifted page can leak/misattribute run
+// evidence. Exercise actual MCP negotiation and SDK receipt verification.
+test("training evidence requests one bounded upstream page and rejects a mismatched receipt", async () => {
+  let calls = 0;
+  let foreignJob = false;
+  const server = createOpenPondMcpServer({
+    baseUrl: "https://api.openpond.ai",
+    context: { userId: "qualification-user", teamId: "qualification-workspace", scopes: ["app:read"], authorize: async () => {} },
+    fetch: async request => {
+      calls++;
+      const url = new URL(request.url);
+      assert.equal(url.searchParams.get("after"), "7");
+      assert.equal(url.searchParams.get("limit"), "1");
+      const kind = url.pathname.endsWith("/events") ? "events" : "logs";
+      return Response.json({ [kind]: [{
+        schemaVersion: kind === "events" ? "openpond.trainingJobEvent.v2" : "openpond.trainingJobLog.v2",
+        jobId: foreignJob ? "foreign-job" : "qualification-job", sequence: 7,
+        ...(kind === "events" ? { id: "retained-event", type: "optimizer_metric", phase: "committed", data: {} } : { level: "info" }),
+        message: "Retained evidence", createdAt: "2026-11-07T00:00:00Z",
+      }], nextOffset: 8 });
+    },
+  });
+  const client = new Client({ name: "paged-evidence-qualification", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(b), client.connect(a)]);
+  try {
+    for (const tool of ["training_jobs_events", "training_jobs_logs"]) {
+      const result = await client.callTool({ name: tool, arguments: { id: "qualification-job", after: 7, limit: 1 } });
+      assert.notEqual(result.isError, true);
+      assert.equal(result.structuredContent.result.items.length, 1);
+      assert.equal(result.structuredContent.result.items[0].sequence, 7);
+      assert.equal(result.structuredContent.result.nextOffset, 8);
+    }
+    assert.equal(calls, 2);
+    foreignJob = true;
+    const denied = await client.callTool({ name: "training_jobs_events", arguments: { id: "qualification-job", after: 7, limit: 1 } });
+    assert.equal(denied.isError, true);
+    assert.equal(calls, 3);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});

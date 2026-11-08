@@ -129,7 +129,9 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
           readOnlyHint: v.effect === "read",
           destructiveHint: v.destructive,
           idempotentHint: v.idempotent,
-          openWorldHint: true,
+          // This catalog operates inside the verified OpenPond workspace; it
+          // exposes no arbitrary internet search, messaging or public posting.
+          openWorldHint: false,
         },
         _meta: {
           securitySchemes: [{ type: "oauth2", scopes: v.scopes }],
