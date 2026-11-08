@@ -97,14 +97,14 @@ describe("hosted training lifecycle over the public SDK", () => {
     await withApi((request, response) => {
       if (request.method === "GET" && request.url === "/v1/training/jobs/job-1")
         return reply(response, { job: job(cancelled ? "cancelled" : "running", 1) });
-      if (request.method === "GET" && request.url === "/v1/training/jobs/job-1/events") {
+      if (request.method === "GET" && new URL(request.url!, "http://qualification").pathname === "/v1/training/jobs/job-1/events") {
         const infrastructure = ++eventReads >= 2;
         return reply(response, { events: [{
-          schemaVersion: "openpond.trainingJobEvent.v2", id: "trajectory-1", jobId: "job-1", sequence: 1,
+          schemaVersion: "openpond.trainingJobEvent.v2", id: "trajectory-1", jobId: "job-1", sequence: 0,
           type: "rollout_metric", phase: infrastructure ? "ineligible" : "eligible", message: null,
           data: { terminalClass: infrastructure ? "infrastructure" : "policy", rewardEligible: !infrastructure, reward: infrastructure ? null : 0 },
           createdAt: timestamp,
-        }] });
+        }], nextOffset: null });
       }
       if (request.method === "POST" && request.url === "/v1/training/jobs/job-1/cancel") {
         expect(eventReads).toBe(2);
