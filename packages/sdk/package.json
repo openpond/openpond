@@ -19,7 +19,8 @@
     "MODEL_STARTERS.md",
     "TRAINING_WORKFLOWS.md",
     "TASK_INGESTION.md",
-    "OPENTELEMETRY.md"
+    "OPENTELEMETRY.md",
+    "PRODUCT_INTEGRATION.md"
   ],
   "exports": {
     "./experiment-improvements": {
@@ -170,6 +171,10 @@
     "./opentelemetry": {
       "types": "./dist/types/packages/sdk/src/opentelemetry.d.ts",
       "import": "./dist/opentelemetry.js"
+    },
+    "./ai-sdk": {
+      "types": "./dist/types/packages/sdk/src/ai-sdk.d.ts",
+      "import": "./dist/ai-sdk.js"
     }
   },
   "publishConfig": {
@@ -202,10 +207,12 @@
     "publish:check": "pnpm run build && tsx scripts/check-protocol-fixtures.ts && tsx scripts/check-published-consumer.ts && npm pack --dry-run"
   },
   "devDependencies": {
+    "@ai-sdk/openai-compatible": "3.0.87",
     "@openpond/actions": "workspace:*",
     "@openpond/cloud": "workspace:*",
     "@opentelemetry/sdk-trace": "^3.1.0",
     "@types/node": "24.13.3",
+    "ai": "7.0.165",
     "esbuild": "0.28.1",
     "tsx": "4.23.1",
     "typescript": "^5.9.3",
@@ -219,10 +226,18 @@
     "zod": "^4.1.13"
   },
   "peerDependencies": {
-    "@opentelemetry/sdk-trace": ">=3.1.0 <4"
+    "@opentelemetry/sdk-trace": ">=3.1.0 <4",
+    "ai": ">=7.0.165 <8",
+    "@ai-sdk/openai-compatible": ">=3.0.87 <4"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/sdk-trace": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    },
+    "@ai-sdk/openai-compatible": {
       "optional": true
     }
   }

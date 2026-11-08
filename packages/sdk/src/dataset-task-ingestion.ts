@@ -41,9 +41,15 @@ export const DatasetTaskAppendReceiptSchema = z
     trainingUseAuthorized: z.literal(false),
   })
   .strict();
-export type DatasetTaskInput = z.input<typeof DatasetTaskInputSchema>;
+/** Source identity, distinct from the server's canonical taskId. */
+export type DatasetTaskInput = z.input<typeof DatasetTaskInputSchema> & { id?: string };
 export type DatasetTaskAppendReceipt = z.infer<typeof DatasetTaskAppendReceiptSchema>;
-export type AddTaskOptions = { idempotencyKey?: string; signal?: AbortSignal };
+export type AddTaskOptions = {
+  /** Prefer task.id. Retained for existing callers; conflicting IDs are rejected. */
+  idempotencyKey?: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
 export type DatasetTaskClientOptions = {
   apiKey: string;
   baseUrl: string;
@@ -53,6 +59,8 @@ export type DatasetTaskClientOptions = {
 
 export class DatasetTaskIngestionError extends Error {
   readonly outcomeUnknown: boolean;
+  /** Reuse this source ID when retrying an uncertain submission. */
+  readonly sourceId: string;
   constructor(
     message: string,
     readonly status: number,
@@ -61,7 +69,9 @@ export class DatasetTaskIngestionError extends Error {
   ) {
     super(message);
     this.name = "DatasetTaskIngestionError";
-    this.outcomeUnknown = status === 0 || status >= 500 || code === "dataset_task_receipt_invalid";
+    this.sourceId = operationId;
+    this.outcomeUnknown =
+      status === 0 || status === 408 || status >= 500 || code === "dataset_task_receipt_invalid";
   }
 }
 
@@ -85,10 +95,22 @@ export async function addDatasetTask(
   const teamId = Id.parse(config.teamId);
   if (!config.apiKey.trim()) throw new Error("An OpenPond API key is required.");
   const id = z.string().trim().min(1).max(240).parse(datasetId);
+  const { id: sourceId, ...content } = task;
+  if (
+    sourceId !== undefined &&
+    options.idempotencyKey !== undefined &&
+    sourceId !== options.idempotencyKey
+  )
+    throw new Error("task.id and idempotencyKey must identify the same source event.");
+  if (
+    options.timeoutMs !== undefined &&
+    (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0 || options.timeoutMs > 300_000)
+  )
+    throw new Error("timeoutMs must be greater than zero and at most 300000.");
   const request = DatasetTaskAppendRequestSchema.parse({
     schemaVersion: "openpond.datasetTaskAppend.v1",
-    operationId: options.idempotencyKey ?? crypto.randomUUID(),
-    task,
+    operationId: sourceId ?? options.idempotencyKey ?? crypto.randomUUID(),
+    task: content,
   });
   assertBoundedTaskJson(request, 128 * 1024);
   let response: Response;
@@ -98,7 +120,13 @@ export async function addDatasetTask(
       {
         method: "POST",
         redirect: "error",
-        signal: options.signal,
+        signal:
+          options.timeoutMs === undefined
+            ? options.signal
+            : AbortSignal.any([
+                AbortSignal.timeout(options.timeoutMs),
+                ...(options.signal ? [options.signal] : []),
+              ]),
         headers: {
           Authorization: `Bearer ${config.apiKey}`,
           "X-OpenPond-Team-Id": teamId,
@@ -115,6 +143,7 @@ export async function addDatasetTask(
       request.operationId,
     );
   }
+  // HTTP rejection establishes a known outcome even when its error body is malformed.
   let raw: unknown;
   try {
     raw = await readBoundedJsonResponse(response, 64 * 1024, "Dataset task receipt");
@@ -122,7 +151,7 @@ export async function addDatasetTask(
     throw new DatasetTaskIngestionError(
       "Task delivery returned an invalid receipt. Retain the same operation ID before retrying.",
       response.status,
-      "dataset_task_receipt_invalid",
+      response.ok ? "dataset_task_receipt_invalid" : "dataset_task_request_failed",
       request.operationId,
     );
   }

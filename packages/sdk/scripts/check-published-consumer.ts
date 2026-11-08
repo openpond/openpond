@@ -13,10 +13,7 @@ type PackResult = Array<{
   filename: string;
 }>;
 
-const packageRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 async function main(): Promise<void> {
   const manifest = JSON.parse(
@@ -24,9 +21,7 @@ async function main(): Promise<void> {
   ) as PackageManifest;
   for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
     if (/^(?:workspace|file|link):/.test(range)) {
-      throw new Error(
-        `Published runtime dependency ${name} uses non-registry range ${range}.`,
-      );
+      throw new Error(`Published runtime dependency ${name} uses non-registry range ${range}.`);
     }
   }
 
@@ -46,10 +41,37 @@ async function main(): Promise<void> {
     if (process.argv.includes("--local-evals")) {
       // Evals consumes the matching Harness API; qualify the complete local
       // cohort instead of mixing a new Evals artifact with registry Harness.
-      const packedHarness = JSON.parse(execFileSync("npm", ["pack", path.resolve(packageRoot, "../harness"), "--json", "--ignore-scripts", "--pack-destination", consumer], { encoding: "utf8" })) as PackResult;
-      if (!packedHarness[0]?.filename) throw new Error("npm pack did not produce a Harness tarball.");
+      const packedHarness = JSON.parse(
+        execFileSync(
+          "npm",
+          [
+            "pack",
+            path.resolve(packageRoot, "../harness"),
+            "--json",
+            "--ignore-scripts",
+            "--pack-destination",
+            consumer,
+          ],
+          { encoding: "utf8" },
+        ),
+      ) as PackResult;
+      if (!packedHarness[0]?.filename)
+        throw new Error("npm pack did not produce a Harness tarball.");
       dependencies.push(path.join(consumer, packedHarness[0].filename));
-      const packedEvals = JSON.parse(execFileSync("npm", ["pack", path.resolve(packageRoot, "../evals"), "--json", "--ignore-scripts", "--pack-destination", consumer], { encoding: "utf8" })) as PackResult;
+      const packedEvals = JSON.parse(
+        execFileSync(
+          "npm",
+          [
+            "pack",
+            path.resolve(packageRoot, "../evals"),
+            "--json",
+            "--ignore-scripts",
+            "--pack-destination",
+            consumer,
+          ],
+          { encoding: "utf8" },
+        ),
+      ) as PackResult;
       if (!packedEvals[0]?.filename) throw new Error("npm pack did not produce an Evals tarball.");
       dependencies.push(path.join(consumer, packedEvals[0].filename));
     }
@@ -57,10 +79,14 @@ async function main(): Promise<void> {
       cwd: consumer,
       stdio: "ignore",
     });
-    execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", ...dependencies], {
-      cwd: consumer,
-      stdio: "inherit",
-    });
+    execFileSync(
+      "npm",
+      ["install", "--ignore-scripts", "--no-audit", "--no-fund", ...dependencies],
+      {
+        cwd: consumer,
+        stdio: "inherit",
+      },
+    );
     // UI consumers need these actual named contracts without importing the
     // private JavaScript executor. Node-only import checks miss that boundary.
     const browser = await build({
@@ -86,7 +112,11 @@ async function main(): Promise<void> {
       metafile: true,
       logLevel: "silent",
     });
-    if (Object.keys(browser.metafile.inputs).some((file) => /(?:^|\/)(?:quickjs-emscripten-core|@jitl)(?:\/|$)/.test(file))) {
+    if (
+      Object.keys(browser.metafile.inputs).some((file) =>
+        /(?:^|\/)(?:quickjs-emscripten-core|@jitl)(?:\/|$)/.test(file),
+      )
+    ) {
       throw new Error("Packed browser contracts include the private JavaScript execution runtime.");
     }
     execFileSync(
@@ -126,7 +156,7 @@ async function main(): Promise<void> {
           'import { OpenPondLearningClient, OpenPondLearningError, LearningSourceSchema, TaskExampleSubmissionSchema, TaskEvidenceSchema, sealLearningContent, createSourceCredentialRequest, LearningSourceCredentialRequestSchema, LearningSourceConfigurationSchema, AuthoringDraftInputSchema, LearningCommandSchema } from "openpond-sdk/learning";',
           'import { LearningResourceKindSchema, createLearningScheduleWorker, LearningScheduleSchema, LearningScheduleFireSchema } from "openpond-sdk/learning"; LearningResourceKindSchema.parse("schedule"); LearningResourceKindSchema.parse("schedule_fire"); if (typeof createLearningScheduleWorker !== "function" || !LearningScheduleSchema || !LearningScheduleFireSchema) throw new Error("Packed SDK resolved Evals without durable schedule contracts");',
           'import { hostedLearningPolicyReferences } from "openpond-sdk/learning"; if (typeof hostedLearningPolicyReferences !== "function") throw new Error("Packed Model policy references are missing");',
-          'if (!ModelProjectSchema || !TrainingJobSubmissionSchema || !TrainingCandidateDecisionSchema) process.exit(1);',
+          "if (!ModelProjectSchema || !TrainingJobSubmissionSchema || !TrainingCandidateDecisionSchema) process.exit(1);",
           'const catalog = new OpenPondModelStarterCatalogClient({ baseUrl: "https://consumer.invalid", apiKey: "test", teamId: "team", fetch: async () => Response.json({ items: [], nextCursor: null }) }); if ((await catalog.list()).items.length !== 0) throw new Error("Packed starter catalog transport failed");',
           'const starterRequest = await createModelStarterCreationRequest({ profileId: "profile", modelId: "model", name: "Consumer model", starter: { id: "starter", revision: 1, contentHash: "a".repeat(64) }, startingModel: { schemaVersion: "openpond.baseModelPreference.v1", modelId: "base", revision: null, tokenizerRevision: null, chatTemplateHash: null, modelAssetId: null, source: "managed" }, method: "sft" }); if (parseModelStarterCreationRequest(starterRequest).operationId !== starterRequest.operationId) throw new Error("Packed starter creation identity failed");',
           'const prepared = createSourceCredentialRequest({ sourceId: "source", name: "Packed consumer", expiresAt: new Date(Date.now() + 86400000).toISOString() }); LearningSourceCredentialRequestSchema.parse({ ...prepared, action: "create", scope: "team" }); if (!LearningSourceConfigurationSchema || typeof OpenPondLearningClient.prototype.sourceConfiguration !== "function") throw new Error("Packed source credential exports are missing");',
@@ -141,36 +171,107 @@ async function main(): Promise<void> {
       ],
       { cwd: consumer, stdio: "inherit" },
     );
-    await writeFile(path.join(consumer, "verify-types.mts"), [
-      'import { OpenPondExperimentsClient, type ExperimentRunDetails } from "openpond-sdk/experiments"; declare const experiments: OpenPondExperimentsClient; const experiment: Promise<ExperimentRunDetails> = experiments.get("mrun_test"); void experiment;',
-      'import { OpenPondDatasetWorkspaceClient, type DatasetPreparationRun } from "openpond-sdk/dataset-workspaces"; declare const datasets: OpenPondDatasetWorkspaceClient; const preparationReadback: Promise<DatasetPreparationRun> = datasets.preparations.get("dataset", "run"); void preparationReadback;',
-      'import { createOpenPondClient } from "openpond-sdk"; const workClient = createOpenPondClient({ sandbox: { endpoint: "https://runtime.invalid", apiKey: "runtime" }, model: { endpoint: "https://model.invalid/v1", apiKey: "model", model: "test" } });',
-      'type NotAny<T> = 0 extends (1 & T) ? false : true; const sandboxTypesSurvivePacking: NotAny<Awaited<ReturnType<typeof workClient.sandboxes.get>>> = true; void sandboxTypesSurvivePacking;',
-      'const sandboxId: Promise<string> = workClient.sandboxes.get("id").then(record => record.id); void sandboxId;',
-      'import { prepareManagedTrainingSubmission, type ManagedTrainingPreparationInput } from "openpond-sdk/training-bundle"; declare const managedInput: ManagedTrainingPreparationInput; void prepareManagedTrainingSubmission(managedInput);',
-      'import { createPolicyHarnessContext } from "openpond-sdk/training-bundle"; const policyContext = createPolicyHarnessContext({ sourceRelease: null }); const policyHash: string = policyContext.harnessRelease.contentHash; void policyHash;',
-      'import { buildTasksetTrainingBundle, type TasksetTrainingBundle } from "openpond-sdk/training-bundle"; declare const trainingInput: Parameters<typeof buildTasksetTrainingBundle>[0]; const trainingBundle: TasksetTrainingBundle = buildTasksetTrainingBundle(trainingInput); const trainingAssets: ReadonlyMap<string, Uint8Array> = trainingBundle.assets; void trainingAssets;',
-      'import { OpenPondLearningClient, type TaskExampleSubmission, type LearningCommand } from "openpond-sdk/learning";',
-      'import { type ModelTasksetDraftRequest, type TasksetDraftFileMutation, TasksetDraftFileMutationSchema } from "openpond-sdk/model-taskset-authoring";',
-      'import { TasksetDraftSchema, type TasksetDraft, DatasetArtifactManifestSchema, type DatasetArtifactManifest, ExternalDatasetSourceRefSchema, type ExternalDatasetSourceRef } from "openpond-sdk/taskset-drafts"; const draftDocument: TasksetDraft = TasksetDraftSchema.parse({}); const datasetDraftArtifact: DatasetArtifactManifest = DatasetArtifactManifestSchema.parse({}); const datasetDraftSource: ExternalDatasetSourceRef = ExternalDatasetSourceRefSchema.parse({}); void datasetDraftArtifact; void datasetDraftSource; void draftDocument;',
-      'import { type TasksetPackage, prepareModelTasksetDraft, publishModelTasksetDraftPackage, resolveTasksetPackageExecution, resolveTasksetPackageInstructions, createTasksetPackageExecutionFile } from "openpond-sdk/taskset-packages";',
-      'declare const client: OpenPondLearningClient;',
-      'import type { LearningSchedule, LearningScheduleFire } from "openpond-sdk/learning"; const schedule: Promise<LearningSchedule> = client.get("schedule", "timer"); const fire: Promise<LearningScheduleFire> = client.get("schedule_fire", "fire"); void schedule; void fire;',
-      'import type { LearningPolicyInspectionResult } from "openpond-sdk/learning"; const readiness: Promise<LearningPolicyInspectionResult> = client.inspectPolicy({ id: "policy", revision: 1, contentHash: "a".repeat(64) }); void readiness;',
-      'declare const example: TaskExampleSubmission;',
-      'const command: LearningCommand = { action: "submit_example", operationId: example.idempotencyKey, example };',
-      'void client.command(command);',
-      'declare const request: ModelTasksetDraftRequest;',
-      'declare const source: TasksetPackage;',
-      'const preparation = prepareModelTasksetDraft({ request, owner: { scopeId: "scope", modelId: request.modelId }, source });',
-      'const published = publishModelTasksetDraftPackage({ preparation, edited: source });',
-      'const execution = resolveTasksetPackageExecution(published);',
-      'const instructions: string = resolveTasksetPackageInstructions(published);',
-      'if (execution) createTasksetPackageExecutionFile(execution.execution);',
-      'const mutation: TasksetDraftFileMutation = TasksetDraftFileMutationSchema.parse({ draftId: preparation.draftId, expectedDraftRevision: 1, path: "environment/world.js", expectedFileHash: null, content: { encoding: "utf8", data: "export const value = 1;" } });',
-      'void mutation;',
-    ].join("\n"));
-    execFileSync(process.execPath, [path.resolve(packageRoot, "../../scripts/run-typescript.mjs"), "tsc", "--noEmit", "--strict", "--skipLibCheck", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", path.join(consumer, "verify-types.mts")], { cwd: path.resolve(packageRoot, "../.."), stdio: "inherit" });
+    // Core imports must work before optional AI dependencies are installed.
+    execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `
+      import { createOpenPondClient } from 'openpond-sdk';
+      const client = createOpenPondClient({ apiKey: 'fixture', teamId: 'team', datasetId: 'dataset',
+        serving: { baseUrl: 'https://model.invalid/v1' }, models: { support: 'exact-model' },
+        fetch: async (url, init) => {
+          const body = JSON.parse(init.body);
+          if (String(url).includes('/tasks')) return Response.json({schemaVersion:'openpond.datasetTaskReceipt.v1',teamId:'team',datasetId:'dataset',taskId:'canonical-task',operationId:body.operationId,receivedAt:'2026-11-07T00:00:00Z',revision:1,state:'saved',trainingUseAuthorized:false});
+          if (body.model !== 'exact-model') throw new Error('Model substitution');
+          return Response.json({id:'inference',model:'resolved-model',choices:[{index:0,message:{content:'hello'},finish_reason:'stop'}]});
+        } });
+      if ((await client.addTask({id:'source',name:'Example',input:{}})).operationId !== 'source') throw new Error('Source identity lost');
+      if ((await client.models.support.generate({prompt:'hi'})).text !== 'hello') throw new Error('Named inference unavailable');
+    `,
+      ],
+      { cwd: consumer, stdio: "inherit" },
+    );
+    execFileSync(
+      "npm",
+      [
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "ai@7.0.165",
+        "@ai-sdk/openai-compatible@3.0.87",
+      ],
+      { cwd: consumer, stdio: "inherit" },
+    );
+    execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `
+      import { createOpenPondClient } from 'openpond-sdk';
+      import { toAIModel } from 'openpond-sdk/ai-sdk';
+      import { generateText } from 'ai';
+      const client = createOpenPondClient({apiKey:'fixture',serving:{baseUrl:'https://model.invalid/v1'},models:{support:'exact-model'},fetch:async()=>Response.json({id:'inference',model:'resolved-model',choices:[{index:0,message:{role:'assistant',content:'hello'},finish_reason:'stop'}]})});
+      if ((await generateText({model:toAIModel(client.models.support),prompt:'hi',maxRetries:0})).text !== 'hello') throw new Error('Packed optional provider failed');
+    `,
+      ],
+      { cwd: consumer, stdio: "inherit" },
+    );
+    await writeFile(
+      path.join(consumer, "verify-types.mts"),
+      [
+        'import { OpenPondExperimentsClient, type ExperimentRunDetails } from "openpond-sdk/experiments"; declare const experiments: OpenPondExperimentsClient; const experiment: Promise<ExperimentRunDetails> = experiments.get("mrun_test"); void experiment;',
+        'import { OpenPondDatasetWorkspaceClient, type DatasetPreparationRun } from "openpond-sdk/dataset-workspaces"; declare const datasets: OpenPondDatasetWorkspaceClient; const preparationReadback: Promise<DatasetPreparationRun> = datasets.preparations.get("dataset", "run"); void preparationReadback;',
+        'import { createOpenPondClient } from "openpond-sdk"; const workClient = createOpenPondClient({ sandbox: { endpoint: "https://runtime.invalid", apiKey: "runtime" }, model: { endpoint: "https://model.invalid/v1", apiKey: "model", model: "test" } });',
+        'import { toAIModel } from "openpond-sdk/ai-sdk"; import { generateText } from "ai"; const product = createOpenPondClient({apiKey:"fixture",teamId:"team",datasetId:"dataset",serving:{baseUrl:"https://model.invalid/v1"},models:{support:"exact-model"}}); void product.addTask({id:"source",name:"Example",input:{}}); void product.dataset("other").addTask({name:"Example",input:{}}); void generateText({model:toAIModel(product.models.support),prompt:"hi",maxRetries:0});',
+        "// @ts-expect-error Unknown model aliases must not erase to any\nvoid product.models.unknown;",
+        "type NotAny<T> = 0 extends (1 & T) ? false : true; const sandboxTypesSurvivePacking: NotAny<Awaited<ReturnType<typeof workClient.sandboxes.get>>> = true; void sandboxTypesSurvivePacking;",
+        'const sandboxId: Promise<string> = workClient.sandboxes.get("id").then(record => record.id); void sandboxId;',
+        'import { prepareManagedTrainingSubmission, type ManagedTrainingPreparationInput } from "openpond-sdk/training-bundle"; declare const managedInput: ManagedTrainingPreparationInput; void prepareManagedTrainingSubmission(managedInput);',
+        'import { createPolicyHarnessContext } from "openpond-sdk/training-bundle"; const policyContext = createPolicyHarnessContext({ sourceRelease: null }); const policyHash: string = policyContext.harnessRelease.contentHash; void policyHash;',
+        'import { buildTasksetTrainingBundle, type TasksetTrainingBundle } from "openpond-sdk/training-bundle"; declare const trainingInput: Parameters<typeof buildTasksetTrainingBundle>[0]; const trainingBundle: TasksetTrainingBundle = buildTasksetTrainingBundle(trainingInput); const trainingAssets: ReadonlyMap<string, Uint8Array> = trainingBundle.assets; void trainingAssets;',
+        'import { OpenPondLearningClient, type TaskExampleSubmission, type LearningCommand } from "openpond-sdk/learning";',
+        'import { type ModelTasksetDraftRequest, type TasksetDraftFileMutation, TasksetDraftFileMutationSchema } from "openpond-sdk/model-taskset-authoring";',
+        'import { TasksetDraftSchema, type TasksetDraft, DatasetArtifactManifestSchema, type DatasetArtifactManifest, ExternalDatasetSourceRefSchema, type ExternalDatasetSourceRef } from "openpond-sdk/taskset-drafts"; const draftDocument: TasksetDraft = TasksetDraftSchema.parse({}); const datasetDraftArtifact: DatasetArtifactManifest = DatasetArtifactManifestSchema.parse({}); const datasetDraftSource: ExternalDatasetSourceRef = ExternalDatasetSourceRefSchema.parse({}); void datasetDraftArtifact; void datasetDraftSource; void draftDocument;',
+        'import { type TasksetPackage, prepareModelTasksetDraft, publishModelTasksetDraftPackage, resolveTasksetPackageExecution, resolveTasksetPackageInstructions, createTasksetPackageExecutionFile } from "openpond-sdk/taskset-packages";',
+        "declare const client: OpenPondLearningClient;",
+        'import type { LearningSchedule, LearningScheduleFire } from "openpond-sdk/learning"; const schedule: Promise<LearningSchedule> = client.get("schedule", "timer"); const fire: Promise<LearningScheduleFire> = client.get("schedule_fire", "fire"); void schedule; void fire;',
+        'import type { LearningPolicyInspectionResult } from "openpond-sdk/learning"; const readiness: Promise<LearningPolicyInspectionResult> = client.inspectPolicy({ id: "policy", revision: 1, contentHash: "a".repeat(64) }); void readiness;',
+        "declare const example: TaskExampleSubmission;",
+        'const command: LearningCommand = { action: "submit_example", operationId: example.idempotencyKey, example };',
+        "void client.command(command);",
+        "declare const request: ModelTasksetDraftRequest;",
+        "declare const source: TasksetPackage;",
+        'const preparation = prepareModelTasksetDraft({ request, owner: { scopeId: "scope", modelId: request.modelId }, source });',
+        "const published = publishModelTasksetDraftPackage({ preparation, edited: source });",
+        "const execution = resolveTasksetPackageExecution(published);",
+        "const instructions: string = resolveTasksetPackageInstructions(published);",
+        "if (execution) createTasksetPackageExecutionFile(execution.execution);",
+        'const mutation: TasksetDraftFileMutation = TasksetDraftFileMutationSchema.parse({ draftId: preparation.draftId, expectedDraftRevision: 1, path: "environment/world.js", expectedFileHash: null, content: { encoding: "utf8", data: "export const value = 1;" } });',
+        "void mutation;",
+      ].join("\n"),
+    );
+    execFileSync(
+      process.execPath,
+      [
+        path.resolve(packageRoot, "../../scripts/run-typescript.mjs"),
+        "tsc",
+        "--noEmit",
+        "--strict",
+        "--skipLibCheck",
+        "--target",
+        "ES2022",
+        "--module",
+        "NodeNext",
+        "--moduleResolution",
+        "NodeNext",
+        path.join(consumer, "verify-types.mts"),
+      ],
+      { cwd: path.resolve(packageRoot, "../.."), stdio: "inherit" },
+    );
   } finally {
     await Promise.all([
       rm(tarball, { force: true }),

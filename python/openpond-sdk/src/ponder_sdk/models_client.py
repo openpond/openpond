@@ -4,8 +4,9 @@ from typing import Union, cast
 from . import inputs, models
 from .wire import JsonValue
 from .resources import Resource, AsyncResource, LearningPage
+from .model_aliases import ModelAliases, AsyncModelAliases
 
-class Models(Resource):
+class Models(ModelAliases, Resource):
     def configuration_candidates(self, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> list[models.ModelProjectBaseModelCandidate]:
         """GET /v1/model-projects/configuration/candidates. Read/reconcile; no mutation."""
         return cast('list[models.ModelProjectBaseModelCandidate]', self._execute('createModelProjectsClient.configuration_candidates', {}, None, query, expected))
@@ -30,7 +31,7 @@ class Models(Resource):
         """GET /v1/model-projects/{projectId}. Read/reconcile; no mutation."""
         return cast('models.HostedModelProjectDetail', self._execute('createModelProjectsClient.get', {'projectId': project_id}, None, query, expected))
 
-class AsyncModels(AsyncResource):
+class AsyncModels(AsyncModelAliases, AsyncResource):
     async def configuration_candidates(self, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> list[models.ModelProjectBaseModelCandidate]:
         """GET /v1/model-projects/configuration/candidates. Read/reconcile; no mutation."""
         return cast('list[models.ModelProjectBaseModelCandidate]', await self._execute('createModelProjectsClient.configuration_candidates', {}, None, query, expected))
