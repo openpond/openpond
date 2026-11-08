@@ -31,6 +31,36 @@ if (
 const presentation = manifest.extensions["com.openai"];
 if (presentation.apps || presentation.hooks)
   throw new Error("Public bundle must not contain app references or lifecycle hooks.");
+for (const [field, maximum] of [
+  ["displayName", 30],
+  ["shortDescription", 30],
+  ["longDescription", 4000],
+  ["developerName", 80],
+]) {
+  const value = presentation.interface[field];
+  if (typeof value !== "string" || !value.trim() || value.length > maximum)
+    throw new Error(`Invalid public listing field: ${field} (maximum ${maximum} characters).`);
+}
+for (const field of ["websiteURL", "supportURL", "privacyPolicyURL", "termsOfServiceURL"]) {
+  const url = new URL(presentation.interface[field]);
+  if (url.protocol !== "https:" || url.username || url.password || url.href.length > 1024)
+    throw new Error(`Invalid public listing URL: ${field}.`);
+}
+const cases = presentation.review?.test_cases;
+for (const [kind, count] of [
+  ["positive", 5],
+  ["negative", 3],
+]) {
+  if (!Array.isArray(cases?.[kind]) || cases[kind].length !== count)
+    throw new Error(`Expected ${count} ${kind} reviewer cases.`);
+  const fields =
+    kind === "positive"
+      ? ["description", "prompt", "tools_triggered", "expected_behavior"]
+      : ["description", "prompt"];
+  for (const entry of cases[kind])
+    if (fields.some((field) => typeof entry[field] !== "string" || !entry[field].trim()))
+      throw new Error(`Incomplete ${kind} reviewer case.`);
+}
 const files = [
   "plugin.json",
   "mcp.json",
@@ -67,9 +97,10 @@ for (const reference of new Set([
   if (
     png.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" ||
     png.readUInt32BE(16) !== png.readUInt32BE(20) ||
-    png.readUInt32BE(16) < 128
+    png.readUInt32BE(16) < 256 ||
+    png.length > 5 * 1024 * 1024
   )
-    throw new Error("Expected a square PNG asset at least 128 pixels wide.");
+    throw new Error("Expected a square PNG asset at least 256 pixels wide and at most 5 MiB.");
 }
 await mkdir(output, { recursive: true });
 const temporary = await mkdtemp(path.join(os.tmpdir(), "openpond-plugin-"));
