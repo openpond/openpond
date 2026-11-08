@@ -646,7 +646,7 @@ importers:
         specifier: 1.32.1
         version: 1.32.1(zod@4.4.3)
       openpond-sdk:
-        specifier: ^0.12.7
+        specifier: ^0.12.24
         version: link:../sdk
       zod:
         specifier: ^4.1.13

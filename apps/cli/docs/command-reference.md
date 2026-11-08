@@ -4,6 +4,20 @@
 
 Parsing, aliases, command help, and this reference use the same authoritative registry.
 
+## skills
+
+```text
+Usage:
+  openpond skills <install|list> --agent <codex|claude-code|opencode|cursor> [--global] [--copy] [--yes] [--dry-run] [--json]
+
+Options:
+  --agent <string>
+  --copy
+  --dry-run
+  --global
+  --json
+  --yes
+```
 ## learning
 
 ```text

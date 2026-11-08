@@ -13,6 +13,9 @@ import { addProjectsAndDatasets } from "./projects-datasets.js";
 import { addExperiments } from "./experiments.js";
 import { addTraining } from "./training.js";
 import { addLearning } from "./learning.js";
+import { addTrainingWorkflows } from "./training-workflows.js";
+import { addAccount } from "./account.js";
+import { addAdapterTraining } from "./training-adapters.js";
 import { Empty } from "./common.js";
 import { normalizeOptionalNulls } from "./input-normalization.js";
 import {
@@ -24,6 +27,10 @@ import {
   type OpenPondMcpScope,
 } from "./types.js";
 export { OPENPOND_APP_MCP_SCOPES, OpenPondMcpAuthorizationError } from "./types.js";
+export {
+  trainingLearningCommandScopes,
+  assertTrainingLearningRead,
+} from "./training-learning-policy.js";
 export type {
   OpenPondMcpContext,
   OpenPondMcpOptions,
@@ -55,6 +62,7 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
       output: config.output,
       wireOutput: config.wireOutput,
       idempotent: config.idempotent ?? effect === "read",
+      destructive: config.destructive ?? effect !== "read",
     });
   };
   add(
@@ -73,7 +81,10 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
   addProjectsAndDatasets(add, clients);
   addExperiments(add, clients);
   addTraining(add, clients, options.context.teamId);
-  addLearning(add, clients);
+  addLearning(add, clients, options.context.teamId);
+  addTrainingWorkflows(add, clients, options.context);
+  addAccount(add, clients);
+  addAdapterTraining(add, clients, options.context);
   const names = new Set(definitions.map((v) => v.name));
   if (names.size !== definitions.length) throw new Error("Duplicate OpenPond MCP tool name.");
   const server = new Server(
@@ -116,7 +127,7 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
             : { type: "object" as const, properties: { result: {} }, required: ["result"] },
         annotations: {
           readOnlyHint: v.effect === "read",
-          destructiveHint: v.effect !== "read",
+          destructiveHint: v.destructive,
           idempotentHint: v.idempotent,
           openWorldHint: true,
         },

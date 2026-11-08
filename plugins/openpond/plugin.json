@@ -1,0 +1,35 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "openpond",
+  "version": "0.1.0",
+  "description": "Manage OpenPond models, datasets, graders, experiments and training from your agent.",
+  "author": { "name": "OpenPond", "url": "https://openpond.ai" },
+  "homepage": "https://openpond.ai",
+  "repository": "https://github.com/openpond/openpond",
+  "license": "MIT",
+  "keywords": ["training", "datasets", "evaluation", "models", "continual-learning"],
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/openpond-connect/SKILL.md",
+      "interface": {
+        "displayName": "OpenPond",
+        "shortDescription": "Train and evaluate your own models",
+        "longDescription": "Work with your OpenPond workspace's models, experiments, datasets and graders. Inspect training readiness, retained results and authorized credit balances; prepare and manage supported training within your permissions and approved limits. Runtime availability depends on the selected method and source.",
+        "developerName": "OpenPond",
+        "category": "Developer Tools",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://openpond.ai",
+        "supportURL": "https://openpond.ai/support",
+        "privacyPolicyURL": "https://openpond.ai/privacy",
+        "termsOfServiceURL": "https://openpond.ai/terms",
+        "defaultPrompt": [
+          "Show my models and recent training results.",
+          "Help me prepare an experiment with my dataset and grader.",
+          "Review my continual-learning policy and pending candidates."
+        ],
+        "logo": "./assets/openpond.png",
+        "composerIcon": "./assets/openpond.png"
+      }
+    }
+  }
+}
