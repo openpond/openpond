@@ -94,11 +94,13 @@ Options:
 
 ```text
 Usage:
-  openpond datasets <context|select|select-model|select-destination|new-experiment|select-experiment|rename-experiment|schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]
+  openpond datasets <context|model-inputs|select|select-model|select-destination|new-experiment|select-experiment|rename-experiment|schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]
+  openpond datasets model-inputs <model-id> --local [--view summary|tasks|graders] [--role training|evaluation] [--split train|validation|test|frozen_eval] [--task-id <id>] [--limit <1..100>] [--offset <n>] [--location cloud --team <id> --api-origin <origin>] [--json]
   openpond datasets <upload|save|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]
   openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]
 
 Options:
+  --api-origin <string>
   --cursor <string>
   --dataset-id <string>
   --expected-revision <integer>
@@ -107,13 +109,18 @@ Options:
   --json
   --limit <integer>
   --local
+  --location <string>
   --offset <integer>
   --operation-id <string>
   --package-hash <string>
   --project <string>
   --publish
+  --role <string>
   --server-url <string>
+  --split <string>
+  --task-id <string>
   --team <string>
+  --view <string>
   --workspace-hash <string>
 ```
 ## connected-evidence

@@ -9,13 +9,11 @@ import { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { modelsLocation, modelsPath } from "../labs/models-route";
 import { DropdownSelect } from "../DropdownSelect";
-import { ChatContextPicker } from "./ChatContextPicker";
 import { DatasetWorkspace } from "./DatasetWorkspace";
 import { ModelTrainingJourney } from "../labs/ModelTrainingJourney";
 import { LocalTrainingOverview } from "./DatasetTrainingOverview";
-import { ChatTrainingInputs, TrainingWorkspaceSection } from "./ChatTrainingInputs";
+import { PonderWorkbench } from "./PonderWorkbench";
 import { ChatExperimentEditor } from "./ChatExperimentEditor";
-import { PlannedTrainingFlow } from "../training/RunFlowDiagram";
 import { DecisionResults } from "../labs/workspace/DecisionResults";
 import { ChatHostedTrainingResult } from "./ChatHostedTrainingResult";
 
@@ -114,10 +112,8 @@ export function ChatExperimentTool({
     : resources;
   return (
     <div className="chat-experiment-tool">
-      <header className="chat-experiment-tool-header">
-        <ChatContextPicker context={context} />
-      </header>
       <ErrorToast error={error} />
+      <PonderWorkbench context={context} connection={connection} sessionId={sessionId} resources={scopedResources}>
       {selected?.alphaEditResult?.result ? (
         <div className="chat-experiment-tool-content">
           <h2>{selected.label}</h2>
@@ -172,6 +168,7 @@ export function ChatExperimentTool({
             ]}
             onChange={(raw) => void choose(raw)}
           />
+          {context.runs.hasNextPage ? <button type="button" className="training-button secondary" disabled={context.runs.isFetchingNextPage} onClick={() => void context.runs.fetchNextPage()}>More training runs</button> : null}
           <ErrorToast error={context.runs.error}>
             {context.runs.error ? (
               <button
@@ -209,32 +206,8 @@ export function ChatExperimentTool({
               <LocalTrainingOverview connection={connection} training={training} />
             )
           ) : (
-            <PlannedTrainingFlow />
+            <p>Choose a training run to inspect its charts and retained results. Open Dataset or Graders to review this model’s configured inputs.</p>
           )}
-          <ChatTrainingInputs
-            connection={connection}
-            dataset={selected.dataset}
-            graders={selected.graders ?? []}
-            model={selected.model}
-          />
-          <TrainingWorkspaceSection title="Experiments">
-            <DropdownSelect
-              floating
-              label="Experiment"
-              value=""
-              options={[
-                { value: "", label: "Experiment", disabled: true },
-                ...(context.catalog.data?.options ?? [])
-                  .filter((item) => item.target.kind === "experiment")
-                  .map((item) => ({
-                    value: JSON.stringify(item.target),
-                    label: item.label,
-                    description: item.detail,
-                  })),
-              ]}
-              onChange={(raw) => void choose(raw)}
-            />
-          </TrainingWorkspaceSection>
         </div>
       ) : selected?.draft && (editingDraft || context.configureDraftId === selected.draft.id) ? (
         <ChatExperimentEditor
@@ -329,6 +302,7 @@ export function ChatExperimentTool({
           sessionId={sessionId}
           resources={scopedResources}
           events={events}
+          showInputs={false}
           selectedExperiment={selectedRun}
           experimentName={selected.target.kind === "dataset" ? "Experiment draft" : selected.label}
         />
@@ -337,6 +311,7 @@ export function ChatExperimentTool({
           <p>Choose an experiment or model, or start a new experiment.</p>
         </div>
       )}
+      </PonderWorkbench>
     </div>
   );
 }

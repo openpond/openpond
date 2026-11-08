@@ -1,3 +1,4 @@
+import { chatCatalogFetch, catalogFailure } from "./chat-catalog-fetch.js";
 import { readChatRetainedResult } from "./chat-retained-result.js";
 import { readChatAlphaEditResult } from "./chat-alphaedit-result.js";
 import { readChatNeuronTrainingResult } from "./chat-neuron-training-result.js";
@@ -34,7 +35,7 @@ export function createChatContextBrowser(deps: {
 
 }) {
   const drafts = createChatExperimentDraftStorage(deps.access);
-  async function catalog(refresh = true, sessionId?: string, draftCursor?: string) {
+  async function catalog(refresh = true, sessionId?: string, draftCursor?: string, source: "all" | "local" | "models" | "drafts" = "all") {
     const session = sessionId ? await deps.store.getSession(sessionId) : null;
     if (sessionId && (!session || session.systemKind)) throw new Error("Chat is unavailable.");
     const scopes = session ? chatExperimentContext(session.metadata).scopes : [];
@@ -49,46 +50,55 @@ export function createChatContextBrowser(deps: {
       const stored = await drafts.list(draftCursor);
       return { options: storedOptions(stored.options), warning: null, nextDraftCursor: stored.page.nextCursor };
     }
-    const resources = await deps.resources();
+    const resources = source === "all" || source === "local" ? await deps.resources() : [];
     const options: ChatContextOption[] = resources.filter(item => item.kind !== "grader").map(item => ({
       target: { kind: item.kind as "dataset" | "experiment", id: item.id, revision: item.revision, location: item.location ?? "local" },
       label: item.name, detail: item.kind === "dataset" ? `Dataset · revision ${item.revision}` : `${item.state} · Dataset revision ${item.datasetRevision ?? "—"} · ${item.model ?? ""} · ${item.id.slice(-8)}`,
     }));
-    for (const model of await deps.store.listModelProjects()) options.push({
+    for (const model of source === "all" || source === "local" ? await deps.store.listModelProjects() : []) options.push({
       target: { kind: "model", id: model.id, location: "local" }, label: model.name,
       detail: `Model · ${model.defaultBaseModel?.modelId ?? "Local"}`,
     });
-    if (sessionId) {
+    if (sessionId && (source === "all" || source === "local")) {
       for (const scope of scopes.filter(scope => !scope.storedDraft && !scope.selectedRunId && (scope.dataset || scope.draft))) options.unshift({
         target: { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" },
         label: scope.name, detail: scope.draft ? `Draft · ${experimentOperationLabel(scope.draft.operationType)}` : `Draft · ${scope.dataset!.name} · revision ${scope.dataset!.revision}`,
       });
     }
     let warning: string | null = null;
-    try {
+    if (source === "all" || source === "models") try {
       const access = await deps.access();
-      const hosted = await listHostedModelProjectCatalog({ store: deps.store, resolveAccess: async () => access, fetch }, { refresh });
+      const hosted = await listHostedModelProjectCatalog({ store: deps.store, resolveAccess: async () => access, fetch: chatCatalogFetch }, { refresh: false, maxAgeMs: refresh ? 30_000 : undefined });
+      const active = await deps.access();
+      if (active.actorId !== access.actorId || active.teamId !== access.teamId || active.apiBaseUrl !== access.apiBaseUrl) throw new Error("Account changed while reading models.");
       for (const { project } of hosted.projects) options.push({
         target: { kind: "model", id: project.id, location: "cloud", teamId: access.teamId, apiOrigin: new URL(access.apiBaseUrl).origin },
         label: project.name, detail: `Model · ${project.defaultBaseModel?.modelId ?? "Hosted"}`,
       });
-    } catch { warning = "Hosted models could not be loaded for the current account. Local resources remain available."; }
+    } catch (cause) { warning = catalogFailure("Hosted models", cause); }
     let nextDraftCursor: string | null = null;
-    try {
+    if (source === "all" || source === "drafts") try {
       const stored = await drafts.list(draftCursor);
       nextDraftCursor = stored.page.nextCursor;
       options.unshift(...storedOptions(stored.options));
-    } catch { warning = [warning, "Saved experiment drafts could not be loaded for the current account."].filter(Boolean).join(" "); }
+    } catch (cause) { warning = [warning, catalogFailure("Saved experiments", cause)].filter(Boolean).join(" "); }
     return { options, warning, nextDraftCursor };
   }
-  async function modelDetails(target: ChatContextTarget) {
+  async function modelProject(target: ChatContextTarget) {
+    if (target.kind !== "model") throw new Error("Select a model before inspecting its inputs.");
     const project = target.location === "local" ? await deps.store.getModelProject(target.id) : await (async () => {
       const access = await deps.access();
       if (target.teamId !== access.teamId || target.apiOrigin !== new URL(access.apiBaseUrl).origin) throw new Error("Model belongs to another account.");
-      const listing = await listHostedModelProjectCatalog({ store: deps.store, resolveAccess: async () => access, fetch }, { refresh: false });
+      const listing = await listHostedModelProjectCatalog({ store: deps.store, resolveAccess: async () => access, fetch: chatCatalogFetch }, { refresh: false });
+      const active = await deps.access();
+      if (active.actorId !== access.actorId || active.teamId !== access.teamId || active.apiBaseUrl !== access.apiBaseUrl) throw new Error("Account changed while reading model inputs.");
       return listing.projects.find(item => item.project.id === target.id)?.project;
     })();
     if (!project) throw new Error("Model is unavailable.");
+    return project;
+  }
+  async function modelDetails(target: ChatContextTarget) {
+    const project = await modelProject(target);
     const dataset = async (ref: { id: string; revision: number } | null | undefined) => {
       if (!ref) return null;
       const record = await deps.store.readLocalDatasetListing(ref.id, ref.revision);
@@ -98,6 +108,26 @@ export function createChatContextBrowser(deps: {
     return { id: project.id, portableProjectId: "portableProjectId" in project ? project.portableProjectId : project.id,
       name: project.name, baseModel: project.defaultBaseModel?.modelId ?? null,
       trainingDataset, evaluationDataset };
+  }
+  async function inputs(raw: unknown) {
+    const target = ChatContextTargetSchema.parse(raw);
+    const project = await modelProject(target);
+    const sources = [];
+    for (const [role, ref] of [["training", project.trainingSetup.tasksetRef], ["evaluation", project.trainingSetup.evaluationTasksetRef]] as const) {
+      if (!ref) continue;
+      if (target.location === "cloud") { sources.push({ role, name: ref.id, release: ref }); continue; }
+      const local = await deps.store.readLocalDatasetListing(ref.id, ref.revision);
+      if (local) sources.push({ role, name: local.workspace.draft.name || ref.id,
+        dataset: await deps.resource({ kind: "dataset", id: ref.id, revision: ref.revision, location: "local" }) });
+      else {
+        const taskset = await deps.store.getTasksetRevision(ref.id, ref.revision, ref.contentHash);
+        if (!taskset || taskset.id !== ref.id || taskset.revision !== ref.revision || taskset.contentHash !== ref.contentHash || !("profileId" in project) || taskset.profileId !== project.profileId)
+          throw new Error("The exact local model dataset is unavailable. Open the model dataset to recover its saved revision.");
+        sources.push({ role, name: taskset.name, taskset: { id: taskset.id, profileId: taskset.profileId, name: taskset.name,
+          revision: taskset.revision, contentHash: taskset.contentHash, tasks: taskset.tasks, graders: taskset.graders } });
+      }
+    }
+    return { sources };
   }
   async function resolve(raw: unknown): Promise<ChatContextSelection> {
     const target = ChatContextTargetSchema.parse(raw);
@@ -148,17 +178,23 @@ export function createChatContextBrowser(deps: {
     return { target: { ...target, revision: resource.revision }, label: resource.name, detail: resource.state, resource, ...await deps.inspectResource?.(resource) };
   }
 
-  async function runs(raw: unknown) {
+  async function runs(raw: unknown, cursor?: string) {
     const selected = await resolve(raw);
     if (!selected.model) throw new Error("Select a model to browse training runs.");
     const access = await deps.access();
-    if (selected.target.location === "cloud") {
+    const localModel = selected.target.location === "local" ? await deps.store.getModelProject(selected.target.id) : null;
+    const link = localModel?.hosted;
+    const hostedId = selected.target.location === "cloud" ? selected.target.id
+      : link?.teamId === access.teamId && link.apiOrigin === new URL(access.apiBaseUrl).origin ? link.projectId : null;
+    if (hostedId) {
       const headers = hostedApiAuthHeaders(access.token); headers.set("x-openpond-team-id", access.teamId);
-      const client = createTrainingClient({ baseUrl: access.apiBaseUrl, headers, fetch });
-      const page = await client.listJobs({ modelProjectId: selected.target.id, limit: 100 });
-      if (page.jobs.some(job => job.teamId !== access.teamId || job.modelProjectId !== selected.target.id)) throw new Error("Training history returned another model or workspace.");
-      return page.jobs.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(job => ({ target: { kind: "training" as const, id: job.id, location: "cloud" as const, teamId: access.teamId, apiOrigin: new URL(access.apiBaseUrl).origin },
-        label: `${job.createdAt.slice(0, 16).replace("T", " ")} UTC · ${job.state === "succeeded" ? "Completed" : job.state}`, detail: `$${job.accruedSpendUsd.toFixed(4)} · ${job.id}` }));
+      const client = createTrainingClient({ baseUrl: access.apiBaseUrl, headers, fetch: chatCatalogFetch });
+      const page = await client.listJobs({ modelProjectId: hostedId, limit: 100, ...(cursor ? { cursor } : {}) });
+      const active = await deps.access();
+      if (active.actorId !== access.actorId || active.teamId !== access.teamId || active.apiBaseUrl !== access.apiBaseUrl) throw new Error("Account changed while reading training history.");
+      if (page.jobs.some(job => job.teamId !== access.teamId || job.modelProjectId !== hostedId)) throw new Error("Training history returned another model or workspace.");
+      return { nextCursor: page.nextCursor, runs: page.jobs.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(job => ({ target: { kind: "training" as const, id: job.id, location: "cloud" as const, teamId: access.teamId, apiOrigin: new URL(access.apiBaseUrl).origin },
+        label: `${job.createdAt.slice(0, 16).replace("T", " ")} UTC · ${job.state === "succeeded" ? "Completed" : job.state}`, detail: `$${job.accruedSpendUsd.toFixed(4)} · ${job.id}` })) };
     }
     const options: ChatContextOption[] = [];
     for (const job of (await deps.store.listTrainingJobs()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
@@ -171,7 +207,7 @@ export function createChatContextBrowser(deps: {
         options.push({ target: { kind: "training", id: job.id, location: "local" }, label: `${job.createdAt.slice(0, 16)} · ${job.status}`, detail: job.id });
       } catch { /* Only canonical executions owned by this account are selectable. */ }
     }
-    return options;
+    return { runs: options, nextCursor: null };
   }
   async function select(raw: unknown, sessionId?: string, newExperiment = false, sourceDraftId?: string) {
     let selection = raw === null ? null : await resolve(raw);
@@ -307,5 +343,5 @@ export function createChatContextBrowser(deps: {
     const currentSaved = await resolve(saved.target);
     return { saved, currentSaved, selection: sessionId ? await current(sessionId) : currentSaved };
   }
-  return { catalog, resolve, runs, select, current, updateDraft };
+  return { catalog, resolve, inputs, runs, select, current, updateDraft };
 }

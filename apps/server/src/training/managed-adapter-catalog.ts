@@ -29,13 +29,15 @@ export async function readManagedModelCatalog(
   const cached = catalogCache.get(key);
   if (!options.fresh && cached && cached.until > Date.now()) return cached.value;
   const value = fetchManagedModelCatalog(access);
-  const entry = { until: Date.now() + 15_000, value };
+  const entry = { until: Infinity, value };
   catalogCache.set(key, entry);
   if (catalogCache.size > 32) catalogCache.delete(catalogCache.keys().next().value!);
   try {
-    return await value;
+    const models = await value;
+    entry.until = Date.now() + 60_000;
+    return models;
   } catch (error) {
-    if (catalogCache.get(key) === entry) catalogCache.delete(key);
+    entry.until = Date.now() + 30_000;
     throw error;
   }
 }

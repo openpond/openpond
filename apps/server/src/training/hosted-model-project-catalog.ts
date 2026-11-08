@@ -13,10 +13,13 @@ type HostedAccess = {
   apiBaseUrl: string;
   token: string;
   teamId: string;
+  actorId?: string;
 };
 
 const HOSTED_MODEL_PROJECT_CATALOG_CACHE_TYPE =
   "training.hosted-model-project-catalog.v1";
+
+const refreshes = new WeakMap<SqliteStore, Map<string, Promise<z.infer<typeof HostedModelProjectCatalogCacheSchema>>>>();
 
 const HostedModelProjectCatalogCacheSchema = z.object({
   teamId: z.string().min(1),
@@ -45,7 +48,7 @@ export async function listHostedModelProjectCatalog(
     resolveAccess: () => Promise<HostedAccess>;
     fetch: typeof fetch;
   },
-  options: { refresh?: boolean } = {},
+  options: { refresh?: boolean; maxAgeMs?: number } = {},
 ): Promise<{
   teamId: string;
   projects: HostedModelProjectCatalogItem[];
@@ -53,7 +56,7 @@ export async function listHostedModelProjectCatalog(
   cached: boolean;
 }> {
   const access = await input.resolveAccess();
-  const cacheKey = `${access.apiBaseUrl}|${access.teamId}`;
+  const cacheKey = `${access.apiBaseUrl}|${access.teamId}|${access.actorId ?? ""}`;
   const cachedEntry = options.refresh
     ? null
     : await input.store.getCacheEntry<unknown>(
@@ -63,10 +66,10 @@ export async function listHostedModelProjectCatalog(
   const cached = cachedEntry
     ? HostedModelProjectCatalogCacheSchema.safeParse(cachedEntry.payload)
     : null;
-  const useCached = Boolean(cached?.success);
-  const catalog = cached?.success
+  const useCached = Boolean(cached?.success && (options.maxAgeMs === undefined || Date.now() - Date.parse(cached.data.generatedAt) < options.maxAgeMs));
+  const catalog = useCached && cached?.success
     ? cached.data
-    : await refreshHostedProjectCatalog(input, access, cacheKey);
+    : await sharedRefresh(input, access, cacheKey);
   const localProjects = await input.store.listModelProjects();
   const localById = new Map(
     localProjects.map((project) => [project.id, project] as const),
@@ -85,6 +88,19 @@ export async function listHostedModelProjectCatalog(
     generatedAt: catalog.generatedAt,
     cached: useCached,
   };
+}
+
+async function sharedRefresh(input: { store: SqliteStore; fetch: typeof fetch }, access: HostedAccess, cacheKey: string) {
+  let pending = refreshes.get(input.store);
+  if (!pending) { pending = new Map(); refreshes.set(input.store, pending); }
+  // Credential rotation must never join the previous principal's in-flight read.
+  const key = `${cacheKey}|${access.token}`;
+  const existing = pending.get(key);
+  if (existing) return existing;
+  const request = refreshHostedProjectCatalog(input, access, cacheKey);
+  pending.set(key, request);
+  try { return await request; }
+  finally { if (pending.get(key) === request) pending.delete(key); }
 }
 
 async function refreshHostedProjectCatalog(

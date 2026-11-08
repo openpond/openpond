@@ -6,7 +6,7 @@ import { DropdownSelect } from "../DropdownSelect";
 import { ChevronDown, ChevronRight } from "../icons";
 
 type ContextType = "experiment" | "model";
-const typeLabels = { experiment: "Experiment", model: "Model" } as const;
+const typeLabels = { model: "Model", experiment: "Experiment" } as const;
 
 export function ChatContextPicker({
   context,
@@ -35,7 +35,7 @@ export function ChatContextPicker({
           selected?.target.kind === "neuron_training_result"
         ? "experiment"
         : selected?.target.kind;
-  const type = draftType ?? selectedType ?? "experiment";
+  const type = draftType ?? selectedType ?? "model";
   const choices = (context.catalog.data?.options ?? []).filter(
     (option) =>
       option.target.kind === type ||
@@ -138,20 +138,21 @@ export function ChatContextPicker({
         ref={triggerRef}
         type="button"
         className={`composer-project-trigger chat-training-trigger${open ? " active" : ""}`}
-        aria-label="Ponder"
+        aria-label="Ponder Training"
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={unavailable}
-        title={selected ? `${selected.label}: ${selected.detail}` : "Ponder"}
+        title={selected ? `${selected.label}: ${selected.detail}` : "Ponder Training"}
         onClick={() => {
           setDraftType(null);
+          if (!open) void context.refreshLocalCatalog().catch(() => undefined);
           setOpen((value) => !value);
         }}
       >
         <span>
           {selected?.target.kind === "dataset"
             ? `Experiment draft · ${selected.label}`
-            : (selected?.model?.name ?? selected?.label ?? "Ponder")}
+            : (selected?.model?.name ?? selected?.label ?? "Ponder Training")}
         </span>
         <ChevronDown size={14} />
       </button>
@@ -179,6 +180,7 @@ export function ChatContextPicker({
             onChange={(value) => setDraftType(value as ContextType)}
           />
           <DropdownSelect
+            searchable
             compact
             floating
             label={`${typeLabels[type]} name`}
@@ -232,7 +234,7 @@ export function ChatContextPicker({
           ) : null}
           {issue ? (
             <ErrorToast error={issue}>
-              {context.catalog.error ? (
+              {context.catalog.error || context.catalog.data?.warning ? (
                 <button type="button" onClick={() => void context.catalog.refetch()}>
                   Retry
                 </button>

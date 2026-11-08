@@ -261,3 +261,66 @@ test("links chat drafts to canonical storage across save, reopen, retry and focu
     store.close(); await rm(home, { recursive: true, force: true });
   }
 });
+
+// Failure story: an unavailable hosted account used to hold local choices behind
+// remote catalog reads. Local discovery must not acquire hosted authority at all.
+test("local picker discovery remains available without hosted account access", async () => {
+  const access = vi.fn(async () => { throw new Error("hosted account offline"); });
+  const dataset = { kind: "dataset" as const, id: "local-data", revision: 3, name: "Local examples", state: "Ready", rows: [] };
+  const browser = createChatContextBrowser({
+    store: { listModelProjects: async () => [] } as unknown as SqliteStore,
+    access, resources: async () => [dataset], resource: async () => dataset,
+    selectResource: async () => {}, createExperiment: async () => {},
+  });
+  expect(await browser.catalog(true, undefined, undefined, "local")).toMatchObject({
+    options: [{ target: { kind: "dataset", id: dataset.id, revision: 3 } }], warning: null,
+  });
+  expect(access).not.toHaveBeenCalled();
+});
+
+// Failure story: a locally pulled model displayed no hosted jobs, while a late
+// workspace switch could deliver history from the previous account. Follow only
+// the verified link, carry its cursor and discard that late response.
+test("linked model history paginates and reauthorizes the completed read", async () => {
+  const access = { apiBaseUrl: "https://api.example.test", token: "test", teamId: "team", actorId: "actor" };
+  const local = { id: "portable", name: "Pulled model", defaultBaseModel: null,
+    trainingSetup: { tasksetRef: null, evaluationTasksetRef: null },
+    hosted: { teamId: "team", apiOrigin: access.apiBaseUrl, projectId: "hosted", portableProjectId: "portable" } };
+  const calls: string[] = [];
+  let switchAccount = false;
+  vi.stubGlobal("fetch", async (url: string) => {
+    calls.push(String(url));
+    if (switchAccount) access.actorId = "different-actor";
+    return new Response(JSON.stringify({ schemaVersion: "openpond.trainingJobPage.v2", jobs: [], nextCursor: "next-page" }));
+  });
+  try {
+    const browser = createChatContextBrowser({ store: {
+      getModelProject: async () => local, readLocalDatasetListing: async () => null,
+    } as unknown as SqliteStore, access: async () => ({ ...access }), resources: async () => [],
+    resource: async () => { throw new Error("unused"); }, selectResource: async () => {}, createExperiment: async () => {},
+    });
+    const target = { kind: "model", id: "portable", location: "local" };
+    expect(await browser.runs(target, "page-two")).toEqual({ runs: [], nextCursor: "next-page" });
+    expect(new URL(calls[0]!).searchParams.get("modelProjectId")).toBe("hosted");
+    expect(new URL(calls[0]!).searchParams.get("cursor")).toBe("page-two");
+    switchAccount = true;
+    await expect(browser.runs(target)).rejects.toThrow("Account changed");
+  } finally { vi.unstubAllGlobals(); }
+});
+
+// Failure story: a saved local model taskset was mistaken for a hosted release,
+// exposing an unrelated remote lookup and hiding locally available tasks.
+test("model inputs retain local taskset identity and reject mismatched revisions", async () => {
+  const pin = { id: "local-taskset", revision: 2, contentHash: "a".repeat(64) };
+  const project = { id: "model", profileId: "profile", name: "Model", trainingSetup: { tasksetRef: pin, evaluationTasksetRef: null } };
+  let taskset = { ...pin, profileId: "profile", name: "Local tasks", tasks: [], graders: [] };
+  const resource = vi.fn(async () => { throw new Error("Independent dataset lookup is not appropriate"); });
+  const browser = createChatContextBrowser({ store: {
+    getModelProject: async () => project, readLocalDatasetListing: async () => null, getTasksetRevision: async () => taskset,
+  } as unknown as SqliteStore, access: async () => { throw new Error("Hosted authority is not needed"); }, resources: async () => [], resource,
+  selectResource: async () => {}, createExperiment: async () => {} });
+  expect(await browser.inputs({ kind: "model", id: "model", location: "local" })).toEqual({ sources: [{ role: "training", name: "Local tasks", taskset }] });
+  expect(resource).not.toHaveBeenCalled();
+  taskset = { ...taskset, revision: 3 };
+  await expect(browser.inputs({ kind: "model", id: "model", location: "local" })).rejects.toThrow("exact local model dataset");
+});
