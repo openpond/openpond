@@ -1,0 +1,9 @@
+{
+  "name": "openpond",
+  "version": "0.1.0",
+  "description": "OpenPond training, datasets, graders, experiments and continual-learning workflows.",
+  "author": { "name": "OpenPond", "url": "https://openpond.ai" },
+  "homepage": "https://openpond.ai",
+  "repository": "https://github.com/openpond/openpond",
+  "license": "MIT"
+}

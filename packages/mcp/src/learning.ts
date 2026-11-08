@@ -1,21 +1,40 @@
 import { z } from "zod";
 import {
   CorrectionMetricsReadSchema,
-  CorrectionMetricsCommandSchema,
   GraderCatalogQuerySchema,
   GraderUsageQuerySchema,
   LearningCommandSchema,
-  LearningResourceKindSchema,
   LearningRevisionRefSchema,
   LearningOperationResultSchema,
   learningResourceSchemas,
+  TaskIntakeFormatSchema,
+  TaskIntakeFileSchema,
+  TaskIntakePreviewSchema,
+  previewTaskIntake,
 } from "openpond-sdk/learning";
-import { HumanReviewCommandSchema, HumanReviewTransportSchema } from "openpond-sdk/human-review";
 import type { AddTool } from "./types.js";
 import type { Clients } from "./clients.js";
-import { ById, Empty, Hash, Id, Revision } from "./common.js";
+import { ById, Hash, Id, Revision, withoutWorkspace } from "./common.js";
+import {
+  TRAINING_LEARNING_ACTIONS,
+  TRAINING_LEARNING_KINDS,
+  TRAINING_LEARNING_PUBLISH_KINDS,
+} from "./training-learning-policy.js";
 
-export function addLearning(add: AddTool, c: Clients) {
+export function addLearning(add: AddTool, c: Clients, teamId: string) {
+  add(
+    "learning_preview_intake",
+    "Preview bounded JSON/JSONL/CSV or supported agent-history text before importing it into training review. Paths label supplied text and never read a filesystem. Use contentHash as expectedPreviewHash and retain reviewed record IDs for learning_import_intake; previewing grants no training permission.",
+    z
+      .object({
+        format: TaskIntakeFormatSchema,
+        files: z.array(TaskIntakeFileSchema).min(1).max(100),
+      })
+      .strict(),
+    "read",
+    async (v) => previewTaskIntake(v),
+    { output: TaskIntakePreviewSchema },
+  );
   // Wire discovery advertises a compact identity envelope; the full SDK schema
   // still validates every returned resource before any result is emitted. Full
   // retained evidence remains in `result`, unchanged. Repeating the entire
@@ -38,17 +57,12 @@ export function addLearning(add: AddTool, c: Clients) {
     for (const variant of variants) {
       const action = variant.shape.action.value as string;
       const kind = "kind" in variant.shape ? variant.shape.kind.value : undefined;
-      const effect = action.includes("cancel")
-        ? "cancel"
-        : action.includes("publish")
-          ? "publish"
-          : action.includes("iteration")
-            ? "learning"
-            : action.startsWith("queue_")
-              ? "execute"
-              : action === "review"
-                ? "review"
-                : "write";
+      if (
+        !(action in TRAINING_LEARNING_ACTIONS) ||
+        (action === "publish" && !TRAINING_LEARNING_PUBLISH_KINDS.some((value) => value === kind))
+      )
+        continue;
+      const effect = TRAINING_LEARNING_ACTIONS[action as keyof typeof TRAINING_LEARNING_ACTIONS];
       add(
         `learning_${action}${kind ? `_${kind}` : ""}`,
         `Apply the supported ${action} learning operation. Exact operation IDs, expected revisions, pinned releases, review and spend admission remain enforced by the existing service.`,
@@ -58,14 +72,15 @@ export function addLearning(add: AddTool, c: Clients) {
         {
           output: LearningOperationResultSchema,
           wireOutput: operationEnvelope,
-          ...(kind === "policy" || action === "publish_resources"
-            ? { scopes: ["app:publish", "app:learning"] as const }
-            : {}),
+          scopes:
+            action === "publish" && kind === "policy"
+              ? ["app:publish", "app:learning"]
+              : [`app:${effect}`],
         },
       );
     }
   }
-  for (const kind of LearningResourceKindSchema.options) {
+  for (const kind of TRAINING_LEARNING_KINDS) {
     add(
       `learning_${kind}_get`,
       `Read an exact ${kind} learning resource and optional immutable revision.`,
@@ -93,20 +108,10 @@ export function addLearning(add: AddTool, c: Clients) {
   add(
     "learning_correction_metrics",
     "Read one Model/run correction verification snapshot; never creates a grade, training run or policy.",
-    CorrectionMetricsReadSchema,
+    withoutWorkspace(CorrectionMetricsReadSchema),
     "read",
-    (v) => c.corrections.read(v),
+    (v) => c.corrections.read({ ...v, teamId }),
   );
-  for (const schema of CorrectionMetricsCommandSchema.options) {
-    const action = schema.shape.action.value;
-    add(
-      `learning_corrections_${action}`,
-      `Record ${action} against exact retained correction evidence without dispatching inference or training.`,
-      schema,
-      "write",
-      (v) => c.corrections.command(v),
-    );
-  }
   add(
     "graders_catalog",
     "Discover released graders with authorized Project, dataset and run usage counts.",
@@ -158,56 +163,5 @@ export function addLearning(add: AddTool, c: Clients) {
     z.object({ batchId: Id, modelProjectId: Id }).strict(),
     "publish",
     (v) => c.learning.publishBatch(v),
-  );
-  for (const schema of HumanReviewCommandSchema.options) {
-    const action = schema.shape.action.value;
-    add(
-      `human_review_${action}`,
-      `Apply the authorized ${action} human-review operation to pinned evidence and revisions.`,
-      z.object({ command: schema }).strict(),
-      action === "cancel" ? "cancel" : "review",
-      (v) => c.human.command(v.command),
-      { ...(action === "cancel" ? { scopes: ["app:review", "app:cancel"] as const } : {}) },
-    );
-  }
-  add(
-    "human_review_get",
-    "Read an assigned review and optional retained revision.",
-    ById.extend({ revision: Revision.optional() }),
-    "read",
-    (v) => c.human.get(v.id, v.revision),
-  );
-  add(
-    "human_review_inspect",
-    "Inspect a bounded page of review slots and collected judgments.",
-    ById.extend({ slot: z.number().int().nonnegative().optional(), afterId: Id.optional() }),
-    "read",
-    ({ id, ...v }) => c.human.inspect(id, undefined, v),
-  );
-  const transportSchemas = HumanReviewTransportSchema.options.flatMap<z.ZodObject>((s) =>
-    s instanceof z.ZodObject ? [s] : s.options,
-  );
-  for (const schema of transportSchemas) {
-    const object: z.ZodObject = schema;
-    const endpoint = object.shape.endpoint.value as string;
-    if (!["inbox", "snapshot", "snapshot_tasks", "results"].includes(endpoint)) continue;
-    const { endpoint: _endpoint, scope: _scope, ...fields } = object.shape;
-    add(
-      `human_review_${endpoint}`,
-      `Read exact retained ${endpoint} evidence for authorized human review.`,
-      z.object(fields).strict(),
-      "read",
-      (v) =>
-        c.human.request(
-          HumanReviewTransportSchema.parse({ ...v, endpoint, scope: c.human.options.scope }),
-        ),
-    );
-  }
-  add(
-    "human_review_members",
-    "Discover eligible workspace reviewers through the existing review service.",
-    Empty,
-    "read",
-    () => c.human.members(),
   );
 }

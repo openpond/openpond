@@ -4,7 +4,7 @@
 
 ## Validate the delivered adapter
 
-The adapter depends on `openpond-sdk@^0.12.7` for its learning, correction, queue and checkpoint contracts. Preserve compatible SDK/Evals/Harness contracts and their existing release processes. A hosted adapter archive can consume compatible registry dependencies or an explicitly packed local cohort; do not treat a workspace-linked import as proof that an archive is installable.
+The adapter depends on `openpond-sdk@^0.12.24` for its current draft, training-result/model-save, funding, Dataset-ingestion/review and learning contracts. Preserve compatible SDK/Evals/Harness contracts and their existing release processes. A hosted adapter archive can consume compatible registry dependencies or an explicitly packed local cohort; do not treat a workspace-linked import as proof that an archive is installable.
 
 From the repository root, after building the required dependency cohort:
 

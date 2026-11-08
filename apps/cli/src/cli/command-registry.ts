@@ -73,6 +73,21 @@ const PROFILE_SDK_OPTION_SCHEMA = {
 
 export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   {
+    name: "skills",
+    usage:
+      "openpond skills <install|list> --agent <codex|claude-code|opencode|cursor> [--global] [--copy] [--yes] [--dry-run] [--json]",
+    optionSchema: {
+      agent: "string",
+      global: "boolean",
+      copy: "boolean",
+      yes: "boolean",
+      dryRun: "boolean",
+      json: "boolean",
+    },
+    handler: async ({ options, rest }) =>
+      (await import("./skills")).runSkillsCommand(options, rest),
+  },
+  {
     name: "learning",
     usage: "openpond learning <get|list> <kind> [id] --team-id <id> [--revision <n>] [--after-id <id>]\n  openpond learning <command|publish-batch> --input-file <absolute-path> --team-id <id>",
     optionSchema: { inputFile: "string", teamId: "string", revision: "integer", afterId: "string", parentId: "string", status: "string", limit: "integer" },

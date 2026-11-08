@@ -39,6 +39,7 @@ export interface ToolDefinition {
   scopes: readonly OpenPondMcpScope[];
   effect: "read" | "write" | "execute" | "publish" | "cancel" | "review" | "learning";
   idempotent: boolean;
+  destructive: boolean;
   run: (input: never) => Promise<unknown>;
 }
 export type AddTool = <T extends z.ZodType>(
@@ -51,6 +52,7 @@ export type AddTool = <T extends z.ZodType>(
     output?: z.ZodType;
     wireOutput?: z.ZodType;
     idempotent?: boolean;
+    destructive?: boolean;
     scopes?: readonly OpenPondMcpScope[];
   },
 ) => void;
