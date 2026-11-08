@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import {ClaudeCodeRuntimeSchema} from "./claude-code-runtime.js";
 import {CodexExperimentRuntimeSchema} from "./codex-experiment-runtime.js";
 import { z } from "zod";
@@ -96,8 +97,8 @@ export class OpenPondModelStarterAttemptError extends Error {
 
 export class OpenPondModelStarterAttemptsClient {
   readonly #options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch };
-  constructor(options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
-    const url = new URL(options.baseUrl);
+  constructor(options: { baseUrl?: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!options.apiKey.trim() || !options.teamId.trim() || !["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("Starter attempts require an HTTP(S) endpoint and workspace credentials.");
     this.#options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
   }

@@ -9,8 +9,8 @@ the actual host/account before preparing work.
 
 ## Authentication and lifecycle
 
-Training and Model clients accept `baseUrl`, `headers` (including an async token
-supplier) and an injectable `fetch`. Use the host's normal Bearer credential and
+Training and Model clients connect to OpenPond automatically. They accept
+`headers` (including an async token supplier) and an injectable `fetch`. Use your API key as the Bearer credential and
 `X-OpenPond-Team-Id`; retain server authorization and owner checks. Learning,
 Dataset and taskset-run clients accept their existing `apiKey` and workspace
 scope. Never put credentials in URLs, request identities, fixtures or receipts.
@@ -204,8 +204,7 @@ the job controls and keep its identity.
    explicit `recordCandidateDecision` with its exact artifact reference and CAS.
    `cancel` reconciles the current job version before sending remote cancellation.
 
-The examples require `OPENPOND_API_URL`, `OPENPOND_API_KEY` and
-`OPENPOND_TEAM_ID` from the caller's normal configured account. They use only
+The examples require `OPENPOND_API_KEY` and `OPENPOND_TEAM_ID` from the caller's normal configured account. They use only
 public SDK imports, bound each invocation to two minutes and write new receipt
 files exclusively with mode0600. They do not poll indefinitely or automatically
 retry an uncertain paid start. Keep the original receipt for future reconciliation.
@@ -495,9 +494,9 @@ of `neuron_steering` and `inspect_activations`. `draftSchema` describes the form
 not permission to write or execute.
 
 Each capability observation retains `validationLevel`: `null` when execution is
-unavailable, `source_validated` for an experimental staging runtime, or
+unavailable, `source_validated` for an experimental runtime, or
 `gpu_qualified` after a retained exact-model/runtime GPU run. Source validation
-describes a runtime reviewed for an experimental staging trial; it is not
+describes a runtime reviewed for an experimental trial; it is not
 evidence that training or inference has already succeeded. Read the runtime's retained evidence; neither level
 reserves compute, approves a charge or establishes model quality. Engram,
 Decision, AlphaEdit and neuron-training capabilities use the same distinction.

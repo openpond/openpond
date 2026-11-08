@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { ConnectedBoundarySchema, ConnectedEventSchema, ConnectedUsageSummarySchema } from "@openpond/evals/connected-evidence";
@@ -37,8 +38,8 @@ export class ConnectedEvidenceError extends Error {
 }
 export class ConnectedEvidenceClient {
   private readonly baseUrl: string;
-  constructor(private readonly options: { apiKey: string; baseUrl: string; teamId: string; fetch?: typeof fetch }) {
-    const url = new URL(options.baseUrl);
+  constructor(private readonly options: { apiKey: string; baseUrl?: string; teamId: string; fetch?: typeof fetch }) {
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim())
       throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = url.toString().replace(/\/+$/, "");

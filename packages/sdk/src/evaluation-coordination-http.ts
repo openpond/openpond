@@ -1,12 +1,13 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import {z} from "zod";
 import {fetchConnectedJson} from "./connected-evidence-http.js";
-export type EvaluationCoordinationAccess={baseUrl:string;apiKey:string;actorId:string;teamId:string;projectId:string|null;fetch?:typeof fetch};
+export type EvaluationCoordinationAccess={baseUrl?:string;apiKey:string;actorId:string;teamId:string;projectId:string|null;fetch?:typeof fetch};
 /** Bounded authenticated transport for the current evaluation owner. There is
  * no retry or operation allocation here; commands retain their reviewed IDs. */
 export class EvaluationCoordinationTransport {
   readonly origin:string;
   constructor(readonly access:EvaluationCoordinationAccess){
-    const url=new URL(access.baseUrl);
+    const url=new URL(access.baseUrl ?? DEFAULT_API_BASE_URL);
     if(!["http:","https:"].includes(url.protocol)||url.username||url.password||url.search||url.hash||!access.apiKey.trim()||!access.actorId.trim()||!access.teamId.trim())throw new Error("Select the current evaluation owner and HTTP API origin.");
     this.origin=url.toString().replace(/\/+$/,"");
   }

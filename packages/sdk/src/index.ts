@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import {
   createProductModels,
   type ProductModelBinding,
@@ -73,7 +74,7 @@ export class OpenPondClient<
         }
       : undefined;
 
-    const apiBaseUrl = options.baseUrl?.trim() || "https://api.openpond.ai";
+    const apiBaseUrl = options.baseUrl?.trim() || DEFAULT_API_BASE_URL;
     const taskTeamId = options.teamId ?? "";
     const defaultDatasetId = options.datasetId;
     const connection = { apiKey, baseUrl: apiBaseUrl, teamId: taskTeamId, fetch: options.fetch };
@@ -95,6 +96,7 @@ export class OpenPondClient<
       );
     }) as OpenPondClient<Models>["addTask"];
     this.models = createProductModels(options.models ?? ({} as Models), {
+      baseUrl: `${apiBaseUrl.replace(/\/+$/, "")}/v1`,
       ...options.serving,
       apiKey: options.serving?.apiKey ?? apiKey,
       teamId: taskTeamId,

@@ -8,7 +8,6 @@ optional Model Project attachment filtering before returning records.
 import { OpenPondTasksetCatalogClient } from "openpond-sdk/taskset-catalog";
 
 const tasksets = new OpenPondTasksetCatalogClient({
-  baseUrl: "https://api.openpond.ai",
   apiKey,
   teamId,
 });
@@ -262,7 +261,7 @@ Imported source still requires explicit source review before publication.
 
 `OpenPondTasksetDraftClient` from `openpond-sdk/taskset-drafts` defines the
 scoped `/v1/models/:modelId/taskset-drafts` protocol. Construct it in server code
-with `baseUrl`, `apiKey` and `teamId`. It supports source inspection,
+with `apiKey` and `teamId`. It supports source inspection,
 initialization, listing, document/file reads and edits, explicit Model refresh,
 validation, publication and deletion. Hosting these endpoints requires a server
 implementation; exporting this client alone does not make them available.

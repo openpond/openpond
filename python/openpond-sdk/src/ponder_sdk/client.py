@@ -14,14 +14,16 @@ from .datasets import Datasets,AsyncDatasets
 from .tool_learning import ToolLearning,AsyncToolLearning
 from .dataset_preparations import DatasetPreparations,AsyncDatasetPreparations
 
+DEFAULT_API_BASE_URL = "https://api.openpond.ai"
+
 class Client:
-    def __init__(self,*,base_url:str,api_key:str,team_id:str,timeout:float=30,read_attempts:int=3,dataset_id:str|None=None,serving_base_url:str|None=None,serving_api_key:str|None=None,model_aliases:dict[str,str|ModelBinding]|None=None):
+    def __init__(self,*,base_url:str=DEFAULT_API_BASE_URL,api_key:str,team_id:str,timeout:float=30,read_attempts:int=3,dataset_id:str|None=None,serving_base_url:str|None=None,serving_api_key:str|None=None,model_aliases:dict[str,str|ModelBinding]|None=None):
         self.team_id=team_id
         self.dataset_id=dataset_id
         self._transport=Transport(base_url,api_key,team_id,timeout=timeout,read_attempts=read_attempts)
         self.training=Training(self._transport,team_id)
         self.models=Models(self._transport,team_id)
-        self.models.configure_aliases(model_aliases or {}, serving_base_url, serving_api_key or api_key)
+        self.models.configure_aliases(model_aliases or {}, serving_base_url if serving_base_url is not None else base_url.rstrip("/")+"/v1", serving_api_key or api_key)
         self.learning=Learning(self._transport,team_id)
         self.post_training=PostTraining(self._transport,team_id)
         self.evaluation_runs=EvaluationRuns(self._transport,team_id)
@@ -47,13 +49,13 @@ class Client:
             if exception[0] is None:raise
 
 class AsyncClient:
-    def __init__(self,*,base_url:str,api_key:str,team_id:str,timeout:float=30,read_attempts:int=3,dataset_id:str|None=None,serving_base_url:str|None=None,serving_api_key:str|None=None,model_aliases:dict[str,str|ModelBinding]|None=None):
+    def __init__(self,*,base_url:str=DEFAULT_API_BASE_URL,api_key:str,team_id:str,timeout:float=30,read_attempts:int=3,dataset_id:str|None=None,serving_base_url:str|None=None,serving_api_key:str|None=None,model_aliases:dict[str,str|ModelBinding]|None=None):
         self.team_id=team_id
         self.dataset_id=dataset_id
         self._transport=AsyncTransport(base_url,api_key,team_id,timeout=timeout,read_attempts=read_attempts)
         self.training=AsyncTraining(self._transport,team_id)
         self.models=AsyncModels(self._transport,team_id)
-        self.models.configure_aliases(model_aliases or {}, serving_base_url, serving_api_key or api_key)
+        self.models.configure_aliases(model_aliases or {}, serving_base_url if serving_base_url is not None else base_url.rstrip("/")+"/v1", serving_api_key or api_key)
         self.learning=AsyncLearning(self._transport,team_id)
         self.post_training=AsyncPostTraining(self._transport,team_id)
         self.evaluation_runs=AsyncEvaluationRuns(self._transport,team_id)

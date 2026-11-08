@@ -220,7 +220,7 @@ export * from "./training-usage-status.js";
 const IdSchema = z.string().trim().min(1).max(500);
 
 export function createTrainingClient(input: {
-  baseUrl: string;
+  baseUrl?: string;
   fetch?: typeof fetch;
   headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
 }) {

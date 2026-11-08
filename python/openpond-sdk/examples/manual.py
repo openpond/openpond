@@ -1,6 +1,6 @@
 """Native reviewed SFT/reward-batch orchestration; each mutation is selected explicitly.
 
-OPENPOND_API_URL / OPENPOND_API_KEY / OPENPOND_TEAM_ID are existing credentials,
+OPENPOND_API_KEY and OPENPOND_TEAM_ID select your existing account,
 not a second login. Never execute this example as a test without approval.
 """
 import argparse,asyncio,json,os
@@ -16,7 +16,7 @@ async def main():
     raw=args.input.read_bytes()
     if len(raw)>1048576:raise ProtocolError('input_too_large')
     value=json.loads(raw)
-    async with AsyncClient(base_url=os.environ['OPENPOND_API_URL'],api_key=os.environ['OPENPOND_API_KEY'],team_id=os.environ['OPENPOND_TEAM_ID']) as client:
+    async with AsyncClient(api_key=os.environ['OPENPOND_API_KEY'],team_id=os.environ['OPENPOND_TEAM_ID']) as client:
         if args.action=='prepare':
             capabilities=await client.training.capabilities()
             configuration=(await client.models.get(value['configuration']['id']))['project']

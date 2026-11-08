@@ -15,10 +15,6 @@ export const openpond = createOpenPondClient({
   apiKey: process.env.OPENPOND_API_KEY!,
   teamId: process.env.OPENPOND_TEAM_ID!,
   datasetId: process.env.OPENPOND_DATASET_ID!,
-  serving: {
-    baseUrl: process.env.OPENPOND_SERVING_BASE_URL!,
-    apiKey: process.env.OPENPOND_SERVING_API_KEY!,
-  },
   models: { support: process.env.OPENPOND_MODEL_ID! },
 });
 
@@ -26,10 +22,10 @@ const answer = await openpond.models.support.generate({ prompt: "How do I rotate
 console.log(answer.text, answer.requestId, answer.usage);
 ```
 
-`serving.baseUrl` is the personalized OpenAI-compatible Chat Completions base URL,
-including its `/v1` path. It is configured explicitly: no catalogue default or
-substitute Model is selected. Omit `serving.apiKey` only when this destination
-accepts the main API key. Naming a Model never activates serving, approves a
+The SDK connects to OpenPond with your API key for task submission and personalized
+inference. Use a key authorized for the selected Dataset and Model. A Dataset-only
+producer key cannot invoke inference. Bind the exact callable Model ID; no
+catalogue default or substitute Model is selected. Naming a Model never activates serving, approves a
 candidate, starts training, or automatically captures inference as a task.
 Decision scorers use their separate typed scoring APIs.
 
@@ -66,9 +62,8 @@ the delivery error or pretending the answer failed. See [task ingestion](TASK_IN
 from ponder_sdk import AsyncClient
 
 async with AsyncClient(
-    base_url=api_origin, api_key=api_key, team_id=team_id,
+    api_key=api_key, team_id=team_id,
     dataset_id=dataset_id,
-    serving_base_url=serving_base_url, serving_api_key=serving_api_key,
     model_aliases={"support": model_id},
 ) as openpond:
     answer = await openpond.models.support.generate(prompt="How do I rotate a token?")

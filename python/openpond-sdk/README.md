@@ -3,20 +3,13 @@
 Native synchronous and asynchronous access to existing OpenPond training,
 evaluation, dataset and continual-learning APIs. Python3.10+; no Node subprocess,
 Desktop application, or uv installation is required to use the installed wheel.
-Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.5. Name and
-publisher ownership must be verified before publication; this source is not a
-claim that a registry release exists.
+Distribution `ponder-sdk`, import `ponder_sdk`. The examples below use the 0.1.6 API.
 
 ```sh
-python -m pip install ./dist/ponder_sdk-0.1.5-py3-none-any.whl
+python -m pip install "ponder-sdk>=0.1.6"
 ```
 
-Version 0.1.5 is an unpublished source candidate; the registry currently has
-0.1.4. The configured Dataset and named-model examples below require the
-candidate wheel or its eventual release. Build a reviewed wheel with `uv build`
-before installing from the local `dist` directory.
-
-Use an existing workspace API credential and explicit API origin. Do not put
+Use an existing workspace API key. The SDK connects to OpenPond automatically. Do not put
 credentials in source or request URLs. The SDK does not perform a second login.
 For the official CLI use the running app's configured OpenPond home as described
 in the repository configuration guide; the SDK accepts the credential explicitly.
@@ -24,7 +17,7 @@ in the repository configuration guide; the SDK accepts the credential explicitly
 ```python
 from ponder_sdk import Client, inputs
 
-with Client(base_url=api_base_url, api_key=api_key,
+with Client(api_key=api_key,
             team_id=team_id) as client:
     capabilities = client.training.capabilities()
     # review is an existing reviewed batch and a pinned Model configuration.
@@ -72,7 +65,7 @@ lag acknowledgement. It does not authorize training or create a Model.
 ```python
 from ponder_sdk import Client
 
-with Client(base_url=api_base_url, api_key=api_key, team_id=team_id,
+with Client(api_key=api_key, team_id=team_id,
             dataset_id=dataset_id) as client:
     receipt = client.add_task({
         "id": event_id,
@@ -156,7 +149,7 @@ operations in both synchronous and asynchronous form:
 ```python
 from ponder_sdk import Client, inputs
 
-with Client(base_url=api_url, api_key=api_key, team_id=team_id) as client:
+with Client(api_key=api_key, team_id=team_id) as client:
     tools = client.tool_learning(project_id=project_id)
     page = tools.installations()
     # Keep page["nextCursor"]; pass query={"after": cursor} for another page.
@@ -588,7 +581,7 @@ def project_span(span):
     return {"name": span.name, "input": {"prompt": prompt}, "split": "validation"}
 
 
-with Client(base_url=api_base_url, api_key=api_key, team_id=team_id,
+with Client(api_key=api_key, team_id=team_id,
             timeout=5) as client:
     exporter = OpenPondSpanExporter(client=client, dataset_id=dataset_id,
                                    project_span=project_span,
@@ -635,12 +628,13 @@ until work completes. It never closes the application-owned client.
 
 ## Named product models
 
-Configure `serving_base_url`, optional `serving_api_key` (defaults to `api_key`),
-and `model_aliases={"support": model_id}` on either client. Then use
+Configure your `api_key`, workspace `team_id`, and
+`model_aliases={"support": model_id}` on either client. Use a key authorized for
+the selected Dataset and Model; a Dataset-only upload key cannot invoke inference. Then use
 `client.models.support.generate(prompt="...")` (await it on AsyncClient), or
 iterate `client.models.support.stream(prompt="...")` (async iteration on AsyncClient).
-These typed text calls use the existing owned pool and explicit personalized
-serving destination. They never choose a catalogue default, activate serving,
+These typed text calls use the existing owned pool and OpenPond's personalized
+serving API. They never choose a catalogue default, activate serving,
 capture tasks automatically or replay paid inference. Existing Model
 administration remains available alongside aliases.
 

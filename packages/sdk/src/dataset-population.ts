@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { contentHash } from "@openpond/harness";
 import { TaskSplitSchema, TaskRecordSchema } from "@openpond/evals/tasksets";
 import { z } from "zod";
@@ -36,8 +37,8 @@ export type DatasetPopulationPage = z.infer<typeof DatasetPopulationPageSchema>;
  * verifier source, privileged context and object locations are never returned. */
 export class OpenPondDatasetPopulationClient {
   private readonly baseUrl: string;
-  constructor(private readonly options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof fetch }) {
-    const url = new URL(options.baseUrl);
+  constructor(private readonly options: { baseUrl?: string; apiKey: string; teamId: string; fetch?: typeof fetch }) {
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim()) throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = url.toString().replace(/\/+$/, "");
   }

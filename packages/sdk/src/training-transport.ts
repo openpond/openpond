@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import {
   OPENPOND_TRAINING_MEDIA_TYPE,
@@ -44,13 +45,13 @@ function headersRecord(headers: HeadersInit | undefined): Record<string, string>
 }
 
 export type TrainingTransportOptions = {
-  baseUrl: string;
+  baseUrl?: string;
   fetch?: typeof fetch;
   headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
 };
 export function createTrainingRequest(input: TrainingTransportOptions) {
   const fetchImpl = input.fetch ?? fetch;
-  const baseUrl = input.baseUrl.replace(/\/$/, "");
+  const baseUrl = (input.baseUrl ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
 
   async function request(
     pathname: string,
