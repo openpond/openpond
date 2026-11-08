@@ -8,6 +8,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { DatasetWorkspaceRequestError } from "openpond-sdk/dataset-workspaces";
 import { createClients } from "./clients.js";
 import { addProjectsAndDatasets } from "./projects-datasets.js";
 import { addExperiments } from "./experiments.js";
@@ -216,6 +217,7 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
         status?: unknown;
         retryable?: unknown;
         requestId?: unknown;
+        outcomeUnknown?: unknown;
       };
       const code =
         error instanceof z.ZodError
@@ -223,6 +225,8 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
           : typeof known.code === "string"
             ? known.code
             : "operation_failed";
+      const datasetValidation = error instanceof DatasetWorkspaceRequestError && error.status === 422 &&
+        ["dataset_validation_failed", "dataset_grader_invalid", "dataset_grader_source_unavailable", "dataset_feedback_key_conflict"].includes(error.code);
       // Service errors may contain private provider diagnostics. Stable public
       // codes and recovery identifiers are returned without raw exception text.
       return {
@@ -234,9 +238,11 @@ export function createOpenPondMcpServer(options: OpenPondMcpOptions) {
               code,
               status: typeof known.status === "number" ? known.status : undefined,
               retryable: known.retryable === true,
+              outcomeUnknown: typeof known.outcomeUnknown === "boolean" ? known.outcomeUnknown : undefined,
               requestId: typeof known.requestId === "string" ? known.requestId : undefined,
-              message:
-                "OpenPond could not complete this operation. Inspect the current resource/operation identity before retrying.",
+              message: datasetValidation
+                ? "Review the saved Dataset source privacy/licensing checks, required approved demonstrations and attached graders, then validate that exact revision again. No publication occurred."
+                : "OpenPond could not complete this operation. Inspect the current resource/operation identity before retrying.",
             }),
           },
         ],
