@@ -50,8 +50,8 @@ GET  /v1/training/jobs?modelProjectId=&cursor=&limit=
 GET  /v1/training/jobs/{jobId}
 POST /v1/training/jobs/{jobId}/cancel
 POST /v1/training/jobs/{jobId}/stop-after-group
-GET  /v1/training/jobs/{jobId}/events
-GET  /v1/training/jobs/{jobId}/logs
+GET  /v1/training/jobs/{jobId}/events?after=0&limit=50
+GET  /v1/training/jobs/{jobId}/logs?after=0&limit=50
 GET  /v1/training/jobs/{jobId}/outputs
 
 PUT  /v1/model-projects/{portableProjectId}
@@ -328,3 +328,7 @@ It performs no authentication, network upload, tool execution, training, or mode
 activation. Callers must verify authentic durable hosted receipts before
 acknowledging delivery. Import the portable entry in browser code; the Node queue
 is a separate runtime capability.
+
+### Retained evidence pagination
+
+Events and logs return at most 100 records per database-selected page (default 50), plus `nextOffset` or `null`. Use `training.eventsPage(jobId, { after, limit })` and `training.logsPage(...)` to obtain `{ items, nextOffset }`. The SDK validates the returned job, sequence window, count and continuation before exposing records. Offsets address the current ordered snapshot; lifecycle snapshots can change while a run is live. They are not an immutable append-only cursor. Existing `events()`/`logs()` convenience reads follow pages with an aggregate response-byte budget and a 100,000-record ceiling. MCP requests exactly one page.
