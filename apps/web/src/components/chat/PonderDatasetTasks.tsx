@@ -100,8 +100,8 @@ function TaskEditor({ record, connection, sessionId, contexts, onSaved }: {
         <thead><tr><th>Task</th><th>Input</th><th>Reference</th><th>Split</th></tr></thead>
         <tbody>{rows.slice(current * 20, current * 20 + 20).map(item => <tr key={item.id}>
           <td><button type="button" className="training-text-button" onClick={() => setSelected(item.id)}>{item.id}</button></td>
-          <td><span className="ponder-task-preview">{JSON.stringify(item.input).slice(0, 160)}</span></td>
-          <td><span className="ponder-task-preview">{JSON.stringify(item.expectedOutput ?? {}).slice(0, 120)}</span></td><td>{item.split}</td>
+          <td><span className="ponder-task-preview">{(typeof item.input.prompt === "string" ? item.input.prompt : JSON.stringify(item.input)).slice(0, 160)}</span></td>
+          <td><span className="ponder-task-preview">{(typeof item.expectedOutput?.text === "string" ? item.expectedOutput.text : JSON.stringify(item.expectedOutput ?? {})).slice(0, 120)}</span></td><td>{item.split}</td>
         </tr>)}</tbody>
       </table></div>
       {!rows.length ? <p>No tasks match this view.</p> : null}
