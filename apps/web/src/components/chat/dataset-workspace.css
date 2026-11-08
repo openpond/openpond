@@ -318,11 +318,82 @@
 .workspace-diff-tool-view > .chat-experiment-tool { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 .chat-experiment-tool-header, .chat-experiment-tool-content { display: grid; gap: 12px; padding: 16px; }
 .chat-experiment-tool-header { border-bottom: 1px solid var(--border-default); }
+.ponder-workbench-tabs { flex-wrap: wrap; padding: 0 8px; border-bottom: 1px solid var(--border-default); }
+.ponder-workbench-tabs .workspace-diff-tab { flex: 0 0 auto; }
+.ponder-workbench-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ponder-task-inspector { display: grid; gap: 12px; min-width: 0; }
+.ponder-task-inspector header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ponder-task-inspector label { display: grid; gap: 6px; }
+.chat-experiment-tool .markdown-code-block { min-width: 0; max-width: 100%; }
 .chat-experiment-tool h2, .chat-experiment-tool h3 { margin: 0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
 .chat-experiment-tool p { margin: 0; line-height: 1.5; }
 .chat-context-note { color: var(--text-secondary); font-size: 12px; }
 
 .chat-experiment-tool-content + .chat-experiment-tool-content { padding-top: 0; }
+
+.ponder-workbench-panel,
+.ponder-workbench-content,
+.ponder-workbench-content > *,
+.ponder-workbench-content section {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.ponder-workbench-content {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
+.ponder-workbench-content .dropdown-select,
+.ponder-workbench-content .dropdown-trigger {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.ponder-workbench-content .dropdown-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ponder-workbench-content .training-table-wrap { min-width: 0; max-width: 100%; }
+.ponder-workbench-content :is(.ponder-task-table, .ponder-calibration-table) {
+  table-layout: fixed;
+  width: 100%;
+}
+.ponder-workbench-content :is(.ponder-task-table, .ponder-calibration-table) :is(th, td) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+  padding: 9px 10px;
+}
+.ponder-task-table th:first-child { width: 28%; }
+.ponder-task-table th:last-child { width: 20%; }
+.ponder-task-table-with-reference th:nth-child(2),
+.ponder-task-table-with-reference th:nth-child(3) { width: 26%; }
+.ponder-task-table .training-text-button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.ponder-task-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ponder-calibration-table th:first-child { width: 28%; }
+.ponder-calibration-table th:last-child { width: 22%; }
+.ponder-calibration-table pre {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ponder-workbench-content .markdown-code-content { max-width: 100%; box-sizing: border-box; }
 
 .chat-context-picker { position: relative; min-width: 0; }
 .chat-context-picker .chat-training-trigger { max-width: 220px; }

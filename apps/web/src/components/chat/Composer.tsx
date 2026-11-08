@@ -8,7 +8,7 @@ import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ChatContextPicker } from "./ChatContextPicker";
 import { ComposerResourceContext } from "./ComposerResourceContext";
-import { useChatContextSelection } from "../../hooks/useChatContextSelection";
+import { CHAT_CONTEXT_SELECTED, useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { useComposerResourceRequests } from "./useComposerResourceRequests";
 import {
   lazy,
@@ -1408,6 +1408,9 @@ export function Composer({
           : undefined;
       const promptOverride =
         options.promptOverride ?? selectedActionPromptOverride;
+      if (contextSelection.selection) window.dispatchEvent(new CustomEvent(CHAT_CONTEXT_SELECTED, {
+        detail: { sessionId: taskSessionId ?? null, scope: contextSelection.scope, targetKey: JSON.stringify(contextSelection.selection.target) },
+      }));
       const sent = await onSubmit(
         payloads,
         selectedAction,

@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { ProviderModelSchema, type ProviderModel } from "@openpond/contracts";
 import {
-  canonicalJson, canonicalSha256, OpenPondTrainingApiError, SavedWeightModelSelectionSchema,
+  canonicalJson, canonicalSha256, SavedWeightModelSelectionSchema,
   parseAndVerifyAlphaEditModelVersion, parseAndVerifyNeuronTrainingModelVersion,
   parseAndVerifyResolvedWeightModelSelection, type AlphaEditModelVersion,
   type NeuronTrainingModelVersion, type ResolvedWeightModelSelection,
 } from "openpond-sdk/training";
 import type { SqliteStore } from "../store/store.js";
-import { listHostedModelProjectCatalog } from "./hosted-model-project-catalog.js";
-import { accountFence, clientFor, configuredAccess, identity } from "./managed-steering-chat.js";
+import { listManagedSavedModelVersions } from "./managed-saved-model-discovery.js";
+import { accountFence, clientFor, configuredAccess, identity } from "./managed-saved-model-access.js";
 
 const Hash = z.string().regex(/^[a-f0-9]{64}$/), Id = z.string().trim().min(1).max(240);
 const Source = z.object({schemaVersion: z.literal("openpond.desktopWeightChatSelection.v1"),
@@ -33,18 +33,9 @@ function method(version: Version) {
  * grant. Every send reauthorizes the immutable version through the SDK. */
 export async function listManagedWeightChatModels(store: SqliteStore, teamId: string): Promise<ProviderModel[]> {
   const access = await configuredAccess(teamId), fence = () => accountFence(access), train = clientFor(access, fence);
-  const catalog = await listHostedModelProjectCatalog({store, resolveAccess: async () => access,
-    fetch: async (...args) => {await fence(); const response = await fetch(...args); await fence(); return response;}}, {refresh: true});
-  if (catalog.projects.length > 1000) throw new Error("The saved Model catalog exceeds this Desktop selection bound.");
+  const versions = await listManagedSavedModelVersions(store, access);
   const models: ProviderModel[] = [];
-  for (const {project} of catalog.projects) {
-    let read;
-    try {read = await train.modelVersion(project.id, {teamId});}
-    catch (error) {
-      if (error instanceof OpenPondTrainingApiError && (error.status === 403 || error.status === 404)) continue;
-      throw error;
-    }
-    const version = read.version;
+  for (const {project, version} of versions) {
     if ((version?.schemaVersion !== "openpond.alphaEditModelVersion.v1" && version?.schemaVersion !== "openpond.neuronTrainingModelVersion.v1")
       || version.ownerUserId !== access.actorId) continue;
     const serving = await train.savedModelServing(project.id, {teamId, versionHash: version.contentHash});

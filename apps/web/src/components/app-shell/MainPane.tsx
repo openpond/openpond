@@ -370,8 +370,9 @@ export function MainPane({
   const accountTeamScopeKey = mainPaneAccountScopeKey(bootstrap);
   const experimentTeamId = bootstrap?.preferences.defaultTeamId ?? null;
   const experimentActorId = bootstrap?.account.profile?.id ?? null;
+  const experimentWebBaseUrl = bootstrap?.account.activeProfile?.baseUrl ?? bootstrap?.account.baseUrl ?? null;
   const experimentWorkspaceScope = useMemo(() => ({ accountKey: accountTeamScopeKey, teamId: experimentTeamId,
-    actorId: experimentActorId }), [accountTeamScopeKey, experimentTeamId, experimentActorId]);
+    actorId: experimentActorId, webBaseUrl: experimentWebBaseUrl }), [accountTeamScopeKey, experimentTeamId, experimentActorId, experimentWebBaseUrl]);
   const trainingLabel = useTrainingSidebarContext({ connection, sessionId: selectedSessionId, accountScope: accountTeamScopeKey,
     active: view === "chat", onOpen: onShowExperimentsPanel });
   const selectedProfileState =

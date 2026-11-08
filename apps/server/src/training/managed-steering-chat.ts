@@ -1,44 +1,24 @@
 import { z } from "zod";
-import { loadAuthenticatedOpenPondAccountContext } from "@openpond/runtime";
 import { ProviderModelSchema, type ProviderModel } from "@openpond/contracts";
 import {
-  canonicalJson, canonicalSha256, createTrainingClient, OpenPondTrainingApiError, SteeringInferenceOptionsSchema,
+  canonicalJson, canonicalSha256, SteeringInferenceOptionsSchema,
   type SteeringInferenceOptions, type ResolvedSteeringSelection, type SteeringModelServing,
 } from "openpond-sdk/training";
 import type { SqliteStore } from "../store/store.js";
-import { hostedApiAuthHeaders, resolveManagedAdapterUserAccess } from "../openpond/hosted-api-access.js";
-import { listHostedModelProjectCatalog } from "./hosted-model-project-catalog.js";
+import { accountFence, clientFor, configuredAccess, identity } from "./managed-saved-model-access.js";
+import { listManagedSavedModelVersions } from "./managed-saved-model-discovery.js";
 
 const Id = z.string().trim().min(1).max(240), Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Source = z.object({schemaVersion: z.literal("openpond.desktopSteeringChatSelection.v1"),
   teamId: Id, actorId: Id, apiOrigin: z.url(), modelProjectId: Id, versionHash: Hash}).strict();
 const CACHE_TYPE = "training.saved-steering-chat-selection.v1";
 const PREFIX = "managed-steering:";
-type Access = Awaited<ReturnType<typeof configuredAccess>>;
 export type ManagedSteeringChatAdmission = {
   apiOrigin: string;
   options: SteeringInferenceOptions; selection: ResolvedSteeringSelection; poolId: string;
   routingBinding: {id: string; revision: number}; runtimeHash: string; workerImageDigest: string;
   assertCurrent: () => Promise<void>;
 };
-export async function configuredAccess(teamId: string) {
-  const context = await loadAuthenticatedOpenPondAccountContext();
-  const actorId = context.accountState.profile?.id;
-  if (context.accountState.state !== "signed_in" || !actorId) throw new Error("Sign in to use this saved steering Model.");
-  return {...await resolveManagedAdapterUserAccess({teamId, loadAccountContext: async () => context}), actorId};
-}
-export function identity(access: Access) {
-  return {teamId: access.teamId, actorId: access.actorId, apiOrigin: new URL(access.apiBaseUrl).origin};
-}
-export function clientFor(access: Access, fence: () => Promise<void>) {
-  return createTrainingClient({baseUrl: access.apiBaseUrl, headers: () => {
-    const headers = hostedApiAuthHeaders(access.token); headers.set("x-openpond-team-id", access.teamId); return headers;
-  }, fetch: async (...args) => {await fence(); const response = await fetch(...args); await fence(); return response;}});
-}
-export async function accountFence(original: Access) {
-  if (canonicalJson(identity(await configuredAccess(original.teamId))) !== canonicalJson(identity(original)))
-    throw new Error("The account changed. Select this saved Model in its original account and workspace.");
-}
 export function isManagedSteeringChatModel(modelId: string | null | undefined) {
   return modelId?.startsWith(PREFIX) === true;
 }
@@ -47,21 +27,9 @@ export function isManagedSteeringChatModel(modelId: string | null | undefined) {
  * cache reset requires selecting the canonical Model again. */
 export async function listManagedSteeringChatModels(store: SqliteStore, teamId: string): Promise<ProviderModel[]> {
   const access = await configuredAccess(teamId), fence = () => accountFence(access), train = clientFor(access, fence);
-  const catalog = await listHostedModelProjectCatalog({store, resolveAccess: async () => access,
-    fetch: async (...args) => {await fence(); const response = await fetch(...args); await fence(); return response;}}, {refresh: true});
+  const versions = await listManagedSavedModelVersions(store, access);
   const models: ProviderModel[] = [];
-  // Sequential bounded catalog reads avoid a request fan-out per saved Model.
-  if (catalog.projects.length > 1000) throw new Error("The saved Model catalog exceeds this Desktop selection bound.");
-  for (const {project} of catalog.projects) {
-    let read;
-    try { read = await train.modelVersion(project.id, {teamId}); }
-    catch (error) {
-      // The shared Model catalog may include team-visible configurations whose
-      // saved versions remain creator-scoped. They grant no chat authority.
-      if (error instanceof OpenPondTrainingApiError && (error.status === 403 || error.status === 404)) continue;
-      throw error;
-    }
-    const version = read.version;
+  for (const {project, version} of versions) {
     if (version?.schemaVersion !== "openpond.steeringModelVersion.v1" || version.publication.ownerUserId !== access.actorId) continue;
     const serving = await train.savedModelServing(project.id, {teamId, versionHash: version.contentHash});
     if (serving.schemaVersion !== "openpond.steeringModelServing.v1") throw new Error("The saved steering Model changed its serving kind.");
@@ -121,7 +89,7 @@ export async function resolveManagedSteeringChat(input: {
       routingBinding: {id: binding.id, revision: binding.revision}, runtimeHash: serving.availability.runtimeHash,
       workerImageDigest: pool.workerImageDigest, assertCurrent: fence} satisfies ManagedSteeringChatAdmission};
 }
-async function resolvedProfile(train: ReturnType<typeof createTrainingClient>, serving: SteeringModelServing,
+async function resolvedProfile(train: ReturnType<typeof clientFor>, serving: SteeringModelServing,
   reference: NonNullable<SteeringInferenceOptions["steering"]>, actorId: string) {
   const record = await train.getSteeringProfile(serving.teamId, reference.id), publication = record.publication;
   if (record.archived || publication.ownerUserId !== actorId || publication.revision !== reference.revision

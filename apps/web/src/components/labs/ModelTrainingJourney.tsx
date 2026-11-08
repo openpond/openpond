@@ -117,8 +117,17 @@ function ModelTrainingJourneyContent({
               View run
             </button>
           </div>
+          {compact && detail ? (
+            <TrainingMetricWorkbench
+              series={hostedTrainingMetricSeries(
+                groupIndex === undefined
+                  ? detail.events
+                  : detail.events.filter((event) => event.data.rolloutGroupIndex === groupIndex),
+              )}
+            />
+          ) : null}
           {flow && scopedFlow ? (
-            <>
+            <details><summary>Stages and rollout evidence</summary>
               <DropdownSelect
                 label="Training group context"
                 value={groupIndex === undefined ? "all" : String(groupIndex)}
@@ -158,7 +167,7 @@ function ModelTrainingJourneyContent({
                 }
               />
               <TrainingRolloutGroups evidence={{ ...scopedFlow, live: flow.live && !error }} />
-            </>
+            </details>
           ) : detail?.flowError ? (
             <ErrorToast error={detail.flowError} />
           ) : null}
@@ -216,15 +225,6 @@ function ModelTrainingJourneyContent({
               Updated {formatDateTime(job.updatedAt)} · Stages reflect recorded evidence, not
               estimated progress.
             </p>
-          ) : null}
-          {compact && detail ? (
-            <TrainingMetricWorkbench
-              series={hostedTrainingMetricSeries(
-                groupIndex === undefined
-                  ? detail.events
-                  : detail.events.filter((event) => event.data.rolloutGroupIndex === groupIndex),
-              )}
-            />
           ) : null}
           {scopedFlow ? (
             <TrainingEvidenceWorkspace
