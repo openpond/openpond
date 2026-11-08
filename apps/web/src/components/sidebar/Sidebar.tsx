@@ -7,7 +7,8 @@ import {
 } from "./SidebarNavigation";
 import { usePonderWork } from "../ponder/usePonderWork";
 import { SidebarSectionList } from "./SidebarSectionList";
-import { NativeConversationControls, useNativeConversationHistory } from "./NativeConversationSources";
+import { useNativeConversationHistory } from "./NativeConversationSources";
+import { ErrorToast } from "../common/ErrorToast";
 import { OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
 import type { SidebarProps } from "./Sidebar.types";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
@@ -101,7 +102,7 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
             setSectionMenuOpen={setSidebarSectionMenuOpen}
           />
         )}
-        {productArea === "chat" && view === "chat" ? <NativeConversationControls history={nativeHistory} /> : null}
+        {productArea === "chat" && view === "chat" ? <ErrorToast error={nativeHistory.error} /> : null}
       </div>
 
     </aside>
