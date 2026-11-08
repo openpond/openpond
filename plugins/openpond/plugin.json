@@ -31,7 +31,9 @@
           "Review my continual-learning policy and pending candidates."
         ],
         "logo": "./assets/openpond.png",
-        "composerIcon": "./assets/openpond.png"
+        "composerIcon": "./assets/openpond.png",
+        "brandColor": "#06B6D4",
+        "brandColorDark": "#06B6D4"
       },
       "review": {
         "prompts": [
