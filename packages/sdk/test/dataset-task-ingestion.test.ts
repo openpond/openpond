@@ -40,13 +40,22 @@ test("flat and bound task submission preserve retry identity and check the desti
     teamId: "workspace",
   };
   try {
-    const client = new OpenPondClient(config);
+    const client = new OpenPondClient({ ...config, datasetId: "dataset/one" });
     const task = { name: "Expired token", input: { error: "Token expired" } };
     const first = await client.addTask("dataset/one", task, { idempotencyKey: "source-event" });
     const addTask = createTaskAdder({ ...config, datasetId: "dataset/one" });
     expect(await addTask(task, { idempotencyKey: "source-event" })).toEqual(first);
     expect(requests[1]).toEqual(requests[0]);
     expect(first.trainingUseAuthorized).toBe(false);
+    expect(await client.addTask({ ...task, id: "source-event" })).toEqual(first);
+    expect(await client.dataset("dataset/one").addTask({ ...task, id: "source-event" })).toEqual(
+      first,
+    );
+    expect(requests[2]).toEqual(requests[0]);
+    expect(requests[3]).toEqual(requests[0]);
+    await expect(
+      client.addTask({ ...task, id: "other" }, { idempotencyKey: "source-event" }),
+    ).rejects.toThrow("same source event");
     wrongWorkspace = true;
     await expect(addTask(task)).rejects.toThrow("receipt identity mismatch");
   } finally {
