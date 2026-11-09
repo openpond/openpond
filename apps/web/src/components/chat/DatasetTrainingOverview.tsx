@@ -185,57 +185,59 @@ export function LocalTrainingOverview({
     <>
       <EvaluationModel name={training.modelId} />
       <ErrorToast error={query.error?.message} />
-      <RunFlowDiagram
-        live={live}
-        loopLabel="Training loop"
-        nodes={[
-          {
-            label: "Prepare",
-            state: prepared ? "done" : live ? "active" : unrecorded,
-            status: prepared ? "Recorded" : detail.job.startedAt ? "Worker started" : "Waiting",
-          },
-          {
-            label: "Rollouts",
-            state: rolled ? "done" : unrecorded,
-            status: rolled ? "Recorded" : "Waiting for attempts",
-            inLoop: true,
-          },
-          {
-            label: "Grade",
-            compute: "cpu",
-            state: graded ? "done" : unrecorded,
-            status: graded ? "Recorded" : "No recorded grades",
-            detail: graded ? `${graded} graded attempts` : undefined,
-            inLoop: true,
-          },
-          {
-            label: "Update adapter",
-            state: updated ? "done" : unrecorded,
-            status: updated ? "Recorded" : "No recorded updates",
-            detail: updated ? `${recordedUpdates} updates` : undefined,
-            inLoop: true,
-          },
-          {
-            label: "Save checkpoint",
-            compute: "cpu",
-            state: checkpoint ? "done" : unrecorded,
-            status: checkpoint ? "Recorded" : "No saved checkpoint recorded",
-            inLoop: true,
-          },
-          {
-            label: "Evaluate",
-            state: evaluated ? "done" : unrecorded,
-            status: evaluated ? "Recorded" : "No candidate evaluation recorded",
-          },
-          {
-            label: "Finish",
-            state: success ? "done" : detail.job.status === "failed" ? "failed" : unrecorded,
-            status: detail.job.status,
-            error: detail.job.error ?? undefined,
-          },
-        ]}
-      />
       <TrainingMetricWorkbench series={metricSeries(detail)} />
+      <details><summary>Stages and recorded evidence</summary>
+        <RunFlowDiagram
+          live={live}
+          loopLabel="Training loop"
+          nodes={[
+            {
+              label: "Prepare",
+              state: prepared ? "done" : live ? "active" : unrecorded,
+              status: prepared ? "Recorded" : detail.job.startedAt ? "Worker started" : "Waiting",
+            },
+            {
+              label: "Rollouts",
+              state: rolled ? "done" : unrecorded,
+              status: rolled ? "Recorded" : "Waiting for attempts",
+              inLoop: true,
+            },
+            {
+              label: "Grade",
+              compute: "cpu",
+              state: graded ? "done" : unrecorded,
+              status: graded ? "Recorded" : "No recorded grades",
+              detail: graded ? `${graded} graded attempts` : undefined,
+              inLoop: true,
+            },
+            {
+              label: "Update adapter",
+              state: updated ? "done" : unrecorded,
+              status: updated ? "Recorded" : "No recorded updates",
+              detail: updated ? `${recordedUpdates} updates` : undefined,
+              inLoop: true,
+            },
+            {
+              label: "Save checkpoint",
+              compute: "cpu",
+              state: checkpoint ? "done" : unrecorded,
+              status: checkpoint ? "Recorded" : "No saved checkpoint recorded",
+              inLoop: true,
+            },
+            {
+              label: "Evaluate",
+              state: evaluated ? "done" : unrecorded,
+              status: evaluated ? "Recorded" : "No candidate evaluation recorded",
+            },
+            {
+              label: "Finish",
+              state: success ? "done" : detail.job.status === "failed" ? "failed" : unrecorded,
+              status: detail.job.status,
+              error: detail.job.error ?? undefined,
+            },
+          ]}
+        />
+      </details>
       <details className="dataset-workspace-logs">
         <summary>Training events</summary>
         <ol>

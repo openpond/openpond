@@ -117,7 +117,7 @@ function ModelTrainingJourneyContent({
               View run
             </button>
           </div>
-          {compact && detail ? (
+          {detail ? (
             <TrainingMetricWorkbench
               series={hostedTrainingMetricSeries(
                 groupIndex === undefined

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { TrainingRunDetail } from "@openpond/contracts";
+import type { TrainingJobEvent } from "openpond-sdk/training";
+import { hostedTrainingMetricSeries } from "./hosted-training-metrics";
 
 import {
   eventSeries,
@@ -12,6 +14,43 @@ import {
 } from "./training-rollout-metrics";
 
 describe("eventSeries", () => {
+  // The hosted API reports committed fields in one optimizer event, rather
+  // than a separate metricId/value event for each chart.
+  it("reads hosted optimizer and supervised telemetry without charting failed rewards", () => {
+    const events = [
+      { type: "optimizer_metric", sequence: 0, data: { metricKind: "policy_optimization", step: 2,
+        policyLoss: 0.4, learningRate: 0.00003, meanReward: null } },
+      { type: "optimizer_metric", sequence: 1, data: { metricKind: "policy_optimization", step: 2, policyLoss: 0.3 } },
+      { type: "metric", sequence: 2, data: { metricKind: "sft_step", step: 1, loss: 1.2, meanTokenAccuracy: 0.6 } },
+      { type: "rollout_metric", sequence: 3, data: { rolloutIndex: 8, reward: 0, rewardEligible: false } },
+      { type: "rollout_metric", sequence: 4, data: { rolloutIndex: 9, reward: 0, rewardEligible: true } },
+    ] as unknown as TrainingJobEvent[];
+    const series = new Map(hostedTrainingMetricSeries(events).map(metric => [metric.id, metric]));
+    expect(series.get("optimizer.policy_loss")?.points).toEqual([{ step: 2, value: 0.3 }]);
+    expect(series.get("optimizer.learning_rate")).toMatchObject({ format: "scientific", points: [{ step: 2, value: 0.00003 }] });
+    expect(series.get("optimizer.loss")?.points).toEqual([{ step: 1, value: 1.2 }]);
+    expect(series.get("train.token_accuracy")).toMatchObject({ format: "percent", points: [{ step: 1, value: 0.6 }] });
+    expect(series.has("optimizer.reward")).toBe(false);
+    expect(series.get("rollout.reward")?.points).toEqual([{ step: 9, value: 0 }]);
+  });
+
+  // An infrastructure failure is operational evidence, not a model score of
+  // zero. Keep a genuine eligible zero while excluding failed placeholders.
+  it("separates infrastructure-only groups from genuine zero rewards", () => {
+    const detail = { events: [
+      { type: "metric", sequence: 0, payload: { metricKind: "rollout_trajectory", rolloutGroupId: "failed",
+        reward: 0, rewardEligible: false, failureCode: "worker_lost", inputTokens: 10, outputTokens: 0 } },
+      { type: "metric", sequence: 1, payload: { metricKind: "rollout_trajectory", rolloutGroupId: "scored",
+        reward: 0, rewardEligible: true, inputTokens: 12, outputTokens: 2 } },
+    ] } as unknown as TrainingRunDetail;
+    const series = new Map(eventSeries(detail.events).map(metric => [metric.id, metric.points]));
+    expect(series.get("rollout.reward")).toEqual([{ step: 1, value: 0 }]);
+    expect(series.get("reward.variance")).toEqual([{ step: 1, value: 0 }]);
+    expect(series.get("reward.best")).toEqual([{ step: 1, value: 0 }]);
+    expect(series.get("attempt.failure_count")).toEqual([{ step: 0, value: 1 }, { step: 1, value: 0 }]);
+    expect(series.get("tokens.input")).toEqual([{ step: 0, value: 10 }, { step: 1, value: 12 }]);
+  });
+
   it("summarizes reward spread, best reward, validity, and retries by rollout group", () => {
     const detail = {
       events: [
