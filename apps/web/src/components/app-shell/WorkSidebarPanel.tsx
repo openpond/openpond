@@ -5,7 +5,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  OutputRefSchema,
   type Experience,
   type OutputRef,
   type RuntimeEvent,
@@ -15,6 +14,7 @@ import type { ShowAppToast } from "../../app/app-state";
 import type { ChatMessage } from "../../lib/app-models";
 import type { ContextWindowStatus } from "../../lib/context-window";
 import { revealLocalFile } from "../../lib/desktop-files";
+import { workOutputsFromEvents } from "../../lib/work-output-projection";
 import { saveLocalFileAs } from "../../lib/desktop-files";
 import {
   Activity,
@@ -658,32 +658,6 @@ export function visibleChatFileArtifacts(messages: ChatMessage[]): Array<{
   return [...artifacts.values()].reverse();
 }
 
-export function workOutputsFromEvents(events: RuntimeEvent[]): OutputRef[] {
-  const outputs = new Map<string, OutputRef>();
-  const deleted = new Set<string>();
-  for (const event of events) {
-    const refs = outputRefsInValue(event.data);
-    if (event.action === "work_output_delete" && event.status === "completed") {
-      for (const output of refs) {
-        const key = outputRevisionKey(output);
-        deleted.add(key);
-        outputs.delete(key);
-      }
-      continue;
-    }
-    if (event.action === "work_output_read") continue;
-    for (const output of refs) {
-      const key = outputRevisionKey(output);
-      if (!deleted.has(key)) outputs.set(key, output);
-    }
-  }
-  return [...outputs.values()].sort(
-    (left, right) =>
-      right.createdAt.localeCompare(left.createdAt) ||
-      right.revision - left.revision
-  );
-}
-
 function outputRevisionKey(output: OutputRef): string {
   return `${output.id}:${output.revision}`;
 }
@@ -707,36 +681,6 @@ function groupOutputRevisions(outputs: OutputRef[]) {
     .sort((left, right) =>
       right.revisions[0]!.createdAt.localeCompare(left.revisions[0]!.createdAt)
     );
-}
-
-function outputRefsInValue(
-  value: unknown,
-  output: OutputRef[] = [],
-  seen = new Set<string>(),
-  depth = 0
-): OutputRef[] {
-  if (depth > 8 || value == null) return output;
-  const parsed = OutputRefSchema.safeParse(value);
-  if (parsed.success) {
-    const key = `${parsed.data.id}:${parsed.data.revision}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      output.push(parsed.data);
-    }
-    return output;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      outputRefsInValue(item, output, seen, depth + 1);
-    }
-    return output;
-  }
-  if (typeof value === "object") {
-    for (const child of Object.values(value as Record<string, unknown>)) {
-      outputRefsInValue(child, output, seen, depth + 1);
-    }
-  }
-  return output;
 }
 
 function workContextItems(messages: ChatMessage[]) {
