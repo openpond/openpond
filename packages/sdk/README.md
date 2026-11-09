@@ -393,6 +393,13 @@ not implicitly share a spending cap.
 
 The configured API targets unpublished source candidate **0.12.25**; registry 0.12.24 does not provide it. Configure `datasetId` once and await `client.addTask({ id: sourceEventId, name, input })`. Use `client.dataset(otherDatasetId).addTask(task)` for another destination. See [task ingestion](TASK_INGESTION.md) for TypeScript/Python examples, receipt semantics and duplicate-safe retries. Task uploads do not enable training.
 
+Dataset workspace HTTP failures throw `DatasetWorkspaceRequestError` from
+`openpond-sdk/dataset-workspaces`, with `status`, an allowlisted `code`,
+`retryable`, and `outcomeUnknown`. Messages contain fixed recovery guidance;
+raw server diagnostics are discarded. `retryable` does not trigger an automatic
+retry. When `outcomeUnknown` is true, retain the original operation ID and request
+bytes, recover its receipt with `operationResult`, or retry the identical request.
+
 ## Add OpenPond to a product
 
 Configure named personalized Model handles with `models` and an explicit `serving` destination, then call `client.models.support.generate({ prompt })` or iterate `stream({ prompt })`. See [product integration](PRODUCT_INTEGRATION.md) for TypeScript, Python, React/backend and optional Vercel AI SDK 7 examples. Inference never activates serving or automatically captures tasks.

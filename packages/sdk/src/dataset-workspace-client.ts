@@ -21,6 +21,7 @@ import {
   DatasetWorkspaceOperationResultSchema,
 } from "./dataset-workspace-operations.js";
 import { OpenPondDatasetPreparationClient } from "./dataset-preparation-client.js";
+import { readDatasetWorkspaceFailure } from "./dataset-workspace-error.js";
 
 /** Hosted independent authoring. Writes use explicit revision/operation identity;
  * callers retain the operation ID when retrying an uncertain response. */
@@ -258,7 +259,7 @@ export class OpenPondDatasetWorkspaceClient {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       },
     );
-    if (!response.ok) throw new Error(`Dataset request failed (${response.status}).`);
+    if (!response.ok) throw await readDatasetWorkspaceFailure(response);
     if (maxResponseBytes !== undefined) {
       if (!response.body) throw new Error("Dataset response is empty.");
       const reader = response.body.getReader(),
