@@ -9,6 +9,7 @@ import {
 } from "openpond-sdk/learning";
 import { hostedTrainingAccount } from "./hosted-training-account";
 import { optionString } from "./common/options";
+import { executeLearningCliBatch } from "./learning-batch";
 
 /** Operator-facing access to the existing canonical learning owner. Commands
  * are strict public SDK requests, with no second login or private HTTP client. */
@@ -21,9 +22,9 @@ export async function runLearningCommand(
     if (rest.length > 2) throw new Error("Use learning schema [public-schema-name].");
     return (await import("./request-schemas")).runRequestSchemaCommand("learning", kind);
   }
-  if (!action || !["get", "list", "command", "publish-batch"].includes(action) || rest.length > 3)
+  if (!action || !["get", "list", "command", "batch", "publish-batch"].includes(action) || rest.length > 3)
     throw new Error(
-      "Use learning <get|list> <kind> [id] or learning <command|publish-batch> --input-file <path>, with --team-id.",
+      "Use learning <get|list> <kind> [id] or learning <command|batch|publish-batch> --input-file <path>, with --team-id.",
     );
   const { context, baseUrl, teamId } = await hostedTrainingAccount(options);
   const client = new OpenPondLearningClient({
@@ -67,10 +68,15 @@ export async function runLearningCommand(
     if (bytes.byteLength > 16777216) throw new Error("Learning input exceeds 16 MiB.");
     const value: unknown = JSON.parse(bytes.toString("utf8"));
     assertLearningRequestJson(value);
-    result =
-      action === "command"
+    if (action === "batch") {
+      const batch = await executeLearningCliBatch(client, value, Number(optionString(options, "concurrency") || "1"));
+      result = batch;
+      if (!batch.ok) process.exitCode = 1;
+    } else {
+      result = action === "command"
         ? await client.command(LearningCommandSchema.parse(value))
         : await client.publishBatch(LearningBatchPublicationSchema.parse(value));
+    }
   }
   console.log(JSON.stringify(result, null, 2));
 }
