@@ -1,6 +1,5 @@
 import { codexPromptWithHarnessContext } from "./native-agents/codex-prompt-context.js";
-import { isManagedDecisionChatModel } from "../training/managed-decision-chat.js";
-import { runDecisionScoringTurn } from "./turns/decision-scoring-turn.js";
+import { runDirectModelTurn } from "./turns/direct-model-turn.js";
 import { nativeToolLearningContext, nativeToolLearningTools } from "../tool-learning/native.js";
 import { createFilePreviewTool, FILE_PREVIEW_INSTRUCTIONS } from "../openpond/file-preview-tool.js";
 import { failTurnWithCodexRecovery } from "./codex-ownership.js";
@@ -1245,25 +1244,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           status: "started",
         })
       );
-      if (remoteEnclave) {
-        if (!deps.enclaveChat) throw new Error("This model connection is unavailable on this server.");
-        const reply = await deps.enclaveChat(turnModelRef?.modelId ?? input.model ?? "", input.prompt, controller.signal);
-        throwIfInterrupted(controller.signal);
-        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "assistant.delta", source: "provider", output: reply.answer,
-          data: { delta: reply.answer, provider: session.provider, remoteRequestId: reply.requestId, remoteThreadId: reply.threadId, remoteTurnId: reply.turnId, persistentHistory: false } }));
-        const completed = await completeTurn(sessionId, turn.id, reply.turnId);
-        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "turn.completed", source: "provider", status: "completed", data: { provider: session.provider } }));
-        return completed;
-      }
-      const decisionModel = turnModelRef?.modelId ?? input.model;
-      if (session.provider === "openpond" && isManagedDecisionChatModel(decisionModel)) {
-        if (!decisionModel || input.attachments?.length || selectedHarness?.workflowAction || userQuestionResolution
-          || activeCreateImproveRun || candidateAuthoring || isolatedProfileEvaluation || session.metadata?.profileEvaluationRun !== undefined)
-          throw new Error("Choose a chat model for this task. Decision Models score supplied context and allowed answers.");
-        return await runDecisionScoringTurn({ session, turn, model: decisionModel, prompt: input.prompt, signal: controller.signal,
-          stream: streamOpenPondHostedChatTurn, append: appendRuntimeEvent, updateTurn: updateStoredTurn,
-          completeTurn, finalize: finalizeAttachedWorkSandbox });
-      }
+      const direct = await runDirectModelTurn({ session, turn, model: turnModelRef?.modelId ?? input.model,
+        prompt: input.prompt, signal: controller.signal, remoteEnclave, enclaveChat: deps.enclaveChat, throwIfInterrupted,
+        decisionContextUnsupported: Boolean(input.attachments?.length || selectedHarness?.workflowAction || userQuestionResolution
+          || activeCreateImproveRun || candidateAuthoring || isolatedProfileEvaluation || session.metadata?.profileEvaluationRun !== undefined),
+        stream: streamOpenPondHostedChatTurn, append: appendRuntimeEvent, updateTurn: updateStoredTurn,
+        completeTurn, finalize: finalizeAttachedWorkSandbox });
+      if (direct) return direct;
       if (selectedHarness?.workflowAction) {
         const bundlePath = selectedHarness.release.bundlePath;
         if (!bundlePath) throw new Error("Bound Profile action lacks its released source bundle.");
