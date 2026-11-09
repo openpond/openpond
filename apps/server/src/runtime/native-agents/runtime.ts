@@ -112,6 +112,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
   }
   return {
     resolveApproval: approvals.resolve,
+    requestUserInput: approvals.request,
     async run(input: { session: Session; turn: Turn; cwd: string; prompt: string; model?: string | null; mode?: string | null; reportingOnly?: boolean; signal: AbortSignal; requestId?: string; requestOrdinal?: number; content?: AcpObject[]; coordination?: TaskCoordinationBridge; preparePrompt?: (prompt: string, capabilities: { taskTools: boolean }) => Promise<string>; prepareContent?: () => Promise<AcpObject[]>; settlePrompt?: (outcome: "resolved" | "failed") => Promise<void> }): Promise<string> {
       const runtime = await ensure(input.session, input.cwd, input.coordination, input.reportingOnly);
       if (runtime.turnId) throw new Error("Native conversation already has an active turn.");

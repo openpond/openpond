@@ -66,8 +66,8 @@
       "packages/sdk/src/tool-learning-responses.ts": "299cee82d631cbcab7e8a7bda63dbc874537cb120a91fc345d93cfdf5ea287c2",
       "packages/sdk/src/training-acceptance.ts": "877f77fe981a2834dd3ae4ac65669a1d12dc777173b5f7f3795094ab3998c6b4",
       "packages/sdk/src/training-candidate-decisions.ts": "0ca20d505d9bc311d7d1007bfe2f29fc5940c16dad67d684ff1e50c21db440a0",
-      "packages/sdk/src/training-compute-selection.ts": "f85138826e481baac2313daafc6d533a63176255f65d93338368e5f242062690",
-      "packages/sdk/src/training-estimates.ts": "8fb58a8e101a18e6942d1e5f3c28696225768a78e127f83896199a04ea831274",
+      "packages/sdk/src/training-compute-selection.ts": "3b4aaef3be534668fc40c79bd570859ed6ef9c2367e61d06f7f695775dc02c06",
+      "packages/sdk/src/training-estimates.ts": "57f3a51f118cd72d4692773a2f0367f9488924cabc1329771eaed8c4f01f480f",
       "packages/sdk/src/training-evaluation-results.ts": "1568c826a10eb3d4f35f50ebaaccc2fd0c2f3df21e978063213a01fe6e6e99ac",
       "packages/sdk/src/training-experiment-setup.ts": "b8ea37a8c394d34d77428c17f876996668afafa71a351853cacf3fd3b61f46fb",
       "packages/sdk/src/training-funding.ts": "98b180beab402976a5e31f2d5cf57f83756408d8f8f6dc940d88e06070f05690",
@@ -37080,7 +37080,7 @@
       "resolved": {
         "$object": 2525
       },
-      "customerHourlyUsd": {
+      "hourlyUsd": {
         "$object": 758
       },
       "availability": {
@@ -37095,7 +37095,7 @@
       "required": [
         "requested",
         "resolved",
-        "customerHourlyUsd",
+        "hourlyUsd",
         "availability"
       ],
       "additionalProperties": false,
@@ -40805,6 +40805,9 @@
       "stockStatus": {
         "$object": 2789
       },
+      "hourlyUsd": {
+        "$object": 758
+      },
       "computeHourlyUsd": {
         "$object": 514
       },
@@ -40829,6 +40832,7 @@
         "gpuCount",
         "gpuMemoryGb",
         "stockStatus",
+        "hourlyUsd",
         "computeHourlyUsd",
         "diskHourlyUsd",
         "totalHourlyUsd"

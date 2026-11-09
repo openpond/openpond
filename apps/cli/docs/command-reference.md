@@ -22,12 +22,14 @@ Options:
 
 ```text
 Usage:
+  openpond learning schema [public-schema-name] [--json]
   openpond learning <get|list> <kind> [id] --team-id <id> [--revision <n>] [--after-id <id>]
   openpond learning <command|publish-batch> --input-file <absolute-path> --team-id <id>
 
 Options:
   --after-id <string>
   --input-file <string>
+  --json
   --limit <integer>
   --parent-id <string>
   --revision <integer>
@@ -95,6 +97,7 @@ Options:
 ```text
 Usage:
   openpond datasets <context|model-inputs|select|select-model|select-destination|new-experiment|select-experiment|rename-experiment|schema|list|read|create|save|file|validate|check-graders|check-sources|package|import|inspect-source|import-source|list-graders|read-grader|save-grader|test-grader|upload|publish|sync|pause-sync|disconnect-sync|related-chats> [id] --local [--server-url <loopback-origin>] [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--json]
+  openpond datasets context --local [--focus-only] [--json]
   openpond datasets model-inputs <model-id> --local [--view summary|tasks|graders] [--role training|evaluation] [--split train|validation|test|frozen_eval] [--task-id <id>] [--limit <1..100>] [--offset <n>] [--location cloud --team <id> --api-origin <origin>] [--json]
   openpond datasets <upload|save|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]
   openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]
@@ -104,6 +107,7 @@ Options:
   --cursor <string>
   --dataset-id <string>
   --expected-revision <integer>
+  --focus-only
   --grader-id <string>
   --input-file <string>
   --json
@@ -1031,6 +1035,7 @@ Options:
 ```text
 Usage:
   openpond training <projects|inspect-project|create-project|prepare-project|pull-project|estimate|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]
+  openpond training schema [public-schema-name] [--json] — inspect installed public SDK schemas offline; omitting the name lists available schemas. Commands still enforce all semantic validation.
   openpond training estimate <hosted-model-project-id> --team-id <id> [--batch-id <id>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--gpu-count <1|2>] [--api-base-url <url>] [--json]
   openpond training hosted-estimate <input.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-funding <input.json> --team-id <id> [--api-base-url <url>] [--json]
@@ -1170,6 +1175,7 @@ Usage:
 
 Options:
   --account <string>
+  --after-revision <integer>
   --api-base-url <string>
   --apply
   --archived

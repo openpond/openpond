@@ -58,6 +58,7 @@ export default desktopScenario({
     await save();
     let cursor = 0;
     const observed = new Set<string>();
+    const approvals = new Map<string, unknown>();
     const deadline = Date.now() + 1_140_000;
     while (Date.now() < deadline) {
       const page = await harness.api.eventPage<any>({ sessionId, afterSequence: cursor, limit: 500 });
@@ -67,10 +68,11 @@ export default desktopScenario({
         if (observed.has(event.id)) continue;
         observed.add(event.id);
         receipt.events.push(event);
+        if (event.name === "approval.requested" && event.data?.id) approvals.set(event.data.id, event.data);
+        if (event.name === "approval.resolved" && event.data?.approvalId) approvals.delete(event.data.approvalId);
         if (["turn.completed", "turn.failed", "turn.error", "turn.interrupted"].includes(event.name)) receipt.completed = event;
       }
-      const state = await harness.api.bootstrap<any>();
-      receipt.pendingApprovals = state.approvals?.filter((item: any) => item.sessionId === sessionId) ?? [];
+      receipt.pendingApprovals = [...approvals.values()];
       await save();
       if (receipt.completed) break;
       // Approval requests remain visible for exact review; never grant the session.

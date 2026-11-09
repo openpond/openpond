@@ -2,6 +2,7 @@ import GraduationCap from "lucide-react/dist/esm/icons/graduation-cap.js";
 import Network from "lucide-react/dist/esm/icons/network.js";
 import Route from "lucide-react/dist/esm/icons/route.js";
 import Braces from "lucide-react/dist/esm/icons/braces.js";
+import { useRef } from "react";
 import type { ComposerDraftStore } from "../../lib/composer-draft-store";
 import "./model-training-starter-cards.css";
 
@@ -9,10 +10,10 @@ const starters = [
   {
     id: "sft",
     title: "Train a model with SFT",
-    description: "Learn from reviewed examples.",
+    description: "Learn math reasoning with GSM8K.",
     icon: GraduationCap,
     prompt:
-      "Train a model with SFT and LoRA using my selected resources. Ask me for any missing objective, dataset or total budget. Show me the proposed run and estimated cost, then continue through training and evaluation within the agreed budget. Report the result and save the trained model if successful. Do not enable recurring training or serving.",
+      "Train me a model with SFT and LoRA using GSM8K. Create a grader that checks whether the final numeric answer is correct.",
   },
   {
     id: "grpo",
@@ -48,6 +49,12 @@ export function ModelTrainingStarterCards({
   disabled?: boolean;
   onFocus(): void;
 }) {
+  const insertedDraft = useRef<{
+    store: ComposerDraftStore;
+    scopeKey: string;
+    submissionScopeKey: string;
+    text: string;
+  } | null>(null);
   return (
     <section
       className="model-training-starters"
@@ -66,13 +73,20 @@ export function ModelTrainingStarterCards({
               getCurrentSubmissionScopeKey() !== submissionScopeKey
             )
               return;
-            draftStore.setForScope(scopeKey, (current) =>
-              current.includes(prompt)
-                ? current
-                : current.trim()
-                  ? `${current}\n\n${prompt}`
-                  : prompt,
-            );
+            draftStore.setForScope(scopeKey, (current) => {
+              const previous = insertedDraft.current;
+              const untouched = previous?.store === draftStore &&
+                previous.scopeKey === scopeKey &&
+                previous.submissionScopeKey === submissionScopeKey &&
+                previous.text === current;
+              if (!current.trim() || untouched) {
+                insertedDraft.current = { store: draftStore, scopeKey, submissionScopeKey, text: prompt };
+                return prompt;
+              }
+              // A typed draft belongs to the user; subsequent cards must preserve it.
+              insertedDraft.current = null;
+              return current.includes(prompt) ? current : `${current}\n\n${prompt}`;
+            });
             onFocus();
           }}
         >

@@ -35,6 +35,10 @@ export async function runTrainingCommand(
   dependencies: TrainingCommandDependencies = {},
 ): Promise<void> {
   const subcommand = rest[0];
+  if (subcommand === "schema") {
+    if (rest.length > 2) throw new Error("Use training schema [public-schema-name].");
+    return (await import("./request-schemas")).runRequestSchemaCommand("training", rest[1]);
+  }
   if (subcommand === "estimate") {
     await (await import("./training-hosted")).runHostedTrainingCommand(options, ["hosted-estimate-model", ...rest.slice(1)]);
     return;

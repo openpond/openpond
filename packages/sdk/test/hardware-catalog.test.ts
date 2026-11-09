@@ -49,7 +49,7 @@ it("binds live GPU replies to the exact query and rejects stale or substituted o
       provider: { accountScopeId: "opaque-scope", product: "POD", cloud: "SECURE", countryCodes: ["US", "CA"],
         cudaVersions: ["12.8"], dataCenterId: null, minimumDiskGb: 130, priceBasis: "provider_catalog_per_gpu_rate_times_count" } },
     offerings: [{ availabilityId: "offer", gpuType: "gpu", provider: "fixture_provider", region: "fixture_region", dataCenterId: null,
-      gpuCount: 2, gpuMemoryGb: 80, stockStatus: "Medium", computeHourlyUsd: 4, diskHourlyUsd: 0.01, totalHourlyUsd: 4.01 }] };
+      gpuCount: 2, gpuMemoryGb: 80, stockStatus: "Medium", hourlyUsd: 7, computeHourlyUsd: 4, diskHourlyUsd: 0.01, totalHourlyUsd: 4.01 }] };
   let mode = "valid";
   const server = createServer((request, response) => {
     const url = new URL(request.url!, "http://localhost");

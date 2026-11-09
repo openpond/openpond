@@ -13,5 +13,6 @@ export function trainingCliError(error: unknown) {
     status: error.status,
     retryable: error.retryable,
     requestId: error.requestId,
+    ...(error.responseMediaType ? { responseMediaType: error.responseMediaType } : {}),
   };
 }

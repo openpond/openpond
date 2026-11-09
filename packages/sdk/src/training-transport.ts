@@ -24,8 +24,9 @@ export class OpenPondTrainingApiError extends Error {
   readonly retryable: boolean;
   readonly requestId: string | null;
   readonly details: Record<string, unknown>;
+  readonly responseMediaType?: TrainingResponseMediaType;
 
-  constructor(status: number, error: z.infer<typeof TrainingApiErrorSchema>) {
+  constructor(status: number, error: z.infer<typeof TrainingApiErrorSchema>, responseMediaType?: TrainingResponseMediaType) {
     super(error.message);
     this.name = "OpenPondTrainingApiError";
     this.status = status;
@@ -33,7 +34,20 @@ export class OpenPondTrainingApiError extends Error {
     this.retryable = error.retryable;
     this.requestId = error.requestId;
     this.details = error.details;
+    this.responseMediaType = responseMediaType;
   }
+}
+
+type TrainingResponseMediaType = "json" | "html" | "text" | "other" | "missing";
+
+// Classify a header without exposing arbitrary upstream values or response bodies.
+function responseMediaType(response: Response): TrainingResponseMediaType {
+  const type = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (!type) return "missing";
+  if (type === "application/json" || type.endsWith("+json")) return "json";
+  if (type === "text/html" || type === "application/xhtml+xml") return "html";
+  if (type.startsWith("text/")) return "text";
+  return "other";
 }
 
 function headersRecord(headers: HeadersInit | undefined): Record<string, string> {
@@ -85,10 +99,16 @@ export function createTrainingRequest(input: TrainingTransportOptions) {
         await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
         continue;
       }
-      const body = await readBoundedJsonResponse(response, responseLimit, "Training API response");
+      let body: unknown;
+      try {
+        body = await readBoundedJsonResponse(response, responseLimit, "Training API response");
+      } catch (error) {
+        // Keep successful-response validation, size limits, and stream/abort failures intact.
+        if (response.ok || !(error instanceof OpenPondProtocolError) || error.code !== "invalid_json") throw error;
+      }
       if (response.ok) return body;
-      const error = trainingApiError(body, response.status);
-      if (attempt === maximumAttempts || !trainingReadFailureIsRetryable(response.status, error)) {
+      const error = trainingApiError(body, response.status, responseMediaType(response));
+      if (attempt === maximumAttempts || init?.signal?.aborted || !trainingReadFailureIsRetryable(response.status, error)) {
         throw error;
       }
       await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
@@ -113,13 +133,17 @@ function trainingReadFailureIsRetryable(status: number | null, error: unknown): 
   return error instanceof TypeError;
 }
 
-function trainingApiError(value: unknown, status: number): Error {
+function trainingApiError(value: unknown, status: number, mediaType: TrainingResponseMediaType): OpenPondTrainingApiError {
   const parsed = TrainingApiErrorSchema.safeParse(value);
   if (parsed.success) {
     return new OpenPondTrainingApiError(status, parsed.data);
   }
-  return new OpenPondProtocolError(
-    "invalid_error_response",
-    `Training request failed with HTTP ${status} and an invalid error envelope.`,
-  );
+  return new OpenPondTrainingApiError(status, {
+    schemaVersion: "openpond.trainingApiError.v2",
+    code: "invalid_error_response",
+    message: `Training request failed with HTTP ${status} and an invalid error envelope (${mediaType} response).`,
+    retryable: trainingReadFailureIsRetryable(status, null),
+    requestId: null,
+    details: {},
+  }, mediaType);
 }
