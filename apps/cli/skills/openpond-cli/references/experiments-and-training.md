@@ -473,10 +473,11 @@ allocate compute or increase the run's approved cap.
 
 Use `gpu.hourlyUsd` in estimates and `offerings[].hourlyUsd` in the live catalog
 for the workspace's whole-allocation hourly price, including attached disk.
-A null rate means pricing is unavailable. The catalog's `computeHourlyUsd`,
-`diskHourlyUsd` and `totalHourlyUsd` describe supplier selection costs; never
-quote those as the user's price or calculate retail prices from them. The API
-owns pricing. An hourly rate alone does not establish an expected run total.
+A null rate means pricing is unavailable. The public catalog exposes only this
+retail rate; signed provider quotes used by other operations are supplier-cost
+authority and must never be presented as the user's price. Do not calculate
+retail prices from supplier quotes. The API owns pricing. An hourly rate alone
+does not establish an expected run total.
 
 The prepaid training policy is implemented in source; hosted qualification is
 pending. On hosts with this policy, new managed training Jobs reserve the full
