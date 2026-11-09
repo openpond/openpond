@@ -58,10 +58,10 @@ export function TrainingResultDetails({ connection, teamId, actorId, jobId, vers
         <button type="button" className="training-button secondary" onClick={() => setSaving(true)}>Review save</button>
       </div> : candidate && result.model ? <button type="button" className="training-button" onClick={() => setSaving(true)}>Save model</button> : null}
       {source ? <dl className="model-project-page-metrics">
-        <div><dt>Base model</dt><dd>{source.baseModel.modelId}</dd><small>{source.baseModel.revision}</small></div>
+        <div><dt>Base model</dt><dd title={source.baseModel.modelId}>{source.baseModel.modelId}</dd><small title={source.baseModel.revision}>{source.baseModel.revision}</small></div>
         <div><dt>Method</dt><dd>{String(source.recipe.method ?? "Training")}</dd></div>
         <div><dt>Configuration revision</dt><dd>{source.source.modelProject.revision}</dd></div>
-        <div><dt>Dataset</dt><dd>{source.source.taskset.id}</dd><small>Revision {source.source.taskset.revision}</small></div>
+        <div><dt>Dataset</dt><dd title={source.source.taskset.id}>{source.source.taskset.id}</dd><small>Revision {source.source.taskset.revision}</small></div>
         {candidate ? <div><dt>Composition</dt><dd>{compositionLabels[candidate.composition]}</dd></div> : null}
         {receipt ? <div><dt>Cleanup</dt><dd>{receipt.cleanupComplete ? "Complete" : "Pending"}</dd></div> : null}
       </dl> : null}

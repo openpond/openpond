@@ -134,22 +134,6 @@
   background: var(--accent-primary-fill);
   animation: dataset-attempt-pulse 1.6s ease-in-out infinite;
 }
-.model-journey.compact {
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.model-journey.compact h3 {
-  font-size: 14px;
-  margin: 4px 0;
-}
-.model-journey.compact .model-journey-facts {
-  padding-top: 10px;
-  gap: 10px;
-}
-.model-journey.compact .training-metric-workbench {
-  margin-top: 14px;
-}
 @keyframes dataset-attempt-pulse {
   50% {
     opacity: 0.4;
