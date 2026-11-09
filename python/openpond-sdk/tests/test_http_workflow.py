@@ -267,7 +267,7 @@ def server():
                         'provider':{'accountScopeId':'opaque-scope','product':'POD','cloud':'SECURE','countryCodes':['US','CA'],
                             'cudaVersions':['12.8'],'dataCenterId':None,'minimumDiskGb':130,'priceBasis':'provider_catalog_per_gpu_rate_times_count'}},
                     'offerings':[{'availabilityId':'offer','gpuType':'gpu','provider':'fixture_provider','region':'fixture_region','dataCenterId':None,
-                        'gpuCount':2,'gpuMemoryGb':80,'stockStatus':'Medium','computeHourlyUsd':4,'diskHourlyUsd':0.01,'totalHourlyUsd':4.01}]}
+                        'gpuCount':2,'gpuMemoryGb':80,'stockStatus':'Medium','hourlyUsd':7,'computeHourlyUsd':4,'diskHourlyUsd':0.01,'totalHourlyUsd':4.01}]}
                 if state.get('gpu_reply')=='hash':value['scope']['requestHash']='0'*64
                 if state.get('gpu_reply')=='count':value['offerings'][0]['gpuCount']=1
                 if state.get('gpu_reply')=='expired':value['expiresAt']=value['observedAt']
@@ -706,7 +706,7 @@ def test_estimate_review_identity_in_both_native_clients(server):
         # Retained GPU allocation quantity uses the whole-Pod rate once. A
         # duplicate phase or device-count multiplier must not become a price.
         aggregate = dict(phase='gpu_allocation', resource='gpu', expectedSeconds=3600,
-            expectedUsd=value['gpu']['customerHourlyUsd'], planningRangeUsd=None,
+            expectedUsd=value['gpu']['hourlyUsd'], planningRangeUsd=None,
             evidence='measured', reason='Conserved allocation quantity at the current rate.')
         value['cost']['components'] = [aggregate]
         assert (await read())['cost']['components'] == [aggregate]

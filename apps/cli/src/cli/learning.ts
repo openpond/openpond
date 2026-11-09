@@ -17,6 +17,10 @@ export async function runLearningCommand(
   rest: string[],
 ) {
   const [action, kind, id] = rest;
+  if (action === "schema") {
+    if (rest.length > 2) throw new Error("Use learning schema [public-schema-name].");
+    return (await import("./request-schemas")).runRequestSchemaCommand("learning", kind);
+  }
   if (!action || !["get", "list", "command", "publish-batch"].includes(action) || rest.length > 3)
     throw new Error(
       "Use learning <get|list> <kind> [id] or learning <command|publish-batch> --input-file <path>, with --team-id.",

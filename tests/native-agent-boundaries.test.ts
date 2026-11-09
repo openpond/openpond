@@ -10,6 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeNativeAgent } from "../apps/server/src/runtime/native-agents/setup.js";
 import { nativeCapabilityProbeKey, nativeCapabilityProbeKeys } from "../apps/server/src/runtime/native-agents/capability-probes.js";
+import { createNativeQuestionTool } from "../apps/server/src/runtime/native-agents/question-tool.js";
+import { SessionSchema } from "@openpond/contracts/sessions";
+import type { ModelToolExecutionContext } from "../apps/server/src/openpond/model-tool-registry.js";
 
 // Claude's supported auth status command exits 1 when signed out. Treating
 // that as a broken installation hides the login action from ordinary users.
@@ -67,6 +70,38 @@ it("validates native question identity and rejects duplicate or late answers", a
   await approvals.resolve(approval.id, { decision: "accept", answers: { "Which fixture?": "Alpha" } });
   expect(await pending).toEqual({ outcome: { outcome: "selected", optionId: "allow" }, answers: { "Which fixture?": "Alpha" } });
   expect(await approvals.resolve(approval.id, { decision: "accept", answers: { "Which fixture?": "Beta" } })).toBeNull();
+});
+
+// Ordinary Codex chats must wait for an actual answer, without a Plan-mode tool
+// or a session-wide permission grant; interruption must release the waiting call.
+it("continues the native question tool only after its exact user answer and cancels on interruption", async () => {
+  const states: Approval[] = [];
+  const approvals = createNativeAgentApprovals({ upsertApproval: async value => { states.push(value); }, appendRuntimeEvent: async () => undefined });
+  const tool = createNativeQuestionTool(approvals.request);
+  const session = SessionSchema.parse({ id: "chat", provider: "codex", title: "Training", appId: null, appName: null,
+    cwd: null, codexThreadId: null, createdAt: "2026-11-08T00:00:00Z", updatedAt: "2026-11-08T00:00:00Z",
+    status: "active", pinned: false, archived: false, order: 0 });
+  const controller = new AbortController();
+  const context: ModelToolExecutionContext = { session, turnId: "turn", provider: "codex", model: "gpt-6.1-sol",
+    callId: "budget", args: { question: "Approve this run with a maximum spend of $25?",
+      options: [{ id: "yes", label: "Approve $25" }, { id: "no", label: "Do not start" }] },
+    signal: controller.signal, turnPermissions: { approvalPolicy: "on-request", sandbox: "workspace-write", codexPermissionMode: "default", codexReasoningEffort: "high" },
+    workspaceDiffBaseline: null, mentionedApps: [], userPrompt: "Train a model", turnMetadata: {} };
+  const resolved = vi.fn();
+  const pending = tool.execute(context).then(value => { resolved(value); return value; });
+  await vi.waitFor(() => expect(states).toHaveLength(1));
+  const approval = states[0]!;
+  expect(approval).toMatchObject({ sessionId: "chat", turnId: "turn", kind: "user_input", status: "pending" });
+  expect(resolved).not.toHaveBeenCalled();
+  await expect(approvals.resolve(approval.id, { decision: "acceptForSession" })).rejects.toThrow();
+  await approvals.resolve(approval.id, { decision: "accept", answers: { [String(context.args.question)]: "Approve $25" } });
+  expect(await pending).toMatchObject({ ok: true, data: { status: "answered", answer: "Approve $25" } });
+  expect((await pending).turnControl).toBeUndefined();
+  expect(await approvals.resolve(approval.id, { decision: "accept", answers: { [String(context.args.question)]: "Do not start" } })).toBeNull();
+  const cancelled = tool.execute({ ...context, callId: "cancelled-budget" });
+  await vi.waitFor(() => expect(states).toHaveLength(3));
+  controller.abort();
+  expect(await cancelled).toMatchObject({ ok: true, data: { status: "dismissed", answer: null } });
 });
 
 it("does not hide a later external turn that repeats an OpenPond-owned prompt", () => {

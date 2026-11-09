@@ -67,6 +67,9 @@ export const TrainingGpuCatalogSchema = z.object({
     region: z.string().min(1), dataCenterId: z.string().nullable(),
     gpuCount: z.number().int().positive(), gpuMemoryGb: z.number().positive(),
     stockStatus: z.enum(["High", "Medium", "Low"]),
+    /** Whole-allocation retail rate, including attached disk. Null means unpriced.
+     * The catalog breakdown below describes provider selection costs only. */
+    hourlyUsd: z.number().finite().nonnegative().nullable(),
     computeHourlyUsd: z.number().nonnegative(), diskHourlyUsd: z.number().nonnegative(), totalHourlyUsd: z.number().nonnegative(),
   }).strict()).max(1000),
 }).strict();

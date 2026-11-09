@@ -31,6 +31,24 @@ not ask the user for internal IDs, sealed-batch contracts, model hashes, learnin
 rates or batch sizes. Resolve supported defaults and exact pins through the CLI.
 Keep evaluation separate and explain any decision that materially changes the task.
 
+An explicit GSM8K SFT+LoRA request already supplies the learning objective and
+dataset. Find and inspect the public source, download/import it through supported
+operations, preserve the official train/test separation, and create the requested
+final-numeric-answer grader with positive and negative checks. Downloading that
+public dataset is part of the request; do not ask a separate download question.
+Choose supported model/recipe defaults rather than sending a setup questionnaire.
+Never call a preview-only sample the full dataset; state the actual population.
+
+After resolving the concrete run, show its scope and the API's price evidence.
+If the spending limit has not been approved, use the available `ask_user` tool
+for one total-budget question, for example “Approve this run with a maximum spend
+of $25?” with approve/decline choices. Wait for the answer, then continue the
+approved run in the same conversation. Do not substitute a prose question when
+the host offers the structured question tool. Keep the conversation about total
+spend; account for required evaluation and retention internally rather than
+asking a separate storage-cost question. A skipped or declined answer is not
+permission to start, and an estimate with unknown totals is not a fixed-price quote.
+
 A total budget covers training, required evaluation and retained storage; reserve
 for these together rather than treating the same ceiling as a separate allowance
 for each. Show the effective run and quote before starting. Once the user has
@@ -88,6 +106,18 @@ Inspect related experiments and graders after selection and summarize what matte
 ## Choose the supported command family
 
 Read the installed command help for exact flags and input contracts; capability varies by version and execution target.
+
+For unfamiliar training or learning JSON, use `training schema` or `learning schema`
+to list the installed public SDK schemas, then request the specific schema by name.
+For example, `training schema TrainingPreparationRequest --json`,
+`training schema TrainingExperimentSetupRequest --json`,
+`training schema DatasetTrainingReviewRequest --json`, or
+`learning schema SaveAuthoringDraftCommand --json`. These offline reads require no
+account or team and start no work. Inspect the appropriate schema and retained
+references instead of reverse engineering minified CLI/server bundles or sending
+empty mutation requests to discover fields. The real command still enforces all
+semantic checks beyond JSON Schema. Never use Start, even without `--yes`, as a
+dry-run, schema probe or cost-inspection command; use estimate and preparation.
 
 | Work | CLI entry point |
 | --- | --- |
@@ -413,6 +443,13 @@ separate from expected totals. A preparation estimate's `review` can be supplied
 to the existing start control; changed inputs, provider context, runtime, expired
 review or increased rate require another review. Estimates do not reserve credit,
 allocate compute or increase the run's approved cap.
+
+Use `gpu.hourlyUsd` in estimates and `offerings[].hourlyUsd` in the live catalog
+for the workspace's whole-allocation hourly price, including attached disk.
+A null rate means pricing is unavailable. The catalog's `computeHourlyUsd`,
+`diskHourlyUsd` and `totalHourlyUsd` describe supplier selection costs; never
+quote those as the user's price or calculate retail prices from them. The API
+owns pricing. An hourly rate alone does not establish an expected run total.
 
 The prepaid training policy is implemented in source; hosted qualification is
 pending. On hosts with this policy, new managed training Jobs reserve the full

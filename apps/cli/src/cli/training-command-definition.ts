@@ -4,6 +4,7 @@ export const TRAINING_COMMAND_DEFINITION: CliCommandDefinition = {
   name: "training",
   usage: "openpond training <projects|inspect-project|create-project|prepare-project|pull-project|estimate|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]",
   usages: [
+    "openpond training schema [public-schema-name] [--json] — inspect installed public SDK schemas offline; omitting the name lists available schemas. Commands still enforce all semantic validation.",
     "openpond training estimate <hosted-model-project-id> --team-id <id> [--batch-id <id>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--gpu-count <1|2>] [--api-base-url <url>] [--json]",
     "openpond training hosted-estimate <input.json> --team-id <id> [--api-base-url <url>] [--json]",
     "openpond training hosted-funding <input.json> --team-id <id> [--api-base-url <url>] [--json]",
@@ -144,6 +145,7 @@ export const TRAINING_COMMAND_DEFINITION: CliCommandDefinition = {
   optionSchema: {
     archived: "boolean",
     expectedRevision: "integer",
+    afterRevision: "integer",
     datasetHash: "string",
     id: "string",
     mode: "string",
