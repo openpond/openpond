@@ -8,12 +8,13 @@ import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ChatContextPicker } from "./ChatContextPicker";
 import { ComposerResourceContext } from "./ComposerResourceContext";
-import { CHAT_CONTEXT_SELECTED, useChatContextSelection } from "../../hooks/useChatContextSelection";
+import { CHAT_CONTEXT_SELECTED, ChatContextAccountScope, useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { useComposerResourceRequests } from "./useComposerResourceRequests";
 import {
   lazy,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -309,6 +310,7 @@ export function Composer({
   const [submitIssueInitialDescription, setSubmitIssueInitialDescription] =
     useState("");
   const [submitIssueSubmitting, setSubmitIssueSubmitting] = useState(false);
+  const attachmentAccountScope = useContext(ChatContextAccountScope);
   const {
     attachmentError,
     attachments,
@@ -319,7 +321,7 @@ export function Composer({
     stageAttachmentsForSubmit,
     prepareAttachmentsForSubmit,
     restoreAttachmentPayloads,
-  } = useComposerAttachments();
+  } = useComposerAttachments(composerDraftStore, JSON.stringify([attachmentAccountScope, submissionScopeKey]));
   const attachmentRequestAppliedRef = useRef(0);
   useEffect(() => {
     if (

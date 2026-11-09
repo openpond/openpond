@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createComposerAttachmentStore, scopedComposerAttachmentStore } from "./composer-attachment-store";
 import { CHAT_ATTACHMENT_LIMITS, type ChatAttachment } from "@openpond/contracts";
 import {
   composerAttachmentKind,
@@ -8,34 +9,25 @@ import {
   readComposerAttachmentPayload,
 } from "./ComposerAttachments";
 
-export function useComposerAttachments() {
-  const attachmentsRef = useRef<ComposerAttachmentDraft[]>([]);
-  const stagedAttachmentsRef = useRef<ComposerAttachmentDraft[]>([]);
+export function useComposerAttachments(owner?: object, scope = "composer") {
+  const localStore = useRef<ReturnType<typeof createComposerAttachmentStore> | null>(null);
+  if (!localStore.current) localStore.current = createComposerAttachmentStore();
+  const store = useMemo(() => owner ? scopedComposerAttachmentStore(owner, scope) : localStore.current!, [owner, scope]);
   const unmountedRef = useRef(false);
-  const [attachments, setAttachments] = useState<ComposerAttachmentDraft[]>([]);
+  const attachments = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-
-  useEffect(() => {
-    attachmentsRef.current = attachments;
-  }, [attachments]);
 
   useEffect(() => {
     unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
-      for (const attachment of attachmentsRef.current) {
-        revokeAttachmentPreview(attachment);
-      }
-      for (const attachment of stagedAttachmentsRef.current) {
-        revokeAttachmentPreview(attachment);
-      }
     };
   }, []);
 
   const addFiles = useCallback(
     (files: File[]) => {
       if (files.length === 0 || unmountedRef.current) return;
-      const current = attachmentsRef.current;
+      const current = store.getSnapshot();
 
       const slotsAvailable = Math.max(
         0,
@@ -68,16 +60,12 @@ export function useComposerAttachments() {
           sizeBytes: file.size,
           kind: composerAttachmentKind(file),
           ...(relativePath ? { relativePath } : {}),
-          ...(file.type.startsWith("image/")
-            ? { previewUrl: URL.createObjectURL(file) }
-            : {}),
         });
       }
 
       if (accepted.length > 0) {
         const next = [...current, ...accepted];
-        attachmentsRef.current = next;
-        setAttachments(next);
+        store.update(next);
         setAttachmentError(null);
       }
 
@@ -100,47 +88,34 @@ export function useComposerAttachments() {
         setAttachmentError(messages.join("; "));
       }
     },
-    []
+    [store]
   );
 
   const removeAttachment = useCallback((id: string) => {
-    const current = attachmentsRef.current;
-    const removed = current.find((attachment) => attachment.id === id);
-    if (removed) revokeAttachmentPreview(removed);
+    const current = store.getSnapshot();
     const next = current.filter((attachment) => attachment.id !== id);
-    attachmentsRef.current = next;
-    setAttachments(next);
+    store.update(next);
     if (next.length === 0) setAttachmentError(null);
-  }, []);
+  }, [store]);
 
   const clearAttachments = useCallback(() => {
-    for (const attachment of attachmentsRef.current) {
-      revokeAttachmentPreview(attachment);
-    }
-    attachmentsRef.current = [];
-    setAttachments([]);
+    store.update([]);
     setAttachmentError(null);
-  }, []);
+  }, [store]);
 
   const stageAttachmentsForSubmit = useCallback(() => {
-    const staged = attachmentsRef.current;
+    const staged = store.getSnapshot();
     if (staged.length === 0) return staged;
-    attachmentsRef.current = [];
-    stagedAttachmentsRef.current = staged;
-    setAttachments([]);
+    store.update([]);
     setAttachmentError(null);
     return staged;
-  }, []);
+  }, [store]);
 
   const settleStagedAttachments = useCallback(
     (staged: ComposerAttachmentDraft[], outcome: "dispose" | "restore") => {
       if (staged.length === 0) return;
-      const stagedIds = new Set(staged.map((attachment) => attachment.id));
-      stagedAttachmentsRef.current = stagedAttachmentsRef.current.filter(
-        (attachment) => !stagedIds.has(attachment.id)
-      );
-      if (outcome === "restore" && !unmountedRef.current) {
-        setAttachments((current) => {
+      if (outcome === "restore") {
+        store.update((current) => {
           const currentIds = new Set(
             current.map((attachment) => attachment.id)
           );
@@ -148,16 +123,12 @@ export function useComposerAttachments() {
             ...staged.filter((attachment) => !currentIds.has(attachment.id)),
             ...current,
           ];
-          attachmentsRef.current = next;
           return next;
         });
         return;
       }
-      for (const attachment of staged) {
-        revokeAttachmentPreview(attachment);
-      }
     },
-    []
+    [store]
   );
 
   const prepareAttachmentsForSubmit = useCallback(async () => {
@@ -194,8 +165,4 @@ export function useComposerAttachments() {
     prepareAttachmentsForSubmit,
     restoreAttachmentPayloads,
   };
-}
-
-function revokeAttachmentPreview(attachment: ComposerAttachmentDraft) {
-  if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
 }

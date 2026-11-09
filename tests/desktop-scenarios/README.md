@@ -5,6 +5,8 @@ They can also be run through the CLI wrapper with `openpond harness desktop run 
 
 Implemented scenarios:
 
+- `model-training-starters.ts`: manual packaged draft/file/scope acceptance. Checks all four cards; sends the three enabled prompts through a real subscribed Codex agent only with `OPENPOND_STARTER_LIVE_ACCEPTANCE=1`. Weight-space remains disabled. Uses unreviewed local examples and a $0 compute limit; this does not prove accepted training preparation or execution. `OPENPOND_STARTER_MODEL` may select an entry verified in the installed agent catalog.
+
 - `chat-two-turns.ts`: visible composer submission for a deterministic two-turn chat.
 - `chat-multi-thread-stress.ts`: three concurrent delayed chat turns with switching, renderer reload, transcript isolation, persistence, timing, and screenshot proof.
 - `chat-interrupt-recovery.ts`: visible Stop-response interruption after the first streamed chunk, followed by same-thread recovery and reload persistence proof.
