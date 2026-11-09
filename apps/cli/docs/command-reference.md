@@ -24,10 +24,11 @@ Options:
 Usage:
   openpond learning schema [public-schema-name] [--json]
   openpond learning <get|list> <kind> [id] --team-id <id> [--revision <n>] [--after-id <id>]
-  openpond learning <command|publish-batch> --input-file <absolute-path> --team-id <id>
+  openpond learning <command|batch|publish-batch> --input-file <absolute-path> --team-id <id> [--concurrency <1..4> (batch only)]
 
 Options:
   --after-id <string>
+  --concurrency <integer>
   --input-file <string>
   --json
   --limit <integer>

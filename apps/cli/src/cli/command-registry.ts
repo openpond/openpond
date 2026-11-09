@@ -89,8 +89,8 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "learning",
-    usage: "openpond learning schema [public-schema-name] [--json]\n  openpond learning <get|list> <kind> [id] --team-id <id> [--revision <n>] [--after-id <id>]\n  openpond learning <command|publish-batch> --input-file <absolute-path> --team-id <id>",
-    optionSchema: { inputFile: "string", teamId: "string", revision: "integer", afterId: "string", parentId: "string", status: "string", limit: "integer", json: "boolean" },
+    usage: "openpond learning schema [public-schema-name] [--json]\n  openpond learning <get|list> <kind> [id] --team-id <id> [--revision <n>] [--after-id <id>]\n  openpond learning <command|batch|publish-batch> --input-file <absolute-path> --team-id <id> [--concurrency <1..4> (batch only)]",
+    optionSchema: { inputFile: "string", teamId: "string", revision: "integer", afterId: "string", parentId: "string", status: "string", limit: "integer", concurrency: "integer", json: "boolean" },
     handler: async ({ options, rest }) => (await import("./learning")).runLearningCommand(options, rest),
   },
   {

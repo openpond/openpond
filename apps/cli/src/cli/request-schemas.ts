@@ -3,7 +3,8 @@ import { z } from "zod";
 /** Offline introspection of the installed public SDK, never account discovery
  * or an API request. Runtime commands retain their original strict parsers. */
 export async function runRequestSchemaCommand(namespace: "training" | "learning", name?: string): Promise<void> {
-  const exports = namespace === "training" ? await import("openpond-sdk/training") : await import("openpond-sdk/learning");
+  const exports = namespace === "training" ? await import("openpond-sdk/training")
+    : { ...await import("openpond-sdk/learning"), ...await import("./learning-batch") };
   const schemas = Object.entries(exports).filter(([key, value]) => key.endsWith("Schema") && value && typeof value === "object" && "safeParse" in value);
   if (!name) {
     console.log(JSON.stringify({ namespace, schemas: schemas.map(([key]) => key).sort() }, null, 2));

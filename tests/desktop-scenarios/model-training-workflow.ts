@@ -79,8 +79,9 @@ export default desktopScenario({
       await new Promise(resolve => setTimeout(resolve, 1_000));
     }
     if (!receipt.completed) throw new Error("Card turn did not finish; retain and reconcile this session before retrying.");
-    harness.recordAssertion("realAgentCompleted", receipt.completed.status === "completed");
-    if (receipt.completed.status !== "completed") throw new Error(`Card turn ended as ${receipt.completed.status}.`);
+    const completed = receipt.completed.name === "turn.completed" && receipt.completed.status === "completed";
+    harness.recordAssertion("realAgentCompleted", completed);
+    if (!completed) throw new Error(`Card turn ended with ${receipt.completed.name}.`);
     await harness.screenshot(`${method}-unchanged-card-response`);
   },
 });

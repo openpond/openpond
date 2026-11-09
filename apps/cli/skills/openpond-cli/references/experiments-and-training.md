@@ -39,7 +39,13 @@ public dataset is part of the request; do not ask a separate download question.
 Choose supported model/recipe defaults rather than sending a setup questionnaire.
 Never call a preview-only sample the full dataset; state the actual population.
 
-After resolving the concrete run, show its scope and the API's price evidence.
+Once the source, supported model, grader checks and API hourly-rate evidence
+are known, show the proposed bounded run and ask for its total budget before
+bulk per-example grading/review, publication or preparation. Do not spend many
+minutes preparing thousands of records before asking the one missing budget
+question. Preparation itself may require this approved ceiling.
+
+Show the concrete scope and the API's price evidence.
 If the spending limit has not been approved, use the available `ask_user` tool
 for one total-budget question, for example “Approve this run with a maximum spend
 of $25?” with approve/decline choices. Wait for the answer, then continue the
@@ -48,6 +54,11 @@ the host offers the structured question tool. Keep the conversation about total
 spend; account for required evaluation and retention internally rather than
 asking a separate storage-cost question. A skipped or declined answer is not
 permission to start, and an estimate with unknown totals is not a fixed-price quote.
+
+Keep the imported source population intact. Select a smaller training/evaluation
+batch only as an explicit run-sizing decision under the approved budget, with
+its actual counts shown. An authoring/import failure is not permission to silently
+turn the requested dataset into a smaller sample.
 
 A total budget covers training, required evaluation and retained storage; reserve
 for these together rather than treating the same ceiling as a separate allowance
@@ -480,6 +491,21 @@ After saving the exact draft, `hosted-funding-handoff request.json --team-id <id
 
 
 Training-data authoring uses the existing learning owner. Create/publish an exact task format and direct source, submit complete example envelopes or JSONL with stable producer keys, grade/review the actual evidence and targets, then seal a `supervised_training` or `reward_training` batch. Importing is not approval. Use `openpond learning <get|list> <kind> ... --team-id <id>` and `openpond learning command --input-file <path> --team-id <id>` with the existing command schemas; keep operation IDs stable on retries. The SDK's `OpenPondLearningClient` and native Python learning operations expose the same commands.
+
+For bulk grading/review or polling known resource IDs, use `learning batch
+--input-file <path> --team-id <id> --concurrency 3` instead of starting a new CLI
+process for every row. The JSON input is an array of up to 100 existing operations:
+`{"action":"command","command":{...}}` or
+`{"action":"get","kind":"grade","id":"...","revision":1}`.
+Use `learning schema LearningCliBatch` for the installed schema. Commands retain
+their original operation IDs and expected revisions. The default concurrency is
+one; use up to four only for independent operations, and run dependent phases
+separately after checking receipts. All input is validated before dispatch.
+Results preserve input order. A failed request stops new dispatch, waits for
+in-flight requests and returns a nonzero exit with partial results. A request
+failure can have an uncertain mutation outcome: reconcile its original ID before
+an explicit retry, and never remint IDs. Batching neither approves evidence nor
+bypasses per-command authorization or budget checks.
 
 For model-first experiments, pass the exact sealed batch reference to canonical experiment preparation. Do not create a saved Model merely to select a batch, and do not replace target approval, reward grading, split/family separation or immutable references with a dataset label. The shared UI can open the existing import/review/batch tools inside the retained experiment and select the batch without starting training. Its import editor pins the format release until an explicit release change.
 
