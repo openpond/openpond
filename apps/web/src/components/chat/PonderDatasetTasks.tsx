@@ -91,7 +91,7 @@ function TaskEditor({ record, connection, onSaved }: {
         <thead><tr><th>Task</th><th>Input</th><th>Reference</th><th><div className="ponder-split-heading">Split
           <DropdownSelect label={`Filter tasks by split: ${splitLabel}`} tooltip={splitLabel} floating floatingMenuWidth={200}
             className={`ponder-split-filter${split !== "all" ? " filtered" : ""}`} value={split} options={splitOptions}
-            triggerContent={<><ListFilter size={14} aria-hidden="true" />{split !== "all" ? <span>{splitLabel}</span> : null}</>}
+            triggerContent={<ListFilter size={14} aria-hidden="true" />}
             onChange={value => { setSplit(value); setPage(0); }} />
         </div></th></tr></thead>
         <tbody>{rows.slice(current * 20, current * 20 + 20).map(item => <tr key={item.id}>
