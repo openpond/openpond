@@ -35,6 +35,7 @@ export function useTrainingRunDetail(
   return {
     detail,
     loading: enabled && !detail && (retained.isPending || live.isPending),
+    refreshing: live.isFetching,
     error: live.error?.message ?? retained.error?.message ?? null,
     refresh: async () => (await live.refetch()).data ?? null,
   };

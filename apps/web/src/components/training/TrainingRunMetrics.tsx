@@ -8,7 +8,14 @@ import { rolloutRewardGroups } from "./training-rollout-metrics";
 
 const REWARD_SERIES_IDS = new Set(["optimizer.reward", "rollout.reward"]);
 
-export function TrainingRunMetrics({ detail, loading, error, taskset = null }: { detail: TrainingRunDetail | null; loading: boolean; error: string | null; taskset?: Taskset | null }) {
+export function TrainingRunMetrics({ detail, loading, refreshing, error, onRefresh, taskset = null }: {
+  detail: TrainingRunDetail | null;
+  loading: boolean;
+  refreshing: boolean;
+  error: string | null;
+  onRefresh(): Promise<unknown>;
+  taskset?: Taskset | null;
+}) {
   useErrorToast(error, { prefix: "Training metrics" });
   const groups = useMemo(() => {
     return detail ? rolloutRewardGroups(detail.events, taskset?.tasks) : [];
@@ -17,17 +24,21 @@ export function TrainingRunMetrics({ detail, loading, error, taskset = null }: {
     if (!detail) return [];
     return mergeRolloutRewardSeries(metricSeries(detail), groups);
   }, [detail, groups]);
-  if (error && !detail) return <div className="training-run-placeholder">Training metrics are unavailable.</div>;
-  if (!detail && !loading) return <div className="training-run-placeholder">Select a training run to inspect its metrics.</div>;
   const live = detail
     ? ["queued", "starting", "running", "reconciling"].includes(detail.job.status)
     : false;
   return (
-    <TrainingMetricWorkbench
-      live={live}
-      loading={loading && !detail}
-      series={series}
-    />
+    <>
+      <div className="model-build-actions">
+        <button type="button" className="training-button secondary" disabled={loading || refreshing}
+          onClick={() => { void onRefresh(); }}>Refresh metrics</button>
+      </div>
+      {detail || loading ? <TrainingMetricWorkbench
+        live={live}
+        loading={loading && !detail}
+        series={series}
+      /> : null}
+    </>
   );
 }
 
