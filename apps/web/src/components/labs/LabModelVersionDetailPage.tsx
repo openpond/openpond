@@ -549,6 +549,8 @@ export function LabModelVersionDetailPage({
             detail={detail.detail}
             error={detail.error}
             loading={detail.loading}
+            refreshing={detail.refreshing}
+            onRefresh={detail.refresh}
             taskset={selectedTaskset}
           />
         ) : null}
