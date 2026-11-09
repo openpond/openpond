@@ -185,13 +185,13 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return {resources:[...unique.values()],links:visible.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
     if (kind === "dataset" && ["context","set_destination","set_model","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
-      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),graderId:z.string().min(1).nullable().optional(),name:z.string().optional(),evaluationModel:z.string().min(1).max(500).optional(),executionLocation:z.enum(["local","cloud"]).optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
+      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),focusOnly:z.boolean().optional(),scopeId:z.string().min(1).optional(),graderId:z.string().min(1).nullable().optional(),name:z.string().optional(),evaluationModel:z.string().min(1).max(500).optional(),executionLocation:z.enum(["local","cloud"]).optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
       if(query.visualPublicationId)await deps.visuals.read(session.id,query.visualPublicationId);
-      const datasetChoices = input.action === "context" ? (await deps.store.listLocalDatasetListings()).map(localDatasetSummary) : [];
+      const datasetChoices = input.action === "context" && !query.focusOnly ? (await deps.store.listLocalDatasetListings()).map(localDatasetSummary) : [];
       const experimentChoices:ChatResourceSummary[] = [];
-      if (input.action === "context" || query.kind === "experiment") {
+      if (input.action === "context" && !query.focusOnly || query.kind === "experiment") {
       const page = await experiments.service.list({teamId:experiments.scope}) as {items:import("@openpond/contracts").LocalExperimentRecord[]};
       const localChoices = await Promise.all(page.items.map(record=>experiments.summary(record)));
       const linkedTeam = team ? (await deps.store.chatResourceLinks({sessionId:session.id,kind:"experiment"})).filter(link=>link.summary.owner) : [];
@@ -303,6 +303,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         if(focus.dataset?.owner || focus.dataset?.profileRef)await verifyOwner(focus.dataset);
         if(focus.dataset && !focus.dataset.owner && !focus.dataset.profileRef) {const pinned=await deps.store.readLocalDatasetListing(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
         const graders = await gradersFor(focus.dataset);
+        if (query.focusOnly) {
+          const selected = await browser.current(session.id);
+          return {focus:{...focus,scopeContext},selection:selected ? {
+            target:selected.target,label:selected.label,detail:selected.detail,...selected.model ? {model:selected.model} : {},
+          } : null,graders};
+        }
         return {focus:{...focus,scopeContext},datasets:datasetChoices,experiments:experimentChoices,graders};
       }
       if (!query.kind) throw new Error("Select the resource focus kind.");

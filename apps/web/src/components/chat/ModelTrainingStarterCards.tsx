@@ -12,7 +12,7 @@ const starters = [
     description: "Learn from reviewed examples.",
     icon: GraduationCap,
     prompt:
-      "Help me prepare SFT training with LoRA using my selected resources. Resolve the exact supported starting model, reviewed demonstrations and separate evaluation setup. Show the effective configuration and estimated cost, and ask for any missing objective, data or spending limit before starting training. Keep the answering model and training target separate. Do not enable a recurring policy.",
+      "Train a model with SFT and LoRA using my selected resources. Ask me for any missing objective, dataset or total budget. Show me the proposed run and estimated cost, then continue through training and evaluation within the agreed budget. Report the result and save the trained model if successful. Do not enable recurring training or serving.",
   },
   {
     id: "grpo",
@@ -20,7 +20,7 @@ const starters = [
     description: "Learn from rewards with GRPO.",
     icon: Network,
     prompt:
-      "Help me prepare reinforcement learning with GRPO using my selected resources. Resolve the exact supported model, training tasks, reward graders and separate evaluation setup. Preserve an exact compatible parent if I have selected one; do not invent continuation support. Show the effective configuration and estimated cost, and ask for missing inputs or spending limits before starting training. Do not enable a recurring policy.",
+      "Train a model with RL and GRPO using my selected resources. Ask me for any missing objective, dataset, reward grader or total budget. Show me the proposed run and estimated cost, then continue through training and evaluation within the agreed budget. Report the result and save the trained model if successful. Do not enable recurring training or serving.",
   },
   {
     id: "decision",
@@ -28,7 +28,7 @@ const starters = [
     description: "Learn to choose between options.",
     icon: Route,
     prompt:
-      "Help me prepare the supported Decision Model training workflow using my selected resources. Review the decision targets, data, exact supported backbone and evaluation setup. Show the effective configuration and estimated cost, and ask for missing inputs or spending limits before starting training. Use the dedicated Decision training operation, and do not enable a recurring policy.",
+      "Train a Decision Model using my selected resources. Ask me for any missing decision objective, dataset or total budget. Show me the proposed run and estimated cost, then continue through the supported Decision training and evaluation workflow within the agreed budget. Report the result and save the trained model if successful. Do not enable recurring training or serving.",
   },
 ] as const;
 
