@@ -10,6 +10,40 @@ import {
   handleOpenPondMcpRequest,
 } from "../dist/index.js";
 
+// Failure story: dropping an expected Dataset validation status makes authoring
+// look like an internal failure; echoing its raw server message can expose data.
+test("Dataset validation errors retain safe recovery and uncertain outcomes", async () => {
+  let status = 422;
+  const privateDiagnostic = "private-provider-diagnostic-do-not-return";
+  const server = createOpenPondMcpServer({
+    baseUrl: "https://api.openpond.ai",
+    context: { userId: "qualification-user", teamId: "qualification-workspace", scopes: ["app:write"], authorize: async () => {} },
+    fetch: async () => Response.json({ code: "dataset_validation_failed", message: privateDiagnostic }, { status }),
+  });
+  const client = new Client({ name: "dataset-error-qualification", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(b), client.connect(a)]);
+  try {
+    const rejected = await client.callTool({ name: "datasets_validate", arguments: { id: "qualification-dataset", expectedRevision: 3 } });
+    assert.equal(rejected.isError, true);
+    const validation = JSON.parse(rejected.content[0].text);
+    assert.equal(validation.code, "dataset_validation_failed");
+    assert.equal(validation.status, 422);
+    assert.equal(validation.retryable, false);
+    assert.equal(validation.outcomeUnknown, false);
+    assert.equal(JSON.stringify(rejected).includes(privateDiagnostic), false);
+    status = 500;
+    const failed = await client.callTool({ name: "datasets_validate", arguments: { id: "qualification-dataset", expectedRevision: 3 } });
+    const unknown = JSON.parse(failed.content[0].text);
+    assert.equal(failed.isError, true);
+    assert.equal(unknown.status, 500);
+    assert.equal(unknown.retryable, true);
+    assert.equal(unknown.outcomeUnknown, true);
+    assert.notEqual(unknown.message, validation.message, "An uncertain server failure must not claim a completed validation rejection");
+    assert.equal(JSON.stringify(failed).includes(privateDiagnostic), false);
+  } finally { await client.close(); await server.close(); }
+});
+
 // Failure story: a client that bypasses discovery must never execute a hidden
 // mutation, and revoking a grant after initialization must stop subsequent calls.
 test("MCP discovery, calls and reconnect retain the authorization boundary", async () => {
