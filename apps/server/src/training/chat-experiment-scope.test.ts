@@ -8,6 +8,41 @@ import { chatExperimentContext, createChatExperimentScopes } from "./chat-experi
 
 const dataset = (revision: number): ChatResourceSummary => ({ kind: "dataset", id: "examples", revision, name: "Examples", state: "Draft", rows: [] });
 
+// A created training Model must survive restart as Model context, while a late
+// CLI receipt must not replace another Model or a newer explicit selection.
+test("created Models attach durably to their originating chat without stealing newer focus", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "openpond-chat-created-model-"));
+  let store = new SqliteStore(home);
+  try {
+    await store.insertSessionAtFront(SessionSchema.parse({id:"chat",provider:"codex",title:"Train a model",appId:null,appName:null,cwd:null,codexThreadId:null,pinned:false,archived:false,order:0,status:"idle",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}));
+    let scopes = createChatExperimentScopes(store);
+    const initial = await scopes.create("chat", "original-data");
+    const source = initial.scopes[0]!;
+    await scopes.select("chat", {scopeId:source.id,dataset:dataset(1)});
+    const before = chatExperimentContext((await store.getSession("chat"))?.metadata);
+    const startedAt = new Date().toISOString();
+    await store.insertTurn(TurnSchema.parse({id:"train",sessionId:"chat",prompt:"Train a model",providerTurnId:null,startedAt,completedAt:null,status:"in_progress",error:null,
+      metadata:{chatExperimentScopeId:source.id,chatExperimentSelectionVersion:before.selectionVersion}}));
+    const pin = {id:"model",teamId:"team",actorId:"actor",apiOrigin:"https://api.example.test"};
+    await scopes.attachModel("chat", "train", pin, "Arithmetic model");
+    await store.close(); store = new SqliteStore(home); scopes = createChatExperimentScopes(store);
+    const saved = (await store.getSession("chat"))!;
+    const state = chatExperimentContext(saved.metadata);
+    expect(state.scopes).toHaveLength(1);
+    expect(state.scopes[0]).toMatchObject({id:source.id,model:pin,dataset:dataset(1),name:"Arithmetic model"});
+    expect(saved.metadata?.chatContextSelection).toEqual({kind:"model",id:pin.id,location:"cloud",teamId:pin.teamId,apiOrigin:pin.apiOrigin});
+    const newer = {kind:"model",id:"different",location:"local"};
+    await store.updateSession("chat", session => ({...session,metadata:{...session.metadata,chatContextSelection:newer,
+      chatContextSelectedAt:new Date(Date.parse(startedAt)+1000).toISOString()}}));
+    await scopes.attachModel("chat", "train", pin, "Arithmetic model");
+    await scopes.attachModel("chat", "train", {...pin,actorId:"other-account"}, "Other account model");
+    const late = (await store.getSession("chat"))!;
+    expect(late.metadata?.chatContextSelection).toEqual(newer);
+    expect(chatExperimentContext(late.metadata).scopes.map(scope=>scope.model?.actorId)).toEqual(["actor","other-account"]);
+    await expect(scopes.attachModel("another-chat", "train", pin, "Wrong chat")).rejects.toThrow("originating conversation");
+  } finally { await store.close(); await rm(home, {recursive:true,force:true}); }
+});
+
 // Failure story: a delayed completion or replay must not replace newer user
 // inputs; concurrent scope creation must survive restart without duplicate IDs.
 test("chat scopes retain immutable runs, serialized selections and originating-turn ownership across restart", async () => {

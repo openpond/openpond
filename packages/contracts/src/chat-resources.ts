@@ -172,6 +172,7 @@ export const ChatExperimentScopeSchema = z
     training: z.array(ChatTrainingAttachmentSchema).optional(),
     selectedTrainingKey: z.string().max(4000).nullable().optional(),
     selectedTrainingJobId: Id.nullable().optional(),
+    model: z.object({id:Id,teamId:Id,actorId:Id,apiOrigin:z.url()}).strict().optional(),
     weightSpace: z.object({id:Id,teamId:Id,actorId:Id,apiOrigin:z.url(),name:z.string().max(500)}).strict().optional(),
     results: z.array(StoredExperimentResultReferenceSchema).max(16).optional(),
     turnIds: z.array(Id),

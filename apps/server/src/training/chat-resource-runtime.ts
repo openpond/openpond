@@ -163,6 +163,19 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       await scopes.attachWeightSpace(context.sessionId,context.turnId,{...ref,actorId:selected.weightSpace.ownerUserId,name:selected.weightSpace.name});
       return {weightSpace:selected.weightSpace};
     }
+    if (kind === "experiment" && input.action === "attach_model") {
+      if (!context) throw new Error("Model attachment requires its originating chat invocation.");
+      const ref = z.object({modelProjectId:z.string().min(1),teamId:z.string().min(1),apiOrigin:z.url()}).strict().parse(input.payload);
+      const access = await deps.access();
+      if (ref.teamId !== access.teamId || ref.apiOrigin !== new URL(access.apiBaseUrl).origin) throw new Error("Model belongs to another account.");
+      const selected = await browser.resolve({kind:"model",id:ref.modelProjectId,location:"cloud",teamId:ref.teamId,apiOrigin:ref.apiOrigin});
+      const current = await deps.access();
+      if (current.actorId !== access.actorId || current.teamId !== access.teamId || current.apiBaseUrl !== access.apiBaseUrl || !selected.model)
+        throw new Error("Account changed before the Model was attached.");
+      await scopes.attachModel(context.sessionId,context.turnId,{id:selected.model.id,teamId:access.teamId,actorId:access.actorId,apiOrigin:ref.apiOrigin},selected.model.name);
+      await deps.append({id:randomUUID(),name:"workspace_action_result",source:"server",sessionId:context.sessionId,turnId:context.turnId,timestamp:new Date().toISOString(),action:"chat_resource",status:"completed",data:{modelAttachment:ref}});
+      return {model:selected.model};
+    }
     if (kind === "experiment" && ["attach_training", "read_training"].includes(String(input.action))) {
       const ref = z.object({jobId:z.string().min(1).optional(),modelRunId:z.string().min(1).optional(),location:z.enum(["local","cloud"]).default("local"),apiOrigin:z.url().optional(),teamId:z.string().min(1).optional()}).strict()
         .refine(value=>Boolean(value.jobId || value.modelRunId),"Provide a training job or Model Run ID.").parse(input.payload);

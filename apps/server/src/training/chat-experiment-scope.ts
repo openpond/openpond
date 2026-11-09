@@ -28,6 +28,12 @@ export function chatExperimentContext(metadata: Record<string, unknown> | undefi
   return parsed.success ? parsed.data : empty();
 }
 
+export function chatResourceFocusKey(state: ChatExperimentContext) {
+  const scope = chatResourceWorkspaces(state).find(item => item.id === state.activeScopeId);
+  return JSON.stringify([state.activeScopeId, scope?.dataset?.id ?? null, scope?.dataset?.revision ?? null,
+    scope?.dataset?.owner ?? scope?.dataset?.profileRef ?? null, scope?.selectedRunId ?? null, scope?.selectedTrainingKey ?? null, scope?.weightSpace ?? null, scope?.model ?? null]);
+}
+
 export function createChatExperimentScopes(store: SqliteStore) {
   async function change(sessionId: string, apply: (state: ChatExperimentContext, metadata: Record<string, unknown>) => void) {
     // updateSession serializes this callback with all other session writes.
@@ -319,13 +325,46 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
+  async function attachModel(sessionId: string, turnId: string, model: NonNullable<ChatExperimentScope["model"]>, name: string) {
+    const turn = await store.getTurn(turnId);
+    if (!turn || turn.sessionId !== sessionId) throw new Error("Model attachment requires its originating conversation.");
+    return change(sessionId, (state, metadata) => {
+      const late = (typeof metadata.chatContextSelectedAt === "string" && metadata.chatContextSelectedAt > turn.startedAt) || (typeof turn.metadata.chatExperimentSelectionVersion === "number"
+        ? turn.metadata.chatExperimentSelectionVersion !== state.selectionVersion
+        : state.selectedAt !== null && state.selectedAt > turn.startedAt);
+      const sameModel = (scope: ChatExperimentScope) => canonicalJson(scope.model ?? null) === canonicalJson(model);
+      let scope = state.scopes.find(sameModel);
+      const origin = typeof turn.metadata.chatExperimentScopeId === "string"
+        ? state.scopes.find(item => item.id === turn.metadata.chatExperimentScopeId)
+        : state.scopes.find(item => item.turnIds.includes(turnId));
+      if (!scope && origin && !origin.model) scope = origin;
+      const now = new Date().toISOString();
+      scope ??= make(state, `model-${createHash("sha256").update(canonicalJson(model)).digest("hex")}`, now);
+      scope.model = model;
+      scope.name = name;
+      scope.updatedAt = now;
+      if (!scope.turnIds.includes(turnId)) scope.turnIds.push(turnId);
+      if (!late) {
+        scope.selectedRunId = null;
+        scope.selectedTrainingKey = null;
+        state.activeScopeId = scope.id;
+        metadata.chatContextSelection = { kind: "model", id: model.id, location: "cloud", teamId: model.teamId, apiOrigin: model.apiOrigin };
+        metadata.chatContextSelectionVersion = state.selectionVersion;
+        metadata.chatContextFocusKey = chatResourceFocusKey(state);
+      }
+    });
+  }
   async function attachTraining(sessionId: string, turnId: string, input: ChatTrainingAttachment) {
     const training = ChatTrainingAttachmentSchema.parse(input);
     const turn = await store.getTurn(turnId);
     if (!turn || turn.sessionId !== sessionId) throw new Error("Resource turn does not belong to this conversation.");
-    return change(sessionId, state => {
+    return change(sessionId, (state, metadata) => {
       const contexts = TaskResourceContextsSchema.safeParse(turn.metadata.chatResourceContexts);
       let targetId = typeof turn.metadata.chatExperimentScopeId === "string" ? turn.metadata.chatExperimentScopeId : null;
+      const modelScope = training.location === "cloud" ? state.scopes.find(scope => scope.turnIds.includes(turnId)
+        && scope.model?.id === training.job.modelProjectId && scope.model.teamId === training.owner.teamId
+        && scope.model.actorId === training.owner.actorId && scope.model.apiOrigin === training.apiOrigin) : null;
+      if (modelScope) targetId = modelScope.id;
       if (!targetId && contexts.success && contexts.data.length) {
         const matches = contexts.data.filter(context=>context.training?.some(reference=>
           reference.location === training.location && reference.jobId === training.jobId
@@ -335,9 +374,9 @@ export function createChatExperimentScopes(store: SqliteStore) {
         if (targets.length !== 1) throw new Error("Select the intended experiment scope before attaching training; the draft has multiple targets.");
         targetId = targets[0]!;
       }
-      const late = typeof turn.metadata.chatExperimentSelectionVersion === "number"
+      const late = (typeof metadata.chatContextSelectedAt === "string" && metadata.chatContextSelectedAt > turn.startedAt) || (typeof turn.metadata.chatExperimentSelectionVersion === "number"
         ? turn.metadata.chatExperimentSelectionVersion !== state.selectionVersion
-        : state.selectedAt !== null && state.selectedAt > turn.startedAt;
+        : state.selectedAt !== null && state.selectedAt > turn.startedAt);
       let scope = targetId ? chatResourceWorkspaces(state).find(candidate => candidate.id === targetId)
         : chatResourceWorkspaces(state).find(candidate => candidate.turnIds.includes(turnId));
       if (targetId && !scope) throw new Error("Resource scope does not belong to this conversation.");
@@ -390,5 +429,5 @@ export function createChatExperimentScopes(store: SqliteStore) {
       scope.updatedAt = new Date().toISOString();
     });
   }
-  return { ensure, create, createForDataset, createDraft, linkStoredDraft, select, attach, attachTraining, attachWeightSpace, associateDraftTraining };
+  return { ensure, create, createForDataset, createDraft, linkStoredDraft, select, attach, attachModel, attachTraining, attachWeightSpace, associateDraftTraining };
 }
