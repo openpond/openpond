@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { downloadVerifiedActionlintArchive } from "./actionlint-download.ts";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -36,13 +36,9 @@ await run(executable, workflows);
 async function install(targetName: string, directory: string, destination: string): Promise<void> {
   const archiveName = `actionlint_${version}_${targetName}.tar.gz`;
   const url = `https://github.com/rhysd/actionlint/releases/download/v${version}/${archiveName}`;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`failed to download ${url}: HTTP ${response.status}`);
-  const archive = Buffer.from(await response.arrayBuffer());
-  const actual = createHash("sha256").update(archive).digest("hex");
-  if (actual !== checksums[targetName]) {
-    throw new Error(`checksum mismatch for ${archiveName}: expected ${checksums[targetName]}, received ${actual}`);
-  }
+  const expected = checksums[targetName];
+  if (!expected) throw new Error(`No pinned checksum for actionlint ${targetName}`);
+  const archive = await downloadVerifiedActionlintArchive(url, expected);
 
   const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-actionlint-"));
   const archivePath = path.join(temporaryDirectory, archiveName);
