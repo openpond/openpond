@@ -7,8 +7,6 @@ import { sidebarActivityTimes, sidebarEventsBySession } from "../lib/sidebar-inb
 import { usePonderActivity } from "../components/ponder/usePonderActivity";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
-  DEFAULT_CHAT_MODEL,
-  DEFAULT_CHAT_PROVIDER,
   type CloudProject,
   type Experience,
   type OpenPondApp,
@@ -36,6 +34,7 @@ import { runtimeEventsForSession } from "../lib/runtime-indexes";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
 import type { AppSecondaryRuntime } from "./useAppSecondaryRuntime";
 import {
+  DEFAULT_APP_PREFERENCES,
   defaultModelForProvider,
   projectSelectionKey,
   providerOptionsFromSettings,
@@ -545,10 +544,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           providerOptionsFromSettings(bootstrap?.providers, {
             enabledOnly: true,
           }).find((option) => option.value !== "codex")?.value ??
-          DEFAULT_CHAT_PROVIDER;
+          DEFAULT_APP_PREFERENCES.defaultChatProvider;
         model =
           defaultModelForProvider(provider, bootstrap?.providers) ??
-          DEFAULT_CHAT_MODEL;
+          DEFAULT_APP_PREFERENCES.defaultChatModel;
       }
       const sourceSession = sidebarSessions.find(
         (session) => session.id === input.sourceSessionId

@@ -28,8 +28,6 @@ import type {
   WorkspaceLspLanguageMode,
 } from "@openpond/contracts";
 import {
-  DEFAULT_CHAT_PROVIDER,
-  DEFAULT_CHAT_MODEL,
   DEFAULT_CODEX_CHAT_MODEL,
   DEFAULT_CODEX_PERMISSION_MODE,
   DEFAULT_CODEX_REASONING_EFFORT,
@@ -226,8 +224,8 @@ export type DropdownOption = {
 };
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
-  defaultChatProvider: DEFAULT_CHAT_PROVIDER,
-  defaultChatModel: DEFAULT_CHAT_MODEL,
+  defaultChatProvider: "codex",
+  defaultChatModel: DEFAULT_CODEX_CHAT_MODEL,
   subagents: defaultSubagentPreferences(),
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
@@ -310,7 +308,6 @@ const OPENPOND_MODEL_OPTIONS = [
   },
 ];
 export const PROVIDER_OPTIONS: Array<DropdownOption & { value: ChatProvider }> = [
-  { value: "openpond", label: "OpenPond Chat" },
   { value: "codex", label: "OpenAI Codex", description: "Codex login" },
 ];
 export const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
@@ -569,39 +566,37 @@ export function providerOptionsFromSettings(
   settings?: ProviderSettings | null,
   options: { includeUnavailable?: boolean; localOnly?: boolean; enabledOnly?: boolean } = {},
 ): Array<DropdownOption & { value: ChatProvider }> {
-  if (!settings) return options.localOnly ? PROVIDER_OPTIONS : PROVIDER_OPTIONS;
+  if (!settings) return PROVIDER_OPTIONS;
   const includeUnavailable = options.includeUnavailable ?? false;
   const enabledOnly = options.enabledOnly ?? false;
   const rows: Array<DropdownOption & { value: ChatProvider }> = [];
   for (const providerId of Object.keys(settings.statuses) as ChatProvider[]) {
-    if (!isRegisteredAcpProvider(providerId) && !["openpond", "codex", "openai", "claude-code", "grok-build", "opencode", "custom-openai-compatible"].includes(providerId)) continue;
+    // Keep the route for existing sessions without offering it in UI pickers.
+    if (providerId === "openpond") continue;
+    if (!isRegisteredAcpProvider(providerId) && !["codex", "openai", "claude-code", "grok-build", "opencode", "custom-openai-compatible"].includes(providerId)) continue;
     if (!isRunnableChatProvider(providerId)) continue;
-    if (options.localOnly && providerId === "openpond") continue;
     const status = providerStatus(settings, providerId);
     if (!status) continue;
     if (!includeUnavailable) {
       if (providerId === "codex" && !status.available && !status.credential.connected) continue;
-      if (providerId !== "openpond" && providerId !== "codex" && !status.enabled) continue;
+      if (providerId !== "codex" && !status.enabled) continue;
     }
-    if (enabledOnly && providerId !== "openpond" && !status.enabled) continue;
+    if (enabledOnly && !status.enabled) continue;
     if (enabledOnly && providerId === "codex" && !status.available && !status.credential.connected) {
       continue;
     }
     rows.push({
       value: providerId,
-      label: providerId === "openpond" ? "OpenPond Chat" : status.displayName,
-      description:
-        providerId === "openpond"
-          ? undefined
-          : status.available
-            ? "Connected"
-            : status.credential.connected
-              ? "Configured"
-              : status.routing.localByok
-                ? "Set up key"
-                : status.enabled
-                  ? "Enabled"
-                  : undefined,
+      label: status.displayName,
+      description: status.available
+        ? "Connected"
+        : status.credential.connected
+          ? "Configured"
+          : status.routing.localByok
+            ? "Set up key"
+            : status.enabled
+              ? "Enabled"
+              : undefined,
     });
   }
   return rows.length > 0 ? rows : PROVIDER_OPTIONS;
@@ -777,10 +772,12 @@ export function codexPermissionTurnInput(mode: CodexPermissionMode): {
 }
 
 export function normalizePreferences(preferences?: AppPreferences | null): AppPreferences {
-  const provider = preferences?.defaultChatProvider ?? DEFAULT_APP_PREFERENCES.defaultChatProvider;
+  const provider = preferences?.defaultChatProvider && preferences.defaultChatProvider !== "openpond"
+    ? preferences.defaultChatProvider
+    : DEFAULT_APP_PREFERENCES.defaultChatProvider;
   return {
     defaultChatProvider: provider,
-    defaultChatModel: normalizeChatModel(provider, preferences?.defaultChatModel),
+    defaultChatModel: normalizeChatModel(provider, preferences?.defaultChatProvider === "openpond" ? undefined : preferences?.defaultChatModel),
     subagents: SubagentPreferencesSchema.parse(
       preferences?.subagents ?? DEFAULT_APP_PREFERENCES.subagents,
     ),

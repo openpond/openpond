@@ -7,14 +7,13 @@ import type {
   OpenPondCommandAccessMode,
 } from "@openpond/contracts";
 import {
-  DEFAULT_CHAT_PROVIDER,
-  DEFAULT_CHAT_MODEL,
   DEFAULT_CODEX_PERMISSION_MODE,
   DEFAULT_CODEX_REASONING_EFFORT,
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
 } from "@openpond/contracts";
 import type { CommitNextStep } from "../components/workspace/WorkspaceGitDialogs";
 import {
+  DEFAULT_APP_PREFERENCES,
   SIDEBAR_TASK_INITIAL_LIMIT,
   type AppView,
   type SettingsSection,
@@ -107,8 +106,8 @@ export const initialAppState: AppState = {
   selectedSessionId: null,
   prompt: "",
   promptDrafts: {},
-  draftProvider: DEFAULT_CHAT_PROVIDER,
-  draftModel: DEFAULT_CHAT_MODEL,
+  draftProvider: DEFAULT_APP_PREFERENCES.defaultChatProvider,
+  draftModel: DEFAULT_APP_PREFERENCES.defaultChatModel,
   draftExperience: "work",
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,

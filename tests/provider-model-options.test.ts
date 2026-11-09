@@ -33,25 +33,26 @@ describe("provider model option capping", () => {
       serialized = JSON.stringify(ClientChoicesSchema.parse({ chatSelection: JSON.parse(value) }).chatSelection);
     });
     const settings = buildProviderSettings({ file: { version: 1, providers: {
+      openai: { enabled: true, baseUrl: null, defaultModel: null, modelOverrides: [], updatedAt: null },
       "claude-code": { enabled: true, baseUrl: null, defaultModel: null, modelOverrides: [], updatedAt: null },
     }, modelCaches: {} } });
-    const groups = () => composerModelGroups({ currentProvider: "openpond",
-      currentModelOptions: modelOptionsForProvider("openpond", settings),
+    const groups = () => composerModelGroups({ currentProvider: "openai",
+      currentModelOptions: modelOptionsForProvider("openai", settings),
       providerOptions: providerOptionsFromSettings(settings, { enabledOnly: true }), providerSettings: settings });
     const native = () => groups().find((group) => group.provider === "claude-code")!;
-    const hostedModel = modelOptionsForProvider("openpond", settings)[0]!.value;
-    rememberChatSelection("openpond", hostedModel);
+    const hostedModel = modelOptionsForProvider("openai", settings)[0]!.value;
+    rememberChatSelection("openai", hostedModel);
     expect(modelSelectionForGroup(native())).toEqual({ provider: "claude-code", model: "" });
     expect(preferredChatModel("claude-code", settings)).toBe("");
     rememberChatSelection("claude-code", "haiku");
-    rememberChatSelection("openpond", hostedModel);
+    rememberChatSelection("openai", hostedModel);
     expect(modelSelectionForGroup(native())).toEqual({ provider: "claude-code", model: "haiku" });
     expect(preferredChatModel("claude-code", settings)).toBe("haiku");
-    expect(preferredChatModel("openpond", settings)).toBe(hostedModel);
-    expect(readChatSelectionPreference()).toMatchObject({ provider: "openpond", model: hostedModel,
-      modelsByProvider: { "claude-code": "haiku", openpond: hostedModel } });
-    rememberChatSelection("openpond", "removed-model");
-    expect(modelSelectionForGroup(groups().find((group) => group.provider === "openpond")!)!.model).toBe(hostedModel);
+    expect(preferredChatModel("openai", settings)).toBe(hostedModel);
+    expect(readChatSelectionPreference()).toMatchObject({ provider: "openai", model: hostedModel,
+      modelsByProvider: { "claude-code": "haiku", openai: hostedModel } });
+    rememberChatSelection("openai", "removed-model");
+    expect(modelSelectionForGroup(groups().find((group) => group.provider === "openai")!)!.model).toBe(hostedModel);
   });
 
   // Failure story: a native provider with a lazy catalog is unreachable from the
