@@ -2,6 +2,7 @@ import type { RuntimeEvent } from "@openpond/contracts";
 import type { ChatMessage } from "./app-models";
 import { buildChatMessages } from "./chat-messages";
 import { asRecord } from "./chat-message-utils";
+import { appendActivityMessage } from "./chat-activities";
 
 export type IncrementalChatProjection = {
   events: RuntimeEvent[];
@@ -32,7 +33,8 @@ export class IncrementalChatProjector {
     if (appendedEvents.some(event => event.name === "user_question.answered" || event.name === "user_question.dismissed"))
       return this.replace(events);
 
-    const deltaProjection = appendTextDeltas(this.projection.messages, appendedEvents);
+    const deltaProjection = appendTextDeltas(this.projection.messages, appendedEvents)
+      ?? appendCommandDeltas(this.projection.messages, appendedEvents);
     if (deltaProjection) {
       this.projection = { events, messages: deltaProjection };
       return deltaProjection;
@@ -71,6 +73,23 @@ export class IncrementalChatProjector {
     this.projection = { events, messages };
     return messages;
   }
+}
+
+function appendCommandDeltas(messages: ChatMessage[], events: readonly RuntimeEvent[]): ChatMessage[] | null {
+  const previous = messages.at(-1);
+  if (!previous || previous.role !== "activity_group" ||
+    previous.activities?.some(activity => activity.subagentMessage) ||
+    events.some(event => event.name !== "command.output" || event.turnId !== previous.turnId ||
+      asRecord(event.data)?.nativeBackgroundTask === true ||
+      event.source === "server" && Boolean(asRecord(event.data)?.chatResource))) return null;
+  // Activity merging updates objects in place. Clone the mutable tail so a
+  // streamed chunk cannot change snapshots already handed to another view.
+  const next = [...messages.slice(0, -1), {
+    ...previous,
+    activities: previous.activities?.map(activity => ({ ...activity })),
+  }];
+  for (const event of events) appendActivityMessage(next, event);
+  return next;
 }
 
 function appendTextDeltas(

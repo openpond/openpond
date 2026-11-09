@@ -189,6 +189,37 @@ describe("IncrementalChatProjector", () => {
     expect(next[1]?.content).toBe("First second");
   });
 
+  // A long-running command used to replay every earlier chunk for each new one,
+  // freezing the renderer. Its fast path must also leave prior view snapshots intact.
+  test("appends command chunks without replaying history or mutating prior projections", () => {
+    let historyReads = 0;
+    const firstChunk = event("chunk-1", "command.output", "turn-0", {
+      action: "exec_command", data: { callId: "command" },
+    });
+    Object.defineProperty(firstChunk, "output", { enumerable: true, get() { historyReads++; return "first output"; } });
+    const initial = [
+      event("start", "turn.started", "turn-0", { args: { prompt: "Run command" } }),
+      event("command", "tool.started", "turn-0", { action: "exec_command", data: { callId: "command", command: "echo output" } }),
+      firstChunk,
+    ];
+    const projector = new IncrementalChatProjector();
+    const before = projector.project(initial);
+    const snapshot = JSON.stringify(before);
+    historyReads = 0;
+    const chunks = Array.from({ length: 30 }, (_, index) => event(`chunk-${index + 2}`, "command.output", "turn-0", {
+      action: "exec_command", output: `output ${index}`, data: { callId: "command" },
+    }));
+    const events = [...initial];
+    for (const chunk of chunks) { events.push(chunk); projector.project([...events]); }
+    expect(historyReads).toBe(0);
+    expect(JSON.stringify(before)).toBe(snapshot);
+    expect(projector.snapshot().messages).toEqual(buildChatMessages(events));
+    events.push(event("done", "tool.completed", "turn-0", {
+      action: "exec_command", output: "finished", status: "completed", data: { callId: "command" },
+    }), event("complete", "turn.completed", "turn-0"));
+    expect(projector.project(events)).toEqual(buildChatMessages(events));
+  });
+
   test("keeps an assistant-only delta projection byte-equivalent to replay", () => {
     const initial = [
       event("start", "turn.started", "turn-0", { args: { prompt: "Hello" } }),
