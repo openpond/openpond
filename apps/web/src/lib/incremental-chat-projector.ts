@@ -26,6 +26,11 @@ export class IncrementalChatProjector {
       this.projection = { events, messages: this.projection.messages };
       return this.projection.messages;
     }
+    // Answers belong to the new turn but update a question in an older turn.
+    // A suffix replay cannot update that retained message. This rare human
+    // interaction can replay history without slowing ordinary text deltas.
+    if (appendedEvents.some(event => event.name === "user_question.answered" || event.name === "user_question.dismissed"))
+      return this.replace(events);
 
     const deltaProjection = appendTextDeltas(this.projection.messages, appendedEvents);
     if (deltaProjection) {

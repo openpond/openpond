@@ -17,6 +17,22 @@ export type ComposerDraftStore = {
   subscribe: (listener: () => void) => () => void;
 };
 
+// Session creation can switch the active draft before the send is accepted.
+// Consume only the originating draft, and leave edits made during the request.
+export function captureSubmittedDraftClear(store: ComposerDraftStore): () => boolean {
+  const scopeKey = store.getScopeKey();
+  const submitted = store.getSnapshot();
+  return () => {
+    let cleared = false;
+    store.setForScope(scopeKey, current => {
+      if (current !== submitted) return current;
+      cleared = true;
+      return "";
+    });
+    return cleared && store.getScopeKey() === scopeKey;
+  };
+}
+
 function draftKey(selection: PromptSelection): string {
   if (selection.selectedSessionId) return `session:${selection.selectedSessionId}`;
   if (selection.selectedProjectId) return `project:${selection.selectedProjectId}`;
