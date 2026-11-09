@@ -17,7 +17,7 @@ def verify_serverless_review(review: dict[str, Any], team_id: str, model_id: str
 def create_serverless_serving_approval(raw: dict[str, Any], spending_limit: str | None = None) -> dict[str, Any]:
     review = validate('ServerlessServingReviewSchema', raw)
     verify_serverless_review(review, review['teamId'], review['modelProjectId'], review['versionHash'], review['artifact'])
-    if (review['schemaVersion'] != 'openpond.serverlessServingReview.v2'
+    if (review['schemaVersion'] != 'openpond.serverlessServingReview.v3'
             or datetime.fromisoformat(review['expiresAt'].replace('Z', '+00:00')) <= datetime.now(timezone.utc)):
         raise ProtocolError('serverless_serving_review_expired')
     cap = None

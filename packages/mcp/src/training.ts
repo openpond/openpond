@@ -7,6 +7,9 @@ import {
 } from "openpond-sdk/model-projects";
 import {
   TrainingInputArtifactUploadSchema,
+  TrainingOperationRequestSchema,
+  TrainingOperationControlSchema,
+  TrainingPlacementReviewSchema,
   TrainingPreparationRequestSchema,
   TrainingPreparationControlSchema,
   TrainingPreparationListQuerySchema,
@@ -87,6 +90,14 @@ export function addTraining(add: AddTool, c: Clients, teamId: string) {
     "write",
     (v) => c.training.estimate(v),
   );
+  add("training_placement_review","Review compatible published retail profiles for exact approved inputs without a stock read or paid launch.",TrainingPreparationRequestSchema,"write",v=>c.training.reviewPlacement(v),{destructive:false});
+  add("training_operation_queue","Retain the approved run before compilation or capacity discovery. This authorizes application-owned admission within the exact returned retail/profile envelope and original total limit; retain its operation identity.",TrainingOperationRequestSchema,"execute",v=>c.training.queueRun(v));
+  add("training_operation_get","Read durable preparation/capacity/platform/funding/review/running progress. Temporary waiting remains application-owned; never repeat preparation to poll.",ById,"read",v=>c.training.getOperation(teamId,v.id));
+  add("training_operation_find","Recover the original retained operation after uncertain delivery using its original operation ID.",z.object({operationId:Id}).strict(),"read",v=>c.training.findOperation(teamId,v.operationId));
+  add("training_operations_list","List retained authorized operations in this workspace.",z.object({projectId:Id.optional(),afterId:Id.optional(),limit:z.number().int().min(1).max(100).optional()}).strict(),"read",v=>c.training.listOperations(teamId,v));
+  add("training_operation_stop","Stop the original pending or started operation at its current revision. Unknown physical custody remains owned until cleanup is verified.",TrainingOperationControlSchema.extend({id:Id}),"cancel",({id,...v})=>c.training.stopOperation(id,v));
+  add("training_operation_review","Get a new placement review for an operation needing explicit review; preserves its original work deadline and budget.",ById,"read",v=>c.training.reviewOperationPlacement(teamId,v.id));
+  add("training_operation_approve_review","Accept explicitly reviewed changed placement terms for an unstarted operation at its exact revision.",TrainingOperationControlSchema.extend({id:Id,placementReview:TrainingPlacementReviewSchema}),"execute",({id,...v})=>c.training.approveOperationReview(id,v));
   add(
     "training_preparations_list",
     "Discover retained Ponder preparations without creating a training job.",

@@ -654,3 +654,19 @@ have `type="text"`/`text` or `type="finish"`/`result`; incomplete streams raise.
 Use `contextlib.closing`/`aclosing` for early iterator exit. Keep this client in
 your product backend; React calls your authenticated application routes.
 There is no SDK capture queue or flush API.
+
+### Recovering queued named Model requests
+
+Usage-based serving uses v3 periodic actual-usage deductions without future credit
+holds. Missing native startup clocks remain pending; initializing elapsed time is
+not charged as runtime. `control.serverless.usage.prepaidDebitedUsd` reports cash
+deductions, while `chargedUsd` also includes funded retail covered by allowance.
+
+Named Model `generate` and `stream` accept `client_request_id` and a serving-only
+`timeout` of at most 630 seconds (the default). HTTP 202 is observed through the
+original request's retained status. No paid POST is retried. If observation ends
+with an unknown outcome, retain `ModelRequestError.client_request_id` and call
+`client.models.support.recover(client_request_id)`, or `inspect_request(request_id)`
+when the canonical ID is known. `cancel_request(request_id)` requests Stop for that
+exact operation. Await these methods on `AsyncClient`. Recovery enforces current
+access and the Model identity; answers have finite retention.
