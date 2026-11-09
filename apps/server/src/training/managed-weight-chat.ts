@@ -32,16 +32,12 @@ function method(version: Version) {
 /** The existing home cache contains only an exact locator, never a serving
  * grant. Every send reauthorizes the immutable version through the SDK. */
 export async function listManagedWeightChatModels(store: SqliteStore, teamId: string): Promise<ProviderModel[]> {
-  const access = await configuredAccess(teamId), fence = () => accountFence(access), train = clientFor(access, fence);
+  const access = await configuredAccess(teamId), fence = () => accountFence(access);
   const versions = await listManagedSavedModelVersions(store, access);
   const models: ProviderModel[] = [];
   for (const {project, version} of versions) {
     if ((version?.schemaVersion !== "openpond.alphaEditModelVersion.v1" && version?.schemaVersion !== "openpond.neuronTrainingModelVersion.v1" && version?.schemaVersion !== "openpond.weightSpaceModelVersion.v1")
       || version.ownerUserId !== access.actorId) continue;
-    const serving = await train.savedModelServing(project.id, {teamId, versionHash: version.contentHash});
-    if ((serving.schemaVersion !== "openpond.alphaEditModelServing.v1" && serving.schemaVersion !== "openpond.neuronTrainingModelServing.v1" && serving.schemaVersion !== "openpond.weightSpaceModelServing.v1")
-      || serving.version.schemaVersion !== version.schemaVersion || serving.version.contentHash !== version.contentHash)
-      throw new Error("The saved learned-weight Model changed its serving kind or version.");
     const source = Source.parse({...identity(access), schemaVersion: "openpond.desktopWeightChatSelection.v1",
       modelProjectId: project.id, versionHash: version.contentHash, method: method(version)});
     const hash = await canonicalSha256(source), prior = await store.getCacheEntry<unknown>(CACHE_TYPE, hash);
@@ -49,12 +45,12 @@ export async function listManagedWeightChatModels(store: SqliteStore, teamId: st
     if (!prior) await store.setCacheEntry(CACHE_TYPE, hash, source);
     const label = source.method === "alphaedit" ? "AlphaEdit" : source.method === "weight_space_programming" ? "Weight-space programming" : "Neuron training";
     models.push(ProviderModelSchema.parse({id: PREFIX + hash, providerId: "openpond",
-      displayName: `${project.name} / ${label} ${version.contentHash.slice(0, 8)}${serving.state === "active" ? "" : ` (${serving.state})`}`,
+      displayName: `${project.name} / ${label} ${version.contentHash.slice(0, 8)}`,
       source: "provider", outputLimit: 4096,
       capabilities: {streaming: true, toolCalling: true, reasoning: false, vision: false, structuredOutput: false},
       raw: {managedServing: true, managedWeight: true, method: source.method,
         savedModel: {modelProjectId: project.id, versionHash: version.contentHash},
-        apiOrigin: source.apiOrigin, teamId, actorId: access.actorId, servingState: serving.state}}));
+        apiOrigin: source.apiOrigin, teamId, actorId: access.actorId}}));
   }
   await fence(); return models;
 }

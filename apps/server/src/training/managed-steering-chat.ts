@@ -26,13 +26,11 @@ export function isManagedSteeringChatModel(modelId: string | null | undefined) {
  * cache owner. Refresh never replaces a selection with a newer version. A
  * cache reset requires selecting the canonical Model again. */
 export async function listManagedSteeringChatModels(store: SqliteStore, teamId: string): Promise<ProviderModel[]> {
-  const access = await configuredAccess(teamId), fence = () => accountFence(access), train = clientFor(access, fence);
+  const access = await configuredAccess(teamId), fence = () => accountFence(access);
   const versions = await listManagedSavedModelVersions(store, access);
   const models: ProviderModel[] = [];
   for (const {project, version} of versions) {
     if (version?.schemaVersion !== "openpond.steeringModelVersion.v1" || version.publication.ownerUserId !== access.actorId) continue;
-    const serving = await train.savedModelServing(project.id, {teamId, versionHash: version.contentHash});
-    if (serving.schemaVersion !== "openpond.steeringModelServing.v1") throw new Error("The saved steering Model changed its serving kind.");
     const source = Source.parse({...identity(access), schemaVersion: "openpond.desktopSteeringChatSelection.v1",
       modelProjectId: project.id, versionHash: version.contentHash});
     const hash = await canonicalSha256(source), modelId = PREFIX + hash;
@@ -40,12 +38,11 @@ export async function listManagedSteeringChatModels(store: SqliteStore, teamId: 
     if (prior && canonicalJson(Source.parse(prior.payload)) !== canonicalJson(source)) throw new Error("The saved Model locator changed its immutable identity.");
     if (!prior) await store.setCacheEntry(CACHE_TYPE, hash, source);
     models.push(ProviderModelSchema.parse({id: modelId, providerId: "openpond",
-      displayName: `${project.name} / Saved steering ${version.contentHash.slice(0, 8)}${serving.state === "active" ? "" : ` (${serving.state})`}`,
+      displayName: `${project.name} / Saved steering ${version.contentHash.slice(0, 8)}`,
       source: "provider", outputLimit: 4096,
       capabilities: {streaming: true, toolCalling: true, reasoning: false, vision: false, structuredOutput: false},
       raw: {managedServing: true, managedSteering: true, savedModel: {modelProjectId: project.id, versionHash: version.contentHash},
-        apiOrigin: source.apiOrigin, teamId, actorId: access.actorId, servingState: serving.state,
-        defaultPublication: serving.defaultPublication}}));
+        apiOrigin: source.apiOrigin, teamId, actorId: access.actorId}}));
   }
   await fence(); return models;
 }
