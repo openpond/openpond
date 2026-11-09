@@ -44,12 +44,12 @@ it("binds live GPU replies to the exact query and rejects stale or substituted o
   const observed = new Date();
   const catalog = { schemaVersion: "openpond.trainingGpuCatalog.v1", observedAt: observed.toISOString(),
     expiresAt: new Date(observed.getTime() + 60_000).toISOString(), workerImageDigest: `sha256:${"a".repeat(64)}`,
-    supportedLoraRanks: [16], pricingBasis: "provider_catalog_compute_and_disk_before_credits",
+    supportedLoraRanks: [16], pricingBasis: "retail_allocation_hourly_before_credits",
     scope: { query, requestHash: await canonicalSha256(query), qualification: "requires_preparation", reason: null,
       provider: { accountScopeId: "opaque-scope", product: "POD", cloud: "SECURE", countryCodes: ["US", "CA"],
-        cudaVersions: ["12.8"], dataCenterId: null, minimumDiskGb: 130, priceBasis: "provider_catalog_per_gpu_rate_times_count" } },
+        cudaVersions: ["12.8"], dataCenterId: null, minimumDiskGb: 130 } },
     offerings: [{ availabilityId: "offer", gpuType: "gpu", provider: "fixture_provider", region: "fixture_region", dataCenterId: null,
-      gpuCount: 2, gpuMemoryGb: 80, stockStatus: "Medium", hourlyUsd: 7, computeHourlyUsd: 4, diskHourlyUsd: 0.01, totalHourlyUsd: 4.01 }] };
+      gpuCount: 2, gpuMemoryGb: 80, stockStatus: "Medium", hourlyUsd: 7 }] };
   let mode = "valid";
   const server = createServer((request, response) => {
     const url = new URL(request.url!, "http://localhost");
@@ -60,6 +60,7 @@ it("binds live GPU replies to the exact query and rejects stale or substituted o
     if (mode === "count") value.offerings[0]!.gpuCount = 1;
     if (mode === "expired") value.expiresAt = value.observedAt;
     if (mode === "missing") delete (value as { scope?: unknown }).scope;
+    if (mode === "supplier_fields") Object.assign(value.offerings[0]!, { computeHourlyUsd: 4, diskHourlyUsd: 0.01, totalHourlyUsd: 4.01 });
     response.writeHead(200, { "content-type": OPENPOND_TRAINING_MEDIA_TYPE }); response.end(JSON.stringify({ catalog: value }));
   });
   server.listen(0, "127.0.0.1"); await once(server, "listening");
@@ -71,5 +72,10 @@ it("binds live GPU replies to the exact query and rejects stale or substituted o
       mode = invalid;
       await expect(client.gpuCatalog(query)).rejects.toMatchObject({ code: invalid === "expired" ? "training_gpu_catalog_expired" : "training_gpu_catalog_scope_mismatch" });
     }
+    // Supplier economics must never become a second public price option.
+    mode = "supplier_fields";
+    await expect(client.gpuCatalog(query)).rejects.toMatchObject({ issues: expect.arrayContaining([
+      expect.objectContaining({ code: "unrecognized_keys", path: ["offerings", 0] }),
+    ]) });
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });

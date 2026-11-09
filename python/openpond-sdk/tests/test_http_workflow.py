@@ -262,16 +262,17 @@ def server():
                 assert query['teamId']==TEAM
                 now=datetime.now(timezone.utc)
                 value={'schemaVersion':'openpond.trainingGpuCatalog.v1','observedAt':now.isoformat(),'expiresAt':(now+timedelta(seconds=60)).isoformat(),
-                    'workerImageDigest':'sha256:'+'a'*64,'supportedLoraRanks':[16],'pricingBasis':'provider_catalog_compute_and_disk_before_credits',
+                    'workerImageDigest':'sha256:'+'a'*64,'supportedLoraRanks':[16],'pricingBasis':'retail_allocation_hourly_before_credits',
                     'scope':{'query':query,'requestHash':canonical_sha256(query),'qualification':'requires_preparation','reason':None,
                         'provider':{'accountScopeId':'opaque-scope','product':'POD','cloud':'SECURE','countryCodes':['US','CA'],
-                            'cudaVersions':['12.8'],'dataCenterId':None,'minimumDiskGb':130,'priceBasis':'provider_catalog_per_gpu_rate_times_count'}},
+                            'cudaVersions':['12.8'],'dataCenterId':None,'minimumDiskGb':130}},
                     'offerings':[{'availabilityId':'offer','gpuType':'gpu','provider':'fixture_provider','region':'fixture_region','dataCenterId':None,
-                        'gpuCount':2,'gpuMemoryGb':80,'stockStatus':'Medium','hourlyUsd':7,'computeHourlyUsd':4,'diskHourlyUsd':0.01,'totalHourlyUsd':4.01}]}
+                        'gpuCount':2,'gpuMemoryGb':80,'stockStatus':'Medium','hourlyUsd':7}]}
                 if state.get('gpu_reply')=='hash':value['scope']['requestHash']='0'*64
                 if state.get('gpu_reply')=='count':value['offerings'][0]['gpuCount']=1
                 if state.get('gpu_reply')=='expired':value['expiresAt']=value['observedAt']
                 if state.get('gpu_reply')=='missing':del value['scope']
+                if state.get('gpu_reply')=='supplier_fields':value['offerings'][0].update(computeHourlyUsd=4,diskHourlyUsd=0.01,totalHourlyUsd=4.01)
                 self.reply(200,{'catalog':value});return
             if self.path=='/v1/training/hardware-catalog':
                 content={'schemaVersion':'openpond.trainingHardwareInventory.v1','provider':'fixture_provider','source':'fixture_inventory_v1',
@@ -661,7 +662,7 @@ def test_hardware_catalog_identity_in_both_native_clients(server):
             return await value if inspect.isawaitable(value) else value
         state['gpu_reply']='valid'
         assert (await gpu_read())['scope']['query']==query
-        for invalid in ('hash','count','expired','missing'):
+        for invalid in ('hash','count','expired','missing','supplier_fields'):
             state['gpu_reply']=invalid
             with pytest.raises(ProtocolError):await gpu_read()
         assert state['posts']==0
