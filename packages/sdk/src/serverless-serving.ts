@@ -60,17 +60,9 @@ export const ServerlessServingReviewV2Schema = ServerlessServingReviewIdentitySc
     supplierRounding: z.literal("ceil_worker_lifetime_second_once"),
   }).strict(),
 }).strict();
-/** New admissions debit evidenced runtime without encumbering future credit. */
+/** Current serving review. */
 export const ServerlessServingReviewV3Schema = ServerlessServingReviewV2Schema.extend({
   schemaVersion: z.literal("openpond.serverlessServingReview.v3"),
-  billing: z.object({
-    mode: z.literal("periodic_actual_usage"),
-    debitIntervalMillis: z.literal(15_000),
-    reservation: z.literal("none"),
-    uncollectible: z.literal("operator_expense"),
-    evidence: z.literal("native_worker_clock"),
-    quantityAuthority: z.literal("pending_until_two_advancing_native_clocks"),
-  }).strict(),
 }).strict();
 export const ServerlessServingReviewSchema = z.discriminatedUnion("schemaVersion", [
   ServerlessServingReviewV1Schema, ServerlessServingReviewV2Schema, ServerlessServingReviewV3Schema,

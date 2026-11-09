@@ -808,11 +808,6 @@ def test_model_serving_activation_recovery_and_stop_in_both_clients(server):
                          'version':'fixture-price','profileHash':'c'*64,'currency':'USD','unit':'resource_hour','hourlyUsd':'1.000000'},
                 'rules':rules,'workerIdleTimeoutSeconds':5,'maximumRequestMillis':540000,
                 'expiresAt':'2999-01-01T00:00:00.000Z'}
-        if version=='v3':
-            review['billing']={'mode':'periodic_actual_usage','debitIntervalMillis':15000,
-                               'reservation':'none','uncollectible':'operator_expense',
-                               'evidence':'native_worker_clock',
-                               'quantityAuthority':'pending_until_two_advancing_native_clocks'}
         review['contentHash']=canonical_sha256(review)
         approval={'schemaVersion':'openpond.serverlessServingApproval.v1','reviewHash':review['contentHash'],'customerCapUsd':'1.000000'}
         if version!='v3':
