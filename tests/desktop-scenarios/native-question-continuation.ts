@@ -51,13 +51,23 @@ export default desktopScenario({
     await waitForRendererCondition(h, `!!document.querySelector('[data-notification-question=${JSON.stringify(question.id)}]')`, "persisted question after reload");
     await h.screenshot("question-after-native-round-and-reload");
     const firstTurn = question.turnId;
+    const unsentDraft = "Unsent follow-up: keep this draft while I answer the form.";
+    await h.renderer.replaceComposerText!(unsentDraft);
     await h.renderer.evaluate(`(() => { const card = document.querySelector('[data-notification-question=${JSON.stringify(question.id)}]'); const button = [...card.querySelectorAll('.user-question-options button')].find(b=>b.textContent.includes(${JSON.stringify(json.label)})); if (!button || button.disabled) throw Error('Question answer unavailable'); button.click(); })()`);
     await observe(() => events.some(e => e.name === "user_question.answered") && events.some(e => e.name === "turn.completed" && e.turnId !== firstTurn));
     const answered = events.find(e => e.name === "user_question.answered").data.resolution;
     h.recordAssertion("exactQuestionAnswered", answered.questionId === question.id && answered.optionId === json.id);
     h.recordAssertion("automaticSameChatContinuation", events.some(e => e.name === "turn.started" && e.turnId !== firstTurn));
     h.recordAssertion("continuationProducedResponse", events.some(e => e.name === "assistant.delta" && e.turnId !== firstTurn && e.output?.trim()));
+    await waitForRendererCondition(h, `!!document.querySelector('.user-question-card.answered')`, "answered question display", { timeoutMs: 20_000 });
+    await reloadRenderer(h);
+    await waitForRendererCondition(h, `!!document.querySelector('.user-question-card.answered')`, "answered question after reload", { timeoutMs: 20_000 });
+    h.recordAssertion("answerPreservedUnsentDraft", await h.renderer.evaluate<string>(`document.querySelector('.composer-inline-input')?.innerText ?? ''`) === unsentDraft);
     h.recordMetadata({ sessionId, firstTurn, questionId: question.id, liveAgent: true, mockedProvider: false, trainingStarted: false });
     await h.screenshot("answer-continued-the-same-chat");
+    await h.renderer.replaceComposerText!("");
+    await h.renderer.evaluate(`document.querySelector('button[aria-label="New thread"]').click()`);
+    await waitForRendererCondition(h, `!!document.querySelector('.model-training-starter')`, "new chat after accepted send");
+    h.recordAssertion("sentPromptDoesNotReturnInNewChat", !(await h.renderer.evaluate<string>(`document.querySelector('.composer-inline-input')?.innerText ?? ''`)).trim());
   },
 });

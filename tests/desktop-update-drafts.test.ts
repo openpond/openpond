@@ -1,10 +1,31 @@
 import { expect, test } from "vitest";
 import { appReducer, initialAppState, type AppAction } from "../apps/web/src/app/app-state";
-import { createComposerDraftStore } from "../apps/web/src/lib/composer-draft-store";
+import { captureSubmittedDraftClear, createComposerDraftStore } from "../apps/web/src/lib/composer-draft-store";
 import { restoreDesktopUpdateDrafts, saveDesktopUpdateDrafts } from "../apps/web/src/lib/desktop-update-drafts";
 import { restoreConversationSidebarSnapshot, saveConversationSidebarSnapshot } from "../apps/web/src/lib/conversation-sidebar-storage";
 import { defaultWorkspaceDiffPanelViewState } from "../apps/web/src/components/workspace-diff/workspace-diff-panel-model";
 import { defaultOpenRightSidebarConversationState, rightSidebarWorkspacePanelStateKey } from "../apps/web/src/lib/right-sidebar-conversation-state";
+
+// An accepted first send must not resurrect in New chat or consume another
+// conversation's draft; edits made while the request is pending remain unsent.
+test("accepted sends clear their original draft without consuming newer edits", () => {
+  const store = createComposerDraftStore();
+  store.set("Submitted starter");
+  const clear = captureSubmittedDraftClear(store);
+  store.applyAppAction({ type: "selectSession", sessionId: "created" });
+  store.set("Next reply");
+  expect(clear()).toBe(false);
+  expect(store.getSnapshot()).toBe("Next reply");
+  store.applyAppAction({ type: "beginNewChat", appId: null });
+  expect(store.getSnapshot()).toBe("");
+  store.set("Another starter");
+  const delayedClear = captureSubmittedDraftClear(store);
+  store.set("Edited while sending");
+  expect(delayedClear()).toBe(false);
+  expect(store.getSnapshot()).toBe("Edited while sending");
+  expect(captureSubmittedDraftClear(store)()).toBe(true);
+  expect(store.getSnapshot()).toBe("");
+});
 
 // Inheriting a folder must switch both draft stores atomically, without copying
 // an unsent reply or its training resources into the new task.

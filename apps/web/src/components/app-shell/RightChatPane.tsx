@@ -249,6 +249,7 @@ export function RightChatPane({
       ? resolution.text
       : "Dismiss this question";
     const sent = await onSubmit([], null, null, {
+      preservePrompt: true,
       displayPrompt,
       promptOverride: displayPrompt,
       turnMetadata: { userQuestionResolution: resolution },

@@ -6,6 +6,30 @@ import { startedAgentNames } from "../apps/web/src/lib/chat-activity-summary";
 import { IncrementalChatProjector } from "../apps/web/src/lib/incremental-chat-projector";
 
 describe("IncrementalChatProjector", () => {
+  // Otherwise an answered question stays clickable in the previous turn until
+  // a full reload, even though the backend already rejects a second answer.
+  test.each(["answer", "dismiss"] as const)("updates an earlier question after a later-turn %s", action => {
+    const initial = [
+      event("question-turn", "turn.started", "turn-1", { args: { prompt: "Choose a format" } }),
+      event("question", "user_question.asked", "turn-1", { data: { question: {
+        id: "format", sessionId: "session", turnId: "turn-1", toolCallId: "ask", question: "Which format?",
+        options: [{ id: "json", label: "JSON" }], allowFreeform: true, status: "pending", answer: null,
+        createdAt: "2026-11-09T00:00:00Z", answeredAt: null,
+      } } }),
+      event("question-done", "turn.completed", "turn-1"),
+    ];
+    const projector = new IncrementalChatProjector();
+    expect(projector.project(initial).find(message => message.userQuestion)?.userQuestion?.status).toBe("pending");
+    const events = [...initial,
+      event("answer-turn", "turn.started", "turn-2", { args: { prompt: "JSON" } }),
+      event("resolved", action === "answer" ? "user_question.answered" : "user_question.dismissed", "turn-2", {
+        data: { resolution: { questionId: "format", action, optionId: action === "answer" ? "json" : null, text: action === "answer" ? "JSON" : "" } },
+      }),
+    ];
+    expect(projector.project(events)).toEqual(buildChatMessages(events));
+    expect(projector.project(events).find(message => message.userQuestion)?.userQuestion?.status).toBe(action === "answer" ? "answered" : "dismissed");
+  });
+
   // Completion events omit launch arguments. Keep the original worker title
   // through streaming/replay, without claiming failed attempts were created.
   test("retains confirmed agent launch names through tool completion and later commands", () => {
