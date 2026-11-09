@@ -787,16 +787,16 @@ def test_model_serving_activation_recovery_and_stop_in_both_clients(server):
     url,state=server
     f=json.loads((Path(__file__).resolve().parents[3]/'packages/sdk/fixtures/python-foundation/training-model-serving-control-http-workflow.json').read_text())
     query={'teamId':TEAM,'versionHash':f['request']['versionHash']};state['model_serving_query']=query
-    # Signed v1 history and v2 lifecycle terms must survive both HTTP clients;
+    # Signed v1/v2 history and current v3 terms survive both HTTP clients;
     # an outer receipt signature cannot authorize substituted nested meter rules.
     from ponder_sdk.serverless_serving import create_serverless_serving_approval
     scenarios=[]
-    for version in ('v1','v2'):
+    for version in ('v1','v2','v3'):
         rules={'quantity':'allocated_engine_milliseconds','allocation':'equal_billing_principal_then_request',
                'startupBillable':False,'idleBillable':False,'queueBillable':False,
                'failure':'observed_engine_work','cancellation':'until_engine_release',
                'tokenRetailUsd':'0.000000','minimumBillableMillis':0}
-        if version=='v2':
+        if version in ('v2','v3'):
             rules.update(quantity='allocated_worker_milliseconds',startupBillable=True,idleBillable=True,
                          cleanupBillable=True,failure='observed_worker_runtime',cancellation='until_worker_stop',
                          supplierRounding='ceil_worker_lifetime_second_once')
@@ -808,9 +808,14 @@ def test_model_serving_activation_recovery_and_stop_in_both_clients(server):
                          'version':'fixture-price','profileHash':'c'*64,'currency':'USD','unit':'resource_hour','hourlyUsd':'1.000000'},
                 'rules':rules,'workerIdleTimeoutSeconds':5,'maximumRequestMillis':540000,
                 'expiresAt':'2999-01-01T00:00:00.000Z'}
+        if version=='v3':
+            review['billing']={'mode':'periodic_actual_usage','debitIntervalMillis':15000,
+                               'reservation':'none','uncollectible':'operator_expense',
+                               'evidence':'native_worker_clock',
+                               'quantityAuthority':'pending_until_two_advancing_native_clocks'}
         review['contentHash']=canonical_sha256(review)
         approval={'schemaVersion':'openpond.serverlessServingApproval.v1','reviewHash':review['contentHash'],'customerCapUsd':'1.000000'}
-        if version=='v1':
+        if version!='v3':
             with pytest.raises(ProtocolError):create_serverless_serving_approval(review,'1.000000')
         else:assert create_serverless_serving_approval(review,'1.000000')==approval
         request=copy.deepcopy(f['request']);request.update(idleTimeoutSeconds=5,serverlessApproval=approval)
