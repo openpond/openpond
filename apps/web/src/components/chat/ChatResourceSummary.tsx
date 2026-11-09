@@ -1,8 +1,10 @@
 import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ChatResourceSummary as Resource, ChatExperimentView } from "@openpond/contracts";
 import type { ClientConnection } from "../../api/api-client";
 import { chatResourceRequest, type DatasetResponse } from "../../api/chat-resource-api";
+import { connectionQueryScope } from "../../lib/query-scope";
 import { ChatResourceToolbar, type ResourceAction } from "./ChatResourceToolbar";
 import { ChatGraderSummary } from "./ChatGraderSummary";
 import { DropdownSelect } from "../DropdownSelect";
@@ -14,6 +16,7 @@ export function ChatResourceSummary(props:{initial:Resource;connection:ClientCon
   return props.initial.kind === "grader" ? <ChatGraderSummary {...props}/> : <ChatDatasetOrExperimentSummary {...props}/>;
 }
 function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Resource;connection:ClientConnection|null;context?:{sessionId:string;turnId:string}}) {
+  const queries = useQueryClient();
   const [current,setCurrent] = useState(initial);
   const [expanded,setExpanded] = useState(false);
   const [rowPage,setRowPage] = useState(0);
@@ -35,19 +38,30 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
   const [chartOperationId] = useState(()=>crypto.randomUUID());
   useEffect(()=>setCurrent(initial),[initial]);
   const unsaved=["Creating","Importing","Failed","Cancelled"].includes(current.state) && current.kind === "dataset";
-  // Refresh runtime state without changing a historical dataset revision.
+  // Only active executions need background refresh. Saved Dataset cards already
+  // contain a row preview; load their pinned contents when the user opens them.
   useEffect(()=> {
-    if (!connection || unsaved || current.kind === "experiment" && !["queued","running","cancelling"].includes(current.state)) return;
+    if (!connection || current.kind !== "experiment" || !["queued","running","cancelling"].includes(current.state)) return;
     const abort = new AbortController(); let timer:ReturnType<typeof setTimeout>;
     const poll = async()=> {
       try {
-        const reply = current.kind === "dataset" ? await chatResourceRequest<DatasetResponse>(connection,"dataset",{action:"read",id:current.id,expectedRevision:current.revision},abort.signal) : await chatResourceRequest<{summary:Resource;view:ChatExperimentView}>(connection,"experiment",{action:"status",payload:{id:current.id}},abort.signal);
-        if (!abort.signal.aborted) { setCurrent(previous=>({...reply.summary,datasetId:previous.datasetId,datasetRevision:previous.datasetRevision}));setDetails("record" in reply ? reply : reply.view);setError(null); }
+        const reply = await chatResourceRequest<{summary:Resource;view:ChatExperimentView}>(connection,"experiment",{action:"status",payload:{id:current.id}},abort.signal);
+        if (!abort.signal.aborted) { setCurrent(previous=>({...reply.summary,datasetId:previous.datasetId,datasetRevision:previous.datasetRevision}));setDetails(reply.view);setError(null); }
       } catch (cause) { if (!abort.signal.aborted) setError(cause instanceof Error ? cause.message : "Status unavailable."); }
-      if (!abort.signal.aborted) timer = setTimeout(()=>void poll(),current.kind === "dataset" ? 10_000 : 2000);
+      if (!abort.signal.aborted) timer = setTimeout(()=>void poll(),2000);
     };
     void poll(); return ()=>{abort.abort();clearTimeout(timer);};
-  },[connection,current.id,current.kind,current.state,current.revision,unsaved]);
+  },[connection,current.id,current.kind,current.state,current.revision]);
+  function datasetKey(id:string,revision:number) {
+    return ["chat-resource-dataset",connectionQueryScope(connection),id,revision];
+  }
+  function readDataset(id:string,revision:number) {
+    return queries.fetchQuery({
+      queryKey:datasetKey(id,revision),
+      staleTime:Infinity,
+      queryFn:({signal})=>chatResourceRequest<DatasetResponse>(connection!,"dataset",{action:"read",id,expectedRevision:revision},signal),
+    });
+  }
   async function perform(action:()=>Promise<void>) {
     if (busy || !connection) return;
     setBusy(true);setError(null);
@@ -56,12 +70,13 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
   }
   async function datasetAction(action:string,payload:Record<string,unknown>={}) {
     const response = await chatResourceRequest<DatasetResponse>(connection!,"dataset",{action,id:current.id,expectedRevision:current.revision,payload,context});
+    queries.setQueryData(datasetKey(response.summary.id,response.summary.revision),response);
     setCurrent(response.summary);setDetails(response);
   }
   async function view() {
     if (expanded) {setExpanded(false);return;}
     if (current.kind === "dataset") {
-      const response = await chatResourceRequest<DatasetResponse>(connection!,"dataset",{action:"read",id:current.id,expectedRevision:current.revision});setDetails(response);
+      const response = await readDataset(current.id,current.revision);setDetails(response);
     } else {
       const response = await chatResourceRequest<{view:ChatExperimentView}>(connection!,"experiment",{action:"result",payload:{id:current.id}});setDetails(response.view);
     }
@@ -71,7 +86,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
     const datasetId=current.kind === "dataset" ? current.id : current.datasetId;
     const revision=current.kind === "dataset" ? current.revision : current.datasetRevision;
     if(!datasetId || !revision)throw new Error("The saved Dataset pin is unavailable.");
-    const [response,dataset]=await Promise.all([chatResourceRequest<{models:ModelChoice[]}>(connection!,"experiment",{action:"models"}),chatResourceRequest<DatasetResponse>(connection!,"dataset",{action:"read",id:datasetId,expectedRevision:revision})]);
+    const [response,dataset]=await Promise.all([chatResourceRequest<{models:ModelChoice[]}>(connection!,"experiment",{action:"models"}),readDataset(datasetId,revision)]);
     setMeteredGrading(dataset.record.workspace.draft.graders.some(grader=>grader.kind === "model_judge"));
     setModels(response.models);setSelectedModels([]);setModel(""); setSetup(true);
     if (response.models.length === 1) setModel(`${response.models[0].providerId}/${response.models[0].id}`);

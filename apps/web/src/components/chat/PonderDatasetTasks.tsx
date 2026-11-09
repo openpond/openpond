@@ -24,6 +24,7 @@ export function PonderDatasetTasks({ connection, dataset, onSaved }: {
   onSaved: (summary: ChatResourceSummary) => Promise<void>;
 }) {
   const query = useQuery({ queryKey: ["ponder-dataset", connectionQueryScope(connection), dataset.id, dataset.revision],
+    staleTime: Infinity,
     queryFn: async ({ signal }) => {
       const result = await chatResourceRequest<DatasetResponse>(connection, "dataset", { action: "read", id: dataset.id, expectedRevision: dataset.revision }, signal);
       if (result.summary.id !== dataset.id || result.summary.revision !== dataset.revision) throw new Error("Dataset differs from the selected revision.");
