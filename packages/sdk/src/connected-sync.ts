@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import {
   AgentImportCommitRequestSchema,
@@ -124,12 +125,12 @@ export class ConnectedSyncClient {
   constructor(
     private readonly options: {
       apiKey: string;
-      baseUrl: string;
+      baseUrl?: string;
       teamId: string;
       fetch?: typeof fetch;
     },
   ) {
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (
       !["http:", "https:"].includes(url.protocol) ||
       url.username ||
@@ -288,7 +289,7 @@ export class ConnectedSyncClient {
   ) {
     const { response, value } = await fetchConnectedJson(
       this.options.fetch ?? fetch,
-      `${this.options.baseUrl.replace(/\/+$/u, "")}/v1/connected-evidence/sync/connections${path}`,
+      `${(this.options.baseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/u, "")}/v1/connected-evidence/sync/connections${path}`,
       {
         method,
         signal,

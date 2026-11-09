@@ -1,4 +1,19 @@
-export type OpenPondClientOptions = {
+import type { ProductModelBinding } from "./product-models.js";
+
+export type OpenPondClientOptions<
+  Models extends Record<string, string | ProductModelBinding> = Record<
+    string,
+    string | ProductModelBinding
+  >,
+> = {
+  /** Default destination for addTask(task). No implicit Dataset creation. */
+  datasetId?: string;
+  /** Optional personalized inference connection overrides. */
+  serving?: { baseUrl?: string; apiKey?: string; timeoutMs?: number };
+  /** Application-owned aliases bound to exact callable model IDs. */
+  models?: Models;
+  /** Custom HTTP transport, useful for application instrumentation. */
+  fetch?: typeof fetch;
   /** Workspace used by flat task ingestion methods. */
   teamId?: string;
   /** OpenPond server API key. Keep this value on the server. */

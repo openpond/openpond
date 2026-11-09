@@ -1,4 +1,5 @@
 import { createTrainingClient, TrainingExecutionListQuerySchema } from "openpond-sdk/training";
+import { readHostedWeightSpace } from "./hosted-weight-space-read.js";
 import {EvaluationOperationRecoveryPageSchema,RecoverableEvaluationActionSchema} from "@openpond/contracts";
 import { ModelProjectBaseModelSchema, createModelProjectsClient } from "openpond-sdk/model-projects";
 import { OpenPondToolLearningClient } from "openpond-sdk/tool-learning";
@@ -105,8 +106,17 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     };
     const ownedExecution = async (id: string) => { const result = await experiments.get(id); assertProject(result.request.project); return result; };
     const ownedRecorded = async (id: string) => { const result = await connected.recordedExecution(id); assertProject({id:result.request.projectId}); return result; };
+    const ownedWeightSpace=async(id:string)=>{
+      const actorId=await input.resolveActorId?.();if(!actorId)throw new Error("Authenticate before reading weight-space grading.");
+      return readHostedWeightSpace({teamId:access.teamId,actorId,apiOrigin:new URL(access.apiBaseUrl).origin,
+        projectId:request.projectId,action:"get",id},async()=>{
+          const current=await input.resolveAccess(),currentActor=await input.resolveActorId?.();
+          if(!currentActor)throw new Error("The editing account changed.");return {...current,actorId:currentActor};
+        },input.fetch);
+    };
     const ownedPass = async (id: string) => { const result = await experiments.scoringPass(id);
       if(result.request.executionKind === "recorded_evidence") await ownedRecorded(result.request.execution.id);
+      else if(result.request.executionKind==="weight_space")await ownedWeightSpace(result.request.execution.id);
       else await ownedExecution(result.request.execution.id); return result; };
     const connectedResult = await connectedWorkspaceRequest(connected,request.operation,request.value,request.projectId,requireDataset);
     if (connectedResult) return connectedResult.value;
@@ -206,7 +216,7 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     }
     if (request.operation === "prepareHarness") return experiments.prepareHarness(PrepareHarnessExperimentSchema.parse(request.value));
     if (request.operation === "run") { const data = RunExperimentSchema.parse(request.value); assertProject(data.request.project); if (data.sourceExperimentId) await ownedExecution(data.sourceExperimentId); return experiments.run(data); }
-    if (request.operation === "score") { const data = ExperimentScoringRequestSchema.parse(request.value); if(data.executionKind === "recorded_evidence") await ownedRecorded(data.execution.id); else await ownedExecution(data.execution.id); return experiments.score(data); }
+    if (request.operation === "score") { const data = ExperimentScoringRequestSchema.parse(request.value); if(data.executionKind === "recorded_evidence") await ownedRecorded(data.execution.id); else if(data.executionKind==="weight_space")await ownedWeightSpace(data.execution.id); else await ownedExecution(data.execution.id); return experiments.score(data); }
     if (request.operation === "compare") {
       const data = z.object({ baselineId: Id, candidateId: Id }).parse(request.value);
       await Promise.all([data.baselineId, data.candidateId].map(id => id.startsWith("score_") ? ownedPass(id) : ownedExecution(id)));
@@ -216,6 +226,9 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     if (["pass", "passResult", "cancelPass"].includes(request.operation)) { const result = await ownedPass(data.id); return request.operation === "pass" ? result : request.operation === "passResult" ? experiments.scoringResult(data.id) : experiments.cancelScoringPass(data.id); }
     if(request.operation === "passes" && data.executionKind === "recorded_evidence") {
       await ownedRecorded(data.id); return experiments.scoringPasses(data.id,{executionKind:"recorded_evidence",afterId:typeof data.afterId==="string"?data.afterId:undefined});
+    }
+    if(request.operation==="passes"&&data.executionKind==="weight_space"){
+      await ownedWeightSpace(data.id);return experiments.scoringPasses(data.id,{executionKind:"weight_space",afterId:typeof data.afterId==="string"?data.afterId:undefined});
     }
     const result = await ownedExecution(data.id);
     if (request.operation === "experiment") return result;

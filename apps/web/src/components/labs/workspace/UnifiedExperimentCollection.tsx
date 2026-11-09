@@ -1,3 +1,4 @@
+import { useManagedWeightSpaceClient } from "./managed-weight-space-api";
 import { useManagedAlphaEditClient } from "./managed-alphaedit-api";
 import { useManagedNeuronTrainingClient } from "./managed-neuron-training-api";
 import { useManagedDecisionClient } from "./managed-decision-api";
@@ -285,6 +286,35 @@ export function UnifiedExperimentCollection({
           ? 3000
           : false,
   });
+  const weightSpacesClient = useManagedWeightSpaceClient(
+    hostedApi,
+    !datasetHash && !datasetId,
+  );
+  const weightSpaces = useInfiniteQuery({
+    queryKey: ["unified-experiments", hostedApi.key, hostedApi.actorId, "managed-weight-space"],
+    enabled: !datasetHash && !datasetId && Boolean(weightSpacesClient.data),
+    retry: false,
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page: import("openpond-sdk/training").WeightSpaceExecutionPage) =>
+      page.nextCursor ?? undefined,
+    queryFn: ({ signal, pageParam }) => {
+      if (!weightSpacesClient.data) throw new Error("Load the execution account first.");
+      return weightSpacesClient.data.list(
+        { limit: 25, ...(pageParam ? { cursor: pageParam } : {}) },
+        signal,
+      );
+    },
+    refetchInterval: (query) =>
+      query.state.error
+        ? false
+        : query.state.data?.pages.some((page) =>
+              page.items.some(
+                (row) => !["prepared", "completed", "cancelled", "failed"].includes(row.phase),
+              ),
+            )
+          ? 3000
+          : false,
+  });
   const rows = [
     ...new Map(
       [
@@ -301,6 +331,17 @@ export function UnifiedExperimentCollection({
         ).map((item) => managedModificationExperimentRecord(hostedApi, item)),
         ...(
           neuronTrainings.data?.pages
+            .flatMap((page) => page.items)
+            .filter(
+              (item) =>
+                !route.query ||
+                `${item.name} ${item.model.modelId} ${item.id}`
+                  .toLowerCase()
+                  .includes(route.query.toLowerCase()),
+            ) ?? []
+        ).map((item) => managedModificationExperimentRecord(hostedApi, item)),
+        ...(
+          weightSpaces.data?.pages
             .flatMap((page) => page.items)
             .filter(
               (item) =>
@@ -458,6 +499,20 @@ export function UnifiedExperimentCollection({
           Retry neuron training history
         </button>
       </ErrorToast>
+      <ErrorToast
+        error={weightSpaces.error ?? weightSpacesClient.error}
+        prefix="Weight-space programming experiments"
+      >
+        <button
+          className="training-text-button"
+          onClick={() => {
+            void weightSpacesClient.refetch();
+            void weightSpaces.refetch();
+          }}
+        >
+          Retry weight-space history
+        </button>
+      </ErrorToast>
       <ErrorToast error={decisions.error ?? decisionClient.error} prefix="Decision experiments">
         <button
           className="training-text-button"
@@ -510,7 +565,7 @@ export function UnifiedExperimentCollection({
             observations.isLoading ||
             modifications.isLoading ||
             alphaEdits.isLoading ||
-            neuronTrainings.isLoading ||
+            neuronTrainings.isLoading || weightSpaces.isLoading ||
             engrams.isLoading ||
             decisions.isLoading ||
             Boolean(
@@ -540,6 +595,15 @@ export function UnifiedExperimentCollection({
           onClick={() => void neuronTrainings.fetchNextPage()}
         >
           More neuron training experiments
+        </button>
+      ) : null}
+      {weightSpaces.hasNextPage ? (
+        <button
+          className="training-button secondary evaluation-more"
+          disabled={weightSpaces.isFetchingNextPage}
+          onClick={() => void weightSpaces.fetchNextPage()}
+        >
+          More weight-space programming experiments
         </button>
       ) : null}
       {decisions.hasNextPage ? (

@@ -11,7 +11,7 @@ formats first. The sample uses an input object with `question` and an output
 object with `answer`; adapt the record to your published format. The scripts read
 the source's exact task-definition reference from the server.
 
-Set `OPENPOND_API_KEY`, `OPENPOND_API_URL` and `OPENPOND_LEARNING_SCOPE` in your
+Set `OPENPOND_API_KEY` and `OPENPOND_LEARNING_SCOPE` in your
 shell, then run one of:
 
 ```sh
@@ -19,12 +19,10 @@ node --experimental-strip-types submit.ts SOURCE_ID example.json
 python3 submit.py SOURCE_ID example.json
 ```
 
-Use the URL of the execution owner: a local OpenPond server or the hosted API
-where the learning service is deployed. The server authorizes the requested
-profile/team scope. The SDK and Python example send the selected scope in
-`X-OpenPond-Team-Id` so hosted requests select that team before authorization;
-the local server uses the profile scope in the request body. These variables are example configuration, not arguments
-that should be committed with credentials.
+The SDK connects to OpenPond automatically. The server authorizes the requested
+workspace scope. The SDK and Python example send that scope in
+`X-OpenPond-Team-Id`. Keep credentials in your application's secret configuration.
+Do not commit their values.
 
 Assign stable example/attempt identities and preserve `idempotencyKey`, timestamp
 and content on retries. A different record must use a different key. Submission

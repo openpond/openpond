@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MODEL_SERVING_IDLE_TIMEOUT_SECONDS, type SavedModelServing, type SavedModelVersion } from "openpond-sdk/training";
+import { MODEL_SERVING_IDLE_TIMEOUT_SECONDS, SERVERLESS_SERVING_IDLE_SECONDS, type SavedModelServing, type SavedModelVersion } from "openpond-sdk/training";
 import { DropdownSelect } from "../DropdownSelect";
 import { ErrorToast } from "../common/ErrorToast";
 import { AppDialog } from "../dialogs/AppDialog";
@@ -21,7 +21,10 @@ export function ModelServingControlDialog({
   onClose(): void;
 }) {
   const saved = useModelServingControl(api, version.modelProjectId, value);
-  const idle = MODEL_SERVING_IDLE_TIMEOUT_SECONDS;
+  const serverless = version.schemaVersion === "openpond.trainingModelVersion.v1";
+  const idle = serverless ? SERVERLESS_SERVING_IDLE_SECONDS : MODEL_SERVING_IDLE_TIMEOUT_SECONDS;
+  const [spendingLimit, setSpendingLimit] = useState("");
+  const availableReview = value?.schemaVersion === "openpond.trainingModelServing.v1" ? value.serverlessReview : null;
   const [defaultProfile, setDefaultProfile] = useState(
     value?.schemaVersion === "openpond.engramModelServing.v1"
       ? value.defaultEnabled
@@ -31,6 +34,9 @@ export function ModelServingControlDialog({
   );
   const retained = saved.retained?.command.request,
     actual = retained?.action ?? action;
+  const acceptedReview = value?.schemaVersion === "openpond.trainingModelServing.v1" ? value.control?.serverless?.review : null;
+  const retainedReviewHash = retained && "serverlessApproval" in retained ? retained.serverlessApproval?.reviewHash : null;
+  const serverlessReview = retainedReviewHash ? [acceptedReview, availableReview].find(review => review?.contentHash === retainedReviewHash) : availableReview;
   const allowed =
     value &&
     (actual === "activate"
@@ -38,10 +44,10 @@ export function ModelServingControlDialog({
         value.schemaVersion === "openpond.engramModelServing.v1" ||
         value.schemaVersion === "openpond.decisionModelServing.v1" ||
         value.schemaVersion === "openpond.alphaEditModelServing.v1" ||
-        value.schemaVersion === "openpond.neuronTrainingModelServing.v1"
+        (value.schemaVersion === "openpond.neuronTrainingModelServing.v1" || value.schemaVersion === "openpond.weightSpaceModelServing.v1")
           ? value.availability.state === "qualified" &&
             !value.cleanup.some((row) => !["shared", "released"].includes(row.capacityState))
-          : value.registry?.qualified) && value.control?.phase !== "stopping"
+          : value.registry?.qualified && Boolean(serverlessReview)) && value.control?.phase !== "stopping"
       : value.control?.desiredState === "active" &&
         value.control.versionHash === version.contentHash);
   const guard = useDraftNavigation({
@@ -49,6 +55,7 @@ export function ModelServingControlDialog({
     busy: saved.busy,
     dirty:
       Boolean(retained) ||
+      (serverless && spendingLimit.length > 0) ||
       (version.schemaVersion === "openpond.engramModelVersion.v1" &&
         defaultProfile !==
           (value?.schemaVersion === "openpond.engramModelServing.v1"
@@ -76,7 +83,9 @@ export function ModelServingControlDialog({
         <ErrorToast error={saved.error} />
         <p>
           {actual === "activate"
-            ? "Activate this exact saved version using workspace capacity and credits. This may allocate paid serving capacity."
+            ? serverless
+              ? "Make this saved version available on demand. Inference uses workspace credits; unused GPUs are released automatically."
+              : "Activate this exact saved version using workspace capacity and credits. This may allocate paid serving capacity."
             : "Stop new requests to this Model. Outstanding requests finish before unused capacity can retire; shared capacity may remain in use."}
         </p>
         <p>
@@ -85,7 +94,7 @@ export function ModelServingControlDialog({
             : version.schemaVersion === "openpond.engramModelVersion.v1" ||
                 version.schemaVersion === "openpond.decisionModelVersion.v1" ||
                 version.schemaVersion === "openpond.alphaEditModelVersion.v1" ||
-                version.schemaVersion === "openpond.neuronTrainingModelVersion.v1"
+                (version.schemaVersion === "openpond.neuronTrainingModelVersion.v1" || version.schemaVersion === "openpond.weightSpaceModelVersion.v1")
               ? version.baseModel.modelId
               : version.request.baseModel.modelId}
         </p>
@@ -130,7 +139,20 @@ export function ModelServingControlDialog({
             />
           </label>
         ) : null}
-        {actual === "activate" ? (
+        {actual === "activate" && serverless ? (
+          <>
+            {serverlessReview ? <p>US${serverlessReview.price.hourlyUsd} per GPU-hour equivalent, billed for your share of active serving time. Startup, queue and idle time have no separate charge.</p> : null}
+            <label className="model-build-field">
+              <span>Serving spending limit (USD, optional)</span>
+              <input type="number" min="0.000001" step="0.000001"
+                value={retained && "serverlessApproval" in retained
+                  ? retained.serverlessApproval?.customerCapUsd ?? "" : spendingLimit}
+                disabled={saved.busy || Boolean(retained)}
+                onChange={event => setSpendingLimit(event.currentTarget.value)} />
+            </label>
+            <p>The Model stays available between requests. Each request reserves a bounded amount before it runs.</p>
+          </>
+        ) : actual === "activate" ? (
           <p>Idle timeout: {(retained?.idleTimeoutSeconds ?? idle) / 60} minutes.</p>
         ) : null}
         {retained ? <p>Original {retained.action} request retained.</p> : null}
@@ -175,6 +197,7 @@ export function ModelServingControlDialog({
                       }
                     : null,
                   defaultProfile,
+                  spendingLimit || null,
                 )
                 .then((receipt) => {
                   if (receipt) {

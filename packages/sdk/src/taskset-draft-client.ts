@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { contentHash, sha256 } from "@openpond/harness";
 import { sameLearningRef } from "@openpond/evals/learning";
@@ -21,8 +22,8 @@ export class OpenPondTasksetDraftError extends Error {
 /** Scoped mutable drafts use explicit CAS and never retry writes automatically. */
 export class OpenPondTasksetDraftClient {
   readonly #options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch };
-  constructor(options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
-    const url = new URL(options.baseUrl);
+  constructor(options: { baseUrl?: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim()) throw new Error("Taskset draft client requires a clean HTTP(S) endpoint and workspace credentials.");
     this.#options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
   }

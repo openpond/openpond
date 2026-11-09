@@ -1,135 +1,136 @@
 # Add tasks to a Dataset
 
-Task submission uses an authenticated OpenPond API, separate from OpenTelemetry.
-A successful receipt means a structured task was durably saved and is available
-through the ordinary Dataset Tasks reader. It does not start training, publish
-a release, create a Model or enable a collection schedule.
+The APIs below target the **0.12.25 source candidate**, which is not published
+yet. Registry version 0.12.24 does not include configured Dataset/named-model
+setup. Use the built candidate package until the coordinated release.
 
-Create or choose an editable Dataset in Console and copy its ID. Configure the
-server-side SDK with the workspace that owns it:
+
+Configure a client once in your product's server module. Submit one structured
+source event with `await addTask(task)`:
 
 ```ts
 import { createOpenPondClient } from "openpond-sdk";
 
-const client = createOpenPondClient({
-  apiKey: process.env.OPENPOND_API_KEY!,
-  teamId: process.env.OPENPOND_TEAM_ID!,
-});
-
-const receipt = await client.addTask(process.env.OPENPOND_DATASET_ID!, {
-  name: "Handle an expired API token",
-  input: { request: "Fetch the report", observedError: "Token expired" },
-  source: { kind: "production_agent", eventId: "run-123" },
-}, { idempotencyKey: "run-123" });
-
-console.log(receipt.taskId, receipt.receivedAt);
-```
-
-Use a configured `baseUrl` when targeting a different OpenPond API origin.
-Never expose the API key in browser code or logged task content.
-
-## Bind the destination once
-
-```ts
-import { createTaskAdder } from "openpond-sdk";
-
-const addTask = createTaskAdder({
+export const openpond = createOpenPondClient({
   apiKey: process.env.OPENPOND_API_KEY!,
   teamId: process.env.OPENPOND_TEAM_ID!,
   datasetId: process.env.OPENPOND_DATASET_ID!,
-  baseUrl: "https://api.openpond.ai",
 });
 
-await addTask({
-  name: "Explain a failed agent run",
-  input: { request: "Summarize the report", outcome: "incomplete" },
-}, { idempotencyKey: "agent-run-456" });
+const receipt = await openpond.addTask({
+  id: sourceEventId,
+  name: "Handle an expired API token",
+  input: { request: "Fetch the report", observedError: "Token expired" },
+  source: { kind: "production_agent", eventId: sourceEventId },
+});
+console.log(receipt.taskId, receipt.receivedAt);
 ```
 
-The Dataset ID is still included in every request. The helper binds it locally;
-it never uses a global account, last-selected Dataset or implicit Fix-it Model.
+The client connects to OpenPond automatically and keeps its own credentials;
+no mutable global account is used. For an explicit alternate Dataset:
 
-## Input and receipt
+```ts
+await openpond.dataset(otherDatasetId).addTask({
+  id: sourceEventId,
+  name: "Explain a failed agent run",
+  input: { request: "Summarize the report", outcome: "incomplete" },
+});
+```
 
-Every task has a readable `name` and structured `input`. Optional fields are
-`expectedOutput`, `split`, `tags` and `source` (`kind`, `eventId`, `label`,
-`occurredAt`). The default split is `validation`. A `train` split alone does
-not authorize training. Keep a missing correct answer absent rather than
-replacing it with an error message.
+`addTask(datasetId, task)` and the `createTaskAdder` helper remain available.
 
-The complete request is bounded to 128 KiB. The receipt includes workspace,
-Dataset, task and operation identities, server `receivedAt`, saved revision,
-`state: "saved"` and `trainingUseAuthorized: false`. Source occurrence time is
-different from server upload time.
+## Delivery, identity and retries
 
-## Delivery and retries
+A successful receipt confirms durable storage of the task and its processing
+obligation. It does not wait for indexing, grading or training. Dataset projection
+may lag acknowledgement. Await suspends this async function while the JavaScript
+event loop continues handling other work. There is no SDK background queue,
+flush command or permanent streaming connection.
 
-Retain an explicit stable idempotency key for each source event. Repeating the
-same key and task in the same authorized destination returns the original
-receipt without inserting a duplicate. Reusing a key with different content is
-a conflict. Separate keys add separate tasks, including simultaneous writers.
+`id` identifies the source event within the workspace and Dataset. It is separate
+from the server's canonical `receipt.taskId`. Repeating the same source ID and
+content returns the original receipt; changed content conflicts instead of
+silently overwriting. New credentials still need current authorization for that
+exact Dataset. A successful upload grants no training permission.
 
-The SDK makes one request; it does not silently replay arbitrary mutations.
-When a response is lost, `DatasetTaskIngestionError.operationId` retains the
-operation identity and `outcomeUnknown` indicates that persistence could not be
-confirmed. Retry the original task with that same key. Do not generate a new
-key merely because the response was interrupted. A supplied abort signal is
-forwarded to the request; an interrupted response can still have been saved.
+The SDK sends once. It never automatically replays a mutation. Preserve your
+source ID and original content across uncertain outcomes:
 
 ```ts
 import { DatasetTaskIngestionError } from "openpond-sdk";
 
+const task = { id: sourceEventId, name: "Expired token", input: { error: "expired" } };
 try {
-  await addTask(task, { idempotencyKey: sourceEventId });
+  await openpond.addTask(task, { signal: request.signal, timeoutMs: 10_000 });
 } catch (error) {
   if (error instanceof DatasetTaskIngestionError && error.outcomeUnknown) {
-    // Retain task + error.operationId privately for a later exact retry.
+    // Retain task and error.sourceId privately for a later exact retry.
   }
   throw error;
 }
 ```
 
-The underlying route is `POST /v1/dataset-workspaces/{datasetId}/tasks`, with
-`Authorization: Bearer …`, `X-OpenPond-Team-Id` and JSON:
+When `id` is omitted the SDK generates one before dispatch. On uncertain delivery,
+`DatasetTaskIngestionError.sourceId` (also `operationId`) retains it. Supply that
+ID in a later retry. Prefer an explicit ID when cancellation or process exit could
+prevent handling the error. An event never transmitted successfully cannot be
+promised durable. `idempotencyKey` is accepted for existing callers; supplying a
+conflicting `task.id` is rejected before dispatch.
+
+Every task has `name` and structured `input`. Optional fields: `expectedOutput`,
+`split`, `tags`, and `source` (`kind`, `eventId`, `label`, `occurredAt`). Default
+split: `validation`; `train` alone grants no learning authority. Requests are
+bounded to 128 KiB. The receipt retains workspace, Dataset, canonical task and
+source identities, first-save `receivedAt`, revision, `state: "saved"` and
+`trainingUseAuthorized: false`. Source occurrence time differs from upload time.
+Existing immutable releases and Experiment inputs retain their own identities.
+
+## Python
+
+`ponder-sdk` uses the same configured destination and source ID with its native
+owned connection pool:
+
+```python
+from ponder_sdk import Client
+
+with Client(api_key=api_key, team_id=team_id,
+            dataset_id=dataset_id) as openpond:
+    receipt = openpond.add_task({
+        "id": source_event_id,
+        "name": "Expired token",
+        "input": {"error": "Token expired"},
+    })
+    # Alternate destination; uses the same pool:
+    # openpond.dataset(other_dataset_id).add_task(task)
+```
+
+Sync calls block their calling thread. Async applications use
+`async with AsyncClient(...)` and `await openpond.add_task(task)`. Both validate the
+maintained wire schemas and never replay writes automatically. A `PonderError`
+retains `operation_id` and `outcome_unknown`; cancellation propagates, so retain
+your own source ID before awaiting. Closing the HTTP pool is resource cleanup,
+not delivery flushing.
+
+## HTTP and React
+
+The HTTP operation remains `POST /v1/dataset-workspaces/{datasetId}/tasks` with
+Bearer auth and `X-OpenPond-Team-Id`. The public `task.id` maps to wire
+`operationId`; it is excluded from `task` content:
 
 ```json
 {
   "schemaVersion": "openpond.datasetTaskAppend.v1",
   "operationId": "stable-source-event",
-  "task": {
-    "name": "Handle an expired API token",
-    "input": { "observedError": "Token expired" }
-  }
+  "task": { "name": "Expired token", "input": { "error": "expired" } }
 }
 ```
 
-The server owns authorization, atomic append and revision history. Appending
-does not rewrite fixed Experiment Dataset versions or previously published
-releases. Full authoring still uses the revisioned Dataset workspace API.
+React calls your authenticated product backend. The backend selects an authorized
+Dataset and awaits the configured client. Keep OpenPond secrets and destination
+authority server-side; do not accept an arbitrary browser-supplied Dataset ID.
+For named model calls and the optional Vercel integration see
+[product integration](PRODUCT_INTEGRATION.md).
 
-## Python
-
-The maintained `ponder-sdk` package exposes the same operation on `Client`
-and `AsyncClient`:
-
-```python
-from ponder_sdk import Client
-
-with Client(base_url=api_origin, api_key=api_key, team_id=team_id) as client:
-    receipt = client.add_task(
-        dataset_id,
-        {"name": "Handle an expired API token", "input": {"error": "Token expired"}},
-        idempotency_key=source_event_id,
-    )
-```
-
-Use `async with AsyncClient(...)` and `await client.add_task(...)` for async
-applications. Both use the existing client connection pool and typed wire
-validation. Retain the caller's key/task across an unknown mutation outcome.
-
-## OpenTelemetry
-
-OpenTelemetry is an optional source adapter, not this HTTP request format.
-Its span exporter can project explicitly selected spans into structured tasks
-using the same destination and receipts. It does not make this endpoint an
-OTLP receiver, automatically capture arbitrary logs, or authorize training.
+OpenTelemetry is a separate optional source adapter, not this request format.
+Project explicitly selected spans into structured tasks. This endpoint is not an
+OTLP receiver and does not capture arbitrary logs or authorize training.

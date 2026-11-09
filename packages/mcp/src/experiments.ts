@@ -118,7 +118,7 @@ export function addExperiments(add: AddTool, c: Clients) {
       .object({
         executionId: Id,
         afterId: Id.optional(),
-        executionKind: z.literal("recorded_evidence").optional(),
+        executionKind: z.enum(["recorded_evidence", "weight_space"]).optional(),
       })
       .strict(),
     "read",

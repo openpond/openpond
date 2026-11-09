@@ -1,3 +1,4 @@
+import { addWeightSpaceTools } from "./training-weight-space.js";
 import {
   DecisionModelScoreRequestSchema,
   DecisionModelServingQuerySchema,
@@ -13,6 +14,7 @@ export function addAdapterTraining(add: AddTool, c: Clients, context: OpenPondMc
   addEngramTraining(add, c, context);
   addDecisionTraining(add, c, context);
   addNeuronTrainingTools(add, c, context);
+  addWeightSpaceTools(add,c,context);
   add(
     "models_version_get",
     "Read a Model's exact saved version and immutable lineage. Supply versionHash to reopen a pinned version. Historical artifacts remain readable; no training or serving is started.",

@@ -40,6 +40,8 @@ WEIGHT_METHODS=frozenset(('alpha_edit_execution_capability',
     'neuron_training_model_serving',
     'control_neuron_training_model_serving'))
 
+WEIGHT_SPACE_METHODS=frozenset(('weight_space_capability','prepare_weight_space_session','start_weight_space_session','cancel_weight_space_session','get_weight_space_session','list_weight_space_sessions','list_weight_space_commands','command_weight_space_session','get_weight_space_command','save_weight_space_result_model','weight_space_model_serving','control_weight_space_model_serving'))
+
 MATRIX=json.loads(files('ponder_sdk').joinpath('operation-matrix.json').read_text())
 OPERATIONS={row['client']+'.'+row['pythonMethod']:row for row in MATRIX['operations']}
 
@@ -98,6 +100,9 @@ def prepare(key: str, team_id: str, parameters: dict[str,Any], value: Any, query
             if 'scope' in body and body['scope']!=team_id:raise ProtocolError('workspace_scope_mismatch')
             body={**body,'scope':team_id}
     method=operation['pythonMethod'];client=operation['client']
+    if client=='createTrainingClient' and method in WEIGHT_SPACE_METHODS:
+        from .weight_space_identity import prepare as prepare_weight_space
+        body=prepare_weight_space(method,body,parameters,team_id,query,expected)
     if client=='createTrainingClient' and method in WEIGHT_METHODS:
         from .weight_execution_identity import prepare as prepare_weight, expectation
         expectation(expected)
@@ -227,6 +232,9 @@ def finish(operation: dict[str,Any], team_id: str, parameters: dict[str,Any], bo
     if schema=='TrainingJobPageSchema':
         from .training_usage_identity import verify_training_usage_snapshot
         for job in response['jobs']:verify_training_usage_snapshot(job)
+    if method in WEIGHT_SPACE_METHODS:
+        from .weight_space_identity import finish as finish_weight_space
+        finish_weight_space(method,schema,response,team_id,parameters,body,expected)
     if method in WEIGHT_METHODS:
         if schema in ('AlphaEditModelServingSchema','NeuronTrainingModelServingSchema'):
             from .weight_serving_identity import verify_weight_model_serving

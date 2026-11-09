@@ -13,6 +13,10 @@ import * as neuronTrainingResult from '../../../packages/sdk/src/neuron-training
 import * as neuronTrainingDraft from '../../../packages/sdk/src/neuron-training-experiment-draft.ts';
 import * as neuronTrainingExecutions from '../../../packages/sdk/src/managed-neuron-training-executions.ts';
 import * as neuronTrainingServing from '../../../packages/sdk/src/neuron-training-model-serving.ts';
+import * as weightSpace from '../../../packages/sdk/src/weight-space-programming.ts';
+import * as weightSpaceArtifacts from '../../../packages/sdk/src/weight-space-artifact.ts';
+import * as weightSpaceServing from '../../../packages/sdk/src/weight-space-model-serving.ts';
+import * as weightSpaceSessions from '../../../packages/sdk/src/weight-space-sessions.ts';
 import * as weightModels from '../../../packages/sdk/src/weight-model-versions.ts';
 import * as weightInference from '../../../packages/sdk/src/weight-inference.ts';
 import * as engramAdapter from '../../../packages/sdk/src/engram-adapter.ts';
@@ -47,6 +51,7 @@ import * as trainingModelSave from '../../../packages/sdk/src/training-model-sav
 import * as trainingModelServing from '../../../packages/sdk/src/training-model-serving.ts';
 import * as trainingModelServingControl from '../../../packages/sdk/src/training-model-serving-control.ts';
 import * as managedServingUsage from '../../../packages/sdk/src/managed-serving-usage.ts';
+import * as serverlessServing from '../../../packages/sdk/src/serverless-serving.ts';
 import * as trainingUsageFunding from '../../../packages/sdk/src/training-usage-funding.ts';
 import * as trainingUsageStatus from '../../../packages/sdk/src/training-usage-status.ts';
 import * as neuronSteering from '../../../packages/sdk/src/neuron-steering.ts';
@@ -99,7 +104,7 @@ const override=({zodSchema,jsonSchema}:any)=>{
  });
  jsonSchema['x-openpond-string-transforms']=transforms;
 };
-for(const module of [alphaedit,alphaeditArtifact,alphaeditDraft,alphaeditExecutions,alphaeditServing,neuronTraining,neuronTrainingArtifact,neuronTrainingResult,neuronTrainingDraft,neuronTrainingExecutions,neuronTrainingServing,weightModels,weightInference,engramAdapter,engramDraft,engramExecutions,engramInference,engramModels,engramServing,decisionModel,decisionData,decisionArtifact,decisionTraining,decisionDraft,decisionAuthoring,decisionExecutions,decisionModels,decisionScoring,decisionServing,training,trainingContracts,trainingResult,trainingModelSave,trainingModelServing,trainingModelServingControl,managedServingUsage,trainingUsageFunding,trainingUsageStatus,neuronSteering,steeringSelection,steeringServing,steeringInference,residualCalibration,calibrationRecords,activationReference,funding,hardwareCatalog,computeSelection,preparation,experimentSetup,evaluationDrafts,hostedEvaluationDrafts,activationDrafts,modificationCapabilities,modificationRecordings,experimentDraftStorage,models,learning,datasets,datasetTaskIngestion,estimates,postTraining,candidate,acceptance,recovery,evaluation,datasetPreparation,datasetOperations,tasksetRuns,harness,credentials,learningIndex,learningClient,harnessClient,toolLearning,toolLearningClient,toolLearningResponses,toolLearningEpisodes]){
+for(const module of [weightSpace,weightSpaceArtifacts,weightSpaceSessions,weightSpaceServing,alphaedit,alphaeditArtifact,alphaeditDraft,alphaeditExecutions,alphaeditServing,neuronTraining,neuronTrainingArtifact,neuronTrainingResult,neuronTrainingDraft,neuronTrainingExecutions,neuronTrainingServing,weightModels,weightInference,engramAdapter,engramDraft,engramExecutions,engramInference,engramModels,engramServing,decisionModel,decisionData,decisionArtifact,decisionTraining,decisionDraft,decisionAuthoring,decisionExecutions,decisionModels,decisionScoring,decisionServing,training,trainingContracts,trainingResult,trainingModelSave,trainingModelServing,trainingModelServingControl,managedServingUsage,serverlessServing,trainingUsageFunding,trainingUsageStatus,neuronSteering,steeringSelection,steeringServing,steeringInference,residualCalibration,calibrationRecords,activationReference,funding,hardwareCatalog,computeSelection,preparation,experimentSetup,evaluationDrafts,hostedEvaluationDrafts,activationDrafts,modificationCapabilities,modificationRecordings,experimentDraftStorage,models,learning,datasets,datasetTaskIngestion,estimates,postTraining,candidate,acceptance,recovery,evaluation,datasetPreparation,datasetOperations,tasksetRuns,harness,credentials,learningIndex,learningClient,harnessClient,toolLearning,toolLearningClient,toolLearningResponses,toolLearningEpisodes]){
  for(const [name,value] of Object.entries(module)){
   if(!name.endsWith('Schema')||!(value instanceof z.ZodType))continue;
   const schema=z.toJSONSchema(value,{target:'draft-2020-12',io:'output',override});

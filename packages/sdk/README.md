@@ -20,7 +20,7 @@ Node.js 22.14 or newer is required. This package is server-only: never expose an
 
 `OpenPondExperimentsClient` from `openpond-sdk/experiments` admits one run and its
 immutable configuration with `run(configuration)`. It is also available as
-`createOpenPondClient({ apiKey, baseUrl }).experiments(teamId)`. The request includes
+`createOpenPondClient({ apiKey }).experiments(teamId)`. The request includes
 one stable operation ID (also on its nested request), dataset/population,
 target/settings, selected graders and spending cap. Reuse the same operation ID
 after a transport failure; it returns the same Experiment without duplicate work.
@@ -67,7 +67,6 @@ export const maxDuration = 800;
 
 const openpond = createOpenPondClient({
   apiKey: process.env.OPENPOND_API_KEY!,
-  baseUrl: process.env.OPENPOND_API_URL,
 });
 
 export async function POST(request: Request) {
@@ -392,4 +391,8 @@ not implicitly share a spending cap.
 
 ## Add production tasks
 
-Use the flat `client.addTask(datasetId, task)` operation, or bind one destination with `createTaskAdder` and call `addTask(task)`. See [task ingestion](TASK_INGESTION.md) for TypeScript/Python examples, receipt semantics and duplicate-safe retries. Task uploads do not enable training.
+The configured API targets unpublished source candidate **0.12.25**; registry 0.12.24 does not provide it. Configure `datasetId` once and await `client.addTask({ id: sourceEventId, name, input })`. Use `client.dataset(otherDatasetId).addTask(task)` for another destination. See [task ingestion](TASK_INGESTION.md) for TypeScript/Python examples, receipt semantics and duplicate-safe retries. Task uploads do not enable training.
+
+## Add OpenPond to a product
+
+Configure named personalized Model handles with `models` and an explicit `serving` destination, then call `client.models.support.generate({ prompt })` or iterate `stream({ prompt })`. See [product integration](PRODUCT_INTEGRATION.md) for TypeScript, Python, React/backend and optional Vercel AI SDK 7 examples. Inference never activates serving or automatically captures tasks.

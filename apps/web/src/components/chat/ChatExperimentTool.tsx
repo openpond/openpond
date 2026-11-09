@@ -1,3 +1,4 @@
+import { WeightSpaceSessionPanel } from "./WeightSpaceSessionPanel";
 import { LearnedModificationResults } from "../labs/workspace/LearnedModificationResults";
 import { experimentOperationLabel } from "openpond-sdk/training";
 import { ErrorToast } from "../common/ErrorToast";
@@ -114,7 +115,9 @@ export function ChatExperimentTool({
     <div className="chat-experiment-tool">
       <ErrorToast error={error} />
       <PonderWorkbench context={context} connection={connection} sessionId={sessionId} resources={scopedResources}>
-      {selected?.alphaEditResult?.result ? (
+      {selected?.weightSpace ? (
+        <WeightSpaceSessionPanel key={`${selected.target.apiOrigin}:${selected.weightSpace.teamId}:${selected.weightSpace.ownerUserId}:${selected.weightSpace.id}`} connection={connection} apiOrigin={selected.target.apiOrigin!} initial={selected.weightSpace}/>
+      ) : selected?.alphaEditResult?.result ? (
         <div className="chat-experiment-tool-content">
           <h2>{selected.label}</h2>
           <LearnedModificationResults result={selected.alphaEditResult.result} />

@@ -9,8 +9,8 @@ the actual host/account before preparing work.
 
 ## Authentication and lifecycle
 
-Training and Model clients accept `baseUrl`, `headers` (including an async token
-supplier) and an injectable `fetch`. Use the host's normal Bearer credential and
+Training and Model clients connect to OpenPond automatically. They accept
+`headers` (including an async token supplier) and an injectable `fetch`. Use your API key as the Bearer credential and
 `X-OpenPond-Team-Id`; retain server authorization and owner checks. Learning,
 Dataset and taskset-run clients accept their existing `apiKey` and workspace
 scope. Never put credentials in URLs, request identities, fixtures or receipts.
@@ -204,8 +204,7 @@ the job controls and keep its identity.
    explicit `recordCandidateDecision` with its exact artifact reference and CAS.
    `cancel` reconciles the current job version before sending remote cancellation.
 
-The examples require `OPENPOND_API_URL`, `OPENPOND_API_KEY` and
-`OPENPOND_TEAM_ID` from the caller's normal configured account. They use only
+The examples require `OPENPOND_API_KEY` and `OPENPOND_TEAM_ID` from the caller's normal configured account. They use only
 public SDK imports, bound each invocation to two minutes and write new receipt
 files exclusively with mode0600. They do not poll indefinitely or automatically
 retry an uncertain paid start. Keep the original receipt for future reconciliation.
@@ -495,9 +494,9 @@ of `neuron_steering` and `inspect_activations`. `draftSchema` describes the form
 not permission to write or execute.
 
 Each capability observation retains `validationLevel`: `null` when execution is
-unavailable, `source_validated` for an experimental staging runtime, or
+unavailable, `source_validated` for an experimental runtime, or
 `gpu_qualified` after a retained exact-model/runtime GPU run. Source validation
-describes a runtime reviewed for an experimental staging trial; it is not
+describes a runtime reviewed for an experimental trial; it is not
 evidence that training or inference has already succeeded. Read the runtime's retained evidence; neither level
 reserves compute, approves a charge or establishes model quality. Engram,
 Decision, AlphaEdit and neuron-training capabilities use the same distinction.
@@ -669,3 +668,7 @@ optimizer creation and exports a cumulative patch with parent, initial and
 final state hashes. A runtime must explicitly advertise this mode before
 admission; source packaging alone does not establish native qualification or
 old/new held-out retention.
+
+Use `topP: 1` for managed GRPO. The current qualified trainer replays temperature and the retained required-tool grammar; it cannot replay an independent nucleus filter or separate JSON response grammar. Unsupported generation settings are rejected during preparation, before allocation. Structured Work output uses its supported required-tool path. Existing saved requests retain their explicit settings and are never silently rewritten.
+
+The current managed runtime admits at least two optimizer iterations. A single iteration is not inherently invalid GRPO, but needs explicit support from the selected runtime before it can be prepared. Each iteration accumulates the entire trajectory group before stepping; `gradientAccumulationSteps` does not define separate optimizer windows for GRPO. SFT uses its own true batch accumulation and exact model/image limits. Held-out SFT evaluation does not select optimizer updates.

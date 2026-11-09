@@ -9,7 +9,7 @@ import { createTrainingClient } from "ponder-sdk/training";
 import { OpenPondLearningClient } from "ponder-sdk/learning";
 ```
 
-Every current public subpath is mirrored, including browser-safe contracts.
+Every current public subpath is mirrored, including browser-safe contracts and the optional `ponder-sdk/ai-sdk` adapter. Dataset binding and named model handles use the same [product integration setup](../sdk/PRODUCT_INTEGRATION.md). Install the adapter’s supported optional peers only when using that entrypoint.
 The root package metadata describes Ponder itself. Python `ponder_sdk` is a
 separate training/evaluation/learning client; shared naming does not imply that
 all TypeScript sandbox/commerce APIs are available in Python.

@@ -3,16 +3,20 @@
 Native synchronous and asynchronous access to existing OpenPond training,
 evaluation, dataset and continual-learning APIs. Python3.10+; no Node subprocess,
 Desktop application, or uv installation is required to use the installed wheel.
-Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.4. Name and
+Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.5. Name and
 publisher ownership must be verified before publication; this source is not a
 claim that a registry release exists.
 
 ```sh
-pip install ponder-sdk==0.1.4
-# or: uv add ponder-sdk==0.1.4
+python -m pip install ./dist/ponder_sdk-0.1.5-py3-none-any.whl
 ```
 
-Use an existing workspace API credential and explicit API origin. Do not put
+Version 0.1.5 is an unpublished source candidate; the registry currently has
+0.1.4. The configured Dataset and named-model examples below require the
+candidate wheel or its eventual release. Build a reviewed wheel with `uv build`
+before installing from the local `dist` directory.
+
+Use an existing workspace API key. The SDK connects to OpenPond automatically. Do not put
 credentials in source or request URLs. The SDK does not perform a second login.
 For the official CLI use the running app's configured OpenPond home as described
 in the repository configuration guide; the SDK accepts the credential explicitly.
@@ -20,7 +24,7 @@ in the repository configuration guide; the SDK accepts the credential explicitly
 ```python
 from ponder_sdk import Client, inputs
 
-with Client(base_url=api_base_url, api_key=api_key,
+with Client(api_key=api_key,
             team_id=team_id) as client:
     capabilities = client.training.capabilities()
     # review is an existing reviewed batch and a pinned Model configuration.
@@ -52,7 +56,7 @@ when the caller owns retry policy.
 streamed body loop. Synchronous calls do not promise an absolute wall-clock
 deadline: header trickling can continue while making progress, and a blocked
 body read can overshoot the elapsed check by one read timeout. Synchronous hard
-workflow cancellation is caller-owned. Async calls additionally enforce one
+workflow cancellation is caller-owned. Resource API async calls additionally enforce one
 `asyncio.wait_for` deadline across connection, headers, body and retries; caller
 cancellation propagates and closes the owned response. This is not a process-kill
 deadline. Async callers can also bound an entire multi-call workflow. Responses are streamed under explicit byte bounds; compression is not
@@ -62,18 +66,20 @@ request bodies, transport URLs or credentials.
 
 ## Add production tasks
 
-Use a Dataset ID from your workspace. A successful receipt means the task is
-saved in that Dataset's Tasks view. It does not authorize training or create a Model.
+Use a Dataset ID from your workspace. A successful receipt confirms durable task/processing storage; the Tasks view may
+lag acknowledgement. It does not authorize training or create a Model.
 
 ```python
 from ponder_sdk import Client
 
-with Client(base_url=api_base_url, api_key=api_key, team_id=team_id) as client:
-    receipt = client.add_task(dataset_id, {
+with Client(api_key=api_key, team_id=team_id,
+            dataset_id=dataset_id) as client:
+    receipt = client.add_task({
+        "id": event_id,
         "name": "Expired token",
         "input": {"prompt": "Refresh the token and retry the request"},
         "source": {"kind": "production", "eventId": event_id},
-    }, idempotency_key=event_id)
+    })
 ```
 
 `AsyncClient.add_task` has the same arguments and is awaited. Retain a stable
@@ -150,7 +156,7 @@ operations in both synchronous and asynchronous form:
 ```python
 from ponder_sdk import Client, inputs
 
-with Client(base_url=api_url, api_key=api_key, team_id=team_id) as client:
+with Client(api_key=api_key, team_id=team_id) as client:
     tools = client.tool_learning(project_id=project_id)
     page = tools.installations()
     # Keep page["nextCursor"]; pass query={"after": cursor} for another page.
@@ -205,6 +211,16 @@ uv run --project python/openpond-sdk pytest python/openpond-sdk/tests
 uv build --project python/openpond-sdk --no-sources
 ```
 
+For a native worker package cohort, run `tools/prepare_release.py` with
+`--output <new-candidate-directory>` and `--expected-version <version>` to retain
+the exact wheel, source distribution and source inventory. Run
+`tools/stage_worker.py` with that `--candidate`, `--expected-version`,
+`--expected-manifest-sha256` and each consumer's `--destination`. Staging checks
+the candidate's wheel hash, complete wheel RECORD, source inventory and schema bytes
+before writing the native checksum receipt. Align the worker's explicit version
+pins and regenerate its source identity before building an image. These commands
+do not publish packages or qualify a runtime.
+
 The request and response type directories (`inputs/` and `models/`) are generated
 from the packaged `schemas.json` authority and stay out of Git. Run
 `pnpm run python:sdk:generate` before source development; `pnpm run test:python:sdk`
@@ -236,10 +252,10 @@ same artifacts with their exact source/run/version/manifest binding:
 
 ```sh
 # Run from the reviewed source ref; these are operator commands, not yet run.
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.4
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.5
 gh run download REVIEWED_BUILD_RUN -n ponder-python-candidate -D reviewed-python-candidate
 sha256sum reviewed-python-candidate/manifest.json
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.4 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.5 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
 ```
 
 The publish lane requires the `pypi-production` environment and
@@ -582,7 +598,7 @@ def project_span(span):
     return {"name": span.name, "input": {"prompt": prompt}, "split": "validation"}
 
 
-with Client(base_url=api_base_url, api_key=api_key, team_id=team_id,
+with Client(api_key=api_key, team_id=team_id,
             timeout=5) as client:
     exporter = OpenPondSpanExporter(client=client, dataset_id=dataset_id,
                                    project_span=project_span,
@@ -626,3 +642,22 @@ waits for its active export. Flush success does not prove every write succeeded;
 inspect `last_export_error` and OTel diagnostics. Exporter shutdown rejects new
 batches and waits up to 30s for active work. If it times out, keep the client open
 until work completes. It never closes the application-owned client.
+
+## Named product models
+
+Configure your `api_key`, workspace `team_id`, and
+`model_aliases={"support": model_id}` on either client. Use a key authorized for
+the selected Dataset and Model; a Dataset-only upload key cannot invoke inference. Then use
+`client.models.support.generate(prompt="...")` (await it on AsyncClient), or
+iterate `client.models.support.stream(prompt="...")` (async iteration on AsyncClient).
+These typed text calls use the existing owned pool and OpenPond's personalized
+serving API. They never choose a catalogue default, activate serving,
+capture tasks automatically or replay paid inference. Existing Model
+administration remains available alongside aliases.
+
+Results retain `text`, `request_id`, `model_id`, `resolved_model_id`,
+`finish_reason`, nullable `usage`, nullable `system_fingerprint` and nullable retained `evidence`. Stream events
+have `type="text"`/`text` or `type="finish"`/`result`; incomplete streams raise.
+Use `contextlib.closing`/`aclosing` for early iterator exit. Keep this client in
+your product backend; React calls your authenticated application routes.
+There is no SDK capture queue or flush API.

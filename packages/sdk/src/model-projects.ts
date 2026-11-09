@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { TrainingGpuSelectionSchema } from "./training-compute-selection.js";
 import { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
@@ -395,12 +396,12 @@ function headersRecord(headers: HeadersInit | undefined): Record<string, string>
 }
 
 export function createModelProjectsClient(input: {
-  baseUrl: string;
+  baseUrl?: string;
   fetch?: ModelProjectsFetch;
   headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
 }) {
   const fetchImpl = input.fetch ?? fetch;
-  const baseUrl = input.baseUrl.replace(/\/$/, "");
+  const baseUrl = (input.baseUrl ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
 
   async function request(pathname: string, init?: RequestInit): Promise<unknown> {
     const configuredHeaders =

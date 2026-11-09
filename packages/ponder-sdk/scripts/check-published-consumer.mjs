@@ -24,6 +24,12 @@ try {
     dependencies.push(pack(path.join(root, "../evals")), pack(path.join(root, "../harness")));
   }
   execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", ...dependencies], { cwd: consumer, stdio: "inherit" });
+  // The ordinary entrypoint must load before a consumer opts into framework peers.
+  execFileSync(process.execPath, ["--input-type=module", "-e", "await import('ponder-sdk')"], { cwd: consumer, stdio: "inherit" });
+  const optionalPeers = Object.entries(source.peerDependencies ?? {})
+    .filter(([name]) => source.peerDependenciesMeta?.[name]?.optional)
+    .map(([name, range]) => `${name}@${source.devDependencies?.[name] ?? range}`);
+  if (optionalPeers.length) execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", ...optionalPeers], { cwd: consumer, stdio: "inherit" });
   const subpaths = Object.keys(source.exports).filter((key) => key !== "./package.json");
   const runtime = `for (const subpath of ${JSON.stringify(subpaths)}) {
     const suffix = subpath === '.' ? '' : subpath.slice(1);

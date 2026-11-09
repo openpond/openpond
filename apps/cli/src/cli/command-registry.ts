@@ -152,7 +152,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       "Prepare only: read datasets context/read/check-graders and experiments models, then write and review the input file. There is no independent Dataset prepare/dry-run command. experiments run --local --input-file <path> executes; reuse operationId only for the exact same input after reconciling status.",
       "--team uses the workspace configuration contract instead. prepare-harness and prepare-profile prepare their released Harness/Profile workflows, not independent saved Dataset inputs.",
     ],
-    optionSchema: { cursor: "string", team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", status: "string", afterId: "string", afterCallId: "string", limit: "integer", json: "boolean",local:"boolean",serverUrl:"string",receiptId:"string",afterSequence:"integer",revision:"integer",contentHash:"string" },
+    optionSchema: { cursor: "string", team: "string", inputFile: "string", operationId: "string", project: "string", datasetHash: "string", search: "string", status: "string", afterId: "string", afterCallId: "string", executionKind: "string", limit: "integer", json: "boolean",local:"boolean",serverUrl:"string",receiptId:"string",afterSequence:"integer",revision:"integer",contentHash:"string" },
     handler: async ({ options, rest }) => (await import("./experiments")).runExperimentsCommand(options, rest),
   },
   {

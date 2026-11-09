@@ -141,3 +141,6 @@ export * from "./alphaedit-experiment-recovery.js";
 export * from "./alphaedit-model-save-recovery.js";
 export * from "./neuron-training-experiment-recovery.js";
 export * from "./neuron-training-model-save-recovery.js";
+export * from "./weight-space-model-save-recovery.js";
+
+export * from "./weight-space-cancel-recovery.js";

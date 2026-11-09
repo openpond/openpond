@@ -412,6 +412,54 @@ class Training(Resource):
         """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
         return cast('models.NeuronTrainingModelServingControlReceipt', self._execute('createTrainingClient.control_neuron_training_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
 
+    def weight_space_capability(self, input: inputs.ModelModificationCapabilitiesQuery, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceCapability:
+        """POST /v1/training/weight-space-sessions/capability. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceCapability', self._execute('createTrainingClient.weight_space_capability', {}, input, query, expected))
+
+    def prepare_weight_space_session(self, input: inputs.WeightSpacePrepare, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecutionReceipt:
+        """POST /v1/training/weight-space-sessions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceExecutionReceipt', self._execute('createTrainingClient.prepare_weight_space_session', {}, input, query, expected))
+
+    def start_weight_space_session(self, id: str, input: inputs.ManagedModificationStart, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecutionReceipt:
+        """POST /v1/training/weight-space-sessions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceExecutionReceipt', self._execute('createTrainingClient.start_weight_space_session', {'id': id}, input, query, expected))
+
+    def cancel_weight_space_session(self, id: str, input: inputs.ManagedModificationCancel, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecutionReceipt:
+        """POST /v1/training/weight-space-sessions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceExecutionReceipt', self._execute('createTrainingClient.cancel_weight_space_session', {'id': id}, input, query, expected))
+
+    def get_weight_space_session(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecution:
+        """GET /v1/training/weight-space-sessions/{id}. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceExecution', self._execute('createTrainingClient.get_weight_space_session', {'id': id}, None, query, expected))
+
+    def list_weight_space_sessions(self, input: inputs.WeightSpaceExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecutionPage:
+        """GET /v1/training/weight-space-sessions. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceExecutionPage', self._execute('createTrainingClient.list_weight_space_sessions', {}, input, query, expected))
+
+    def command_weight_space_session(self, session_id: str, input: inputs.WeightSpaceCommand, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceCommandReceipt:
+        """POST /v1/training/weight-space-sessions/{sessionId}/commands. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceCommandReceipt', self._execute('createTrainingClient.command_weight_space_session', {'sessionId': session_id}, input, query, expected))
+
+    def get_weight_space_command(self, session_id: str, operation_id: str, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceCommandReceipt:
+        """GET /v1/training/weight-space-sessions/{sessionId}/commands/{operationId}. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceCommandReceipt', self._execute('createTrainingClient.get_weight_space_command', {'sessionId': session_id, 'operationId': operation_id}, None, query, expected))
+
+    def save_weight_space_result_model(self, execution_id: str, input: inputs.WeightSpaceResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceResultSaveReceipt', self._execute('createTrainingClient.save_weight_space_result_model', {'executionId': execution_id}, input, query, expected))
+
+    def weight_space_model_serving(self, model_project_id: str, input: inputs.WeightSpaceModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceModelServing', self._execute('createTrainingClient.weight_space_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def control_weight_space_model_serving(self, model_project_id: str, input: inputs.WeightSpaceModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceModelServingControlReceipt', self._execute('createTrainingClient.control_weight_space_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    def list_weight_space_commands(self, session_id: str, input: inputs.WeightSpaceCommandListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceCommandPage:
+        """GET /v1/training/weight-space-sessions/{sessionId}/commands. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceCommandPage', self._execute('createTrainingClient.list_weight_space_commands', {'sessionId': session_id}, input, query, expected))
+
 class AsyncTraining(AsyncResource):
     async def capabilities(self, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.TrainingCapabilities:
         """GET /v1/training/capabilities. Read/reconcile; no mutation."""
@@ -816,3 +864,51 @@ class AsyncTraining(AsyncResource):
     async def control_neuron_training_model_serving(self, model_project_id: str, input: inputs.NeuronTrainingModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.NeuronTrainingModelServingControlReceipt:
         """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
         return cast('models.NeuronTrainingModelServingControlReceipt', await self._execute('createTrainingClient.control_neuron_training_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def weight_space_capability(self, input: inputs.ModelModificationCapabilitiesQuery, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceCapability:
+        """POST /v1/training/weight-space-sessions/capability. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceCapability', await self._execute('createTrainingClient.weight_space_capability', {}, input, query, expected))
+
+    async def prepare_weight_space_session(self, input: inputs.WeightSpacePrepare, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecutionReceipt:
+        """POST /v1/training/weight-space-sessions/prepare. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceExecutionReceipt', await self._execute('createTrainingClient.prepare_weight_space_session', {}, input, query, expected))
+
+    async def start_weight_space_session(self, id: str, input: inputs.ManagedModificationStart, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecutionReceipt:
+        """POST /v1/training/weight-space-sessions/{id}/start. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceExecutionReceipt', await self._execute('createTrainingClient.start_weight_space_session', {'id': id}, input, query, expected))
+
+    async def cancel_weight_space_session(self, id: str, input: inputs.ManagedModificationCancel, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecutionReceipt:
+        """POST /v1/training/weight-space-sessions/{id}/cancel. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceExecutionReceipt', await self._execute('createTrainingClient.cancel_weight_space_session', {'id': id}, input, query, expected))
+
+    async def get_weight_space_session(self, id: str, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecution:
+        """GET /v1/training/weight-space-sessions/{id}. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceExecution', await self._execute('createTrainingClient.get_weight_space_session', {'id': id}, None, query, expected))
+
+    async def list_weight_space_sessions(self, input: inputs.WeightSpaceExecutionListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceExecutionPage:
+        """GET /v1/training/weight-space-sessions. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceExecutionPage', await self._execute('createTrainingClient.list_weight_space_sessions', {}, input, query, expected))
+
+    async def command_weight_space_session(self, session_id: str, input: inputs.WeightSpaceCommand, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceCommandReceipt:
+        """POST /v1/training/weight-space-sessions/{sessionId}/commands. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceCommandReceipt', await self._execute('createTrainingClient.command_weight_space_session', {'sessionId': session_id}, input, query, expected))
+
+    async def get_weight_space_command(self, session_id: str, operation_id: str, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceCommandReceipt:
+        """GET /v1/training/weight-space-sessions/{sessionId}/commands/{operationId}. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceCommandReceipt', await self._execute('createTrainingClient.get_weight_space_command', {'sessionId': session_id, 'operationId': operation_id}, None, query, expected))
+
+    async def save_weight_space_result_model(self, execution_id: str, input: inputs.WeightSpaceResultSaveRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceResultSaveReceipt:
+        """POST /v1/training/modification-executions/{executionId}/model. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceResultSaveReceipt', await self._execute('createTrainingClient.save_weight_space_result_model', {'executionId': execution_id}, input, query, expected))
+
+    async def weight_space_model_serving(self, model_project_id: str, input: inputs.WeightSpaceModelServingQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceModelServing:
+        """GET /v1/training/models/{modelProjectId}/serving. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceModelServing', await self._execute('createTrainingClient.weight_space_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def control_weight_space_model_serving(self, model_project_id: str, input: inputs.WeightSpaceModelServingControlRequest, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceModelServingControlReceipt:
+        """POST /v1/training/models/{modelProjectId}/serving. Explicit operation; never automatically replayed."""
+        return cast('models.WeightSpaceModelServingControlReceipt', await self._execute('createTrainingClient.control_weight_space_model_serving', {'modelProjectId': model_project_id}, input, query, expected))
+
+    async def list_weight_space_commands(self, session_id: str, input: inputs.WeightSpaceCommandListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: WeightOperationExpectation | None = None) -> models.WeightSpaceCommandPage:
+        """GET /v1/training/weight-space-sessions/{sessionId}/commands. Read/reconcile; no mutation."""
+        return cast('models.WeightSpaceCommandPage', await self._execute('createTrainingClient.list_weight_space_commands', {'sessionId': session_id}, input, query, expected))

@@ -1,3 +1,4 @@
+import { WeightSpaceModelServingControlRequestSchema, parseAndVerifyWeightSpaceModelServingControl } from "openpond-sdk/training";
 import { z } from "zod";
 import {
   AlphaEditModelServingControlRequestSchema,
@@ -191,6 +192,23 @@ export function createHostedTrainingRunDetail(input: {
       if (body.teamId !== input.teamId)
         throw new Error("Control serving in this Model's original workspace.");
       return parseAndVerifyNeuronTrainingModelServingControl(
+        await request(
+          `/v1/training/models/${encodeURIComponent(id)}/serving`,
+          {
+            method: "POST",
+            body: JSON.stringify(body),
+          },
+          16_777_216,
+        ),
+        { modelProjectId: id, request: body, actorId: input.actorId },
+      );
+    },
+    async controlWeightSpaceModelServing(modelProjectId: string, raw: unknown) {
+      const id = Id.parse(modelProjectId),
+        body = WeightSpaceModelServingControlRequestSchema.parse(raw);
+      if (body.teamId !== input.teamId)
+        throw new Error("Control serving in this Model's original workspace.");
+      return parseAndVerifyWeightSpaceModelServingControl(
         await request(
           `/v1/training/models/${encodeURIComponent(id)}/serving`,
           {

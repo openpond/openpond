@@ -28,7 +28,7 @@ def record(value: dict[str, Any], team_id: str, owner: str | None = None, profil
 
 
 def version(value: dict[str, Any], team_id: str, model_id: str) -> None:
-    if value['schemaVersion'] in ('openpond.alphaEditModelVersion.v1','openpond.neuronTrainingModelVersion.v1'):
+    if value['schemaVersion'] in ('openpond.alphaEditModelVersion.v1','openpond.neuronTrainingModelVersion.v1','openpond.weightSpaceModelVersion.v1'):
         from .weight_model_identity import verify_weight_model_version
         verify_weight_model_version(value, team_id=team_id, model_project_id=model_id)
         return

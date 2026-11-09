@@ -57,6 +57,8 @@ export async function modelExperimentDraft(input: {
         teamId: input.teamId,
       }),
     });
+  if (saved?.schemaVersion === "openpond.weightSpaceModelVersion.v1")
+    throw new Error("This saved parameter patch supports inference. Starting another editing session from a saved patch requires exact-parent continuation support; choose an exact managed base for a fresh session.");
   if (saved?.schemaVersion === "openpond.neuronTrainingModelVersion.v1")
     throw new Error(
       "This saved neuron delta supports inference. Training continuation is unavailable because optimizer state is not retained. Choose a managed base explicitly for a fresh experiment.",

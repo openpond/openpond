@@ -1,24 +1,24 @@
 import { z } from "zod";
 import { canonicalJson, canonicalSha256, OpenPondProtocolError } from "./protocol.js";
 import { parseAndVerifyAlphaEditModelVersion, parseAndVerifyNeuronTrainingModelVersion,
-  type AlphaEditModelVersion, type NeuronTrainingModelVersion } from "./weight-model-versions.js";
+  parseAndVerifyWeightSpaceModelVersion, type WeightSpaceModelVersion, type AlphaEditModelVersion, type NeuronTrainingModelVersion } from "./weight-model-versions.js";
 
 const Id = z.string().trim().min(1).max(240), Hash = z.string().regex(/^[a-f0-9]{64}$/);
 export const SavedWeightModelSelectionSchema = z.object({modelProjectId: Id, versionHash: Hash}).strict();
 export const ResolvedWeightModelSelectionSchema = z.object({
   schemaVersion: z.literal("openpond.resolvedWeightModelSelection.v1"),
-  method: z.enum(["alphaedit", "selective_neuron_training"]), savedModel: SavedWeightModelSelectionSchema,
+  method: z.enum(["alphaedit", "selective_neuron_training", "weight_space_programming"]), savedModel: SavedWeightModelSelectionSchema,
   artifact: z.object({id: Id, contentHash: Hash, manifestSha256: Hash}).strict(), modelHash: Hash,
 }).strict();
 export type ResolvedWeightModelSelection = z.infer<typeof ResolvedWeightModelSelectionSchema>;
 
 /** A saved weight Model always selects its installed patch. Off/baseline
  * comparison is a separate exact source, never an implicit base substitution. */
-export async function parseAndVerifyResolvedWeightModelSelection(raw: unknown, input: AlphaEditModelVersion | NeuronTrainingModelVersion) {
+export async function parseAndVerifyResolvedWeightModelSelection(raw: unknown, input: AlphaEditModelVersion | NeuronTrainingModelVersion | WeightSpaceModelVersion) {
   const value = ResolvedWeightModelSelectionSchema.parse(raw);
-  const version = input.schemaVersion === "openpond.alphaEditModelVersion.v1"
+  const version = input.schemaVersion === "openpond.weightSpaceModelVersion.v1" ? await parseAndVerifyWeightSpaceModelVersion(input) : input.schemaVersion === "openpond.alphaEditModelVersion.v1"
     ? await parseAndVerifyAlphaEditModelVersion(input) : await parseAndVerifyNeuronTrainingModelVersion(input);
-  const method = version.schemaVersion === "openpond.alphaEditModelVersion.v1" ? "alphaedit" : "selective_neuron_training";
+  const method = version.schemaVersion === "openpond.weightSpaceModelVersion.v1" ? "weight_space_programming" : version.schemaVersion === "openpond.alphaEditModelVersion.v1" ? "alphaedit" : "selective_neuron_training";
   if (value.method !== method || value.savedModel.modelProjectId !== version.modelProjectId
     || value.savedModel.versionHash !== version.contentHash || value.artifact.id !== version.artifact.id
     || value.artifact.contentHash !== version.artifact.contentHash
@@ -38,7 +38,7 @@ export const WeightModelInferenceReceiptSchema = WeightModelInferenceReceiptCont
 export type WeightModelInferenceReceipt = z.infer<typeof WeightModelInferenceReceiptSchema>;
 export async function parseAndVerifyWeightModelInferenceReceipt(raw: unknown, expected: {
   teamId: string; requestId: string; requestHash: string; selection: ResolvedWeightModelSelection;
-  version: AlphaEditModelVersion | NeuronTrainingModelVersion; poolId: string;
+  version: AlphaEditModelVersion | NeuronTrainingModelVersion | WeightSpaceModelVersion; poolId: string;
   routingBinding: {id: string; revision: number}; runtimeHash: string; workerImageDigest: string;
   engineGeneration: number; cacheNamespace: string;
 }) {

@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { ModelProjectVersionedRefSchema } from "./model-projects.js";
 import { ModelStarterSchema, validateResolvedModelStarter } from "./model-starters.js";
@@ -24,9 +25,9 @@ export class OpenPondModelStarterCatalogError extends Error {
  * exact resolution obtains a bounded, integrity-checked package separately. */
 export class OpenPondModelStarterCatalogClient {
   readonly #options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch };
-  constructor(options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
+  constructor(options: { baseUrl?: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
     if (!options.apiKey.trim() || !options.teamId.trim()) throw new Error("Starter catalog credentials and workspace are required.");
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("Starter catalog base URL must be an HTTP(S) endpoint without credentials, query or fragment.");
     this.#options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
   }
