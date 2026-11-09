@@ -23,24 +23,22 @@ export function isManagedEngramChatModel(modelId: string | null | undefined) {
 /** This existing-home cache stores only an exact locator. It grants no Model,
  * module or serving authority; every send reauthorizes the canonical version. */
 export async function listManagedEngramChatModels(store: SqliteStore, teamId: string): Promise<ProviderModel[]> {
-  const access = await configuredAccess(teamId), fence = () => accountFence(access), train = clientFor(access, fence);
+  const access = await configuredAccess(teamId), fence = () => accountFence(access);
   const versions = await listManagedSavedModelVersions(store, access);
   const models: ProviderModel[] = [];
   for (const {project, version} of versions) {
     if (version?.schemaVersion !== "openpond.engramModelVersion.v1" || version.ownerUserId !== access.actorId) continue;
-    const serving = await train.savedModelServing(project.id, {teamId, versionHash: version.contentHash});
-    if (serving.schemaVersion !== "openpond.engramModelServing.v1") throw new Error("The saved memory Model changed its serving kind.");
     const source = Source.parse({...identity(access), schemaVersion: "openpond.desktopEngramChatSelection.v1",
       modelProjectId: project.id, versionHash: version.contentHash});
     const hash = await canonicalSha256(source), prior = await store.getCacheEntry<unknown>(CACHE_TYPE, hash);
     if (prior && canonicalJson(Source.parse(prior.payload)) !== canonicalJson(source)) throw new Error("The saved Model locator changed its immutable identity.");
     if (!prior) await store.setCacheEntry(CACHE_TYPE, hash, source);
     models.push(ProviderModelSchema.parse({id: PREFIX + hash, providerId: "openpond",
-      displayName: `${project.name} / Saved memory ${version.contentHash.slice(0, 8)}${serving.state === "active" ? "" : ` (${serving.state})`}`,
+      displayName: `${project.name} / Saved memory ${version.contentHash.slice(0, 8)}`,
       source: "provider", outputLimit: 4096,
       capabilities: {streaming: true, toolCalling: true, reasoning: false, vision: false, structuredOutput: false},
       raw: {managedServing: true, managedEngram: true, savedModel: {modelProjectId: project.id, versionHash: version.contentHash},
-        apiOrigin: source.apiOrigin, teamId, actorId: access.actorId, servingState: serving.state, defaultEnabled: serving.defaultEnabled}}));
+        apiOrigin: source.apiOrigin, teamId, actorId: access.actorId}}));
   }
   await fence(); return models;
 }
