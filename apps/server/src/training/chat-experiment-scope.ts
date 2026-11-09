@@ -31,7 +31,7 @@ export function chatExperimentContext(metadata: Record<string, unknown> | undefi
 export function chatResourceFocusKey(state: ChatExperimentContext) {
   const scope = chatResourceWorkspaces(state).find(item => item.id === state.activeScopeId);
   return JSON.stringify([state.activeScopeId, scope?.dataset?.id ?? null, scope?.dataset?.revision ?? null,
-    scope?.dataset?.owner ?? scope?.dataset?.profileRef ?? null, scope?.selectedRunId ?? null, scope?.selectedTrainingKey ?? null, scope?.weightSpace ?? null, scope?.model ?? null]);
+    scope?.dataset?.owner ?? scope?.dataset?.profileRef ?? null, scope?.selectedRunId ?? null, scope?.selectedTrainingKey ?? null, scope?.weightSpace ?? null]);
 }
 
 export function createChatExperimentScopes(store: SqliteStore) {
