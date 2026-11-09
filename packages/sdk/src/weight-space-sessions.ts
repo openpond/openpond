@@ -9,6 +9,17 @@ import { WeightSpaceCommandSchema, WeightSpaceCommandResultSchema, WeightSpaceHa
 import { WeightSpaceResultSchema, parseAndVerifyWeightSpaceResult } from "./weight-space-artifact.js";
 
 const Method = z.literal("weight_space_programming");
+/** New qualified cold-bootstrap terms travel inside the hashed runtime. Old
+ * runtimes omit this profile and retain their original 300-second clock. */
+export const WeightSpaceQualifiedBootstrapClockSchema=z.object({
+  schemaVersion:z.literal("openpond.weightSpaceQualifiedBootstrapClock.v1"),
+  method:Method,validationLevel:z.literal("gpu_qualified"),bootstrapSeconds:z.literal(900),
+  maximumWorkSeconds:z.number().int().min(1).max(21_600),workClock:z.literal("native_command_issued"),cleanupSeconds:z.literal(120),
+  modelHash:Hash,runtimeTemplateHash:Hash,qualification:z.object({id:Id,contentHash:Hash}).strict(),
+  source:z.object({imageDigest:z.string().regex(/^sha256:[a-f0-9]{64}$/),releaseHash:Hash,
+    canonicalReleaseSha256:Hash,sourceTreeSha256:Hash,softwareInventorySha256:Hash,buildReceiptSha256:Hash,
+    pythonSdkSha256:Hash}).strict(),contentHash:Hash,
+}).strict();
 export const WeightSpaceCapabilityContentSchema = z.object({
   schemaVersion: z.literal("openpond.weightSpaceCapability.v1"), teamId: Id, actorId: Id,
   query: ModelModificationCapabilitiesQuerySchema, requestHash: Hash, checkedAt: z.iso.datetime(), expiresAt: z.iso.datetime(),
@@ -18,7 +29,7 @@ export const WeightSpaceCapabilityContentSchema = z.object({
       reason: z.string().min(1).max(1000) }).strict(),
     z.object({ state: z.literal("ready"), model: WeightSpaceModelSchema,
       runtime: z.object({ id: Id, releaseHash: Hash, imageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-        requestSchema: z.literal("openpond.weightSpaceRequest.v1"), evidence: z.object({ id: Id, contentHash: Hash }).strict() }).strict(),
+        requestSchema: z.literal("openpond.weightSpaceRequest.v1"), bootstrapClock:WeightSpaceQualifiedBootstrapClockSchema.optional(), evidence: z.object({ id: Id, contentHash: Hash }).strict() }).strict(),
       limits: WeightSpaceLimitsSchema }).strict(),
   ]),
 }).strict();
@@ -102,6 +113,15 @@ export async function parseAndVerifyWeightSpaceCapability(raw: unknown, query: z
     || (value.execution.state === "ready") !== (value.validationLevel !== null)
     || Date.parse(value.checkedAt) > Date.now() + 30_000 || Date.parse(value.expiresAt) <= Date.now()
     || Date.parse(value.expiresAt) <= Date.parse(value.checkedAt) || Date.parse(value.expiresAt) - Date.parse(value.checkedAt) > 300_000) reject();
+  if(value.execution.state==="ready"&&value.execution.runtime.bootstrapClock){
+    const clock=value.execution.runtime.bootstrapClock,{contentHash,...content}=clock;
+    const {bootstrapClock:_clock,...runtime}=value.execution.runtime;
+    if(value.validationLevel!=="gpu_qualified"||value.execution.limits.maximumDurationSeconds!==clock.maximumWorkSeconds||contentHash!==await canonicalSha256(content)
+      ||clock.source.imageDigest!==runtime.imageDigest||clock.source.releaseHash!==runtime.releaseHash
+      ||clock.modelHash!==await canonicalSha256(value.execution.model)
+      ||canonicalJson(clock.qualification)!==canonicalJson(runtime.evidence)
+      ||clock.runtimeTemplateHash!==await canonicalSha256({method:"weight_space_programming",execution:{...value.execution,runtime}}))reject();
+  }
   return value;
 }
 export async function parseAndVerifyWeightSpacePrepare(raw: unknown) {
