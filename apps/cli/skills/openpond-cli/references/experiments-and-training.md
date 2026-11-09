@@ -15,6 +15,36 @@ Use [Compact inline resource presentation](compact-resource-tables.md) as guidan
 - Several datasets and runs can belong to a conversation. Use explicit IDs and revisions for operations; inspecting a candidate must not silently replace a baseline or alter another run's saved inputs.
 - Keep dataset creation and grader creation distinct. A request to add a grader applies to the selected dataset unless the user asks to create another dataset.
 
+### Carry a training request through to its result
+
+For “train a model”, including a starter-card request, preparation is an intermediate
+step. Ask for missing choices, then continue the same conversation through reviewed
+data and grader setup, the quoted run, authorized Start, status, retained evaluation
+and saving the successful trained version. A request explicitly limited to planning,
+preparation or cost review stops at that boundary. Do not create a planning-only
+request type or make the user restart the workflow after answering a question.
+
+Ask concise, concrete questions about the behavior to learn, which data to use and
+the maximum total spend. Reuse selected resources and limits already supplied in
+this conversation. Offer a small relevant choice when resources are missing; do
+not ask the user for internal IDs, sealed-batch contracts, model hashes, learning
+rates or batch sizes. Resolve supported defaults and exact pins through the CLI.
+Keep evaluation separate and explain any decision that materially changes the task.
+
+A total budget covers training, required evaluation and retained storage; reserve
+for these together rather than treating the same ceiling as a separate allowance
+for each. Show the effective run and quote before starting. Once the user has
+authorized training and its scope and ceiling are resolved, continue without an
+extra generic confirmation. Ask again only for a material scope/cost change or
+an explicit approval requirement. A budget does not authorize a different run,
+unbounded retries, recurring training or serving.
+
+Call a local JSON note a plan or draft. Only a successful canonical preparation
+receipt with its operation and plan identity is an accepted preparation. A Model
+record is not a trained version, and a submitted job is not a completed result.
+Keep the useful resource and live run attached to this chat; give concise progress
+and the next actionable blocker if the supported runtime cannot continue.
+
 ## Starting from an objective and sources
 
 For “I want to make a model; where do I start?”, give a short next step: ask what
@@ -72,7 +102,18 @@ When the app provides a scoped command executor, run the CLI with `"$OPENPOND_CL
 
 Use that supplied prefix directly. Do not spend a command printing or probing its environment variables before every request; investigate setup only after an actual execution failure. Reuse command contracts already read in this conversation, and batch independent inspections where useful. A simple grader question normally needs one listing and, only when criteria are needed, one grader inspection.
 
-Use `datasets context --local --json` to inspect the current scope; `datasets select <id> --local --expected-revision <revision>` selects an existing dataset. `datasets new-experiment --local --operation-id <stable-id>` creates a configuration scope without compute. Scope selection/rename use `select-experiment` and `rename-experiment`; check their current help. These commands require app-supplied context. Mere `datasets list` discovery does not attach all records.
+Use `datasets context --local --focus-only --json` once to inspect the current scope
+and selected Model/Experiment without listing all saved records. Reuse it until
+selection changes; do not repeat full context reads or pipe full catalogs into
+Python to recover the selected record. Omit `--focus-only` only when the complete
+resource choices are actually needed. Use `account context --json` through the
+same scoped CLI for its account, API origin and selected team. A separate MCP
+connection may have another identity; do not use its workspace as the CLI's.
+`datasets select <id> --local --expected-revision <revision>` selects an existing
+dataset. `datasets new-experiment --local --operation-id <stable-id>` creates a
+configuration scope without compute. Scope selection/rename use `select-experiment`
+and `rename-experiment`; check their current help. These commands require
+app-supplied context. Mere `datasets list` discovery does not attach all records.
 
 Use the application's supplied local server context and OpenPond home when present. Pass that configured home with `--home <selected-home>`. Check this context before diagnosing missing authentication. Do not guess a second installation, scrape credentials, or switch teams to get an operation to succeed. Local dataset commands use `--local`; hosted operations have their own explicit destination/account options. Local experiment execution may still call a paid remote inference provider.
 

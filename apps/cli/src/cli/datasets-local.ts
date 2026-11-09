@@ -28,7 +28,7 @@ export async function runLocalDatasetsCommand(options:Record<string,string|boole
   if (action === "model-inputs" && (!id || !["local", "cloud"].includes(modelLocation) || modelLocation === "cloud" && (!optionString(options,"team") || !optionString(options,"apiOrigin"))))
     throw new Error("model-inputs requires a model ID; cloud inspection also requires --location cloud --team <id> --api-origin <origin>.");
   const conversational:Record<string,unknown> | null = action === "model-inputs" ? { action: "context_inputs", payload: { target: { kind: "model", id, location: modelLocation,
-    ...(modelLocation === "cloud" ? { teamId: optionString(options,"team"), apiOrigin: optionString(options,"apiOrigin") } : {}) } } } : action === "context" ? {action:"context",payload}
+    ...(modelLocation === "cloud" ? { teamId: optionString(options,"team"), apiOrigin: optionString(options,"apiOrigin") } : {}) } } } : action === "context" ? {action:"context",payload:{...payload as object,...parseBooleanOption(options.focusOnly) ? {focusOnly:true} : {}}}
     : action === "select-destination" ? {action:"set_destination",payload:{executionLocation:id === "hosted" ? "cloud" : id}}
     : action === "select-model" ? {action:"set_model",payload:{evaluationModel:id}}
     : action === "new-experiment" ? {action:"create_scope",payload:{operationId:optionString(options,"operationId")}}

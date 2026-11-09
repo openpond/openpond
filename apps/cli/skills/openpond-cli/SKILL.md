@@ -17,6 +17,13 @@ authentication and resource association. Do not install another CLI, ask for a
 login, or use the provider shell before trying this path. The answering assistant,
 the evaluated model and the training base/checkpoint are separate selections.
 
+Read the current selection once with `datasets context --local --focus-only --json`.
+For hosted work, use `account context --json` through that same executor to resolve
+the selected account, API origin and team. A separately connected MCP server can
+belong to another account; its `connection_context` is not the Desktop CLI's
+identity. Never copy its team into a Desktop command. Discover other resources
+only when the selection is empty or the user asks to change it.
+
 ## Standalone setup
 
 For a terminal outside the app, first check whether the running desktop already
