@@ -58,7 +58,7 @@ export function TrainingResultDetails({ connection, teamId, actorId, jobId, vers
         <button type="button" className="training-button secondary" onClick={() => setSaving(true)}>Review save</button>
       </div> : candidate && result.model ? <button type="button" className="training-button" onClick={() => setSaving(true)}>Save model</button> : null}
       {source ? <dl className="model-project-page-metrics">
-        <div><dt>Base model</dt><dd title={source.baseModel.modelId}>{source.baseModel.modelId}</dd><small title={source.baseModel.revision}>{source.baseModel.revision}</small></div>
+        <div><dt>Base model</dt><dd title={source.baseModel.modelId}>{source.baseModel.modelId}</dd><small title={source.baseModel.revision ?? undefined}>{source.baseModel.revision}</small></div>
         <div><dt>Method</dt><dd>{String(source.recipe.method ?? "Training")}</dd></div>
         <div><dt>Configuration revision</dt><dd>{source.source.modelProject.revision}</dd></div>
         <div><dt>Dataset</dt><dd title={source.source.taskset.id}>{source.source.taskset.id}</dd><small>Revision {source.source.taskset.revision}</small></div>
