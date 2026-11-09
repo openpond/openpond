@@ -44,7 +44,7 @@ for await (const event of openpond.models.support.stream({ prompt: "Explain toke
 Breaking the iteration cancels the response. An interrupted stream raises
 `ProductModelError` and never emits a successful `finish`. It may already have
 incurred usage; inference is never automatically replayed. `serving.timeoutMs`
-defaults to 60 seconds and accepts at most 300 seconds. Supply a caller abort
+defaults to 630 seconds and accepts at most 630 seconds, bounded by the signed request deadline and response allowance. Queued requests return HTTP 202; the SDK observes the original retained request by GET and never repeats the paid POST. Unknown outcomes retain `requestId` and `clientRequestId`; use `inspectRequest` or `recover` on the same Model handle. Supply a caller abort
 signal to cancel an individual request. Text requests are bounded to 1 MiB and
 results to 8 MiB; individual stream frames to 1 MiB.
 

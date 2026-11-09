@@ -5,6 +5,9 @@ import json
 import codecs
 import time
 import re
+from datetime import datetime
+from uuid import UUID, uuid4
+from urllib.parse import quote
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Iterator, Literal, TypedDict
 from .errors import PonderError, ProtocolError
@@ -42,6 +45,38 @@ class ModelEvent:
     text: str = ''
     result: ModelResult | None = None
 
+SERVING_OBSERVER_SECONDS = 630.0
+
+class ModelRequestError(PonderError):
+    def __init__(self, code: str, *, client_request_id: str, request_id: str | None = None,
+                 status: int | None = None, outcome_unknown: bool = True):
+        self.client_request_id = client_request_id
+        self.request_id = request_id
+        super().__init__(code, status=status, outcome_unknown=outcome_unknown, operation_id=client_request_id)
+
+def _client_request_id(value: str | None) -> str:
+    if value is None: return str(uuid4())
+    try:
+        if str(UUID(value)) != value: raise ValueError()
+    except (ValueError, TypeError, AttributeError): raise ProtocolError('invalid_client_request_id') from None
+    return value
+
+def _observer_timeout(value: float) -> float:
+    if isinstance(value, bool) or not 0 < value <= SERVING_OBSERVER_SECONDS:
+        raise ProtocolError('invalid_serving_observer_timeout')
+    return value
+
+def _canonical_response_model_id(value: str) -> str:
+    # Match the API's single hosted-name resolution; preserve the caller's
+    # original binding in ModelResult.model_id.
+    name = value[len('personalized:'):] if value.startswith('personalized:') else None
+    return name if name and re.fullmatch(r'[a-z0-9][a-z0-9._:-]{2,127}', name) else value
+
+def _status_timestamp(value: Any) -> bool:
+    if not isinstance(value, str): return False
+    try: return datetime.fromisoformat(value.replace('Z', '+00:00')).utcoffset() is not None
+    except (ValueError, TypeError): return False
+
 class ModelBase:
     def __init__(self, transport: Transport | AsyncTransport, binding: str | ModelBinding, base_url: str, api_key: str):
         self._transport = transport
@@ -51,6 +86,35 @@ class ModelBase:
             raise ProtocolError('invalid_model_id')
         self.base_url, self.headers = configuration(base_url, api_key, transport.headers['X-OpenPond-Team-Id'])
         self.headers = {**self.headers, 'Content-Type': 'application/json', 'Accept-Encoding': 'identity'}
+    def _recovery_path(self, request_id: str | None = None, client_request_id: str | None = None) -> str:
+        if request_id is not None:
+            if re.fullmatch(r'pinf_[A-Za-z0-9-]{8,191}', request_id) is None: raise ProtocolError('invalid_request_id')
+            return '/chat/completions/' + quote(request_id, safe='')
+        return '/chat/completions?clientRequestId=' + quote(_client_request_id(client_request_id), safe='')
+    def _status(self, raw: Any, response, *, request_id: str | None = None, client_request_id: str | None = None) -> dict[str, Any]:
+        keys={'schemaVersion','requestId','clientRequestId','modelId','state','deadlineAt','retryAt','result','failureCode'}
+        if (not isinstance(raw,dict) or set(raw)!=keys or raw['schemaVersion']!='openpond.modelRequestStatus.v1'
+                or raw['modelId']!=_canonical_response_model_id(self.id) or raw['state'] not in ('pending','running','stopping','completed','failed','cancelled')
+                or not isinstance(raw['requestId'],str) or re.fullmatch(r'pinf_[A-Za-z0-9-]{8,191}', raw['requestId']) is None
+                or request_id is not None and raw['requestId'] != request_id
+                or client_request_id is not None and raw['clientRequestId'] != client_request_id
+                or not _status_timestamp(raw['deadlineAt'])
+                or raw['retryAt'] is not None and not _status_timestamp(raw['retryAt'])
+                or raw['failureCode'] is not None and not isinstance(raw['failureCode'], str)):
+            raise ProtocolError('model_recovery_identity_changed')
+        if raw['clientRequestId'] is not None: _client_request_id(raw['clientRequestId'])
+        if raw['result'] is not None:
+            result = raw['result']
+            if (raw['state'] != 'completed' or raw['failureCode'] is not None or not isinstance(result, dict)
+                    or result.get('id') != raw['requestId'] or result.get('model') != raw['modelId']
+                    or not isinstance(result.get('choices'), list) or len(result['choices']) != 1
+                    or not isinstance(result['choices'][0], dict) or result['choices'][0].get('index') != 0):
+                raise ProtocolError('model_response_invalid', outcome_unknown=True)
+        result=self.result(raw['result'],response) if raw['result'] is not None else None
+        if result is not None:
+            result=ModelResult(result.text,raw['requestId'],result.model_id,result.resolved_model_id,
+                result.finish_reason,result.usage,result.system_fingerprint,result.evidence)
+        return {**raw,'result':result}
     def body(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None, stream: bool = False) -> bytes:
         if (prompt is None) == (messages is None): raise ProtocolError('supply_prompt_or_messages')
         if prompt is not None and not isinstance(prompt, str): raise ProtocolError('invalid_prompt')
@@ -124,27 +188,73 @@ class StreamState:
         except (ValueError,KeyError,TypeError): raise ProtocolError('model_stream_invalid',outcome_unknown=True) from None
 
 class ProductModel(ModelBase):
-    def generate(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None) -> ModelResult:
+    def inspect_request(self, request_id: str) -> dict[str, Any]:
+        return self._read_status(self._recovery_path(request_id=request_id), request_id=request_id)
+    def recover(self, client_request_id: str) -> dict[str, Any]:
+        return self._read_status(self._recovery_path(client_request_id=client_request_id), client_request_id=client_request_id)
+    def _read_status(self, path: str, timeout: float = 30.0, *, request_id: str | None = None, client_request_id: str | None = None) -> dict[str, Any]:
+        with self._transport.client.stream('GET',self.base_url+path,headers=self.headers,timeout=timeout) as response:
+            self.check(response,False)
+            data=bytearray()
+            for chunk in response.iter_bytes():
+                data.extend(chunk)
+                if len(data)>8388608: raise ProtocolError('response_too_large')
+            return self._status(parse_body(bytes(data),response.status_code),response,request_id=request_id,client_request_id=client_request_id)
+    def _observe_pending(self, status: dict[str, Any], deadline: float, client_request_id: str) -> ModelResult:
+        wall_deadline=datetime.fromisoformat(status['deadlineAt'].replace('Z','+00:00')).timestamp()+30
+        while True:
+            if status['state']=='completed':
+                if status['result'] is not None: return status['result']
+                raise ModelRequestError('model_result_not_retained',client_request_id=client_request_id,request_id=status['requestId'],outcome_unknown=False)
+            if status['state'] in ('failed','cancelled'):
+                raise ModelRequestError(status['failureCode'] or 'model_request_failed',client_request_id=client_request_id,
+                    request_id=status['requestId'],outcome_unknown=False)
+            remaining=min(deadline-time.monotonic(),wall_deadline-time.time())
+            if remaining<=0: raise ModelRequestError('model_outcome_unknown',client_request_id=client_request_id,request_id=status['requestId'])
+            delay=2.0 if status['retryAt'] is None else datetime.fromisoformat(status['retryAt'].replace('Z','+00:00')).timestamp()-time.time()
+            time.sleep(min(remaining,max(.5,min(15.0,delay))))
+            try: status=self._read_status(self._recovery_path(request_id=status['requestId']),timeout=min(30.0,max(.001,deadline-time.monotonic())),request_id=status['requestId'],client_request_id=client_request_id)
+            except Exception: raise ModelRequestError('model_outcome_unknown',client_request_id=client_request_id,request_id=status['requestId']) from None
+    def cancel_request(self, request_id: str) -> None:
+        with self._transport.client.stream('POST',self.base_url+self._recovery_path(request_id=request_id)+'/cancel',headers=self.headers,timeout=30) as response:
+            self.check(response,False)
+    def generate(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None, client_request_id: str | None = None, timeout: float = SERVING_OBSERVER_SECONDS) -> ModelResult:
+        client_request_id=_client_request_id(client_request_id); timeout=_observer_timeout(timeout)
         body=self.body(prompt=prompt,messages=messages,temperature=temperature,max_tokens=max_tokens)
-        deadline=time.monotonic()+self._transport.timeout
+        deadline=time.monotonic()+timeout
         try:
-            with self._transport.client.stream('POST',self.base_url+'/chat/completions',headers=self.headers,content=body) as response:
+            with self._transport.client.stream('POST',self.base_url+'/chat/completions',headers={**self.headers,'X-OpenPond-Client-Request-Id':client_request_id},content=body,timeout=timeout) as response:
                 self.check(response,False)
                 data=bytearray()
                 for chunk in response.iter_bytes():
                     if time.monotonic()>deadline: raise PonderError('request_deadline',outcome_unknown=True)
                     data.extend(chunk)
                     if len(data)>8388608: raise ProtocolError('response_too_large',outcome_unknown=True)
-                return self.result(parse_body(bytes(data),response.status_code),response)
+                raw=parse_body(bytes(data),response.status_code)
+                if response.status_code==202: return self._observe_pending(self._status(raw,response,client_request_id=client_request_id),deadline,client_request_id)
+                return self.result(raw,response)
+        except ModelRequestError: raise
         except PonderError as error:
             if error.status is None or error.status==408 or error.status>=500: error.outcome_unknown=True
-            raise
-        except Exception: raise PonderError('model_outcome_unknown',outcome_unknown=True) from None
-    def stream(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None) -> Iterator[ModelEvent]:
+            raise ModelRequestError(error.code, status=error.status, outcome_unknown=error.outcome_unknown,
+                client_request_id=client_request_id, request_id=locals().get('response',None).headers.get('x-openpond-request-id') if locals().get('response',None) else None) from None
+        except Exception: raise ModelRequestError('model_outcome_unknown',client_request_id=client_request_id) from None
+    def stream(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None, client_request_id: str | None = None, timeout: float = SERVING_OBSERVER_SECONDS) -> Iterator[ModelEvent]:
+        client_request_id=_client_request_id(client_request_id); timeout=_observer_timeout(timeout)
         body=self.body(prompt=prompt,messages=messages,temperature=temperature,max_tokens=max_tokens,stream=True)
-        deadline=time.monotonic()+self._transport.timeout
+        deadline=time.monotonic()+timeout
         try:
-            with self._transport.client.stream('POST',self.base_url+'/chat/completions',headers=self.headers,content=body) as response:
+            with self._transport.client.stream('POST',self.base_url+'/chat/completions',headers={**self.headers,'X-OpenPond-Client-Request-Id':client_request_id},content=body,timeout=timeout) as response:
+                if response.status_code==202:
+                    self.check(response,False); data=bytearray()
+                    for chunk in response.iter_bytes():
+                        if time.monotonic()>deadline: raise PonderError('request_deadline',outcome_unknown=True)
+                        data.extend(chunk)
+                        if len(data)>8388608: raise ProtocolError('response_too_large')
+                    result=self._observe_pending(self._status(parse_body(bytes(data),response.status_code),response,client_request_id=client_request_id),deadline,client_request_id)
+                    if result.text: yield ModelEvent('text',text=result.text)
+                    yield ModelEvent('finish',result=result)
+                    return
                 self.check(response,True); state=StreamState(self,response)
                 decoder=codecs.getincrementaldecoder('utf-8')();buffer=''
                 for chunk in response.iter_bytes():
@@ -156,37 +266,87 @@ class ProductModel(ModelBase):
                         if state.done: return
                     if len(buffer.encode("utf-8"))>1048576: raise ProtocolError('stream_frame_too_large',outcome_unknown=True)
                 raise ProtocolError('model_stream_incomplete',outcome_unknown=True)
+        except ModelRequestError: raise
         except PonderError as error:
             if error.status is None or error.status==408 or error.status>=500: error.outcome_unknown=True
-            raise
-        except Exception: raise PonderError('model_outcome_unknown',outcome_unknown=True) from None
+            raise ModelRequestError(error.code, status=error.status, outcome_unknown=error.outcome_unknown,
+                client_request_id=client_request_id, request_id=locals().get('response',None).headers.get('x-openpond-request-id') if locals().get('response',None) else None) from None
+        except Exception: raise ModelRequestError('model_outcome_unknown',client_request_id=client_request_id) from None
 
 class AsyncProductModel(ModelBase):
-    async def generate(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None) -> ModelResult:
+    async def inspect_request(self, request_id: str) -> dict[str, Any]:
+        return await self._read_status(self._recovery_path(request_id=request_id),request_id=request_id)
+    async def recover(self, client_request_id: str) -> dict[str, Any]:
+        return await self._read_status(self._recovery_path(client_request_id=client_request_id),client_request_id=client_request_id)
+    async def _read_status(self, path: str, timeout: float = 30.0, *, request_id: str | None = None, client_request_id: str | None = None) -> dict[str, Any]:
+        async with self._transport.client.stream('GET',self.base_url+path,headers=self.headers,timeout=timeout) as response:
+            self.check(response,False)
+            data=bytearray()
+            async for chunk in response.aiter_bytes():
+                data.extend(chunk)
+                if len(data)>8388608: raise ProtocolError('response_too_large')
+            return self._status(parse_body(bytes(data),response.status_code),response,request_id=request_id,client_request_id=client_request_id)
+    async def _observe_pending(self, status: dict[str, Any], deadline: float, client_request_id: str) -> ModelResult:
+        wall_deadline=datetime.fromisoformat(status['deadlineAt'].replace('Z','+00:00')).timestamp()+30
+        while True:
+            if status['state']=='completed':
+                if status['result'] is not None: return status['result']
+                raise ModelRequestError('model_result_not_retained',client_request_id=client_request_id,request_id=status['requestId'],outcome_unknown=False)
+            if status['state'] in ('failed','cancelled'):
+                raise ModelRequestError(status['failureCode'] or 'model_request_failed',client_request_id=client_request_id,
+                    request_id=status['requestId'],outcome_unknown=False)
+            remaining=min(deadline-time.monotonic(),wall_deadline-time.time())
+            if remaining<=0: raise ModelRequestError('model_outcome_unknown',client_request_id=client_request_id,request_id=status['requestId'])
+            delay=2.0 if status['retryAt'] is None else datetime.fromisoformat(status['retryAt'].replace('Z','+00:00')).timestamp()-time.time()
+            await asyncio.sleep(min(remaining,max(.5,min(15.0,delay))))
+            try: status=await self._read_status(self._recovery_path(request_id=status['requestId']),timeout=min(30.0,max(.001,deadline-time.monotonic())),request_id=status['requestId'],client_request_id=client_request_id)
+            except Exception: raise ModelRequestError('model_outcome_unknown',client_request_id=client_request_id,request_id=status['requestId']) from None
+    async def cancel_request(self, request_id: str) -> None:
+        async with self._transport.client.stream('POST',self.base_url+self._recovery_path(request_id=request_id)+'/cancel',headers=self.headers,timeout=30) as response:
+            self.check(response,False)
+    async def generate(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None, client_request_id: str | None = None, timeout: float = SERVING_OBSERVER_SECONDS) -> ModelResult:
+        client_request_id=_client_request_id(client_request_id); timeout=_observer_timeout(timeout)
         try:
-            return await asyncio.wait_for(self._generate(prompt=prompt,messages=messages,temperature=temperature,max_tokens=max_tokens),timeout=self._transport.timeout)
-        except asyncio.TimeoutError: raise PonderError('request_deadline',outcome_unknown=True) from None
+            return await asyncio.wait_for(self._generate(prompt=prompt,messages=messages,temperature=temperature,max_tokens=max_tokens,client_request_id=client_request_id,timeout=timeout),timeout=timeout)
+        except asyncio.TimeoutError: raise ModelRequestError('request_deadline',client_request_id=client_request_id) from None
 
-    async def _generate(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None) -> ModelResult:
+    async def _generate(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None, client_request_id: str | None = None, timeout: float = SERVING_OBSERVER_SECONDS) -> ModelResult:
+        client_request_id=_client_request_id(client_request_id); timeout=_observer_timeout(timeout)
+        deadline=time.monotonic()+timeout
         body=self.body(prompt=prompt,messages=messages,temperature=temperature,max_tokens=max_tokens)
         try:
-            async with self._transport.client.stream('POST',self.base_url+'/chat/completions',headers=self.headers,content=body) as response:
+            async with self._transport.client.stream('POST',self.base_url+'/chat/completions',headers={**self.headers,'X-OpenPond-Client-Request-Id':client_request_id},content=body,timeout=timeout) as response:
                 self.check(response,False)
                 data=bytearray()
                 async for chunk in response.aiter_bytes():
                     data.extend(chunk)
                     if len(data)>8388608: raise ProtocolError('response_too_large',outcome_unknown=True)
-                return self.result(parse_body(bytes(data),response.status_code),response)
+                raw=parse_body(bytes(data),response.status_code)
+                if response.status_code==202: return await self._observe_pending(self._status(raw,response,client_request_id=client_request_id),deadline,client_request_id)
+                return self.result(raw,response)
         except asyncio.CancelledError: raise
+        except ModelRequestError: raise
         except PonderError as error:
             if error.status is None or error.status==408 or error.status>=500: error.outcome_unknown=True
-            raise
-        except Exception: raise PonderError('model_outcome_unknown',outcome_unknown=True) from None
-    async def stream(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None) -> AsyncIterator[ModelEvent]:
+            raise ModelRequestError(error.code, status=error.status, outcome_unknown=error.outcome_unknown,
+                client_request_id=client_request_id, request_id=locals().get('response',None).headers.get('x-openpond-request-id') if locals().get('response',None) else None) from None
+        except Exception: raise ModelRequestError('model_outcome_unknown',client_request_id=client_request_id) from None
+    async def stream(self, *, prompt: str | None = None, messages: list[Message] | None = None, temperature: float | None = None, max_tokens: int | None = None, client_request_id: str | None = None, timeout: float = SERVING_OBSERVER_SECONDS) -> AsyncIterator[ModelEvent]:
+        client_request_id=_client_request_id(client_request_id); timeout=_observer_timeout(timeout)
         body=self.body(prompt=prompt,messages=messages,temperature=temperature,max_tokens=max_tokens,stream=True)
-        deadline=time.monotonic()+self._transport.timeout
+        deadline=time.monotonic()+timeout
         try:
-            async with self._transport.client.stream('POST',self.base_url+'/chat/completions',headers=self.headers,content=body) as response:
+            async with self._transport.client.stream('POST',self.base_url+'/chat/completions',headers={**self.headers,'X-OpenPond-Client-Request-Id':client_request_id},content=body,timeout=timeout) as response:
+                if response.status_code==202:
+                    self.check(response,False); data=bytearray()
+                    async for chunk in response.aiter_bytes():
+                        if time.monotonic()>deadline: raise PonderError('request_deadline',outcome_unknown=True)
+                        data.extend(chunk)
+                        if len(data)>8388608: raise ProtocolError('response_too_large')
+                    result=await self._observe_pending(self._status(parse_body(bytes(data),response.status_code),response,client_request_id=client_request_id),deadline,client_request_id)
+                    if result.text: yield ModelEvent('text',text=result.text)
+                    yield ModelEvent('finish',result=result)
+                    return
                 self.check(response,True); state=StreamState(self,response)
                 iterator=response.aiter_bytes();decoder=codecs.getincrementaldecoder('utf-8')();buffer=''
                 while True:
@@ -200,7 +360,9 @@ class AsyncProductModel(ModelBase):
                     if len(buffer.encode("utf-8"))>1048576: raise ProtocolError('stream_frame_too_large',outcome_unknown=True)
                 raise ProtocolError('model_stream_incomplete',outcome_unknown=True)
         except asyncio.CancelledError: raise
+        except ModelRequestError: raise
         except PonderError as error:
             if error.status is None or error.status==408 or error.status>=500: error.outcome_unknown=True
-            raise
-        except Exception: raise PonderError('model_outcome_unknown',outcome_unknown=True) from None
+            raise ModelRequestError(error.code, status=error.status, outcome_unknown=error.outcome_unknown,
+                client_request_id=client_request_id, request_id=locals().get('response',None).headers.get('x-openpond-request-id') if locals().get('response',None) else None) from None
+        except Exception: raise ModelRequestError('model_outcome_unknown',client_request_id=client_request_id) from None

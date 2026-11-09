@@ -111,6 +111,7 @@ export {
   TrainingPhysicalPlacementSchema,
   type TrainingPhysicalPlacement,
 } from "./training-physical-placement.js";
+import { createTrainingOperationClient } from "./training-operations.js";
 import { createTrainingPreparationClient } from "./training-preparations.js";
 import { createTrainingExperimentLearningClient } from "./training-experiment-learning.js";
 export * from "./training-experiment-learning.js";
@@ -282,6 +283,7 @@ export function createTrainingClient(input: {
     ...createWeightSpaceClient(request),
     ...createWeightSpaceModelServingClient(request),
     ...createTrainingPreparationClient(request),
+    ...createTrainingOperationClient(request),
     ...createTrainingExperimentSetupClient(request),
     ...createTrainingExperimentLearningClient(request),
     ...createTrainingEstimateClient(request),
@@ -493,3 +495,5 @@ export { parseAndVerifyTrainingEstimate } from "./training-estimates.js";
 export * from "./steering-experiment-source.js";
 export * from "./steering-experiment-source-verification.js";
 export * from "./steering-experiment-authoring.js";
+
+export * from "./training-operations.js";
