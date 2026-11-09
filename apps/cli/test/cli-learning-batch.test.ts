@@ -36,7 +36,7 @@ test("batch validates before effects, bounds dispatch and retains partial outcom
   expect(active).toBe(0);
   expect(result.ok).toBe(false);
   expect(result.results).toMatchObject([
-    { index: 0, status: "request_failed", error: { code: "request_timeout" } },
+    { index: 0, status: "request_failed", error: { code: "request_timeout", status: 504, retryable: true, requestId: null } },
     { index: 1, status: "completed", result: { operationId: "cancel-1" } },
     { index: 2, status: "not_started" }, { index: 3, status: "not_started" },
   ]);
