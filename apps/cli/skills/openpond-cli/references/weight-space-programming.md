@@ -73,8 +73,13 @@ Dataset release that is never copied into editor-visible panels.
 output tokens and integer seed 0–2147483647.
 
 All ten integer `limits` fields are required. Use the tighter of the user's
-approved bound and the corresponding ready capability bound. Duration and idle
-time include startup and reasoning; idle must fit within duration. Resolve
+approved bound and the corresponding ready capability bound. The hosted work
+duration begins at native-command issuance: checkpoint loading and verification
+consume that time, and readiness does not reset it. Idle limits bound inactivity
+between commands once the session is ready, and must fit within duration. Plan
+enough approved time for loading, agent reasoning, edits, both frozen passes,
+checkpoint verification, export and transfer. Finalize with that headroom still
+available; a later receipt cannot authorize a new upload after cutoff. Resolve
 missing user preferences in chat before paid start, while keeping preparation
 free of compute.
 

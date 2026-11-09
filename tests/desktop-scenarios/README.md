@@ -44,7 +44,34 @@ or attachment. When the exact runtime is ready, the scenario also requires an
 accepted prepared execution and its original attachment after reload. It never
 authorizes GPU execution, scoring, serving or schedules and is not routine CI.
 Set `OPENPOND_WSP_ACCEPTANCE_SESSION_ID` to inspect an existing acceptance turn
-without sending another prompt.
+without sending another prompt. Use `OPENPOND_WSP_ACCEPTANCE_TURN_ID` to select
+the exact original turn in a chat with multiple preparations. Recovery reads
+the chat's paginated event history, including turns outside the recent global
+event window; a missing retained completion fails without another prompt.
+
+For a protected preparation handoff, provide `OPENPOND_WSP_ACCEPTANCE_PREPARE_FILE`
+and `OPENPOND_WSP_ACCEPTANCE_PREPARE_SHA256` together. The scenario copies the
+reviewed input unchanged into the new chat directory, requires matching ready
+capability, verifies the accepted receipt against that input, and checks its
+attachment after reopening. The Desktop agent prepares on behalf of the declared
+editing teacher; the teacher identity remains unchanged. Confirm the operation
+has never been submitted and arrange the teacher handoff before running. Complete
+handoff before the returned plan expires; expiry does not authorize another
+preparation or operation. Confirm custody of the running renderer before using
+its debug connection.
+
+When another acceptance owns the renderer, `OPENPOND_WSP_ACCEPTANCE_SERVER_ONLY=1`
+issues the original prompt through the running Desktop server in its own chat.
+It verifies the real CLI receipt without changing the screen, and writes
+`original-prepare-receipt.json` for immediate teacher handoff. Attachment and
+rendered reopening remain unproved in this mode. After the renderer is free, rerun
+with the recorded session ID and the original reviewed input, without server-only
+mode, to prove reopening without another prompt or Prepare. The same attachment
+may then correctly show the execution's later phase.
+Use `OPENPOND_WSP_ACCEPTANCE_CONTINUE_SESSION_ID` instead of the resume variable
+to submit a new reviewed preparation in an existing server-only chat. Each turn
+retains its own identity and receipt; set `OPENPOND_WSP_ACCEPTANCE_TURN_ID` when
+later inspecting a particular completed turn in a chat with multiple turns.
 
 Useful commands:
 

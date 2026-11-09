@@ -23,7 +23,7 @@ export const ComputeAppliedPriceSchema = z.object({
 }).strict();
 export type ComputeAppliedPrice = z.infer<typeof ComputeAppliedPriceSchema>;
 
-export const ManagedModificationPriceSchema = z.object({
+export const ManagedModificationWarmPriceSchema = z.object({
   schemaVersion:z.literal("openpond.modificationPrice.v1"),
   appliedPrice:ComputeAppliedPriceSchema.extend({service:z.literal("model_modification")}),
   billingBoundary:z.literal("active_allocation_until_verified_cleanup"),
@@ -32,6 +32,15 @@ export const ManagedModificationPriceSchema = z.object({
   minimumBillableSeconds:z.literal(0),
   warmReuseSeconds:z.literal(300),
 }).strict();
+/** Cold-only execution has explicit customer terms. A v1 receipt keeps its
+ * original reuse window and hash; changing lifecycle terms requires a new review. */
+export const ManagedModificationColdPriceSchema = ManagedModificationWarmPriceSchema.extend({
+  schemaVersion:z.literal("openpond.modificationPrice.v2"),
+  warmReuseSeconds:z.literal(0),
+}).strict();
+export const ManagedModificationPriceSchema = z.discriminatedUnion("schemaVersion", [
+  ManagedModificationWarmPriceSchema, ManagedModificationColdPriceSchema,
+]);
 export type ManagedModificationPrice = z.infer<typeof ManagedModificationPriceSchema>;
 
 /** Null means use available credits, with native finite execution bounds.
