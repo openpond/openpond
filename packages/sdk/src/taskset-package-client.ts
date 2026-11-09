@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { TasksetCatalogReleaseRefSchema } from "./taskset-catalog.js";
 import { MAX_TASKSET_PACKAGE_BYTES, TasksetPackageSchema, tasksetPackageRewardBinding, validateTasksetPackage, type TasksetPackage } from "./taskset-package-contracts.js";
@@ -56,8 +57,8 @@ export class OpenPondTasksetPackageError extends Error {
  * Catalog inventory remains metadata-only and never calls this client itself. */
 export class OpenPondTasksetPackageClient {
   readonly #options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch };
-  constructor(options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
-    const url = new URL(options.baseUrl);
+  constructor(options: { baseUrl?: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim()) throw new Error("Taskset package client requires a clean HTTP(S) endpoint and workspace credentials.");
     this.#options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
   }

@@ -27,6 +27,8 @@ export const RecoverableEvaluationActionSchema = z.enum([
   "training:start-neuron-training",
   "training:cancel-neuron-training",
   "training-neuron-training-result-save",
+  "training-weight-space-result-save",
+  "training-weight-space-cancel",
 ]);
 export const EvaluationOperationRecoverySchema = z
   .object({

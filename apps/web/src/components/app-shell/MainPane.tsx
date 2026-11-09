@@ -39,6 +39,7 @@ import { useRuntimeEventSession } from "../../hooks/useRuntimeEventSession";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { ComposerSubmitOptions } from "../chat/Composer";
 import { DraftBoundComposer } from "../chat/DraftBoundComposer";
+import { ModelTrainingStarterCards } from "../chat/ModelTrainingStarterCards";
 import type {
   ComposerCreateImproveActions,
   ComposerCreateImproveRuntime,
@@ -327,6 +328,7 @@ export function MainPane({
   const [composerAttachmentRequest, setComposerAttachmentRequest] =
     useState<ComposerAttachmentRequest | null>(null);
   const [chatSubmissionVersion, setChatSubmissionVersion] = useState(0);
+  const [starterFocusVersion, setStarterFocusVersion] = useState(0);
   const currentComposerSubmissionScopeKeyRef = useRef("");
   const getCurrentComposerSubmissionScopeKey = useCallback(
     () => currentComposerSubmissionScopeKeyRef.current,
@@ -1853,6 +1855,14 @@ export function MainPane({
                 />
               )}
             </div>
+            <ModelTrainingStarterCards
+              draftStore={composerDraftStore}
+              scopeKey={composerDraftStore.getScopeKey()}
+              submissionScopeKey={composerSubmissionScopeKey}
+              getCurrentSubmissionScopeKey={getCurrentComposerSubmissionScopeKey}
+              disabled={turnRunning}
+              onFocus={() => setStarterFocusVersion(current => current + 1)}
+            />
             <div className="composer-stack start">
               {trainingChatHandoffBar}
               <ApprovalRequestCard connection={connection} showToast={showToast}
@@ -1865,7 +1875,7 @@ export function MainPane({
                 attachmentRequest={composerAttachmentRequest}
                 mode="start"
                 autoFocus
-                focusRequestId={mainComposerFocusRequestId}
+                focusRequestId={mainComposerFocusRequestId + starterFocusVersion}
                 mentionApps={repositoryWork ? mentionApps : []}
                 connectedAppMentions={connectedAppMentions}
                 profileSkills={

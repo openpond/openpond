@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { compareExperiments, verifyExperimentEvidence } from "@openpond/evals/experiments";
@@ -18,8 +19,8 @@ export class OpenPondExperimentError extends Error {
 /** One Experiment is one run with its immutable configuration and results. */
 export class OpenPondExperimentsClient {
   private readonly baseUrl: string;
-  constructor(private readonly options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof fetch }) {
-    const url = new URL(options.baseUrl);
+  constructor(private readonly options: { baseUrl?: string; apiKey: string; teamId: string; fetch?: typeof fetch }) {
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || !options.apiKey.trim() || !options.teamId.trim())
       throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = url.toString().replace(/\/+$/, "");
@@ -136,9 +137,9 @@ export class OpenPondExperimentsClient {
   async scoringPass(id: string, signal?: AbortSignal) {
     return this.pass(await this.request(`/scoring-passes/${encodeURIComponent(Id.parse(id))}`, "GET", undefined, signal), id);
   }
-  async scoringPasses(executionId: string, options: { afterId?: string; executionKind?: "recorded_evidence"; signal?: AbortSignal } = {}) {
+  async scoringPasses(executionId: string, options: { afterId?: string; executionKind?: "recorded_evidence" | "weight_space"; signal?: AbortSignal } = {}) {
     const params = new URLSearchParams(options.afterId ? { afterId: Id.parse(options.afterId) } : {});
-    if (options.executionKind) params.set("executionKind", z.literal("recorded_evidence").parse(options.executionKind));
+    if (options.executionKind) params.set("executionKind", z.enum(["recorded_evidence", "weight_space"]).parse(options.executionKind));
     const page = z.object({ items: z.array(z.unknown()).max(30), nextCursor: Id.nullable() }).strict().parse(
       await this.request(`/${encodeURIComponent(Id.parse(executionId))}/scoring-passes?${params}`, "GET", undefined, options.signal));
     const items = page.items.map(value => this.pass(value));

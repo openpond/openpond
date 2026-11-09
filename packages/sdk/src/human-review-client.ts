@@ -1,11 +1,12 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import {contentHash} from "@openpond/harness";
 import { z } from "zod";
 import { HumanReviewTransportSchema,HumanInspectionSchema,HumanEvidenceSchema,HumanFormSchema,HumanResultViewSchema, HumanReviewViewSchema, HumanInboxSchema, type HumanReviewCommand, type HumanReviewRequest, type HumanReviewTransportRequest } from "@openpond/evals/human-review";
 export class HumanReviewClientError extends Error { constructor(readonly status: number, readonly code: string, message: string) { super(message); this.name = "HumanReviewClientError"; } }
 export class OpenPondHumanReviewClient {
-  readonly options: { baseUrl: string; apiKey: string; scope: string; fetch?: typeof globalThis.fetch };
+  readonly options: { baseUrl?: string; apiKey: string; scope: string; fetch?: typeof globalThis.fetch };
   constructor(options: OpenPondHumanReviewClient["options"]) {
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash || url.search || !options.apiKey.trim() || !options.scope.trim() || options.scope !== options.scope.trim() || /[\r\n]/.test(options.scope)) throw new Error("Use a scoped key and a plain HTTP(S) API endpoint.");
     this.options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
   }

@@ -19,7 +19,7 @@ import { OpenPondClient } from "openpond-sdk";
 import { OpenPondSpanExporter } from "openpond-sdk/opentelemetry";
 import { BatchSpanProcessor, TracerProvider } from "@opentelemetry/sdk-trace";
 
-const client = new OpenPondClient({ baseUrl: apiBaseUrl, apiKey, teamId });
+const client = new OpenPondClient({ apiKey, teamId });
 const exporter = new OpenPondSpanExporter({
   client,
   datasetId,

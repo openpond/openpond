@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { canonicalJson } from "./protocol.js";
 import { ModelTasksetRunRequestSchema, ModelTasksetRunListQuerySchema, ModelTasksetRunPageSchema, verifyModelTasksetRunDetails, verifyModelTasksetRunResult, type ModelTasksetRunSummary } from "./model-taskset-runs-contracts.js";
@@ -10,8 +11,8 @@ export class OpenPondModelTasksetRunError extends Error {
 
 export class OpenPondModelTasksetRunsClient {
   readonly #options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch };
-  constructor(options: { baseUrl: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
-    const url = new URL(options.baseUrl);
+  constructor(options: { baseUrl?: string; apiKey: string; teamId: string; fetch?: typeof globalThis.fetch }) {
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!options.apiKey.trim() || !options.teamId.trim() || !["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("Evaluation runs require an HTTP(S) endpoint and workspace credentials.");
     this.#options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
   }

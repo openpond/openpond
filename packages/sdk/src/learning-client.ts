@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { OpenPondLearningError } from "./learning-error.js";
 export { OpenPondLearningError } from "./learning-error.js";
 import { z } from "zod";
@@ -16,7 +17,7 @@ import { LearningSourceCredentialSchema, LearningSourceCredentialRequestSchema, 
 
 export interface OpenPondLearningClientOptions {
   apiKey: string;
-  baseUrl: string;
+  baseUrl?: string;
   /** Local profile or hosted team scope. The server checks the credential's ownership. */
   scope: string;
   fetch?: typeof globalThis.fetch;
@@ -34,7 +35,7 @@ export class OpenPondLearningClient {
   readonly #options: OpenPondLearningClientOptions;
   constructor(options: OpenPondLearningClientOptions) {
     if (!options.apiKey.trim() || !options.scope.trim()) throw new Error("Learning API key and scope are required.");
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("Learning base URL must be an HTTP(S) endpoint without credentials, query, or fragment.");
     this.#options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
   }

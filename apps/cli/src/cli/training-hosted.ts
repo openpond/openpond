@@ -1,3 +1,4 @@
+import { weightSpaceHostedActions } from "./training-hosted-weight-space";
 import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { alphaEditHostedActions } from "./training-hosted-alphaedit";
 import { neuronTrainingHostedActions } from "./training-hosted-neuron-training";
@@ -69,6 +70,14 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
       action: action!, target, baseUrl, headers, request, readInput,
       confirmed: parseBooleanOption(options.yes),
     })); return;
+  }
+  if(action && weightSpaceHostedActions.has(action)){
+    const result = await (await import("./training-hosted-weight-space")).runHostedWeightSpaceCommand({action,target,teamId,options,client,readInput});
+    print(result);
+    const id = result && typeof result === "object" && "execution" in result ? (result.execution as {id:string}).id
+      : action === "hosted-weight-space-session" && target ? target : null;
+    if (id) await attachHostedTrainingToChat({id,teamId,apiOrigin:new URL(baseUrl).origin});
+    return;
   }
   if (action && alphaEditHostedActions.has(action)) {
     const { runHostedAlphaEditCommand } = await import("./training-hosted-alphaedit");

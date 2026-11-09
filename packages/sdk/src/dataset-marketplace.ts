@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 
 export const CatalogId = z.string().trim().min(1).max(240);
@@ -55,7 +56,7 @@ export type CatalogSummary = z.infer<typeof CatalogSummarySchema>;
 export type CatalogVisibilityReceipt = z.infer<typeof CatalogVisibilityReceiptSchema>;
 export type CatalogAdoptionReceipt = z.infer<typeof CatalogAdoptionReceiptSchema>;
 export type CatalogCheckResult = z.infer<typeof CatalogCheckResultSchema>;
-export interface DatasetMarketplaceClientOptions { baseUrl: string; apiKey?: string; teamId?: string; fetch?: typeof globalThis.fetch }
+export interface DatasetMarketplaceClientOptions { baseUrl?: string; apiKey?: string; teamId?: string; fetch?: typeof globalThis.fetch }
 export class OpenPondDatasetMarketplaceError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message); this.name = "OpenPondDatasetMarketplaceError"; }
 }
@@ -65,7 +66,7 @@ const sameRelease = (a: z.infer<typeof CatalogReleaseRef>, b: z.infer<typeof Cat
 export class OpenPondDatasetMarketplaceClient {
   readonly #options: DatasetMarketplaceClientOptions;
   constructor(options: DatasetMarketplaceClientOptions) {
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("Dataset marketplace base URL must be an HTTP(S) endpoint without credentials, query, or fragment.");
     this.#options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };
   }

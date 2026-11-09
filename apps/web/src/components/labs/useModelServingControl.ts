@@ -1,3 +1,4 @@
+import { WeightSpaceModelServingControlCommandSchema, WeightSpaceModelServingControlIntentSchema, parseAndVerifyWeightSpaceModelServingControl, type WeightSpaceModelServingControlReceipt } from "openpond-sdk/training";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -18,6 +19,7 @@ import {
   EngramModelServingControlIntentSchema,
   parseAndVerifyEngramModelServingControl,
   type EngramModelServingControlReceipt,
+  createServerlessServingApproval,
   TrainingModelServingControlCommandSchema,
   TrainingModelServingControlIntentSchema,
   SteeringModelServingControlCommandSchema,
@@ -37,6 +39,7 @@ const ACTION = "training-model-serving-control";
 const Intent = z.union([
   AlphaEditModelServingControlIntentSchema,
   NeuronTrainingModelServingControlIntentSchema,
+  WeightSpaceModelServingControlIntentSchema,
   DecisionModelServingControlIntentSchema,
   EngramModelServingControlIntentSchema,
   TrainingModelServingControlIntentSchema,
@@ -45,6 +48,7 @@ const Intent = z.union([
 const Command = z.union([
   AlphaEditModelServingControlCommandSchema,
   NeuronTrainingModelServingControlCommandSchema,
+  WeightSpaceModelServingControlCommandSchema,
   DecisionModelServingControlCommandSchema,
   EngramModelServingControlCommandSchema,
   TrainingModelServingControlCommandSchema,
@@ -57,6 +61,7 @@ type Attempt = {
 type Receipt =
   | AlphaEditModelServingControlReceipt
   | NeuronTrainingModelServingControlReceipt
+  | WeightSpaceModelServingControlReceipt
   | DecisionModelServingControlReceipt
   | TrainingModelServingControlReceipt
   | SteeringModelServingControlReceipt
@@ -73,6 +78,8 @@ async function verifyReceipt(
         request,
         actorId,
       })
+    : request.schemaVersion === "openpond.weightSpaceModelServingControlRequest.v1"
+      ? parseAndVerifyWeightSpaceModelServingControl(raw,{modelProjectId:command.modelProjectId,request,actorId})
     : request.schemaVersion === "openpond.neuronTrainingModelServingControlRequest.v1"
       ? parseAndVerifyNeuronTrainingModelServingControl(raw, {
           modelProjectId: command.modelProjectId,
@@ -103,7 +110,7 @@ async function verifyReceipt(
                 actorId,
               });
 }
-function freshIntent(
+async function freshIntent(
   api: WorkspaceApi,
   modelProjectId: string,
   value: SavedModelServing,
@@ -111,16 +118,17 @@ function freshIntent(
   idleTimeoutSeconds: number,
   defaultPublication: SteeringPublicationReference | null,
   defaultEnabled: boolean,
+  spendingLimit?: string | null,
 ) {
   if (
     value.schemaVersion === "openpond.alphaEditModelServing.v1" ||
-    value.schemaVersion === "openpond.neuronTrainingModelServing.v1"
+    (value.schemaVersion === "openpond.neuronTrainingModelServing.v1" || value.schemaVersion === "openpond.weightSpaceModelServing.v1")
   )
     return Intent.parse({
       schemaVersion:
         value.schemaVersion === "openpond.alphaEditModelServing.v1"
           ? "openpond.alphaEditModelServingControlRequest.v1"
-          : "openpond.neuronTrainingModelServingControlRequest.v1",
+          : value.schemaVersion === "openpond.weightSpaceModelServing.v1" ? "openpond.weightSpaceModelServingControlRequest.v1" : "openpond.neuronTrainingModelServingControlRequest.v1",
       teamId: api.teamId,
       modelProjectId,
       expectedRevision: value.control?.revision ?? 0,
@@ -164,6 +172,8 @@ function freshIntent(
   }
   return Intent.parse({
     schemaVersion: "openpond.trainingModelServingControlRequest.v1",
+    ...(action === "activate" ? {serverlessApproval: await createServerlessServingApproval(
+      value.serverlessReview ?? (() => { throw new Error("Refresh this Model's serverless price before activation."); })(), spendingLimit)} : {}),
     teamId: api.teamId,
     modelProjectId,
     expectedRevision: value.control?.revision ?? 0,
@@ -180,6 +190,7 @@ function definitive(error: unknown, attempt: Attempt) {
     attempt.command.request.schemaVersion === "openpond.alphaEditModelServingControlRequest.v1" ||
     attempt.command.request.schemaVersion ===
       "openpond.neuronTrainingModelServingControlRequest.v1" ||
+    attempt.command.request.schemaVersion === "openpond.weightSpaceModelServingControlRequest.v1" ||
     attempt.command.request.schemaVersion === "openpond.decisionModelServingControlRequest.v1"
   )
     return false;
@@ -298,6 +309,7 @@ export function useModelServingControl(
     idleTimeoutSeconds: number,
     defaultPublication: SteeringPublicationReference | null = null,
     defaultEnabled = true,
+    spendingLimit?: string | null,
   ) {
     if (active.current.has(scope) || (!original && !pending.isSuccess)) return null;
     active.current.add(scope);
@@ -310,7 +322,7 @@ export function useModelServingControl(
       if (!saved) {
         if (!value)
           throw new Error("Read the exact saved version before reviewing a fresh serving command.");
-        const intent = freshIntent(
+        const intent = await freshIntent(
           api,
           modelProjectId,
           value,
@@ -318,6 +330,7 @@ export function useModelServingControl(
           idleTimeoutSeconds,
           defaultPublication,
           defaultEnabled,
+          spendingLimit,
         );
         const operation = await api.operation(ACTION, intent);
         if (!current()) return null;
@@ -336,7 +349,7 @@ export function useModelServingControl(
       dispatched = saved;
       const raw = await apiFetch(
         api.connection,
-        `/v1/training/saved-models/${encodeURIComponent(saved.command.modelProjectId)}/serving?${new URLSearchParams({ teamId: api.teamId, ...(saved.command.request.schemaVersion === "openpond.alphaEditModelServingControlRequest.v1" || saved.command.request.schemaVersion === "openpond.neuronTrainingModelServingControlRequest.v1" || saved.command.request.schemaVersion === "openpond.decisionModelServingControlRequest.v1" ? { intentHash: saved.operation.intentHash, ...(api.projectId ? { projectId: api.projectId } : {}) } : {}) })}`,
+        `/v1/training/saved-models/${encodeURIComponent(saved.command.modelProjectId)}/serving?${new URLSearchParams({ teamId: api.teamId, ...(saved.command.request.schemaVersion === "openpond.alphaEditModelServingControlRequest.v1" || saved.command.request.schemaVersion === "openpond.neuronTrainingModelServingControlRequest.v1" || saved.command.request.schemaVersion === "openpond.weightSpaceModelServingControlRequest.v1" || saved.command.request.schemaVersion === "openpond.decisionModelServingControlRequest.v1" ? { intentHash: saved.operation.intentHash, ...(api.projectId ? { projectId: api.projectId } : {}) } : {}) })}`,
         { method: "POST", body: JSON.stringify(saved.command.request) },
       );
       const response = await verifyReceipt(raw, saved.command, api.actorId);

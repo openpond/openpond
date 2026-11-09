@@ -226,6 +226,7 @@ Options:
   --content-hash <string>
   --cursor <string>
   --dataset-hash <string>
+  --execution-kind <string>
   --input-file <string>
   --json
   --limit <integer>
@@ -1053,6 +1054,18 @@ Usage:
   openpond training hosted-modification-executions --team-id <id> [--id <execution-id>] [--project-id <id>] [--method <neuron_steering|inspect_activations>] [--phase <phase>] [--cursor <cursor>] [--limit <1..100>] [--json]
   openpond training hosted-modification-execution <execution-id> --team-id <id> [--json]
   openpond training hosted-compare-modification <execution-id> --team-id <id> --baseline <variant-id> --candidate <variant-id> [--prompt <prompt-id>] [--json]
+  openpond training hosted-weight-space-capability <query.json> --team-id <id> [--json]
+  openpond training hosted-prepare-weight-space <input.json> --team-id <id> [--json]
+  openpond training hosted-start-weight-space <input.json> --team-id <id> --yes [--json]
+  openpond training hosted-cancel-weight-space <input.json> --team-id <id> [--json]
+  openpond training hosted-weight-space-session <session-id> --team-id <id> [--json]
+  openpond training hosted-weight-space-sessions  --team-id <id> [--project-id <id>] [--phase <phase>] [--cursor <cursor>] [--limit <1..100>] [--json]
+  openpond training hosted-weight-space-history <session-id> --team-id <id> [--after-revision <n>] [--limit <1..5>] [--json]
+  openpond training hosted-weight-space-command <command.json> --team-id <id> [--json]
+  openpond training hosted-weight-space-command-result <session-id> --team-id <id> --operation-id <id> [--json]
+  openpond training hosted-save-weight-space-model <input.json> --team-id <id> [--json]
+  openpond training hosted-weight-space-serving <input.json> --team-id <id> [--json]
+  openpond training hosted-control-weight-space-serving <input.json> --team-id <id> [--yes] [--json]
   openpond training hosted-alphaedit-capability <query.json> --team-id <id> [--json]
   openpond training hosted-compile-alphaedit <input.json> --team-id <id> [--json]
   openpond training hosted-prepare-alphaedit <input.json> --team-id <id> [--json]

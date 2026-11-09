@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { CorrectionVerificationPlanContentSchema, CorrectionVerificationPlanSchema, CorrectionOpportunitySchema, CorrectionMetricSummarySchema, CorrectionMetricObservationSchema, assertLearningRequestJson } from "@openpond/evals/learning";
 import { OpenPondLearningError, readBoundedLearningResponse, type LearningRequestOptions } from "./learning-client.js";
@@ -30,9 +31,9 @@ export type CorrectionMetricsRead = z.infer<typeof CorrectionMetricsReadSchema>;
 export type CorrectionMetricsCommand = z.infer<typeof CorrectionMetricsCommandSchema>;
 export class OpenPondCorrectionMetricsClient {
   private readonly options: { baseUrl: string; apiKey: string; fetch?: typeof globalThis.fetch };
-  constructor(options: { baseUrl: string; apiKey: string; fetch?: typeof globalThis.fetch }) {
+  constructor(options: { baseUrl?: string; apiKey: string; fetch?: typeof globalThis.fetch }) {
     if (!options.apiKey.trim()) throw new Error("Learning API key is required.");
-    const url = new URL(options.baseUrl);
+    const url = new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash)
       throw new Error("Learning base URL must be an HTTP(S) endpoint without credentials, query, or fragment.");
     this.options = { ...options, baseUrl: url.toString().replace(/\/+$/, "") };

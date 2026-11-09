@@ -17,8 +17,9 @@ Training examples remain labeled by origin: extracted, corrected, synthetic, or 
 | SFT | Learn desired responses from reviewed demonstrations. | LoRA, Engram adapter or Neuron training through their respective trainers. |
 | RL | Learn from rewards on generated attempts. | LoRA with GRPO. |
 | Decision Model | Train or score allowed choices from structured state. | The specialized Decision LoRA adapter. |
+| Weight-space programming | Let the local agent inspect and directly edit remote parameters. | Direct parameter patch; source implementation requires runtime qualification. |
 
-Choose the workflow first, then its adapter and compatible starting model.
+Choose the workflow first, then its adapter and compatible starting model. Weight-space programming directly edits parameters and has no adapter selector; see its [execution boundaries](model-modifications.md#weight-space-programming).
 The ordinary SFT recipe is LoRA-specific; Engram and neuron training retain their
 dedicated supervised contracts and required data. Every combination requires an
 exact compatible runtime; serving readiness is checked separately.

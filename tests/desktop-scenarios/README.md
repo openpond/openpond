@@ -33,6 +33,17 @@ Artifact convention:
 
 Use server APIs for setup-heavy state. Use real renderer actions only when the scenario is proving visible UX behavior.
 
+`weight-space-live-prepare.ts` is a manual connected acceptance using an existing
+Codex subscription and the selected Desktop account. It sends one preparation-only
+request from a new empty temporary directory, uses the installed CLI contract,
+retains the real capability receipt, and reopens the transcript. An unavailable
+runtime proves the admission boundary; it does not prove successful preparation
+or attachment. When the exact runtime is ready, the scenario also requires an
+accepted prepared execution and its original attachment after reload. It never
+authorizes GPU execution, scoring, serving or schedules and is not routine CI.
+Set `OPENPOND_WSP_ACCEPTANCE_SESSION_ID` to inspect an existing acceptance turn
+without sending another prompt.
+
 Useful commands:
 
 ```bash

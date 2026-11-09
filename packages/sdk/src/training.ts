@@ -1,7 +1,15 @@
+import { createWeightSpaceModelServingClient } from "./weight-space-model-serving.js";
+export * from "./weight-space-model-serving.js";
 import { createTrainingEvidenceClient } from "./training-evidence.js";
+import { createWeightSpaceClient } from "./weight-space-sessions.js";
+export * from "./weight-space-programming.js";
+export * from "./weight-space-evaluation.js";
+export * from "./weight-space-artifact.js";
+export * from "./weight-space-sessions.js";
 export { TrainingEvidenceWindowSchema, type TrainingEvidenceWindow } from "./training-evidence.js";
 export * from "./training-usage-funding.js";
 export * from "./managed-serving-usage.js";
+export * from "./serverless-serving.js";
 export * from "./managed-compute-price.js";
 import { createEngramModelServingClient } from "./engram-model-serving.js";
 export * from "./engram-model-serving.js";
@@ -219,7 +227,7 @@ export * from "./training-usage-status.js";
 const IdSchema = z.string().trim().min(1).max(500);
 
 export function createTrainingClient(input: {
-  baseUrl: string;
+  baseUrl?: string;
   fetch?: typeof fetch;
   headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
 }) {
@@ -228,6 +236,8 @@ export function createTrainingClient(input: {
   return {
     postTraining: createPostTrainingClient({ request }),
     ...createTrainingEvidenceClient(request),
+    ...createWeightSpaceClient(request),
+    ...createWeightSpaceModelServingClient(request),
     ...createTrainingPreparationClient(request),
     ...createTrainingExperimentSetupClient(request),
     ...createTrainingExperimentLearningClient(request),

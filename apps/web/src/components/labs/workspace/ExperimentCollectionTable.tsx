@@ -70,7 +70,7 @@ export function ExperimentCollectionTable({
               row.kind === "modification"
                 ? `modification-recording:${row.id}`
                 : row.kind === "managed-modification"
-                  ? `${row.execution.method === "alphaedit" ? "managed-alphaedit" : row.execution.method === "selective_neuron_training" ? "managed-neuron-training" : row.execution.method === "decision_model" ? "managed-decision" : row.execution.method === "engram_adapter" ? "managed-engram" : "managed-modification"}:${row.id}`
+                  ? `${row.execution.method === "weight_space_programming" ? "managed-weight-space" : row.execution.method === "alphaedit" ? "managed-alphaedit" : row.execution.method === "selective_neuron_training" ? "managed-neuron-training" : row.execution.method === "decision_model" ? "managed-decision" : row.execution.method === "engram_adapter" ? "managed-engram" : "managed-modification"}:${row.id}`
                   : row.id,
             projectId:
               row.kind === "managed-modification" ? row.execution.projectId : route.projectId,
@@ -229,7 +229,7 @@ export function ExperimentCollectionTable({
                       : row.kind === "draft"
                         ? experimentOperationLabel(row.record.draft.operationType)
                         : row.kind === "managed-modification"
-                          ? experimentOperationLabel(row.execution.method)
+                          ? row.execution.method === "weight_space_programming" ? "Weight-space programming" : experimentOperationLabel(row.execution.method)
                           : row.kind === "modification"
                             ? experimentOperationLabel(row.recording.method)
                             : row.execution.method === "sft"

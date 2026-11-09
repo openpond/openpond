@@ -1,3 +1,4 @@
+import { readChatWeightSpace } from "./chat-weight-space.js";
 import { chatCatalogFetch, catalogFailure } from "./chat-catalog-fetch.js";
 import { readChatRetainedResult } from "./chat-retained-result.js";
 import { readChatAlphaEditResult } from "./chat-alphaedit-result.js";
@@ -19,7 +20,7 @@ type Access = { apiBaseUrl: string; token: string; teamId: string; actorId: stri
 function focusKey(state: ReturnType<typeof chatExperimentContext>) {
   const scope = chatResourceWorkspaces(state).find(item => item.id === state.activeScopeId);
   return JSON.stringify([state.activeScopeId, scope?.dataset?.id ?? null, scope?.dataset?.revision ?? null,
-    scope?.dataset?.owner ?? scope?.dataset?.profileRef ?? null, scope?.selectedRunId ?? null, scope?.selectedTrainingKey ?? null]);
+    scope?.dataset?.owner ?? scope?.dataset?.profileRef ?? null, scope?.selectedRunId ?? null, scope?.selectedTrainingKey ?? null, scope?.weightSpace ?? null]);
 }
 
 export function createChatContextBrowser(deps: {
@@ -64,6 +65,11 @@ export function createChatContextBrowser(deps: {
         target: { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" },
         label: scope.name, detail: scope.draft ? `Draft · ${experimentOperationLabel(scope.draft.operationType)}` : `Draft · ${scope.dataset!.name} · revision ${scope.dataset!.revision}`,
       });
+    }
+    if ((source === "all" || source === "local") && scopes.some(scope=>scope.weightSpace)) {
+      const access = await deps.access().catch(() => null);
+      for (const scope of scopes) if (scope.weightSpace && access && scope.weightSpace.teamId === access.teamId && scope.weightSpace.actorId === access.actorId && scope.weightSpace.apiOrigin === new URL(access.apiBaseUrl).origin)
+        options.unshift({target:{kind:"weight_space_session",id:scope.weightSpace.id,location:"cloud",teamId:access.teamId,apiOrigin:scope.weightSpace.apiOrigin},label:scope.name,detail:"Weight-space programming"});
     }
     let warning: string | null = null;
     if (source === "all" || source === "models") try {
@@ -134,6 +140,7 @@ export function createChatContextBrowser(deps: {
     if (["training_result", "managed_modification_result", "engram_result"].includes(target.kind)) return readChatRetainedResult(target, deps.access);
     if (target.kind === "alphaedit_result") return readChatAlphaEditResult(target, deps.access);
     if (target.kind === "neuron_training_result") return readChatNeuronTrainingResult(target, deps.access);
+    if (target.kind === "weight_space_session") return readChatWeightSpace(target, deps.access);
     if (target.kind === "decision_result") return readChatDecisionResult(target, deps.access);
     if (target.storedDraft) {
       const reference = { id: target.id, teamId: target.teamId!, apiOrigin: target.apiOrigin! };
@@ -277,7 +284,7 @@ export function createChatContextBrowser(deps: {
     const run = scope?.runs.find(item => item.id === scope.selectedRunId);
     const training = scope?.training?.find(item => chatTrainingAttachmentKey(item) === scope.selectedTrainingKey);
     const resource = run ?? scope?.dataset;
-    const focused: ChatContextTarget | null = training ? {
+    const focused: ChatContextTarget | null = scope?.weightSpace ? {kind:"weight_space_session",id:scope.weightSpace.id,location:"cloud",teamId:scope.weightSpace.teamId,apiOrigin:scope.weightSpace.apiOrigin} : training ? {
       kind: "training", id: training.jobId, location: training.location,
       ...(training.location === "cloud" ? { teamId: training.owner.teamId, apiOrigin: training.apiOrigin } : {}),
     } : !run && scope?.ordinal && (scope.dataset || scope.draft || scope.storedDraft) ? { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" }
@@ -303,7 +310,7 @@ export function createChatContextBrowser(deps: {
       return current(sessionId);
     }
     if (version === state.selectionVersion && sameFocus) return saved ? resolve(saved) : null;
-    if (version === undefined && saved && ["model", "training", "training_result", "managed_modification_result", "engram_result", "decision_result", "alphaedit_result", "neuron_training_result"].includes(saved.kind)) {
+    if (version === undefined && saved && ["model", "training", "weight_space_session", "training_result", "managed_modification_result", "engram_result", "decision_result", "alphaedit_result", "neuron_training_result"].includes(saved.kind)) {
       await deps.store.updateSession(sessionId, current => {
         const target = ChatContextTargetSchema.safeParse(current.metadata?.chatContextSelection);
         if (current.metadata?.chatContextSelectionVersion !== undefined || !target.success ||

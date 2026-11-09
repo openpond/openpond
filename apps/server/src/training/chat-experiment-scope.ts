@@ -355,6 +355,23 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
+  async function attachWeightSpace(sessionId: string, turnId: string, pin: NonNullable<ChatExperimentScope["weightSpace"]>) {
+    const turn = await store.getTurn(turnId);
+    if (!turn || turn.sessionId !== sessionId) throw new Error("The editing session requires its originating conversation.");
+    return change(sessionId, state => {
+      const now = new Date().toISOString();
+      const late = typeof turn.metadata.chatExperimentSelectionVersion === "number"
+        ? turn.metadata.chatExperimentSelectionVersion !== state.selectionVersion
+        : state.selectedAt !== null && state.selectedAt > turn.startedAt;
+      // A session owns a dedicated scope: attaching a second run cannot overwrite
+      // an earlier session pin, even when the agent started both in one turn.
+      const operationId = `weight-space:${createHash("sha256").update(canonicalJson([pin.apiOrigin,pin.teamId,pin.actorId,pin.id])).digest("hex")}`;
+      const scope = make(state, operationId, now);
+      scope.weightSpace = pin; scope.name = pin.name; scope.updatedAt = now;
+      if (!scope.turnIds.includes(turnId)) scope.turnIds.push(turnId);
+      if (!late) { state.activeScopeId = scope.id; state.selectionVersion++; state.selectedAt = now; }
+    });
+  }
   // GUI Start has no agent turn. Associate its canonical returned Job with the
   // originating draft, preserving newer focus rather than inventing a turn.
   async function associateDraftTraining(sessionId: string, draftId: string, input: ChatTrainingAttachment) {
@@ -373,5 +390,5 @@ export function createChatExperimentScopes(store: SqliteStore) {
       scope.updatedAt = new Date().toISOString();
     });
   }
-  return { ensure, create, createForDataset, createDraft, linkStoredDraft, select, attach, attachTraining, associateDraftTraining };
+  return { ensure, create, createForDataset, createDraft, linkStoredDraft, select, attach, attachTraining, attachWeightSpace, associateDraftTraining };
 }

@@ -177,5 +177,24 @@ test("chat scopes retain immutable runs, serialized selections and originating-t
     expect(foreign.activeScopeId).not.toBe(originalScope);
     expect(foreign.scopes.find(scope=>scope.id===originalScope)?.dataset?.owner).toEqual(ownerA);
 
+    // Editing attachments survive restart without replacing a newer selection
+    // or aliasing the same remote ID in different accounts.
+    const beforeWeight=chatExperimentContext((await store.getSession("chat-a"))?.metadata);
+    await store.insertTurn(TurnSchema.parse({id:"weight-turn",sessionId:"chat-a",prompt:"Inspect weights",providerTurnId:null,
+      startedAt:new Date().toISOString(),completedAt:null,status:"in_progress",error:null,
+      metadata:{chatExperimentSelectionVersion:beforeWeight.selectionVersion}}));
+    const pin={id:"remote-session",teamId:"team",actorId:"actor",apiOrigin:"https://api.example.test",name:"Parameter study"};
+    const attached=await scopes.attachWeightSpace("chat-a","weight-turn",pin);
+    const editing=attached.scopes.find(item=>item.weightSpace?.id===pin.id)!;
+    expect(attached.activeScopeId).toBe(editing.id);
+    await scopes.select("chat-a",{scopeId:first.id});
+    const late=await scopes.attachWeightSpace("chat-a","weight-turn",pin);
+    expect(late.activeScopeId).toBe(first.id);
+    expect(late.scopes.filter(item=>item.weightSpace?.id===pin.id)).toHaveLength(1);
+    await scopes.attachWeightSpace("chat-a","weight-turn",{...pin,actorId:"another-actor"});
+    store.close();store=new SqliteStore(home);scopes=createChatExperimentScopes(store);
+    const recoveredWeights=chatExperimentContext((await store.getSession("chat-a"))?.metadata);
+    expect(recoveredWeights.activeScopeId).toBe(first.id);
+    expect(recoveredWeights.scopes.filter(item=>item.weightSpace?.id===pin.id).map(item=>item.weightSpace?.actorId).sort()).toEqual(["actor","another-actor"]);
   } finally { await store.close(); await rm(home, { recursive: true, force: true }); }
 });

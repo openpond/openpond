@@ -16,7 +16,7 @@ def main():
     if len(sys.argv) != 3:
         raise ValueError("Usage: submit.py SOURCE_ID example.json")
     source_id, filename = sys.argv[1:]
-    endpoint = os.environ["OPENPOND_API_URL"].rstrip("/")
+    endpoint = "https://api.openpond.ai"
     parsed = urllib.parse.urlparse(endpoint)
     if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("Use an HTTP(S) API URL without credentials, query or fragment.")

@@ -49,6 +49,8 @@ export async function chatSteeringExperiment(
   )
     throw new Error("The account changed while resolving this saved Model. Select it again.");
   const version = value.version;
+  if (version?.schemaVersion === "openpond.weightSpaceModelVersion.v1")
+    throw new Error("Starting another editing session from this saved patch requires exact-parent continuation support. Choose an exact managed base for a fresh session.");
   if (version?.schemaVersion === "openpond.neuronTrainingModelVersion.v1")
     throw new Error(
       "This saved neuron delta supports inference. Training continuation is unavailable because optimizer state is not retained. Choose a managed base explicitly for a fresh experiment.",

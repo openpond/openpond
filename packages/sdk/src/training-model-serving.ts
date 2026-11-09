@@ -1,4 +1,5 @@
 import { ManagedServingUsageReviewResultSchema, verifyManagedServingUsageBilling } from "./managed-serving-usage.js";
+import { ServerlessServingReviewSchema, verifyServerlessServingReview } from "./serverless-serving.js";
 import { TrainingServingPoolSchema } from "./model-serving-pool.js";
 export { TrainingServingPoolSchema, MODEL_SERVING_IDLE_TIMEOUT_SECONDS } from "./model-serving-pool.js";
 import { z } from "zod";
@@ -28,6 +29,7 @@ export const TrainingServingLoadEvidenceSchema = z.object({
   deploymentId: Id, poolId: Id, workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/), completedAt: Timestamp,
 }).strict();
 export const TrainingModelServingContentSchema = z.object({
+  serverlessReview: ServerlessServingReviewSchema.nullable().optional(),
   usageBilling: ManagedServingUsageReviewResultSchema.optional(),
   schemaVersion: z.literal("openpond.trainingModelServing.v1"), teamId: Id, modelProjectId: Id, observedAt: Timestamp,
   version: TrainingServingVersionSchema, registry: TrainingServingRegistrySchema.nullable(),
@@ -61,6 +63,15 @@ export function trainingModelServingState(value: Pick<TrainingModelServing, "reg
 export async function parseAndVerifyTrainingModelServing(raw: unknown, expected: { modelProjectId: string; teamId: string; versionHash: string }) {
   const value = TrainingModelServingSchema.parse(raw), { contentHash, ...content } = value;
   await verifyManagedServingUsageBilling(value.usageBilling, { ...expected, method: "training" }, value.control);
+  for (const pair of [
+    {review: value.serverlessReview, versionHash: expected.versionHash, artifact: value.registry?.artifact},
+    {review: value.control?.serverless?.review, versionHash: value.control?.versionHash, artifact: value.control?.artifact},
+  ]) {
+    const {review} = pair;
+    if (!review) continue;
+    await verifyServerlessServingReview(review, {teamId: expected.teamId, modelProjectId: expected.modelProjectId,
+      versionHash: pair.versionHash!, artifact: pair.artifact});
+  }
   await parseAndVerifyTrainingModelVersion(value.version, expected);
   function fail(): never { throw new OpenPondProtocolError("training_model_serving_mismatch", "Serving evidence differs from the exact saved Model, registry or deployment."); }
   if (value.teamId !== expected.teamId || value.modelProjectId !== expected.modelProjectId || value.version.contentHash !== expected.versionHash

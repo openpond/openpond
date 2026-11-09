@@ -1,3 +1,4 @@
+import { WeightSpaceDetail } from "./WeightSpaceDetail";
 import { ManagedAlphaEditDetail } from "./ManagedAlphaEditDetail";
 import { ManagedNeuronTrainingDetail } from "./ManagedNeuronTrainingDetail";
 import { ManagedDecisionDetail } from "./ManagedDecisionDetail";
@@ -215,6 +216,8 @@ function HostedEvaluationWorkspaceContent({
             api={workspaceApiForLocation(api, "hosted")}
             id={route.resourceId.slice("managed-alphaedit:".length)}
           />
+        ) : route.resourceId?.startsWith("managed-weight-space:") ? (
+          <WeightSpaceDetail key={`${api.key}:${route.resourceId}`} api={workspaceApiForLocation(api,"hosted")} id={route.resourceId.slice("managed-weight-space:".length)}/>
         ) : route.resourceId?.startsWith("managed-neuron-training:") ? (
           <ManagedNeuronTrainingDetail
             key={`${api.key}:${route.resourceId}`}

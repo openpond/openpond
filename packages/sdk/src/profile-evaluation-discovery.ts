@@ -1,3 +1,4 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { ImmutableReleaseRefSchema } from "@openpond/harness";
 import { ProfileEvaluationDefinitionSchema, ProfileEvaluationSuiteSchema,
@@ -25,15 +26,15 @@ export const ProfileEvaluationDiscoveryRequestSchema=z.object({teamId:Id,profile
 /** Reads the existing source owner's receipts. No resource is copied and no
  * incomplete execution is turned into a synthetic rerunnable configuration. */
 export class OpenPondProfileEvaluationDiscoveryClient {
-  constructor(private readonly options:{baseUrl:string;apiKey:string;teamId:string;fetch?:typeof fetch}){
-    const url=new URL(options.baseUrl);
+  constructor(private readonly options:{baseUrl?:string;apiKey:string;teamId:string;fetch?:typeof fetch}){
+    const url=new URL(options.baseUrl ?? DEFAULT_API_BASE_URL);
     if(!["http:","https:"].includes(url.protocol)||url.username||url.password||url.search||url.hash||!options.apiKey.trim()||!options.teamId.trim())
       throw new Error("Profile discovery requires a scoped HTTP endpoint and owner credential.");
   }
   async read(input:{profileRepositoryId:string;trainingProjectId?:string},signal?:AbortSignal){
     const body=ProfileEvaluationDiscoveryRequestSchema.parse({...input,teamId:this.options.teamId});
     const {response,value}=await fetchConnectedJson(this.options.fetch??fetch,
-      `${this.options.baseUrl.replace(/\/$/,"")}/v1/profile-evaluation-discovery`,
+      `${(this.options.baseUrl ?? DEFAULT_API_BASE_URL).replace(/\/$/,"")}/v1/profile-evaluation-discovery`,
       {method:"POST",redirect:"error",headers:{Authorization:`Bearer ${this.options.apiKey}`,"X-OpenPond-Team-Id":this.options.teamId,"Content-Type":"application/json"},body:JSON.stringify(body),signal},
       (_status,_code,message)=>new Error(message));
     if(!response.ok)throw new Error("The released Profile evaluation owner is unavailable to this account and workspace.");

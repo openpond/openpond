@@ -1,3 +1,4 @@
+import { readChatWeightSpace } from "./chat-weight-space.js";
 import { createChatNextStepService } from "./chat-next-step.js";
 import { createChatContextBrowser } from "./chat-context-browser.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
@@ -154,6 +155,13 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if (input.action === "context_resolve") return { selection: await browser.resolve(query.target) };
       if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId) };
       return { selection: query.sessionId ? await browser.current(query.sessionId) : null };
+    }
+    if (kind === "experiment" && input.action === "attach_weight_space") {
+      if (!context) throw new Error("An editing-session attachment requires its originating chat invocation.");
+      const ref = z.object({id:z.string().min(1),teamId:z.string().min(1),apiOrigin:z.url()}).strict().parse(input.payload);
+      const selected = await readChatWeightSpace({kind:"weight_space_session",location:"cloud",...ref},deps.access);
+      await scopes.attachWeightSpace(context.sessionId,context.turnId,{...ref,actorId:selected.weightSpace.ownerUserId,name:selected.weightSpace.name});
+      return {weightSpace:selected.weightSpace};
     }
     if (kind === "experiment" && ["attach_training", "read_training"].includes(String(input.action))) {
       const ref = z.object({jobId:z.string().min(1).optional(),modelRunId:z.string().min(1).optional(),location:z.enum(["local","cloud"]).default("local"),apiOrigin:z.url().optional(),teamId:z.string().min(1).optional()}).strict()

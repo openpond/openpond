@@ -1,3 +1,9 @@
+import { DEFAULT_API_BASE_URL } from "./endpoints.js";
+import {
+  createProductModels,
+  type ProductModelBinding,
+  type ProductModels,
+} from "./product-models.js";
 import {
   addDatasetTask,
   type DatasetTaskInput,
@@ -21,12 +27,24 @@ import { ConnectedEvidenceClient } from "./connected-evidence.js";
 import { OpenPondHumanReviewClient } from "./human-review-client.js";
 import { configuredEndpoint, configuredKey } from "./work-sandbox.js";
 
-export class OpenPondClient {
-  readonly addTask: (
-    datasetId: string,
-    task: DatasetTaskInput,
-    options?: AddTaskOptions,
-  ) => Promise<DatasetTaskAppendReceipt>;
+export class OpenPondClient<
+  Models extends Record<string, string | ProductModelBinding> = Record<string, never>,
+> {
+  readonly models: ProductModels<Models>;
+  readonly dataset: (datasetId: string) => {
+    addTask: (
+      task: DatasetTaskInput,
+      options?: AddTaskOptions,
+    ) => Promise<DatasetTaskAppendReceipt>;
+  };
+  readonly addTask: {
+    (task: DatasetTaskInput, options?: AddTaskOptions): Promise<DatasetTaskAppendReceipt>;
+    (
+      datasetId: string,
+      task: DatasetTaskInput,
+      options?: AddTaskOptions,
+    ): Promise<DatasetTaskAppendReceipt>;
+  };
   readonly sandboxes: OpenPondSandboxClient;
   readonly work: OpenPondWorkClient;
   readonly workflows: OpenPondWorkflowsClient;
@@ -37,7 +55,7 @@ export class OpenPondClient {
   readonly connectedEvidence: (teamId: string) => ConnectedEvidenceClient;
   readonly humanReview: (scope: string) => OpenPondHumanReviewClient;
 
-  constructor(options: OpenPondClientOptions) {
+  constructor(options: OpenPondClientOptions<Models>) {
     const apiKey = options.apiKey?.trim() ?? "";
     if (!apiKey && (!options.sandbox || !options.model))
       throw new Error("OpenPond API key is required when using a default sandbox or model");
@@ -56,15 +74,34 @@ export class OpenPondClient {
         }
       : undefined;
 
-    const apiBaseUrl = options.baseUrl?.trim() || "https://api.openpond.ai";
+    const apiBaseUrl = options.baseUrl?.trim() || DEFAULT_API_BASE_URL;
     const taskTeamId = options.teamId ?? "";
-    this.addTask = (datasetId, task, taskOptions) =>
-      addDatasetTask(
-        { apiKey, baseUrl: apiBaseUrl, teamId: taskTeamId },
-        datasetId,
-        task,
-        taskOptions,
+    const defaultDatasetId = options.datasetId;
+    const connection = { apiKey, baseUrl: apiBaseUrl, teamId: taskTeamId, fetch: options.fetch };
+    this.dataset = (datasetId) => ({
+      addTask: (task, taskOptions) => addDatasetTask(connection, datasetId, task, taskOptions),
+    });
+    this.addTask = ((
+      destination: string | DatasetTaskInput,
+      taskOrOptions?: DatasetTaskInput | AddTaskOptions,
+      taskOptions?: AddTaskOptions,
+    ) => {
+      if (typeof destination === "string")
+        return this.dataset(destination).addTask(taskOrOptions as DatasetTaskInput, taskOptions);
+      if (!defaultDatasetId)
+        throw new Error("Configure datasetId or use client.dataset(datasetId).addTask(task).");
+      return this.dataset(defaultDatasetId).addTask(
+        destination,
+        taskOrOptions as AddTaskOptions | undefined,
       );
+    }) as OpenPondClient<Models>["addTask"];
+    this.models = createProductModels(options.models ?? ({} as Models), {
+      baseUrl: `${apiBaseUrl.replace(/\/+$/, "")}/v1`,
+      ...options.serving,
+      apiKey: options.serving?.apiKey ?? apiKey,
+      teamId: taskTeamId,
+      fetch: options.fetch,
+    });
     this.learning = (scope) => new OpenPondLearningClient({ apiKey, baseUrl: apiBaseUrl, scope });
     this.experiments = (teamId) =>
       new OpenPondExperimentsClient({ apiKey, baseUrl: apiBaseUrl, teamId });
@@ -96,7 +133,9 @@ export class OpenPondClient {
   }
 }
 
-export function createOpenPondClient(options: OpenPondClientOptions): OpenPondClient {
+export function createOpenPondClient<
+  const Models extends Record<string, string | ProductModelBinding> = Record<string, never>,
+>(options: OpenPondClientOptions<Models>): OpenPondClient<Models> {
   return new OpenPondClient(options);
 }
 
@@ -185,3 +224,5 @@ export type {
   DatasetTaskAppendReceipt,
   AddTaskOptions,
 } from "./dataset-task-ingestion.js";
+
+export * from "./product-models.js";

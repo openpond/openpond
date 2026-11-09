@@ -69,7 +69,10 @@ export async function runExperimentsCommand(options: Record<string, string | boo
       if (request.execution.id !== id) throw new Error("Scoring input belongs to a different execution.");
       result = await experiments.score(request);
     }
-    else if (action === "passes") result = await experiments.scoringPasses(id, { afterId: optionString(options, "afterId") || undefined });
+    else if (action === "passes") result = await experiments.scoringPasses(id, {
+      afterId: optionString(options, "afterId") || undefined,
+      executionKind: ExperimentScoringRequestSchema.shape.executionKind.parse(optionString(options, "executionKind") || undefined),
+    });
     else if (action === "pass") result = await experiments.scoringPass(id);
     else if (action === "cancel-pass") result = await experiments.cancelScoringPass(id);
     else if (action === "pass-result") result = await experiments.scoringResult(id);

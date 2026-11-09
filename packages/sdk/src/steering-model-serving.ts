@@ -1,3 +1,4 @@
+import { WeightSpaceModelServingSchema, parseAndVerifyWeightSpaceModelServing } from "./weight-space-model-serving.js";
 import { ManagedServingUsageApprovalSchema, ManagedServingUsageSnapshotSchema, ManagedServingUsageReviewResultSchema, managedServingUsageApprovalMatches, verifyManagedServingUsageBilling } from "./managed-serving-usage.js";
 import { EngramModelServingSchema, parseAndVerifyEngramModelServing } from "./engram-model-serving.js";
 import { DecisionModelServingSchema, parseAndVerifyDecisionModelServing } from "./decision-model-serving.js";
@@ -64,7 +65,7 @@ export const SteeringModelServingContentSchema = z.object({
 }).strict();
 export const SteeringModelServingSchema = SteeringModelServingContentSchema.extend({ contentHash: Hash }).strict();
 export type SteeringModelServing = z.infer<typeof SteeringModelServingSchema>;
-export const SavedModelServingSchema = z.discriminatedUnion("schemaVersion", [TrainingModelServingSchema, SteeringModelServingSchema, EngramModelServingSchema, DecisionModelServingSchema, AlphaEditModelServingSchema, NeuronTrainingModelServingSchema]);
+export const SavedModelServingSchema = z.discriminatedUnion("schemaVersion", [TrainingModelServingSchema, SteeringModelServingSchema, EngramModelServingSchema, DecisionModelServingSchema, AlphaEditModelServingSchema, NeuronTrainingModelServingSchema, WeightSpaceModelServingSchema]);
 export type SavedModelServing = z.infer<typeof SavedModelServingSchema>;
 export const SavedModelServingQuerySchema = TrainingModelServingQuerySchema;
 
@@ -168,6 +169,7 @@ export async function parseAndVerifySteeringModelServing(raw: unknown, expected:
 export async function parseAndVerifySavedModelServing(raw: unknown, expected: { teamId: string; modelProjectId: string; versionHash: string }): Promise<SavedModelServing> {
   const value = SavedModelServingSchema.parse(raw);
   if (value.schemaVersion === "openpond.alphaEditModelServing.v1") return parseAndVerifyAlphaEditModelServing(value, expected);
+  if (value.schemaVersion === "openpond.weightSpaceModelServing.v1") return parseAndVerifyWeightSpaceModelServing(value, expected);
   if (value.schemaVersion === "openpond.neuronTrainingModelServing.v1") return parseAndVerifyNeuronTrainingModelServing(value, expected);
   return value.schemaVersion === "openpond.trainingModelServing.v1"
     ? parseAndVerifyTrainingModelServing(value, expected) : value.schemaVersion === "openpond.engramModelServing.v1"
