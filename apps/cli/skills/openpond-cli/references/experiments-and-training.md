@@ -50,6 +50,12 @@ bulk per-example grading/review, publication or preparation. Do not spend many
 minutes preparing thousands of records before asking the one missing budget
 question. Preparation itself may require this approved ceiling.
 
+The budget is a missing run input under the user's training request, not a new
+skill-activation permission. Keep the form brief: ask for the total cap, with
+the supported model, example counts and current API price in a short reason.
+Do not put local skill paths, instruction quotations or a storage-cost breakdown
+in the form. Reuse an existing approved cap instead of asking for it again.
+
 Show the concrete scope and the API's price evidence.
 If the spending limit has not been approved, use the available `ask_user` tool
 for one total-budget question, for example “Approve this run with a maximum spend
@@ -78,6 +84,11 @@ receipt with its operation and plan identity is an accepted preparation. A Model
 record is not a trained version, and a submitted job is not a completed result.
 Keep the useful resource and live run attached to this chat; give concise progress
 and the next actionable blocker if the supported runtime cannot continue.
+
+Keep the resource sidebar focused on the actual dataset, grader or run. An
+ordinary training request does not need a separate proposal file opened in the
+sidebar; put the bounded scope in the conversation and budget form. Open a file
+when the user asks for it or its actual contents help inspect the requested work.
 
 ## Starting from an objective and sources
 
