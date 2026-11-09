@@ -91,11 +91,14 @@ export function SavedModelServing({
           value.schemaVersion === "openpond.engramModelServing.v1" ||
           value.schemaVersion === "openpond.decisionModelServing.v1" ||
           value.schemaVersion === "openpond.alphaEditModelServing.v1" ||
-          (value.schemaVersion === "openpond.neuronTrainingModelServing.v1" || value.schemaVersion === "openpond.weightSpaceModelServing.v1")
+          value.schemaVersion === "openpond.neuronTrainingModelServing.v1" ||
+          value.schemaVersion === "openpond.weightSpaceModelServing.v1"
         ? value.availability.state === "qualified" &&
           value.control?.phase !== "stopping" &&
           !value.cleanup.some((row) => !["shared", "released"].includes(row.capacityState))
-        : value.registry?.qualified && Boolean(value.serverlessReview) && value.control?.phase !== "stopping");
+        : value.registry?.qualified &&
+          Boolean(value.serverlessReview) &&
+          value.control?.phase !== "stopping");
   return (
     <section aria-label="Serving state">
       <div className="labs-project-trends-heading">
@@ -141,12 +144,35 @@ export function SavedModelServing({
       {value ? (
         <>
           <dl className="model-project-page-metrics">
-            {value.schemaVersion === "openpond.trainingModelServing.v1" && value.control?.serverless ? (
+            {value.schemaVersion === "openpond.trainingModelServing.v1" &&
+            value.control?.serverless ? (
               <>
-                <div><dt>Serving usage</dt><dd>{(value.control.serverless.quantityMicros / 1_000_000).toFixed(3)} allocated seconds</dd></div>
-                <div><dt>Serving charged</dt><dd>US${value.control.serverless.chargedUsd}</dd></div>
-                <div><dt>Reserved for requests</dt><dd>US${value.control.serverless.reservedUsd}</dd></div>
-                <div><dt>Serving spending limit</dt><dd>{value.control.serverless.customerCapUsd ? `US$${value.control.serverless.customerCapUsd}` : "Available workspace credit"}</dd></div>
+                <div>
+                  <dt>
+                    {value.control.serverless.review.rules.startupBillable
+                      ? "Allocated worker runtime"
+                      : "Allocated engine time"}
+                  </dt>
+                  <dd>
+                    {(value.control.serverless.quantityMicros / 1_000_000).toFixed(3)} seconds
+                  </dd>
+                </div>
+                <div>
+                  <dt>Serving charged</dt>
+                  <dd>US${value.control.serverless.chargedUsd}</dd>
+                </div>
+                <div>
+                  <dt>Reserved for requests</dt>
+                  <dd>US${value.control.serverless.reservedUsd}</dd>
+                </div>
+                <div>
+                  <dt>Serving spending limit</dt>
+                  <dd>
+                    {value.control.serverless.customerCapUsd
+                      ? `US$${value.control.serverless.customerCapUsd}`
+                      : "Available workspace credit"}
+                  </dd>
+                </div>
               </>
             ) : null}
             <div>
@@ -232,7 +258,8 @@ export function SavedModelServing({
             <p>Default modification: {value.defaultPublication ? "Saved profile" : "Off"}</p>
           ) : null}
           {value.schemaVersion === "openpond.alphaEditModelServing.v1" ||
-          (value.schemaVersion === "openpond.neuronTrainingModelServing.v1" || value.schemaVersion === "openpond.weightSpaceModelServing.v1") ||
+          value.schemaVersion === "openpond.neuronTrainingModelServing.v1" ||
+          value.schemaVersion === "openpond.weightSpaceModelServing.v1" ||
           value.schemaVersion === "openpond.decisionModelServing.v1" ? (
             <p>Qualification: {value.availability.reason.replaceAll("_", " ")}</p>
           ) : null}
@@ -319,7 +346,8 @@ export function SavedModelServing({
                       : value.schemaVersion === "openpond.engramModelServing.v1" ||
                           value.schemaVersion === "openpond.decisionModelServing.v1" ||
                           value.schemaVersion === "openpond.alphaEditModelServing.v1" ||
-                          (value.schemaVersion === "openpond.neuronTrainingModelServing.v1" || value.schemaVersion === "openpond.weightSpaceModelServing.v1")
+                          value.schemaVersion === "openpond.neuronTrainingModelServing.v1" ||
+                          value.schemaVersion === "openpond.weightSpaceModelServing.v1"
                         ? {
                             contentHash: value.version.contentHash,
                             source: value.version.source,
