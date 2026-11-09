@@ -31,6 +31,14 @@ const starters = [
     prompt:
       "Train a Decision Model using my selected resources. Ask me for any missing decision objective, dataset or total budget. Show me the proposed run and estimated cost, then continue through the supported Decision training and evaluation workflow within the agreed budget. Report the result and save the trained model if successful. Do not enable recurring training or serving.",
   },
+  {
+    id: "weight-space",
+    title: "Weight-space programming",
+    description: "Edit model weights with a program.",
+    icon: Braces,
+    prompt:
+      "Help me build a model with weight-space programming using my selected resources.",
+  },
 ] as const;
 
 /** Synchronous draft insertion uses the current scoped store; it never submits a turn. */
@@ -97,15 +105,6 @@ export function ModelTrainingStarterCards({
           </span>
         </button>
       ))}
-      <button type="button" className="model-training-starter" disabled>
-        <Braces size={18} aria-hidden />
-        <span className="model-training-starter-title">
-          Weight-space programming
-        </span>
-        <span className="model-training-starter-description">
-          Not available yet.
-        </span>
-      </button>
     </section>
   );
 }
