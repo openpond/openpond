@@ -62,12 +62,16 @@ export default desktopScenario({
     await waitForRendererCondition(h, `!!document.querySelector('.user-question-card.answered')`, "answered question display", { timeoutMs: 20_000 });
     await reloadRenderer(h);
     await waitForRendererCondition(h, `!!document.querySelector('.user-question-card.answered')`, "answered question after reload", { timeoutMs: 20_000 });
-    h.recordAssertion("answerPreservedUnsentDraft", await h.renderer.evaluate<string>(`document.querySelector('.composer-inline-input')?.innerText ?? ''`) === unsentDraft);
+    const draftPreserved = await h.renderer.evaluate<string>(`document.querySelector('.composer-inline-input')?.innerText ?? ''`) === unsentDraft;
+    h.recordAssertion("answerPreservedUnsentDraft", draftPreserved);
+    if (!draftPreserved) throw new Error("Answering a question consumed an unrelated unsent draft.");
     h.recordMetadata({ sessionId, firstTurn, questionId: question.id, liveAgent: true, mockedProvider: false, trainingStarted: false });
     await h.screenshot("answer-continued-the-same-chat");
     await h.renderer.replaceComposerText!("");
     await h.renderer.evaluate(`document.querySelector('button[aria-label="New thread"]').click()`);
     await waitForRendererCondition(h, `!!document.querySelector('.model-training-starter')`, "new chat after accepted send");
-    h.recordAssertion("sentPromptDoesNotReturnInNewChat", !(await h.renderer.evaluate<string>(`document.querySelector('.composer-inline-input')?.innerText ?? ''`)).trim());
+    const newDraftEmpty = !(await h.renderer.evaluate<string>(`document.querySelector('.composer-inline-input')?.innerText ?? ''`)).trim();
+    h.recordAssertion("sentPromptDoesNotReturnInNewChat", newDraftEmpty);
+    if (!newDraftEmpty) throw new Error("An accepted prompt reappeared in New chat.");
   },
 });
