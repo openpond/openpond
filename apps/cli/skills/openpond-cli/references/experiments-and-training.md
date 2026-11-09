@@ -522,6 +522,20 @@ After saving the exact draft, `hosted-funding-handoff request.json --team-id <id
 
 Training-data authoring uses the existing learning owner. Create/publish an exact task format and direct source, submit complete example envelopes or JSONL with stable producer keys, grade/review the actual evidence and targets, then seal a `supervised_training` or `reward_training` batch. Importing is not approval. Use `openpond learning <get|list> <kind> ... --team-id <id>` and `openpond learning command --input-file <path> --team-id <id>` with the existing command schemas; keep operation IDs stable on retries. The SDK's `OpenPondLearningClient` and native Python learning operations expose the same commands.
 
+Check the training and optimizer-validation contracts before bulk target grading.
+The held-out package must retain the same output schema, compatible environment
+and tools, and the checked Reward binding and verifier assets. Matching grader
+names or an ordinary Dataset's output-format label do not establish these
+references. A reviewed training batch's compiled output contract can differ from
+the original ordinary Dataset. When authoring both through learning review, reuse
+the exact task definition and checked Reward binding, seal held-out examples with
+purpose `evaluation`, and publish the complete package before selecting its
+immutable release. Keep the original splits and family isolation; evaluation
+admission does not approve held-out answers as training targets. Read back the
+published Model configuration before preparing against it: publishing a package
+can change its selected taskset and revision. Preserve the requested training
+batch and recipe rather than copying changed defaults without checking them.
+
 For bulk grading/review or polling known resource IDs, use `learning batch
 --input-file <path> --team-id <id> --concurrency 3` instead of starting a new CLI
 process for every row. The JSON input is an array of up to 100 existing operations:
