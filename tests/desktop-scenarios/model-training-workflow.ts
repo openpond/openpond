@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { desktopScenario } from "../../scripts/desktop-harness/scenario";
 import { reloadRenderer, waitForRendererCondition } from "./helpers";
@@ -14,54 +14,78 @@ export default desktopScenario({
       sft: "Train a model with SFT", grpo: "Train a model with RL", decision: "Train a Decision Model",
     };
     if (!titles[method]) throw new Error("Choose sft, grpo or decision; WSP remains unavailable.");
-    const providers = await harness.api.fetchJson<any>("/v1/providers");
-    if (!providers.statuses.codex?.available || !providers.statuses.codex.modelIds.includes("gpt-6.1-sol")) {
-      throw new Error("The installed Codex agent must offer GPT-6.1 Sol.");
-    }
-    const configuration = await harness.api.fetchJson<any>("/v1/configuration");
-    await harness.api.fetchJson("/v1/configuration", { method: "POST", body: {
-      action: "client-state", owner: configuration.clientState.owner,
-      patch: { chatSelection: { provider: "codex", model: "gpt-6.1-sol" }, chatMode: "chat" },
-    } });
-    const receipt: Record<string, any> = { method, liveAgent: true, mockedProvider: false, events: [] };
+    const resumed = process.env.OPENPOND_WORKFLOW_RESUME_EVIDENCE
+      ? JSON.parse(await readFile(process.env.OPENPOND_WORKFLOW_RESUME_EVIDENCE, "utf8"))
+      : null;
+    if (resumed && (resumed.method !== method || typeof resumed.sessionId !== "string" || !resumed.sessionId || typeof resumed.prompt !== "string"))
+      throw new Error("Resume only the original method/session evidence; do not submit another card.");
+    const receipt: Record<string, any> = resumed
+      ? { method, sessionId: resumed.sessionId, prompt: resumed.prompt, liveAgent: true, mockedProvider: false, resumedObservation: true, events: [] }
+      : { method, liveAgent: true, mockedProvider: false, events: [] };
     const evidencePath = path.join(harness.artifactsDir, "workflow-evidence.private.json");
     const save = () => writeFile(evidencePath, JSON.stringify(receipt, null, 2));
-    await reloadRenderer(harness);
-    await waitForRendererCondition(harness, `!!document.querySelector('button[aria-label="New thread"]')`, "new chat action", { timeoutMs: 20_000 });
-    await harness.renderer.evaluate(`document.querySelector('button[aria-label="New thread"]').click()`);
-    await waitForRendererCondition(harness, `!!document.querySelector('.model-training-starter')`, "new-chat cards", { timeoutMs: 20_000 });
-    const initialText = await harness.renderer.evaluate<string>(`document.querySelector('.composer-inline-input')?.innerText ?? ''`);
-    if (initialText.trim()) {
-      if (process.env.OPENPOND_CLEAR_TEST_DRAFT !== "1") throw new Error("New chat has an existing draft; preserve it instead of mixing it into card acceptance.");
-      await writeFile(path.join(harness.artifactsDir, "previous-draft.private.txt"), initialText);
-      await harness.renderer.replaceComposerText!("");
+    if (resumed) {
+      await harness.renderer.selectSession(resumed.sessionId);
+    } else {
+      const providers = await harness.api.fetchJson<any>("/v1/providers");
+      if (!providers.statuses.codex?.available || !providers.statuses.codex.modelIds.includes("gpt-6.1-sol")) {
+        throw new Error("The installed Codex agent must offer GPT-6.1 Sol.");
+      }
+      const configuration = await harness.api.fetchJson<any>("/v1/configuration");
+      await harness.api.fetchJson("/v1/configuration", { method: "POST", body: {
+        action: "client-state", owner: configuration.clientState.owner,
+        patch: { chatSelection: { provider: "codex", model: "gpt-6.1-sol" }, chatMode: "chat" },
+      } });
+      await reloadRenderer(harness);
+      await waitForRendererCondition(harness, `!!document.querySelector('button[aria-label="New thread"]')`, "new chat action", { timeoutMs: 20_000 });
+      await harness.renderer.evaluate(`document.querySelector('button[aria-label="New thread"]').click()`);
+      await waitForRendererCondition(harness, `!!document.querySelector('.model-training-starter')`, "new-chat cards", { timeoutMs: 20_000 });
+      const initialText = await harness.renderer.evaluate<string>(`document.querySelector('.composer-inline-input')?.innerText ?? ''`);
+      if (initialText.trim()) {
+        if (process.env.OPENPOND_CLEAR_TEST_DRAFT !== "1") throw new Error("New chat has an existing draft; preserve it instead of mixing it into card acceptance.");
+        await writeFile(path.join(harness.artifactsDir, "previous-draft.private.txt"), initialText);
+        await harness.renderer.replaceComposerText!("");
+      }
+      await harness.renderer.evaluate(`(() => {
+        const card = [...document.querySelectorAll('.model-training-starter')].find(button => button.querySelector('.model-training-starter-title')?.textContent === ${JSON.stringify(titles[method])});
+        if (!card || card.disabled) throw Error('Supported starter unavailable');
+        card.click();
+      })()`);
+      receipt.prompt = await harness.renderer.evaluate(`document.querySelector('.composer-inline-input')?.innerText`);
+      if (!receipt.prompt?.trim()) throw new Error("The card did not populate the composer.");
+      receipt.attachedFileCount = await harness.renderer.evaluate(`document.querySelectorAll('form.composer .composer-attachment-card').length`);
+      if (receipt.attachedFileCount) throw new Error("Card-only acceptance requires a chat without attached files.");
+      await save();
+      await harness.renderer.evaluate(`(() => {
+        const button = document.querySelector('form.composer button[aria-label="Send"]');
+        if (!button || button.disabled) throw Error('Send unavailable');
+        button.click();
+      })()`);
+      await waitForRendererCondition(harness, `!!document.querySelector('main[data-thread-session]')?.getAttribute('data-thread-session')`, "submitted card chat", { timeoutMs: 20_000 });
+      const sessionId = await harness.renderer.evaluate<string>(`document.querySelector('main[data-thread-session]').getAttribute('data-thread-session')`);
+      receipt.sessionId = sessionId;
     }
-    await harness.renderer.evaluate(`(() => {
-      const card = [...document.querySelectorAll('.model-training-starter')].find(button => button.querySelector('.model-training-starter-title')?.textContent === ${JSON.stringify(titles[method])});
-      if (!card || card.disabled) throw Error('Supported starter unavailable');
-      card.click();
-    })()`);
-    receipt.prompt = await harness.renderer.evaluate(`document.querySelector('.composer-inline-input')?.innerText`);
-    if (!receipt.prompt?.trim()) throw new Error("The card did not populate the composer.");
-    receipt.attachedFileCount = await harness.renderer.evaluate(`document.querySelectorAll('form.composer .composer-attachment-card').length`);
-    if (receipt.attachedFileCount) throw new Error("Card-only acceptance requires a chat without attached files.");
-    await save();
-    await harness.renderer.evaluate(`(() => {
-      const button = document.querySelector('form.composer button[aria-label="Send"]');
-      if (!button || button.disabled) throw Error('Send unavailable');
-      button.click();
-    })()`);
-    await waitForRendererCondition(harness, `!!document.querySelector('main[data-thread-session]')?.getAttribute('data-thread-session')`, "submitted card chat", { timeoutMs: 20_000 });
-    const sessionId = await harness.renderer.evaluate<string>(`document.querySelector('main[data-thread-session]').getAttribute('data-thread-session')`);
-    receipt.sessionId = sessionId;
-    harness.recordMetadata({ method, sessionId, evidencePath, unchangedCardPrompt: receipt.prompt });
+    const sessionId = receipt.sessionId as string;
+    harness.recordMetadata({ method, sessionId, evidencePath, unchangedCardPrompt: receipt.prompt, resumedObservation: Boolean(resumed) });
     await save();
     let cursor = 0;
     const observed = new Set<string>();
     const approvals = new Map<string, unknown>();
     const deadline = Date.now() + 1_140_000;
+    let failedReads = 0;
     while (Date.now() < deadline) {
-      const page = await harness.api.eventPage<any>({ sessionId, afterSequence: cursor, limit: 500 });
+      let page;
+      try {
+        page = await harness.api.eventPage<any>({ sessionId, afterSequence: cursor, limit: 500 });
+        failedReads = 0;
+      } catch (error) {
+        // Retry observation only. Never replay Send or any paid command.
+        (receipt.observationErrors ??= []).push({ at: new Date().toISOString(), message: error instanceof Error ? error.message : String(error) });
+        await save();
+        if (++failedReads > 3) throw error;
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+        continue;
+      }
       for (const entry of page.events ?? []) {
         const event = entry.event ?? entry;
         cursor = Math.max(cursor, event.sequence ?? 0);
