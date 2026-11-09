@@ -222,9 +222,9 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
       learning: new OpenPondLearningClient({ baseUrl, apiKey: context.token, scope: teamId, fetch: request }),
     });
     print(result);
-    if (result.preparation.jobId) await attach(result.preparation.jobId);
-    if (result.preparation.jobId && !parseBooleanOption(options.detach)) {
-      await watchHostedTrainingJob({ client, jobId: result.preparation.jobId, teamId,
+    if (result.operation.jobId) await attach(result.operation.jobId);
+    if (result.operation.jobId && !parseBooleanOption(options.detach)) {
+      await watchHostedTrainingJob({ client, jobId: result.operation.jobId, teamId,
         options: parseHostedWatchOptions(options), print, requestBound, readNativeInspection });
     }
     return;
@@ -339,6 +339,14 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     if (starting && !parseBooleanOption(options.yes)) throw new Error("Starting paid hosted modification requires --yes.");
     print(input.action === "start" ? await client.startModificationExecution(input) : await client.cancelModificationExecution(input)); return;
   }
+  if(action==="hosted-operations") {print(await client.listOperations(teamId,{projectId:optionString(options,"projectId")??undefined,afterId:optionString(options,"cursor")??undefined,limit:parseIntegerOption(options.limit,"--limit")}));return;}
+  if(action==="hosted-operation" || action==="hosted-find-operation") {if(!target)throw new Error(`${action} requires its original identifier.`);print(action==="hosted-operation"?await client.getOperation(teamId,target):await client.findOperation(teamId,target));return;}
+  if(action==="hosted-resolve-experiment") {const {TrainingExperimentSetupRequestSchema}=await import("openpond-sdk/training");print(await client.resolveExperiment(TrainingExperimentSetupRequestSchema.parse(await readInput())));return;}
+  if(action==="hosted-review-placement") {const input=TrainingPreparationRequestSchema.parse(await readInput());if(input.teamId!==teamId)throw new Error("The inputs belong to another workspace.");print(await client.reviewPlacement(input));return;}
+  if(action==="hosted-queue") {if(!parseBooleanOption(options.yes))throw new Error("Queueing authorized training requires --yes.");const {TrainingOperationRequestSchema}=await import("openpond-sdk/training");const input=TrainingOperationRequestSchema.parse(await readInput());if(input.request.teamId!==teamId)throw new Error("The inputs belong to another workspace.");print(await client.queueRun(input));return;}
+  if(action==="hosted-stop-operation") {if(!target)throw new Error("Provide an operation ID.");const operation=await client.getOperation(teamId,target);print(await client.stopOperation(target,{teamId,expectedRevision:operation.revision}));return;}
+  if(action==="hosted-review-operation") {if(!target)throw new Error("Provide an operation ID.");print(await client.reviewOperationPlacement(teamId,target));return;}
+  if(action==="hosted-approve-operation-review") {if(!target||!parseBooleanOption(options.yes))throw new Error("Provide the reviewed control JSON and --yes.");const {TrainingOperationControlSchema,TrainingPlacementReviewSchema}=await import("openpond-sdk/training");const input=TrainingOperationControlSchema.extend({id:TrainingPreparationRequestSchema.shape.operationId,placementReview:TrainingPlacementReviewSchema}).strict().parse(await readInput());if(input.teamId!==teamId)throw new Error("The review belongs to another workspace.");const {id,...control}=input;print(await client.approveOperationReview(id,control));return;}
   if (action === "hosted-preparations") {
     const cursor = optionString(options, "cursor"), projectId = optionString(options, "projectId");
     const limit = parseIntegerOption(options.limit, "--limit");
