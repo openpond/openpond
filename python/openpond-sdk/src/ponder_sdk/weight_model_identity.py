@@ -1,4 +1,5 @@
 """Exact matrix/column artifacts and saved Model publication identities."""
+from .weight_space_programming import verify_weight_space_request, verify_weight_space_artifact
 from .alphaedit import verify_alphaedit_request, verify_alphaedit_artifact
 from .neuron_training import verify_neuron_training_request, verify_neuron_training_artifact
 from .errors import ProtocolError
@@ -11,11 +12,12 @@ def fail():
 
 def verify_weight_model_version(raw, *, team_id=None, model_project_id=None, owner_user_id=None):
     alpha = raw.get('schemaVersion') == 'openpond.alphaEditModelVersion.v1'
-    value = validate('AlphaEditModelVersionSchema' if alpha else 'NeuronTrainingModelVersionSchema', raw)
+    wsp = raw.get('schemaVersion') == 'openpond.weightSpaceModelVersion.v1'
+    value = validate('WeightSpaceModelVersionSchema' if wsp else 'AlphaEditModelVersionSchema' if alpha else 'NeuronTrainingModelVersionSchema', raw)
     verify_hash(value, 'contentHash')
-    request = (verify_alphaedit_request if alpha else verify_neuron_training_request)(value['request'])
+    request = (verify_weight_space_request if wsp else verify_alphaedit_request if alpha else verify_neuron_training_request)(value['request'])
     artifact, base = value['artifact'], value['baseModel']
-    manifest = (verify_alphaedit_artifact if alpha else verify_neuron_training_artifact)(artifact['manifest'], request, value['source']['runtimeHash'])
+    manifest = (verify_weight_space_artifact if wsp else verify_alphaedit_artifact if alpha else verify_neuron_training_artifact)(artifact['manifest'], request, value['source']['runtimeHash'])
     if (team_id is not None and value['teamId'] != team_id
             or model_project_id is not None and value['modelProjectId'] != model_project_id
             or owner_user_id is not None and value['ownerUserId'] != owner_user_id
@@ -28,7 +30,7 @@ def verify_weight_model_version(raw, *, team_id=None, model_project_id=None, own
     expected = [metadata, *payloads]
     files = artifact['files']
     if (metadata['sizeBytes'] > 262144 or len(files) != len(expected) or len({row['path'] for row in files}) != len(expected)
-            or sum(row['sizeBytes'] for row in files) > request['training']['maxCheckpointBytes']
+            or sum(row['sizeBytes'] for row in files) > (request['limits']['maximumCheckpointBytes'] if wsp else request['training']['maxCheckpointBytes'])
             or any(row['artifactId'] != artifact['id'] for row in files)
             or any(not any(all(row[key] == item[key] for key in ('path', 'sha256', 'sizeBytes')) for row in files) for item in expected)):
         fail()
@@ -37,7 +39,7 @@ def verify_weight_model_version(raw, *, team_id=None, model_project_id=None, own
 
 def verify_weight_result_save(raw, request, *, actor_id=None):
     alpha = raw.get('schemaVersion') == 'openpond.alphaEditResultSaveReceipt.v1'
-    prefix = 'AlphaEdit' if alpha else 'NeuronTraining'
+    prefix = 'WeightSpace' if raw.get('schemaVersion') == 'openpond.weightSpaceResultSaveReceipt.v1' else 'AlphaEdit' if alpha else 'NeuronTraining'
     value = validate(prefix + 'ResultSaveReceiptSchema', raw)
     request = validate(prefix + 'ResultSaveRequestSchema', request, request=True)
     if bool(request['modelProjectId']) != (request['expectedModelRevision'] > 0):
@@ -61,7 +63,7 @@ def verify_resolved_weight_selection(raw, version):
     value = validate('ResolvedWeightModelSelectionSchema', raw)
     version = verify_weight_model_version(version)
     artifact = version['artifact']
-    method = 'alphaedit' if version['schemaVersion'] == 'openpond.alphaEditModelVersion.v1' else 'selective_neuron_training'
+    method = 'weight_space_programming' if version['schemaVersion']=='openpond.weightSpaceModelVersion.v1' else 'alphaedit' if version['schemaVersion'] == 'openpond.alphaEditModelVersion.v1' else 'selective_neuron_training'
     if (value['method'] != method or value['savedModel'] != {'modelProjectId': version['modelProjectId'], 'versionHash': version['contentHash']}
             or value['artifact'] != {'id': artifact['id'], 'contentHash': artifact['contentHash'], 'manifestSha256': canonical_sha256(artifact['manifest'])}
             or value['modelHash'] != canonical_sha256(version['request']['model'])):

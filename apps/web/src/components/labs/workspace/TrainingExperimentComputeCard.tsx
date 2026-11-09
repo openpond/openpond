@@ -41,8 +41,8 @@ export function TrainingExperimentComputeCard({ compute, selection, onChange, lo
             { value: "auto:fast", label: "Automatic · Performance" },
             ...(selection.mode === "manual" && !selectedOffer ? [{ value, label: `${selection.gpuType} · Selected offering`, disabled: true }] : []),
             ...offers.map(offer => ({ value: `offer:${offer.availabilityId}`,
-              label: `${offer.gpuType} · ${actualUsage ? "" : `${usd(offer.totalHourlyUsd)}/hr · `}${offer.dataCenterId ?? offer.region}`,
-              disabled: compute.catalogExpired || compute.catalog.isError })),
+              label: `${offer.gpuType} · ${offer.hourlyUsd === null ? "Price unavailable" : `${usd(offer.hourlyUsd)}/hr`} · ${offer.dataCenterId ?? offer.region}`,
+              disabled: offer.hourlyUsd === null || compute.catalogExpired || compute.catalog.isError })),
           ]}
           onChange={choice => {
             const offer = offers.find(item => `offer:${item.availabilityId}` === choice);
@@ -84,7 +84,7 @@ export function TrainingExperimentComputeCard({ compute, selection, onChange, lo
         <dl className="training-compute-summary">
           <dt>Resolved GPU</dt><dd>{estimate.gpu.resolved
             ? `${estimate.gpu.resolved.gpuCount} × ${estimate.gpu.resolved.gpuType}` : "Unavailable"}</dd>
-          <dt>Compute and disk</dt><dd>{estimate.gpu.customerHourlyUsd === null ? "Unknown" : `${usd(estimate.gpu.customerHourlyUsd)}/hr`}</dd>
+          <dt>Compute and disk</dt><dd>{estimate.gpu.hourlyUsd === null ? "Unknown" : `${usd(estimate.gpu.hourlyUsd)}/hr`}</dd>
           <dt>Execution time</dt><dd>{estimate.executionSeconds.expected === null ? "Unknown" : duration(estimate.executionSeconds.expected)}
             {estimate.executionSeconds.planningRange ? ` (${duration(estimate.executionSeconds.planningRange.low)}–${duration(estimate.executionSeconds.planningRange.high)} observed)` : ""}</dd>
           <dt>Expected total</dt><dd>{estimate.cost.expectedUsd === null ? "Unknown" : usd(estimate.cost.expectedUsd)}</dd>

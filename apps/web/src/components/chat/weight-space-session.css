@@ -1,0 +1,44 @@
+.weight-space-session,
+.weight-space-session > *,
+.weight-space-session section,
+.weight-space-session details,
+.weight-space-session .dropdown-select,
+.weight-space-session .dropdown-trigger {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.weight-space-session {
+  overflow-wrap: anywhere;
+}
+
+.weight-space-session .dropdown-trigger {
+  width: 100%;
+}
+
+.weight-space-session .dropdown-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weight-space-session pre {
+  max-width: 100%;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.weight-space-session details[open] > :not(summary) {
+  margin-top: 8px;
+}
+
+.weight-space-session .evaluation-workspace-table {
+  min-width: 440px;
+}
+
+.weight-space-session .evaluation-workspace-table .training-button {
+  white-space: nowrap;
+}

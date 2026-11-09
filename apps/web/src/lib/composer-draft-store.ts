@@ -1,8 +1,9 @@
 import { TaskResourceContextsSchema, type TaskResourceContext } from "@openpond/contracts";
 import { useSyncExternalStore, type SetStateAction } from "react";
 import type { AppAction, AppState } from "../app/app-state";
+import { DecisionChatDraftSchema, DecisionChatDraftsSchema, type DecisionChatDraft } from "./decision-chat-draft";
 
-export type StoredComposerDraft = string | { prompt: string; resourceContexts: TaskResourceContext[] };
+export type StoredComposerDraft = string | { prompt: string; resourceContexts: TaskResourceContext[]; decisionInputs?: Record<string, DecisionChatDraft> };
 
 type PromptSelection = Pick<AppState, "selectedAppId" | "selectedProjectId" | "selectedSessionId">;
 
@@ -14,8 +15,26 @@ export type ComposerDraftStore = {
   resourceContexts: Map<string, TaskResourceContext[]>;
   set: (value: SetStateAction<string>) => void;
   setForScope: (scopeKey: string, value: SetStateAction<string>) => void;
+  getDecisionDraft: (scopeKey: string, modelId: string) => DecisionChatDraft | null;
+  setDecisionDraftForScope: (scopeKey: string, modelId: string, value: DecisionChatDraft | null) => void;
   subscribe: (listener: () => void) => () => void;
 };
+
+// Session creation can switch the active draft before the send is accepted.
+// Consume only the originating draft, and leave edits made during the request.
+export function captureSubmittedDraftClear(store: ComposerDraftStore): () => boolean {
+  const scopeKey = store.getScopeKey();
+  const submitted = store.getSnapshot();
+  return () => {
+    let cleared = false;
+    store.setForScope(scopeKey, current => {
+      if (current !== submitted) return current;
+      cleared = true;
+      return "";
+    });
+    return cleared && store.getScopeKey() === scopeKey;
+  };
+}
 
 function draftKey(selection: PromptSelection): string {
   if (selection.selectedSessionId) return `session:${selection.selectedSessionId}`;
@@ -34,10 +53,13 @@ export function createComposerDraftStore(
 ): ComposerDraftStore {
   let selection = initialSelection;
   const resourceContexts = new Map<string, TaskResourceContext[]>();
+  const decisionInputs = new Map<string, Record<string, DecisionChatDraft>>();
   const drafts = new Map(Object.entries(initialDrafts).map(([key, entry]) => {
     if (typeof entry === "string") return [key, entry] as const;
     const parsed = TaskResourceContextsSchema.safeParse(entry.resourceContexts);
     if (parsed.success) resourceContexts.set(key, parsed.data);
+    const decisions = DecisionChatDraftsSchema.safeParse(entry.decisionInputs);
+    if (decisions.success && Object.keys(decisions.data).length) decisionInputs.set(key, decisions.data);
     return [key, entry.prompt] as const;
   }));
   let value = drafts.get(draftKey(selection)) ?? "";
@@ -77,15 +99,32 @@ export function createComposerDraftStore(
     resourceContexts,
     getDrafts: () => {
       saveCurrent();
-      return Object.fromEntries([...drafts].map(([key, prompt]) => [key,
-        resourceContexts.has(key) ? {prompt, resourceContexts: structuredClone(resourceContexts.get(key)!)} : prompt,
-      ]));
+      return Object.fromEntries([...new Set([...drafts.keys(), ...decisionInputs.keys()])].map(key => {
+        const prompt = drafts.get(key) ?? "", decisions = decisionInputs.get(key);
+        return [key, resourceContexts.has(key) || decisions ? {
+          prompt, resourceContexts: structuredClone(resourceContexts.get(key) ?? []),
+          ...(decisions ? { decisionInputs: structuredClone(decisions) } : {}),
+        } : prompt];
+      }));
     },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     set: (next) => store.setForScope(draftKey(selection), next),
+    getDecisionDraft(scopeKey, modelId) {
+      const value = decisionInputs.get(scopeKey)?.[modelId];
+      return value ? structuredClone(value) : null;
+    },
+    setDecisionDraftForScope(scopeKey, modelId, value) {
+      DecisionChatDraftsSchema.keyType.parse(modelId);
+      const current = { ...decisionInputs.get(scopeKey) };
+      if (value) current[modelId] = DecisionChatDraftSchema.parse(value);
+      else delete current[modelId];
+      if (Object.keys(current).length) decisionInputs.set(scopeKey, current);
+      else decisionInputs.delete(scopeKey);
+      for (const listener of listeners) listener();
+    },
     setForScope(scopeKey, next) {
       const activeScopeKey = draftKey(selection);
       const current =

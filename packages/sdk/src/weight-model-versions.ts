@@ -1,3 +1,5 @@
+import { WeightSpaceRequestSchema } from "./weight-space-programming.js";
+import { WeightSpaceResultSchema, parseAndVerifyWeightSpaceArtifact } from "./weight-space-artifact.js";
 import { z } from "zod";
 import { canonicalJson, canonicalSha256, OpenPondProtocolError } from "./protocol.js";
 import { HostedModelProjectSummarySchema, ModelProjectBaseModelSchema } from "./model-projects.js";
@@ -28,11 +30,15 @@ export const NeuronTrainingModelVersionContentSchema = z.object({
 }).strict();
 export const NeuronTrainingModelVersionSchema = NeuronTrainingModelVersionContentSchema.extend({contentHash: Hash});
 export type NeuronTrainingModelVersion = z.infer<typeof NeuronTrainingModelVersionSchema>;
+export const WeightSpaceModelVersionContentSchema = z.object({...identity,schemaVersion:z.literal("openpond.weightSpaceModelVersion.v1"),
+  request:WeightSpaceRequestSchema,artifact:WeightSpaceResultSchema.shape.artifact}).strict();
+export const WeightSpaceModelVersionSchema=WeightSpaceModelVersionContentSchema.extend({contentHash:Hash});
+export type WeightSpaceModelVersion=z.infer<typeof WeightSpaceModelVersionSchema>;
 type Scope = {teamId?: string; modelProjectId?: string; ownerUserId?: string};
 function fail(): never {
   throw new OpenPondProtocolError("weight_model_version_mismatch", "The saved Model differs from its exact learned weights, source or committed artifact.");
 }
-async function verifyEnvelope(value: AlphaEditModelVersion | NeuronTrainingModelVersion, expected: Scope) {
+async function verifyEnvelope(value: AlphaEditModelVersion | NeuronTrainingModelVersion | WeightSpaceModelVersion, expected: Scope) {
   const {contentHash, ...content} = value;
   if (contentHash !== await canonicalSha256(content)
     || expected.teamId !== undefined && value.teamId !== expected.teamId
@@ -73,6 +79,13 @@ export async function parseAndVerifyNeuronTrainingModelVersion(raw: unknown, exp
   await verifyFiles(value.artifact, manifest, [manifest.payload], value.request.training.maxCheckpointBytes);
   return value;
 }
+export async function parseAndVerifyWeightSpaceModelVersion(raw:unknown,expected:Scope={}){
+  const value=WeightSpaceModelVersionSchema.parse(raw);
+  await verifyEnvelope(value,expected);
+  const manifest=await parseAndVerifyWeightSpaceArtifact(value.artifact.manifest,{request:value.request,runtimeHash:value.source.runtimeHash});
+  await verifyFiles(value.artifact,manifest,[manifest.payload],value.request.limits.maximumCheckpointBytes);
+  return value;
+}
 export async function verifySavedAlphaEditExperimentSource(sourceInput: unknown, raw: unknown, expected: Scope = {}) {
   const source = SavedAlphaEditExperimentSourceSchema.parse(sourceInput);
   const version = await parseAndVerifyAlphaEditModelVersion(raw, {...expected, modelProjectId: source.modelProjectId});
@@ -94,6 +107,8 @@ const SaveRequest = z.object({teamId: Id, operationId: Id, executionId: Id, resu
   name: z.string().trim().min(1).max(200), modelProjectId: Id.nullable(), expectedModelRevision: z.number().int().nonnegative(),
 }).strict().refine(value => value.modelProjectId ? value.expectedModelRevision > 0 : value.expectedModelRevision === 0,
   {message: "Retain the existing Model revision or create a new Model."});
+export const WeightSpaceResultSaveRequestSchema=SaveRequest;
+export type WeightSpaceResultSaveRequest=z.infer<typeof SaveRequest>;
 export const AlphaEditResultSaveRequestSchema = SaveRequest;
 export const NeuronTrainingResultSaveRequestSchema = SaveRequest;
 export type AlphaEditResultSaveRequest = z.infer<typeof AlphaEditResultSaveRequestSchema>;
@@ -107,7 +122,10 @@ export const NeuronTrainingResultSaveReceiptContentSchema = z.object({...receipt
   schemaVersion: z.literal("openpond.neuronTrainingResultSaveReceipt.v1"), version: NeuronTrainingModelVersionSchema}).strict();
 export const NeuronTrainingResultSaveReceiptSchema = NeuronTrainingResultSaveReceiptContentSchema.extend({contentHash: Hash});
 export type NeuronTrainingResultSaveReceipt = z.infer<typeof NeuronTrainingResultSaveReceiptSchema>;
-async function verifySave(value: AlphaEditResultSaveReceipt | NeuronTrainingResultSaveReceipt, request: AlphaEditResultSaveRequest) {
+export const WeightSpaceResultSaveReceiptContentSchema=z.object({...receipt,schemaVersion:z.literal("openpond.weightSpaceResultSaveReceipt.v1"),version:WeightSpaceModelVersionSchema}).strict();
+export const WeightSpaceResultSaveReceiptSchema=WeightSpaceResultSaveReceiptContentSchema.extend({contentHash:Hash});
+export type WeightSpaceResultSaveReceipt=z.infer<typeof WeightSpaceResultSaveReceiptSchema>;
+async function verifySave(value: AlphaEditResultSaveReceipt | NeuronTrainingResultSaveReceipt | WeightSpaceResultSaveReceipt, request: AlphaEditResultSaveRequest) {
   const {contentHash, ...content} = value;
   if (contentHash !== await canonicalSha256(content) || value.teamId !== request.teamId || value.model.teamId !== request.teamId
     || value.operationId !== request.operationId || value.requestHash !== await canonicalSha256(request)
@@ -127,10 +145,18 @@ export async function parseAndVerifyNeuronTrainingResultSaveReceipt(raw: unknown
   await parseAndVerifyNeuronTrainingModelVersion(value.version, {teamId: request.teamId, modelProjectId: value.model.id, ownerUserId: value.actorId});
   await verifySave(value, request); return value;
 }
+export async function parseAndVerifyWeightSpaceResultSaveReceipt(raw:unknown,input:WeightSpaceResultSaveRequest){
+  const request=SaveRequest.parse(input),value=WeightSpaceResultSaveReceiptSchema.parse(raw);
+  await parseAndVerifyWeightSpaceModelVersion(value.version,{teamId:request.teamId,modelProjectId:value.model.id,ownerUserId:value.actorId});
+  await verifySave(value,request);return value;
+}
 export function createWeightModelClient(request: (path: string, init?: RequestInit) => Promise<unknown>) {
   const save = (command: AlphaEditResultSaveRequest) => request(`/v1/training/modification-executions/${encodeURIComponent(command.executionId)}/model`,
     {method: "POST", body: canonicalJson(command)});
   return {
+    async saveWeightSpaceResultModel(raw:WeightSpaceResultSaveRequest){
+      const command=SaveRequest.parse(raw);return parseAndVerifyWeightSpaceResultSaveReceipt(await save(command),command);
+    },
     async saveAlphaEditResultModel(raw: AlphaEditResultSaveRequest) {
       const command = SaveRequest.parse(raw); return parseAndVerifyAlphaEditResultSaveReceipt(await save(command), command);
     },

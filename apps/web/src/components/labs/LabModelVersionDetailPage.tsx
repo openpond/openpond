@@ -1,5 +1,6 @@
 import { comparisonParentLabel, continuationConfiguration, runConfiguration } from "./model-run-configuration";
 import { Fragment, useMemo, useState } from "react";
+import { ErrorToast } from "../common/ErrorToast";
 import {
   RftRecipeSchema,
   RunStageEvidenceSchema,
@@ -548,6 +549,8 @@ export function LabModelVersionDetailPage({
             detail={detail.detail}
             error={detail.error}
             loading={detail.loading}
+            refreshing={detail.refreshing}
+            onRefresh={detail.refresh}
             taskset={selectedTaskset}
           />
         ) : null}
@@ -661,12 +664,15 @@ export function LabModelVersionDetailPage({
             )
           ) : null}
           {activeDetailTab === "activity" && selectedJob ? (
-            <TrainingEventLog
-              error={selectedJob.error ?? detail.error}
-              events={detail.detail?.events ?? []}
-              loading={detail.loading}
-              pending={runActive}
-            />
+            <>
+              <ErrorToast error={detail.error} />
+              <TrainingEventLog
+                error={selectedJob.error}
+                events={detail.detail?.events ?? []}
+                loading={detail.loading}
+                pending={runActive}
+              />
+            </>
           ) : null}
         </div>
       </section>

@@ -54,6 +54,24 @@ test("a failed hydration can be retried", async () => {
   expect(clientChoiceStorage.getItem("openpond:last-chat-task-mode")).toBe("work");
 });
 
+// Desktop's loopback port changes on restart. Dismissal follows the server-owned
+// account preferences, while another account must retain its own setup choice.
+test("retains setup dismissal across a server address change without leaking it to another owner", async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(Response.json({ clientState: { owner: "setup-owner", revision: 1, value: { gettingStartedDismissed: true } } }))
+    .mockResolvedValueOnce(Response.json({ clientState: { owner: "setup-owner", revision: 1, value: { gettingStartedDismissed: true } } }))
+    .mockResolvedValueOnce(Response.json({ clientState: { owner: "other-owner", revision: 1, value: {} } }));
+  vi.stubGlobal("fetch", fetch);
+  const connection = { serverUrl: "http://127.0.0.1:30001", token: "setup", platform: "linux" };
+  await connectClientChoices(connection);
+  expect(clientChoiceStorage.getItem("openpond:desktop-get-started:v1")).toBe("true");
+  const restarted = { ...connection, serverUrl: "http://127.0.0.1:30002", token: "restarted" };
+  await connectClientChoices(restarted);
+  expect(clientChoiceStorage.getItem("openpond:desktop-get-started:v1")).toBe("true");
+  await connectClientChoices(restarted, { force: true });
+  expect(clientChoiceStorage.getItem("openpond:desktop-get-started:v1")).toBeNull();
+});
+
 // StrictMode/remount or a timeout may abandon hydration while a retry starts.
 // A late response from that abandoned attempt must not replace the new owner.
 test("aborted hydration does not block or overwrite its replacement", async () => {

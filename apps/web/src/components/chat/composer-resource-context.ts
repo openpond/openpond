@@ -44,5 +44,5 @@ export function composerSubmissionResourceContext(
   selected: ChatContextSelection | null,
 ): { contexts: TaskResourceContext[]; focus: ChatContextSelection | null } {
   if (drafted?.length) return { contexts: drafted, focus: null };
-  return { contexts: selected?.model || selected?.training ? [] : inferred, focus: selected };
+  return { contexts: selected?.model || selected?.training || selected?.weightSpace ? [] : inferred, focus: selected };
 }

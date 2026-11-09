@@ -3,6 +3,7 @@ import {
   DecisionModelServingControlRequestSchema,
   EngramModelServingControlRequestSchema,
   NeuronTrainingModelServingControlRequestSchema,
+  WeightSpaceModelServingControlRequestSchema,
   SteeringModelServingControlRequestSchema,
 } from "openpond-sdk/training";
 import { RunFeedbackTargetSchema } from "@openpond/contracts";
@@ -51,6 +52,7 @@ export function createHostedTrainingDetailTransport(deps: {
           DecisionModelServingControlRequestSchema,
           AlphaEditModelServingControlRequestSchema,
           NeuronTrainingModelServingControlRequestSchema,
+  WeightSpaceModelServingControlRequestSchema,
         ])
         .safeParse(body.command);
       if (decision.success) {
@@ -100,6 +102,8 @@ export function createHostedTrainingDetailTransport(deps: {
         ? detail.controlAlphaEditModelServing(body.modelProjectId, body.command)
         : NeuronTrainingModelServingControlRequestSchema.safeParse(body.command).success
           ? detail.controlNeuronTrainingModelServing(body.modelProjectId, body.command)
+        : WeightSpaceModelServingControlRequestSchema.safeParse(body.command).success
+          ? detail.controlWeightSpaceModelServing(body.modelProjectId, body.command)
           : DecisionModelServingControlRequestSchema.safeParse(body.command).success
             ? detail.controlDecisionModelServing(body.modelProjectId, body.command)
             : EngramModelServingControlRequestSchema.safeParse(body.command).success

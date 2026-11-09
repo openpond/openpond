@@ -459,7 +459,7 @@ function combinedModelOptions(
       });
     }
   }
-  if (selected.modelId && !options.some((option) => option.value === modelSelectionValue(selected.providerId, selected.modelId))) {
+  if (selected.providerId !== "openpond" && selected.modelId && !options.some((option) => option.value === modelSelectionValue(selected.providerId, selected.modelId))) {
     options.unshift({
       value: modelSelectionValue(selected.providerId, selected.modelId),
       label: `${chatProviderLabel(selected.providerId, providers)} / ${selected.modelId}`,

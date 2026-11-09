@@ -1,3 +1,4 @@
+import { readChatWeightSpace } from "./chat-weight-space.js";
 import { createChatNextStepService } from "./chat-next-step.js";
 import { createChatContextBrowser } from "./chat-context-browser.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
@@ -155,6 +156,26 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId) };
       return { selection: query.sessionId ? await browser.current(query.sessionId) : null };
     }
+    if (kind === "experiment" && input.action === "attach_weight_space") {
+      if (!context) throw new Error("An editing-session attachment requires its originating chat invocation.");
+      const ref = z.object({id:z.string().min(1),teamId:z.string().min(1),apiOrigin:z.url()}).strict().parse(input.payload);
+      const selected = await readChatWeightSpace({kind:"weight_space_session",location:"cloud",...ref},deps.access);
+      await scopes.attachWeightSpace(context.sessionId,context.turnId,{...ref,actorId:selected.weightSpace.ownerUserId,name:selected.weightSpace.name});
+      return {weightSpace:selected.weightSpace};
+    }
+    if (kind === "experiment" && input.action === "attach_model") {
+      if (!context) throw new Error("Model attachment requires its originating chat invocation.");
+      const ref = z.object({modelProjectId:z.string().min(1),teamId:z.string().min(1),apiOrigin:z.url()}).strict().parse(input.payload);
+      const access = await deps.access();
+      if (ref.teamId !== access.teamId || ref.apiOrigin !== new URL(access.apiBaseUrl).origin) throw new Error("Model belongs to another account.");
+      const selected = await browser.resolve({kind:"model",id:ref.modelProjectId,location:"cloud",teamId:ref.teamId,apiOrigin:ref.apiOrigin});
+      const current = await deps.access();
+      if (current.actorId !== access.actorId || current.teamId !== access.teamId || current.apiBaseUrl !== access.apiBaseUrl || !selected.model)
+        throw new Error("Account changed before the Model was attached.");
+      await scopes.attachModel(context.sessionId,context.turnId,{id:selected.model.id,teamId:access.teamId,actorId:access.actorId,apiOrigin:ref.apiOrigin},selected.model.name);
+      await deps.append({id:randomUUID(),name:"workspace_action_result",source:"server",sessionId:context.sessionId,turnId:context.turnId,timestamp:new Date().toISOString(),action:"chat_resource",status:"completed",data:{modelAttachment:ref}});
+      return {model:selected.model};
+    }
     if (kind === "experiment" && ["attach_training", "read_training"].includes(String(input.action))) {
       const ref = z.object({jobId:z.string().min(1).optional(),modelRunId:z.string().min(1).optional(),location:z.enum(["local","cloud"]).default("local"),apiOrigin:z.url().optional(),teamId:z.string().min(1).optional()}).strict()
         .refine(value=>Boolean(value.jobId || value.modelRunId),"Provide a training job or Model Run ID.").parse(input.payload);
@@ -177,13 +198,13 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return {resources:[...unique.values()],links:visible.map(link=>({sessionId:link.sessionId,key:link.summary.kind+":"+link.summary.id}))};
     }
     if (kind === "dataset" && ["context","set_destination","set_model","set_focus","create_scope","select_scope","rename_scope"].includes(String(input.action))) {
-      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),scopeId:z.string().min(1).optional(),graderId:z.string().min(1).nullable().optional(),name:z.string().optional(),evaluationModel:z.string().min(1).max(500).optional(),executionLocation:z.enum(["local","cloud"]).optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
+      const query = z.object({sessionId:z.string().min(1),kind:z.enum(["dataset","experiment","grader"]).optional(),id:z.string().nullable().optional(),revision:z.number().int().positive().optional(),operationId:z.string().min(1).max(240).optional(),focusOnly:z.boolean().optional(),scopeId:z.string().min(1).optional(),graderId:z.string().min(1).nullable().optional(),name:z.string().optional(),evaluationModel:z.string().min(1).max(500).optional(),executionLocation:z.enum(["local","cloud"]).optional(),expectedSelectionVersion:z.number().int().nonnegative().optional(),visualPublicationId:z.string().optional()}).strict().parse(context ? {...input.payload as object,sessionId:context.sessionId} : input.payload);
       const session = await deps.store.getSession(query.sessionId);
       if (!session || session.systemKind || session.workspaceKind === "sandbox") throw new Error("This conversation cannot use installation-local resource focus.");
       if(query.visualPublicationId)await deps.visuals.read(session.id,query.visualPublicationId);
-      const datasetChoices = input.action === "context" ? (await deps.store.listLocalDatasetListings()).map(localDatasetSummary) : [];
+      const datasetChoices = input.action === "context" && !query.focusOnly ? (await deps.store.listLocalDatasetListings()).map(localDatasetSummary) : [];
       const experimentChoices:ChatResourceSummary[] = [];
-      if (input.action === "context" || query.kind === "experiment") {
+      if (input.action === "context" && !query.focusOnly || query.kind === "experiment") {
       const page = await experiments.service.list({teamId:experiments.scope}) as {items:import("@openpond/contracts").LocalExperimentRecord[]};
       const localChoices = await Promise.all(page.items.map(record=>experiments.summary(record)));
       const linkedTeam = team ? (await deps.store.chatResourceLinks({sessionId:session.id,kind:"experiment"})).filter(link=>link.summary.owner) : [];
@@ -295,6 +316,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         if(focus.dataset?.owner || focus.dataset?.profileRef)await verifyOwner(focus.dataset);
         if(focus.dataset && !focus.dataset.owner && !focus.dataset.profileRef) {const pinned=await deps.store.readLocalDatasetListing(focus.dataset.id,focus.dataset.revision);focus={...focus,dataset:pinned ? localDatasetSummary(pinned) : null};}
         const graders = await gradersFor(focus.dataset);
+        if (query.focusOnly) {
+          const selected = await browser.current(session.id);
+          return {focus:{...focus,scopeContext},selection:selected ? {
+            target:selected.target,label:selected.label,detail:selected.detail,...selected.model ? {model:selected.model} : {},
+          } : null,graders};
+        }
         return {focus:{...focus,scopeContext},datasets:datasetChoices,experiments:experimentChoices,graders};
       }
       if (!query.kind) throw new Error("Select the resource focus kind.");

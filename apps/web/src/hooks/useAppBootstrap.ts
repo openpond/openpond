@@ -1,4 +1,4 @@
-import { CHAT_SELECTION_KEY, readChatSelectionPreference } from "../lib/chat-selection-preference";
+import { CHAT_SELECTION_KEY, preferredChatModel, readChatSelectionPreference } from "../lib/chat-selection-preference";
 import { connectClientChoices, useHydratedClientChoice, clientChoiceSaveIssue, clientChoiceStorage, subscribeClientChoices } from "../lib/client-choice-storage";
 import {
   useCallback,
@@ -21,7 +21,7 @@ import type {
   SidebarAppPreferences,
 } from "@openpond/contracts";
 import { api, resolveConnection, type ClientConnection, type PreferencesPayload } from "../api";
-import { normalizePreferences, parseProjectSelection, projectSelectionKey } from "../lib/app-models";
+import { normalizePreferences, parseProjectSelection, projectSelectionKey, providerOptionsFromSettings } from "../lib/app-models";
 import { latestReadyLocalCreateImproveProfileRefreshKey } from "../lib/create-pipeline-profile-refresh";
 import {
   normalizeOpenPondOrganization,
@@ -278,12 +278,18 @@ export function useAppBootstrap(params: {
     if (selectedSessionId) return;
     const preferences = normalizePreferences(bootstrap?.preferences);
     const remembered = readChatSelectionPreference();
-    setDraftProvider(remembered?.provider ?? preferences.defaultChatProvider);
-    setDraftModel(remembered?.model ?? preferences.defaultChatModel);
+    const hiddenProvider = (remembered?.provider ?? bootstrap?.preferences.defaultChatProvider) === "openpond";
+    const fallbackProvider = providerOptionsFromSettings(bootstrap?.providers, { enabledOnly: true })[0]!.value;
+    const selection = hiddenProvider
+      ? { provider: fallbackProvider, model: preferredChatModel(fallbackProvider, bootstrap?.providers) }
+      : remembered ?? { provider: preferences.defaultChatProvider, model: preferences.defaultChatModel };
+    setDraftProvider(selection.provider);
+    setDraftModel(selection.model);
   }, [
     selectedSessionId,
     bootstrap?.preferences.defaultChatProvider,
     bootstrap?.preferences.defaultChatModel,
+    bootstrap?.providers,
     rememberedChatSelection,
     setDraftModel,
     setDraftProvider,

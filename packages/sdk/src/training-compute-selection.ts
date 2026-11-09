@@ -49,7 +49,6 @@ export const TrainingGpuCatalogScopeSchema = z.object({
     cudaVersions: z.array(z.string().regex(/^\d+\.\d+$/)).min(1).max(100),
     dataCenterId: Id.nullable(),
     minimumDiskGb: z.number().int().positive(),
-    priceBasis: z.literal("provider_catalog_per_gpu_rate_times_count"),
   }).strict().nullable(),
 }).strict();
 export type TrainingGpuCatalogScope = z.infer<typeof TrainingGpuCatalogScopeSchema>;
@@ -60,14 +59,15 @@ export const TrainingGpuCatalogSchema = z.object({
   expiresAt: z.string().datetime({ offset: true }),
   workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   supportedLoraRanks: z.array(z.number().int().positive()),
-  pricingBasis: z.enum(["accepted_compute_and_disk_hourly_before_credits", "provider_catalog_compute_and_disk_before_credits"]),
+  pricingBasis: z.literal("retail_allocation_hourly_before_credits"),
   scope: TrainingGpuCatalogScopeSchema.optional(),
   offerings: z.array(z.object({
     availabilityId: Id, gpuType: z.string().min(1).max(256), provider: OpaqueProvider,
     region: z.string().min(1), dataCenterId: z.string().nullable(),
     gpuCount: z.number().int().positive(), gpuMemoryGb: z.number().positive(),
     stockStatus: z.enum(["High", "Medium", "Low"]),
-    computeHourlyUsd: z.number().nonnegative(), diskHourlyUsd: z.number().nonnegative(), totalHourlyUsd: z.number().nonnegative(),
+    /** Whole-allocation retail rate, including attached disk. Null means unpriced. */
+    hourlyUsd: z.number().finite().nonnegative().nullable(),
   }).strict()).max(1000),
 }).strict();
 export type TrainingGpuCatalog = z.infer<typeof TrainingGpuCatalogSchema>;
@@ -82,7 +82,7 @@ export async function parseAndVerifyTrainingGpuCatalog(raw: unknown, query?: Tra
     return catalog;
   }
   const scope = catalog.scope;
-  if (!scope || catalog.pricingBasis !== "provider_catalog_compute_and_disk_before_credits" ||
+  if (!scope ||
       canonicalJson(scope.query) !== canonicalJson(query) ||
       scope.requestHash !== await canonicalSha256(query) ||
       (scope.qualification === "unsupported") !== (scope.reason !== null) ||

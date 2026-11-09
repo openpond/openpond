@@ -9,11 +9,18 @@ export const ExperimentScoringRequestSchema = z.object({
   operationId: Id,
   execution: ImmutableReleaseRefSchema,
   /** Recorded executions retain observed evidence and never invoke a target. */
-  executionKind: z.literal("recorded_evidence").optional(),
+  executionKind: z.enum(["recorded_evidence", "weight_space"]).optional(),
+  /** Pins a retained candidate-forward receipt; scoring never reruns the model. */
+  weightSpaceOperationId: Id.optional(),
+  weightSpaceTarget: z.enum(["candidate","baseline"]).optional(),
   graders: z.array(RewardReleaseRefSchema).min(1).max(100),
   maximumCostUsd: z.number().finite().min(0.000001).max(10_000),
   mappings: z.array(z.object({ graderId: Id, fields: ExperimentFieldMappingsSchema }).strict()).max(100).optional(),
 }).strict().superRefine((value, context) => {
+  if ((value.executionKind === "weight_space") !== (value.weightSpaceOperationId !== undefined))
+    context.addIssue({ code: "custom", path: ["weightSpaceOperationId"], message: "Weight-space scoring requires its exact retained evaluation operation." });
+  if ((value.executionKind === "weight_space") !== (value.weightSpaceTarget !== undefined))
+    context.addIssue({ code: "custom", path: ["weightSpaceTarget"], message: "Select the evaluated candidate or its sealed held-out baseline explicitly." });
   if (new Set(value.graders.map(grader => grader.id)).size !== value.graders.length)
     context.addIssue({ code: "custom", path: ["graders"], message: "Select each grader once." });
   if (value.mappings && (new Set(value.mappings.map(mapping => mapping.graderId)).size !== value.mappings.length

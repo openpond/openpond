@@ -5,6 +5,10 @@ They can also be run through the CLI wrapper with `openpond harness desktop run 
 
 Implemented scenarios:
 
+- `model-training-starters.ts`: manual packaged draft/file/scope acceptance. Checks all four cards; sends the three enabled prompts through a real subscribed Codex agent only with `OPENPOND_STARTER_LIVE_ACCEPTANCE=1`. Weight-space remains disabled. Uses unreviewed local examples and a $0 compute limit; this does not prove accepted training preparation or execution. `OPENPOND_STARTER_MODEL` may select an entry verified in the installed agent catalog.
+- `training-budget-continuation.ts`: manually answer one exact, already reviewed budget form in its original running Desktop chat and observe its matching continuation. Read-only mode checks the retained form without answering. This proves the question lifecycle, not successful training.
+- `training-conversation-continuation.ts`: resume an approved training chat after a verified repair. `OPENPOND_TRAINING_CONTINUATION_REVIEW` binds the original completed turn, budget question/answer, ceiling and follow-up text; `OPENPOND_TRAINING_CONTINUATION_RECEIPT` must be a stable absolute path. `OPENPOND_TRAINING_CONTINUATION_READ_ONLY=1` checks retained authority without sending. A live Send requires `OPENPOND_ALLOW_REVIEWED_TRAINING_CONTINUATION=1`; its attempt is journaled before clicking, and reruns observe the same turn without resubmitting. It preserves edited drafts and never answers additional questions. Training completion still requires independent retained run/result evidence.
+
 - `chat-two-turns.ts`: visible composer submission for a deterministic two-turn chat.
 - `chat-multi-thread-stress.ts`: three concurrent delayed chat turns with switching, renderer reload, transcript isolation, persistence, timing, and screenshot proof.
 - `chat-interrupt-recovery.ts`: visible Stop-response interruption after the first streamed chunk, followed by same-thread recovery and reload persistence proof.
@@ -32,6 +36,44 @@ Artifact convention:
 - Packaged runs require a prebuilt desktop app and should pass `--packaged --app <path>` or rely on standard `release/` candidates.
 
 Use server APIs for setup-heavy state. Use real renderer actions only when the scenario is proving visible UX behavior.
+
+`weight-space-live-prepare.ts` is a manual connected acceptance using an existing
+Codex subscription and the selected Desktop account. It sends one preparation-only
+request from a new empty temporary directory, uses the installed CLI contract,
+retains the real capability receipt, and reopens the transcript. An unavailable
+runtime proves the admission boundary; it does not prove successful preparation
+or attachment. When the exact runtime is ready, the scenario also requires an
+accepted prepared execution and its original attachment after reload. It never
+authorizes GPU execution, scoring, serving or schedules and is not routine CI.
+Set `OPENPOND_WSP_ACCEPTANCE_SESSION_ID` to inspect an existing acceptance turn
+without sending another prompt. Use `OPENPOND_WSP_ACCEPTANCE_TURN_ID` to select
+the exact original turn in a chat with multiple preparations. Recovery reads
+the chat's paginated event history, including turns outside the recent global
+event window; a missing retained completion fails without another prompt.
+
+For a protected preparation handoff, provide `OPENPOND_WSP_ACCEPTANCE_PREPARE_FILE`
+and `OPENPOND_WSP_ACCEPTANCE_PREPARE_SHA256` together. The scenario copies the
+reviewed input unchanged into the new chat directory, requires matching ready
+capability, verifies the accepted receipt against that input, and checks its
+attachment after reopening. The Desktop agent prepares on behalf of the declared
+editing teacher; the teacher identity remains unchanged. Confirm the operation
+has never been submitted and arrange the teacher handoff before running. Complete
+handoff before the returned plan expires; expiry does not authorize another
+preparation or operation. Confirm custody of the running renderer before using
+its debug connection.
+
+When another acceptance owns the renderer, `OPENPOND_WSP_ACCEPTANCE_SERVER_ONLY=1`
+issues the original prompt through the running Desktop server in its own chat.
+It verifies the real CLI receipt without changing the screen, and writes
+`original-prepare-receipt.json` for immediate teacher handoff. Attachment and
+rendered reopening remain unproved in this mode. After the renderer is free, rerun
+with the recorded session ID and the original reviewed input, without server-only
+mode, to prove reopening without another prompt or Prepare. The same attachment
+may then correctly show the execution's later phase.
+Use `OPENPOND_WSP_ACCEPTANCE_CONTINUE_SESSION_ID` instead of the resume variable
+to submit a new reviewed preparation in an existing server-only chat. Each turn
+retains its own identity and receipt; set `OPENPOND_WSP_ACCEPTANCE_TURN_ID` when
+later inspecting a particular completed turn in a chat with multiple turns.
 
 Useful commands:
 

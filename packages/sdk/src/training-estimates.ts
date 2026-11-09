@@ -83,7 +83,7 @@ export const TrainingEstimateSchema = z.object({
   gpu: z.object({
     requested: TrainingGpuSelectionSchema,
     resolved: z.object({ availabilityId: Id, gpuType: z.string().min(1).max(256), gpuCount: z.union([z.literal(1), z.literal(2)]) }).strict().nullable(),
-    customerHourlyUsd: NonNegative.nullable(),
+    hourlyUsd: NonNegative.nullable(),
     availability: z.enum(["available", "limited", "unavailable", "unknown"]),
   }).strict(),
   configuration: z.object({
@@ -126,7 +126,7 @@ export const TrainingEstimateSchema = z.object({
 }).strict().superRefine((estimate, context) => {
   const allocation = estimate.cost.components.filter(component => component.phase === "gpu_allocation");
   if (allocation.length) {
-    const aggregate = allocation[0]!, rate = estimate.gpu.customerHourlyUsd;
+    const aggregate = allocation[0]!, rate = estimate.gpu.hourlyUsd;
     const mismatch = allocation.length !== 1 || aggregate.resource !== "gpu" ||
       (aggregate.expectedUsd === null) !== (aggregate.expectedSeconds === null) ||
       aggregate.expectedUsd !== null && (rate === null || aggregate.evidence !== "measured" ||

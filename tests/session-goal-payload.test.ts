@@ -43,6 +43,13 @@ test("goal mutations enforce the session/provider boundary and clean up failed c
     setThreadGoal: vi.fn(), stop: vi.fn(async () => {}) }));
   const deps = { getSession: async () => ({ provider: "openai", status: "idle" } as Session),
     appendRuntimeEvent: vi.fn(), createClient };
+  // Empty chats have no provider thread yet; reading optional goal state must
+  // succeed without starting a provider client or allowing a goal mutation.
+  for (const session of [{ provider: "openai" }, { provider: "codex" }]) {
+    const read = createSessionGoalPayload({ ...deps, getSession: async () => ({ ...session, status: "idle" } as Session) });
+    await expect(read("session", undefined)).resolves.toMatchObject({ goal: null, observedAt: expect.any(String) });
+    await expect(read("session", { expectedObjective: "Old", status: "active" })).rejects.toThrow("Codex goal");
+  }
   await expect(createSessionGoalPayload(deps)("session", { expectedObjective: "Old", status: "active" })).rejects.toThrow("Codex goal");
   expect(createClient).not.toHaveBeenCalled();
   const client = createClient();

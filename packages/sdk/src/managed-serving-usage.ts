@@ -35,6 +35,7 @@ export const ManagedServingUsageMethodSchema = z.enum([
   "decision",
   "alphaedit",
   "selective_neuron_training",
+  "weight_space_programming",
 ]);
 export type ManagedServingUsageMethod = z.infer<
   typeof ManagedServingUsageMethodSchema

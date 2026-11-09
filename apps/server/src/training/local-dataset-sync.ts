@@ -9,7 +9,12 @@ export function createLocalDatasetSync(deps:{store:SqliteStore;access:()=>Promis
   const publications=new Map<string,{hash:string;work:Promise<LocalDatasetRecord>}>();
   const lastVerified = new Map<string,number>();
   const shutdown = new AbortController();
-  const transport:typeof fetch = (url,init) => (deps.fetch ?? fetch)(url,{...init,signal:AbortSignal.any([shutdown.signal,AbortSignal.timeout(30_000),...init?.signal ? [init.signal] : []])});
+  const transport:typeof fetch = (url,init) => {
+    // Full dataset writes can legitimately outlast a catalog read. Keep the
+    // retained operation and shutdown/caller cancellation throughout transfer.
+    const timeout = ["POST","PUT","PATCH"].includes(init?.method?.toUpperCase() ?? "GET") ? 120_000 : 30_000;
+    return (deps.fetch ?? fetch)(url,{...init,signal:AbortSignal.any([shutdown.signal,AbortSignal.timeout(timeout),...init?.signal ? [init.signal] : []])});
+  };
   let closed = false;
   async function current(id:string) { const value = await deps.store.readLocalDataset(id); if (!value) throw new Error("Local Dataset was not found."); return value; }
   async function change(id:string,update:(record:LocalDatasetRecord)=>LocalDatasetRecord) {

@@ -4,6 +4,7 @@ import { AGENTS_OVERVIEW_TAB_ID } from "../workspace-diff/workspace-diff-panel-m
 import { useTrainingSidebarContext } from "../../hooks/useTrainingSidebarContext";
 import { ChatContextAccountScope } from "../../hooks/useChatContextSelection";
 import { rememberChatSelection } from "../../lib/chat-selection-preference";
+import { captureSubmittedDraftClear } from "../../lib/composer-draft-store";
 import type { HtmlVisualReference } from "@openpond/contracts/html-visuals";
 import { OpenHtmlVisualContext, SelectHtmlResourceContext } from "../visuals/html-visual-context";
 import { chatResourceRequest } from "../../api/chat-resource-api";
@@ -910,10 +911,10 @@ export function MainPane({
     ) => {
       const promptForSubmit =
         options.promptOverride ?? composerDraftStore.getSnapshot();
+      const clearSubmittedDraft = captureSubmittedDraftClear(composerDraftStore);
       const clearMainPrompt = () => {
         if (options.preservePrompt) return;
-        composerDraftStore.set("");
-        setMentionedAppId(null);
+        if (clearSubmittedDraft()) setMentionedAppId(null);
       };
       if (!action) {
         const command = selectedCommand
@@ -987,9 +988,7 @@ export function MainPane({
               null,
               buildSubmitIssueSlashPrompt(command.args),
               {
-                clearPrompt: options.preservePrompt
-                  ? () => undefined
-                  : undefined,
+                clearPrompt: clearMainPrompt,
                 usageAttribution: usageAttributionForComposerSlashCommand(
                   command,
                   selectedCommand ? "composer_selection" : "prompt_parse"
@@ -1008,7 +1007,7 @@ export function MainPane({
                 : promptForAppSlashCommand(command);
             setChatSubmissionVersion((version) => version + 1);
             return sendPrompt([], null, skillPrompt, {
-              clearPrompt: options.preservePrompt ? () => undefined : undefined,
+              clearPrompt: clearMainPrompt,
               usageAttribution: usageAttributionForComposerSlashCommand(
                 command,
                 selectedCommand ? "composer_selection" : "prompt_parse"
@@ -1017,7 +1016,7 @@ export function MainPane({
           }
           setChatSubmissionVersion((version) => version + 1);
           return sendPrompt([], null, promptForAppSlashCommand(command), {
-            clearPrompt: options.preservePrompt ? () => undefined : undefined,
+            clearPrompt: clearMainPrompt,
             usageAttribution: usageAttributionForComposerSlashCommand(
               command,
               selectedCommand ? "composer_selection" : "prompt_parse"
@@ -1027,7 +1026,7 @@ export function MainPane({
       }
       setChatSubmissionVersion((version) => version + 1);
       return sendPrompt(attachments, action, options.promptOverride, {
-        clearPrompt: options.preservePrompt ? () => undefined : undefined,
+        clearPrompt: clearMainPrompt,
         displayPrompt: options.displayPrompt,
         turnMetadata: options.turnMetadata,
         sessionMetadata: options.sessionMetadata,
@@ -1742,6 +1741,7 @@ export function MainPane({
                       ? resolution.text
                       : "Dismiss this question";
                   const sent = await sendPrompt([], null, displayPrompt, {
+                    clearPrompt: () => undefined,
                     displayPrompt,
                     turnMetadata: { userQuestionResolution: resolution },
                   });

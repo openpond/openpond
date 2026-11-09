@@ -28,7 +28,7 @@ def verify_gpu_catalog(catalog,query):
         if catalog.get('scope') is not None:raise ProtocolError('training_gpu_catalog_scope_mismatch')
         return
     scope=catalog.get('scope')
-    if scope is None or catalog['pricingBasis']!='provider_catalog_compute_and_disk_before_credits' or scope['query']!=query or scope['requestHash']!=canonical_sha256(query):
+    if scope is None or scope['query']!=query or scope['requestHash']!=canonical_sha256(query):
         raise ProtocolError('training_gpu_catalog_scope_mismatch')
     unsupported=scope['qualification']=='unsupported'
     if unsupported!=(scope['reason'] is not None):

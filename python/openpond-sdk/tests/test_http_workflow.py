@@ -262,16 +262,17 @@ def server():
                 assert query['teamId']==TEAM
                 now=datetime.now(timezone.utc)
                 value={'schemaVersion':'openpond.trainingGpuCatalog.v1','observedAt':now.isoformat(),'expiresAt':(now+timedelta(seconds=60)).isoformat(),
-                    'workerImageDigest':'sha256:'+'a'*64,'supportedLoraRanks':[16],'pricingBasis':'provider_catalog_compute_and_disk_before_credits',
+                    'workerImageDigest':'sha256:'+'a'*64,'supportedLoraRanks':[16],'pricingBasis':'retail_allocation_hourly_before_credits',
                     'scope':{'query':query,'requestHash':canonical_sha256(query),'qualification':'requires_preparation','reason':None,
                         'provider':{'accountScopeId':'opaque-scope','product':'POD','cloud':'SECURE','countryCodes':['US','CA'],
-                            'cudaVersions':['12.8'],'dataCenterId':None,'minimumDiskGb':130,'priceBasis':'provider_catalog_per_gpu_rate_times_count'}},
+                            'cudaVersions':['12.8'],'dataCenterId':None,'minimumDiskGb':130}},
                     'offerings':[{'availabilityId':'offer','gpuType':'gpu','provider':'fixture_provider','region':'fixture_region','dataCenterId':None,
-                        'gpuCount':2,'gpuMemoryGb':80,'stockStatus':'Medium','computeHourlyUsd':4,'diskHourlyUsd':0.01,'totalHourlyUsd':4.01}]}
+                        'gpuCount':2,'gpuMemoryGb':80,'stockStatus':'Medium','hourlyUsd':7}]}
                 if state.get('gpu_reply')=='hash':value['scope']['requestHash']='0'*64
                 if state.get('gpu_reply')=='count':value['offerings'][0]['gpuCount']=1
                 if state.get('gpu_reply')=='expired':value['expiresAt']=value['observedAt']
                 if state.get('gpu_reply')=='missing':del value['scope']
+                if state.get('gpu_reply')=='supplier_fields':value['offerings'][0].update(computeHourlyUsd=4,diskHourlyUsd=0.01,totalHourlyUsd=4.01)
                 self.reply(200,{'catalog':value});return
             if self.path=='/v1/training/hardware-catalog':
                 content={'schemaVersion':'openpond.trainingHardwareInventory.v1','provider':'fixture_provider','source':'fixture_inventory_v1',
@@ -661,7 +662,7 @@ def test_hardware_catalog_identity_in_both_native_clients(server):
             return await value if inspect.isawaitable(value) else value
         state['gpu_reply']='valid'
         assert (await gpu_read())['scope']['query']==query
-        for invalid in ('hash','count','expired','missing'):
+        for invalid in ('hash','count','expired','missing','supplier_fields'):
             state['gpu_reply']=invalid
             with pytest.raises(ProtocolError):await gpu_read()
         assert state['posts']==0
@@ -706,7 +707,7 @@ def test_estimate_review_identity_in_both_native_clients(server):
         # Retained GPU allocation quantity uses the whole-Pod rate once. A
         # duplicate phase or device-count multiplier must not become a price.
         aggregate = dict(phase='gpu_allocation', resource='gpu', expectedSeconds=3600,
-            expectedUsd=value['gpu']['customerHourlyUsd'], planningRangeUsd=None,
+            expectedUsd=value['gpu']['hourlyUsd'], planningRangeUsd=None,
             evidence='measured', reason='Conserved allocation quantity at the current rate.')
         value['cost']['components'] = [aggregate]
         assert (await read())['cost']['components'] == [aggregate]
@@ -786,6 +787,41 @@ def test_model_serving_activation_recovery_and_stop_in_both_clients(server):
     url,state=server
     f=json.loads((Path(__file__).resolve().parents[3]/'packages/sdk/fixtures/python-foundation/training-model-serving-control-http-workflow.json').read_text())
     query={'teamId':TEAM,'versionHash':f['request']['versionHash']};state['model_serving_query']=query
+    # Signed v1 history and v2 lifecycle terms must survive both HTTP clients;
+    # an outer receipt signature cannot authorize substituted nested meter rules.
+    from ponder_sdk.serverless_serving import create_serverless_serving_approval
+    scenarios=[]
+    for version in ('v1','v2'):
+        rules={'quantity':'allocated_engine_milliseconds','allocation':'equal_billing_principal_then_request',
+               'startupBillable':False,'idleBillable':False,'queueBillable':False,
+               'failure':'observed_engine_work','cancellation':'until_engine_release',
+               'tokenRetailUsd':'0.000000','minimumBillableMillis':0}
+        if version=='v2':
+            rules.update(quantity='allocated_worker_milliseconds',startupBillable=True,idleBillable=True,
+                         cleanupBillable=True,failure='observed_worker_runtime',cancellation='until_worker_stop',
+                         supplierRounding='ceil_worker_lifetime_second_once')
+        review={'schemaVersion':f'openpond.serverlessServingReview.{version}','teamId':TEAM,
+                'modelProjectId':f['modelProjectId'],'versionHash':query['versionHash'],
+                'artifact':f['request']['artifact'],'baseProfileId':'profile-fixture',
+                'workerImageDigest':'sha256:'+'a'*64,'providerConfigurationHash':'b'*64,
+                'price':{'schemaVersion':'openpond.computeAppliedPrice.v1','service':'model_serving',
+                         'version':'fixture-price','profileHash':'c'*64,'currency':'USD','unit':'resource_hour','hourlyUsd':'1.000000'},
+                'rules':rules,'workerIdleTimeoutSeconds':5,'maximumRequestMillis':540000,
+                'expiresAt':'2999-01-01T00:00:00.000Z'}
+        review['contentHash']=canonical_sha256(review)
+        approval={'schemaVersion':'openpond.serverlessServingApproval.v1','reviewHash':review['contentHash'],'customerCapUsd':'1.000000'}
+        if version=='v1':
+            with pytest.raises(ProtocolError):create_serverless_serving_approval(review,'1.000000')
+        else:assert create_serverless_serving_approval(review,'1.000000')==approval
+        request=copy.deepcopy(f['request']);request.update(idleTimeoutSeconds=5,serverlessApproval=approval)
+        reply=copy.deepcopy(f['receipt']);reply['request']=request
+        reply['control'].update(idleTimeoutSeconds=5,serverless={'schemaVersion':'openpond.serverlessServing.v1',
+            'ownerKey':'fixture-owner','review':review,'customerCapUsd':'1.000000','state':'active',
+            'quantityMicros':1000000,'chargedUsd':'0.000278','reservedUsd':'0.000000','supplierCostStatus':'reconciled'})
+        reply['contentHash']=canonical_sha256({k:v for k,v in reply.items() if k!='contentHash'})
+        invalid=copy.deepcopy(reply);invalid['control']['serverless']['review']['rules']['idleBillable']=not rules['idleBillable']
+        invalid['contentHash']=canonical_sha256({k:v for k,v in invalid.items() if k!='contentHash'})
+        scenarios.append((request,reply,invalid))
     for asynchronous in (False,True):
         state.update(serving_control_request=f['request'],serving_control_reply=f['receipt'],serving_control_calls=[],serving_control_drop=True,model_serving=f['starting'])
         if asynchronous:
@@ -807,6 +843,12 @@ def test_model_serving_activation_recovery_and_stop_in_both_clients(server):
                     state.update(serving_control_request=priced['request'],serving_control_reply=priced['receipt'],model_serving=priced['status'])
                     assert (await client.training.control_model_serving(f['modelProjectId'],priced['request']))['control']['usage']['customerCapUsd']=='1.000000'
                     assert (await client.training.model_serving(f['modelProjectId'],query))['usageBilling']['review']['contentHash']==priced['request']['usageApproval']['reviewHash']
+                    for request,reply,invalid in scenarios:
+                        state.update(serving_control_request=request,serving_control_reply=reply)
+                        assert (await client.training.control_model_serving(f['modelProjectId'],request))['control']['serverless']['review']['rules']['quantity']==reply['control']['serverless']['review']['rules']['quantity']
+                        state['serving_control_reply']=invalid
+                        with pytest.raises(ProtocolError):await client.training.control_model_serving(f['modelProjectId'],request)
+                    state['serving_control_request']=priced['request']
                     state['serving_control_reply']=priced['invalidControl']
                     with pytest.raises(ProtocolError):await client.training.control_model_serving(f['modelProjectId'],priced['request'])
                     state['model_serving']=priced['invalidStatus']
@@ -830,6 +872,12 @@ def test_model_serving_activation_recovery_and_stop_in_both_clients(server):
                 state.update(serving_control_request=priced['request'],serving_control_reply=priced['receipt'],model_serving=priced['status'])
                 assert client.training.control_model_serving(f['modelProjectId'],priced['request'])['control']['usage']['customerCapUsd']=='1.000000'
                 assert client.training.model_serving(f['modelProjectId'],query)['usageBilling']['review']['contentHash']==priced['request']['usageApproval']['reviewHash']
+                for request,reply,invalid in scenarios:
+                    state.update(serving_control_request=request,serving_control_reply=reply)
+                    assert client.training.control_model_serving(f['modelProjectId'],request)['control']['serverless']['review']['rules']['quantity']==reply['control']['serverless']['review']['rules']['quantity']
+                    state['serving_control_reply']=invalid
+                    with pytest.raises(ProtocolError):client.training.control_model_serving(f['modelProjectId'],request)
+                state['serving_control_request']=priced['request']
                 state['serving_control_reply']=priced['invalidControl']
                 with pytest.raises(ProtocolError):client.training.control_model_serving(f['modelProjectId'],priced['request'])
                 state['model_serving']=priced['invalidStatus']

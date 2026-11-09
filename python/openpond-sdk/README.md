@@ -204,6 +204,16 @@ uv run --project python/openpond-sdk pytest python/openpond-sdk/tests
 uv build --project python/openpond-sdk --no-sources
 ```
 
+For a native worker package cohort, run `tools/prepare_release.py` with
+`--output <new-candidate-directory>` and `--expected-version <version>` to retain
+the exact wheel, source distribution and source inventory. Run
+`tools/stage_worker.py` with that `--candidate`, `--expected-version`,
+`--expected-manifest-sha256` and each consumer's `--destination`. Copying the candidate verifies
+its wheel hash, complete wheel RECORD, source inventory and schema bytes
+before writing the native checksum receipt. Align the worker's explicit version
+pins and regenerate its source identity before building an image. These commands
+do not publish packages or qualify a runtime.
+
 The request and response type directories (`inputs/` and `models/`) are generated
 from the packaged `schemas.json` authority and stay out of Git. Run
 `pnpm run python:sdk:generate` before source development; `pnpm run test:python:sdk`
@@ -235,10 +245,10 @@ same artifacts with their exact source/run/version/manifest binding:
 
 ```sh
 # Run from the reviewed source ref; these are operator commands, not yet run.
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.5
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=REVIEWED_VERSION
 gh run download REVIEWED_BUILD_RUN -n ponder-python-candidate -D reviewed-python-candidate
 sha256sum reviewed-python-candidate/manifest.json
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.5 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=REVIEWED_VERSION -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
 ```
 
 The publish lane requires the `pypi-production` environment and

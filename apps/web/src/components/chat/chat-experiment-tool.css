@@ -1,0 +1,156 @@
+/* Run and result details share the sidebar's compact, flat section layout. */
+.chat-experiment-tool .model-journey-heading .training-button,
+.chat-experiment-tool .training-result-heading .training-button {
+  min-height: 28px;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.chat-experiment-tool .training-result-details {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-default);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chat-experiment-tool .training-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chat-experiment-tool .training-result-heading h3 {
+  color: var(--text-primary);
+}
+
+.chat-experiment-tool .training-result-details .model-project-page-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.chat-experiment-tool .training-result-details .model-project-page-metrics > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 35%) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 9px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-default);
+  border-radius: 0;
+  background: transparent;
+}
+
+.chat-experiment-tool .training-result-details .model-project-page-metrics > div:last-child {
+  border-bottom: 0;
+}
+.chat-experiment-tool .training-result-details .model-project-page-metrics dt {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.chat-experiment-tool .training-result-details .model-project-page-metrics dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.chat-experiment-tool .training-result-details .model-project-page-metrics small {
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.chat-experiment-tool .training-result-details > details,
+.chat-experiment-tool .model-journey-stages {
+  border-block: 1px solid var(--border-default);
+  padding-block: 12px;
+  font-size: 12px;
+}
+
+.chat-experiment-tool .training-result-details > details > summary,
+.chat-experiment-tool .model-journey-stages > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.chat-experiment-tool .training-result-details > details > summary::-webkit-details-marker,
+.chat-experiment-tool .model-journey-stages > summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-experiment-tool .training-result-details > details > summary::before,
+.chat-experiment-tool .model-journey-stages > summary::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(-45deg);
+  flex-shrink: 0;
+}
+
+.chat-experiment-tool .training-result-details > details[open] > summary::before,
+.chat-experiment-tool .model-journey-stages[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.chat-experiment-tool .training-result-details > details > summary:focus-visible,
+.chat-experiment-tool .model-journey-stages > summary:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.chat-experiment-tool .training-result-details pre {
+  max-height: 280px;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-experiment-tool .training-evidence-workspace > nav {
+  gap: 16px;
+  scrollbar-width: thin;
+}
+.chat-experiment-tool .training-evidence-workspace > nav button {
+  font-size: 12px;
+}
+.chat-experiment-tool .training-evidence-workspace > section {
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+}
+.chat-experiment-tool .training-evidence-logs {
+  margin: 0;
+  scrollbar-width: thin;
+}

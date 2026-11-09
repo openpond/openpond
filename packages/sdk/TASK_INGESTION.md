@@ -1,9 +1,5 @@
 # Add tasks to a Dataset
 
-The APIs below target the **0.12.25 source candidate**, which is not published
-yet. Registry version 0.12.24 does not include configured Dataset/named-model
-setup. Use the built candidate package until the coordinated release.
-
 
 Configure a client once in your product's server module. Submit one structured
 source event with `await addTask(task)`:

@@ -1,3 +1,8 @@
+import { cancelHostedWeightSpace } from "../training/hosted-weight-space-cancel.js";
+import { readHostedWeightSpace } from "../training/hosted-weight-space-read.js";
+import { WeightSpaceModelSaveIntentSchema } from "@openpond/contracts";
+import { createHostedWeightSpacePublication, HostedWeightSpacePublicationEnvelopeSchema } from "../training/hosted-weight-space-publication.js";
+import { HostedWeightSpaceExecutionError } from "../training/hosted-weight-space-executions.js";
 import {
   createHostedAlphaEditPublication,
   HostedAlphaEditPublicationEnvelopeSchema,
@@ -232,6 +237,12 @@ export function createReviewAndActivityTransport(deps: {
         },
       }).perform(body);
     }
+    if(action === "hosted_weight_space_cancel") return cancelHostedWeightSpace(payload,deps.store,async()=>({
+      ...await deps.resolveAccess(),teamId:await deps.teamId(),actorId:await deps.actorId(),
+    }));
+    if(action === "hosted_weight_space_read") return readHostedWeightSpace(payload,async()=>({
+      ...await deps.resolveAccess(),teamId:await deps.teamId(),actorId:await deps.actorId(),
+    }));
     if (action === "hosted_neuron_training_publication") {
       const body = HostedNeuronTrainingPublicationEnvelopeSchema.parse(payload);
       const [teamId, actorId, access] = await Promise.all([
@@ -272,6 +283,56 @@ export function createReviewAndActivityTransport(deps: {
             );
           validateReviewedEvaluationCommand({
             action: "training-neuron-training-result-save",
+            id: command.operationId,
+            actorId,
+            teamId,
+            projectId,
+            intent: retained.reviewedIntent,
+            command,
+          });
+        },
+      }).perform(body);
+    }
+    if (action === "hosted_weight_space_publication") {
+      const body = HostedWeightSpacePublicationEnvelopeSchema.parse(payload);
+      const [teamId, actorId, access] = await Promise.all([
+        deps.teamId(),
+        deps.actorId(),
+        deps.resolveAccess(),
+      ]);
+      const apiOrigin = new URL(access.apiBaseUrl).origin;
+      return createHostedWeightSpacePublication({
+        teamId,
+        actorId,
+        access,
+        currentIdentity: async () => ({
+          teamId: await deps.teamId(),
+          actorId: await deps.actorId(),
+          apiOrigin: (await deps.resolveAccess()).apiBaseUrl,
+        }),
+        assertRetained: async (command, intentHash, projectId) => {
+          const retained = await deps.store.readPendingEvaluationOperation({
+            scopeHash: contentHash({ actorId, apiOrigin, teamId, projectId }),
+            action: "training-weight-space-result-save",
+            intentHash,
+            id: command.operationId,
+          });
+          if (
+            retained.phase !== "dispatching" ||
+            contentHash(retained.command) !== contentHash(command)
+          )
+            throw new HostedWeightSpaceExecutionError(
+              "weight_space_save_review_required",
+              "Recover the original reviewed Model save before dispatch.",
+            );
+          const intent = WeightSpaceModelSaveIntentSchema.parse(retained.reviewedIntent);
+          if (contentHash(intent.account) !== contentHash({ teamId, actorId, apiOrigin }))
+            throw new HostedWeightSpaceExecutionError(
+              "weight_space_save_account_changed",
+              "Return to this Model save's original account.",
+            );
+          validateReviewedEvaluationCommand({
+            action: "training-weight-space-result-save",
             id: command.operationId,
             actorId,
             teamId,

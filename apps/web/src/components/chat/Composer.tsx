@@ -8,12 +8,13 @@ import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
 import { ChatContextPicker } from "./ChatContextPicker";
 import { ComposerResourceContext } from "./ComposerResourceContext";
-import { CHAT_CONTEXT_SELECTED, useChatContextSelection } from "../../hooks/useChatContextSelection";
+import { CHAT_CONTEXT_SELECTED, ChatContextAccountScope, useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { useComposerResourceRequests } from "./useComposerResourceRequests";
 import {
   lazy,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -309,6 +310,7 @@ export function Composer({
   const [submitIssueInitialDescription, setSubmitIssueInitialDescription] =
     useState("");
   const [submitIssueSubmitting, setSubmitIssueSubmitting] = useState(false);
+  const attachmentAccountScope = useContext(ChatContextAccountScope);
   const {
     attachmentError,
     attachments,
@@ -319,7 +321,7 @@ export function Composer({
     stageAttachmentsForSubmit,
     prepareAttachmentsForSubmit,
     restoreAttachmentPayloads,
-  } = useComposerAttachments();
+  } = useComposerAttachments(composerDraftStore, JSON.stringify([attachmentAccountScope, submissionScopeKey]));
   const attachmentRequestAppliedRef = useRef(0);
   useEffect(() => {
     if (
@@ -490,13 +492,13 @@ export function Composer({
   }
   const providerOptions = useMemo(() => {
     const options = allowedModelRefs
-      ? [...new Set(allowedModelRefs.map(ref => ref.providerId))].map(value => ({value, label:chatProviderLabel(value,providerSettings), description:undefined}))
+      ? [...new Set(allowedModelRefs.map(ref => ref.providerId))].filter(value => value !== "openpond").map(value => ({value, label:chatProviderLabel(value,providerSettings), description:undefined}))
       : providerOptionsFromSettings(providerSettings, {enabledOnly:true}).map(option => ({...option,description:undefined}));
     const scopedOptions =
       workspaceTarget.value === "cloud" && repositoryWork
         ? options.filter((option) => option.value === "openpond")
         : options;
-    const withCurrent = scopedOptions.some(
+    const withCurrent = provider === "openpond" || scopedOptions.some(
       (option) => option.value === provider
     )
       ? scopedOptions

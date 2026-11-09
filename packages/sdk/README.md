@@ -43,19 +43,11 @@ source, package, model and case identities before accepting a run.
 
 ## Next.js route handler
 
-Sandbox and model configuration are independently optional. With only `apiKey`,
-Work uses OpenPond's hosted defaults. To run tools in your installed runtime while
-keeping the hosted model, add `sandbox: { endpoint, apiKey }`. To choose a model,
-add `model: { endpoint, apiKey, model }`, where `endpoint` is an OpenAI-compatible
-Chat Completions base URL. Each override requires its own credential; credentials
-are never borrowed from another service. Both overrides together allow omitting
-the hosted `apiKey` for Work.
+With your `apiKey`, Work uses OpenPond’s hosted defaults.
 
 The customer runtime uses fresh guests for subsequent turns. Persist history and
 outputs in your application, then pass them into the next run. A failed output
-save retains the guest for recovery; retry persistence before deleting it. Hosted
-repository provisioning and spending budgets do not apply to a custom runtime.
-An optional UUID `requestId` lets an application reconcile interrupted allocations
+save retains the guest for recovery; retry persistence before deleting it. An optional UUID `requestId` lets an application reconcile interrupted allocations
 through sandbox metadata; it does not replay model or tool operations.
 
 ```ts

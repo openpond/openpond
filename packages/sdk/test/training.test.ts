@@ -774,16 +774,31 @@ describe("Training SDK contracts", () => {
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ error: "upstream unavailable" }), { status: 500 }),
       )
+      .mockResolvedValueOnce(new Response("<html>private upstream response</html>", {
+        status: 503, headers: { "content-type": "text/html; charset=utf-8" },
+      }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ job: job() }), { status: 200 }));
     const readClient = createTrainingClient({
       baseUrl: "https://api.openpond.test",
       fetch: readFetch,
     });
     await expect(readClient.getJob("job-1")).resolves.toEqual(job());
-    expect(readFetch).toHaveBeenCalledTimes(2);
+    expect(readFetch).toHaveBeenCalledTimes(3);
+
+    // HTTP failures from a proxy still carry safe diagnostics and obey read retries.
+    const missingFetch = vi.fn(async () => new Response("private upstream response", {
+      status: 404, headers: { "content-type": "text/plain; private=hidden" },
+    }));
+    const missingClient = createTrainingClient({ baseUrl: "https://api.openpond.test", fetch: missingFetch });
+    const missingError = await missingClient.getJob("job-1").catch((error: unknown) => error);
+    expect(missingError).toMatchObject({ code: "invalid_error_response", status: 404, responseMediaType: "text", retryable: false });
+    expect(JSON.stringify(missingError)).not.toContain("private");
+    expect(missingFetch).toHaveBeenCalledTimes(1);
 
     const mutationFetch = vi.fn(
-      async () => new Response(JSON.stringify({ error: "upstream unavailable" }), { status: 500 }),
+      async () => new Response("<html>private upstream response</html>", {
+        status: 503, headers: { "content-type": "text/html; private=hidden" },
+      }),
     );
     const mutationClient = createTrainingClient({
       baseUrl: "https://api.openpond.test",
@@ -796,6 +811,8 @@ describe("Training SDK contracts", () => {
     };
     await expect(mutationClient.createJob(validSubmission)).rejects.toMatchObject({
       code: "invalid_error_response",
+      status: 503,
+      responseMediaType: "html",
     });
     expect(mutationFetch).toHaveBeenCalledTimes(1);
   });

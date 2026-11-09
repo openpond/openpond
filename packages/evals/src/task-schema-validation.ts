@@ -13,13 +13,21 @@ const schemaChildren = new Set(["items", "additionalProperties", "not", "if", "t
 
 /** Bound producer-controlled JSON before hashing, schema compilation or validation. */
 export function assertBoundedTaskJson(value: unknown, maxBytes = TASK_VALUE_MAX_BYTES): void {
+  // A package/workspace is a collection of task values. Its explicitly larger
+  // byte allowance must also cover the collection's nodes, rather than applying
+  // one task's structural budget to thousands of otherwise valid task records.
+  // Even trusted local callers with unlimited file bytes retain a finite budget.
+  const units = Number.isFinite(maxBytes)
+    ? Math.max(1, Math.min(64, Math.ceil(maxBytes / TASK_VALUE_MAX_BYTES))) : 64;
+  const maxNodes = 100_000 * units;
+  const maxArrayLength = 10_000 * units;
   const pending: Array<{ value: unknown; depth: number; exit?: boolean }> = [{ value, depth: 0 }];
   const seen = new Set<object>();
   let nodes = 0;
   while (pending.length) {
     const item = pending.pop()!;
     if (item.exit) { seen.delete(item.value as object); continue; }
-    if (++nodes > 100_000 || item.depth > 48) throw new Error("task_json_complexity_exceeded");
+    if (++nodes > maxNodes || item.depth > 48) throw new Error("task_json_complexity_exceeded");
     if (item.value === null || typeof item.value === "string" || typeof item.value === "boolean") continue;
     if (typeof item.value === "number" && Number.isFinite(item.value)) continue;
     if (typeof item.value !== "object") throw new Error("task_json_value_invalid");
@@ -30,7 +38,7 @@ export function assertBoundedTaskJson(value: unknown, maxBytes = TASK_VALUE_MAX_
     if (!Array.isArray(item.value) && prototype !== Object.prototype && prototype !== null) throw new Error("task_json_object_invalid");
     if (Object.getOwnPropertySymbols(item.value).length) throw new Error("task_json_symbol_invalid");
     if (Object.hasOwn(item.value, "toJSON")) throw new Error("task_json_serializer_invalid");
-    if (Array.isArray(item.value) && (item.value.length > 10_000 || Object.keys(item.value).length !== item.value.length)) throw new Error("task_json_array_invalid");
+    if (Array.isArray(item.value) && (item.value.length > maxArrayLength || Object.keys(item.value).length !== item.value.length)) throw new Error("task_json_array_invalid");
     for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(item.value))) {
       if (descriptor.get || descriptor.set) throw new Error("task_json_accessor_invalid");
       if (Array.isArray(item.value) && key !== "length" && (!/^(0|[1-9]\d*)$/u.test(key) || Number(key) >= item.value.length)) throw new Error("task_json_array_invalid");

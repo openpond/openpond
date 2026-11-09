@@ -30,6 +30,14 @@ Implemented means an execution contract and dedicated implementation exist. Exac
 
 The implemented operation families require compatible model and runtime evidence; source implementation does not enable a disabled product workflow. Engram and neuron training currently target the pinned dense BF16 Qwen3-8B; Decision uses its separate Nimble/Qwen3.5 release. Changing the UI workflow does not change the artifact format or make an arbitrary model compatible.
 
+## Weight-space programming
+
+Weight-space programming lets the locally controlled agent inspect remote weights, write a bounded tensor program, evaluate an immutable candidate and save its parameter patch as a Model version. It is direct parameter editing; there is no adapter selector or SFT/GRPO optimizer inside the session. The checkpoint stays remote. Only bounded slices, statistics and development results return to the agent.
+
+The first source implementation targets exact dense BF16 Qwen3-8B, permits bounded reads of named parameters and writes selected MLP down-projection columns. Its Python-syntax input compiles to a limited tensor language, without arbitrary Python, imports or hidden model forwards. The current hosted dispatcher reuses one GPU-backed worker for the whole session: analysis runs on CPU and evaluation on GPU. The numerical library can run on CPU, but hosted Daytona/CPU execution is not implemented.
+
+Availability requires a qualified runtime; these source contracts do not enable paid execution. Preparation starts no compute. Start binds the original plan, price and spending limit; retrying a command retains its operation ID. Saving never activates serving. When a frozen Dataset release is declared, finalization runs the original base and selected candidate on its policy-visible inputs, then closes editing. Existing experiment scoring grades those retained outputs separately; a release reference or generated answer alone is not a quality score. Inspect the installed official CLI's `training --help` and the [weight-space agent reference](../../apps/cli/skills/openpond-cli/references/weight-space-programming.md) for the exact supported operations and limits.
+
 ## Inference interventions and inspection
 
 | Operation | What changes | Relationship to training |
