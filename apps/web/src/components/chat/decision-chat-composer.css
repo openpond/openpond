@@ -1,0 +1,80 @@
+.decision-chat-composer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.decision-chat-frame {
+  padding: 0;
+  cursor: default;
+}
+.decision-chat-fields {
+  max-height: min(46vh, 520px);
+  overflow: auto;
+  padding: 14px;
+  font-size: 13px;
+}
+.decision-chat-fields header,
+.decision-chat-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.decision-chat-fields header strong {
+  color: var(--accent-primary);
+}
+.decision-chat-fields header {
+  flex-wrap: wrap;
+}
+.decision-chat-fields fieldset {
+  border: 0;
+  padding: 0;
+  margin: 12px 0 0;
+  min-width: 0;
+}
+.decision-chat-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+.decision-chat-fields input,
+.decision-chat-fields textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+}
+.decision-chat-fields textarea {
+  resize: vertical;
+  max-height: 240px;
+}
+.decision-chat-fields .model-build-actions {
+  flex-wrap: wrap;
+}
+.decision-chat-fields .model-build-actions label {
+  flex: 1 1 130px;
+}
+.decision-chat-fields p {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.decision-chat-limits {
+  margin-top: 14px;
+}
+.decision-chat-limits summary {
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.decision-chat-controls {
+  justify-content: flex-end;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-default);
+}

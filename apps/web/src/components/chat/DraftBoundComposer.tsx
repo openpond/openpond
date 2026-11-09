@@ -1,8 +1,10 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { lazy, memo, Suspense, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type { ComposerDraftStore } from "../../lib/composer-draft-store";
 import { useComposerDraft } from "../../lib/composer-draft-store";
 import { RenderCommitBoundary } from "../../lib/render-commit-metrics";
 import { Composer, type ComposerProps } from "./Composer";
+import { isDecisionChatModel } from "../../lib/decision-chat-draft";
+const DecisionChatComposer = lazy(() => import("./DecisionChatComposer").then(module => ({ default: module.DecisionChatComposer })));
 
 export type DraftBoundComposerProps = Omit<ComposerProps, "onPromptChange" | "prompt"> & {
   draftStore: ComposerDraftStore;
@@ -55,7 +57,9 @@ const DraftComposerContent = memo(function DraftComposerContent({
   );
   return (
     <RenderCommitBoundary id="composer">
-      <Composer {...props} prompt={prompt} onPromptChange={setScopedPrompt} />
+      {isDecisionChatModel(props.provider, props.model) ? <Suspense fallback={<div className="composer" role="status">Loading Decision input…</div>}>
+        <DecisionChatComposer key={`${draftScopeKey}:${props.model}`} {...props} prompt={prompt} draftStore={draftStore} />
+      </Suspense> : <Composer {...props} prompt={prompt} onPromptChange={setScopedPrompt} />}
     </RenderCommitBoundary>
   );
 });

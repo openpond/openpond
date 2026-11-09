@@ -3,6 +3,8 @@ import { ProviderConfigSchema } from "@openpond/contracts";
 import { createTurnRunnerTestHarness, turnRunnerTestSession } from "./helpers/turn-runner-test-harness";
 import { createLocalManagedMessaging } from "../apps/server/src/runtime/task-inbox/local-managed-messaging";
 import { createLocalManagedReadiness } from "../apps/server/src/runtime/task-inbox/local-managed-readiness";
+import { event } from "../apps/server/src/utils";
+import { decisionScoreFixture } from "./helpers/decision-score-fixture";
 
 // Failure story: the relay treats an owned OpenPond tool-loop task as imported
 // history, starts another conversation, or executes a retry as another turn.
@@ -47,5 +49,45 @@ test("managed OpenPond follow-up retains canonical history and retry identity", 
     accountAvailable = false;
     await expect(messaging.send("session_test", { ...payload, idempotencyKey: "changed-account" })).rejects.toThrow("Original account changed");
     expect(requests).toHaveLength(2);
+  } finally { await harness.runner.close(); }
+});
+
+// A typed scorer must not consume old chat as an agent/compaction prompt or
+// turn an unrelated language-model reply into successful Decision inference.
+test("Decision selection sends one typed request and refuses unverified chat text", async () => {
+  const fixture = await decisionScoreFixture(), model = fixture.modelId;
+  const requests: any[] = [];
+  const harness = createTurnRunnerTestHarness({
+    sessions: [turnRunnerTestSession({ provider: "openpond", modelRef: { providerId: "openpond", modelId: model } })],
+    events: [event({ sessionId: "session_test", turnId: "old-turn", name: "assistant.delta", source: "provider", output: "Prior ordinary chat context" })],
+    dependencies: {
+      streamOpenPondHostedChatTurn: async function* (request) {
+        requests.push(request);
+        if (requests.length === 1) yield { type: "text_delta", text: "An ordinary generated answer", raw: null };
+        else yield { type: "text_delta", text: "Scores", raw: { modelId: model, decisionReceipt: await fixture.receipt({
+          schemaVersion: "openpond.decisionModelScoreRequest.v1", teamId: "team", versionHash: fixture.version.contentHash,
+          requestId: request.requestId!, ...JSON.parse(request.messages[0]!.content),
+        }) } };
+      },
+      ensureCodexRuntime: async () => { throw new Error("A Decision score cannot substitute a native assistant."); },
+    },
+  });
+  const prompt = JSON.stringify({ input: { state: { signal: "blue" }, questions: [{ id: "route", description: "Which route?", type: "choice",
+    choices: [{ value: "left", description: "Left" }, { value: "right", description: "Right" }] }] },
+    limits: { maximumPromptTokens: 512, maximumForwardTokenWork: 2048, maximumDurationSeconds: 30 } });
+  try {
+    const result = await harness.runner.sendTurn("session_test", { prompt });
+    expect(result.status).toBe("failed");
+    expect(requests).toHaveLength(1);
+    expect(requests[0].messages).toEqual([{ role: "user", content: prompt }]);
+    expect(requests[0].requestId).toBe(result.id);
+    expect(harness.state.events.filter(row => row.turnId === result.id && row.name === "assistant.delta")).toHaveLength(0);
+    const completed = await harness.runner.sendTurn("session_test", { prompt });
+    expect(completed.status).toBe("completed");
+    expect(requests).toHaveLength(2);
+    expect(requests[1].messages).toEqual([{ role: "user", content: prompt }]);
+    const answer = harness.state.events.find(row => row.turnId === completed.id && row.name === "assistant.delta");
+    expect(answer?.data?.decisionScore).toMatchObject({ version: { contentHash: fixture.version.contentHash },
+      result: { distributions: [{ questionId: "route", candidates: [{ value: "left", probability: 0.5 }, { value: "right", probability: 0.5 }] }] } });
   } finally { await harness.runner.close(); }
 });

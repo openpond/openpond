@@ -68,6 +68,11 @@ test("recovers scoped drafts and tabs without reviving cleared state", () => {
   } as Storage;
   const oldStore = createComposerDraftStore();
   oldStore.set("New task draft");
+  const decisionId = `managed-decision:${"a".repeat(64)}`;
+  const decisionDraft = { stateJson: '{"unfinished":', questions: [],
+    limits: { maximumPromptTokens: "512", maximumForwardTokenWork: "2048", maximumDurationSeconds: "30" } };
+  oldStore.setDecisionDraftForScope("new-chat", decisionId, decisionDraft);
+  oldStore.setDecisionDraftForScope("session:decision-only", decisionId, decisionDraft);
   oldStore.applyAppAction({ type: "selectSession", sessionId: "chat-1" });
   oldStore.set("Unsent chat reply");
   const contexts = [{scopeId:"experiment-one",selectionVersion:7,resources:[{kind:"dataset" as const,id:"quotes",revision:3}]}];
@@ -86,6 +91,11 @@ test("recovers scoped drafts and tabs without reviving cleared state", () => {
   const newStore = createComposerDraftStore(undefined, restored);
   expect(restoreDesktopUpdateDrafts(storage)).toEqual(restored);
   expect(newStore.getSnapshot()).toBe("New task draft");
+  expect(newStore.getDecisionDraft("new-chat", decisionId)).toEqual(decisionDraft);
+  expect(newStore.getDecisionDraft("new-chat", `managed-decision:${"b".repeat(64)}`)).toBeNull();
+  expect(newStore.getDecisionDraft("session:decision-only", decisionId)).toEqual(decisionDraft);
+  newStore.setDecisionDraftForScope("session:decision-only", decisionId, null);
+  expect(newStore.getDecisionDraft("new-chat", decisionId)).toEqual(decisionDraft);
   newStore.applyAppAction({ type: "selectSession", sessionId: "chat-1" });
   expect(newStore.getSnapshot()).toBe("Unsent chat reply");
   expect(newStore.resourceContexts.get("session:chat-1")).toEqual(contexts);

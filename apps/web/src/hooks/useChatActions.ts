@@ -1,4 +1,5 @@
 import { preferredChatModel, rememberChatSelection } from "../lib/chat-selection-preference";
+import { decisionChatPromptForDisplay } from "../lib/decision-chat-draft";
 import { useRef, type Dispatch, type SetStateAction } from "react";
 import type {
   BootstrapPayload,
@@ -1104,7 +1105,7 @@ export function useChatActions({
                 ...(sessionCommandAccessMode
                   ? { openPondCommandAccessMode: sessionCommandAccessMode }
                   : {}),
-                autoTitlePrompt: sessionAutoTitlePrompt(value),
+                autoTitlePrompt: sessionAutoTitlePrompt(decisionChatPromptForDisplay(providerForTurn, modelForTurnValue, value)),
               }
             : {
                 experience: experienceForTurn,
@@ -1153,7 +1154,7 @@ export function useChatActions({
                         ? { metadata: options.sessionMetadata }
                         : {}),
                     }),
-                autoTitlePrompt: sessionAutoTitlePrompt(value),
+                autoTitlePrompt: sessionAutoTitlePrompt(decisionChatPromptForDisplay(providerForTurn, modelForTurnValue, value)),
               }
         );
         setSessions((current) => [session!, ...current]);
@@ -1210,7 +1211,7 @@ export function useChatActions({
       pendingUserMessage = createPendingUserChatMessage({
         afterMessageId: turnChatMessages.at(-1)?.id ?? null,
         attachments,
-        content: value,
+        content: decisionChatPromptForDisplay(providerForTurn, modelForTurnValue, value),
         sessionId: session.id,
       });
       clearPromptForTurn();
