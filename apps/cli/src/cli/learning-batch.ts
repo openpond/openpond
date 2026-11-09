@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ReleaseIdSchema } from "@openpond/harness";
+import { trainingCliError } from "./common/training-error";
 import {
   assertLearningRequestJson,
   LearningCommandSchema,
@@ -18,7 +19,7 @@ export const LearningCliBatchSchema = z.array(z.discriminatedUnion("action", [
 type BatchResult = { index: number } & (
   | { status: "not_started" }
   | { status: "completed"; result: unknown }
-  | { status: "request_failed"; error: { code: string; message: string } }
+  | { status: "request_failed"; error: { code: string; message: string; status?: number; retryable?: boolean; requestId?: string | null } }
 );
 
 /** Validate every operation before dispatch. A failed request stops new work,
@@ -46,10 +47,13 @@ export async function executeLearningCliBatch(
         results[index] = { index, status: "completed", result };
       } catch (error) {
         failed = true;
-        results[index] = { index, status: "request_failed", error: {
+        const diagnostic = trainingCliError(error) ?? {
           code: error instanceof Error && "code" in error && typeof error.code === "string"
             ? error.code : "learning_request_failed",
-          message: (error instanceof Error ? error.message : String(error)).slice(0, 1000),
+          message: error instanceof Error ? error.message : String(error),
+        };
+        results[index] = { index, status: "request_failed", error: {
+          ...diagnostic, message: diagnostic.message.slice(0, 1000),
         } };
       }
     }
