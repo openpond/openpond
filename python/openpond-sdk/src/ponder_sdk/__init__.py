@@ -17,7 +17,7 @@ from .decision_serving_identity import (
     parse_decision_model_score_request, resolved_decision_selection, verify_resolved_decision_selection,
     verify_decision_model_score_receipt, verify_decision_model_serving, verify_decision_serving_control,
 )
-__version__='0.1.5'
+__version__='0.1.6'
 __all__ = [
     'Client', 'AsyncClient', 'PonderError', 'ProtocolError', 'canonical_json', 'canonical_sha256', 'models', 'inputs',
     'DecisionOperationExpectation', 'DecisionScoreAdmissionExpectation',

@@ -1,12 +1,8 @@
 # Use OpenPond in your product
 
-The APIs below target the **0.12.25 source candidate**, which is not published
-yet. Registry version 0.12.24 does not include configured Dataset/named-model
-setup. Use the built candidate package until the coordinated release.
-
 
 Configure one application-owned server client. Bind aliases to exact callable
-Model IDs from your serving destination:
+Model IDs from your OpenPond workspace:
 
 ```ts
 import { createOpenPondClient } from "openpond-sdk";

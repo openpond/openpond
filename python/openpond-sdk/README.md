@@ -3,18 +3,11 @@
 Native synchronous and asynchronous access to existing OpenPond training,
 evaluation, dataset and continual-learning APIs. Python3.10+; no Node subprocess,
 Desktop application, or uv installation is required to use the installed wheel.
-Distribution `ponder-sdk`, import `ponder_sdk`, candidate version0.1.5. Name and
-publisher ownership must be verified before publication; this source is not a
-claim that a registry release exists.
+Distribution `ponder-sdk`, import `ponder_sdk`. The examples below use the 0.1.6 API.
 
 ```sh
-python -m pip install ./dist/ponder_sdk-0.1.5-py3-none-any.whl
+python -m pip install "ponder-sdk>=0.1.6"
 ```
-
-Version 0.1.5 is an unpublished source candidate; the registry currently has
-0.1.4. The configured Dataset and named-model examples below require the
-candidate wheel or its eventual release. Build a reviewed wheel with `uv build`
-before installing from the local `dist` directory.
 
 Use an existing workspace API key. The SDK connects to OpenPond automatically. Do not put
 credentials in source or request URLs. The SDK does not perform a second login.
@@ -215,8 +208,8 @@ For a native worker package cohort, run `tools/prepare_release.py` with
 `--output <new-candidate-directory>` and `--expected-version <version>` to retain
 the exact wheel, source distribution and source inventory. Run
 `tools/stage_worker.py` with that `--candidate`, `--expected-version`,
-`--expected-manifest-sha256` and each consumer's `--destination`. Staging checks
-the candidate's wheel hash, complete wheel RECORD, source inventory and schema bytes
+`--expected-manifest-sha256` and each consumer's `--destination`. Copying the candidate verifies
+its wheel hash, complete wheel RECORD, source inventory and schema bytes
 before writing the native checksum receipt. Align the worker's explicit version
 pins and regenerate its source identity before building an image. These commands
 do not publish packages or qualify a runtime.
@@ -252,10 +245,10 @@ same artifacts with their exact source/run/version/manifest binding:
 
 ```sh
 # Run from the reviewed source ref; these are operator commands, not yet run.
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=0.1.5
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=build -f version=REVIEWED_VERSION
 gh run download REVIEWED_BUILD_RUN -n ponder-python-candidate -D reviewed-python-candidate
 sha256sum reviewed-python-candidate/manifest.json
-gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=0.1.5 -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
+gh workflow run release-python-sdk.yml --ref REVIEWED_REF -f mode=publish -f version=REVIEWED_VERSION -f candidate_run_id=REVIEWED_BUILD_RUN -f candidate_sha=REVIEWED_40_CHARACTER_COMMIT -f manifest_sha256=REVIEWED_MANIFEST_SHA256
 ```
 
 The publish lane requires the `pypi-production` environment and

@@ -21,7 +21,9 @@ export function ModelServingControlDialog({
   onClose(): void;
 }) {
   const saved = useModelServingControl(api, version.modelProjectId, value);
-  const serverless = version.schemaVersion === "openpond.trainingModelVersion.v1";
+  const retained = saved.retained?.command.request;
+  const serverless = version.schemaVersion === "openpond.trainingModelVersion.v1" &&
+    (!retained || ("serverlessApproval" in retained && Boolean(retained.serverlessApproval)));
   const idle = serverless ? SERVERLESS_SERVING_IDLE_SECONDS : MODEL_SERVING_IDLE_TIMEOUT_SECONDS;
   const [spendingLimit, setSpendingLimit] = useState("");
   const availableReview = value?.schemaVersion === "openpond.trainingModelServing.v1" ? value.serverlessReview : null;
@@ -32,8 +34,7 @@ export function ModelServingControlDialog({
         ? value.defaultPublication !== null
         : true,
   );
-  const retained = saved.retained?.command.request,
-    actual = retained?.action ?? action;
+  const actual = retained?.action ?? action;
   const acceptedReview = value?.schemaVersion === "openpond.trainingModelServing.v1" ? value.control?.serverless?.review : null;
   const retainedReviewHash = retained && "serverlessApproval" in retained ? retained.serverlessApproval?.reviewHash : null;
   const serverlessReview = retainedReviewHash ? [acceptedReview, availableReview].find(review => review?.contentHash === retainedReviewHash) : availableReview;
