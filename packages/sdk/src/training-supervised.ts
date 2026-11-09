@@ -19,6 +19,13 @@ export const SftRecipeSchema = z.object({
   dataset: z.object({
     trainSplit: z.literal("train"),
     validationSplit: z.enum(["validation", "frozen_eval"]),
+    /** Exact bounded optimizer evaluation membership in the pinned held-out source. */
+    validationTaskIds: z
+      .array(Id)
+      .min(1)
+      .max(1000)
+      .refine((ids) => new Set(ids).size === ids.length, "Validation task IDs must be unique.")
+      .optional(),
     completionOnly: z.boolean(),
     maxSequenceLength: z.number().int().positive().max(32_768),
     maxExamples: z.number().int().positive().max(100_000).default(1_000),
@@ -46,6 +53,27 @@ export const SftRecipeSchema = z.object({
   }),
 });
 export type SftRecipe = z.infer<typeof SftRecipeSchema>;
+
+/** Membership is explicit; missing, duplicate or wrong-split tasks never widen to all held-out rows. */
+export function selectSftValidationTasks<T extends { id: string; split: string }>(
+  tasks: readonly T[],
+  selection: Pick<SftRecipe["dataset"], "validationSplit" | "validationTaskIds">,
+): T[] {
+  const candidates = tasks.filter((task) => task.split === selection.validationSplit);
+  if (selection.validationTaskIds === undefined) return candidates;
+  const ids = SftRecipeSchema.shape.dataset.shape.validationTaskIds.parse(
+    selection.validationTaskIds,
+  )!;
+  const byId = new Map(candidates.map((task) => [task.id, task]));
+  if (byId.size !== candidates.length)
+    throw new Error("Validation task identities must be unique.");
+  return ids.map((id) => {
+    const task = byId.get(id);
+    if (!task)
+      throw new Error("A selected validation task is absent from the pinned held-out split.");
+    return task;
+  });
+}
 
 /** Managed authoring ceiling. An immutable worker's advertised SFT envelope
  * may be smaller and must also admit the recipe before paid execution.
@@ -97,34 +125,43 @@ export const ManagedSftRecipeSchema = SftRecipeSchema.safeExtend({
 /** Image-specific support, rather than the broad managed authoring ceiling.
  * Receipt identity belongs to the server's reviewed immutable-image registry.
  */
-export const TrainingSftImageCapabilitiesSchema = z.object({
-  schemaVersion: z.literal("openpond.managedSftImageSupport.v2"),
-  workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  workerSourceReleaseSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  baseModel: SftRecipeSchema.shape.baseModel,
-  gpuCount: z.literal(1),
-  supportedRanks: z.array(z.number().int().min(1).max(64)).min(1).max(64),
-  maxSequenceLength: z.number().int().min(2).max(8192),
-  maxEpochs: z.number().positive().max(20),
-  maxOptimizerSteps: z.number().int().min(1).max(400),
-  evidenceRef: z.string().trim().min(1).max(2048),
-  evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/),
-}).strict().superRefine((value, context) => {
-  if (new Set(value.supportedRanks).size !== value.supportedRanks.length)
-    context.addIssue({code: "custom", path: ["supportedRanks"], message: "Supported ranks must be unique."});
-});
+export const TrainingSftImageCapabilitiesSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.managedSftImageSupport.v2"),
+    workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    workerSourceReleaseSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    baseModel: SftRecipeSchema.shape.baseModel,
+    gpuCount: z.literal(1),
+    supportedRanks: z.array(z.number().int().min(1).max(64)).min(1).max(64),
+    maxSequenceLength: z.number().int().min(2).max(8192),
+    maxEpochs: z.number().positive().max(20),
+    maxOptimizerSteps: z.number().int().min(1).max(400),
+    evidenceRef: z.string().trim().min(1).max(2048),
+    evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Set(value.supportedRanks).size !== value.supportedRanks.length)
+      context.addIssue({
+        code: "custom",
+        path: ["supportedRanks"],
+        message: "Supported ranks must be unique.",
+      });
+  });
 export type TrainingSftImageCapabilities = z.infer<typeof TrainingSftImageCapabilitiesSchema>;
 
 export function supportsTrainingSftRecipe(
   image: TrainingSftImageCapabilities,
   recipe: SftRecipe,
 ): boolean {
-  return image.baseModel.id === recipe.baseModel.id &&
+  return (
+    image.baseModel.id === recipe.baseModel.id &&
     image.baseModel.revision === recipe.baseModel.revision &&
     image.baseModel.tokenizerRevision === recipe.baseModel.tokenizerRevision &&
     image.baseModel.chatTemplateHash === recipe.baseModel.chatTemplateHash &&
     image.supportedRanks.includes(recipe.lora.rank) &&
     recipe.dataset.maxSequenceLength <= image.maxSequenceLength &&
     recipe.optimizer.epochs <= image.maxEpochs &&
-    recipe.optimizer.maxSteps <= image.maxOptimizerSteps;
+    recipe.optimizer.maxSteps <= image.maxOptimizerSteps
+  );
 }

@@ -58,16 +58,36 @@ export * from "./engram-model-version.js";
 export * from "./engram-experiment-authoring.js";
 export * from "./experiment-draft-storage.js";
 import { createTrainingExecutionClient } from "./training-executions.js";
-export { TrainingExecutionSummarySchema, TrainingExecutionPageSchema, TrainingExecutionListQuerySchema, type TrainingExecutionSummary, type TrainingExecutionPage, type TrainingExecutionListQuery } from "./training-executions.js";
+export {
+  TrainingExecutionSummarySchema,
+  TrainingExecutionPageSchema,
+  TrainingExecutionListQuerySchema,
+  type TrainingExecutionSummary,
+  type TrainingExecutionPage,
+  type TrainingExecutionListQuery,
+} from "./training-executions.js";
 import { createTrainingRequest } from "./training-transport.js";
-export { SftRecipeSchema, ManagedSftRecipeSchema, TrainingSftImageCapabilitiesSchema,
-  supportsTrainingSftRecipe, type SftRecipe, type TrainingSftImageCapabilities } from "./training-supervised.js";
+export {
+  SftRecipeSchema,
+  ManagedSftRecipeSchema,
+  selectSftValidationTasks,
+  TrainingSftImageCapabilitiesSchema,
+  supportsTrainingSftRecipe,
+  type SftRecipe,
+  type TrainingSftImageCapabilities,
+} from "./training-supervised.js";
 export { TrainingApiErrorSchema, OpenPondTrainingApiError } from "./training-transport.js";
 import { createTrainingAcceptanceClient } from "./training-acceptance.js";
 import { createTrainingHardwareClient } from "./training-hardware.js";
-export { HardwareObservationSchema, HardwareFleetSnapshotSchema,
-  HardwareAvailabilitySchema, HardwareGpuObservationSchema,
-  type HardwareObservation, type HardwareFleetSnapshot, type HardwareObservationQuery } from "./training-hardware.js";
+export {
+  HardwareObservationSchema,
+  HardwareFleetSnapshotSchema,
+  HardwareAvailabilitySchema,
+  HardwareGpuObservationSchema,
+  type HardwareObservation,
+  type HardwareFleetSnapshot,
+  type HardwareObservationQuery,
+} from "./training-hardware.js";
 import { createPostTrainingClient } from "./post-training.js";
 export {
   TrainingAcceptanceGroupReferenceSchema,
@@ -82,18 +102,28 @@ export {
 } from "./training-acceptance.js";
 import { z } from "zod";
 import { TrainingCheckpointRecoveryRequestSchema } from "./training-recovery.js";
-export { TrainingCheckpointRecoveryRequestSchema, TrainingCheckpointRecoveryResourceApprovalSchema,
-  createTrainingCheckpointRecoveryResourceApproval } from "./training-recovery.js";
-export { TrainingPhysicalPlacementSchema, type TrainingPhysicalPlacement } from "./training-physical-placement.js";
+export {
+  TrainingCheckpointRecoveryRequestSchema,
+  TrainingCheckpointRecoveryResourceApprovalSchema,
+  createTrainingCheckpointRecoveryResourceApproval,
+} from "./training-recovery.js";
+export {
+  TrainingPhysicalPlacementSchema,
+  type TrainingPhysicalPlacement,
+} from "./training-physical-placement.js";
 import { createTrainingPreparationClient } from "./training-preparations.js";
 import { createTrainingExperimentLearningClient } from "./training-experiment-learning.js";
 export * from "./training-experiment-learning.js";
 import { createTrainingExperimentSetupClient } from "./training-experiment-setup.js";
 export {
-  TrainingExperimentSetupRequestSchema, TrainingExperimentSetupReceiptSchema,
-  TrainingExperimentInputsPageSchema, type TrainingExperimentInputsPage,
-  parseAndVerifyTrainingExperimentSetupReceipt, trainingExperimentConfigurationIdentity,
-  type TrainingExperimentSetupRequest, type TrainingExperimentSetupReceipt,
+  TrainingExperimentSetupRequestSchema,
+  TrainingExperimentSetupReceiptSchema,
+  TrainingExperimentInputsPageSchema,
+  type TrainingExperimentInputsPage,
+  parseAndVerifyTrainingExperimentSetupReceipt,
+  trainingExperimentConfigurationIdentity,
+  type TrainingExperimentSetupRequest,
+  type TrainingExperimentSetupReceipt,
 } from "./training-experiment-setup.js";
 import { createTrainingEstimateClient } from "./training-estimates.js";
 import { createTrainingFundingClient } from "./training-funding.js";
@@ -127,8 +157,15 @@ export * from "./dataset-training-review.js";
 import { createTrainingGpuCatalogClient } from "./training-compute-selection.js";
 import { createTrainingHardwareCatalogClient } from "./training-hardware-catalog.js";
 export * from "./training-hardware-catalog.js";
-export { TrainingGpuCatalogSchema, TrainingGpuCatalogQuerySchema, TrainingGpuCatalogScopeSchema,
-  parseAndVerifyTrainingGpuCatalog, type TrainingGpuCatalog, type TrainingGpuCatalogQuery, type TrainingGpuCatalogScope } from "./training-compute-selection.js";
+export {
+  TrainingGpuCatalogSchema,
+  TrainingGpuCatalogQuerySchema,
+  TrainingGpuCatalogScopeSchema,
+  parseAndVerifyTrainingGpuCatalog,
+  type TrainingGpuCatalog,
+  type TrainingGpuCatalogQuery,
+  type TrainingGpuCatalogScope,
+} from "./training-compute-selection.js";
 export { TrainingQueueStatusSchema, type TrainingQueueStatus } from "./training-queue.js";
 export {
   TrainingGpuSelectionSchema,
@@ -216,10 +253,16 @@ export {
 } from "./protocol.js";
 
 import {
-  TrainingCapabilitiesSchema, TrainingInputArtifactSchema, TrainingJobSchema, TrainingJobPageSchema,
-  TrainingJobControlRequestSchema, TrainingJobOutputsSchema,
-  parseAndVerifyTrainingInputArtifactUpload, parseAndVerifyTrainingJobSubmission,
-  type TrainingInputArtifactUpload, type TrainingJobSubmission,
+  TrainingCapabilitiesSchema,
+  TrainingInputArtifactSchema,
+  TrainingJobSchema,
+  TrainingJobPageSchema,
+  TrainingJobControlRequestSchema,
+  TrainingJobOutputsSchema,
+  parseAndVerifyTrainingInputArtifactUpload,
+  parseAndVerifyTrainingJobSubmission,
+  type TrainingInputArtifactUpload,
+  type TrainingJobSubmission,
 } from "./training-job-contracts.js";
 export * from "./training-job-contracts.js";
 export * from "./training-usage-status.js";
@@ -355,17 +398,28 @@ export function createTrainingClient(input: {
         ),
       );
     },
-    async recoverCheckpoint(jobId: string, input: z.input<typeof TrainingCheckpointRecoveryRequestSchema>) {
+    async recoverCheckpoint(
+      jobId: string,
+      input: z.input<typeof TrainingCheckpointRecoveryRequestSchema>,
+    ) {
       const recovery = TrainingCheckpointRecoveryRequestSchema.parse(input);
       if (recovery.resourceApproval) {
         const { approvalHash, ...body } = recovery.resourceApproval;
-        if (body.sourceJobId !== jobId || await canonicalSha256(body) !== approvalHash)
-          throw new OpenPondProtocolError("content_hash_mismatch", "Recovery resource approval does not bind this source request.");
+        if (body.sourceJobId !== jobId || (await canonicalSha256(body)) !== approvalHash)
+          throw new OpenPondProtocolError(
+            "content_hash_mismatch",
+            "Recovery resource approval does not bind this source request.",
+          );
       }
-      return TrainingJobSchema.parse(unwrapObject(await request(
-        `/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/recover`,
-        { method: "POST", body: JSON.stringify(recovery) },
-      ), "job"));
+      return TrainingJobSchema.parse(
+        unwrapObject(
+          await request(`/v1/training/jobs/${encodeURIComponent(IdSchema.parse(jobId))}/recover`, {
+            method: "POST",
+            body: JSON.stringify(recovery),
+          }),
+          "job",
+        ),
+      );
     },
     async outputs(jobId: string) {
       return TrainingJobOutputsSchema.parse(
@@ -400,7 +454,6 @@ export function createTrainingClient(input: {
         { jobId: id, evaluation: reference, offset },
       );
     },
-
   };
 }
 
@@ -409,10 +462,28 @@ function unwrapObject(value: unknown, key: string): unknown {
   return key in value ? (value as Record<string, unknown>)[key] : value;
 }
 
-export { ExperimentDraftSchema, ModelSetupDraftSchema, assertModelSetupExecutionIntent, parseAndVerifyExperimentDraft, ExperimentOperationTypeSchema, ExperimentStartingModelSchema, parseAndVerifyExperimentStartingModel, experimentOperationLabel, type ExperimentDraft, type ModelSetupDraft, type ExperimentOperationType, type ExperimentStartingModel } from "./training-experiment-setup.js";
+export {
+  ExperimentDraftSchema,
+  ModelSetupDraftSchema,
+  assertModelSetupExecutionIntent,
+  parseAndVerifyExperimentDraft,
+  ExperimentOperationTypeSchema,
+  ExperimentStartingModelSchema,
+  parseAndVerifyExperimentStartingModel,
+  experimentOperationLabel,
+  type ExperimentDraft,
+  type ModelSetupDraft,
+  type ExperimentOperationType,
+  type ExperimentStartingModel,
+} from "./training-experiment-setup.js";
 export * from "./activation-experiment-draft.js";
 
-export { TrainingExperimentFormDraftSchema, ExperimentDraftUpdateSchema, type TrainingExperimentFormDraft, type ExperimentDraftUpdate } from "./training-experiment-setup.js";
+export {
+  TrainingExperimentFormDraftSchema,
+  ExperimentDraftUpdateSchema,
+  type TrainingExperimentFormDraft,
+  type ExperimentDraftUpdate,
+} from "./training-experiment-setup.js";
 export * from "./evaluation-experiment-draft.js";
 export * from "./managed-modification-executions.js";
 export * from "./activation-form-compiler.js";
