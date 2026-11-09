@@ -136,7 +136,7 @@ function ModelTrainingJourneyContent({
               <TrainingMetricWorkbench series={metricSeries} />
             ) : (
               <p className="model-journey-metrics-empty">
-                {flow?.live || ["queued", "admitted", "running"].includes(job?.state ?? "")
+                {flow?.live || (job && !["succeeded", "failed", "cancelled"].includes(job.state))
                   ? "Metrics will appear when training reports its first results."
                   : "No chartable metrics were reported for this selection."}
               </p>
