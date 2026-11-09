@@ -69,6 +69,16 @@ export function ComposerAttachmentPreview({
   onRemove: () => void;
 }) {
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(attachment.previewUrl);
+  useEffect(() => {
+    if (attachment.previewUrl || attachment.kind !== "image") {
+      setPreviewUrl(attachment.previewUrl);
+      return;
+    }
+    const url = URL.createObjectURL(attachment.file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [attachment.file, attachment.kind, attachment.previewUrl]);
   const previewButtonRef = useRef<HTMLButtonElement>(null);
   const closePreview = useCallback(() => {
     setPreviewOpen(false);
@@ -91,7 +101,7 @@ export function ComposerAttachmentPreview({
   const showMeta = attachment.kind !== "image";
   return (
     <div className={`composer-attachment-card ${attachment.kind}`}>
-      {attachment.kind === "image" && attachment.previewUrl ? (
+      {attachment.kind === "image" && previewUrl ? (
         <button
           ref={previewButtonRef}
           type="button"
@@ -100,7 +110,7 @@ export function ComposerAttachmentPreview({
           title={`Preview ${attachment.name}`}
           onClick={() => setPreviewOpen(true)}
         >
-          <img alt="" decoding="async" src={attachment.previewUrl} />
+          <img alt="" decoding="async" src={previewUrl} />
         </button>
       ) : (
         <div className="composer-attachment-thumb" aria-hidden="true">
@@ -109,7 +119,7 @@ export function ComposerAttachmentPreview({
       )}
       <ImageLightbox
         open={previewOpen}
-        src={attachment.previewUrl ?? null}
+        src={previewUrl ?? null}
         title={attachment.name}
         onClose={closePreview}
       />

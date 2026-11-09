@@ -19,7 +19,22 @@ import { createTrainingClient } from "openpond-sdk/training";
 import { readAccountBalance } from "./account.js";
 import type { OpenPondMcpOptions } from "./types.js";
 
-export function createClients(options: OpenPondMcpOptions) {
+export type Clients = {
+  accountBalance: () => ReturnType<typeof readAccountBalance>;
+  projects: OpenPondTrainingProjectClient;
+  datasets: OpenPondDatasetWorkspaceClient;
+  population: OpenPondDatasetPopulationClient;
+  tasksets: OpenPondTasksetCatalogClient;
+  packages: OpenPondTasksetPackageClient;
+  graders: OpenPondGraderInspectionClient;
+  experiments: OpenPondExperimentsClient;
+  cases: OpenPondExperimentInspectionClient;
+  corrections: OpenPondCorrectionMetricsClient;
+  models: ReturnType<typeof createModelProjectsClient>;
+  training: ReturnType<typeof createTrainingClient>;
+  learning: OpenPondLearningClient;
+};
+export function createClients(options: OpenPondMcpOptions): Clients {
   const origin = new URL(options.baseUrl);
   if (
     !["https:", "http:"].includes(origin.protocol) ||
@@ -80,4 +95,3 @@ export function createClients(options: OpenPondMcpOptions) {
     learning: new OpenPondLearningClient({ ...config, scope: options.context.teamId }),
   };
 }
-export type Clients = ReturnType<typeof createClients>;

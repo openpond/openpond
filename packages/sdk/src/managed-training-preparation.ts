@@ -1,9 +1,15 @@
-import { ManagedSftRecipeSchema } from "./training-supervised.js";
+import { ManagedSftRecipeSchema, selectSftValidationTasks } from "./training-supervised.js";
 import { contentHash, sha256 } from "@openpond/harness";
 import { TrainingHandoffOriginSchema, type TrainingHandoffOrigin } from "./post-training.js";
 import { z } from "zod";
-import { TrainingPhysicalPlacementSchema, type TrainingPhysicalPlacement } from "./training-physical-placement.js";
-import { TrainingGpuSelectionSchema, type TrainingGpuSelection } from "./training-compute-selection.js";
+import {
+  TrainingPhysicalPlacementSchema,
+  type TrainingPhysicalPlacement,
+} from "./training-physical-placement.js";
+import {
+  TrainingGpuSelectionSchema,
+  type TrainingGpuSelection,
+} from "./training-compute-selection.js";
 
 import type { ModelProject } from "./model-projects.js";
 import {
@@ -62,20 +68,46 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
   const manifest = HarnessRunManifestSchema.parse(input.manifest);
   const bundle = ResolvedTrainingBundleManifestSchema.parse(input.bundleManifest);
   const qualification = input.executionMode === "qualification";
-  const gpuSelection = (input.gpuSelection ?? project.trainingSetup.managedGpuSelection)
-    ? TrainingGpuSelectionSchema.parse(input.gpuSelection ?? project.trainingSetup.managedGpuSelection) : undefined;
+  const gpuSelection =
+    (input.gpuSelection ?? project.trainingSetup.managedGpuSelection)
+      ? TrainingGpuSelectionSchema.parse(
+          input.gpuSelection ?? project.trainingSetup.managedGpuSelection,
+        )
+      : undefined;
   const physicalPlacement = input.physicalPlacement
-    ? TrainingPhysicalPlacementSchema.parse(input.physicalPlacement) : undefined;
-  const qualificationGroupSize = manifest.qualificationSamples === undefined ? null
-    : z.object({ rollout: z.object({ groupSize: z.number().int().min(2).max(32) }).passthrough() }).passthrough().parse(recipe).rollout.groupSize;
-  if (manifest.qualificationSamples !== bundle.qualificationSamples || (manifest.qualificationSamples !== undefined && (!qualification || manifest.qualificationSamples > qualificationGroupSize!))) {
-    throw new Error("Qualification samples must be within the pinned rollout group and cannot be used for training.");
+    ? TrainingPhysicalPlacementSchema.parse(input.physicalPlacement)
+    : undefined;
+  const qualificationGroupSize =
+    manifest.qualificationSamples === undefined
+      ? null
+      : z
+          .object({
+            rollout: z.object({ groupSize: z.number().int().min(2).max(32) }).passthrough(),
+          })
+          .passthrough()
+          .parse(recipe).rollout.groupSize;
+  if (
+    manifest.qualificationSamples !== bundle.qualificationSamples ||
+    (manifest.qualificationSamples !== undefined &&
+      (!qualification || manifest.qualificationSamples > qualificationGroupSize!))
+  ) {
+    throw new Error(
+      "Qualification samples must be within the pinned rollout group and cannot be used for training.",
+    );
   }
-  if (manifest.executionMode !== input.executionMode || bundle.executionMode !== input.executionMode) {
+  if (
+    manifest.executionMode !== input.executionMode ||
+    bundle.executionMode !== input.executionMode
+  ) {
     throw new Error("Managed submission execution mode differs from its immutable bundle.");
   }
-  if (qualification && (input.evaluationSource || input.resumeFrom || input.rewardSource.kind !== "deterministic")) {
-    throw new Error("Qualification requires the original learner, deterministic rewards, and no evaluation source.");
+  if (
+    qualification &&
+    (input.evaluationSource || input.resumeFrom || input.rewardSource.kind !== "deterministic")
+  ) {
+    throw new Error(
+      "Qualification requires the original learner, deterministic rewards, and no evaluation source.",
+    );
   }
   const { contentHash: manifestHash, ...manifestContent } = manifest;
   const { contentHash: bundleHash, ...bundleContent } = bundle;
@@ -112,7 +144,9 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
     approval.approvalHash !== manifest.approval.approvalHash ||
     approval.maximumSpendUsd !== manifest.approval.maximumSpendUsd
   ) {
-    throw new Error("Managed training requires the exact approved supported recipe and spend ceiling.");
+    throw new Error(
+      "Managed training requires the exact approved supported recipe and spend ceiling.",
+    );
   }
   if (recipe.method === "sft") {
     const supervised = ManagedSftRecipeSchema.parse(recipe);
@@ -133,19 +167,46 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
   if (input.idempotencyKey !== undefined)
     z.string().trim().min(16).max(191).parse(input.idempotencyKey);
   const files = verifyFiles(bundle, input.files);
-  const evaluationSource = qualification ? null : TrainingEvaluationSourceSchema.parse(input.evaluationSource);
+  const evaluationSource = qualification
+    ? null
+    : TrainingEvaluationSourceSchema.parse(input.evaluationSource);
+  if (recipe.method === "sft" && evaluationSource) {
+    const dataset = ManagedSftRecipeSchema.parse(recipe).dataset;
+    if (
+      selectSftValidationTasks(evaluationSource.tasks, dataset).length !==
+      evaluationSource.tasks.length
+    )
+      throw new Error(
+        "The evaluation artifact must contain exactly the selected SFT validation tasks.",
+      );
+  }
   const evaluationFile = files.find((file) => file.path === TRAINING_EVALUATION_SOURCE_PATH);
   if (
-    evaluationSource && (!evaluationFile ||
-    contentHash(JSON.parse(Buffer.from(evaluationFile.content, "base64").toString("utf8"))) !==
-      contentHash(evaluationSource))
+    evaluationSource &&
+    (!evaluationFile ||
+      contentHash(JSON.parse(Buffer.from(evaluationFile.content, "base64").toString("utf8"))) !==
+        contentHash(evaluationSource))
   ) {
     throw new Error("The evaluation source differs from the immutable training bundle.");
   }
-  if (qualification && (evaluationFile || files.some(file => file.path === "dataset/train.json") || !files.some(file => file.path === "dataset/qualification.json") || !files.some(file => file.path === "qualification-source.json"))) {
-    throw new Error("Qualification requires its dedicated dataset and no training/evaluation datasets.");
+  if (
+    qualification &&
+    (evaluationFile ||
+      files.some((file) => file.path === "dataset/train.json") ||
+      !files.some((file) => file.path === "dataset/qualification.json") ||
+      !files.some((file) => file.path === "qualification-source.json"))
+  ) {
+    throw new Error(
+      "Qualification requires its dedicated dataset and no training/evaluation datasets.",
+    );
   }
-  if (!qualification && files.some(file => file.path === "dataset/qualification.json" || file.path === "qualification-source.json")) {
+  if (
+    !qualification &&
+    files.some(
+      (file) =>
+        file.path === "dataset/qualification.json" || file.path === "qualification-source.json",
+    )
+  ) {
     throw new Error("Qualification datasets cannot be prepared as training.");
   }
   const evaluation = evaluationSource ? await trainingEvaluationSourceRef(evaluationSource) : null;
@@ -209,7 +270,15 @@ export async function prepareManagedTrainingSubmission(raw: ManagedTrainingPrepa
       resumeFrom: input.resumeFrom,
     },
     requestedCapabilities: [
-      { id: qualification ? "managed_rl.policy.qualification" : recipe.method === "sft" ? "managed_training.sft" : "managed_rl.policy.grpo", version: "1", required: true },
+      {
+        id: qualification
+          ? "managed_rl.policy.qualification"
+          : recipe.method === "sft"
+            ? "managed_training.sft"
+            : "managed_rl.policy.grpo",
+        version: "1",
+        required: true,
+      },
       ...(gpuSelection?.gpuCount === 2
         ? [{ id: "managed_rl.policy.data_parallel", version: "1", required: true }]
         : []),

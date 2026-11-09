@@ -10,6 +10,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeNativeAgent } from "../apps/server/src/runtime/native-agents/setup.js";
 import { nativeCapabilityProbeKey, nativeCapabilityProbeKeys } from "../apps/server/src/runtime/native-agents/capability-probes.js";
+import { createNativeQuestionTool } from "../apps/server/src/runtime/native-agents/question-tool.js";
+import { parseUserQuestionResolution, promptWithUserQuestionResolution } from "../apps/server/src/runtime/turns/user-question-resolution.js";
+import { SessionSchema } from "@openpond/contracts/sessions";
+import type { ModelToolExecutionContext } from "../apps/server/src/openpond/model-tool-registry.js";
 
 // Claude's supported auth status command exits 1 when signed out. Treating
 // that as a broken installation hides the login action from ordinary users.
@@ -67,6 +71,39 @@ it("validates native question identity and rejects duplicate or late answers", a
   await approvals.resolve(approval.id, { decision: "accept", answers: { "Which fixture?": "Alpha" } });
   expect(await pending).toEqual({ outcome: { outcome: "selected", optionId: "allow" }, answers: { "Which fixture?": "Alpha" } });
   expect(await approvals.resolve(approval.id, { decision: "accept", answers: { "Which fixture?": "Beta" } })).toBeNull();
+});
+
+// Ordinary Codex chats must wait for an actual answer, without a Plan-mode tool
+// or a session-wide permission grant; interruption must release the waiting call.
+// A native provider can finish its round while a person is away. The question
+// must survive that round/reload and resume through the existing answer path.
+it("persists native questions for validated chat continuation instead of a live RPC waiter", async () => {
+  const events: RuntimeEvent[] = [];
+  const tool = createNativeQuestionTool(async event => { events.push(event); });
+  const session = SessionSchema.parse({ id: "chat", provider: "codex", title: "Training", appId: null, appName: null,
+    cwd: null, codexThreadId: null, createdAt: "2026-11-08T00:00:00Z", updatedAt: "2026-11-08T00:00:00Z",
+    status: "active", pinned: false, archived: false, order: 0 });
+  const controller = new AbortController();
+  const context: ModelToolExecutionContext = { session, turnId: "turn", provider: "codex", model: "gpt-6.1-sol",
+    callId: "budget", args: { question: "Approve this run with a maximum spend of $25?",
+      options: [{ id: "yes", label: "Approve $25" }, { id: "no", label: "Do not start" }] },
+    signal: controller.signal, turnPermissions: { approvalPolicy: "on-request", sandbox: "workspace-write", codexPermissionMode: "default", codexReasoningEffort: "high" },
+    workspaceDiffBaseline: null, mentionedApps: [], userPrompt: "Train a model", turnMetadata: {} };
+  expect(await tool.execute(context)).toMatchObject({ ok: true, turnControl: "await_user_input" });
+  const retained: RuntimeEvent[] = JSON.parse(JSON.stringify(events));
+  const message = buildChatMessages(retained).find(item => item.userQuestion);
+  expect(message?.userQuestion).toMatchObject({ sessionId: "chat", turnId: "turn", status: "pending", allowFreeform: true });
+  const id = message!.userQuestion!.id;
+  const resolution = { questionId: id, action: "answer", optionId: null, text: "Approve $25 maximum" };
+  expect(parseUserQuestionResolution(resolution, retained)).toMatchObject(resolution);
+  expect(promptWithUserQuestionResolution("Train a model", parseUserQuestionResolution(resolution, retained))).toContain(resolution.text);
+  expect(() => parseUserQuestionResolution({ ...resolution, optionId: "foreign-option" }, retained)).toThrow("option not found");
+  expect(() => parseUserQuestionResolution({ ...resolution, questionId: "foreign-question" }, retained)).toThrow("not found");
+  retained.push({ ...retained[0]!, id: "answered", name: "user_question.answered", data: { resolution } });
+  expect(() => parseUserQuestionResolution(resolution, retained)).toThrow("already resolved");
+  controller.abort();
+  await expect(tool.execute({ ...context, callId: "cancelled-budget" })).rejects.toThrow();
+  expect(events).toHaveLength(1);
 });
 
 it("does not hide a later external turn that repeats an OpenPond-owned prompt", () => {

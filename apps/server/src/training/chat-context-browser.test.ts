@@ -20,7 +20,11 @@ test("retains an exact training target and reauthorizes it for fresh status read
   const access = { apiBaseUrl: "https://api.example.test", token: "test", teamId: "team", actorId: "actor" };
   let state = "running";
   let metadata: Record<string, unknown> = {};
-  const request = vi.fn(async () => new Response(JSON.stringify({ job: {
+  const request = vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(String(url).includes("/v1/model-projects/") ? {
+    project: {id:"model",teamId:"team",portableProjectId:"portable",name:"Test model",objective:null,defaultBaseModel:null,defaultDestinationId:null,
+      trainingSetup:{tasksetRef:null,evaluationTasksetRef:null},sourceRevision:1,sourceUpdatedAt:"2026-10-14T00:00:00.000Z",revision:1,etag:"b".repeat(64),createdAt:"2026-10-14T00:00:00.000Z",updatedAt:"2026-10-14T00:00:00.000Z"},
+    resources:[],jobCount:1,latestJobIds:["job"],
+  } : { job: {
     schemaVersion: "openpond.trainingJob.v2", id: "job", teamId: "team", kind: "policy_optimize",
     modelProjectId: "model", portableProjectId: "portable", sourceProjectRevision: 1, submissionHash: "a".repeat(64),
     state, phase: state === "running" ? "training" : "completed", version: 1, progress: state === "running" ? 0.5 : 1,

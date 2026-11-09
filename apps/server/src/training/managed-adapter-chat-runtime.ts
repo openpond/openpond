@@ -1,6 +1,7 @@
 import { isManagedSteeringChatModel, resolveManagedSteeringChat } from "./managed-steering-chat.js";
 import { isManagedEngramChatModel, resolveManagedEngramChat } from "./managed-engram-chat.js";
 import { isManagedWeightChatModel, resolveManagedWeightChat } from "./managed-weight-chat.js";
+import { acknowledgeManagedDecisionChatScore, decisionChatScoreText, isManagedDecisionChatModel, parseManagedDecisionChatInput, scoreManagedDecisionChat } from "./managed-decision-chat.js";
 import type { HostedChatMessage, HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
 import type { ManagedAdapterServingProjection, ModelBinding } from "@openpond/contracts";
 import { managedAdapterProjectionReady } from "@openpond/contracts";
@@ -52,7 +53,7 @@ export function createManagedAdapterChatRuntime(dependencies: {
     // degraded, or failed. Returning false here would silently route a
     // retired remote route through local inference, bypassing the production
     // gateway, billing, and kill switch.
-    return isManagedWeightChatModel(modelId) || isManagedSteeringChatModel(modelId) || isManagedEngramChatModel(modelId) || modelId?.startsWith("managed:") === true || Boolean(await context(modelId));
+    return isManagedDecisionChatModel(modelId) || isManagedWeightChatModel(modelId) || isManagedSteeringChatModel(modelId) || isManagedEngramChatModel(modelId) || modelId?.startsWith("managed:") === true || Boolean(await context(modelId));
   }
 
   async function* stream(input: {
@@ -74,6 +75,22 @@ export function createManagedAdapterChatRuntime(dependencies: {
       ...(input.savedModel === undefined ? {} : {savedModel: input.savedModel}),
       ...(input.steering === undefined ? {} : {steering: input.steering}),
     };
+    if (isManagedDecisionChatModel(input.modelId)) {
+      if (!input.modelId || input.steering !== undefined || input.engram !== undefined)
+        throw new Error("Use the selected Decision Model without steering or memory overrides.");
+      if (input.toolChoice === "required" || typeof input.toolChoice === "object" && input.toolChoice !== null)
+        throw new Error("Decision Models score allowed answers and do not call tools.");
+      const lastUser = input.messages.slice().reverse().find(message => message.role === "user");
+      if (typeof lastUser?.content !== "string") throw new Error("Provide the state and allowed answers to score.");
+      const receipt = await scoreManagedDecisionChat({ store: dependencies.store, modelId: input.modelId,
+        selectedTeamId: await dependencies.resolveSelectedTeamId?.() ?? null, requestId: input.requestId,
+        payload: parseManagedDecisionChatInput(lastUser.content), signal: input.signal,
+        ...(input.savedModel === undefined ? {} : { savedModel: input.savedModel }) });
+      yield { text: decisionChatScoreText(receipt), raw: { decisionReceipt: receipt, modelId: input.modelId } };
+      await acknowledgeManagedDecisionChatScore({ store: dependencies.store, modelId: input.modelId, requestId: input.requestId, receipt });
+      yield { finishReason: "stop" };
+      return;
+    }
     if (isManagedWeightChatModel(input.modelId)) {
       if (!input.modelId || input.steering !== undefined || input.engram !== undefined)
         throw new Error("Select the exact learned-weight Model without an activation or memory override.");

@@ -13,18 +13,25 @@ normal `training.controlModelServing` activation request. Retain the original
 operation ID and exact request for recovery. The request's idle setting must
 match the review's `workerIdleTimeoutSeconds`.
 
-Activation creates callable configuration. Each inference reserves a finite
-amount of workspace credit before dispatch and settles observed allocated
-execution time. Compatible requests can share a worker; their quantities divide
-the same interval rather than each receiving a full GPU clock. Startup, queue
-and idle time have no separate customer charge. Token usage is still reported,
-with no additional token charge for the same Serverless request.
+Activation creates callable configuration. New `openpond.serverlessServingReview.v2`
+terms settle attributable worker runtime from confirmed worker start through full
+stop. This includes cold start, model loading, execution, idle time and cleanup,
+including failed loading. Queue wait before a worker starts and time scaled down
+are not billed. Worker lifetime is rounded up to a whole second once, before
+allocation; compatible requests share the same interval rather than each
+receiving a full GPU clock. Token usage is still reported with no additional
+token charge for the same Serverless request.
+
+Read the exact retained review: historical v1 receipts preserve their original
+engine-only terms. They are not retroactively charged under v2. Refresh the price
+review before creating a new approval; the SDK does not mint new v1 approvals.
 
 The optional spending limit bounds the accepted activation's cumulative usage.
 An omitted limit uses available workspace credit. Pending requests retain their
-credit holds until execution release is confirmed. Stop closes new admission
+credit holds until worker stop and settlement are confirmed. Stop closes new admission
 and requests cancellation while preserving outstanding settlement and cleanup.
-Delayed supplier records do not increase an accepted customer price.
+Unconfirmed runtime remains pending with credit reserved until verified. Delayed
+records do not change the accepted rate.
 
 Current usage is returned in `control.serverless`: `chargedUsd`, `reservedUsd`,
 `quantityMicros` and the retained review. Supplier-cost status is separate from

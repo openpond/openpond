@@ -8,6 +8,7 @@ import {
   ManagedDecisionExecutionSchema,
   ManagedAlphaEditExecutionSchema,
   ManagedNeuronTrainingExecutionSchema,
+  WeightSpaceExecutionSchema,
   canonicalJson,
 } from "openpond-sdk/training";
 import { z } from "zod";
@@ -25,6 +26,7 @@ export const ChatContextTargetSchema = z
       "experiment",
       "model",
       "training",
+      "weight_space_session",
       "training_result",
       "managed_modification_result",
       "engram_result",
@@ -65,6 +67,8 @@ export const ChatContextTargetSchema = z
         path: ["result"],
         message: "Retain the exact completed result in its original hosted account.",
       });
+    if (target.kind === "weight_space_session" && (target.location !== "cloud" || !target.teamId || !target.apiOrigin || target.scopeId || target.sessionId || target.draft || target.storedDraft || target.revision))
+      context.addIssue({code:"custom",message:"An editing session requires its exact hosted identity."});
     if (
       target.draft &&
       (target.kind !== "experiment" ||
@@ -120,6 +124,7 @@ export const ChatContextSelectionSchema = ChatContextOptionSchema.extend({
   decisionResult: ManagedDecisionExecutionSchema.optional(),
   alphaEditResult: ManagedAlphaEditExecutionSchema.optional(),
   neuronTrainingResult: ManagedNeuronTrainingExecutionSchema.optional(),
+  weightSpace: WeightSpaceExecutionSchema.optional(),
   model: z
     .object({
       id: z.string(),
@@ -138,6 +143,8 @@ export const ChatContextSelectionSchema = ChatContextOptionSchema.extend({
 })
   .strict()
   .superRefine((selection, context) => {
+    if (selection.target.kind === "weight_space_session" ? !selection.weightSpace || selection.weightSpace.id !== selection.target.id || selection.weightSpace.teamId !== selection.target.teamId : selection.weightSpace !== undefined)
+      context.addIssue({code:"custom",message:"Retain the exact editing session and workspace."});
     const kind = selection.target.kind,
       pin = selection.target.result;
     const execution =

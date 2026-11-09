@@ -1,4 +1,5 @@
-import { Profiler, type ProfilerOnRenderCallback, type ReactNode } from "react";
+import { Profiler, useEffect, type ProfilerOnRenderCallback, type ReactNode } from "react";
+import { retainDevPerformanceMeasures } from "./dev-performance-retention";
 
 export type RenderCommitMetric = {
   commits: number;
@@ -43,6 +44,7 @@ const onRender: ProfilerOnRenderCallback = (id, phase, actualDuration, _baseDura
 };
 
 export function RenderCommitBoundary({ children, id }: { children: ReactNode; id: string }) {
+  useEffect(() => import.meta.env.DEV ? retainDevPerformanceMeasures() : undefined, []);
   return <Profiler id={id} onRender={onRender}>{children}</Profiler>;
 }
 

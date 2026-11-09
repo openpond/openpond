@@ -13,7 +13,7 @@ for operation in DOCUMENT['operations']:
 DEST=ROOT/'src/ponder_sdk'
 (DEST/'operation-matrix.json').write_text(json.dumps(DOCUMENT,indent=2)+'\n')
 DECISION_METHODS={row['pythonMethod'] for row in DOCUMENT['operations'] if row.get('authorityDomain','').startswith('decision-')}
-WEIGHT_METHODS={row['pythonMethod'] for row in DOCUMENT['operations'] if row.get('authorityDomain','').startswith(('alphaedit-','neuron-training-'))}
+WEIGHT_METHODS={row['pythonMethod'] for row in DOCUMENT['operations'] if row.get('authorityDomain','').startswith(('alphaedit-','neuron-training-','weight-space-'))}
 GROUPS={'createTrainingClient':('training','Training'),'createModelProjectsClient':('models_client','Models'),'OpenPondLearningClient':('learning','Learning'),'createTrainingClient.postTraining':('post_training','PostTraining'),'OpenPondModelTasksetRunsClient':('evaluation_runs','EvaluationRuns'),'OpenPondDatasetWorkspaceClient':('datasets','Datasets'),'OpenPondDatasetPreparationClient':('dataset_preparations','DatasetPreparations'),'OpenPondToolLearningClient':('tool_learning','ToolLearning')}
 SCHEMAS=run_path(str(DEST/'schema_asset.py'))['decode_schema_asset']((DEST/'schemas.json').read_bytes())['schemas']
 def snake(v):return re.sub(r'(?<!^)(?=[A-Z])','_',v).lower()

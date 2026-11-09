@@ -26,6 +26,7 @@ export function createSessionGoalPayload(deps: {
         ? (await readCodexHistoryThreadPayload(sessionId, { tail: true, maxEvents: 1 })).session
         : await deps.getSession(sessionId);
       if (session.provider !== "codex" || !session.codexThreadId) {
+        if (!patch) return { goal: null, observedAt: new Date().toISOString() };
         throw new Error("This chat does not have a Codex goal.");
       }
       if (session.status === "closed") throw new Error("Reopen this chat before editing its goal.");

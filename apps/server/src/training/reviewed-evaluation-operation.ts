@@ -1,3 +1,7 @@
+import { WeightSpaceCancelIntentSchema } from "@openpond/contracts";
+import { WeightSpaceModelServingControlIntentSchema, WeightSpaceModelServingControlCommandSchema } from "openpond-sdk/training";
+import { WeightSpaceModelSaveIntentSchema } from "@openpond/contracts";
+import { WeightSpaceResultSaveRequestSchema } from "openpond-sdk/training";
 import type { ManagedModificationPrice } from "openpond-sdk/training";
 import {
   AlphaEditModelServingControlIntentSchema,
@@ -97,6 +101,7 @@ import {
 const ServingIntent = z.union([
   AlphaEditModelServingControlIntentSchema,
   NeuronTrainingModelServingControlIntentSchema,
+  WeightSpaceModelServingControlIntentSchema,
   DecisionModelServingControlIntentSchema,
   EngramModelServingControlIntentSchema,
   TrainingModelServingControlIntentSchema,
@@ -105,6 +110,7 @@ const ServingIntent = z.union([
 const ServingCommand = z.union([
   AlphaEditModelServingControlCommandSchema,
   NeuronTrainingModelServingControlCommandSchema,
+  WeightSpaceModelServingControlCommandSchema,
   DecisionModelServingControlCommandSchema,
   EngramModelServingControlCommandSchema,
   TrainingModelServingControlCommandSchema,
@@ -163,6 +169,22 @@ export function validateReviewedEvaluationIntent(
   }
   if (action === "training-neuron-training-result-save") {
     const intent = NeuronTrainingModelSaveIntentSchema.parse(raw);
+    if (
+      intent.account.actorId !== scope.actorId ||
+      intent.account.teamId !== scope.teamId ||
+      intent.execution.projectId !== scope.projectId
+    )
+      throw new Error("The reviewed Model save belongs to another creator, workspace or Project.");
+    return intent;
+  }
+  if(action === "training-weight-space-cancel"){
+    const intent=WeightSpaceCancelIntentSchema.parse(raw);
+    if(intent.account.actorId!==scope.actorId||intent.account.teamId!==scope.teamId||intent.execution.projectId!==scope.projectId)
+      throw new Error("The editing cancellation belongs to another account or Project.");
+    return intent;
+  }
+  if (action === "training-weight-space-result-save") {
+    const intent = WeightSpaceModelSaveIntentSchema.parse(raw);
     if (
       intent.account.actorId !== scope.actorId ||
       intent.account.teamId !== scope.teamId ||
@@ -415,6 +437,26 @@ export function validateReviewedEvaluationCommand(input: {
       validateReviewedEvaluationIntent(input.action, input.intent, input),
     );
     const command = NeuronTrainingResultSaveRequestSchema.parse(input.command),
+      { operationId, ...request } = command;
+    if (operationId !== input.id || contentHash(request) !== contentHash(intent.request))
+      throw new Error(
+        "The retained Model save differs from its original result, module or destination revision.",
+      );
+    return command;
+  }
+  if(input.action === "training-weight-space-cancel"){
+    const intent=WeightSpaceCancelIntentSchema.parse(validateReviewedEvaluationIntent(input.action,input.intent,input));
+    const command=ManagedModificationCancelSchema.parse(input.command);
+    if(command.operationId!==input.id||command.id!==intent.execution.id||command.teamId!==intent.account.teamId
+      ||command.planHash!==intent.execution.plan.contentHash||command.expectedRevision!==intent.execution.revision)
+      throw new Error("Retry the original editing session cancellation command.");
+    return command;
+  }
+  if (input.action === "training-weight-space-result-save") {
+    const intent = WeightSpaceModelSaveIntentSchema.parse(
+      validateReviewedEvaluationIntent(input.action, input.intent, input),
+    );
+    const command = WeightSpaceResultSaveRequestSchema.parse(input.command),
       { operationId, ...request } = command;
     if (operationId !== input.id || contentHash(request) !== contentHash(intent.request))
       throw new Error(

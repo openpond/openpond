@@ -339,7 +339,9 @@ export async function waitForRendererBridge(cdp: CdpClient, timeoutMs: number): 
   await waitFor(async () =>
     evaluateValue<boolean>(
       cdp,
-      `document.readyState !== "loading" &&
+      // Electron's temporary data: startup page also has the preload bridge.
+      `window.location.protocol === "http:" &&
+        document.readyState !== "loading" &&
         typeof window.openpond === "object" &&
         typeof window.openpond.getConnection === "function"`,
     ), timeoutMs, "Timed out waiting for Desktop preload bridge.");

@@ -68,7 +68,7 @@ def verify_steering_inference_receipt(raw: Any, expected: dict[str, Any]) -> dic
 
 
 def verify_saved_model_serving(value: dict[str, Any], team_id: str, model_id: str, version_hash: str) -> None:
-    if value['schemaVersion'] in ('openpond.alphaEditModelServing.v1','openpond.neuronTrainingModelServing.v1'):
+    if value['schemaVersion'] in ('openpond.alphaEditModelServing.v1','openpond.neuronTrainingModelServing.v1','openpond.weightSpaceModelServing.v1'):
         from .weight_serving_identity import verify_weight_model_serving
         verify_weight_model_serving(value,team_id,model_id,version_hash)
         return

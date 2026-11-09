@@ -15,6 +15,81 @@ Use [Compact inline resource presentation](compact-resource-tables.md) as guidan
 - Several datasets and runs can belong to a conversation. Use explicit IDs and revisions for operations; inspecting a candidate must not silently replace a baseline or alter another run's saved inputs.
 - Keep dataset creation and grader creation distinct. A request to add a grader applies to the selected dataset unless the user asks to create another dataset.
 
+### Carry a training request through to its result
+
+For “train a model”, including a starter-card request, preparation is an intermediate
+step. Ask for missing choices, then continue the same conversation through reviewed
+data and grader setup, the quoted run, authorized Start, status, retained evaluation
+and saving the successful trained version. A request explicitly limited to planning,
+preparation or cost review stops at that boundary. Do not create a planning-only
+request type or make the user restart the workflow after answering a question.
+
+Ask concise, concrete questions about the behavior to learn, which data to use and
+the maximum total spend. Reuse selected resources and limits already supplied in
+this conversation. Offer a small relevant choice when resources are missing; do
+not ask the user for internal IDs, sealed-batch contracts, model hashes, learning
+rates or batch sizes. Resolve supported defaults and exact pins through the CLI.
+Keep evaluation separate and explain any decision that materially changes the task.
+
+An explicit GSM8K SFT+LoRA request already supplies the learning objective and
+dataset. Find and inspect the public source, download/import it through supported
+operations, preserve the official train/test separation, and create the requested
+final-numeric-answer grader with positive and negative checks. Downloading that
+public dataset is part of the request; do not ask a separate download question.
+Choose supported model/recipe defaults rather than sending a setup questionnaire.
+Never call a preview-only sample the full dataset; state the actual population.
+
+Before quoting a run, inspect the installed recipe schema and live capabilities
+for row, step, sequence and runtime limits. Retain the complete source Dataset,
+but size the executable batch within those limits; do not propose a full-source
+run that its method cannot admit.
+
+Once the source, supported model, grader checks and API hourly-rate evidence
+are known, show the proposed bounded run and ask for its total budget before
+bulk per-example grading/review, publication or preparation. Do not spend many
+minutes preparing thousands of records before asking the one missing budget
+question. Preparation itself may require this approved ceiling.
+
+The budget is a missing run input under the user's training request, not a new
+skill-activation permission. Keep the form brief: ask for the total cap, with
+the supported model, example counts and current API price in a short reason.
+Do not put local skill paths, instruction quotations or a storage-cost breakdown
+in the form. Reuse an existing approved cap instead of asking for it again.
+
+Show the concrete scope and the API's price evidence.
+If the spending limit has not been approved, use the available `ask_user` tool
+for one total-budget question, for example “Approve this run with a maximum spend
+of $25?” with approve/decline choices. Wait for the answer, then continue the
+approved run in the same conversation. Do not substitute a prose question when
+the host offers the structured question tool. Keep the conversation about total
+spend; account for required evaluation and retention internally rather than
+asking a separate storage-cost question. A skipped or declined answer is not
+permission to start, and an estimate with unknown totals is not a fixed-price quote.
+
+Keep the imported source population intact. Select a smaller training/evaluation
+batch only as an explicit run-sizing decision under the approved budget, with
+its actual counts shown. An authoring/import failure is not permission to silently
+turn the requested dataset into a smaller sample.
+
+A total budget covers training, required evaluation and retained storage; reserve
+for these together rather than treating the same ceiling as a separate allowance
+for each. Show the effective run and quote before starting. Once the user has
+authorized training and its scope and ceiling are resolved, continue without an
+extra generic confirmation. Ask again only for a material scope/cost change or
+an explicit approval requirement. A budget does not authorize a different run,
+unbounded retries, recurring training or serving.
+
+Call a local JSON note a plan or draft. Only a successful canonical preparation
+receipt with its operation and plan identity is an accepted preparation. A Model
+record is not a trained version, and a submitted job is not a completed result.
+Keep the useful resource and live run attached to this chat; give concise progress
+and the next actionable blocker if the supported runtime cannot continue.
+
+Keep the resource sidebar focused on the actual dataset, grader or run. An
+ordinary training request does not need a separate proposal file opened in the
+sidebar; put the bounded scope in the conversation and budget form. Open a file
+when the user asks for it or its actual contents help inspect the requested work.
+
 ## Starting from an objective and sources
 
 For “I want to make a model; where do I start?”, give a short next step: ask what
@@ -59,6 +134,18 @@ Inspect related experiments and graders after selection and summarize what matte
 
 Read the installed command help for exact flags and input contracts; capability varies by version and execution target.
 
+For unfamiliar training or learning JSON, use `training schema` or `learning schema`
+to list the installed public SDK schemas, then request the specific schema by name.
+For example, `training schema TrainingPreparationRequest --json`,
+`training schema TrainingExperimentSetupRequest --json`,
+`training schema DatasetTrainingReviewRequest --json`, or
+`learning schema SaveAuthoringDraftCommand --json`. These offline reads require no
+account or team and start no work. Inspect the appropriate schema and retained
+references instead of reverse engineering minified CLI/server bundles or sending
+empty mutation requests to discover fields. The real command still enforces all
+semantic checks beyond JSON Schema. Never use Start, even without `--yes`, as a
+dry-run, schema probe or cost-inspection command; use estimate and preparation.
+
 | Work | CLI entry point |
 | --- | --- |
 | Dataset discovery, authoring, import, revisions, and validation | `openpond datasets` |
@@ -72,7 +159,18 @@ When the app provides a scoped command executor, run the CLI with `"$OPENPOND_CL
 
 Use that supplied prefix directly. Do not spend a command printing or probing its environment variables before every request; investigate setup only after an actual execution failure. Reuse command contracts already read in this conversation, and batch independent inspections where useful. A simple grader question normally needs one listing and, only when criteria are needed, one grader inspection.
 
-Use `datasets context --local --json` to inspect the current scope; `datasets select <id> --local --expected-revision <revision>` selects an existing dataset. `datasets new-experiment --local --operation-id <stable-id>` creates a configuration scope without compute. Scope selection/rename use `select-experiment` and `rename-experiment`; check their current help. These commands require app-supplied context. Mere `datasets list` discovery does not attach all records.
+Use `datasets context --local --focus-only --json` once to inspect the current scope
+and selected Model/Experiment without listing all saved records. Reuse it until
+selection changes; do not repeat full context reads or pipe full catalogs into
+Python to recover the selected record. Omit `--focus-only` only when the complete
+resource choices are actually needed. Use `account context --json` through the
+same scoped CLI for its account, API origin and selected team. A separate MCP
+connection may have another identity; do not use its workspace as the CLI's.
+`datasets select <id> --local --expected-revision <revision>` selects an existing
+dataset. `datasets new-experiment --local --operation-id <stable-id>` creates a
+configuration scope without compute. Scope selection/rename use `select-experiment`
+and `rename-experiment`; check their current help. These commands require
+app-supplied context. Mere `datasets list` discovery does not attach all records.
 
 Use the application's supplied local server context and OpenPond home when present. Pass that configured home with `--home <selected-home>`. Check this context before diagnosing missing authentication. Do not guess a second installation, scrape credentials, or switch teams to get an operation to succeed. Local dataset commands use `--local`; hosted operations have their own explicit destination/account options. Local experiment execution may still call a paid remote inference provider.
 
@@ -263,9 +361,22 @@ method-specific settings, a sealed reviewed batch, stable operation ID, name,
 Project (or null) and maximum spend. The service owns configuration creation;
 do not send the user through New Model first. Retain the request and the full
 returned wrapper receipt. This prepares without starting compute or a recurring
-policy. After reviewing its limits and obtaining the user's execution authority,
-`training hosted-start <receipt.json> --team-id <id> --yes --json` accepts the
-wrapper directly. On a lost preparation reply, reconcile the same operation and
+policy. For a reserved-budget start, request a fresh price review with
+`training hosted-estimate <estimate-request.json> --team-id <id> --json`.
+Use `openpond.trainingEstimateRequest.v1` with the same `teamId` and
+`source: { kind: "preparation", id: receipt.plan.id,
+planHash: receipt.plan.contentHash, expectedRevision: receipt.revision }`.
+For a model-first wrapper, these fields are in `receipt.preparation`. Retain the
+full estimate response, including its signed `review` and `expiresAt`; a Model
+configuration estimate cannot replace a review of this exact prepared plan.
+After reviewing its limits and obtaining the user's execution authority,
+`training hosted-start <receipt.json> --team-id <id>
+--estimate-review-file <estimate.json> --yes --json` accepts the wrapper directly.
+Refresh an expired review for the same preparation before retrying Start. This
+read creates no Job and does not require another budget question when the
+approved scope and cap are unchanged. Unknown duration or total cost remains
+unknown; retain the current hourly price and the authorized hard cap.
+On a lost preparation reply, reconcile the same operation and
 exact input; changed inputs require a new operation. Never recreate a submitted
 job because its chat attachment failed.
 
@@ -373,6 +484,14 @@ to the existing start control; changed inputs, provider context, runtime, expire
 review or increased rate require another review. Estimates do not reserve credit,
 allocate compute or increase the run's approved cap.
 
+Use `gpu.hourlyUsd` in estimates and `offerings[].hourlyUsd` in the live catalog
+for the workspace's whole-allocation hourly price, including attached disk.
+A null rate means pricing is unavailable. The public catalog exposes only this
+retail rate; signed provider quotes used by other operations are supplier-cost
+authority and must never be presented as the user's price. Do not calculate
+retail prices from supplier quotes. The API owns pricing. An hourly rate alone
+does not establish an expected run total.
+
 The prepaid training policy is implemented in source; hosted qualification is
 pending. On hosts with this policy, new managed training Jobs reserve the full
 approved cap from available included/prepaid credit. Workspace owner or overage
@@ -402,6 +521,35 @@ After saving the exact draft, `hosted-funding-handoff request.json --team-id <id
 
 
 Training-data authoring uses the existing learning owner. Create/publish an exact task format and direct source, submit complete example envelopes or JSONL with stable producer keys, grade/review the actual evidence and targets, then seal a `supervised_training` or `reward_training` batch. Importing is not approval. Use `openpond learning <get|list> <kind> ... --team-id <id>` and `openpond learning command --input-file <path> --team-id <id>` with the existing command schemas; keep operation IDs stable on retries. The SDK's `OpenPondLearningClient` and native Python learning operations expose the same commands.
+
+Check the training and optimizer-validation contracts before bulk target grading.
+The held-out package must retain the same output schema, compatible environment
+and tools, and the checked Reward binding and verifier assets. Matching grader
+names or an ordinary Dataset's output-format label do not establish these
+references. A reviewed training batch's compiled output contract can differ from
+the original ordinary Dataset. When authoring both through learning review, reuse
+the exact task definition and checked Reward binding, seal held-out examples with
+purpose `evaluation`, and publish the complete package before selecting its
+immutable release. Keep the original splits and family isolation; evaluation
+admission does not approve held-out answers as training targets. Read back the
+published Model configuration before preparing against it: publishing a package
+can change its selected taskset and revision. Preserve the requested training
+batch and recipe rather than copying changed defaults without checking them.
+
+For bulk grading/review or polling known resource IDs, use `learning batch
+--input-file <path> --team-id <id> --concurrency 3` instead of starting a new CLI
+process for every row. The JSON input is an array of up to 100 existing operations:
+`{"action":"command","command":{...}}` or
+`{"action":"get","kind":"grade","id":"...","revision":1}`.
+Use `learning schema LearningCliBatch` for the installed schema. Commands retain
+their original operation IDs and expected revisions. The default concurrency is
+one; use up to four only for independent operations, and run dependent phases
+separately after checking receipts. All input is validated before dispatch.
+Results preserve input order. A failed request stops new dispatch, waits for
+in-flight requests and returns a nonzero exit with partial results. A request
+failure can have an uncertain mutation outcome: reconcile its original ID before
+an explicit retry, and never remint IDs. Batching neither approves evidence nor
+bypasses per-command authorization or budget checks.
 
 For model-first experiments, pass the exact sealed batch reference to canonical experiment preparation. Do not create a saved Model merely to select a batch, and do not replace target approval, reward grading, split/family separation or immutable references with a dataset label. The shared UI can open the existing import/review/batch tools inside the retained experiment and select the batch without starting training. Its import editor pins the format release until an explicit release change.
 
@@ -763,3 +911,7 @@ For “keep improving until X”, turn X into observable acceptance criteria bef
 Keep a concise experiment record in the user's chosen working location: objective, allowed changes, total spending/run/time bounds, hypothesis, exact input/model/grader revisions, baseline/candidate evidence, decision and next step. Each iteration reads retained failures, makes one justified change, validates it and runs a comparison within the authorized bounds. Fix genuine task or grader defects; never remove hard cases, weaken grading or silently change the target to meet a score. Grader changes alter the measurement: rerun a matched baseline or clearly label unlike scoring. Re-grade saved outputs only through a verified supported operation; otherwise prepare the supported full evaluation.
 
 Separate infrastructure failure, grader failure, missing evidence and model-quality failure. A job that produced no predictions is not zero accuracy. Stop when acceptance is met, authorized limits are reached, progress stalls, required capability is unavailable or a material decision needs the user. A hosted job may already be running: attach/read that exact job and original operation before any launch. Moving a study between chats requires its dataset/model/grader pins, retained results, remaining limits and next action; importing history does not transfer an active writer or authorize another run.
+
+## Weight-space programming
+
+For direct parameter inspection/editing requests, read [Weight-space programming](weight-space-programming.md). Use the existing local agent with remote target weights and the exact `hosted-weight-space-*` CLI family. This is distinct from adapters and SFT/RL optimizers; capability discovery may report an unqualified runtime. Do not start compute unless the user authorized it.

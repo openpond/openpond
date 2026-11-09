@@ -22,7 +22,7 @@ export function DatasetRowPreview({ connection, dataset }: { connection: ClientC
   const [page, setPage] = useState(0);
   const query = useQuery({
     queryKey: ["training-dataset-rows", connectionQueryScope(connection), resourceIdentity(dataset), dataset.revision],
-    staleTime: 60_000,
+    staleTime: Infinity,
     queryFn: async ({ signal }) => {
       const result = await chatResourceRequest<DatasetResponse>(connection, "dataset", { action: "read", id: dataset.id, expectedRevision: dataset.revision }, signal);
       if (resourceIdentity(result.summary) !== resourceIdentity(dataset) || result.summary.revision !== dataset.revision) throw new Error("Dataset rows do not match the selected revision.");

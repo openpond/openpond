@@ -91,7 +91,7 @@ export function SavedTrainingModel({
               </div>
             </dl>
           ) : version.schemaVersion === "openpond.alphaEditModelVersion.v1" ||
-            version.schemaVersion === "openpond.neuronTrainingModelVersion.v1" ? (
+            (version.schemaVersion === "openpond.neuronTrainingModelVersion.v1" || version.schemaVersion === "openpond.weightSpaceModelVersion.v1") ? (
             <>
               <dl className="model-project-page-metrics">
                 <div>
@@ -99,7 +99,7 @@ export function SavedTrainingModel({
                   <dd>
                     {version.schemaVersion === "openpond.alphaEditModelVersion.v1"
                       ? "AlphaEdit"
-                      : "Neuron training"}
+                      : version.schemaVersion === "openpond.weightSpaceModelVersion.v1" ? "Weight-space programming" : "Neuron training"}
                   </dd>
                 </div>
                 <div>
@@ -119,7 +119,7 @@ export function SavedTrainingModel({
                 onClick={() =>
                   void navigateModelsRoute(
                     modelsLocation("experiments", null, {
-                      resourceId: `${version.schemaVersion === "openpond.alphaEditModelVersion.v1" ? "managed-alphaedit" : "managed-neuron-training"}:${version.source.executionId}`,
+                      resourceId: `${version.schemaVersion === "openpond.alphaEditModelVersion.v1" ? "managed-alphaedit" : version.schemaVersion === "openpond.weightSpaceModelVersion.v1" ? "managed-weight-space" : "managed-neuron-training"}:${version.source.executionId}`,
                     }),
                   )
                 }

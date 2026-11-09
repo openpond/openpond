@@ -84,7 +84,11 @@ export async function importHostedModelArtifacts(input: {
       id: `model_lineage_${contentHash([input.project.id, input.job.id, weights.sha256]).slice(0, 24)}`,
       modelId: input.project.id, artifactId: weights.id, jobId: input.job.id,
       tasksetId: snapshot.taskset.id, tasksetHash: snapshot.taskset.contentHash,
-      graderHash: z.object({ graderHash: z.string().regex(/^[a-f0-9]{64}$/) }).parse(submission.job.recipe.reward).graderHash,
+      // SFT has no optimizer reward. Retain its complete, verified grading
+      // source (including a composer) instead of reading the GRPO recipe field.
+      graderHash: submission.job.kind === "policy_optimize" && submission.job.recipe.method === "sft"
+        ? contentHash(submission.job.rewardSource)
+        : z.object({ graderHash: z.string().regex(/^[a-f0-9]{64}$/) }).parse(submission.job.recipe.reward).graderHash,
       // Recovery retains the source approval while its own input manifest binds execution.
       planHash: executionHash, bundleHash: input.job.bundleHash, recipeHash: retained.receipt.recipeHash,
       workerVersion: retained.receipt.runtimeRelease.id,

@@ -1,3 +1,5 @@
+import { handleWeightSpacePublicationRoutes } from "./weight-space-publication-routes.js";
+import { handleWeightSpaceReadRoutes } from "./weight-space-routes.js";
 import { trainingRoutes as routes, dynamicTrainingRoutes as dynamic } from "./training-route-tables.js";
 import { handleAlphaEditPublicationRoutes } from "./alphaedit-publication-routes.js";
 import { handleHostedAlphaEditRoutes } from "./hosted-alphaedit-routes.js";
@@ -37,6 +39,8 @@ export async function handleTrainingRoutes({
   response,
 }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
+  if (await handleWeightSpacePublicationRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleWeightSpaceReadRoutes({ deps, request, requestUrl, response })) return true;
   if (await handleAlphaEditPublicationRoutes({ deps, request, requestUrl, response })) return true;
   if (await handleNeuronTrainingPublicationRoutes({ deps, request, requestUrl, response }))
     return true;

@@ -1,8 +1,8 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import type { ChatAttachment, Session } from "@openpond/contracts";
+import type { ChatAttachment, Session, UsageRequestAttribution } from "@openpond/contracts";
 import type { ShowAppToast } from "../app/app-state";
 import type { ComposerSubmitOptions } from "../components/chat/Composer";
-import type { ComposerDraftStore } from "../lib/composer-draft-store";
+import { captureSubmittedDraftClear, type ComposerDraftStore } from "../lib/composer-draft-store";
 import type { SandboxActionCatalogEntry } from "../lib/sandbox-types";
 
 type SendPrompt = (
@@ -12,6 +12,7 @@ type SendPrompt = (
   options?: {
     clearPrompt?: () => void;
     displayPrompt?: string;
+    usageAttribution?: UsageRequestAttribution;
     onSessionCreated?: (session: Session) => void;
     turnMetadata?: Record<string, unknown>;
     sessionMetadata?: Record<string, unknown>;
@@ -47,9 +48,10 @@ export function useMainComposerSubmit({
     attachments: ChatAttachment[] = [],
     action: SandboxActionCatalogEntry | null = null,
     promptOverride?: string,
-    options: ComposerSubmitOptions = {},
+    options: ComposerSubmitOptions & NonNullable<Parameters<SendPrompt>[3]> = {},
   ) => {
     const promptForSubmission = promptOverride ?? composerDraftStore.getSnapshot();
+    const clearSubmittedDraft = captureSubmittedDraftClear(composerDraftStore);
     const trainingTurn = prepareTrainingTurn(promptForSubmission);
     if (trainingTurn.active && promptForSubmission.trim() && !trainingTurn.metadata) {
       showToast(
@@ -60,8 +62,11 @@ export function useMainComposerSubmit({
     }
 
     const sent = await sendPrompt(attachments, action, promptOverride, {
-      clearPrompt: options.preservePrompt ? () => undefined : undefined,
+      clearPrompt: options.preservePrompt ? () => undefined : options.clearPrompt ?? (() => {
+        if (clearSubmittedDraft()) setMentionedAppId(null);
+      }),
       displayPrompt: options.displayPrompt,
+      usageAttribution: options.usageAttribution,
       onSessionCreated: (session) => {
         onSessionCreated(session);
         options.onSessionCreated?.(session);

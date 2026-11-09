@@ -11,9 +11,9 @@ def fail():
 
 
 def verify_weight_model_serving(raw, team_id, model_id, version_hash, *, owner_user_id=None):
-    prefix = 'AlphaEdit' if raw.get('schemaVersion') == 'openpond.alphaEditModelServing.v1' else 'NeuronTraining'
+    prefix = 'WeightSpace' if raw.get('schemaVersion','').startswith('openpond.weightSpace') else 'AlphaEdit' if raw.get('schemaVersion') == 'openpond.alphaEditModelServing.v1' else 'NeuronTraining'
     value = validate(prefix + 'ModelServingSchema', raw)
-    verify_usage_billing(value, team_id, model_id, version_hash, 'alphaedit' if prefix == 'AlphaEdit' else 'selective_neuron_training')
+    verify_usage_billing(value, team_id, model_id, version_hash, 'weight_space_programming' if prefix=='WeightSpace' else 'alphaedit' if prefix == 'AlphaEdit' else 'selective_neuron_training')
     verify_hash(value, 'contentHash')
     version = verify_weight_model_version(value['version'], team_id=team_id, model_project_id=model_id, owner_user_id=owner_user_id)
     availability = value['availability']
@@ -52,7 +52,7 @@ def verify_weight_model_serving(raw, team_id, model_id, version_hash, *, owner_u
 
 
 def verify_weight_serving_control(raw, request, team_id, model_id, *, actor_id=None):
-    prefix = 'AlphaEdit' if raw.get('schemaVersion') == 'openpond.alphaEditModelServingControlReceipt.v1' else 'NeuronTraining'
+    prefix = 'WeightSpace' if raw.get('schemaVersion','').startswith('openpond.weightSpace') else 'AlphaEdit' if raw.get('schemaVersion') == 'openpond.alphaEditModelServingControlReceipt.v1' else 'NeuronTraining'
     value = validate(prefix + 'ModelServingControlReceiptSchema', raw)
     request = validate(prefix + 'ModelServingControlRequestSchema', request, request=True)
     verify_hash(value, 'contentHash')

@@ -28,7 +28,7 @@ export async function runLocalDatasetsCommand(options:Record<string,string|boole
   if (action === "model-inputs" && (!id || !["local", "cloud"].includes(modelLocation) || modelLocation === "cloud" && (!optionString(options,"team") || !optionString(options,"apiOrigin"))))
     throw new Error("model-inputs requires a model ID; cloud inspection also requires --location cloud --team <id> --api-origin <origin>.");
   const conversational:Record<string,unknown> | null = action === "model-inputs" ? { action: "context_inputs", payload: { target: { kind: "model", id, location: modelLocation,
-    ...(modelLocation === "cloud" ? { teamId: optionString(options,"team"), apiOrigin: optionString(options,"apiOrigin") } : {}) } } } : action === "context" ? {action:"context",payload}
+    ...(modelLocation === "cloud" ? { teamId: optionString(options,"team"), apiOrigin: optionString(options,"apiOrigin") } : {}) } } } : action === "context" ? {action:"context",payload:{...payload as object,...parseBooleanOption(options.focusOnly) ? {focusOnly:true} : {}}}
     : action === "select-destination" ? {action:"set_destination",payload:{executionLocation:id === "hosted" ? "cloud" : id}}
     : action === "select-model" ? {action:"set_model",payload:{evaluationModel:id}}
     : action === "new-experiment" ? {action:"create_scope",payload:{operationId:optionString(options,"operationId")}}
@@ -40,6 +40,9 @@ export async function runLocalDatasetsCommand(options:Record<string,string|boole
   const response = await request(new URL("/v1/local-datasets",base),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...(conversational ?? {action:action.replaceAll("-","_"),...(datasetId || id ? {id:datasetId || id}:{}),...(options.operationId?{operationId:optionString(options,"operationId")}:{}),...(revision?{expectedRevision:Number(revision)}:{}),payload}),...(process.env.OPENPOND_CHAT_INVOCATION ? {invocationToken:process.env.OPENPOND_CHAT_INVOCATION} : {})})});
   const result = await response.json() as Record<string,unknown>;
   if (!response.ok) throw new Error(typeof result.error === "string" ? result.error : `Local Dataset request failed (${response.status}).`);
+  // Checks persist their failure evidence and return a successful HTTP read.
+  // CLI callers must still be able to distinguish a rejected package/check.
+  if (result.check && typeof result.check === "object" && "status" in result.check && result.check.status === "failed") process.exitCode = 1;
   if (action === "model-inputs") { console.log(JSON.stringify(inspectModelDatasetInputs(result, options),null,2)); return; }
   if (parseBooleanOption(options.json)) { console.log(JSON.stringify(result,null,2)); return; }
   const summaries = Array.isArray(result) ? result : [...result.summary ? [result.summary] : [],...Array.isArray(result.summaries) ? result.summaries : []];

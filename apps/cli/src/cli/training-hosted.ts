@@ -1,3 +1,4 @@
+import { weightSpaceHostedActions } from "./training-hosted-weight-space";
 import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { alphaEditHostedActions } from "./training-hosted-alphaedit";
 import { neuronTrainingHostedActions } from "./training-hosted-neuron-training";
@@ -38,6 +39,7 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   };
   const client = createTrainingClient({ baseUrl, headers, fetch: request });
   const attach = (jobId:string)=>attachHostedTrainingToChat({jobId,teamId,apiOrigin:new URL(baseUrl).origin});
+  const attachModel = (modelProjectId:string)=>attachHostedTrainingToChat({modelProjectId,teamId,apiOrigin:new URL(baseUrl).origin});
   const printAttached = async (value:unknown,jobId:string) => { print(value); await attach(jobId); };
   const readInput = async () => {
     if (!target) throw new Error(`${action} requires an input JSON file.`);
@@ -69,6 +71,14 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
       action: action!, target, baseUrl, headers, request, readInput,
       confirmed: parseBooleanOption(options.yes),
     })); return;
+  }
+  if(action && weightSpaceHostedActions.has(action)){
+    const result = await (await import("./training-hosted-weight-space")).runHostedWeightSpaceCommand({action,target,teamId,options,client,readInput});
+    print(result);
+    const id = result && typeof result === "object" && "execution" in result ? (result.execution as {id:string}).id
+      : action === "hosted-weight-space-session" && target ? target : null;
+    if (id) await attachHostedTrainingToChat({id,teamId,apiOrigin:new URL(baseUrl).origin});
+    return;
   }
   if (action && alphaEditHostedActions.has(action)) {
     const { runHostedAlphaEditCommand } = await import("./training-hosted-alphaedit");
@@ -147,7 +157,8 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   }
   if (action === "hosted-model") {
     if (!target) throw new Error("hosted-model requires a Model Project ID.");
-    print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).get(target)); return;
+    const result = await createModelProjectsClient({ baseUrl, headers, fetch: request }).get(target);
+    print(result); await attachModel(result.project.id); return;
   }
   if (action === "hosted-corrections" || action === "hosted-learning-inspect") {
     if (!target) throw new Error(`${action} requires a hosted Model Project ID.`);
@@ -160,12 +171,14 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
   }
   if (action === "hosted-sync-model") {
     const input = HostedModelProjectSyncSchema.parse(await readInput());
-    print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).upsert(input)); return;
+    const result = await createModelProjectsClient({ baseUrl, headers, fetch: request }).upsert(input);
+    print(result); await attachModel(result.id); return;
   }
   if (action === "hosted-publish-taskset") {
     const { OpenPondTasksetPackageClient, TasksetPackagePublicationSchema } = await import("openpond-sdk/taskset-packages");
     const input = TasksetPackagePublicationSchema.parse(await readInput());
-    print(await new OpenPondTasksetPackageClient({ baseUrl, apiKey: context.token, teamId, fetch: request }).publish(input)); return;
+    const result = await new OpenPondTasksetPackageClient({ baseUrl, apiKey: context.token, teamId, fetch: request }).publish(input);
+    print(result); await attachModel(result.project?.id ?? result.modelProjectId); return;
   }
   if (action === "hosted-capabilities") { print(await client.capabilities()); return; }
   if (action === "hosted-modification-capabilities") {
@@ -354,7 +367,8 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     const { TrainingExperimentSetupRequestSchema } = await import("openpond-sdk/training");
     const input = TrainingExperimentSetupRequestSchema.parse(await readInput());
     if (input.teamId !== teamId) throw new Error("Experiment input belongs to a different workspace.");
-    print(await client.prepareExperiment(input)); return;
+    const result = await client.prepareExperiment(input);
+    print(result); await attachModel(result.preparation.plan.source.modelProject.id); return;
   }
   if (action === "hosted-jobs") { print(await client.listJobs({ limit: 100 })); return; }
   if (action === "hosted-prepare") {

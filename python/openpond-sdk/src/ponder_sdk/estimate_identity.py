@@ -39,7 +39,7 @@ def verify_estimate(value: dict[str, Any], request: dict[str, Any], team_id: str
     components = value['cost']['components']
     allocation = [component for component in components if component['phase'] == 'gpu_allocation']
     if allocation:
-        aggregate, rate = allocation[0], gpu['customerHourlyUsd']
+        aggregate, rate = allocation[0], gpu['hourlyUsd']
         expected, seconds = aggregate['expectedUsd'], aggregate['expectedSeconds']
         if (len(allocation) != 1 or aggregate['resource'] != 'gpu'
                 or (expected is None) != (seconds is None)

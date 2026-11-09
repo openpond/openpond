@@ -1,4 +1,5 @@
 import { codexPromptWithHarnessContext } from "./native-agents/codex-prompt-context.js";
+import { runDirectModelTurn } from "./turns/direct-model-turn.js";
 import { nativeToolLearningContext, nativeToolLearningTools } from "../tool-learning/native.js";
 import { createFilePreviewTool, FILE_PREVIEW_INSTRUCTIONS } from "../openpond/file-preview-tool.js";
 import { failTurnWithCodexRecovery } from "./codex-ownership.js";
@@ -10,6 +11,7 @@ import { nextStepSessionEligible } from "../training/chat-next-step.js";
 import { createChatNextStepTool, CHAT_NEXT_STEP_INSTRUCTIONS } from "../openpond/chat-next-step-tool.js";
 import { runSteeredNativeTurn } from "./native-agents/steered-turn.js";
 import { nativeBrowserTools, NATIVE_BROWSER_INSTRUCTIONS } from "./native-agents/browser-tools.js";
+import { createNativeQuestionTool, NATIVE_QUESTION_INSTRUCTIONS } from "./native-agents/question-tool.js";
 import { HTML_VISUAL_INSTRUCTIONS } from "@openpond/contracts/html-visuals";
 import { visualTools } from "../visuals/visual-tools.js";
 import { nativeToolMcpResult } from "../openpond/native-tool-calls.js";
@@ -1242,16 +1244,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           status: "started",
         })
       );
-      if (remoteEnclave) {
-        if (!deps.enclaveChat) throw new Error("This model connection is unavailable on this server.");
-        const reply = await deps.enclaveChat(turnModelRef?.modelId ?? input.model ?? "", input.prompt, controller.signal);
-        throwIfInterrupted(controller.signal);
-        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "assistant.delta", source: "provider", output: reply.answer,
-          data: { delta: reply.answer, provider: session.provider, remoteRequestId: reply.requestId, remoteThreadId: reply.threadId, remoteTurnId: reply.turnId, persistentHistory: false } }));
-        const completed = await completeTurn(sessionId, turn.id, reply.turnId);
-        await appendRuntimeEvent(event({ sessionId, turnId: turn.id, name: "turn.completed", source: "provider", status: "completed", data: { provider: session.provider } }));
-        return completed;
-      }
+      const direct = await runDirectModelTurn({ session, turn, model: turnModelRef?.modelId ?? input.model,
+        prompt: input.prompt, signal: controller.signal, remoteEnclave, enclaveChat: deps.enclaveChat, throwIfInterrupted,
+        decisionContextUnsupported: Boolean(input.attachments?.length || selectedHarness?.workflowAction || userQuestionResolution
+          || activeCreateImproveRun || candidateAuthoring || isolatedProfileEvaluation || session.metadata?.profileEvaluationRun !== undefined),
+        stream: streamOpenPondHostedChatTurn, append: appendRuntimeEvent, updateTurn: updateStoredTurn,
+        completeTurn, finalize: finalizeAttachedWorkSandbox });
+      if (direct) return direct;
       if (selectedHarness?.workflowAction) {
         const bundlePath = selectedHarness.release.bundlePath;
         if (!bundlePath) throw new Error("Bound Profile action lacks its released source bundle.");
@@ -1411,11 +1410,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const browserDefinitions = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
         && peerInput?.payload.taskReportingOnly !== true && (session.provider === "codex" || isNativeAgentId(session.provider))
         ? nativeBrowserTools(session, browserToolExecutor) : [];
+      const questionDefinitions = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
+        && peerInput?.payload.taskReportingOnly !== true && (session.provider === "codex" || isNativeAgentId(session.provider))
+        ? [createNativeQuestionTool(appendRuntimeEvent)] : [];
       const fileDefinitions = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
         && peerInput?.payload.taskReportingOnly !== true ? [filePreviewTool] : [];
       const toolLearningContext = !nativeEvaluation && !candidateAuthoring && !isolatedProfileEvaluation ? await nativeToolLearningContext(session).catch(() => "") : "";
       const extraSystemContext = [
         toolLearningContext,
+        questionDefinitions.length ? NATIVE_QUESTION_INSTRUCTIONS : "",
         fileDefinitions.length ? FILE_PREVIEW_INSTRUCTIONS : "",
         session.systemKind === "openpond.ponder" ? LOCAL_PONDER_INSTRUCTIONS : "",
         nextStepTools.length ? CHAT_NEXT_STEP_INSTRUCTIONS : "",
@@ -1758,7 +1761,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
         const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : coordinationTools;
         const visualToolsEnabled = !nativeEvaluation && peerInput?.payload.taskReportingOnly !== true && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
-        const definitions = [...coordinationDefinitions, ...nativeEvaluationSkills, ...nativeCliSkillTools, ...nextStepTools, ...browserDefinitions, ...fileDefinitions, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : [])];
+        const definitions = [...coordinationDefinitions, ...nativeEvaluationSkills, ...nativeCliSkillTools, ...nextStepTools, ...questionDefinitions, ...browserDefinitions, ...fileDefinitions, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : [])];
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
         const providerTurnId = await runSteeredNativeTurn({ runtime: nativeAgents, inbox: taskInbox, store: inboxStore, getSession,
           taskToolInstructions: [coordinationDefinitions.length ? TASK_COORDINATION_INSTRUCTIONS : "", visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : "", browserDefinitions.length ? NATIVE_BROWSER_INSTRUCTIONS : ""].filter(Boolean).join("\n\n"),
@@ -1798,7 +1801,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (turnCwd && turnCwd !== session.cwd)
         session = await updateSession(session.id, { cwd: turnCwd });
       activeTurn.session = session;
-      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...nativeEvaluationSkills, ...nativeCliSkillTools, ...nextStepTools, ...browserDefinitions, ...fileDefinitions, ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : [])];
+      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...nativeEvaluationSkills, ...nativeCliSkillTools, ...nextStepTools, ...questionDefinitions, ...browserDefinitions, ...fileDefinitions, ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : [])];
       const runtime = await ensureCodexRuntime(session, {
         ...input,
         coordination: coordinationDefinitions.length ? {

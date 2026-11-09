@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type {
   CloudProject,
   LocalProject,
@@ -6,7 +6,7 @@ import type {
   SidebarAppPreferences,
   SidebarFileBookmark,
 } from "@openpond/contracts";
-import { buildCachedChatMessages } from "../lib/chat-messages";
+import { IncrementalChatProjector } from "../lib/incremental-chat-projector";
 import {
   SIDEBAR_SECTION_LIMIT,
   SIDEBAR_TASK_INITIAL_LIMIT,
@@ -60,6 +60,7 @@ export function useSidebarData({
   chatRowsVisibleCount,
   sidebarFileBookmarks = [],
 }: UseSidebarDataInput) {
+  const [chatProjector] = useState(() => new IncrementalChatProjector());
   const visibleLocalProjects = useMemo(
     () => localProjects.filter((project) => !project.hiddenFromDefaultSidebar),
     [localProjects]
@@ -343,8 +344,8 @@ export function useSidebarData({
     [runtimeIndexes, selectedSessionId]
   );
   const chatMessages = useMemo(
-    () => buildCachedChatMessages(sessionEvents),
-    [sessionEvents]
+    () => chatProjector.project(sessionEvents),
+    [chatProjector, sessionEvents]
   );
   const contextUsage = latestContextUsageForSession(
     runtimeIndexes,

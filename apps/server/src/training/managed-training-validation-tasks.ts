@@ -6,7 +6,11 @@ import type {
 } from "@openpond/contracts";
 import { computeTasksetHash, contentHash } from "@openpond/taskset-sdk";
 import { TrainingRecipeSchema } from "@openpond/contracts";
-import { assertTrainingEvaluationIsolation, deterministicTrainingRewardSource } from "openpond-sdk/training";
+import {
+  assertTrainingEvaluationIsolation,
+  deterministicTrainingRewardSource,
+  selectSftValidationTasks,
+} from "openpond-sdk/training";
 
 import type { SqliteStore } from "../store/store.js";
 import { resolveTasksetTrainingReward } from "./taskset-reward-binding.js";
@@ -16,7 +20,10 @@ export type ManagedValidationTaskSource = {
   tasks: TaskDataRecord[];
 };
 
-export type ManagedValidationSourcePlan = Pick<TrainingPlan, "comparisonSeriesEntry" | "evaluationTasksetRef"> & {
+export type ManagedValidationSourcePlan = Pick<
+  TrainingPlan,
+  "comparisonSeriesEntry" | "evaluationTasksetRef"
+> & {
   recipe?: unknown;
 };
 
@@ -30,13 +37,25 @@ export async function resolveManagedValidationTaskSource(input: {
   trainingTaskset: Taskset;
   storeDir?: string;
 }): Promise<ManagedValidationTaskSource> {
-  const recipe = input.trainingPlan.recipe == null ? null : TrainingRecipeSchema.parse(input.trainingPlan.recipe);
+  const recipe =
+    input.trainingPlan.recipe == null
+      ? null
+      : TrainingRecipeSchema.parse(input.trainingPlan.recipe);
   const validationSplit = recipe && "dataset" in recipe ? recipe.dataset.validationSplit : null;
   const explicit = input.trainingPlan.evaluationTasksetRef;
   if (explicit) {
-    const taskset = await input.store.getTasksetRevision(explicit.id, explicit.revision, explicit.contentHash);
-    if (!taskset || taskset.profileId !== input.trainingTaskset.profileId
-      || taskset.id !== explicit.id || taskset.revision !== explicit.revision || taskset.contentHash !== explicit.contentHash) {
+    const taskset = await input.store.getTasksetRevision(
+      explicit.id,
+      explicit.revision,
+      explicit.contentHash,
+    );
+    if (
+      !taskset ||
+      taskset.profileId !== input.trainingTaskset.profileId ||
+      taskset.id !== explicit.id ||
+      taskset.revision !== explicit.revision ||
+      taskset.contentHash !== explicit.contentHash
+    ) {
       throw new Error("The selected held-out Taskset revision is unavailable in this workspace.");
     }
     return verifySource(taskset);
@@ -73,37 +92,67 @@ export async function resolveManagedValidationTaskSource(input: {
     if (computeTasksetHash(taskset) !== taskset.contentHash) {
       throw new Error("The held-out Taskset bytes do not match its immutable revision.");
     }
-    const tasks = validationTasks(taskset, validationSplit);
-    if (!tasks.length) throw new Error(validationSplit
-      ? `The selected Taskset has no held-out evaluation tasks in the declared ${validationSplit} split.`
-      : "The selected Taskset has no held-out evaluation tasks.");
-    assertTrainingEvaluationIsolation(input.trainingTaskset.tasks.filter(task => task.split === "train"), tasks);
+    const tasks =
+      recipe?.method === "sft"
+        ? selectSftValidationTasks(taskset.tasks, recipe.dataset)
+        : validationTasks(taskset, validationSplit);
+    if (!tasks.length)
+      throw new Error(
+        validationSplit
+          ? `The selected Taskset has no held-out evaluation tasks in the declared ${validationSplit} split.`
+          : "The selected Taskset has no held-out evaluation tasks.",
+      );
+    assertTrainingEvaluationIsolation(
+      input.trainingTaskset.tasks.filter((task) => task.split === "train"),
+      tasks,
+    );
     if (taskset !== input.trainingTaskset) {
       const contract = (source: Taskset) => ({
-        environment: { kind: source.environment.kind, entrypoint: source.environment.entrypoint,
-          requiresState: source.capabilities.requiresState, requiresTools: source.capabilities.requiresTools },
+        environment: {
+          kind: source.environment.kind,
+          entrypoint: source.environment.entrypoint,
+          requiresState: source.capabilities.requiresState,
+          requiresTools: source.capabilities.requiresTools,
+        },
         output: source.metadata.tasksetOutputContract ?? null,
       });
       if (contentHash(contract(taskset)) !== contentHash(contract(input.trainingTaskset))) {
-        throw new Error("The held-out Taskset execution or output contract differs from the training Taskset.");
+        throw new Error(
+          "The held-out Taskset execution or output contract differs from the training Taskset.",
+        );
       }
       const grading = async (source: Taskset) => {
         const resolved = await resolveTasksetTrainingReward(input.store, source, input.storeDir);
-        return deterministicTrainingRewardSource({ graders: source.graders,
-          rewardExecution: resolved.rewardExecution ? { binding: resolved.rewardExecution.binding, rewards: resolved.rewardExecution.rewards } : undefined });
+        return deterministicTrainingRewardSource({
+          graders: source.graders,
+          rewardExecution: resolved.rewardExecution
+            ? {
+                binding: resolved.rewardExecution.binding,
+                rewards: resolved.rewardExecution.rewards,
+              }
+            : undefined,
+        });
       };
-      const [trainingGrade, evaluationGrade] = await Promise.all([grading(input.trainingTaskset), grading(taskset)]);
+      const [trainingGrade, evaluationGrade] = await Promise.all([
+        grading(input.trainingTaskset),
+        grading(taskset),
+      ]);
       if (contentHash(trainingGrade) !== contentHash(evaluationGrade)) {
-        throw new Error("The held-out Taskset Reward composition differs from the approved training grading plan.");
+        throw new Error(
+          "The held-out Taskset Reward composition differs from the approved training grading plan.",
+        );
       }
     }
     return { taskset, tasks };
   }
 }
 
-function validationTasks(taskset: Taskset, split: "frozen_eval" | "validation" | null): TaskDataRecord[] {
-  return taskset.tasks.filter(
-    (task) => split ? task.split === split : task.split === "frozen_eval" || task.split === "validation",
+function validationTasks(
+  taskset: Taskset,
+  split: "frozen_eval" | "validation" | null,
+): TaskDataRecord[] {
+  return taskset.tasks.filter((task) =>
+    split ? task.split === split : task.split === "frozen_eval" || task.split === "validation",
   );
 }
 
@@ -117,9 +166,11 @@ function sameEntryReference(
   },
   reference: ModelComparisonEntryRef,
 ): boolean {
-  return entry.seriesId === reference.seriesId
-    && entry.id === reference.entryId
-    && entry.scheduleEntryId === reference.scheduleEntryId
-    && entry.ordinal === reference.ordinal
-    && entry.releaseHash === reference.releaseHash;
+  return (
+    entry.seriesId === reference.seriesId &&
+    entry.id === reference.entryId &&
+    entry.scheduleEntryId === reference.scheduleEntryId &&
+    entry.ordinal === reference.ordinal &&
+    entry.releaseHash === reference.releaseHash
+  );
 }

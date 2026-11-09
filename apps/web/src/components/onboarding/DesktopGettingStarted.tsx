@@ -3,6 +3,7 @@ import type { BootstrapPayload } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { isDesktopShell } from "../app-shell/WindowControls";
 import { ONBOARDING_STORAGE_KEY, OPEN_ONBOARDING_EVENT, scheduleGettingStarted } from "./onboarding-lifecycle";
+import { clientChoiceStorage, useHydratedClientChoice } from "../../lib/client-choice-storage";
 
 const GettingStartedDialog = lazy(() => import("./GettingStartedDialog").then(module => ({ default: module.GettingStartedDialog })));
 
@@ -13,15 +14,13 @@ export function DesktopGettingStarted({ ready, connection, payload, onPayload }:
   onPayload: (payload: BootstrapPayload) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [dismissed, setDismissed] = useState(() => {
-    try { return localStorage.getItem(ONBOARDING_STORAGE_KEY) !== null; }
-    catch { return false; }
-  });
+  const [dismissed, setDismissed] = useState(() => clientChoiceStorage.getItem(ONBOARDING_STORAGE_KEY) === "true");
+  useHydratedClientChoice(() => setDismissed(clientChoiceStorage.getItem(ONBOARDING_STORAGE_KEY) === "true"));
   const desktop = isDesktopShell();
   const accountSettled = payload?.account.state === "signed_in" || payload?.account.state === "signed_out" || payload?.account.state === "auth_error";
   const complete = payload?.account.state === "signed_in"
-    && Boolean(payload.providers.providers.codex?.enabled && payload.providers.statuses.codex?.available)
-    && Boolean(payload.providers.providers["claude-code"]?.enabled && payload.providers.statuses["claude-code"]?.available);
+    && Boolean(payload.providers.providers.codex?.enabled && payload.providers.statuses.codex?.available
+      || payload.providers.providers["claude-code"]?.enabled && payload.providers.statuses["claude-code"]?.available);
 
   useEffect(() => {
     if (!desktop || !ready || !connection || !accountSettled || dismissed || complete || open) return;
@@ -41,8 +40,7 @@ export function DesktopGettingStarted({ ready, connection, payload, onPayload }:
   function close() {
     setOpen(false);
     setDismissed(true);
-    try { localStorage.setItem(ONBOARDING_STORAGE_KEY, "dismissed"); }
-    catch { /* Remember dismissal for this launch when storage is unavailable. */ }
+    clientChoiceStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
   }
 
   if (!open || !ready || !connection || !payload) return null;

@@ -37,7 +37,7 @@ export function labChatModelOptions(
       : [];
   });
   const selectedValue = chatModelValue(selected);
-  if (groups.some((group) => group.models.some((model) => model.value === selectedValue))) {
+  if (selected.providerId === "openpond" || groups.some((group) => group.models.some((model) => model.value === selectedValue))) {
     return groups;
   }
   return [

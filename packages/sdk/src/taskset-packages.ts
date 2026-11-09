@@ -1,4 +1,5 @@
 export * from "./taskset-package-contracts.js";
+export { textTaskPolicyMessages } from "./taskset-text-policy.js";
 export { bindOrdinaryModelTasksetReward } from "./model-ordinary-taskset-reward.js";
 export * from "./taskset-package-client.js";
 export * from "./taskset-package-learning.js";

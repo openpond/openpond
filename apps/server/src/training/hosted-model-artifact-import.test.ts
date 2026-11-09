@@ -6,11 +6,12 @@ import { importHostedModelArtifacts } from "./hosted-model-artifact-import.js";
 import { assertManagedModelArtifactIntegrity } from "./managed-model-artifact-integrity.js";
 import { createTrainingModelBindingService } from "./training-model-binding-service.js";
 import { HostedRecoveryImportSchema } from "./hosted-model-recovery.js";
+import { contentHash } from "@openpond/taskset-sdk";
 
 const H = "a".repeat(64);
 const NOW = "2026-09-09T12:00:00.000Z";
 
-async function fixture() {
+async function fixture(method: "grpo" | "sft" = "grpo") {
   const project = { id: "model", profileId: "profile", hosted: { projectId: "hosted-model", teamId: "team", apiOrigin: "https://host.invalid" } } as ModelProject;
   const submission = TrainingJobSubmissionSchema.parse({
     schemaVersion: "openpond.trainingJobSubmission.v2", idempotencyKey: "run-once", name: "Training",
@@ -22,7 +23,14 @@ async function fixture() {
     },
     job: { kind: "policy_optimize", baseModel: { schemaVersion: "openpond.baseModelPreference.v1", source: "managed",
       modelId: "Qwen/Qwen3-8B", revision: H, tokenizerRevision: H, chatTemplateHash: H, modelAssetId: null },
-      recipe: { schemaVersion: "openpond.rftRecipe.v1", method: "grpo", parameterization: "lora", reward: { graderHash: H } },
+      recipe: method === "grpo"
+        ? { schemaVersion: "openpond.rftRecipe.v1", method: "grpo", parameterization: "lora", reward: { graderHash: H } }
+        : { schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora",
+          baseModel: { id: "Qwen/Qwen3-8B", revision: H, tokenizerRevision: H, chatTemplateHash: H },
+          dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: 256 },
+          lora: { rank: 16, alpha: 32, dropout: 0, targetModules: ["q_proj", "v_proj"] },
+          optimizer: { learningRate: 0.00003, epochs: 1, maxSteps: 2, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 },
+          resourceLimits: { cpuThreads: 1, memoryBytes: 1073741824, wallTimeMs: 60000 } },
       rewardSource: { kind: "deterministic", grader: { id: "grader", contentHash: H }, composer: null }, resumeFrom: null },
     requestedCapabilities: [], placementObjective: "balanced", budget: { maximumSpendUsd: 2, maximumWallSeconds: 1200 },
     approval: { approvalHash: H, approvedAt: NOW, exportApproved: true, maximumSpendUsd: 2, retentionDays: 7, region: null }, contentHash: H,
@@ -106,13 +114,15 @@ describe("Hosted Model serving receipts", () => {
   });
   // An API-created Model must be bindable without local weights or a downloaded Taskset,
   // and importing it repeatedly must preserve the same Version and evaluation identity.
-  it("imports one exact hosted Version and verifies its remote receipt before binding", async () => {
-    const f = await fixture();
+  it.each(["grpo", "sft"] as const)("imports one exact hosted %s Version and verifies its remote receipt before binding", async (method) => {
+    const f = await fixture(method);
     await importHostedModelArtifacts({ ...f, fetch: f.request });
     await importHostedModelArtifacts({ ...f, fetch: f.request });
     expect(f.models.size).toBe(1);
     expect(f.artifacts.size).toBe(3);
     const model = [...f.models.values()][0]!;
+    if (f.submission.job.kind !== "policy_optimize") throw new Error("Expected a policy training fixture");
+    expect(model.graderHash).toBe(method === "sft" ? contentHash(f.submission.job.rewardSource) : H);
     expect(model.frozenEvaluationArtifactId).toBe([...f.artifacts.values()].find(value => value.kind === "evaluation")?.id);
     expect([...f.artifacts.values()].every(value => value.path.startsWith("sandbox-managed-rl://job/"))).toBe(true);
     model.managedServing = { schemaVersion: "openpond.managedAdapterServingProjection.v1", teamId: "team", source: "sandbox_managed_rl",

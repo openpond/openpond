@@ -41,7 +41,7 @@
         "gpuType": "gpu",
         "gpuCount": 1
       },
-      "customerHourlyUsd": 2,
+      "hourlyUsd": 2,
       "availability": "available"
     },
     "configuration": {

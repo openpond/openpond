@@ -26,6 +26,34 @@ afterEach(() => {
 });
 
 describe("training CLI", () => {
+  // Failure story: a documented history cursor must reach the API unchanged;
+  // rejecting zero or dropping a nonzero cursor hides or broadens command history.
+  test("forwards bounded weight-space history cursors through the CLI parser", async () => {
+    console.log = (message?: unknown) => logs.push(String(message ?? ""));
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      expect(url.origin + url.pathname).toBe("https://api.example.test/v1/training/weight-space-sessions/session-fixture/commands");
+      expect(init?.method ?? "GET").toBe("GET");
+      expect(new Headers(init?.headers).get("x-openpond-team-id")).toBe("team-fixture");
+      const afterRevision = request.mock.calls.length === 1 ? 0 : 7;
+      expect(Object.fromEntries(url.searchParams)).toEqual({ teamId: "team-fixture", afterRevision: String(afterRevision), limit: "2" });
+      const content = {
+        schemaVersion: "openpond.weightSpaceCommandPage.v1", teamId: "team-fixture", ownerUserId: "owner-fixture",
+        sessionId: "session-fixture", query: { afterRevision, limit: 2 }, items: [], nextAfterRevision: null,
+      };
+      return jsonResponse({ ...content, contentHash: await canonicalSha256(content) });
+    });
+    for (const afterRevision of [0, 7]) {
+      const parsed = parseArgs(["training", "hosted-weight-space-history", "session-fixture", "--team-id", "team-fixture",
+        "--after-revision", String(afterRevision), "--limit", "2", "--json"]);
+      expect(await runCliCommand(parsed)).toBe(true);
+      expect(JSON.parse(logs.at(-1)!)).toMatchObject({ query: { afterRevision, limit: 2 } });
+    }
+    const negative = parseArgs(["training", "hosted-weight-space-history", "session-fixture", "--team-id", "team-fixture", "--after-revision", "-1"]);
+    await expect(runCliCommand(negative)).rejects.toThrow();
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
   // Failure story: an advertised Model filter must survive argv validation and
   // reach the API, or profile history is rejected or broadened to other Models.
   test("forwards exact hosted steering profile Model scope through the CLI parser", async () => {

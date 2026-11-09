@@ -4,10 +4,17 @@ import type { SqliteStore } from "../store/store.js";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import { managedTrainingEvidenceFromPublic } from "./openpond-managed-training-evidence.js";
 
+type HostedTrainingClient = ReturnType<typeof createTrainingClient>;
+export type HostedModelRunEvidence = {
+  refresh(job: TrainingJob): Promise<void>;
+  evaluationTasks(job: TrainingJob, evaluationId: string, options: { cursor?: string; limit?: number }): ReturnType<HostedTrainingClient["evaluationTasks"]>;
+  clientFor(job: TrainingJob): Promise<HostedTrainingClient>;
+};
+
 export function createHostedModelRunEvidence(input: {
   store: SqliteStore;
   resolveAccess?: () => Promise<{ apiBaseUrl: string; token: string; teamId: string }>;
-}) {
+}): HostedModelRunEvidence {
   async function clientFor(job: TrainingJob) {
     if (!input.resolveAccess) throw new Error("Hosted training access is unavailable.");
     const access = await input.resolveAccess();

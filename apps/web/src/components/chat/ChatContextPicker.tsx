@@ -32,7 +32,7 @@ export function ChatContextPicker({
           selected?.target.kind === "engram_result" ||
           selected?.target.kind === "decision_result" ||
           selected?.target.kind === "alphaedit_result" ||
-          selected?.target.kind === "neuron_training_result"
+          selected?.target.kind === "neuron_training_result" || selected?.target.kind === "weight_space_session"
         ? "experiment"
         : selected?.target.kind;
   const type = draftType ?? selectedType ?? "model";
@@ -42,7 +42,7 @@ export function ChatContextPicker({
       (type === "experiment" &&
         (Boolean(option.target.result) || option.target.kind === "decision_result" ||
           option.target.kind === "alphaedit_result" ||
-          option.target.kind === "neuron_training_result")),
+          option.target.kind === "neuron_training_result" || option.target.kind === "weight_space_session")),
   );
   const modelId = selected?.training
     ? selected.training.location === "cloud"
@@ -55,7 +55,7 @@ export function ChatContextPicker({
       (selected?.target.kind === "dataset" || Boolean(selected?.target.result) ||
         selected?.target.kind === "decision_result" ||
         selected?.target.kind === "alphaedit_result" ||
-        selected?.target.kind === "neuron_training_result"))
+        selected?.target.kind === "neuron_training_result" || selected?.target.kind === "weight_space_session"))
       ? selected
       : type === "model" && modelId
         ? choices.find(

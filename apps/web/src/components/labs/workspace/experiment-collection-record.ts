@@ -1,6 +1,7 @@
 import type {
   ManagedAlphaEditExecutionPage,
   ManagedNeuronTrainingExecutionPage,
+  WeightSpaceExecutionPage,
   ManagedDecisionExecutionPage,
   ManagedEngramExecutionPage,
   ExperimentDraftRecord,
@@ -142,6 +143,7 @@ export type ManagedModificationExperimentCollectionRecord = {
     | ManagedEngramExecutionPage["items"][number]
     | ManagedDecisionExecutionPage["items"][number]
     | ManagedAlphaEditExecutionPage["items"][number]
+    | WeightSpaceExecutionPage["items"][number]
     | ManagedNeuronTrainingExecutionPage["items"][number];
 };
 export function managedModificationExperimentRecord(
@@ -151,11 +153,12 @@ export function managedModificationExperimentRecord(
     | ManagedEngramExecutionPage["items"][number]
     | ManagedDecisionExecutionPage["items"][number]
     | ManagedAlphaEditExecutionPage["items"][number]
+    | WeightSpaceExecutionPage["items"][number]
     | ManagedNeuronTrainingExecutionPage["items"][number],
 ): ManagedModificationExperimentCollectionRecord {
   return {
     kind: "managed-modification",
-    key: `${execution.method === "alphaedit" ? "managed-alphaedit" : execution.method === "selective_neuron_training" ? "managed-neuron-training" : execution.method === "decision_model" ? "managed-decision" : execution.method === "engram_adapter" ? "managed-engram" : "managed-modification"}:${execution.id}`,
+    key: `${execution.method === "weight_space_programming" ? "managed-weight-space" : execution.method === "alphaedit" ? "managed-alphaedit" : execution.method === "selective_neuron_training" ? "managed-neuron-training" : execution.method === "decision_model" ? "managed-decision" : execution.method === "engram_adapter" ? "managed-engram" : "managed-modification"}:${execution.id}`,
     id: execution.id,
     location: "hosted",
     api,

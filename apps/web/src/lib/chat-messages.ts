@@ -1,4 +1,5 @@
 import { parseNativeTaskNotification } from "./native-task-notification";
+import { decisionChatPromptForDisplay } from "./decision-chat-draft";
 import { HtmlVisualReferenceSchema } from "@openpond/contracts/html-visuals";
 import { attachChatResources } from "./chat-resources";
 import {
@@ -426,7 +427,10 @@ function parseWorkspaceDiffSummary(value: unknown): WorkspaceDiffSummary | null 
 function extractPrompt(value: unknown): string {
   if (!value || typeof value !== "object" || !("prompt" in value)) return "";
   const prompt = (value as { prompt?: unknown }).prompt;
-  return typeof prompt === "string" ? prompt : "";
+  if (typeof prompt !== "string") return "";
+  const ref = asRecord(asRecord(value)?.modelRef);
+  return decisionChatPromptForDisplay(typeof ref?.providerId === "string" ? ref.providerId : "",
+    typeof ref?.modelId === "string" ? ref.modelId : null, prompt);
 }
 
 function extractAttachments(value: unknown): ChatMessage["attachments"] {

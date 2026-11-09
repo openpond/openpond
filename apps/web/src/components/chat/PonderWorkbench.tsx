@@ -25,8 +25,9 @@ export function PonderWorkbench({ context, connection, sessionId, resources, chi
   context: Context; connection: ClientConnection; sessionId: string | null; resources: ReturnType<typeof useChatResourceFocus>; children: ReactNode;
 }) {
   const tabKey = `${context.scope}:${JSON.stringify(context.selection?.target ?? null)}`;
-  const [tabState, setTabState] = useState(() => ({ key: tabKey, value: rememberedTabs.get(tabKey) ?? "model" as Tab }));
-  const tab = tabState.key === tabKey ? tabState.value : rememberedTabs.get(tabKey) ?? tabState.value;
+  const defaultTab: Tab = context.selection?.target.kind === "dataset" ? "dataset" : "model";
+  const [tabState, setTabState] = useState(() => ({ key: tabKey, value: rememberedTabs.get(tabKey) ?? defaultTab }));
+  const tab = tabState.key === tabKey ? tabState.value : rememberedTabs.get(tabKey) ?? defaultTab;
   const setTab = (value: Tab) => setTabState({ key: tabKey, value });
   useEffect(() => {
     if (rememberedTabs.size >= 128 && !rememberedTabs.has(tabKey)) rememberedTabs.delete(rememberedTabs.keys().next().value!);
