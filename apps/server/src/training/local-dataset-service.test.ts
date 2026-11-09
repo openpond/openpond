@@ -94,6 +94,30 @@ test("large folder saves stay local and selected runs retain their exact dataset
   }finally {await store.close();await rm(home,{recursive:true,force:true});}
 },120_000);
 
+// A complete public corpus used to hit one task's 100k-node budget, forcing an
+// accidental sampled Dataset despite fitting the declared authoring byte limit.
+test("imports and packages a complete multi-thousand-row corpus without sampling its splits", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "openpond-full-local-corpus-"));
+  const store = new SqliteStore(home);
+  try {
+    const service = createLocalDatasetService({ store, home });
+    const tasks = Array.from({ length: 8792 }, (_, index) => ({ schemaVersion: "openpond.taskData.v1",
+      id: `task-${index}`, clusterKey: `family-${index}`, split: index < 7473 ? "train" : "frozen_eval",
+      input: { prompt: `What is ${index} plus one?` }, expectedOutput: { text: String(index + 1) },
+      policyVisibleContext: {}, privilegedContextRef: null, sourceRefs: [], tags: [], metadata: { sourceRow: index } }));
+    const request = { action: "create", operationId: "complete-corpus", payload: { name: "Complete arithmetic corpus",
+      draft: { objective: "Solve each arithmetic problem and return its numeric answer.", tasks, graders: [{ id: "exact", version: "1", label: "Exact", kind: "state", weight: 1,
+        hardGate: true, rewardEligible: false, privileged: true, config: { fields: ["text"] }, metadata: {} }] } } };
+    const first = (await service.request(request) as { record: LocalDatasetRecord }).record;
+    expect(first.workspace.draft.tasks).toHaveLength(8792);
+    const packaged = await service.packageDataset(first.workspace.draft.id, 1);
+    expect(packaged.package.taskset.tasks.filter(task => task.split === "train")).toHaveLength(7473);
+    expect(packaged.package.taskset.tasks.filter(task => task.split === "frozen_eval")).toHaveLength(1319);
+    expect((await service.request(request) as { record: LocalDatasetRecord }).record.workspace.contentHash).toBe(first.workspace.contentHash);
+    expect((await service.read(first.workspace.draft.id, 1)).workspace.draft.tasks).toHaveLength(8792);
+  } finally { await store.close(); await rm(home, { recursive: true, force: true }); }
+}, 60_000);
+
 // Failure story: an uncertain write must recover the exact saved revision,
 // edits must preserve older bytes, and settling a cloud receipt must not block
 // or roll back a simultaneous authored edit. No account is needed locally.

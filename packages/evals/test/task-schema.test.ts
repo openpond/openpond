@@ -52,12 +52,21 @@ test("bounds cyclic, sparse, accessor and serializer inputs while allowing repea
   const cycle: Record<string, unknown> = {};
   cycle.self = cycle;
   expect(() => assertBoundedTaskJson(cycle)).toThrow("task_json_cycle");
-  expect(() => assertBoundedTaskJson(new Array(5))).toThrow("task_json_array_invalid");
+  const sparse: unknown[] = []; sparse.length = 5;
+  expect(() => assertBoundedTaskJson(sparse)).toThrow("task_json_array_invalid");
   expect(() => assertBoundedTaskJson({ get value() { throw new Error("must not execute"); } })).toThrow("task_json_accessor_invalid");
   expect(() => assertBoundedTaskJson(Object.defineProperty({}, "toJSON", { value() { throw new Error("must not execute"); } }))).toThrow("task_json_serializer_invalid");
   expect(() => assertBoundedTaskJson({ value: Infinity })).toThrow("task_json_value_invalid");
   const item = { value: 1 };
   expect(() => assertBoundedTaskJson([item, item])).not.toThrow();
+  // Collection callers grant a larger byte budget. Individual task/schema
+  // callers keep their original structural ceiling and producer-code fences.
+  const collection = Array.from({ length: 8792 }, (_, id) => ({ id,
+    input: { prompt: `Question ${id}`, context: {} }, expected: { text: String(id) }, metadata: { split: "train", source: "public", revision: 1, verified: true } }));
+  expect(() => assertBoundedTaskJson(collection)).toThrow("task_json_complexity_exceeded");
+  expect(() => assertBoundedTaskJson(collection, 64 * 1024 * 1024)).not.toThrow();
+  expect(() => assertBoundedTaskJson({ collection, cycle }, 64 * 1024 * 1024)).toThrow("task_json_cycle");
+  expect(() => assertBoundedTaskJson({ collection, get value() { throw new Error("must not execute"); } }, 64 * 1024 * 1024)).toThrow("task_json_accessor_invalid");
 });
 
 // Regression: empty checks and malformed schema must remain unscorable, never successful training reward.
