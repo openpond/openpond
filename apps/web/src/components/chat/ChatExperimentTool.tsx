@@ -17,6 +17,7 @@ import { PonderWorkbench } from "./PonderWorkbench";
 import { ChatExperimentEditor } from "./ChatExperimentEditor";
 import { DecisionResults } from "../labs/workspace/DecisionResults";
 import { ChatHostedTrainingResult } from "./ChatHostedTrainingResult";
+import "./chat-experiment-tool.css";
 
 export function ChatExperimentTool({
   connection,
