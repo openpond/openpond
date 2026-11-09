@@ -12,7 +12,11 @@ export async function configuredAccess(teamId: string) {
 export function identity(access: Access) {
   return {teamId: access.teamId, actorId: access.actorId, apiOrigin: new URL(access.apiBaseUrl).origin};
 }
-export function clientFor(access: Access, fence: () => Promise<void>, fetchImpl: typeof fetch = fetch) {
+export function clientFor(
+  access: Access,
+  fence: () => Promise<void>,
+  fetchImpl: typeof fetch = fetch,
+): ReturnType<typeof createTrainingClient> {
   return createTrainingClient({baseUrl: access.apiBaseUrl, headers: () => {
     const headers = hostedApiAuthHeaders(access.token); headers.set("x-openpond-team-id", access.teamId); return headers;
   }, fetch: async (...args) => {await fence(); const response = await fetchImpl(...args); await fence(); return response;}});
