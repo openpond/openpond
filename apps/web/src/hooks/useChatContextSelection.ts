@@ -226,6 +226,6 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
     } finally { pending.delete(key); for (const listener of listeners) listener(); }
   }, [connection, selection, workspace?.teamId, key, queries, scope, sessionId]);
   const closeDraftEditor = useCallback(() => { configureDrafts.delete(key); for (const listener of listeners) listener(); }, [key]);
-  const refreshLocalCatalog = () => connection ? queries.fetchQuery(sourceQuery("local")) : Promise.resolve();
+  const refreshLocalCatalog = () => connection ? Promise.all([queries.fetchQuery(sourceQuery("local")), queries.fetchQuery(sourceQuery("models"))]) : Promise.resolve();
   return { associateTraining, selection, selecting, configureDraftId, closeDraftEditor, catalog, refreshLocalCatalog, runs, select, saveDraft, selectionError: retained.error, moveToSession, scope };
 }
