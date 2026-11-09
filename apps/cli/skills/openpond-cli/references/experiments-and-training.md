@@ -361,9 +361,22 @@ method-specific settings, a sealed reviewed batch, stable operation ID, name,
 Project (or null) and maximum spend. The service owns configuration creation;
 do not send the user through New Model first. Retain the request and the full
 returned wrapper receipt. This prepares without starting compute or a recurring
-policy. After reviewing its limits and obtaining the user's execution authority,
-`training hosted-start <receipt.json> --team-id <id> --yes --json` accepts the
-wrapper directly. On a lost preparation reply, reconcile the same operation and
+policy. For a reserved-budget start, request a fresh price review with
+`training hosted-estimate <estimate-request.json> --team-id <id> --json`.
+Use `openpond.trainingEstimateRequest.v1` with the same `teamId` and
+`source: { kind: "preparation", id: receipt.plan.id,
+planHash: receipt.plan.contentHash, expectedRevision: receipt.revision }`.
+For a model-first wrapper, these fields are in `receipt.preparation`. Retain the
+full estimate response, including its signed `review` and `expiresAt`; a Model
+configuration estimate cannot replace a review of this exact prepared plan.
+After reviewing its limits and obtaining the user's execution authority,
+`training hosted-start <receipt.json> --team-id <id>
+--estimate-review-file <estimate.json> --yes --json` accepts the wrapper directly.
+Refresh an expired review for the same preparation before retrying Start. This
+read creates no Job and does not require another budget question when the
+approved scope and cap are unchanged. Unknown duration or total cost remains
+unknown; retain the current hourly price and the authorized hard cap.
+On a lost preparation reply, reconcile the same operation and
 exact input; changed inputs require a new operation. Never recreate a submitted
 job because its chat attachment failed.
 
