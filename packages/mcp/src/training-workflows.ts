@@ -93,6 +93,7 @@ export function addTrainingWorkflows(add: AddTool, c: Clients, context: OpenPond
     },
     { output: ExperimentDraftReceiptSchema, wireOutput: draftReceipt },
   );
+  add("training_resolve_experiment","Save or reconcile the exact Model configuration behind an approved experiment without compiling inputs or looking for GPUs. Follow with placement review and one durable operation queue request.",withoutWorkspace(TrainingExperimentSetupRequestSchema),"write",v=>c.training.resolveExperiment({...v,teamId}),{destructive:false});
   add(
     "training_prepare_experiment",
     "Prepare an exact SFT or GRPO experiment through the canonical model-first setup service. Preserve the operation ID, source revisions and spend approval; this does not start training.",

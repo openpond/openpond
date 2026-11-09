@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { learningRef, type OpenPondLearningClient } from "openpond-sdk/learning";
 import { type createModelProjectsClient } from "openpond-sdk/model-projects";
-import { TrainingGpuSelectionSchema, type createTrainingClient } from "openpond-sdk/training";
+import { TrainingGpuSelectionSchema, TrainingPreparationRequestSchema, type createTrainingClient } from "openpond-sdk/training";
 import { optionString, parseBooleanOption, parseNumberOption } from "./common/options";
 
 type Options = Record<string, string | boolean>;
@@ -56,7 +56,7 @@ export async function startHostedModel(input: {
   }
   if (cap === null || !Number.isFinite(cap) || cap <= 0 || cap > 1_000_000)
     throw new Error("Choose an explicit positive --max-spend or save a positive Model budget before starting.");
-  const preparation = await client.prepareRun({
+  const request = TrainingPreparationRequestSchema.parse({
     schemaVersion: "openpond.trainingPreparationRequest.v1", teamId,
     operationId: optionString(options, "operationId") || randomUUID(),
     projectId: optionString(options, "projectId") || null,
@@ -65,24 +65,16 @@ export async function startHostedModel(input: {
     maximumSpendUsd: cap,
     ...(gpuSelection ? { gpuSelection } : {}),
   });
-  if (!parseBooleanOption(options.json)) console.log(`Retained preparation: ${preparation.plan.id}`);
-  if (!parseBooleanOption(options.json)) {
-    console.log(`Prepared run: ${preparation.plan.id}; approved maximum $${cap}.`);
-    console.log(`Model: ${project.name}@${preparation.plan.source.modelProject.revision}; batch: ${preparation.plan.request.batch.id}@${preparation.plan.request.batch.revision}.`);
-    console.log(`GPU choice: ${gpuSelection?.mode === "manual" ? `${gpuSelection.gpuType} / ${gpuSelection.availabilityId}` : `Automatic (${gpuSelection?.objective ?? project.trainingSetup.managedGpuPlacementObjective})`}; count ${gpuSelection?.gpuCount ?? 1}.`);
+  const placementReview=await client.reviewPlacement(request);
+  if(!parseBooleanOption(options.json)) {
+    console.log(`Model: ${project.name}@${project.revision}; batch: ${request.batch.id}@${request.batch.revision}.`);
+    console.log(`Approved total maximum $${cap}; compatible GPU hourly ceiling $${placementReview.maximumHourlyUsd}.`);
+    console.log("The application retains this operation while compatible capacity is unavailable.");
   }
-  if (!yes) {
-    const prompt = createInterface({ input: process.stdin, output: process.stdout });
-    try {
-      const confirmed = await prompt.question(`Start this exact prepared run with a $${cap} maximum? [y/N] `);
-      if (!["y", "yes"].includes(confirmed.trim().toLowerCase()))
-        throw new Error(`Training was not started. Preparation ${preparation.plan.id} is retained for review or cancellation.`);
-    } finally { prompt.close(); }
-  }
-  // Do not repeat this mutation after a lost response. The retained preparation
-  // is the recovery handle and the backend owns exactly-once submission.
-  const submitted = await client.startPreparation(preparation.plan.id, {
-    teamId, planHash: preparation.plan.contentHash, expectedRevision: preparation.revision,
-  });
-  return { preparation: submitted };
+  if(!yes){const prompt=createInterface({input:process.stdin,output:process.stdout});try{
+    const answer=await prompt.question(`Queue this reviewed run with a $${cap} total maximum? [y/N] `);
+    if(!["y","yes"].includes(answer.trim().toLowerCase()))throw new Error("Training was not queued.");
+  }finally{prompt.close();}}
+  const operation=await client.queueRun({schemaVersion:"openpond.trainingOperationRequest.v1",request,placementReview});
+  return {operation};
 }

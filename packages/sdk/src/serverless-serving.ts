@@ -60,8 +60,20 @@ export const ServerlessServingReviewV2Schema = ServerlessServingReviewIdentitySc
     supplierRounding: z.literal("ceil_worker_lifetime_second_once"),
   }).strict(),
 }).strict();
+/** New admissions debit evidenced runtime without encumbering future credit. */
+export const ServerlessServingReviewV3Schema = ServerlessServingReviewV2Schema.extend({
+  schemaVersion: z.literal("openpond.serverlessServingReview.v3"),
+  billing: z.object({
+    mode: z.literal("periodic_actual_usage"),
+    debitIntervalMillis: z.literal(15_000),
+    reservation: z.literal("none"),
+    uncollectible: z.literal("operator_expense"),
+    evidence: z.literal("native_worker_clock"),
+    quantityAuthority: z.literal("pending_until_two_advancing_native_clocks"),
+  }).strict(),
+}).strict();
 export const ServerlessServingReviewSchema = z.discriminatedUnion("schemaVersion", [
-  ServerlessServingReviewV1Schema, ServerlessServingReviewV2Schema,
+  ServerlessServingReviewV1Schema, ServerlessServingReviewV2Schema, ServerlessServingReviewV3Schema,
 ]);
 export type ServerlessServingReview = z.infer<typeof ServerlessServingReviewSchema>;
 
@@ -71,6 +83,22 @@ export const ServerlessServingApprovalSchema = z.object({
   customerCapUsd: Money.refine(value => Number(value) > 0).nullable(),
 }).strict();
 export type ServerlessServingApproval = z.infer<typeof ServerlessServingApprovalSchema>;
+
+export const ServerlessServingUsageSchema = z.object({
+  mode: z.literal("periodic_actual_usage"),
+  phase: z.enum(["starting", "running", "stopping", "closed", "waiting_capacity", "waiting_funding", "waiting_platform"]),
+  ratedUsd: Money,
+  chargedUsd: Money,
+  prepaidDebitedUsd: Money,
+  includedUsageUsd: Money,
+  pendingEvidence: z.boolean(),
+  lastEvidenceAt: Timestamp.nullable(),
+  lastDebitAt: Timestamp.nullable(),
+  nextDebitAt: Timestamp.nullable(),
+  retryAt: Timestamp.nullable().optional(),
+  stopReason: z.string().nullable(),
+}).strict();
+export type ServerlessServingUsage = z.infer<typeof ServerlessServingUsageSchema>;
 
 export const ServerlessServingSnapshotSchema = z.object({
   schemaVersion: z.literal("openpond.serverlessServing.v1"),
@@ -82,6 +110,7 @@ export const ServerlessServingSnapshotSchema = z.object({
   chargedUsd: Money,
   reservedUsd: Money,
   supplierCostStatus: z.enum(["pending", "reconciled"]),
+    usage: ServerlessServingUsageSchema.optional(),
 }).strict();
 export type ServerlessServingSnapshot = z.infer<typeof ServerlessServingSnapshotSchema>;
 
@@ -100,7 +129,7 @@ export async function verifyServerlessServingReview(raw: ServerlessServingReview
 
 export async function createServerlessServingApproval(raw: ServerlessServingReview, spendingLimit?: string | null) {
   const review = ServerlessServingReviewSchema.parse(raw), {contentHash, ...content} = review;
-  if (review.schemaVersion !== "openpond.serverlessServingReview.v2" ||
+  if (review.schemaVersion !== "openpond.serverlessServingReview.v3" ||
     contentHash !== await canonicalSha256(content) || Date.parse(review.expiresAt) <= Date.now())
     throw new OpenPondProtocolError("serverless_serving_review_expired", "Refresh this saved Model's serving price.");
   return ServerlessServingApprovalSchema.parse({schemaVersion: "openpond.serverlessServingApproval.v1",
