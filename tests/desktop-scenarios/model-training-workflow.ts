@@ -82,6 +82,8 @@ export default desktopScenario({
     const completed = receipt.completed.name === "turn.completed" && receipt.completed.status === "completed";
     harness.recordAssertion("realAgentCompleted", completed);
     if (!completed) throw new Error(`Card turn ended with ${receipt.completed.name}.`);
+    harness.recordAssertion("noStrandedApprovals", approvals.size === 0);
+    if (approvals.size) throw new Error("The native round ended with unresolved RPC approvals; this does not prove question continuation.");
     await harness.screenshot(`${method}-unchanged-card-response`);
   },
 });

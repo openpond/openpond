@@ -39,6 +39,11 @@ public dataset is part of the request; do not ask a separate download question.
 Choose supported model/recipe defaults rather than sending a setup questionnaire.
 Never call a preview-only sample the full dataset; state the actual population.
 
+Before quoting a run, inspect the installed recipe schema and live capabilities
+for row, step, sequence and runtime limits. Retain the complete source Dataset,
+but size the executable batch within those limits; do not propose a full-source
+run that its method cannot admit.
+
 Once the source, supported model, grader checks and API hourly-rate evidence
 are known, show the proposed bounded run and ask for its total budget before
 bulk per-example grading/review, publication or preparation. Do not spend many

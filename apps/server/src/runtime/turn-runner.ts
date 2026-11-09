@@ -1414,7 +1414,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         ? nativeBrowserTools(session, browserToolExecutor) : [];
       const questionDefinitions = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
         && peerInput?.payload.taskReportingOnly !== true && (session.provider === "codex" || isNativeAgentId(session.provider))
-        ? [createNativeQuestionTool(nativeAgents.requestUserInput)] : [];
+        ? [createNativeQuestionTool(appendRuntimeEvent)] : [];
       const fileDefinitions = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
         && peerInput?.payload.taskReportingOnly !== true ? [filePreviewTool] : [];
       const toolLearningContext = !nativeEvaluation && !candidateAuthoring && !isolatedProfileEvaluation ? await nativeToolLearningContext(session).catch(() => "") : "";
