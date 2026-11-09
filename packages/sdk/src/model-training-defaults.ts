@@ -85,7 +85,7 @@ export function prepareModelTrainingDefaults(input: {
     const sameEvaluation = setup.evaluationTasksetRef?.id === setup.tasksetRef?.id
       && setup.evaluationTasksetRef?.contentHash === setup.tasksetRef?.contentHash;
     if (!dataset.validationSplit && !sameEvaluation)
-      throw new Error("Choose the optimizer validation split from the selected evaluation dataset.");
+      throw new Error("Choose the held-out split from the selected evaluation dataset.");
     return ModelProjectTrainingSetupSchema.parse({
       ...setup,
       recipe: ManagedSftRecipeSchema.parse({

@@ -669,6 +669,8 @@ final state hashes. A runtime must explicitly advertise this mode before
 admission; source packaging alone does not establish native qualification or
 old/new held-out retention.
 
+### Managed GRPO sampling support
+
 Use `topP: 1` for managed GRPO. The current qualified trainer replays temperature and the retained required-tool grammar; it cannot replay an independent nucleus filter or separate JSON response grammar. Unsupported generation settings are rejected during preparation, before allocation. Structured Work output uses its supported required-tool path. Existing saved requests retain their explicit settings and are never silently rewritten.
 
 The current managed runtime admits at least two optimizer iterations. A single iteration is not inherently invalid GRPO, but needs explicit support from the selected runtime before it can be prepared. Each iteration accumulates the entire trajectory group before stepping; `gradientAccumulationSteps` does not define separate optimizer windows for GRPO. SFT uses its own true batch accumulation and exact model/image limits. Held-out SFT evaluation does not select optimizer updates.

@@ -43,19 +43,11 @@ source, package, model and case identities before accepting a run.
 
 ## Next.js route handler
 
-Sandbox and model configuration are independently optional. With only `apiKey`,
-Work uses OpenPond's hosted defaults. To run tools in your installed runtime while
-keeping the hosted model, add `sandbox: { endpoint, apiKey }`. To choose a model,
-add `model: { endpoint, apiKey, model }`, where `endpoint` is an OpenAI-compatible
-Chat Completions base URL. Each override requires its own credential; credentials
-are never borrowed from another service. Both overrides together allow omitting
-the hosted `apiKey` for Work.
+With your `apiKey`, Work uses OpenPond’s hosted defaults.
 
 The customer runtime uses fresh guests for subsequent turns. Persist history and
 outputs in your application, then pass them into the next run. A failed output
-save retains the guest for recovery; retry persistence before deleting it. Hosted
-repository provisioning and spending budgets do not apply to a custom runtime.
-An optional UUID `requestId` lets an application reconcile interrupted allocations
+save retains the guest for recovery; retry persistence before deleting it. An optional UUID `requestId` lets an application reconcile interrupted allocations
 through sandbox metadata; it does not replay model or tool operations.
 
 ```ts
@@ -391,7 +383,7 @@ not implicitly share a spending cap.
 
 ## Add production tasks
 
-The configured API targets unpublished source candidate **0.12.25**; registry 0.12.24 does not provide it. Configure `datasetId` once and await `client.addTask({ id: sourceEventId, name, input })`. Use `client.dataset(otherDatasetId).addTask(task)` for another destination. See [task ingestion](TASK_INGESTION.md) for TypeScript/Python examples, receipt semantics and duplicate-safe retries. Task uploads do not enable training.
+Configure `datasetId` once and await `client.addTask({ id: sourceEventId, name, input })`. Use `client.dataset(otherDatasetId).addTask(task)` for another destination. See [task ingestion](TASK_INGESTION.md) for TypeScript/Python examples, receipt semantics and duplicate-safe retries. Task uploads do not enable training.
 
 Dataset workspace HTTP failures throw `DatasetWorkspaceRequestError` from
 `openpond-sdk/dataset-workspaces`, with `status`, an allowlisted `code`,
@@ -402,4 +394,4 @@ bytes, recover its receipt with `operationResult`, or retry the identical reques
 
 ## Add OpenPond to a product
 
-Configure named personalized Model handles with `models` and an explicit `serving` destination, then call `client.models.support.generate({ prompt })` or iterate `stream({ prompt })`. See [product integration](PRODUCT_INTEGRATION.md) for TypeScript, Python, React/backend and optional Vercel AI SDK 7 examples. Inference never activates serving or automatically captures tasks.
+Configure named personalized Model handles with `models` and your API key, then call `client.models.support.generate({ prompt })` or iterate `stream({ prompt })`. See [product integration](PRODUCT_INTEGRATION.md) for TypeScript, Python, React/backend and optional Vercel AI SDK 7 examples. Inference never activates serving or automatically captures tasks.

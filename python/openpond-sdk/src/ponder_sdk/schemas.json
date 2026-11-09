@@ -92,8 +92,8 @@
     },
     {
       "sourceBase": "0bf7b6be48ae1d3a94f1266d41c695c992d05b48",
-      "candidateSdkVersion": "0.12.25",
-      "pythonVersion": "0.1.5",
+      "candidateSdkVersion": "0.12.26",
+      "pythonVersion": "0.1.6",
       "sourceFiles": {
         "$object": 0
       }
