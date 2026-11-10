@@ -9,6 +9,7 @@ import {
 import { requireLearningRelease, requireLearningResource, type LearningRepository, type LearningTransaction } from "./repository.js";
 import { deferLearningIterationSubmission } from "./iteration-dispatch-deferral.js";
 import { LearningIterationSubmissionDeferralSchema, type LearningIterationSubmissionDeferral } from "./iteration-dispatch-contracts.js";
+import { settleLearningIterationExposure } from "./iteration-exposure.js";
 
 export type LearningIterationExecutionContext = {
   scope: string;
@@ -121,6 +122,9 @@ export function createLearningIterationWorker(repository: LearningRepository, ex
       terminalReceipt: outcome?.receipt ?? null, leaseOwner: null, leaseExpiresAt: null, admission: null,
       nextAttemptAt: terminal ? null : new Date(Date.parse(now()) + 5_000).toISOString(), consecutiveFailures: 0, lastError: null });
     if (terminal) {
+      await settleLearningIterationExposure(tx, { chainId: current.chainId, iterationId: iteration.id,
+        batch: await requireLearningRelease(tx, "batch", current.batch), outcome,
+        unstarted: !outcome && !current.submissionStartedAt });
       const reservation = await requireLearningResource(tx, "reservation", iteration.id);
       const settled = LearningIterationReservationSchema.parse({ ...reservation, revision: reservation.revision + 1,
         budget: { ...reservation.budget, reservedSpendUsd: 0, settledSpendUsd: updated.spendUsd, settledAt: now() }, updatedAt: now() });

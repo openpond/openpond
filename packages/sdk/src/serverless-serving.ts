@@ -8,7 +8,7 @@ const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Money = z.string().regex(/^(0|[1-9]\d*)\.\d{6}$/).max(24);
 const Timestamp = z.iso.datetime();
 
-export const SERVERLESS_SERVING_IDLE_SECONDS = 5;
+export const SERVERLESS_SERVING_IDLE_SECONDS = 60;
 export const SERVERLESS_SERVING_REQUEST_MILLIS = 540_000;
 export const SERVERLESS_SERVING_QUEUE_MILLIS = 60_000;
 export const SERVERLESS_SERVING_METER_LEASE_MILLIS = 15_000;
@@ -23,7 +23,7 @@ const ServerlessServingReviewIdentitySchema = z.object({
   workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   providerConfigurationHash: Hash,
   price: ComputeAppliedPriceSchema.extend({ service: z.literal("model_serving") }),
-  workerIdleTimeoutSeconds: z.literal(SERVERLESS_SERVING_IDLE_SECONDS),
+  workerIdleTimeoutSeconds: z.literal(5),
   maximumRequestMillis: z.literal(SERVERLESS_SERVING_REQUEST_MILLIS),
   expiresAt: Timestamp,
   contentHash: Hash,
@@ -63,6 +63,7 @@ export const ServerlessServingReviewV2Schema = ServerlessServingReviewIdentitySc
 /** Current serving review. */
 export const ServerlessServingReviewV3Schema = ServerlessServingReviewV2Schema.extend({
   schemaVersion: z.literal("openpond.serverlessServingReview.v3"),
+  workerIdleTimeoutSeconds: z.union([z.literal(5), z.literal(SERVERLESS_SERVING_IDLE_SECONDS)]),
   /** Newly issued reviews expose the approved hardware set. Historical signed
    * reviews remain valid with their original content hash. */
   hardware: z.object({

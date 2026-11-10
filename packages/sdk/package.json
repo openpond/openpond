@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.12.26",
+  "version": "0.12.27",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -220,7 +220,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
-    "@openpond/evals": "^0.12.6",
+    "@openpond/evals": "^0.12.7",
     "@openpond/harness": "^0.4.11",
     "esbuild": "0.28.1",
     "yaml": "^2.9.0",

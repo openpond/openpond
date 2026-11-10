@@ -42,11 +42,12 @@ export function createModelTrainingRecipeDefaults(
 
 /** Changing source inputs invalidates only their bindings, preserving the
  * caller's optimizer, rollout, adapter, loss and budget settings. */
-export function rebindModelTrainingRecipe(saved: ModelProjectTrainingSetup["recipe"]) {
+export function rebindModelTrainingRecipe(saved: ModelProjectTrainingSetup["recipe"], options: { preserveValidationSelection?: boolean } = {}) {
   const { baseModel: _base, reward: _reward, policyOptimization: _compiled, ...recipe } = createModelTrainingRecipeDefaults(saved);
   // Split names and the derived source population belong to the new package.
   // Retain authoring controls such as prompt length/selection strategy.
-  const { trainSplit: _train, validationSplit: _validation, maxExamples: _population, ...dataset } = fields(recipe.dataset);
+  const { trainSplit: _train, validationSplit: _validation, validationTaskIds, maxExamples: _population, ...remaining } = fields(recipe.dataset);
+  const dataset = { ...remaining, ...(options.preserveValidationSelection && validationTaskIds !== undefined ? { validationTaskIds } : {}) };
   return recipe.method === "sft"
     ? { ...recipe, dataset: { ...dataset, ...(_validation ? { validationSplit: _validation } : {}) } }
     : { ...recipe, dataset, policyOptimization: null };

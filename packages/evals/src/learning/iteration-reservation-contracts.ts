@@ -29,17 +29,19 @@ export const LearningEligibilityCountsSchema = z.object({
   consumed: z.number().int().nonnegative(),
 }).strict();
 
-/** Immutable evidence consumption survives rejection and policy revision changes.
- * A corrected evidence revision is new data; reapproving the same revision isn't. */
+/** Reservation history is retained; authoritative terminal exposure alone may
+ * release proven-unexposed evidence. Ambiguous execution remains reserved. */
 export const LearningConsumptionSchema = z.object({
   schemaVersion: z.literal("openpond.learningConsumption.v1"),
   id: ReleaseIdSchema,
-  revision: z.literal(1),
+  revision: z.number().int().positive(),
   chainId: ReleaseIdSchema,
   iterationId: ReleaseIdSchema,
   evidence: LearningRevisionRefSchema,
   decision: LearningRevisionRefSchema,
   reservedAt: ReleaseTimestampSchema,
+  exposure: z.enum(["reserved", "trained", "exposed", "unexposed"]).optional(),
+  executionReceipt: z.object({ id: ReleaseIdSchema, contentHash: ReleaseHashSchema }).strict().nullable().optional(),
 }).strict();
 
 /** Dispatch must reconcile this reservation, never reserve a second batch on retry. */

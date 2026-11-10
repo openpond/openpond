@@ -2,7 +2,8 @@ import { LearningIterationSchema } from "./contracts.js";
 import { LearningDomainError } from "./errors.js";
 import { LearningChainSchema, LearningIterationReservationSchema } from "./iteration-reservation-contracts.js";
 import type { LearningCommand } from "./operations.js";
-import { LearningConflictError, requireLearningResource, type LearningResourcePointer, type LearningTransaction } from "./repository.js";
+import { LearningConflictError, requireLearningRelease, requireLearningResource, type LearningResourcePointer, type LearningTransaction } from "./repository.js";
+import { settleLearningIterationExposure } from "./iteration-exposure.js";
 
 /** Only a reservation that has never been dispatched can release spend locally.
  * Submitted executions require authoritative cancellation and settlement. */
@@ -18,6 +19,9 @@ export async function cancelLearningIterationReservation(
   if (iteration.trainingJob || iteration.evaluationJob || !["ready", "waiting_for_data", "waiting_for_review"].includes(iteration.status)) {
     throw new LearningDomainError("learning_execution_cancellation_required", 409);
   }
+  const dispatch = await transaction.get("dispatch", iteration.dispatchId);
+  if (dispatch?.submissionStartedAt || dispatch?.execution || dispatch?.leaseOwner)
+    throw new LearningDomainError("learning_execution_cancellation_required", 409);
   const updated = LearningIterationSchema.parse({ ...iteration, revision: iteration.revision + 1, status: "cancelled", updatedAt: now });
   const released = LearningIterationReservationSchema.parse({
     ...reservation, revision: reservation.revision + 1,
@@ -29,7 +33,11 @@ export async function cancelLearningIterationReservation(
   if (chain.activeIterationId === iteration.id) {
     await transaction.put("chain", LearningChainSchema.parse({ ...chain, revision: chain.revision + 1, activeIterationId: null, updatedAt: now }), chain.revision, { parentId: chain.modelProjectId });
   }
-  // Consumption is retained. Retry/replay is an explicit operation, never a
-  // side effect of cancelling that silently makes the same examples new again.
+  // Retain the reservation history; only this transaction's fenced proof that
+  // dispatch never started makes its exact evidence eligible again.
+  if (iteration.batch) await settleLearningIterationExposure(transaction, {
+    chainId: reservation.chainId, iterationId: iteration.id,
+    batch: await requireLearningRelease(transaction, "batch", iteration.batch), outcome: null, unstarted: true,
+  });
   return [{ kind: "iteration", id: updated.id, revision: updated.revision }, { kind: "reservation", id: released.id, revision: released.revision }];
 }

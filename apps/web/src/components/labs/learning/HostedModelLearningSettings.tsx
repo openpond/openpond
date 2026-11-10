@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   createHostedLearningPolicyContent,
   hostedLearningPolicyDefaults,
+  supportsRecurringModelTraining,
   learningRef,
   sameLearningRef,
   type LearningPolicy,
@@ -34,7 +35,7 @@ export function HostedModelLearningSettings({
 }) {
   const [id] = useState(() => policy?.id ?? `policy-${crypto.randomUUID()}`);
   const [defaults] = useState(() => hostedLearningPolicyDefaults(project, policy));
-  const [enabled, setEnabled] = useState(defaults.enabled);
+  const [enabled, setEnabled] = useState(defaults.enabled && policy?.trigger.kind !== "manual");
   const [triggerKind, setTriggerKind] = useState<LearningPolicy["trigger"]["kind"]>(
     policy?.trigger.kind ?? "nightly",
   );
@@ -96,6 +97,8 @@ export function HostedModelLearningSettings({
     };
   }, [client, after]);
   const current = catalog && catalog.after === after ? catalog.data : null;
+  const method = applyModel ? project.trainingSetup.method : policy?.training.method;
+  const recurringSupported = supportsRecurringModelTraining(method);
   const binding = applyModel ? project.trainingSetup.rewardBindingRef : policy?.rewardBinding;
   function select(source: LearningSource) {
     const selected = sources.some((ref) => ref.id === source.id);
@@ -122,8 +125,9 @@ export function HostedModelLearningSettings({
           sources,
           taskDefinition: definition,
           settings: {
-            enabled,
-            scheduled: triggerKind !== "manual",
+            enabled:
+              triggerKind === "manual" ? (policy?.enabled ?? false) : recurringSupported && enabled,
+            scheduled: recurringSupported && triggerKind !== "manual",
             humanReviewRequired: human,
             intervalSeconds: Number(fields.interval) * 60,
             trigger:
@@ -207,11 +211,17 @@ export function HostedModelLearningSettings({
             <label>
               <input
                 type="checkbox"
-                checked={enabled}
+                checked={recurringSupported && enabled}
+                disabled={!recurringSupported || triggerKind === "manual"}
                 onChange={(event) => setEnabled(event.target.checked)}
               />{" "}
               Enable learning
             </label>
+            {!recurringSupported ? (
+              <p>Recurring training is unavailable for this method. Run one reviewed stage.</p>
+            ) : method === "sft" ? (
+              <p>Each recurring SFT cycle trains a fresh LoRA from the pinned base model.</p>
+            ) : null}
             <fieldset>
               <legend>Example review and admission</legend>
               <DropdownSelect
@@ -361,12 +371,15 @@ export function HostedModelLearningSettings({
               <legend>Training schedule</legend>
               <DropdownSelect
                 label="Training schedule"
+                disabled={!recurringSupported}
                 value={triggerKind}
                 options={[
                   { value: "nightly", label: "Every night" },
                   { value: "approved_count", label: "When enough approved tasks are ready" },
                   { value: "schedule", label: "Check at an interval" },
-                  { value: "manual", label: "Manual updates" },
+                  ...(triggerKind === "manual"
+                    ? [{ value: "manual", label: "No recurring cadence selected", disabled: true }]
+                    : []),
                   ...(policy?.trigger.kind === "upstream_accepted"
                     ? [
                         {
@@ -413,7 +426,14 @@ export function HostedModelLearningSettings({
               ) : triggerKind === "approved_count" ? (
                 <p>Checks when at least {fields.minimum} admitted, unused examples are ready.</p>
               ) : triggerKind === "manual" ? (
-                <p>Training starts only through an explicit Run now action.</p>
+                <p>No recurring cadence selected. One-off training uses Run.</p>
+              ) : triggerKind === "schedule" ? (
+                <p>
+                  Checks every {fields.interval} minutes for at least {fields.minimum} approved,
+                  unused examples.
+                </p>
+              ) : triggerKind === "upstream_accepted" ? (
+                <p>Checks after the configured upstream Model is accepted.</p>
               ) : null}
             </fieldset>
             {(Object.keys(fields) as Array<keyof typeof fields>)

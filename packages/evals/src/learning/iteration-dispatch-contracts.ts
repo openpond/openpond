@@ -89,7 +89,11 @@ export const LearningIterationObservationSchema = z.object({
   evaluation: ImmutableReleaseRefSchema.nullable(),
   candidate: ImmutableReleaseRefSchema.nullable(),
   failure: z.string().max(20_000).nullable(),
+  coverage: z.array(z.object({ evidence: LearningRevisionRefSchema,
+    outcome: z.enum(["trained", "exposed", "unexposed", "unknown"]) }).strict()).max(10_000).optional(),
 }).strict().superRefine((value, context) => {
+  if (value.coverage && (!["succeeded", "failed", "cancelled"].includes(value.status) || !value.cleanupComplete || !value.receipt))
+    context.addIssue({ code: "custom", path: ["coverage"], message: "Coverage requires authoritative terminal cleanup evidence." });
   if (["succeeded", "failed", "cancelled"].includes(value.status) && (!value.cleanupComplete || !value.receipt)) {
     context.addIssue({ code: "custom", path: ["receipt"], message: "Terminal execution requires an authoritative cleanup receipt." });
   }

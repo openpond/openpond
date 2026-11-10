@@ -652,6 +652,11 @@ There is no SDK capture queue or flush API.
 
 ### Recovering queued named Model requests
 
+The signed serving review sets `workerIdleTimeoutSeconds`. Current v3 reviews
+support 5 or 60 seconds, with new reviews using a 60-second billable idle reuse
+window before unused capacity scales to zero. Activate with the reviewed value;
+historical v1/v2 reviews retain their signed 5-second setting.
+
 Named Model `generate` and `stream` accept `client_request_id` and a serving-only
 `timeout` of at most 630 seconds (the default). HTTP 202 is observed through the
 original request's retained status. No paid POST is retried. If observation ends
