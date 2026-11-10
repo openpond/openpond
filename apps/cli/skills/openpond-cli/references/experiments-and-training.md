@@ -85,6 +85,13 @@ record is not a trained version, and a submitted job is not a completed result.
 Keep the useful resource and live run attached to this chat; give concise progress
 and the next actionable blocker if the supported runtime cannot continue.
 
+For ordinary hosted SFT/GRPO, use the durable operation flow below. A catalog or
+configuration estimate is an observation, not accepted work. Temporary empty
+stock must not end the authorized workflow before the application can retain it.
+`requires_preparation` in an unprepared catalog scope does not establish that the
+selected Model's runtime is unsupported. Resolve and review the exact inputs
+through the supported operation commands before deciding that it cannot proceed.
+
 Keep the resource sidebar focused on the actual dataset, grader or run. An
 ordinary training request does not need a separate proposal file opened in the
 sidebar; put the bounded scope in the conversation and budget form. Open a file
@@ -325,7 +332,61 @@ requires canonical equality before the atomic import. Preserve both original fil
 and their distinct hashes; never reconstruct a missing package or override a hash.
 Do not reauthor an old published dataset to substitute for a newer canonical package.
 
-Use the current CLI's prepare/start/status/watch/artifacts operations for the selected backend. Return retained job/model references and read saved completion state; a submitted job is not a trained model. CLI flags that acknowledge submission do not create user authorization or enlarge a budget.
+Use the current CLI's operation/status/artifact commands for the selected backend. Return retained operation/job/model references and read saved completion state; accepted waiting work and a submitted Job are not trained models. CLI flags that acknowledge submission do not create user authorization or enlarge a budget.
+
+### Durable hosted SFT/GRPO operations
+
+Check installed `training --help` and `training schema` for the exact public
+contracts. Preserve the selected Model configuration, reviewed training batch,
+held-out Dataset/grader pins, existing total approval and stable operation ID.
+List existing work with `training hosted-operations --project-id <project-id>
+--team-id <id> --json`, or recover a known original operation with
+`hosted-find-operation <operation-id>`. Read accepted work before another submit;
+an empty catalog, client timeout or chat reconnect does not authorize replacement.
+
+For model-first settings, `training hosted-resolve-experiment <setup.json>
+--team-id <id> --json` accepts `openpond.trainingExperimentSetupRequest.v1` and
+returns the exact `openpond.trainingPreparationRequest.v1`. Preserve an existing
+configuration reference when supplied. When that preparation request already
+exists, use it directly rather than creating another configuration.
+
+Use `training hosted-review-placement <request.json> --team-id <id> --json`
+for the server-issued runtime/profile/customer-price review. This does not start
+compute. Do not manufacture profile support or prices, and do not use a live
+listing as a prerequisite for requesting this review. Unsupported runtime and
+temporary capacity absence are different outcomes.
+
+After workload and total-spend authorization, retain one
+`openpond.trainingOperationRequest.v1` file containing `request` and the returned
+`placementReview`. If held-out evaluation is requested, include its exact
+`postTraining` intent in that same request, without a fabricated `binding`; the
+server binds it to the sealed preparation. Budget training, evaluation and
+retention together within the existing cumulative approval. Submit once with
+`training hosted-queue <operation.json> --team-id <id> --yes --json`.
+
+The application owns preparation, capacity retries and admission. Follow the
+returned original ID with `training hosted-operation <id> --team-id <id> --json`.
+`preparing`, `waiting_capacity`, `waiting_platform` and `waiting_funding` describe
+retained work; a quiet or completed chat turn does not cancel it. Give a concise
+accurate update and preserve the operation for application-owned continuation.
+Do not repeatedly prepare, issue shell polling loops, pin arbitrary hardware,
+shrink data, lower the approved cap or claim the goal finished to clear a wait.
+
+Use `hosted-review-operation <id>` and `hosted-approve-operation-review
+<reviewed-control.json> --yes` only when `needs_review` requires new accepted
+terms. Preserve the original request and absolute deadline. Stop uses
+`hosted-stop-operation <id>` and its revisioned server control, followed by
+retained cleanup readback. Once a Job exists, inspect its official status,
+artifacts and held-out results before saving the actual trained Model version.
+Saving does not activate serving.
+
+When the Job succeeds and `hosted-result` reports a retained final candidate
+with verified cleanup, complete the requested Model save through
+`hosted-save-model`, then read it back with `hosted-saved-model` and
+`hosted-model-version`. A blocked optional attached evaluation is a separate
+result; it does not prevent saving that completed checkpoint. Keep its original
+evaluation identity and report the block without claiming it passed or starting
+another paid attempt. A saved version is not evidence of improved scores.
 
 For an explicitly authorized first-image SFT qualification on a host that has
 activated this operator path, `training hosted-import-sft-qualification
@@ -354,8 +415,9 @@ interrupted recovery is separate. Current SFT cannot continue a checkpoint.
 Preserve an unavailable parent and report the reason; never silently start from
 the base instead. Saving a draft with a parent starts no compute.
 
-For model-first manual SFT/GRPO setup, use `training hosted-prepare-experiment
+For an explicitly selected sealed preparation flow, use `training hosted-prepare-experiment
 <draft.json> --team-id <id> --json` when the host supports draft preparation.
+Ordinary SFT/GRPO starts use the durable operation flow above instead.
 Its input uses `openpond.trainingExperimentSetupRequest.v1`: exact base model,
 method-specific settings, a sealed reviewed batch, stable operation ID, name,
 Project (or null) and maximum spend. The service owns configuration creation;
