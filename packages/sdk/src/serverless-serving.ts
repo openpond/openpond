@@ -63,6 +63,12 @@ export const ServerlessServingReviewV2Schema = ServerlessServingReviewIdentitySc
 /** Current serving review. */
 export const ServerlessServingReviewV3Schema = ServerlessServingReviewV2Schema.extend({
   schemaVersion: z.literal("openpond.serverlessServingReview.v3"),
+  /** Newly issued reviews expose the approved hardware set. Historical signed
+   * reviews remain valid with their original content hash. */
+  hardware: z.object({
+    selection: z.literal("automatic"),
+    gpuTypeIds: z.array(Id).min(1).max(8).refine(ids => new Set(ids).size === ids.length),
+  }).strict().optional(),
 }).strict();
 export const ServerlessServingReviewSchema = z.discriminatedUnion("schemaVersion", [
   ServerlessServingReviewV1Schema, ServerlessServingReviewV2Schema, ServerlessServingReviewV3Schema,
@@ -73,6 +79,7 @@ export const ServerlessServingApprovalSchema = z.object({
   schemaVersion: z.literal("openpond.serverlessServingApproval.v1"),
   reviewHash: Hash,
   customerCapUsd: Money.refine(value => Number(value) > 0).nullable(),
+  gpuTypeId: Id.optional(),
 }).strict();
 export type ServerlessServingApproval = z.infer<typeof ServerlessServingApprovalSchema>;
 
@@ -119,11 +126,13 @@ export async function verifyServerlessServingReview(raw: ServerlessServingReview
   return review;
 }
 
-export async function createServerlessServingApproval(raw: ServerlessServingReview, spendingLimit?: string | null) {
+export async function createServerlessServingApproval(raw: ServerlessServingReview, spendingLimit?: string | null, gpuTypeId?: string) {
   const review = ServerlessServingReviewSchema.parse(raw), {contentHash, ...content} = review;
   if (review.schemaVersion !== "openpond.serverlessServingReview.v3" ||
     contentHash !== await canonicalSha256(content) || Date.parse(review.expiresAt) <= Date.now())
     throw new OpenPondProtocolError("serverless_serving_review_expired", "Refresh this saved Model's serving price.");
+  if (gpuTypeId && !review.hardware?.gpuTypeIds.includes(gpuTypeId))
+    throw new OpenPondProtocolError("serverless_serving_gpu_unavailable", "Choose a GPU from this Model's current serving offering.");
   return ServerlessServingApprovalSchema.parse({schemaVersion: "openpond.serverlessServingApproval.v1",
-    reviewHash: contentHash, customerCapUsd: canonicalComputeSpendCap(spendingLimit)});
+    reviewHash: contentHash, customerCapUsd: canonicalComputeSpendCap(spendingLimit), ...(gpuTypeId ? { gpuTypeId } : {})});
 }

@@ -88,7 +88,7 @@ export async function parseAndVerifyTrainingModelServing(raw: unknown, expected:
   if (registry.source.jobId !== value.version.jobId || registry.source.checkpointId !== value.version.candidate.checkpointId
     || registry.source.artifact.id !== value.version.candidate.artifact.id || registry.source.artifact.contentHash !== value.version.candidate.artifact.contentHash
     || registry.qualified !== (registry.reason === "qualified")
-    || registry.qualified && (registry.state !== "promotable" || registry.revoked || registry.deleted)) fail();
+    || registry.qualified && (!["imported_unvalidated", "evaluating", "promotable", "rejected"].includes(registry.state) || registry.revoked || registry.deleted)) fail();
   const deployments = new Map(value.deployments.map(row => [row.id, row]));
   const pools = new Map(value.pools.map(row => [row.id, row]));
   if (value.deployments.some(row => row.artifactId !== registry.artifact.id || row.poolId && !pools.has(row.poolId))

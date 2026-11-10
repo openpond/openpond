@@ -32,7 +32,6 @@ import {
   DEFAULT_CODEX_PERMISSION_MODE,
   DEFAULT_CODEX_REASONING_EFFORT,
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
-  DEFAULT_OPENPOND_CHAT_MODEL,
   isRegisteredAcpProvider,
   SubagentPreferencesSchema,
   defaultSubagentPreferences,
@@ -309,6 +308,7 @@ const OPENPOND_MODEL_OPTIONS = [
 ];
 export const PROVIDER_OPTIONS: Array<DropdownOption & { value: ChatProvider }> = [
   { value: "codex", label: "OpenAI Codex", description: "Codex login" },
+  { value: "openpond", label: "OpenPond Managed" },
 ];
 export const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
   "openai",
@@ -566,13 +566,15 @@ export function providerOptionsFromSettings(
   settings?: ProviderSettings | null,
   options: { includeUnavailable?: boolean; localOnly?: boolean; enabledOnly?: boolean } = {},
 ): Array<DropdownOption & { value: ChatProvider }> {
-  if (!settings) return PROVIDER_OPTIONS;
+  if (!settings) return options.localOnly ? PROVIDER_OPTIONS.filter(option => option.value !== "openpond") : PROVIDER_OPTIONS;
   const includeUnavailable = options.includeUnavailable ?? false;
   const enabledOnly = options.enabledOnly ?? false;
   const rows: Array<DropdownOption & { value: ChatProvider }> = [];
   for (const providerId of Object.keys(settings.statuses) as ChatProvider[]) {
-    // Keep the route for existing sessions without offering it in UI pickers.
-    if (providerId === "openpond") continue;
+    if (providerId === "openpond") {
+      if (!options.localOnly) rows.push({ value: providerId, label: "OpenPond Managed" });
+      continue;
+    }
     if (!isRegisteredAcpProvider(providerId) && !["codex", "openai", "claude-code", "grok-build", "opencode", "custom-openai-compatible"].includes(providerId)) continue;
     if (!isRunnableChatProvider(providerId)) continue;
     const status = providerStatus(settings, providerId);
@@ -607,20 +609,20 @@ export function modelOptionsForProvider(
   settings?: ProviderSettings | null,
 ): DropdownOption[] {
   const cached = (providerModelCache(settings, provider)?.models ?? []).filter(
-    (model) => provider !== "openpond" || model.id !== DEFAULT_OPENPOND_CHAT_MODEL,
+    (model) => provider !== "openpond" || model.raw?.managedServing === true,
   );
   const fromCache = cached.map(modelOptionFromProviderModel);
+  if (provider === "openpond") return uniqueDropdownOptions(fromCache);
   const config = providerConfig(settings, provider);
   const discovered = providerModelCache(settings, provider)?.source === "provider";
   const manual = [...(config?.modelOverrides ?? []),
     !discovered || cached.some(model => model.id === config?.defaultModel) ? config?.defaultModel : undefined]
     .filter(
       (value): value is string =>
-        Boolean(value?.trim()) &&
-        (provider !== "openpond" || value !== DEFAULT_OPENPOND_CHAT_MODEL),
+        Boolean(value?.trim()),
     )
     .map((value) => ({ value, label: modelDisplayLabel(value) }));
-  const fallback = discovered || provider === "openpond" && fromCache.length > 0
+  const fallback = discovered
     ? []
     : fallbackModelOptions(provider);
   return uniqueDropdownOptions([...fromCache, ...manual, ...fallback]);
@@ -690,7 +692,7 @@ export function defaultModelForProvider(
 ): string {
   const discovered = providerModelCache(settings, provider)?.source === "provider";
   const options = modelOptionsForProvider(provider, settings);
-  const selectable = (model: string) => !discovered || options.some(option => option.value === model);
+  const selectable = (model: string) => (provider !== "openpond" && !discovered) || options.some(option => option.value === model);
   const configDefault = providerConfig(settings, provider)?.defaultModel?.trim();
   if (configDefault && selectable(configDefault)) return configDefault;
   const statusDefault = providerStatus(settings, provider)?.defaultModel?.trim();
@@ -699,7 +701,7 @@ export function defaultModelForProvider(
   if (firstOption) return firstOption;
   if (discovered) return "";
   if (provider === "codex") return DEFAULT_CODEX_CHAT_MODEL;
-  if (provider === "openpond") return DEFAULT_OPENPOND_CHAT_MODEL;
+  if (provider === "openpond") return "";
   return "";
 }
 
@@ -711,7 +713,7 @@ export function normalizeChatModel(
   const trimmed = model?.trim();
   // Keep managed identity while its catalog loads or serving is cold.
   // An explicit empty selection is the managed provider awaiting a model.
-  if (provider === "openpond" && (model === "" || trimmed?.startsWith("managed:"))) return trimmed ?? "";
+  if (provider === "openpond") return trimmed ?? "";
   // Native catalogs are session-scoped and loaded lazily. Preserve an explicit
   // choice until the runtime validates it against that session's live catalog.
   if (isRegisteredAcpProvider(provider)) return trimmed ?? "";
@@ -772,12 +774,12 @@ export function codexPermissionTurnInput(mode: CodexPermissionMode): {
 }
 
 export function normalizePreferences(preferences?: AppPreferences | null): AppPreferences {
-  const provider = preferences?.defaultChatProvider && preferences.defaultChatProvider !== "openpond"
+  const provider = preferences?.defaultChatProvider
     ? preferences.defaultChatProvider
     : DEFAULT_APP_PREFERENCES.defaultChatProvider;
   return {
     defaultChatProvider: provider,
-    defaultChatModel: normalizeChatModel(provider, preferences?.defaultChatProvider === "openpond" ? undefined : preferences?.defaultChatModel),
+    defaultChatModel: normalizeChatModel(provider, provider !== preferences?.defaultChatProvider ? undefined : preferences?.defaultChatModel),
     subagents: SubagentPreferencesSchema.parse(
       preferences?.subagents ?? DEFAULT_APP_PREFERENCES.subagents,
     ),
@@ -918,7 +920,7 @@ export function normalizeBranchPrefix(value?: string | null): string {
 }
 
 export function chatProviderLabel(provider: ChatProvider, settings?: ProviderSettings | null): string {
-  if (provider === "openpond") return "OpenPond Chat";
+  if (provider === "openpond") return "OpenPond Managed";
   return providerStatus(settings, provider)?.displayName ?? (provider === "codex" ? "OpenAI Codex" : provider);
 }
 
