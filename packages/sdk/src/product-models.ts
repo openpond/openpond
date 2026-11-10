@@ -1,6 +1,11 @@
 import { DEFAULT_MODEL_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { readBoundedJsonResponse } from "./protocol.js";
+import { ProductModelTransport } from "./product-model-transport.js";
+import { ProductModelError, productModelEndpoint, ProductModelChunkSchema as Chunk,
+  ProductModelUsageSchema as Usage, ProductModelToolCallSchema, type ProductModelToolCall, type ProductModelConnection,
+  type ProductModelWireStatus } from "./product-model-wire.js";
+export { ProductModelError, productModelEndpoint, type ProductModelConnection, type ProductModelToolCall } from "./product-model-wire.js";
 
 export type ProductModelBinding = {
   id: string;
@@ -42,29 +47,10 @@ export type ProductModelResult = {
 export type ProductModelEvent =
   | { type: "text"; text: string }
   | { type: "finish"; result: ProductModelResult };
-export type ProductModelConnection = {
-  baseUrl?: string;
-  teamId?: string;
-  apiKey: string;
-  timeoutMs?: number;
-  fetch?: typeof fetch;
-};
 export type ProductModels<Models> = {
   readonly [Name in keyof Models]: ProductModel;
 };
 
-export class ProductModelError extends Error {
-  constructor(
-    readonly code: string,
-    readonly status: number,
-    readonly outcomeUnknown: boolean,
-    readonly requestId?: string,
-    readonly clientRequestId?: string,
-  ) {
-    super(`OpenPond model request failed (${code}).`);
-    this.name = "ProductModelError";
-  }
-}
 const Message = z
   .object({
     role: z.enum(["system", "user", "assistant"]),
@@ -83,89 +69,13 @@ const Input = z
     (v) => (v.prompt !== undefined) !== (v.messages !== undefined),
     "Supply prompt or messages, exclusively.",
   );
-const Usage = z.object({
-  prompt_tokens: z.number().int().nonnegative(),
-  completion_tokens: z.number().int().nonnegative(),
-  total_tokens: z.number().int().nonnegative(),
-});
-const Chunk = z.object({
-  id: z.string(),
-  model: z.string(),
-  system_fingerprint: z.string().nullable().optional(),
-  openpond: z.record(z.string(), z.json()).optional(),
-  usage: Usage.nullable().optional(),
-  choices: z
-    .array(
-      z.object({
-        index: z.number().int(),
-        finish_reason: z.string().nullable().optional(),
-        delta: z
-          .object({
-            content: z.string().nullable().optional(),
-            tool_calls: z.unknown().optional(),
-          })
-          .passthrough()
-          .optional(),
-        message: z
-          .object({
-            content: z.string().nullable(),
-            tool_calls: z.unknown().optional(),
-          })
-          .passthrough()
-          .optional(),
-      }),
-    )
-    .max(1),
-});
-
-const ProductModelRequestStatusSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.modelRequestStatus.v1"),
-    requestId: z.string().regex(/^pinf_[A-Za-z0-9-]{8,191}$/),
-    clientRequestId: z.uuid().nullable(),
-    modelId: z.string(),
-    state: z.enum([
-      "pending",
-      "running",
-      "stopping",
-      "completed",
-      "failed",
-      "cancelled",
-    ]),
-    deadlineAt: z.iso.datetime(),
-    retryAt: z.iso.datetime().nullable(),
-    result: Chunk.nullable(),
-    failureCode: z.string().nullable(),
-  })
-  .strict();
-export type ProductModelRequestStatus = Omit<
-  z.infer<typeof ProductModelRequestStatusSchema>,
-  "result"
-> & { result: ProductModelResult | null };
-type RequestIdentity = { requestId?: string; clientRequestId?: string };
-const RequestId = ProductModelRequestStatusSchema.shape.requestId;
-
-/** The serving API resolves exactly one valid hosted-model prefix. Keep the
- * caller's named binding in results while checking the canonical wire name. */
-function canonicalResponseModelId(modelId: string) {
-  const name = modelId.startsWith("personalized:")
-    ? modelId.slice("personalized:".length)
-    : null;
-  return name && /^[a-z0-9][a-z0-9._:-]{2,127}$/.test(name) ? name : modelId;
-}
-
-export function productModelEndpoint(value: string): string {
-  const url = new URL(value);
-  if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  )
-    throw new Error("A clean serving base URL is required.");
-  return url.href.replace(/\/$/, "");
-}
+export type ProductModelRecoveredResult = ProductModelResult & {
+  /** Available only for explicitly tool-capable bindings; arguments remain JSON text. */
+  toolCalls?: ProductModelToolCall[];
+};
+export type ProductModelRequestStatus = Omit<ProductModelWireStatus, "result"> & {
+  result: ProductModelRecoveredResult | null;
+};
 
 /** A named text model. This never resolves a catalogue default or activates serving. */
 export class ProductModel {
@@ -173,6 +83,7 @@ export class ProductModel {
   readonly capabilities: Required<
     NonNullable<ProductModelBinding["capabilities"]>
   >;
+  private readonly transport: ProductModelTransport;
   constructor(
     binding: string | ProductModelBinding,
     private readonly connection: ProductModelConnection,
@@ -205,16 +116,12 @@ export class ProductModel {
       throw new Error(
         "Serving timeoutMs must be greater than zero and at most 630000.",
       );
+    this.transport = new ProductModelTransport(this.id, this.connection);
   }
   /** Provider integrations use the same exact destination and transport. */
   providerConnection(): Readonly<ProductModelConnection> {
     return { ...this.connection };
   }
-  private readonly clientRequestIds = new WeakMap<Response, string>();
-  private readonly observers = new WeakMap<
-    Response,
-    { until: number; signal?: AbortSignal }
-  >();
   private async request(
     input: ProductModelInput,
     stream: boolean,
@@ -222,9 +129,6 @@ export class ProductModel {
     if (stream && !this.capabilities.streaming)
       throw new ProductModelError("streaming_unsupported", 0, false);
     const { signal, clientRequestId: suppliedClientId, ...raw } = input;
-    const clientRequestId = z
-      .uuid()
-      .parse(suppliedClientId ?? crypto.randomUUID());
     const parsed = Input.parse(raw);
     const body = JSON.stringify({
       model: this.id,
@@ -237,59 +141,10 @@ export class ProductModel {
         : { max_tokens: parsed.maxTokens }),
       stream,
     });
-    if (new TextEncoder().encode(body).length > 1024 * 1024)
-      throw new ProductModelError("payload_too_large", 0, false);
-    const timeoutMs = this.connection.timeoutMs ?? 630_000;
-    const until = Date.now() + timeoutMs;
-    const deadline = AbortSignal.timeout(timeoutMs);
-    let response: Response;
-    try {
-      response = await (this.connection.fetch ?? fetch)(
-        `${productModelEndpoint(this.connection.baseUrl!)}/chat/completions`,
-        {
-          method: "POST",
-          redirect: "error",
-          headers: {
-            Authorization: `Bearer ${this.connection.apiKey}`,
-            ...(this.connection.teamId
-              ? { "X-OpenPond-Team-Id": this.connection.teamId }
-              : {}),
-            "Content-Type": "application/json",
-            "X-OpenPond-Client-Request-Id": clientRequestId,
-            Accept: stream ? "text/event-stream" : "application/json",
-          },
-          body,
-          signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
-        },
-      );
-    } catch {
-      throw new ProductModelError(
-        "model_outcome_unknown",
-        0,
-        true,
-        undefined,
-        clientRequestId,
-      );
-    }
-    this.clientRequestIds.set(response, clientRequestId);
-    this.observers.set(response, { until, signal });
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new ProductModelError(
-        "model_request_rejected",
-        response.status,
-        response.status >= 500,
-        response.headers.get("x-openpond-request-id") ??
-          response.headers.get("x-request-id") ??
-          undefined,
-        this.clientRequestIds.get(response),
-      );
-    }
-    return response;
+    return this.transport.request(body, { stream, signal, clientRequestId: suppliedClientId });
   }
   async generate(input: ProductModelInput): Promise<ProductModelResult> {
     const response = await this.request(input, false);
-    if (response.status === 202) return this.observePending(response);
     try {
       const chunk = Chunk.parse(
         await readBoundedJsonResponse(
@@ -318,245 +173,37 @@ export class ProductModel {
         response.headers.get("x-openpond-request-id") ??
           response.headers.get("x-request-id") ??
           undefined,
-        this.clientRequestIds.get(response),
+        this.transport.identity(response).clientRequestId,
       );
     }
   }
   /** Read only: a timeout never submits another paid operation. */
   async inspectRequest(requestId: string): Promise<ProductModelRequestStatus> {
-    const id = RequestId.parse(requestId);
-    return this.readRequestStatus(`/${encodeURIComponent(id)}`, {
-      requestId: id,
-    });
+    return this.projectStatus(await this.transport.inspectRequest(requestId));
   }
   async recover(clientRequestId: string): Promise<ProductModelRequestStatus> {
-    const id = z.uuid().parse(clientRequestId);
-    return this.readRequestStatus(
-      `?clientRequestId=${encodeURIComponent(id)}`,
-      { clientRequestId: id },
-    );
+    return this.projectStatus(await this.transport.recover(clientRequestId));
   }
-  private async readRequestStatus(
-    suffix: string,
-    expected: RequestIdentity,
-    timeoutMs = 30_000,
-    signal?: AbortSignal,
-  ): Promise<ProductModelRequestStatus> {
-    const response = await (this.connection.fetch ?? fetch)(
-      `${productModelEndpoint(this.connection.baseUrl!)}/chat/completions${suffix}`,
-      {
-        method: "GET",
-        redirect: "error",
-        headers: {
-          Authorization: `Bearer ${this.connection.apiKey}`,
-          ...(this.connection.teamId
-            ? { "X-OpenPond-Team-Id": this.connection.teamId }
-            : {}),
-          Accept: "application/json",
-        },
-        signal: signal
-          ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
-          : AbortSignal.timeout(timeoutMs),
-      },
-    );
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new ProductModelError(
-        "model_status_unavailable",
-        response.status,
-        false,
-      );
+  private projectStatus(status: ProductModelWireStatus): ProductModelRequestStatus {
+    if (!status.result) return { ...status, result: null };
+    const message = status.result.choices[0]!.message!;
+    let toolCalls: ProductModelToolCall[] | undefined;
+    if (message.tool_calls !== undefined && message.tool_calls !== null) {
+      const parsed = z.array(ProductModelToolCallSchema).safeParse(message.tool_calls);
+      if (!this.capabilities.tools || !parsed.success)
+        throw new ProductModelError("model_response_invalid", 200, true, status.requestId,
+          status.clientRequestId ?? undefined);
+      toolCalls = parsed.data;
     }
-    return this.requestStatus(
-      await readBoundedJsonResponse(response, 8 * 1024 * 1024, "Model status"),
-      response,
-      expected,
-    );
-  }
-  private requestStatus(
-    raw: unknown,
-    response: Response,
-    expected: RequestIdentity,
-  ): ProductModelRequestStatus {
-    const status = ProductModelRequestStatusSchema.parse(raw);
-    if (
-      status.modelId !== canonicalResponseModelId(this.id) ||
-      (expected.requestId !== undefined &&
-        status.requestId !== expected.requestId) ||
-      (expected.clientRequestId !== undefined &&
-        status.clientRequestId !== expected.clientRequestId)
-    )
-      throw new ProductModelError(
-        "model_recovery_identity_changed",
-        409,
-        true,
-        expected.requestId,
-        expected.clientRequestId,
-      );
-    if (
-      status.result &&
-      (status.state !== "completed" ||
-        status.failureCode !== null ||
-        status.result.id !== status.requestId ||
-        status.result.model !== status.modelId ||
-        status.result.choices.length !== 1 ||
-        status.result.choices[0]?.index !== 0 ||
-        !status.result.choices[0]?.message ||
-        status.result.choices[0]?.message.tool_calls)
-    )
-      throw new ProductModelError(
-        "model_response_invalid",
-        response.status,
-        true,
-        status.requestId,
-        expected.clientRequestId ?? status.clientRequestId ?? undefined,
-      );
-    return {
-      ...status,
-      result: status.result
-        ? {
-            ...this.result(
-              status.result,
-              status.result.choices[0]?.message?.content ?? "",
-              status.result.choices[0]?.finish_reason ?? null,
-              response,
-            ),
-            requestId: status.requestId,
-          }
-        : null,
-    };
-  }
-  private async observePending(
-    response: Response,
-  ): Promise<ProductModelResult> {
-    const clientRequestId = this.clientRequestIds.get(response);
-    let status: ProductModelRequestStatus;
-    try {
-      status = this.requestStatus(
-        await readBoundedJsonResponse(
-          response,
-          8 * 1024 * 1024,
-          "Pending model request",
-        ),
-        response,
-        { clientRequestId },
-      );
-    } catch (error) {
-      if (error instanceof ProductModelError) throw error;
-      throw new ProductModelError(
-        "model_outcome_unknown",
-        202,
-        true,
-        undefined,
-        clientRequestId,
-      );
-    }
-    const expected = { requestId: status.requestId, clientRequestId };
-    const observer = this.observers.get(response)!;
-    const until = Math.min(
-      observer.until,
-      Date.parse(status.deadlineAt) + 30_000,
-    );
-    for (;;) {
-      if (status.result && status.state === "completed") return status.result;
-      if (status.state === "completed")
-        throw new ProductModelError(
-          "model_result_not_retained",
-          200,
-          false,
-          status.requestId,
-          status.clientRequestId ?? undefined,
-        );
-      if (["failed", "cancelled"].includes(status.state))
-        throw new ProductModelError(
-          status.failureCode ?? "model_request_failed",
-          200,
-          false,
-          status.requestId,
-          status.clientRequestId ?? undefined,
-        );
-      if (Date.now() >= until || observer.signal?.aborted)
-        throw new ProductModelError(
-          "model_outcome_unknown",
-          202,
-          true,
-          status.requestId,
-          status.clientRequestId ?? undefined,
-        );
-      const delay = Math.min(
-        until - Date.now(),
-        Math.max(
-          500,
-          Math.min(
-            15_000,
-            status.retryAt ? Date.parse(status.retryAt) - Date.now() : 2_000,
-          ),
-        ),
-      );
-      await new Promise<void>((resolve, reject) => {
-        const abort = () => {
-          clearTimeout(timer);
-          reject(
-            new ProductModelError(
-              "model_outcome_unknown",
-              202,
-              true,
-              status.requestId,
-              status.clientRequestId ?? undefined,
-            ),
-          );
-        };
-        const timer = setTimeout(() => {
-          observer.signal?.removeEventListener("abort", abort);
-          resolve();
-        }, delay);
-        observer.signal?.addEventListener("abort", abort, { once: true });
-        if (observer.signal?.aborted) abort();
-      });
-      try {
-        status = await this.readRequestStatus(
-          `/${encodeURIComponent(expected.requestId)}`,
-          expected,
-          Math.max(1, Math.min(30_000, until - Date.now())),
-          observer.signal,
-        );
-      } catch (error) {
-        throw new ProductModelError(
-          "model_outcome_unknown",
-          202,
-          true,
-          status.requestId,
-          status.clientRequestId ?? undefined,
-        );
-      }
-    }
+    return { ...status, result: {
+      ...this.result(status.result, message.content ?? "",
+        status.result.choices[0]!.finish_reason ?? null, new Response(null)),
+      ...(toolCalls === undefined ? {} : { toolCalls }),
+    } };
   }
   /** Explicit cancellation retains the original request's cleanup owner. */
   async cancelRequest(requestId: string): Promise<void> {
-    const id = RequestId.parse(requestId);
-    const response = await (this.connection.fetch ?? fetch)(
-      `${productModelEndpoint(this.connection.baseUrl!)}/chat/completions/${encodeURIComponent(id)}/cancel`,
-      {
-        method: "POST",
-        redirect: "error",
-        headers: {
-          Authorization: `Bearer ${this.connection.apiKey}`,
-          ...(this.connection.teamId
-            ? { "X-OpenPond-Team-Id": this.connection.teamId }
-            : {}),
-          Accept: "application/json",
-        },
-        signal: AbortSignal.timeout(30_000),
-      },
-    );
-    await response.body?.cancel();
-    if (!response.ok)
-      throw new ProductModelError(
-        "model_cancel_pending",
-        response.status,
-        true,
-        id,
-      );
+    await this.transport.cancelRequest(requestId);
   }
   private result(
     chunk: z.infer<typeof Chunk>,
@@ -587,12 +234,6 @@ export class ProductModel {
   /** Breaking iteration cancels the HTTP body. A truncated stream never produces finish. */
   async *stream(input: ProductModelInput): AsyncGenerator<ProductModelEvent> {
     const response = await this.request(input, true);
-    if (response.status === 202) {
-      const result = await this.observePending(response);
-      if (result.text) yield { type: "text", text: result.text };
-      yield { type: "finish", result };
-      return;
-    }
     if (
       !response.headers.get("content-type")?.includes("text/event-stream") ||
       !response.body
@@ -603,7 +244,7 @@ export class ProductModel {
         response.status,
         true,
         response.headers.get("x-openpond-request-id") ?? undefined,
-        this.clientRequestIds.get(response),
+        this.transport.identity(response).clientRequestId,
       );
     }
     const reader = response.body.getReader();
@@ -670,7 +311,7 @@ export class ProductModel {
         response.headers.get("x-openpond-request-id") ??
           response.headers.get("x-request-id") ??
           undefined,
-        this.clientRequestIds.get(response),
+        this.transport.identity(response).clientRequestId,
       );
     } finally {
       await reader.cancel().catch(() => {});

@@ -25,11 +25,57 @@ async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
 // Protect the paid-call boundary: exact personalized routing, no silent replay,
 // complete stream evidence, and cancellation when a consumer stops reading.
 test("named models and AI SDK consumer preserve exact routing, usage and no-replay semantics", async () => {
-  let mode: "normal" | "reject" | "truncated" | "held" = "normal";
+  type FixtureMode = "normal" | "reject" | "truncated" | "held" | "pending" | "pending-tools"
+    | "pending-mismatch" | "pending-abort" | "lost" | "lost-tools";
+  let mode: FixtureMode = "normal";
+  type Operation = { id: string; clientId: string; model: string; deadlineAt: string;
+    mode: FixtureMode; reads: number };
+  const operations = new Map<string, Operation>();
+  let paidPosts = 0;
+  let statusReads = 0;
+  let observationAbort: AbortController | undefined;
+  const retainedCompletion = (operation: Operation) => ({
+    id: operation.id, model: operation.model, system_fingerprint: "version-evidence",
+    openpond: { weightReceipt: { versionHash: "exact-version" } },
+    choices: [{ index: 0, message: ["pending-tools", "lost-tools"].includes(operation.mode)
+      ? { role: "assistant", content: null, tool_calls: [{ id: "call-fixture", type: "function",
+        function: { name: "lookup", arguments: '{"value":"ok"}' } }] }
+      : { role: "assistant", content: "retained hello" },
+      finish_reason: ["pending-tools", "lost-tools"].includes(operation.mode) ? "tool_calls" : "stop" }],
+    usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 },
+  });
+  const retainedStatus = (operation: Operation, completed: boolean) => ({
+    schemaVersion: "openpond.modelRequestStatus.v1", requestId: operation.id,
+    clientRequestId: operation.mode === "pending-mismatch" && operation.reads > 0 ? crypto.randomUUID() : operation.clientId,
+    modelId: operation.model, state: completed ? "completed" : "pending",
+    deadlineAt: operation.deadlineAt, retryAt: completed ? null : new Date().toISOString(),
+    result: completed ? retainedCompletion(operation) : null, failureCode: null,
+  });
   let calls = 0;
   let cancelled = false;
   const server = createServer(async (req, res) => {
     calls++;
+    if (req.method === "GET") {
+      statusReads++;
+      const url = new URL(req.url!, "http://fixture.invalid");
+      const operation = url.searchParams.has("clientRequestId")
+        ? [...operations.values()].find(value => value.clientId === url.searchParams.get("clientRequestId"))
+        : operations.get(url.pathname.split("/").at(-1)!);
+      expect(operation).toBeDefined();
+      if (!operation) { res.writeHead(404); res.end(); return; }
+      expect(req.headers.authorization).toBe("Bearer serving-key");
+      expect(req.headers["x-openpond-team-id"]).toBe("team-one");
+      expect(url.pathname.startsWith("/personalized/v1/chat/completions")).toBe(true);
+      operation.reads++;
+      if (operation.mode === "pending-abort") observationAbort?.abort();
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify(retainedStatus(operation, operation.mode.startsWith("lost") || operation.reads >= 2)));
+      return;
+    }
+    paidPosts++;
+    expect(req.method).toBe("POST");
+    expect(req.headers["openpond-api-key"]).toBeUndefined();
+    expect(z.uuid().safeParse(req.headers["x-openpond-client-request-id"]).success).toBe(true);
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = JSON.parse(Buffer.concat(chunks).toString());
@@ -47,6 +93,19 @@ test("named models and AI SDK consumer preserve exact routing, usage and no-repl
       body.model === "saved-model-two" ? "Bearer other-key" : "Bearer serving-key",
     );
     expect(["saved-model-one", "saved-model-two"]).toContain(body.model);
+    if (mode.startsWith("pending") || mode.startsWith("lost")) {
+      const operation: Operation = { id: `pinf_${crypto.randomUUID()}`,
+        clientId: String(req.headers["x-openpond-client-request-id"]), model: body.model,
+        deadlineAt: new Date(Date.now() + 60_000).toISOString(), mode, reads: 0 };
+      operations.set(operation.id, operation);
+      if (mode.startsWith("lost")) { req.socket.destroy(); return; }
+      res.setHeader("x-openpond-request-id", operation.id);
+      // The transport must derive its GET destination; never follow Location.
+      res.setHeader("Location", "https://untrusted.invalid/collect");
+      res.writeHead(202, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(retainedStatus(operation, false)));
+      return;
+    }
     if (mode === "reject") {
       res.writeHead(503);
       res.end("{}");
@@ -128,7 +187,7 @@ test("named models and AI SDK consumer preserve exact routing, usage and no-repl
     const aiAnswer = await generateText({
       model: aiModel,
       prompt: "hi",
-      headers: { authorization: "Bearer attempted-override", "x-openpond-team-id": "wrong-team" },
+      headers: { authorization: "Bearer attempted-override", "openpond-api-key": "attempted-override", "x-openpond-team-id": "wrong-team" },
     });
     expect(aiAnswer.text).toBe("hello");
     expect(aiAnswer.providerMetadata?.openpond).toEqual({
@@ -204,6 +263,81 @@ test("named models and AI SDK consumer preserve exact routing, usage and no-repl
       }),
     ).rejects.toMatchObject({ code: "tools_unsupported" });
     expect(calls).toBe(before + 1);
+    // An accepted request is not an OpenAI completion. Both consumers must
+    // observe the same retained operation, including tools and interrupted reads.
+    const beforePending = paidPosts;
+    const beforeReads = statusReads;
+    mode = "pending";
+    expect((await client.models.support.generate({ prompt: "pending" })).text).toBe("retained hello");
+    expect((await collect(client.models.support.stream({ prompt: "pending" }))).at(-1)).toMatchObject({
+      type: "finish", result: { text: "retained hello", usage: { totalTokens: 5 } },
+    });
+    const pendingAnswer = await generateText({ model: aiModel, prompt: "pending" });
+    expect(pendingAnswer.text).toBe("retained hello");
+    expect(pendingAnswer.providerMetadata?.openpond).toEqual({ weightReceipt: { versionHash: "exact-version" } });
+    const pendingStream = streamText({ model: aiModel, prompt: "pending" });
+    expect(await pendingStream.text).toBe("retained hello");
+    expect(await pendingStream.usage).toMatchObject({ inputTokens: 2, outputTokens: 3 });
+    expect(paidPosts).toBe(beforePending + 4);
+    expect(statusReads).toBe(beforeReads + 8);
+
+    const toolClient = createOpenPondClient({ apiKey: "serving-key", teamId: "team-one",
+      serving: { baseUrl: `http://127.0.0.1:${address.port}/personalized/v1` },
+      models: { support: { id: "saved-model-one", capabilities: { tools: true } } } });
+    const tools = { lookup: { description: "Read a fixture value", inputSchema: z.object({ value: z.string() }) } };
+    mode = "pending-tools";
+    const beforeTools = paidPosts;
+    const toolAnswer = await generateText({ model: toAIModel(toolClient.models.support), prompt: "lookup", tools });
+    expect(toolAnswer.toolCalls[0]).toMatchObject({ toolCallId: "call-fixture", toolName: "lookup", input: { value: "ok" } });
+    const toolStream = streamText({ model: toAIModel(toolClient.models.support), prompt: "lookup", tools });
+    expect((await toolStream.toolCalls)[0]).toMatchObject({ toolCallId: "call-fixture", toolName: "lookup", input: { value: "ok" } });
+    expect(paidPosts).toBe(beforeTools + 2);
+
+    mode = "pending-mismatch";
+    const beforeMismatch = paidPosts;
+    await expect(generateText({ model: aiModel, prompt: "changed identity" })).rejects.toMatchObject({
+      code: "model_recovery_identity_changed", outcomeUnknown: true,
+    });
+    expect(paidPosts).toBe(beforeMismatch + 1);
+
+    mode = "pending-abort";
+    observationAbort = new AbortController();
+    const beforeAbort = paidPosts;
+    let interrupted: unknown;
+    try { await generateText({ model: aiModel, prompt: "cancel observation", abortSignal: observationAbort.signal }); }
+    catch (error) { interrupted = error; }
+    expect(interrupted).toBeInstanceOf(ProductModelError);
+    expect(interrupted).toMatchObject({ outcomeUnknown: true,
+      requestId: expect.stringMatching(/^pinf_/), clientRequestId: expect.stringMatching(/^[a-f0-9-]{36}$/) });
+    expect(paidPosts).toBe(beforeAbort + 1);
+
+    mode = "lost";
+    const beforeLost = paidPosts;
+    let lost: unknown;
+    try { await generateText({ model: aiModel, prompt: "lost initial response" }); }
+    catch (error) { lost = error; }
+    expect(lost).toBeInstanceOf(ProductModelError);
+    expect(lost).toMatchObject({ outcomeUnknown: true, clientRequestId: expect.stringMatching(/^[a-f0-9-]{36}$/) });
+    expect(paidPosts).toBe(beforeLost + 1);
+    if (!(lost instanceof ProductModelError) || !lost.clientRequestId) throw new Error("Missing recovery identity");
+    expect(await client.models.support.recover(lost.clientRequestId)).toMatchObject({
+      state: "completed", result: { text: "retained hello" },
+    });
+    expect(paidPosts).toBe(beforeLost + 1);
+    mode = "lost-tools";
+    const beforeLostTools = paidPosts;
+    let lostTools: unknown;
+    try { await generateText({ model: toAIModel(toolClient.models.support), prompt: "lost tool response", tools }); }
+    catch (error) { lostTools = error; }
+    expect(lostTools).toBeInstanceOf(ProductModelError);
+    if (!(lostTools instanceof ProductModelError) || !lostTools.clientRequestId) throw new Error("Missing tool recovery identity");
+    const recoveredTools = await toolClient.models.support.recover(lostTools.clientRequestId);
+    expect(recoveredTools).toMatchObject({ state: "completed", result: { text: "", toolCalls: [{
+      id: "call-fixture", type: "function", function: { name: "lookup", arguments: '{"value":"ok"}' },
+    }] } });
+    expect(await toolClient.models.support.inspectRequest(recoveredTools.requestId)).toEqual(recoveredTools);
+    await expect(client.models.support.recover(lostTools.clientRequestId)).rejects.toMatchObject({ code: "model_response_invalid" });
+    expect(paidPosts).toBe(beforeLostTools + 1);
     // Exercise the documented key-only setup through the same HTTP consumer.
     // Assert the production destination before forwarding to the local listener.
     mode = "normal";
@@ -220,4 +354,4 @@ test("named models and AI SDK consumer preserve exact routing, usage and no-repl
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
-});
+}, 20_000);
