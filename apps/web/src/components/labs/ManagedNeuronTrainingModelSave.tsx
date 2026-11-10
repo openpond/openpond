@@ -75,8 +75,8 @@ export function ManagedNeuronTrainingModelSave({
               Open Models
             </button>
             <p>
-              The saved neuron delta supports inference. Training continuation requires optimizer
-              state and is unavailable; choose a managed base explicitly for a fresh experiment.
+              The saved neuron delta supports inference. Training continuation and recurring updates
+              are unavailable; choose a managed base explicitly for a fresh experiment.
             </p>
           </div>
           <SavedModelServing

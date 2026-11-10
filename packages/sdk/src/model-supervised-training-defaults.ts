@@ -30,6 +30,7 @@ export function createSupervisedTrainingRecipeDefaults(
   const rank = dense?.rank ?? 16;
   return {
     schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora",
+    ...(source?.evaluation ? { evaluation: source.evaluation } : {}),
     ...(source?.baseModel ? { baseModel: source.baseModel } : {}),
     dataset: {
       completionOnly: true, maxSequenceLength: 8_192,
