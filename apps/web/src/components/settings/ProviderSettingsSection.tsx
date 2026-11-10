@@ -1,3 +1,4 @@
+import { modelsLocation, navigateModelsRoute } from "../labs/lab-primary-tab-state";
 import { ErrorToast } from "../common/ErrorToast";
 import { AcpAgentBrowser } from "./AcpAgentBrowser";
 import { apiFetch } from "../../api/api-client";
@@ -204,7 +205,7 @@ export function ProviderSettingsSection({
   const [removing, setRemoving] = useState<string | null>(null);
   const [removalError, setRemovalError] = useState<string | null>(null);
   const [detailsProviderId, setDetailsProviderId] = useState<ChatProvider | null>(null);
-  const providerRows = [...DESKTOP_AGENT_PROVIDERS, ...(Object.keys(providers?.statuses ?? {}).filter(isRegisteredAcpProvider))].filter(id => providers?.statuses[id]);
+  const providerRows = ["openpond" as const, ...DESKTOP_AGENT_PROVIDERS, ...(Object.keys(providers?.statuses ?? {}).filter(isRegisteredAcpProvider))].filter(id => providers?.statuses[id]);
   const detailsStatus = detailsProviderId ? providers?.statuses[detailsProviderId] ?? null : null;
   function openProviderDetails(providerId: ChatProvider, loadModels: boolean) {
     setDetailsProviderId(providerId);
@@ -230,7 +231,7 @@ export function ProviderSettingsSection({
                 const checked = providerId === "openpond" || Boolean(providers.providers[providerId]?.enabled);
                 return (
                   <div className="provider-connection-card" role="listitem" key={providerId}>
-                    <div className="provider-connection-identity"><strong>{status.displayName}</strong>
+                    <div className="provider-connection-identity"><strong>{providerId === "openpond" ? "OpenPond Managed" : status.displayName}</strong>
                     <div className="provider-connection-controls">
                     {providerId === "codex" || providerId === "claude-code" ? <ProviderPlanUsageRefresh connection={connection} provider={providerId} /> : null}
                     <label className="provider-toggle" aria-label={`Enable ${status.displayName}`}>
@@ -255,7 +256,8 @@ export function ProviderSettingsSection({
                       type="button"
                       className="settings-secondary"
                       onClick={() => {
-                        openProviderDetails(providerId, needsModelLoad);
+                        if (providerId === "openpond") void navigateModelsRoute(modelsLocation("serving"));
+                        else openProviderDetails(providerId, needsModelLoad);
                       }}
                     >
                       Manage

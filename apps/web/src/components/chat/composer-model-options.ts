@@ -31,12 +31,19 @@ export function composerModelGroups({
   providerSettings?: ProviderSettings | null;
 }): ComposerModelGroup[] {
   return providerOptions.flatMap<ComposerModelGroup>((providerOption) => {
-    if (providerOption.value === "setup-provider" || providerOption.value === "openpond") return [];
+    if (providerOption.value === "setup-provider") return [];
     const provider = providerOption.value as ChatProvider;
     const options =
       provider === currentProvider
         ? currentModelOptions
         : modelOptionsForProvider(provider, providerSettings);
+    if (provider === "openpond") {
+      const managedIds = new Set((providerSettings?.modelCaches.openpond?.models ?? [])
+        .filter(model => model.raw?.managedServing === true).map(model => model.id));
+      const managed = options.filter(option => managedIds.has(option.value));
+      return [{ key: "openpond-managed", provider, label: "OpenPond Managed", managed: true,
+        defaultModel: managed[0]?.value ?? "", options: managed }];
+    }
     if (provider === "custom-openai-compatible") {
       const cached = providerSettings?.modelCaches[provider]?.models ?? [];
       const groups = new Map<string, DropdownOption[]>();

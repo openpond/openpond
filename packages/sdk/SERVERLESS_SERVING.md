@@ -1,44 +1,48 @@
-# Usage-based saved Model serving
-
-A saved trained Model can be activated when the service returns a compatible
-Serverless price review. Model availability and GPU residency are separate:
-the Model stays callable while unused workers scale down. Cold requests can wait
-for model loading; no fixed cold-start latency is promised.
+# Saved Model serving
 
 Read `training.modelServing(modelProjectId, { teamId, versionHash })` for the
-exact saved version. When `serverlessReview` is available, use
-`createServerlessServingApproval(serverlessReview, spendingLimit)` from
-`openpond-sdk/training` and include the result as `serverlessApproval` in the
-normal `training.controlModelServing` activation request. Retain the original
-operation ID and exact request for recovery. The request's idle setting must
-match the review's `workerIdleTimeoutSeconds`.
+exact saved version. Create an approval from its `serverlessReview` with
+`createServerlessServingApproval` from `openpond-sdk/training`, then include it
+in `training.controlModelServing`. Retain the original operation ID and exact
+request.
 
-Activation creates callable configuration. New `openpond.serverlessServingReview.v2`
-terms settle attributable worker runtime from confirmed worker start through full
-stop. This includes cold start, model loading, execution, idle time and cleanup,
-including failed loading. Queue wait before a worker starts and time scaled down
-are not billed. Worker lifetime is rounded up to a whole second once, before
-allocation; compatible requests share the same interval rather than each
-receiving a full GPU clock. Token usage is still reported with no additional
-token charge for the same Serverless request.
+Read status to follow waiting, starting, running and stopping. Stop requests
+cancellation of the original work; status remains readable while stopping.
 
-Read the exact retained review: historical v1 receipts preserve their original
-engine-only terms. They are not retroactively charged under v2. Refresh the price
-review before creating a new approval; the SDK does not mint new v1 approvals.
+## Pending inference and recovery
 
-The optional spending limit bounds the accepted activation's cumulative usage.
-An omitted limit uses available workspace credit. Pending requests retain their
-credit holds until worker stop and settlement are confirmed. Stop closes new admission
-and requests cancellation while preserving outstanding settlement and cleanup.
-Unconfirmed runtime remains pending with credit reserved until verified. Delayed
-records do not change the accepted rate.
+A queued serving POST returns HTTP 202 with an
+`openpond.modelRequestStatus.v1` receipt. The SDK observes that original request
+with GET requests until its retained result or bounded observer deadline. It
+never resubmits the paid POST. The default observer is 630 seconds;
+`serving.timeoutMs` can shorten it. A queued `stream()` call emits the retained
+completed text and finish event when available.
 
-Current usage is returned in `control.serverless`: `chargedUsd`, `reservedUsd`,
-`quantityMicros` and the retained review. Supplier-cost status is separate from
-the customer debit. An unavailable review does not qualify another model or
-modification method automatically.
+Every SDK call creates a stable `clientRequestId` before POST. You may supply
+one explicitly. If observation ends with an unknown outcome, retain both IDs
+from `ProductModelError` and recover the original operation:
 
-Python consumers use the same generated request/response contracts and can
-import `create_serverless_serving_approval` from `ponder_sdk.serverless_serving`.
-The official CLI's `hosted-model-serving` and `hosted-control-model-serving`
-operations use these same Model contracts.
+```ts
+try {
+  const answer = await model.generate({ prompt: "Explain the result." });
+} catch (error) {
+  if (error instanceof ProductModelError && error.outcomeUnknown && error.clientRequestId) {
+    const status = await model.recover(error.clientRequestId);
+    // status.result is present when the original operation has completed.
+  }
+}
+```
+
+`model.inspectRequest(requestId)` reads by canonical request ID;
+`model.cancelRequest(requestId)` explicitly requests cancellation. Recovery
+checks the original actor, current access and exact model identity. Retained
+answers expire after the service's finite retention period. Recovery never
+resubmits the original request.
+
+Python uses the same generated serving contracts and
+`create_serverless_serving_approval` from `ponder_sdk.serverless_serving`.
+Named model calls accept `client_request_id` and a serving-only `timeout`
+(default and maximum 630 seconds). Use `recover`, `inspect_request` and
+`cancel_request` on the same handle, awaiting them on `AsyncClient`.
+`ModelRequestError.client_request_id` retains the original operation identity.
+The official hosted Model-serving CLI operations use these same contracts.

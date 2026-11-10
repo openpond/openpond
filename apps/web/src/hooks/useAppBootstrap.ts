@@ -278,7 +278,10 @@ export function useAppBootstrap(params: {
     if (selectedSessionId) return;
     const preferences = normalizePreferences(bootstrap?.preferences);
     const remembered = readChatSelectionPreference();
-    const hiddenProvider = (remembered?.provider ?? bootstrap?.preferences.defaultChatProvider) === "openpond";
+    const selectedProvider = remembered?.provider ?? bootstrap?.preferences.defaultChatProvider;
+    const selectedModel = remembered?.model ?? bootstrap?.preferences.defaultChatModel;
+    const hiddenProvider = selectedProvider === "openpond" && !(selectedModel?.startsWith("managed:") || selectedModel?.startsWith("managed-"))
+      && !bootstrap?.providers?.modelCaches.openpond?.models.some(model => model.id === selectedModel && model.raw?.managedServing === true);
     const fallbackProvider = providerOptionsFromSettings(bootstrap?.providers, { enabledOnly: true })[0]!.value;
     const selection = hiddenProvider
       ? { provider: fallbackProvider, model: preferredChatModel(fallbackProvider, bootstrap?.providers) }

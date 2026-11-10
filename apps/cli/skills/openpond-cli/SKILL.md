@@ -9,6 +9,12 @@ Use the official CLI for supported OpenPond operations, reusing its authenticati
 
 For dataset, grader, experiment, training, or learning-from-logs requests, read [Experiments and training](references/experiments-and-training.md). This guidance owns the conversational flow and useful inline presentation; the app supplies resource attachment and the Training picker and resource sidebar.
 
+Before a new training start or resumed training request, reread the current
+training guidance from this installation. A copy from an earlier conversation
+may describe a superseded workflow. Ordinary SFT/GRPO requests use the durable
+operation flow; an empty live GPU catalog alone is not a reason to abandon an
+authorized run before queueing it.
+
 ## App-scoped execution
 
 In OpenPond chat, use the supplied scoped command executor and bundled prefix

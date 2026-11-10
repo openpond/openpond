@@ -89,7 +89,7 @@ describe("provider model option capping", () => {
     expect(JSON.stringify(discovered.providers)).toBe(defaults);
   });
 
-  test("uses hosted model capabilities for OpenPond's visible models and efforts", () => {
+  test("keeps hosted reasoning metadata without offering OpenPond Chat models", () => {
     const preset = getProviderPreset("openpond");
     const catalog = ProviderCatalogSchema.parse({
       version: 1,
@@ -130,10 +130,7 @@ describe("provider model option capping", () => {
       },
     });
 
-    expect(modelOptionsForProvider("openpond", settings).map((option) => option.value)).toEqual([
-      "gpt-6-sol",
-      "accounts/fireworks/models/glm-5p3",
-    ]);
+    expect(modelOptionsForProvider("openpond", settings)).toEqual([]);
     expect(reasoningEffortOptionsForModel("openpond", "gpt-6-sol", settings).map((option) => option.value))
       .toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
     expect(reasoningEffortOptionsForModel("openpond", "accounts/fireworks/models/glm-5p3", settings).map((option) => option.value))
@@ -186,6 +183,28 @@ describe("provider model option capping", () => {
     expect(modelOptionsForProvider("openpond", settings).map((option) => option.value)).not.toContain(
       "openpond-chat",
     );
+  });
+
+  // Failure story: hiding hosted Chat also removes trained models, or a restored
+  // Managed picker silently routes an unselected model to the hosted default.
+  test("selects managed models without exposing hosted Chat or substituting its default", () => {
+    const settings = buildProviderSettings({ file: { version: 1, providers: {}, modelCaches: {} } });
+    const managedId = "managed:workspace:artifact";
+    settings.modelCaches.openpond = ProviderModelCacheSchema.parse({ providerId: "openpond", source: "provider", models: [
+      { id: "hosted-chat", providerId: "openpond", displayName: "Hosted Chat", source: "hosted" },
+      { id: managedId, providerId: "openpond", displayName: "Trained model", source: "provider", raw: { managedServing: true } },
+    ] });
+    const groups = composerModelGroups({ currentProvider: "codex", currentModelOptions: [],
+      providerOptions: providerOptionsFromSettings(settings), providerSettings: settings });
+    const group = groups.find(group => group.managed)!;
+    expect(group.options.map(option => option.value)).toEqual([managedId]);
+    expect(modelRefForTurn("openpond", modelSelectionForGroup(group)!.model, settings))
+      .toEqual({ providerId: "openpond", modelId: managedId });
+    settings.modelCaches.openpond.models = settings.modelCaches.openpond.models.filter(model => model.id !== managedId);
+    const cold = composerModelGroups({ currentProvider: "codex", currentModelOptions: [],
+      providerOptions: providerOptionsFromSettings(settings), providerSettings: settings }).find(group => group.managed)!;
+    expect(modelSelectionForGroup(cold)).toEqual({ provider: "openpond", model: "" });
+    expect(() => modelRefForTurn("openpond", "", settings)).toThrow("Choose an OpenPond Managed model");
   });
 
   test("caps large provider model lists", () => {

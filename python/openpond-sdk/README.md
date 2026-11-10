@@ -120,19 +120,14 @@ after a failed mutation. All page APIs expose the full retained cursor.
 Estimate availability and measured coverage depend on the configured host.
 `training.estimate()` uses native HTTP in both clients and checks exact source,
 request, GPU, review identity and expiry. Missing timing or resource evidence is
-returned as unknown; hourly rates are not expected totals. Pass a preparation's
-returned `review` to `start_preparation` to bind that review. It neither reserves
-credit/capacity nor grants permission to spend above the approved ceiling.
-A `gpu_allocation` component may price conserved, weighted billable allocation
-time from matching completed runs at the current whole-Pod rate. GPU count and
-other GPU phases must not be charged a second time. Both clients reject an
-inconsistent aggregate. Numeric component evidence does not turn unknown
-whole-run totals into zero or a complete estimate.
+returned as unknown. Pass a preparation's returned `review` to
+`start_preparation` to bind that review. Numeric component evidence does not
+turn unknown whole-run totals into zero or a complete estimate.
 
 Current executable training is discovered through capabilities: GRPO and
 reward-model jobs in the deployed host's supported model/runtime envelope.
 Recipe schema enums do not establish SFT/DPO/PPO or gradient/session support.
-Candidate decisions do not activate serving. Training start, funding, evaluation
+Candidate decisions do not activate serving. Training start, evaluation
 start/retry, acceptance and serving are separate explicit controls. Ordinary
 hosted `prepare_run` compiles an existing reviewed batch on the server; Python
 never shells out to a Node authoring compiler. Advanced `stage_artifact` and
@@ -168,7 +163,7 @@ with Client(api_key=api_key, team_id=team_id) as client:
 Owner credentials register/control installations, select routing, project
 recoveries, and purge retained events. Use the separate short-lived installation
 credential for capture/manifest/consultation calls; possession of it does not
-approve training data, spend, or a learned adapter. `register`, `set_state`,
+approve training data or a learned adapter. `register`, `set_state`,
 `append`, `project`, `purge`, `configure_routing`, and `consult` are explicit
 mutations and are never automatically replayed. Queries cannot override the
 bound project. Response scope, installation, operation, echoed configuration,
@@ -181,11 +176,11 @@ Harness event, action, context, manifest or routing seals.** Like portable
 Harness packages, these are host-authenticated declarations rather than a
 claim that this Python client reproduces JavaScript locale collation. Installed
 Python makes no Node subprocess calls. The canonical host validates seals and
-admission; schema validation is not authority to capture, bill or train.
+admission; schema validation is not authority to capture or train.
 
 For SFT, select `sft` and the supervised recipe on the hosted Model, review the
 supervised batch, and use `training.prepare_run` / `start_preparation` with that
-pinned Model configuration and bounded spend. The manual example reads the
+pinned Model configuration. The manual example reads the
 actual selected method and checks hosted capabilities, revision and etag; it no
 longer assumes every preparation is GRPO. Status, outputs and cancellation use
 the same existing operations. A completed optimizer run does not automatically
@@ -317,7 +312,7 @@ known exact revision/tokenizer/template/asset fields using
 workspace, includes the current actor and expires within five minutes. The
 current host projection returns unsupported-model or unqualified-runtime
 reasons; no activation executor is advertised. Format support (`draftSchema`)
-is separate from permission. This read creates no Job, reservation or capacity.
+is separate from permission. This read creates no Job or capacity.
 When the current actor is known, the lightweight
 `modification_identity.verify_modification_capabilities` helper additionally
 checks it with `expected_actor_id`.
@@ -396,8 +391,8 @@ are verified; list cursors retain their account/Project/search scope.
 `measurementAttestation: unattested` remain explicit. Hashes do not attest the
 supplied runtime's measurements or establish a grade. Account/API-origin
 switches cannot read the previous account's observations. Importing the CPU
-example in the shared UI uses this same local storage and never creates a Job,
-credit reservation or served model. HTTP helpers remain independent of Torch.
+example in the shared UI uses this same local storage and never creates a Job
+or served model. HTTP helpers remain independent of Torch.
 
 ## Model workflows and adapters
 
@@ -453,7 +448,7 @@ The configured `client.training` and async equivalent expose
 `prepare_engram_execution`, `start_engram_execution`, `get_engram_execution`,
 `list_engram_executions`, `cancel_engram_execution`, and
 `save_engram_result_model`. Use the generated input types and original workspace,
-operation ID, plan hash, revision and approved spend cap. Capability reads,
+operation ID, plan hash and revision. Capability reads,
 compilation, preparation and saving do not start paid training or serving.
 An unavailable capability remains unavailable until the exact runtime is qualified.
 
@@ -654,3 +649,14 @@ have `type="text"`/`text` or `type="finish"`/`result`; incomplete streams raise.
 Use `contextlib.closing`/`aclosing` for early iterator exit. Keep this client in
 your product backend; React calls your authenticated application routes.
 There is no SDK capture queue or flush API.
+
+### Recovering queued named Model requests
+
+Named Model `generate` and `stream` accept `client_request_id` and a serving-only
+`timeout` of at most 630 seconds (the default). HTTP 202 is observed through the
+original request's retained status. No paid POST is retried. If observation ends
+with an unknown outcome, retain `ModelRequestError.client_request_id` and call
+`client.models.support.recover(client_request_id)`, or `inspect_request(request_id)`
+when the canonical ID is known. `cancel_request(request_id)` requests Stop for that
+exact operation. Await these methods on `AsyncClient`. Recovery enforces current
+access and the Model identity; answers have finite retention.
