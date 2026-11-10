@@ -144,6 +144,7 @@ export function createHostedTrainingDetailTransport(deps: {
         .object({
           teamId: z.string().min(1),
           modelProjectId: z.string().min(1).max(240),
+          preferActiveServing: z.boolean().optional(),
           versionHash: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -169,7 +170,7 @@ export function createHostedTrainingDetailTransport(deps: {
         }),
       });
       return action === "hosted_training_saved_version"
-        ? detail.savedVersion(body.modelProjectId, body.versionHash)
+        ? detail.savedVersion(body.modelProjectId, body.versionHash, body.preferActiveServing)
         : detail.savedModel(body.modelProjectId);
     }
     if (

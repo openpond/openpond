@@ -1,9 +1,13 @@
-import { ProductModelError } from "./product-models.js";
+import { ProductModelError } from "./product-model-wire.js";
 
-/** Bound the optional provider's otherwise unbounded parser and require the
+/** Bound response bodies for both model consumers and require the
  * personalized gateway's terminal marker before treating EOF as completion. */
-export function boundProductModelResponse(response: Response): Response {
-  if (!response.body) return response;
+export function boundProductModelResponse(response: Response, context: {
+  signal?: AbortSignal; requestId?: string; clientRequestId?: string;
+} = {}): Response {
+  const headers = new Headers(response.headers);
+  if (context.clientRequestId) headers.set("x-openpond-client-request-id", context.clientRequestId);
+  if (!response.body) return new Response(null, { status: response.status, statusText: response.statusText, headers });
   const streaming = response.headers.get("content-type")?.includes("text/event-stream") ?? false;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -16,16 +20,40 @@ export function boundProductModelResponse(response: Response): Response {
       streaming ? "model_stream_interrupted" : "model_response_invalid",
       response.status,
       true,
-      response.headers.get("x-openpond-request-id") ??
+      context.requestId ?? response.headers.get("x-openpond-request-id") ??
         response.headers.get("x-request-id") ??
         undefined,
+      context.clientRequestId,
     );
+  let closed = false;
+  let cancellation: Promise<void> | undefined;
+  // Abort, parser failure and consumer cancellation may converge. One owner
+  // cancels the source and releases its reader only after pending reads settle.
+  const cancelReader = (reason?: unknown) => cancellation ??= reader.cancel(reason)
+    .finally(() => reader.releaseLock());
+  let abort: (() => void) | undefined;
+  const cleanup = () => { if (abort) context.signal?.removeEventListener("abort", abort); };
   const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      abort = () => {
+        if (closed) return;
+        closed = true;
+        cleanup();
+        void cancelReader().catch(() => {});
+        controller.error(fail());
+      };
+      context.signal?.addEventListener("abort", abort, { once: true });
+      if (context.signal?.aborted) abort();
+    },
     async pull(controller) {
+      if (closed) return;
       try {
         const { done, value } = await reader.read();
+        if (closed) return;
         if (done) {
           if (streaming && !terminal) throw fail();
+          closed = true;
+          cleanup();
           controller.close();
           reader.releaseLock();
           return;
@@ -58,17 +86,22 @@ export function boundProductModelResponse(response: Response): Response {
         }
         controller.enqueue(value);
       } catch {
-        await reader.cancel().catch(() => {});
+        if (closed) return;
+        closed = true;
+        cleanup();
+        await cancelReader().catch(() => {});
         controller.error(fail());
       }
     },
     async cancel(reason) {
-      await reader.cancel(reason);
+      closed = true;
+      cleanup();
+      await cancelReader(reason);
     },
   });
   return new Response(body, {
     status: response.status,
     statusText: response.statusText,
-    headers: response.headers,
+    headers,
   });
 }

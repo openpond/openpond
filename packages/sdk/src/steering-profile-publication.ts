@@ -122,9 +122,10 @@ export function createSteeringProfileClient(request: (path: string, init?: Reque
       for (const [index, item] of page.items.entries()) {
         if (item.teamId !== teamId || item.ownerUserId !== page.ownerUserId || query.projectId && item.projectId !== query.projectId || query.modelProjectId && item.modelProjectId !== query.modelProjectId || item.archived !== query.archived || index && page.items[index - 1]!.id >= item.id) throw new OpenPondProtocolError("steering_profile_page_mismatch", "The profile list scope changed."); }
       return page; },
-    async modelVersion(modelProjectId: string, query: {teamId: string; versionHash?: string}) {
+    async modelVersion(modelProjectId: string, query: {teamId: string; versionHash?: string; preferActiveServing?: boolean}) {
       const params = new URLSearchParams({teamId: Id.parse(query.teamId)});
       if (query.versionHash !== undefined) params.set("versionHash", Hash.parse(query.versionHash));
+      if (query.preferActiveServing === true && query.versionHash === undefined) params.set("preferActiveServing", "true");
       return parseAndVerifySavedModelVersionRead(await request(`/v1/training/models/${encodeURIComponent(Id.parse(modelProjectId))}/version?${params}`), query.teamId, modelProjectId, query.versionHash);
     },
   };

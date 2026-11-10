@@ -69,7 +69,8 @@ def verify_training_model_serving(value: dict[str, Any], team_id: str, model_id:
     source = registry['source']
     if (source['jobId'] != version['jobId'] or source['checkpointId'] != version['candidate']['checkpointId']
             or source['artifact'] != version['candidate']['artifact'] or registry['qualified'] != (registry['reason'] == 'qualified')
-            or registry['qualified'] and (registry['state'] != 'promotable' or registry['revoked'] or registry['deleted'])):
+            or registry['qualified'] and (registry['state'] not in ('imported_unvalidated', 'evaluating', 'promotable', 'rejected')
+                                         or registry['revoked'] or registry['deleted'])):
         fail()
     deployments = {row['id']: row for row in value['deployments']}
     pools = {row['id']: row for row in value['pools']}

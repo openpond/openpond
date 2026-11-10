@@ -1,6 +1,5 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { TrainingStateResponse } from "@openpond/contracts";
 
 import {
   LabsView,
@@ -12,34 +11,7 @@ import "../styles/training/training.css";
 import "../styles/labs/labs.css";
 import "../styles/labs/labs-inventory.css";
 
-const state = {
-  modelProjects: [
-    {
-      id: "model_support",
-      name: "Support model",
-    },
-  ],
-  modelVersions: [
-    {
-      artifactLineageId: "lineage_support_v2",
-      version: 2,
-    },
-  ],
-  models: [
-    {
-      id: "lineage_support_v2",
-      modelId: "model_support",
-      importedAt: "2026-07-30T10:00:00.000Z",
-      managedServing: {
-        state: "ready",
-        canonicalArtifactState: "promotable",
-        canonicalDeploymentState: "ready",
-        customerBindingAllowed: true,
-        lastSyncedAt: "2026-07-30T11:00:00.000Z",
-      },
-    },
-  ],
-} as unknown as TrainingStateResponse;
+
 
 function ModelsBrowserProof() {
   const activeTab: LabPrimaryTab = "serving";
@@ -56,7 +28,7 @@ function ModelsBrowserProof() {
         onCreateModel={() => setLastAction("create-model")}
       >
         {activeTab === "serving" ? (
-          <LabServingPage state={state} />
+          <LabServingPage connection={null} teamId={null} actorId={null} accountKey="browser-proof" />
         ) : (
           <div className="labs-flat-body">
             <div className="labs-table-empty">{activeTab} proof</div>

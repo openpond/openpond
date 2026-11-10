@@ -4,8 +4,6 @@ import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
 import { ErrorToast } from "../common/ErrorToast";
 import { useState } from "react";
-import { SaveTrainingModelDialog } from "./SaveTrainingModelDialog";
-import type { TrainingResultSaveReceipt } from "openpond-sdk/training";
 import type { WorkspaceApi } from "./workspace/workspace-api";
 
 const candidateLabels: Record<TrainingResult["candidateState"], string> = {
@@ -26,20 +24,19 @@ export function TrainingResultDetails({ connection, teamId, actorId, jobId, vers
   connection: ClientConnection; teamId: string; actorId: string; jobId: string; version: number;
   api: WorkspaceApi; onOpenModel?(id: string): Promise<void>;
 }) {
-  const [saving, setSaving] = useState(false), [opening, setOpening] = useState(false);
-  const [saved, setSaved] = useState<TrainingResultSaveReceipt | null>(null), [actionError, setActionError] = useState<unknown>(null);
+  const [opening, setOpening] = useState(false);
+  const [actionError, setActionError] = useState<unknown>(null);
   const query = useQuery({
     queryKey: ["hosted-training-result", api.key, connectionQueryScope(connection), teamId, actorId, jobId, version],
     queryFn: async ({ signal }) => parseAndVerifyTrainingResult(await apiFetch(connection,
       `/v1/training/hosted-jobs/${encodeURIComponent(jobId)}/result?teamId=${encodeURIComponent(teamId)}`, { signal }), { teamId, jobId }),
     staleTime: 30_000, gcTime: 300_000,
+    refetchInterval: current => !current.state.error && current.state.data?.candidateState === "retained" && !current.state.data.savedVersion ? 5_000 : false,
   });
   const result = query.data;
   const source = result?.request;
   const candidate = result?.candidate;
   const receipt = result?.outputs.receipt;
-  const savedModelName = result?.model && (!saved || result.model.revision >= saved.model.revision)
-    ? result.model.name : saved?.model.name ?? "Model";
   return <section className="training-result-details" aria-label="Model result">
     <div className="training-result-heading"><h3>Model result</h3>
       <button type="button" className="training-button secondary" disabled={query.isFetching} onClick={() => void query.refetch()}>Refresh result</button>
@@ -48,15 +45,14 @@ export function TrainingResultDetails({ connection, teamId, actorId, jobId, vers
     {query.isPending ? <p role="status">Loading model result…</p> : null}
     {result ? <>
       <p>{candidateLabels[result.candidateState]}</p>
-      {saved || result.savedVersion ? <div className="model-build-actions"><span>Saved to {savedModelName}.</span>
+      {result.savedVersion ? <div className="model-build-actions">
         {onOpenModel ? <button type="button" className="training-button secondary" disabled={opening} onClick={() => {
-          const id = saved?.model.id ?? result.model?.id;
+          const id = result.model?.id;
           if (!id || !onOpenModel) return;
           setOpening(true); setActionError(null);
           void onOpenModel(id).catch(setActionError).finally(() => setOpening(false));
         }}>{opening ? "Opening…" : "View model"}</button> : null}
-        <button type="button" className="training-button secondary" onClick={() => setSaving(true)}>Review save</button>
-      </div> : candidate && result.model ? <button type="button" className="training-button" onClick={() => setSaving(true)}>Save model</button> : null}
+      </div> : null}
       {source ? <dl className="model-project-page-metrics">
         <div><dt>Base model</dt><dd title={source.baseModel.modelId}>{source.baseModel.modelId}</dd><small title={source.baseModel.revision ?? undefined}>{source.baseModel.revision}</small></div>
         <div><dt>Method</dt><dd>{String(source.recipe.method ?? "Training")}</dd></div>
@@ -73,8 +69,6 @@ export function TrainingResultDetails({ connection, teamId, actorId, jobId, vers
           ? { id: receipt.id, runtimeRelease: receipt.runtimeRelease, spendUsd: receipt.spendUsd, durationSeconds: receipt.durationSeconds } : null }, null, 2)}</pre>
       </details>
     </> : null}
-    {saving && result ? <SaveTrainingModelDialog api={api} result={result} onClose={() => setSaving(false)} onSaved={(receipt, acknowledgementError) => {
-      setSaved(receipt); setActionError(acknowledgementError); setSaving(false); void query.refetch();
-    }} /> : null}
+
   </section>;
 }

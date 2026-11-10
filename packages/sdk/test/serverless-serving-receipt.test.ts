@@ -23,6 +23,18 @@ it.each(["v1", "v2"] as const)("binds returned %s terms to their accepted review
     workerIdleTimeoutSeconds: 5 as const, maximumRequestMillis: 540000 as const,
     expiresAt: "2000-01-01T00:00:00.000Z"};
   const review = ServerlessServingReviewSchema.parse({...content, contentHash: await canonicalSha256(content)});
+  if (version === "v2") {
+    const current = {...content, schemaVersion: "openpond.serverlessServingReview.v3" as const,
+      expiresAt: "2999-01-01T00:00:00.000Z", hardware: {selection: "automatic" as const, gpuTypeIds: ["fixture-gpu"]}};
+    const priced = ServerlessServingReviewSchema.parse({...current, contentHash: await canonicalSha256(current)});
+    expect(await createServerlessServingApproval(priced, "2", "fixture-gpu"))
+      .toMatchObject({reviewHash: priced.contentHash, customerCapUsd: "2.000000", gpuTypeId: "fixture-gpu"});
+    await expect(createServerlessServingApproval(priced, "2", "unapproved-gpu"))
+      .rejects.toMatchObject({code: "serverless_serving_gpu_unavailable"});
+    const replaced = {...priced, hardware: {...current.hardware, gpuTypeIds: ["unapproved-gpu"]}};
+    await expect(createServerlessServingApproval(replaced, "2", "unapproved-gpu"))
+      .rejects.toMatchObject({code: "serverless_serving_review_expired"});
+  }
   // Old signatures remain readable but cannot mint a new engine-only approval.
   if (version === "v1") {
     const fresh = {...content, expiresAt: "2999-01-01T00:00:00.000Z"};

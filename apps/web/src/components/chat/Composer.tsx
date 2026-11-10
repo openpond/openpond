@@ -492,7 +492,7 @@ export function Composer({
   }
   const providerOptions = useMemo(() => {
     const options = allowedModelRefs
-      ? [...new Set(allowedModelRefs.map(ref => ref.providerId))].filter(value => value !== "openpond").map(value => ({value, label:chatProviderLabel(value,providerSettings), description:undefined}))
+      ? [...new Set(allowedModelRefs.map(ref => ref.providerId))].map(value => ({value, label:chatProviderLabel(value,providerSettings), description:undefined}))
       : providerOptionsFromSettings(providerSettings, {enabledOnly:true}).map(option => ({...option,description:undefined}));
     const scopedOptions =
       workspaceTarget.value === "cloud" && repositoryWork

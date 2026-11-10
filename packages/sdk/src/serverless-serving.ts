@@ -60,8 +60,18 @@ export const ServerlessServingReviewV2Schema = ServerlessServingReviewIdentitySc
     supplierRounding: z.literal("ceil_worker_lifetime_second_once"),
   }).strict(),
 }).strict();
+/** Current serving review. */
+export const ServerlessServingReviewV3Schema = ServerlessServingReviewV2Schema.extend({
+  schemaVersion: z.literal("openpond.serverlessServingReview.v3"),
+  /** Newly issued reviews expose the approved hardware set. Historical signed
+   * reviews remain valid with their original content hash. */
+  hardware: z.object({
+    selection: z.literal("automatic"),
+    gpuTypeIds: z.array(Id).min(1).max(8).refine(ids => new Set(ids).size === ids.length),
+  }).strict().optional(),
+}).strict();
 export const ServerlessServingReviewSchema = z.discriminatedUnion("schemaVersion", [
-  ServerlessServingReviewV1Schema, ServerlessServingReviewV2Schema,
+  ServerlessServingReviewV1Schema, ServerlessServingReviewV2Schema, ServerlessServingReviewV3Schema,
 ]);
 export type ServerlessServingReview = z.infer<typeof ServerlessServingReviewSchema>;
 
@@ -69,8 +79,25 @@ export const ServerlessServingApprovalSchema = z.object({
   schemaVersion: z.literal("openpond.serverlessServingApproval.v1"),
   reviewHash: Hash,
   customerCapUsd: Money.refine(value => Number(value) > 0).nullable(),
+  gpuTypeId: Id.optional(),
 }).strict();
 export type ServerlessServingApproval = z.infer<typeof ServerlessServingApprovalSchema>;
+
+export const ServerlessServingUsageSchema = z.object({
+  mode: z.literal("periodic_actual_usage"),
+  phase: z.enum(["starting", "running", "stopping", "closed", "waiting_capacity", "waiting_funding", "waiting_platform"]),
+  ratedUsd: Money,
+  chargedUsd: Money,
+  prepaidDebitedUsd: Money,
+  includedUsageUsd: Money,
+  pendingEvidence: z.boolean(),
+  lastEvidenceAt: Timestamp.nullable(),
+  lastDebitAt: Timestamp.nullable(),
+  nextDebitAt: Timestamp.nullable(),
+  retryAt: Timestamp.nullable().optional(),
+  stopReason: z.string().nullable(),
+}).strict();
+export type ServerlessServingUsage = z.infer<typeof ServerlessServingUsageSchema>;
 
 export const ServerlessServingSnapshotSchema = z.object({
   schemaVersion: z.literal("openpond.serverlessServing.v1"),
@@ -82,6 +109,7 @@ export const ServerlessServingSnapshotSchema = z.object({
   chargedUsd: Money,
   reservedUsd: Money,
   supplierCostStatus: z.enum(["pending", "reconciled"]),
+    usage: ServerlessServingUsageSchema.optional(),
 }).strict();
 export type ServerlessServingSnapshot = z.infer<typeof ServerlessServingSnapshotSchema>;
 
@@ -98,11 +126,13 @@ export async function verifyServerlessServingReview(raw: ServerlessServingReview
   return review;
 }
 
-export async function createServerlessServingApproval(raw: ServerlessServingReview, spendingLimit?: string | null) {
+export async function createServerlessServingApproval(raw: ServerlessServingReview, spendingLimit?: string | null, gpuTypeId?: string) {
   const review = ServerlessServingReviewSchema.parse(raw), {contentHash, ...content} = review;
-  if (review.schemaVersion !== "openpond.serverlessServingReview.v2" ||
+  if (review.schemaVersion !== "openpond.serverlessServingReview.v3" ||
     contentHash !== await canonicalSha256(content) || Date.parse(review.expiresAt) <= Date.now())
     throw new OpenPondProtocolError("serverless_serving_review_expired", "Refresh this saved Model's serving price.");
+  if (gpuTypeId && !review.hardware?.gpuTypeIds.includes(gpuTypeId))
+    throw new OpenPondProtocolError("serverless_serving_gpu_unavailable", "Choose a GPU from this Model's current serving offering.");
   return ServerlessServingApprovalSchema.parse({schemaVersion: "openpond.serverlessServingApproval.v1",
-    reviewHash: contentHash, customerCapUsd: canonicalComputeSpendCap(spendingLimit)});
+    reviewHash: contentHash, customerCapUsd: canonicalComputeSpendCap(spendingLimit), ...(gpuTypeId ? { gpuTypeId } : {})});
 }

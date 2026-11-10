@@ -343,6 +343,7 @@ export async function handleTrainingRoutes({
         "hosted_training_saved_version",
         {
           teamId: requestUrl.searchParams.get("teamId"),
+          preferActiveServing: requestUrl.searchParams.get("preferActiveServing") === "true",
           modelProjectId: decodeURIComponent(savedVersion[1]!),
           ...(requestUrl.searchParams.has("versionHash")
             ? { versionHash: requestUrl.searchParams.get("versionHash") }

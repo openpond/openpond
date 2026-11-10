@@ -1,20 +1,38 @@
 import { DEFAULT_MODEL_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { readBoundedJsonResponse } from "./protocol.js";
+import { ProductModelTransport } from "./product-model-transport.js";
+import { ProductModelError, productModelEndpoint, ProductModelChunkSchema as Chunk,
+  ProductModelUsageSchema as Usage, ProductModelToolCallSchema, type ProductModelToolCall, type ProductModelConnection,
+  type ProductModelWireStatus } from "./product-model-wire.js";
+export { ProductModelError, productModelEndpoint, type ProductModelConnection, type ProductModelToolCall } from "./product-model-wire.js";
 
 export type ProductModelBinding = {
   id: string;
-  capabilities?: { streaming?: boolean; tools?: boolean; structuredOutput?: false };
+  capabilities?: {
+    streaming?: boolean;
+    tools?: boolean;
+    structuredOutput?: false;
+  };
 };
-export type ProductModelMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ProductModelMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 export type ProductModelInput = {
   prompt?: string;
   messages?: ProductModelMessage[];
   temperature?: number;
   maxTokens?: number;
   signal?: AbortSignal;
+  /** Stable original operation identity for inspect/recover; never authorizes a replay. */
+  clientRequestId?: string;
 };
-export type ProductModelUsage = { inputTokens: number; outputTokens: number; totalTokens: number };
+export type ProductModelUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
 export type ProductModelResult = {
   text: string;
   requestId: string;
@@ -29,28 +47,15 @@ export type ProductModelResult = {
 export type ProductModelEvent =
   | { type: "text"; text: string }
   | { type: "finish"; result: ProductModelResult };
-export type ProductModelConnection = {
-  baseUrl?: string;
-  teamId?: string;
-  apiKey: string;
-  timeoutMs?: number;
-  fetch?: typeof fetch;
+export type ProductModels<Models> = {
+  readonly [Name in keyof Models]: ProductModel;
 };
-export type ProductModels<Models> = { readonly [Name in keyof Models]: ProductModel };
 
-export class ProductModelError extends Error {
-  constructor(
-    readonly code: string,
-    readonly status: number,
-    readonly outcomeUnknown: boolean,
-    readonly requestId?: string,
-  ) {
-    super(`OpenPond model request failed (${code}).`);
-    this.name = "ProductModelError";
-  }
-}
 const Message = z
-  .object({ role: z.enum(["system", "user", "assistant"]), content: z.string().max(200_000) })
+  .object({
+    role: z.enum(["system", "user", "assistant"]),
+    content: z.string().max(200_000),
+  })
   .strict();
 const Input = z
   .object({
@@ -64,52 +69,21 @@ const Input = z
     (v) => (v.prompt !== undefined) !== (v.messages !== undefined),
     "Supply prompt or messages, exclusively.",
   );
-const Usage = z.object({
-  prompt_tokens: z.number().int().nonnegative(),
-  completion_tokens: z.number().int().nonnegative(),
-  total_tokens: z.number().int().nonnegative(),
-});
-const Chunk = z.object({
-  id: z.string(),
-  model: z.string(),
-  system_fingerprint: z.string().nullable().optional(),
-  openpond: z.record(z.string(), z.json()).optional(),
-  usage: Usage.nullable().optional(),
-  choices: z
-    .array(
-      z.object({
-        index: z.number().int(),
-        finish_reason: z.string().nullable().optional(),
-        delta: z
-          .object({ content: z.string().nullable().optional(), tool_calls: z.unknown().optional() })
-          .passthrough()
-          .optional(),
-        message: z
-          .object({ content: z.string().nullable(), tool_calls: z.unknown().optional() })
-          .passthrough()
-          .optional(),
-      }),
-    )
-    .max(1),
-});
-
-export function productModelEndpoint(value: string): string {
-  const url = new URL(value);
-  if (
-    !["http:", "https:"].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  )
-    throw new Error("A clean serving base URL is required.");
-  return url.href.replace(/\/$/, "");
-}
+export type ProductModelRecoveredResult = ProductModelResult & {
+  /** Available only for explicitly tool-capable bindings; arguments remain JSON text. */
+  toolCalls?: ProductModelToolCall[];
+};
+export type ProductModelRequestStatus = Omit<ProductModelWireStatus, "result"> & {
+  result: ProductModelRecoveredResult | null;
+};
 
 /** A named text model. This never resolves a catalogue default or activates serving. */
 export class ProductModel {
   readonly id: string;
-  readonly capabilities: Required<NonNullable<ProductModelBinding["capabilities"]>>;
+  readonly capabilities: Required<
+    NonNullable<ProductModelBinding["capabilities"]>
+  >;
+  private readonly transport: ProductModelTransport;
   constructor(
     binding: string | ProductModelBinding,
     private readonly connection: ProductModelConnection,
@@ -127,72 +101,57 @@ export class ProductModel {
     };
     if (!connection.apiKey.trim())
       throw new Error("Named models require an API key.");
-    this.connection = { ...connection, baseUrl: productModelEndpoint(connection.baseUrl ?? DEFAULT_MODEL_BASE_URL) };
+    this.connection = {
+      ...connection,
+      baseUrl: productModelEndpoint(
+        connection.baseUrl ?? DEFAULT_MODEL_BASE_URL,
+      ),
+    };
     if (
       connection.timeoutMs !== undefined &&
       (!Number.isFinite(connection.timeoutMs) ||
         connection.timeoutMs <= 0 ||
-        connection.timeoutMs > 300_000)
+        connection.timeoutMs > 630_000)
     )
-      throw new Error("Serving timeoutMs must be greater than zero and at most 300000.");
+      throw new Error(
+        "Serving timeoutMs must be greater than zero and at most 630000.",
+      );
+    this.transport = new ProductModelTransport(this.id, this.connection);
   }
   /** Provider integrations use the same exact destination and transport. */
   providerConnection(): Readonly<ProductModelConnection> {
     return { ...this.connection };
   }
-  private async request(input: ProductModelInput, stream: boolean): Promise<Response> {
+  private async request(
+    input: ProductModelInput,
+    stream: boolean,
+  ): Promise<Response> {
     if (stream && !this.capabilities.streaming)
       throw new ProductModelError("streaming_unsupported", 0, false);
-    const { signal, ...raw } = input;
+    const { signal, clientRequestId: suppliedClientId, ...raw } = input;
     const parsed = Input.parse(raw);
     const body = JSON.stringify({
       model: this.id,
       messages: parsed.messages ?? [{ role: "user", content: parsed.prompt }],
-      ...(parsed.temperature === undefined ? {} : { temperature: parsed.temperature }),
-      ...(parsed.maxTokens === undefined ? {} : { max_tokens: parsed.maxTokens }),
+      ...(parsed.temperature === undefined
+        ? {}
+        : { temperature: parsed.temperature }),
+      ...(parsed.maxTokens === undefined
+        ? {}
+        : { max_tokens: parsed.maxTokens }),
       stream,
     });
-    if (new TextEncoder().encode(body).length > 1024 * 1024)
-      throw new ProductModelError("payload_too_large", 0, false);
-    const deadline = AbortSignal.timeout(this.connection.timeoutMs ?? 60_000);
-    let response: Response;
-    try {
-      response = await (this.connection.fetch ?? fetch)(
-        `${productModelEndpoint(this.connection.baseUrl!)}/chat/completions`,
-        {
-          method: "POST",
-          redirect: "error",
-          headers: {
-            Authorization: `Bearer ${this.connection.apiKey}`,
-            ...(this.connection.teamId ? { "X-OpenPond-Team-Id": this.connection.teamId } : {}),
-            "Content-Type": "application/json",
-            Accept: stream ? "text/event-stream" : "application/json",
-          },
-          body,
-          signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
-        },
-      );
-    } catch {
-      throw new ProductModelError("model_outcome_unknown", 0, true);
-    }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new ProductModelError(
-        "model_request_rejected",
-        response.status,
-        response.status >= 500,
-        response.headers.get("x-openpond-request-id") ??
-          response.headers.get("x-request-id") ??
-          undefined,
-      );
-    }
-    return response;
+    return this.transport.request(body, { stream, signal, clientRequestId: suppliedClientId });
   }
   async generate(input: ProductModelInput): Promise<ProductModelResult> {
     const response = await this.request(input, false);
     try {
       const chunk = Chunk.parse(
-        await readBoundedJsonResponse(response, 8 * 1024 * 1024, "Model result"),
+        await readBoundedJsonResponse(
+          response,
+          8 * 1024 * 1024,
+          "Model result",
+        ),
       );
       if (
         chunk.choices.length !== 1 ||
@@ -214,8 +173,37 @@ export class ProductModel {
         response.headers.get("x-openpond-request-id") ??
           response.headers.get("x-request-id") ??
           undefined,
+        this.transport.identity(response).clientRequestId,
       );
     }
+  }
+  /** Read only: a timeout never submits another paid operation. */
+  async inspectRequest(requestId: string): Promise<ProductModelRequestStatus> {
+    return this.projectStatus(await this.transport.inspectRequest(requestId));
+  }
+  async recover(clientRequestId: string): Promise<ProductModelRequestStatus> {
+    return this.projectStatus(await this.transport.recover(clientRequestId));
+  }
+  private projectStatus(status: ProductModelWireStatus): ProductModelRequestStatus {
+    if (!status.result) return { ...status, result: null };
+    const message = status.result.choices[0]!.message!;
+    let toolCalls: ProductModelToolCall[] | undefined;
+    if (message.tool_calls !== undefined && message.tool_calls !== null) {
+      const parsed = z.array(ProductModelToolCallSchema).safeParse(message.tool_calls);
+      if (!this.capabilities.tools || !parsed.success)
+        throw new ProductModelError("model_response_invalid", 200, true, status.requestId,
+          status.clientRequestId ?? undefined);
+      toolCalls = parsed.data;
+    }
+    return { ...status, result: {
+      ...this.result(status.result, message.content ?? "",
+        status.result.choices[0]!.finish_reason ?? null, new Response(null)),
+      ...(toolCalls === undefined ? {} : { toolCalls }),
+    } };
+  }
+  /** Explicit cancellation retains the original request's cleanup owner. */
+  async cancelRequest(requestId: string): Promise<void> {
+    await this.transport.cancelRequest(requestId);
   }
   private result(
     chunk: z.infer<typeof Chunk>,
@@ -246,9 +234,18 @@ export class ProductModel {
   /** Breaking iteration cancels the HTTP body. A truncated stream never produces finish. */
   async *stream(input: ProductModelInput): AsyncGenerator<ProductModelEvent> {
     const response = await this.request(input, true);
-    if (!response.headers.get("content-type")?.includes("text/event-stream") || !response.body) {
+    if (
+      !response.headers.get("content-type")?.includes("text/event-stream") ||
+      !response.body
+    ) {
       await response.body?.cancel();
-      throw new ProductModelError("model_stream_invalid", response.status, true);
+      throw new ProductModelError(
+        "model_stream_invalid",
+        response.status,
+        true,
+        response.headers.get("x-openpond-request-id") ?? undefined,
+        this.transport.identity(response).clientRequestId,
+      );
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -261,7 +258,10 @@ export class ProductModel {
     try {
       for (;;) {
         const { done, value } = await reader.read();
-        buffer = (buffer + decoder.decode(value, { stream: !done })).replace(/\r\n/g, "\n");
+        buffer = (buffer + decoder.decode(value, { stream: !done })).replace(
+          /\r\n/g,
+          "\n",
+        );
         if (new TextEncoder().encode(buffer).length > 1024 * 1024)
           throw new Error("Stream frame too large");
         let boundary: number;
@@ -288,13 +288,15 @@ export class ProductModel {
           last = chunk;
           if (chunk.usage) usage = chunk.usage;
           const choice = chunk.choices[0];
-          if (choice?.delta?.tool_calls) throw new Error("Tool output unsupported by text API");
+          if (choice?.delta?.tool_calls)
+            throw new Error("Tool output unsupported by text API");
           if (choice?.finish_reason) finish = choice.finish_reason;
           const delta = choice?.delta?.content;
           if (delta) {
             text += delta;
             outputBytes += new TextEncoder().encode(delta).length;
-            if (outputBytes > 8 * 1024 * 1024) throw new Error("Model output too large");
+            if (outputBytes > 8 * 1024 * 1024)
+              throw new Error("Model output too large");
             yield { type: "text", text: delta };
           }
         }
@@ -309,6 +311,7 @@ export class ProductModel {
         response.headers.get("x-openpond-request-id") ??
           response.headers.get("x-request-id") ??
           undefined,
+        this.transport.identity(response).clientRequestId,
       );
     } finally {
       await reader.cancel().catch(() => {});

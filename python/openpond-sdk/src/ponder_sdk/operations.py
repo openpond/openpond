@@ -224,6 +224,19 @@ def finish(operation: dict[str,Any], team_id: str, parameters: dict[str,Any], bo
         for name in ('jobId','datasetId','runId'):
             if name in parameters and name in response and parameters[name]!=response[name]:raise ProtocolError('resource_identity_mismatch')
         if 'id' in parameters and 'id' in response and parameters['id']!=response['id']:raise ProtocolError('resource_identity_mismatch')
+    if schema=='TrainingPlacementReviewSchema':
+        if body and response['requestHash']!=canonical_sha256(body):raise ProtocolError('training_operation_review_mismatch')
+    if schema=='TrainingOperationStatusSchema':
+        if response['id']!=response['preparationId'] or response['requestHash']!=canonical_sha256(response['request']):raise ProtocolError('training_operation_identity_mismatch')
+        if method=='queue_run' and (response['operationId']!=body['request']['operationId'] or response['requestHash']!=canonical_sha256(body['request'])):raise ProtocolError('training_operation_request_mismatch')
+        if method=='find_operation' and response['operationId']!=parameters['operationId']:raise ProtocolError('training_operation_identity_mismatch')
+        if response.get('preparation'):verify_preparation(response['preparation'],team_id)
+    if schema=='TrainingOperationPageSchema':
+        if len({value['id'] for value in response['items']})!=len(response['items']):raise ProtocolError('training_operation_page_mismatch')
+        for value in response['items']:
+            scoped(value,team_id)
+            if value['requestHash']!=canonical_sha256(value['request']):raise ProtocolError('training_operation_identity_mismatch')
+    if method=='resolve_experiment' and (response['teamId']!=body['teamId'] or response['operationId']!=body['operationId'] or response['name']!=body['name'] or response['maximumSpendUsd']!=body['maximumSpendUsd']):raise ProtocolError('training_operation_experiment_mismatch')
     if schema=='TrainingJobSchema':
         from .training_usage_identity import verify_training_usage_snapshot
         verify_training_usage_snapshot(response)

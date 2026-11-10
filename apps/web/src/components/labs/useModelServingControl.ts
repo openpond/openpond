@@ -119,6 +119,7 @@ async function freshIntent(
   defaultPublication: SteeringPublicationReference | null,
   defaultEnabled: boolean,
   spendingLimit?: string | null,
+  gpuTypeId?: string,
 ) {
   if (
     value.schemaVersion === "openpond.alphaEditModelServing.v1" ||
@@ -173,7 +174,7 @@ async function freshIntent(
   return Intent.parse({
     schemaVersion: "openpond.trainingModelServingControlRequest.v1",
     ...(action === "activate" ? {serverlessApproval: await createServerlessServingApproval(
-      value.serverlessReview ?? (() => { throw new Error("Refresh this Model's serverless price before activation."); })(), spendingLimit)} : {}),
+      value.serverlessReview ?? (() => { throw new Error("Refresh this Model's serverless price before activation."); })(), spendingLimit, gpuTypeId)} : {}),
     teamId: api.teamId,
     modelProjectId,
     expectedRevision: value.control?.revision ?? 0,
@@ -310,6 +311,7 @@ export function useModelServingControl(
     defaultPublication: SteeringPublicationReference | null = null,
     defaultEnabled = true,
     spendingLimit?: string | null,
+    gpuTypeId?: string,
   ) {
     if (active.current.has(scope) || (!original && !pending.isSuccess)) return null;
     active.current.add(scope);
@@ -331,6 +333,7 @@ export function useModelServingControl(
           defaultPublication,
           defaultEnabled,
           spendingLimit,
+          gpuTypeId,
         );
         const operation = await api.operation(ACTION, intent);
         if (!current()) return null;

@@ -14,12 +14,15 @@ def verify_serverless_review(review: dict[str, Any], team_id: str, model_id: str
         raise ProtocolError('serverless_serving_review_mismatch')
 
 
-def create_serverless_serving_approval(raw: dict[str, Any], spending_limit: str | None = None) -> dict[str, Any]:
+def create_serverless_serving_approval(raw: dict[str, Any], spending_limit: str | None = None,
+                                      gpu_type_id: str | None = None) -> dict[str, Any]:
     review = validate('ServerlessServingReviewSchema', raw)
     verify_serverless_review(review, review['teamId'], review['modelProjectId'], review['versionHash'], review['artifact'])
-    if (review['schemaVersion'] != 'openpond.serverlessServingReview.v2'
+    if (review['schemaVersion'] != 'openpond.serverlessServingReview.v3'
             or datetime.fromisoformat(review['expiresAt'].replace('Z', '+00:00')) <= datetime.now(timezone.utc)):
         raise ProtocolError('serverless_serving_review_expired')
+    if gpu_type_id and gpu_type_id not in review.get('hardware', {}).get('gpuTypeIds', []):
+        raise ProtocolError('serverless_serving_gpu_unavailable')
     cap = None
     if spending_limit is not None and spending_limit.strip():
         try:
@@ -31,7 +34,8 @@ def create_serverless_serving_approval(raw: dict[str, Any], spending_limit: str 
         except (InvalidOperation, ValueError):
             raise ProtocolError('serverless_serving_cap_invalid') from None
     return validate('ServerlessServingApprovalSchema', {'schemaVersion': 'openpond.serverlessServingApproval.v1',
-        'reviewHash': review['contentHash'], 'customerCapUsd': cap})
+        'reviewHash': review['contentHash'], 'customerCapUsd': cap,
+        **({'gpuTypeId': gpu_type_id} if gpu_type_id else {})})
 
 
 def serverless_approval_matches(request: dict[str, Any], control: dict[str, Any]) -> bool:
