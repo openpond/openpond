@@ -1,7 +1,7 @@
 import { learningIterationFixture as fixture } from "./helpers/learning-iteration-fixtures";
 import { describe, expect, test } from "vitest";
 import {
-  createLearningService, LearningChainSchema, LearningIterationSchema, LearningIterationReservationSchema,
+  createLearningIterationWorker, createLearningService, LearningChainSchema, LearningIterationSchema, LearningIterationReservationSchema,
   learningRef, type LearningRepository,
 } from "@openpond/evals/learning";
 
@@ -59,8 +59,26 @@ describe("durable learning iteration reservations", () => {
     const ready = LearningIterationSchema.parse((await f.reserve(policy, "after-review")).resources[0]);
     expect(ready.status).toBe("ready");
     await f.cancel(ready.id);
+    expect((await f.service.list(learningContext, "consumption")).items[0]).toMatchObject({ exposure: "unexposed" });
     policy = await f.publishPolicy(policy);
-    const noNewData = await f.reserve(policy, "after-policy-edit");
+    const reused = LearningIterationSchema.parse((await f.reserve(policy, "after-policy-edit")).resources[0]);
+    expect(reused.status).toBe("ready");
+    expect((await f.service.get(learningContext, "batch", reused.batch!.id)).examples.map(entry => entry.evidence)).toEqual([learningRef(evidence)]);
+    const receipt = { id: "trained-receipt", contentHash: "a".repeat(64) };
+    const worker = createLearningIterationWorker(store.learningRepository(), {
+      async prepare() { return { provider: "fixture", protocol: "fixture.v1", payload: {} }; },
+      async reconcile() { return null; },
+      async submit(input) { return {
+        scope: input.scope, dispatchId: input.dispatch.id, submissionHash: input.dispatch.submissionHash!,
+        execution: { id: "trained-execution", contentHash: "b".repeat(64) }, status: "failed", spendUsd: 0.5,
+        cleanupComplete: true, receipt, evaluation: null, candidate: null, failure: "Evaluation failed after training.",
+        coverage: input.batch.examples.map(example => ({ evidence: example.evidence, outcome: "trained" as const })),
+      }; },
+      async cancel() { throw new Error("No dispatched cancellation expected."); },
+    }, { workerId: "reservation-exposure", executionOwner: "hosted", now: () => learningNow });
+    expect(await worker.run(learningContext.scope, reused.id)).toMatchObject({ status: "failed", spendUsd: 0.5 });
+    expect((await f.service.list(learningContext, "consumption")).items[0]).toMatchObject({ exposure: "trained", executionReceipt: receipt });
+    const noNewData = await f.reserve(policy, "after-proven-exposure");
     expect(LearningIterationSchema.parse(noNewData.resources[0]).status).toBe("waiting_for_data");
     expect(LearningIterationReservationSchema.parse(noNewData.resources[1]).counts.consumed).toBe(1);
     const later = await f.submit({ idempotencyKey: "later", exampleId: "later", familyKey: "later", input: { question: "A new question" } });

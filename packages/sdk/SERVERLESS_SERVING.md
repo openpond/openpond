@@ -9,6 +9,12 @@ request.
 Read status to follow waiting, starting, running and stopping. Stop requests
 cancellation of the original work; status remains readable while stopping.
 
+The signed review's `workerIdleTimeoutSeconds` sets the billable idle reuse
+window. Current v3 reviews support 5 or 60 seconds; new reviews use 60 seconds
+before unused capacity scales to zero. The activation request must use the
+reviewed value. Historical v1/v2 reviews retain their signed 5-second setting.
+For v3, `idleBillable: true` includes this reuse window in accepted usage.
+
 ## Pending inference and recovery
 
 A queued serving POST returns HTTP 202 with an

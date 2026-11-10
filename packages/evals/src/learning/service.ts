@@ -142,6 +142,8 @@ export function createLearningService(repository: LearningRepository, options: {
         break;
       }
       case "policy": {
+        if (input.content.training.replayBatches.length)
+          throw new LearningDomainError("learning_replay_not_supported", 422, "Replay requires an executor that materializes exact examples and weights.");
         const definition = await requireLearningRelease(transaction, "definition", input.content.taskDefinition);
         if (!sameLearningRef(definition.rewardBinding, input.content.rewardBinding)) throw new LearningDomainError("learning_policy_binding_mismatch", 422);
         for (const source of input.content.sources) {

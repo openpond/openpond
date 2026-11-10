@@ -21,7 +21,10 @@ test("policy inspection stays read-only and follows current admission and chain 
     const service = createLearningService(noWrites, { now: () => learningNow });
     try {
       const f = await learningIterationFixture(repository);
-      const policy = await f.publishPolicy();
+      const initialPolicy = await f.publishPolicy();
+      // Both the released example and the later held-out relative must fit in
+      // the candidate batch so family isolation remains the admission blocker.
+      const policy = await f.publishPolicy(initialPolicy, { limits: { ...initialPolicy.limits, maxBatchExamples: 2 } });
       const evidence = await f.submit();
       const inspect = () => service.inspectPolicy(learningContext, learningRef(policy));
       expect(await inspect()).toMatchObject({ policy: learningRef(policy), modelProjectId: "model", canReserve: false,
@@ -36,6 +39,8 @@ test("policy inspection stays read-only and follows current admission and chain 
       expect(await inspect()).toMatchObject({ canReserve: false, chain: { activeIterationId: iteration.id, latestIterationId: iteration.id },
         counts: { eligible: 0, consumed: 1 }, budget: { reservedSpendUsd: 2, committedSpendUsd: 2 } });
       await f.cancel(iteration.id);
+      expect(await inspect()).toMatchObject({ canReserve: true,
+        counts: { eligible: 1, consumed: 0 }, budget: { committedSpendUsd: 0 } });
       const later = await f.submit({ idempotencyKey: "later", exampleId: "later", familyKey: "held-out-family", input: { question: "Held-out relative" } });
       await f.approve(later);
       await repository.transaction(learningContext.scope, async tx => {
@@ -44,7 +49,7 @@ test("policy inspection stays read-only and follows current admission and chain 
         }
       });
       const isolated = await inspect();
-      expect(isolated).toMatchObject({ canReserve: false, counts: { eligible: 1, consumed: 1 }, budget: { committedSpendUsd: 0 } });
+      expect(isolated).toMatchObject({ canReserve: false, counts: { eligible: 2, consumed: 0 }, budget: { committedSpendUsd: 0 } });
       expect(isolated.blockers).toHaveLength(1);
       await expect(f.reserve(policy, "held-out-isolation")).rejects.toThrow(isolated.blockers[0]!.code);
       const paused = await f.publishPolicy(policy, { enabled: false, limits: { ...policy.limits, cooldownSeconds: 60 } });

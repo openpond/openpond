@@ -1,6 +1,7 @@
 import { LearningDomainError, LearningPolicyContentSchema, LearningSourceContentSchema, learningRef, sameLearningRef, sealLearningContent, type TaskDefinition, type LearningPolicy, type LearningRevisionRef } from "@openpond/evals/learning";
 import { contentHash } from "@openpond/harness";
 
+import { supportsRecurringModelTraining } from "./model-learning-capabilities.js";
 import type { HostedModelProjectSummary } from "./model-projects.js";
 import { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
 
@@ -77,13 +78,19 @@ export function createHostedLearningPolicyContent(input: {
   const applyModel = input.applyModelConfiguration || !previous;
   const refs = applyModel ? hostedLearningPolicyReferences(project) : null;
   const method = applyModel ? project.trainingSetup.recipe?.method : previous?.training.method;
-  const trigger = settings.trigger ?? (settings.scheduled ? { kind: "schedule" as const, intervalSeconds: settings.intervalSeconds } : { kind: "manual" as const });
-  if (settings.enabled && method !== "grpo" && method !== "sft") {
+  const retainedTrigger = previous && ["nightly", "approved_count"].includes(previous.trigger.kind)
+    && settings.intervalSeconds === hostedLearningPolicyDefaults(project, previous).intervalSeconds
+    ? previous.trigger : null;
+  const trigger = settings.trigger ?? (settings.scheduled
+    ? retainedTrigger ?? { kind: "schedule" as const, intervalSeconds: settings.intervalSeconds }
+    : { kind: "manual" as const });
+  if (settings.enabled && !supportsRecurringModelTraining(method)) {
     throw new LearningDomainError("learning_training_method_unsupported", 422, "Hosted continual learning supports reviewed SFT and GRPO.");
   }
   return LearningPolicyContentSchema.parse({
     schemaVersion: "openpond.learningPolicy.v1", id: input.policyId, revision: (previous?.revision ?? 0) + 1,
     modelProjectId: project.portableProjectId, executionOwner: "hosted", enabled: settings.enabled,
+    ...(previous?.origin ? { origin: previous.origin } : {}),
     sources: input.sources, taskDefinition: input.taskDefinition,
     rewardBinding: applyModel ? project.trainingSetup.rewardBindingRef : previous?.rewardBinding,
     admission: { mode: settings.humanReviewRequired ? "human" : "qualified_automatic",
@@ -94,7 +101,9 @@ export function createHostedLearningPolicyContent(input: {
     teacher: previous?.teacher ?? null,
     training: { method, recipe: refs?.recipe ?? previous?.training.recipe,
       retentionEvaluation: refs?.retentionEvaluation ?? previous?.training.retentionEvaluation,
-      replayBatches: previous?.training.replayBatches ?? [] },
+      replayBatches: previous?.training.replayBatches ?? [],
+      ...(!applyModel && previous?.training.continuationMode
+        ? { continuationMode: previous.training.continuationMode } : {}) },
     limits: { maxIterationSpendUsd: settings.maxIterationSpendUsd, maxDailySpendUsd: settings.maxDailySpendUsd,
       cooldownSeconds: settings.cooldownSeconds, maxRetries: settings.maxRetries,
       maxBatchExamples: settings.maxBatchExamples, maxBacklogExamples: settings.maxBacklogExamples },

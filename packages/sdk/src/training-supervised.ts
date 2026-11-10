@@ -46,6 +46,8 @@ export const SftRecipeSchema = z.object({
     gradientAccumulationSteps: z.number().int().positive().max(10_000),
     seed: z.number().int(),
   }),
+  /** Explicit held-out generation horizon, separately reviewed from fitting. */
+  evaluation: z.object({ maxOutputTokens: z.number().int().positive().max(8192) }).strict().optional(),
   resourceLimits: z.object({
     cpuThreads: z.number().int().positive().max(256),
     memoryBytes: z.number().int().positive(),

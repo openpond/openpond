@@ -28,6 +28,8 @@ export async function reserveLearningIteration(transaction: LearningTransaction,
     return [{ kind: "iteration", id, revision: (await requireLearningResource(transaction, "iteration", id)).revision }, { kind: "reservation", id, revision: previous.revision }];
   }
   const current = await requireLearningResource(transaction, "policy", policy.id);
+  if (policy.training.replayBatches.length)
+    throw new LearningDomainError("learning_replay_not_supported", 422);
   if (!sameLearningRef(learningRef(current), input.policy)) throw new LearningDomainError("learning_policy_revision_stale", 409);
   if (!policy.enabled) throw new LearningDomainError("learning_policy_paused", 409);
   if (policy.automation.accept || policy.automation.serve) throw new LearningDomainError("learning_automatic_acceptance_not_available", 422);
@@ -53,6 +55,7 @@ export async function reserveLearningIteration(transaction: LearningTransaction,
   const parent = await resolveLearningTrainingParent(transaction, policy, acceptedParent);
   let batch = null;
   if (ready) {
+    await transaction.validateTrainingReservation?.({ policy, parent: parent.trainingParentSelection });
     await assertAvailableBudget(transaction, chainId, now, policy.limits.maxIterationSpendUsd, policy.limits.maxDailySpendUsd);
     const sealed = await sealLearningBatch(transaction, {
       action: "seal_batch", operationId: input.operationId, batchId: `batch-${contentHash(id)}`,
@@ -63,11 +66,15 @@ export async function reserveLearningIteration(transaction: LearningTransaction,
     pointers.push(...sealed);
     batch = learningRef(await requireLearningResource(transaction, "batch", sealed[0]!.id));
     for (const item of eligibility.selected) {
+      const consumptionId = learningConsumptionId(chainId, item.evidence);
+      const prior = await transaction.get("consumption", consumptionId);
+      if (prior && prior.exposure !== "unexposed") throw new LearningDomainError("learning_evidence_already_reserved", 409);
       const consumption = LearningConsumptionSchema.parse({
-        schemaVersion: "openpond.learningConsumption.v1", id: learningConsumptionId(chainId, item.evidence), revision: 1,
+        schemaVersion: "openpond.learningConsumption.v1", id: consumptionId, revision: (prior?.revision ?? 0) + 1,
         chainId, iterationId: id, evidence: learningRef(item.evidence), decision: learningRef(item.decision), reservedAt: now,
+        exposure: "reserved", executionReceipt: null,
       });
-      await transaction.put("consumption", consumption, 0, { parentId: chainId });
+      await transaction.put("consumption", consumption, prior?.revision ?? 0, { parentId: chainId });
     }
   }
   const iteration = LearningIterationSchema.parse({
