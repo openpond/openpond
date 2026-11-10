@@ -288,7 +288,7 @@ export function createHostedTrainingRunDetail(input: {
         { modelProjectId: id, request: body, actorId: input.actorId },
       );
     },
-    async savedVersion(modelProjectId: string, versionHash?: string) {
+    async savedVersion(modelProjectId: string, versionHash?: string, preferActiveServing = false) {
       const id = Id.parse(modelProjectId);
       const query = new URLSearchParams({ teamId: input.teamId });
       if (versionHash !== undefined)
@@ -299,6 +299,7 @@ export function createHostedTrainingRunDetail(input: {
             .regex(/^[a-f0-9]{64}$/)
             .parse(versionHash),
         );
+      if (preferActiveServing && !versionHash) query.set("preferActiveServing", "true");
       const value = await parseAndVerifySavedModelVersionRead(
         await request(
           `/v1/training/models/${encodeURIComponent(id)}/version?${query}`,

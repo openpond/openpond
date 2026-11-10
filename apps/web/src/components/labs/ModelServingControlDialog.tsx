@@ -32,6 +32,7 @@ export function ModelServingControlDialog({
     (!retained || ("serverlessApproval" in retained && Boolean(retained.serverlessApproval)));
   const idle = serverless ? SERVERLESS_SERVING_IDLE_SECONDS : MODEL_SERVING_IDLE_TIMEOUT_SECONDS;
   const [spendingLimit, setSpendingLimit] = useState("");
+  const [gpuTypeId, setGpuTypeId] = useState("");
   const availableReview =
     value?.schemaVersion === "openpond.trainingModelServing.v1" ? value.serverlessReview : null;
   const [defaultProfile, setDefaultProfile] = useState(
@@ -71,7 +72,7 @@ export function ModelServingControlDialog({
     busy: saved.busy,
     dirty:
       Boolean(retained) ||
-      (serverless && spendingLimit.length > 0) ||
+      (serverless && (spendingLimit.length > 0 || gpuTypeId.length > 0)) ||
       (version.schemaVersion === "openpond.engramModelVersion.v1" &&
         defaultProfile !==
           (value?.schemaVersion === "openpond.engramModelServing.v1"
@@ -89,19 +90,19 @@ export function ModelServingControlDialog({
   return (
     <>
       <AppDialog
-        ariaLabel={actual === "activate" ? "Activate Model" : "Stop Model"}
+        ariaLabel={actual === "activate" ? "Serve model" : "Stop serving"}
         className="labs-rename-dialog"
         backdropClassName="labs-rename-backdrop"
         dismissDisabled={saved.busy}
         onClose={() => void guard.requestLeave(onClose)}
       >
-        <h2>{actual === "activate" ? "Activate Model" : "Stop Model"}</h2>
+        <h2>{actual === "activate" ? "Serve model" : "Stop serving"}</h2>
         <ErrorToast error={saved.error} />
         <p>
           {actual === "activate"
             ? serverless
-              ? "Make this saved version available on demand. Inference uses workspace credits; unused GPUs are released automatically."
-              : "Activate this exact saved version using workspace capacity and credits. This may allocate paid serving capacity."
+              ? "Serve this model on demand using workspace credits."
+              : "Serve this model using workspace capacity and credits."
             : "Stop new requests to this Model. Outstanding requests finish before unused capacity can retire; shared capacity may remain in use."}
         </p>
         <p>
@@ -114,9 +115,6 @@ export function ModelServingControlDialog({
                 version.schemaVersion === "openpond.weightSpaceModelVersion.v1"
               ? version.baseModel.modelId
               : version.request.baseModel.modelId}
-        </p>
-        <p className="saved-model-version-reference">
-          Saved version {retained?.versionHash ?? version.contentHash}
         </p>
         {actual === "activate" &&
         (retained
@@ -158,6 +156,12 @@ export function ModelServingControlDialog({
         ) : null}
         {actual === "activate" && serverless ? (
           <>
+            {serverlessReview?.schemaVersion === "openpond.serverlessServingReview.v3" && serverlessReview.hardware ? (
+              <label className="model-build-field"><span>GPU</span><DropdownSelect label="GPU"
+                value={(retained && "serverlessApproval" in retained ? retained.serverlessApproval?.gpuTypeId : gpuTypeId) || "automatic"}
+                options={[{ value: "automatic", label: "Automatic" }, ...serverlessReview.hardware.gpuTypeIds.map(id => ({ value: id, label: id }))]}
+                disabled={saved.busy || Boolean(retained)} onChange={id => setGpuTypeId(id === "automatic" ? "" : id)} /></label>
+            ) : null}
             {serverlessReview ? (
               <p>
                 {new Intl.NumberFormat("en-US", {
@@ -188,20 +192,17 @@ export function ModelServingControlDialog({
               />
             </label>
             <p>
-              The Model stays available between requests. Each request reserves a bounded amount
-              before it runs.
-              {serverlessReview?.rules.startupBillable
-                ? " Funding remains reserved through shutdown and usage reconciliation, including after cancellation."
-                : ""}
+              {serverlessReview?.schemaVersion === "openpond.serverlessServingReview.v3"
+                ? "Measured runtime is charged against workspace credits. Serving stops when your spending limit or available credits run out."
+                : "Requests reserve bounded funding until their usage is reconciled. Unused GPUs are released automatically."}
             </p>
           </>
         ) : actual === "activate" ? (
           <p>Idle timeout: {(retained?.idleTimeoutSeconds ?? idle) / 60} minutes.</p>
         ) : null}
-        {retained ? <p>Original {retained.action} request retained.</p> : null}
         {saved.receipt ? (
           <p role="status">
-            Request accepted. Retaining recovery until its acknowledgment completes.
+            Request accepted.
           </p>
         ) : null}
         <div className="model-build-actions">
@@ -241,6 +242,7 @@ export function ModelServingControlDialog({
                     : null,
                   defaultProfile,
                   spendingLimit || null,
+                  gpuTypeId || undefined,
                 )
                 .then((receipt) => {
                   if (receipt) {
@@ -253,9 +255,9 @@ export function ModelServingControlDialog({
             {saved.busy
               ? "Applying…"
               : retained
-                ? `Retry original ${retained.action}`
+                ? "Retry request"
                 : actual === "activate"
-                  ? "Activate"
+                  ? "Serve"
                   : "Stop serving"}
           </button>
         </div>

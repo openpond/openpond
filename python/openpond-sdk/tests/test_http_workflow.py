@@ -808,11 +808,18 @@ def test_model_serving_activation_recovery_and_stop_in_both_clients(server):
                          'version':'fixture-price','profileHash':'c'*64,'currency':'USD','unit':'resource_hour','hourlyUsd':'1.000000'},
                 'rules':rules,'workerIdleTimeoutSeconds':5,'maximumRequestMillis':540000,
                 'expiresAt':'2999-01-01T00:00:00.000Z'}
+        if version == 'v3':
+            review['hardware'] = {'selection': 'automatic', 'gpuTypeIds': ['fixture-gpu']}
         review['contentHash']=canonical_sha256(review)
         approval={'schemaVersion':'openpond.serverlessServingApproval.v1','reviewHash':review['contentHash'],'customerCapUsd':'1.000000'}
         if version!='v3':
             with pytest.raises(ProtocolError):create_serverless_serving_approval(review,'1.000000')
-        else:assert create_serverless_serving_approval(review,'1.000000')==approval
+        else:
+            assert create_serverless_serving_approval(review,'1.000000')==approval
+            approval = create_serverless_serving_approval(review, '1.000000', 'fixture-gpu')
+            assert approval['gpuTypeId'] == 'fixture-gpu'
+            with pytest.raises(ProtocolError):
+                create_serverless_serving_approval(review, '1.000000', 'unapproved-gpu')
         request=copy.deepcopy(f['request']);request.update(idleTimeoutSeconds=5,serverlessApproval=approval)
         reply=copy.deepcopy(f['receipt']);reply['request']=request
         reply['control'].update(idleTimeoutSeconds=5,serverless={'schemaVersion':'openpond.serverlessServing.v1',
@@ -889,8 +896,11 @@ def test_exact_model_serving_identity_in_both_clients(server):
     url,state=server
     fixture=json.loads((Path(__file__).resolve().parents[3]/'packages/sdk/fixtures/python-foundation/training-model-serving-http-workflow.json').read_text())
     state['model_serving_query']=fixture['query']
+    prepared = copy.deepcopy(fixture['response'])
+    prepared['registry']['state'] = 'rejected'
+    prepared['contentHash'] = canonical_sha256({k: v for k, v in prepared.items() if k != 'contentHash'})
     for asynchronous in (False,True):
-        state['model_serving']=fixture['response']
+        state['model_serving']=prepared
         if asynchronous:
             async def run():
                 async with AsyncClient(base_url=url,api_key='secret-fixture',team_id=TEAM,read_attempts=1) as client:

@@ -984,3 +984,9 @@
 .model-starter-title, .model-starter-description { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 .model-starter-reward-badge { flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 6px; padding: 3px 7px; color: var(--text-muted); font-size: 11px; }
 .model-starter-description button { flex-shrink: 0; }
+
+.labs-serving-dialog {
+  width: min(880px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}

@@ -265,7 +265,7 @@ export function LabsRoute(props: LabsRouteProps) {
       />}
     </>;
   } else if (route.page === "serving") {
-    page = <LabServingPage modelProjectId={route.modelId} modelProjectIds={new Set(models.map(model => model.id))} state={state} />;
+    page = <LabServingPage connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} accountKey={workspaceKey} training={training.training} modelProjectId={route.modelId} />;
   } else if (route.page === "runs" && route.collection === "series") {
     page = <>
       <LabModelComparisonsPage connection={profileView.connection} state={scopedState} training={training.training} selectedSeriesId={route.resourceId} selectedEntryId={route.detailTab}
