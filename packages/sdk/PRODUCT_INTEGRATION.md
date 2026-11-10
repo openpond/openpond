@@ -101,6 +101,17 @@ export async function POST(request: Request) {
 }
 ```
 
+The adapter shares the named Model's timeout, request identity and GET-only
+pending observation. After a queued request completes, streaming returns the
+retained text or tool calls followed by usage and finish metadata. It does not
+start another generation or resume native token delivery. On an unknown outcome,
+retain `ProductModelError.clientRequestId` and use the original named Model's
+`recover` method; aborting observation does not cancel retained server work.
+For a binding with `capabilities.tools: true`, `recover` and `inspectRequest` return
+retained calls in `status.result.toolCalls`, with each original `id`, function
+`name` and JSON-text `arguments`. Recovery never executes those calls. The direct
+`generate` and `stream` methods remain text-only and reject tool-call outputs.
+
 Use the AI SDK 7 React `useChat`/transport recipe against your own authenticated
 backend. Never place the OpenPond client or secrets in browser code. AI SDK's UI
 stream response is different from raw OpenAI SSE; use

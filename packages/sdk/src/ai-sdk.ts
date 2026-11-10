@@ -4,7 +4,7 @@ import {
   type OpenAICompatibleChatLanguageModel,
 } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
-import { boundProductModelResponse } from "./product-model-response.js";
+import { ProductModelTransport } from "./product-model-transport.js";
 import { ProductModel, ProductModelError, productModelEndpoint } from "./product-models.js";
 
 const Evidence = z.object({ openpond: z.record(z.string(), z.json()) }).passthrough();
@@ -21,6 +21,7 @@ export function toAIModel(
   "specificationVersion" | "provider" | "modelId" | "supportedUrls" | "doGenerate" | "doStream"
 > {
   const connection = model.providerConnection();
+  const transport = new ProductModelTransport(model.id, connection);
   const provider = createOpenAICompatible({
     name: "openpond",
     baseURL: productModelEndpoint(connection.baseUrl!),
@@ -67,18 +68,15 @@ export function toAIModel(
     },
     supportsStructuredOutputs: model.capabilities.structuredOutput,
     fetch: async (url, init) => {
-      const timeout = AbortSignal.timeout(connection.timeoutMs ?? 60_000);
-      const headers = new Headers(init?.headers);
-      headers.set("Authorization", `Bearer ${connection.apiKey}`);
-      if (connection.teamId) headers.set("X-OpenPond-Team-Id", connection.teamId);
-      return boundProductModelResponse(
-        await (connection.fetch ?? fetch)(url, {
-          ...init,
-          redirect: "error",
-          headers,
-          signal: init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout,
-        }),
-      );
+      // The provider only serializes/parses OpenAI-compatible payloads. All
+      // submission, identity and pending observation belong to the shared wire
+      // transport, including when this call asks for a stream.
+      if (String(url) !== `${productModelEndpoint(connection.baseUrl!)}/chat/completions`
+        || init?.method?.toUpperCase() !== "POST" || typeof init.body !== "string")
+        throw new ProductModelError("transport_override_forbidden", 0, false);
+      const body = JSON.parse(init.body) as { stream?: boolean };
+      return transport.request(init.body, { stream: body.stream === true,
+        headers: init.headers, signal: init.signal });
     },
   }).chatModel(model.id);
   const check = (options: Parameters<typeof provider.doGenerate>[0]) => {
@@ -105,7 +103,7 @@ export function toAIModel(
   };
   // Convert retryable transport errors to a terminal SDK error: AI SDK's default
   // automatic retries must not accidentally duplicate a billed generation.
-  const normalizeError = (error: unknown): ProductModelError => {
+  const normalizeError = (error: unknown, streamHeaders?: Record<string, string | undefined>): ProductModelError => {
     if (error instanceof ProductModelError) return error;
     if (
       error &&
@@ -123,10 +121,17 @@ export function toAIModel(
         : 0;
     const unknown =
       status === 0 || status === 408 || status >= 500 || (status >= 200 && status < 300);
+    const responseHeaders = error && typeof error === "object" && "responseHeaders" in error
+      && error.responseHeaders && typeof error.responseHeaders === "object"
+      ? error.responseHeaders as Record<string, unknown> : streamHeaders ?? {};
+    const requestId = responseHeaders["x-openpond-request-id"] ?? responseHeaders["x-request-id"];
+    const clientRequestId = responseHeaders["x-openpond-client-request-id"];
     return new ProductModelError(
       status >= 400 ? "model_request_rejected" : "model_outcome_unknown",
       status,
       unknown,
+      typeof requestId === "string" ? requestId : undefined,
+      typeof clientRequestId === "string" ? clientRequestId : undefined,
     );
   };
   return {
@@ -161,11 +166,11 @@ export function toAIModel(
                 } else
                   controller.enqueue(
                     value.type === "error"
-                      ? { ...value, error: normalizeError(value.error) }
+                      ? { ...value, error: normalizeError(value.error, result.response?.headers) }
                       : value,
                   );
               } catch (error) {
-                controller.error(normalizeError(error));
+                controller.error(normalizeError(error, result.response?.headers));
               }
             },
             async cancel(reason) {
