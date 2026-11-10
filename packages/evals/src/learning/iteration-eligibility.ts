@@ -46,7 +46,8 @@ export async function inspectIterationEligibility(transaction: LearningTransacti
           counts.excluded += 1;
           continue;
         }
-        if (await transaction.get("consumption", learningConsumptionId(chainId, evidence))) {
+        const consumption = await transaction.get("consumption", learningConsumptionId(chainId, evidence));
+        if (consumption && consumption.exposure !== "unexposed") {
           counts.consumed += 1;
           continue;
         }

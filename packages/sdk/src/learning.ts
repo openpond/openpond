@@ -8,3 +8,4 @@ export * from "./grader-inspection.js";
 
 export * from "./grader-feedback-key.js";
 export * from "./learning-correction-metrics.js";
+export * from "./model-learning-capabilities.js";

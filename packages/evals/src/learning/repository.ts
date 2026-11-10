@@ -4,7 +4,7 @@ import { LearningScheduleSchema, LearningScheduleFireSchema } from "./schedule-c
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 
-import { assertLearningContentHash, LearningSourceSchema, TaskAdmissionDecisionSchema, TaskBatchSchema, TaskDefinitionSchema, TaskEvidenceSchema, TaskFeedbackSchema, TaskGradeRunSchema, LearningPolicySchema, LearningIterationSchema, type LearningRevisionRef } from "./contracts.js";
+import { assertLearningContentHash, LearningSourceSchema, TaskAdmissionDecisionSchema, TaskBatchSchema, TaskDefinitionSchema, TaskEvidenceSchema, TaskFeedbackSchema, TaskGradeRunSchema, LearningPolicySchema, LearningIterationSchema, type LearningRevisionRef, type LearningPolicy, type LearningIteration } from "./contracts.js";
 import { RewardBindingSchema, RewardReleaseSchema } from "../rewards.js";
 import { TasksetReleaseSchema } from "../tasksets.js";
 import { LearningDomainError } from "./errors.js";
@@ -36,6 +36,9 @@ export type LearningResourcePage<K extends LearningResourceKind> = { items: Lear
 
 /** Transactions must serialize mutations within a scope and roll back atomically. */
 export interface LearningTransaction {
+  /** Host-owned checkpoint/profile checks, before reserving examples or budget.
+   * Runs inside this transaction; no provider work may be started here. */
+  validateTrainingReservation?(input: { policy: LearningPolicy; parent: LearningIteration["trainingParentSelection"] }): Promise<void>;
   get<K extends LearningResourceKind>(kind: K, id: string, revision?: number): Promise<LearningResourceFor<K> | null>;
   put<K extends LearningResourceKind>(kind: K, resource: LearningResourceFor<K>, expectedRevision: number, index?: { parentId?: string; status?: string }): Promise<void>;
   list<K extends LearningResourceKind>(kind: K, query: LearningResourceQuery): Promise<LearningResourcePage<K>>;
