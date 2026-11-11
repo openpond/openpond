@@ -156,7 +156,7 @@ export function ModelServingControlDialog({
         ) : null}
         {actual === "activate" && serverless ? (
           <>
-            {serverlessReview?.schemaVersion === "openpond.serverlessServingReview.v3" && serverlessReview.hardware ? (
+            {(serverlessReview?.schemaVersion === "openpond.serverlessServingReview.v3" || serverlessReview?.schemaVersion === "openpond.serverlessServingReview.v4") && serverlessReview.hardware ? (
               <label className="model-build-field"><span>GPU</span><DropdownSelect label="GPU"
                 value={(retained && "serverlessApproval" in retained ? retained.serverlessApproval?.gpuTypeId : gpuTypeId) || "automatic"}
                 options={[{ value: "automatic", label: "Automatic" }, ...serverlessReview.hardware.gpuTypeIds.map(id => ({ value: id, label: id }))]}
@@ -169,11 +169,12 @@ export function ModelServingControlDialog({
                   currency: "USD",
                   maximumFractionDigits: 9,
                 }).format(Number(serverlessReview.price.hourlyUsd) / 3_600)}{" "}
-                per second (US${serverlessReview.price.hourlyUsd} per hour equivalent), billed for
-                your allocated share of{" "}
-                {serverlessReview.rules.startupBillable
-                  ? "worker runtime, including startup, model loading, execution and idle time through full shutdown. Failed startup is billable. Waiting without a running worker is not billed."
-                  : "engine execution. These retained terms exclude startup, queue and idle time."}
+                per second (US${serverlessReview.price.hourlyUsd} per hour equivalent), billed for{" "}
+                {serverlessReview.schemaVersion === "openpond.serverlessServingReview.v4"
+                  ? "each request’s engine execution. Startup, model loading, queue, idle and cleanup are not billed separately."
+                  : serverlessReview.rules.startupBillable
+                    ? "your allocated share of worker runtime, including startup, model loading, execution and idle time through full shutdown. Failed startup is billable. Waiting without a running worker is not billed."
+                    : "your allocated share of engine execution. These retained terms exclude startup, queue and idle time."}
               </p>
             ) : null}
             <label className="model-build-field">
@@ -192,7 +193,7 @@ export function ModelServingControlDialog({
               />
             </label>
             <p>
-              {serverlessReview?.schemaVersion === "openpond.serverlessServingReview.v3"
+              {serverlessReview?.schemaVersion === "openpond.serverlessServingReview.v3" || serverlessReview?.schemaVersion === "openpond.serverlessServingReview.v4"
                 ? "Measured runtime is charged against workspace credits. Serving stops when your spending limit or available credits run out."
                 : "Requests reserve bounded funding until their usage is reconciled. Unused GPUs are released automatically."}
             </p>

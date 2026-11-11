@@ -6,6 +6,12 @@ import { TrainingPreparationRequestSchema, TrainingPreparationReceiptSchema, par
 const Id = z.string().trim().min(1).max(191);
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Time = z.string().datetime({ offset: true });
+export const TrainingCapacityBlockerSchema = z.enum([
+  "platform_job_limit", "workspace_job_limit", "gpu_create_limit", "gpu_worker_limit",
+  "gpu_create_pacing", "gpu_hourly_limit", "provider_capacity_pending",
+]);
+export type TrainingCapacityBlocker = z.infer<typeof TrainingCapacityBlockerSchema>;
+export const TrainingPlacementReviewOptionsSchema = z.object({ deadlineAt: Time.optional() }).strict();
 export const TrainingOperationPhaseSchema = z.enum(["preparing", "waiting_capacity", "waiting_platform", "waiting_funding", "needs_review", "starting", "running", "stopping", "completed", "cancelled", "expired", "failed"]);
 export const TrainingPlacementReviewSchema = z.object({
   schemaVersion: z.literal("openpond.trainingPlacementReview.v1"), id: Id, teamId: Id, actorUserId: Id,
@@ -25,6 +31,7 @@ export const TrainingOperationStatusSchema = z.object({
   schemaVersion: z.literal("openpond.trainingOperationStatus.v1"), id: Id, preparationId: Id,
   operationId: Id, teamId: Id, requestHash: Hash, request: TrainingPreparationRequestSchema, revision: z.number().int().positive(),
   phase: TrainingOperationPhaseSchema, reason: z.enum(["preparing_inputs", "compatible_capacity", "platform_paused", "platform_limit", "provider_unavailable", "funding_required", "authorization_changed", "runtime_unsupported", "accepted", "stop_requested", "deadline_expired", "finished"]),
+  capacityBlocker: TrainingCapacityBlockerSchema.nullable(),
   nextAttemptAt: Time.nullable(), deadlineAt: Time, createdAt: Time, updatedAt: Time,
   jobId: Id.nullable(), chargedUsd: z.number().finite().nonnegative(), pendingEvidence: z.boolean(),
   canStop: z.boolean(), placementReview: TrainingPlacementReviewSchema,
@@ -70,10 +77,13 @@ export function createTrainingOperationClient(request: (path: string, init?: Req
         throw new OpenPondProtocolError("training_operation_experiment_mismatch","The resolved experiment differs from these reviewed inputs.");
       return resolved;
     },
-    async reviewPlacement(input: z.input<typeof TrainingPreparationRequestSchema>) {
+    async reviewPlacement(input: z.input<typeof TrainingPreparationRequestSchema>, options: z.input<typeof TrainingPlacementReviewOptionsSchema> = {}) {
       const parsed = TrainingPreparationRequestSchema.parse(input);
-      const review = TrainingPlacementReviewSchema.parse(await request(`${base}/review`, {method:"POST", body:JSON.stringify(parsed)}));
-      if (review.teamId !== parsed.teamId || review.requestHash !== await canonicalSha256(parsed))
+      const bounded = TrainingPlacementReviewOptionsSchema.parse(options);
+      const query = bounded.deadlineAt ? `?${new URLSearchParams({deadlineAt: bounded.deadlineAt})}` : "";
+      const review = TrainingPlacementReviewSchema.parse(await request(`${base}/review${query}`, {method:"POST", body:JSON.stringify(parsed)}));
+      if (review.teamId !== parsed.teamId || review.requestHash !== await canonicalSha256(parsed) ||
+          bounded.deadlineAt !== undefined && Date.parse(review.deadlineAt) !== Date.parse(bounded.deadlineAt))
         throw new OpenPondProtocolError("training_operation_review_mismatch", "The placement review does not match these inputs.");
       return review;
     },

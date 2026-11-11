@@ -88,7 +88,7 @@ const HostedManagedJobSchema = z.object({
   optimizerUpdatesSkipped: z.number().int().nonnegative(),
   currentPolicyVersion: z.number().int().nonnegative(),
   spendCapUsd: z.union([z.string(), z.number()]),
-  accruedSpendUsd: z.union([z.string(), z.number()]),
+  accruedSpendUsd: z.union([z.string(), z.number()]).nullable(),
   terminalReason: z.string().nullable(),
   canonicalPublishState: z.string().nullable(),
   canonicalAdapterArtifactId: z.string().nullable(),
@@ -826,7 +826,7 @@ function hostedTrainingJob(
   const method = submission.job.recipe.method;
   const status = hostedTrainingJobStatus(hosted.state);
   const spendCapUsd = Number(hosted.spendCapUsd);
-  const accruedSpendUsd = Number(hosted.accruedSpendUsd);
+  const accruedSpendUsd = hosted.accruedSpendUsd === null ? null : Number(hosted.accruedSpendUsd);
   return TrainingJobSchema.parse({
     schemaVersion: "openpond.trainingJob.v1",
     id: hosted.id,
@@ -869,7 +869,7 @@ function hostedTrainingJob(
       },
       currentPolicyVersion: hosted.currentPolicyVersion,
       spendCapUsd: Number.isFinite(spendCapUsd) ? spendCapUsd : null,
-      accruedSpendUsd: Number.isFinite(accruedSpendUsd)
+      accruedSpendUsd: accruedSpendUsd !== null && Number.isFinite(accruedSpendUsd)
         ? accruedSpendUsd
         : null,
       canonicalPublishState: hosted.canonicalPublishState,

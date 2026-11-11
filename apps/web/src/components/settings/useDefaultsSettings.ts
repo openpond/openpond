@@ -31,9 +31,6 @@ export function useDefaultsSettings({
   const [defaultBranchPrefix, setDefaultBranchPrefix] = useState(preferences.defaultBranchPrefix);
   const [defaultNewProjectDirectory, setDefaultNewProjectDirectory] = useState(preferences.defaultNewProjectDirectory);
   const [advancedWorkspaceControls, setAdvancedWorkspaceControls] = useState(preferences.advancedWorkspaceControls);
-  const [steerActiveResponses, setSteerActiveResponses] = useState(
-    preferences.steerActiveResponses,
-  );
   const [contextCompactionAutoEnabled, setContextCompactionAutoEnabled] = useState(
     preferences.contextCompaction.autoEnabled,
   );
@@ -75,7 +72,6 @@ export function useDefaultsSettings({
     setDefaultBranchPrefix(preferences.defaultBranchPrefix);
     setDefaultNewProjectDirectory(preferences.defaultNewProjectDirectory);
     setAdvancedWorkspaceControls(preferences.advancedWorkspaceControls);
-    setSteerActiveResponses(preferences.steerActiveResponses);
     setContextCompactionAutoEnabled(preferences.contextCompaction.autoEnabled);
     setSubagentsEnabled(preferences.subagents.enabled);
     setSubagentDelegationMode(preferences.subagents.delegationMode);
@@ -92,7 +88,6 @@ export function useDefaultsSettings({
     preferences.defaultBranchPrefix,
     preferences.defaultNewProjectDirectory,
     preferences.advancedWorkspaceControls,
-    preferences.steerActiveResponses,
     preferences.contextCompaction.autoEnabled,
     preferences.subagents,
   ]);
@@ -197,7 +192,6 @@ export function useDefaultsSettings({
           defaultBranchPrefix: normalizeBranchPrefix(defaultBranchPrefix),
           defaultNewProjectDirectory: defaultNewProjectDirectory.trim(),
           advancedWorkspaceControls,
-          steerActiveResponses,
           contextCompaction: {
             ...preferences.contextCompaction,
             autoEnabled: contextCompactionAutoEnabled,
@@ -230,7 +224,6 @@ export function useDefaultsSettings({
 
   return {
     advancedWorkspaceControls,
-    steerActiveResponses,
     contextCompactionAutoEnabled,
     defaultBranchPrefix,
     defaultNewProjectDirectory,
@@ -250,7 +243,6 @@ export function useDefaultsSettings({
     changeSubagentsProvider,
     changeSubagentRoleProvider,
     setAdvancedWorkspaceControls,
-    setSteerActiveResponses,
     setContextCompactionAutoEnabled,
     setDefaultBranchPrefix,
     setDefaultNewProjectDirectory,

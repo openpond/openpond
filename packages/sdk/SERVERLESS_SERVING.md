@@ -52,3 +52,9 @@ Named model calls accept `client_request_id` and a serving-only `timeout`
 `cancel_request` on the same handle, awaiting them on `AsyncClient`.
 `ModelRequestError.client_request_id` retains the original operation identity.
 The official hosted Model-serving CLI operations use these same contracts.
+
+## Request engine-time reviews
+
+When the API returns `openpond.serverlessServingReview.v4`, each request is billed for its own observed engine execution. Startup, model loading, queueing, idle time and cleanup are not separate customer charges. The review's signed price and spending limit still apply; failures and cancellation retain observed engine work until release.
+
+Use `createServerlessServingApproval` with the exact returned review, then retain the accepted review for verification and Stop. The TypeScript SDK accepts v4 without changing the meaning of retained v1–v3 reviews. GPU choices come from the review's approved hardware set.

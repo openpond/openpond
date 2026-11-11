@@ -9,11 +9,9 @@ type DefaultsSettingsSectionProps = {
   defaultNewProjectDirectory: string;
   preferences: BootstrapPayload["preferences"];
   saving: boolean;
-  steerActiveResponses: boolean;
   chooseDefaultProjectDirectory: () => void | Promise<void>;
   saveDefaults: (event: FormEvent<HTMLFormElement>) => void;
   setAdvancedWorkspaceControls: (value: boolean) => void;
-  setSteerActiveResponses: (value: boolean) => void;
   setDefaultBranchPrefix: (value: string) => void;
   setDefaultNewProjectDirectory: (value: string) => void;
 };
@@ -24,36 +22,21 @@ export function DefaultsSettingsSection({
   defaultNewProjectDirectory,
   preferences,
   saving,
-  steerActiveResponses,
   chooseDefaultProjectDirectory,
   saveDefaults,
   setAdvancedWorkspaceControls,
-  setSteerActiveResponses,
   setDefaultBranchPrefix,
   setDefaultNewProjectDirectory,
 }: DefaultsSettingsSectionProps) {
   const unchanged =
     normalizeBranchPrefix(defaultBranchPrefix) === preferences.defaultBranchPrefix &&
     defaultNewProjectDirectory.trim() === preferences.defaultNewProjectDirectory &&
-    advancedWorkspaceControls === preferences.advancedWorkspaceControls &&
-    steerActiveResponses === preferences.steerActiveResponses;
+    advancedWorkspaceControls === preferences.advancedWorkspaceControls;
 
   return (
     <section className="account-settings">
       <h2>General</h2>
       <form className="provider-settings-form" onSubmit={(event) => void saveDefaults(event)}>
-        <label className="settings-check-row">
-          <input
-            type="checkbox"
-            checked={steerActiveResponses}
-            disabled={saving}
-            onChange={(event) => setSteerActiveResponses(event.target.checked)}
-          />
-          <span>
-            <strong>Steer active responses</strong>
-            <small>Send a new message into the active response immediately. Turn this off to queue it instead.</small>
-          </span>
-        </label>
         <label className="settings-check-row">
           <input
             type="checkbox"

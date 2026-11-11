@@ -1377,7 +1377,6 @@ export function MainPane({
       actionCatalog={composerActionCatalog}
       createImproveActions={createImproveActions}
       contextCompaction={appPreferences.contextCompaction}
-      steerActiveResponses={appPreferences.steerActiveResponses}
       busy={busy}
       codexPermissionMode={codexPermissionMode}
       codexReasoningEffort={codexReasoningEffort}
@@ -1795,7 +1794,6 @@ export function MainPane({
                 }
                 busy={turnRunning}
                 running={turnRunning}
-                steerActiveResponses={appPreferences.steerActiveResponses}
                 taskSessionId={liveSessionId}
                 goalSessionId={selectedSessionId}
                 taskEvents={runtimeEvents}
@@ -1894,7 +1892,6 @@ export function MainPane({
                 }
                 busy={turnRunning}
                 running={turnRunning}
-                steerActiveResponses={appPreferences.steerActiveResponses}
                 taskSessionId={liveSessionId}
                 goalSessionId={selectedSessionId}
                 taskEvents={runtimeEvents}
