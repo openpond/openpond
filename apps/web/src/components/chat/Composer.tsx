@@ -189,7 +189,6 @@ export function Composer({
   taskSessionId = null,
   goalSessionId = taskSessionId,
   taskEvents = EMPTY_TASK_EVENTS,
-  steerActiveResponses = false,
   submissionScopeKey = "default", composerDraftStore,
   getCurrentSubmissionScopeKey,
   voiceInputChannelKey = submissionScopeKey,
@@ -240,7 +239,10 @@ export function Composer({
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
   const originDraftScopeKey = composerDraftStore?.getScopeKey();
-  const useActiveSteering = steerActiveResponses;
+  const voiceSubmitMode = useRef<{ channel: string; queue: boolean } | null>(null);
+  const onVoiceInputActiveChange = useCallback((active: boolean) => {
+    if (!active) voiceSubmitMode.current = null;
+  }, []);
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
   const contextSelection = useChatContextSelection(surface === "chat" && enableResourceContext ? connection : null, taskSessionId ?? null);
   const chatResources = useChatResourceFocus(surface === "chat" && enableResourceContext && !contextSelection.selection?.model && !contextSelection.selection?.training ? connection : null, taskSessionId ?? null);
@@ -453,7 +455,7 @@ export function Composer({
   const sendTooltip = serializingAttachments
     ? "Preparing files"
     : running
-      ? useActiveSteering ? "Steer" : "Queue"
+      ? "Steer (Enter) · Queue (Ctrl Enter)"
       : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments || contextSelection.selecting;
@@ -1454,13 +1456,17 @@ export function Composer({
     }
   }
 
-  async function submitComposer() {
+  async function submitComposer(queue = false) {
     // Voice owns this submission until both transcription and delivery finish.
     // This also covers Enter/form submission while dictation is in progress.
-    if (requestVoiceInputSubmit(voiceInputChannelKey)) return;
+    if (requestVoiceInputSubmit(voiceInputChannelKey)) {
+      voiceSubmitMode.current ??= { channel: voiceInputChannelKey, queue };
+      return;
+    }
+    voiceSubmitMode.current = null;
     if (running) {
-      if (useActiveSteering) await submitImmediateSteer();
-      else await stageCurrentSteerDraft();
+      if (queue) await stageCurrentSteerDraft();
+      else await submitImmediateSteer();
       return;
     }
     if (isSubmittingCurrentScope()) return;
@@ -1518,6 +1524,8 @@ export function Composer({
     text: string,
     options: { submit: boolean },
   ) {
+    const queue = voiceSubmitMode.current?.channel === voiceInputChannelKey && voiceSubmitMode.current.queue;
+    voiceSubmitMode.current = null;
     const currentScopeKey = getCurrentSubmissionScopeKey?.() ?? submissionScopeKey;
     const originDraft = currentScopeKey !== submissionScopeKey && originDraftScopeKey
       ? composerDraftStore?.getDrafts()[originDraftScopeKey]
@@ -1543,9 +1551,9 @@ export function Composer({
       setOriginDraft: (value) => onPromptChange(value),
       submit: options.submit,
       submitFromOrigin: (promptOverride) => running
-        ? useActiveSteering
-          ? submitImmediateSteer(promptOverride)
-          : stageCurrentSteerDraft(promptOverride)
+        ? queue
+          ? stageCurrentSteerDraft(promptOverride)
+          : submitImmediateSteer(promptOverride)
         : submitComposerPayload({
           preservePrompt: true,
           promptOverride,
@@ -1558,7 +1566,7 @@ export function Composer({
     }
     if (delivery === "submitted") {
       if (currentScopeKey !== submissionScopeKey) showToast(
-        running && !useActiveSteering
+        running && queue
           ? "Voice message queued in the chat where recording started."
           : "Voice message sent to the chat where recording started.",
         "success",
@@ -1802,7 +1810,7 @@ export function Composer({
                   event.shiftKey,
                   experience,
                   surface,
-                  Boolean(onSaveTaskDraft)
+                  Boolean(onSaveTaskDraft) && !running
                 )
               ) {
                 event.preventDefault();
@@ -1820,7 +1828,7 @@ export function Composer({
               }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                if (!serializingAttachments) void submitComposer();
+                if (!serializingAttachments) void submitComposer(event.ctrlKey || event.metaKey);
               }
             }}
             onPasteFiles={addFiles}
@@ -1944,6 +1952,7 @@ export function Composer({
             });
           }}
           onTranscript={insertDictationTranscript}
+          onVoiceInputActiveChange={onVoiceInputActiveChange}
           voiceInputChannelKey={voiceInputChannelKey}
           provider={provider}
           providerSettings={providerSettings}

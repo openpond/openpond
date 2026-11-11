@@ -60,7 +60,6 @@ export type ComposerProps = {
   taskSessionId?: string | null;
   goalSessionId?: string | null;
   taskEvents?: readonly RuntimeEvent[];
-  steerActiveResponses?: boolean;
   submissionScopeKey?: string;
   composerDraftStore?: ComposerDraftStore;
   getCurrentSubmissionScopeKey?: () => string;
