@@ -57,7 +57,6 @@ export function RightChatPane({
   actionCatalog,
   createImproveActions,
   contextCompaction,
-  steerActiveResponses,
   initialScrollState,
   codexPermissionMode,
   codexReasoningEffort,
@@ -101,7 +100,6 @@ export function RightChatPane({
   actionCatalog: SandboxActionCatalogEntry[];
   createImproveActions: ComposerCreateImproveActions;
   contextCompaction: AppPreferences["contextCompaction"];
-  steerActiveResponses: boolean;
   initialScrollState: RightChatScrollState | null;
   busy: boolean;
   codexPermissionMode: CodexPermissionMode;
@@ -327,7 +325,6 @@ export function RightChatPane({
           createImproveRuntime={createImproveRuntime}
           busy={activePanelView.running}
           running={activePanelView.running}
-          steerActiveResponses={steerActiveResponses}
           taskSessionId={panel.runtimeSource === "live" ? panel.sessionId : null}
           goalSessionId={panel.sessionId}
           taskEvents={liveSessionSnapshot.events}

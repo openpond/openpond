@@ -84,6 +84,7 @@ export function ComposerPrimaryControls({
   onStop,
   onToggleAddMenu,
   onTranscript,
+  onVoiceInputActiveChange,
   voiceInputChannelKey,
   provider,
   providerSettings: initialProviderSettings,
@@ -136,6 +137,7 @@ export function ComposerPrimaryControls({
   onStop: (reason?: string) => Promise<boolean | void> | boolean | void;
   onToggleAddMenu: () => void;
   onTranscript: (text: string, options: { submit: boolean }) => Promise<void> | void;
+  onVoiceInputActiveChange?: (active: boolean) => void;
   voiceInputChannelKey: string;
   provider: ChatProvider;
   providerSettings?: ProviderSettings | null;
@@ -203,6 +205,10 @@ export function ComposerPrimaryControls({
       ? modelValue
       : modelValue || defaultModelForProvider(provider, providerSettings);
   const [voiceInputActive, setVoiceInputActive] = useState(false);
+  const updateVoiceInputActive = useCallback((active: boolean) => {
+    setVoiceInputActive(active);
+    onVoiceInputActiveChange?.(active);
+  }, [onVoiceInputActiveChange]);
   const showModelReasoningMenu = providerModelSupportsReasoning(
     provider,
     displayedModel,
@@ -296,7 +302,7 @@ export function ComposerPrimaryControls({
           disabled={disabled}
           iconSize={16}
           wrapperClassName="composer-voice-input"
-          onActiveChange={setVoiceInputActive}
+          onActiveChange={updateVoiceInputActive}
           showToast={showToast}
           onTranscript={onTranscript}
           transcriptionChannelKey={voiceInputChannelKey}
@@ -458,7 +464,7 @@ export function ComposerPrimaryControls({
         disabled={disabled}
         iconSize={16}
         wrapperClassName="composer-voice-input"
-        onActiveChange={setVoiceInputActive}
+        onActiveChange={updateVoiceInputActive}
         showToast={showToast}
         onTranscript={onTranscript}
         transcriptionChannelKey={voiceInputChannelKey}
