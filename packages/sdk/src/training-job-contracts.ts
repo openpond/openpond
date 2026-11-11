@@ -348,7 +348,8 @@ export const TrainingJobSchema = z
         optimizerUpdatesSkipped: z.number().int().nonnegative(),
       })
       .strict(),
-    accruedSpendUsd: z.number().nonnegative(),
+    /** Null means retained customer-charge evidence is unavailable, never free. */
+    accruedSpendUsd: z.number().nonnegative().nullable(),
     usage: TrainingUsageSnapshotSchema.optional(),
     terminalReason: z.string().trim().min(1).max(5_000).nullable(),
     createdAt: TimestampSchema,

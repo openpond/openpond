@@ -151,7 +151,7 @@ export function LabHostedTrainingRunDetail({
         { label: "Rollout groups", value: `${summary.rolloutProgress.groupsCompleted} / ${summary.rolloutProgress.groupsTarget}` },
         { label: "Weight updates", value: summary.rolloutProgress.optimizerUpdatesApplied },
         { label: "Skipped updates", value: summary.rolloutProgress.optimizerUpdatesSkipped },
-        { label: summary.usage ? "Charged" : "Accrued spend", value: summary.usage ? `$${summary.usage.chargedUsd}` : `$${summary.accruedSpendUsd.toFixed(6)}` },
+        { label: summary.usage ? "Charged" : "Accrued spend", value: summary.usage ? `$${summary.usage.chargedUsd}` : summary.accruedSpendUsd === null ? "—" : `$${summary.accruedSpendUsd.toFixed(6)}` },
       ] : []} />
       <nav className="evaluation-workspace-tabs" aria-label="Training sections"><button aria-selected={!diagnostics} onClick={()=>onDiagnostics?.(false)}>Overview</button><button aria-selected={diagnostics} onClick={()=>onDiagnostics?.(true)}>Diagnostics</button></nav>
       <ErrorToast error={error ?? readError} />

@@ -18,7 +18,8 @@ import "../styles.css";
 // microphone permission, server request, provider turn, or account write occurs.
 const connection = { serverUrl: "http://proof.invalid", token: "synthetic", platform: "web" };
 const localQueue = new URLSearchParams(window.location.search).has("local");
-const steerMode = new URLSearchParams(window.location.search).has("steer");
+const params = new URLSearchParams(window.location.search);
+const provider = params.get("provider") === "codex" ? "codex" : "claude-code";
 const initialDraft = {
   id: "local-draft",
   prompt: "Edit this queued instruction",
@@ -28,7 +29,7 @@ const initialDraft = {
 const inputs = new Map<string, TaskInput>();
 let finishTranscription: (() => void) | undefined;
 let acceptQueue: (() => void) | undefined;
-let holdInitialInbox = !steerMode;
+let holdInitialInbox = params.has("hold-inbox");
 let changed = () => {};
 let failed = false;
 const originals = {
@@ -239,10 +240,13 @@ function Proof() {
               </div>
               <div className="message-row assistant">
                 <div className="assistant-message">
-                  A synthetic agent turn is running. Queue a draft, then accept its receipt. Edit
-                  must remove it from the queue.
+                  A synthetic agent turn is running. Enter or Send steers immediately; Ctrl Enter queues.
+                  Accept the receipt to finish submission.
                 </div>
               </div>
+              <output aria-label="Accepted input kinds">
+                {[...inputs.values()].map(input => `${input.kind}: ${input.body}`).join("\n")}
+              </output>
               <output aria-label="Accepted steering files">
                 {[...inputs.values()]
                   .filter((input) => input.kind === "steer")
@@ -262,10 +266,9 @@ function Proof() {
                   mode="dock"
                   busy
                   running
-                  steerActiveResponses={steerMode}
                   attachmentRequest={attachmentRequest}
                   connection={localQueue ? null : connection}
-                  provider="claude-code"
+                  provider={provider}
                   model="default"
                   taskSessionId={localQueue ? null : scope}
                   initialSteerDrafts={localQueue ? [initialDraft] : undefined}
@@ -275,7 +278,7 @@ function Proof() {
                   enableResourceContext={false}
                   showProjectFooter={false}
                   contextWindowStatus={contextWindowStatusFromUsage({
-                    provider: "claude-code",
+                    provider,
                     snapshot: null,
                   })}
                   projectTarget={{
@@ -306,6 +309,9 @@ function Proof() {
                   showToast={showToast}
                   onSubmit={async () => {
                     throw new Error("Queue incorrectly used ordinary Send.");
+                  }}
+                  onSaveTaskDraft={async () => {
+                    throw new Error("Running shortcut incorrectly saved a task draft.");
                   }}
                   onStop={() => {}}
                 />
