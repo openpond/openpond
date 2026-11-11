@@ -26,7 +26,7 @@ async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
 // complete stream evidence, and cancellation when a consumer stops reading.
 test("named models and AI SDK consumer preserve exact routing, usage and no-replay semantics", async () => {
   type FixtureMode = "normal" | "reject" | "truncated" | "held" | "pending" | "pending-tools"
-    | "pending-mismatch" | "pending-abort" | "lost" | "lost-tools";
+    | "pending-mismatch" | "pending-abort" | "pending-throttled" | "lost" | "lost-tools";
   let mode: FixtureMode = "normal";
   type Operation = { id: string; clientId: string; model: string; deadlineAt: string;
     mode: FixtureMode; reads: number };
@@ -67,6 +67,11 @@ test("named models and AI SDK consumer preserve exact routing, usage and no-repl
       expect(req.headers["x-openpond-team-id"]).toBe("team-one");
       expect(url.pathname.startsWith("/personalized/v1/chat/completions")).toBe(true);
       operation.reads++;
+      if (operation.mode === "pending-throttled" && operation.reads === 1) {
+        res.writeHead(429, { "Retry-After": "1" });
+        res.end("{}");
+        return;
+      }
       if (operation.mode === "pending-abort") observationAbort?.abort();
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify(retainedStatus(operation, operation.mode.startsWith("lost") || operation.reads >= 2)));
@@ -280,6 +285,14 @@ test("named models and AI SDK consumer preserve exact routing, usage and no-repl
     expect(await pendingStream.usage).toMatchObject({ inputTokens: 2, outputTokens: 3 });
     expect(paidPosts).toBe(beforePending + 4);
     expect(statusReads).toBe(beforeReads + 8);
+
+    // Real HTTP throttling must delay only authenticated status reads. A new
+    // paid POST here would duplicate the accepted operation and its exposure.
+    mode = "pending-throttled";
+    const beforeThrottlePosts = paidPosts, beforeThrottleReads = statusReads;
+    expect((await client.models.support.generate({ prompt: "retained throttled result" })).text).toBe("retained hello");
+    expect(paidPosts).toBe(beforeThrottlePosts + 1);
+    expect(statusReads).toBe(beforeThrottleReads + 2);
 
     const toolClient = createOpenPondClient({ apiKey: "serving-key", teamId: "team-one",
       serving: { baseUrl: `http://127.0.0.1:${address.port}/personalized/v1` },

@@ -15,13 +15,14 @@ import {
   DatasetWorkspaceWriteSchema,
 } from "./dataset-workspace-contracts.js";
 import { validateTasksetDraftWorkspace } from "./taskset-draft-workspace.js";
-import type { z } from "zod";
+import { z } from "zod";
 import {
   DatasetWorkspaceOperationKindSchema,
   DatasetWorkspaceOperationResultSchema,
 } from "./dataset-workspace-operations.js";
 import { OpenPondDatasetPreparationClient } from "./dataset-preparation-client.js";
 import { readDatasetWorkspaceFailure } from "./dataset-workspace-error.js";
+import { CorrectionsDefaultSchema } from "./corrections-default.js";
 
 /** Hosted independent authoring. Writes use explicit revision/operation identity;
  * callers retain the operation ID when retrying an uncertain response. */
@@ -79,6 +80,21 @@ export class OpenPondDatasetWorkspaceClient {
       await this.request(`/${encodeURIComponent(id)}`, "GET", undefined, signal),
       id,
     );
+  }
+  /** Resolve this actor's account-provisioned Dataset and untrained Model. */
+  async defaultCorrections(signal?: AbortSignal) {
+    const result = CorrectionsDefaultSchema.parse(await this.request("/defaults/corrections", "GET", undefined, signal));
+    if (result.teamId !== this.options.teamId)
+      throw new Error("Corrections default workspace/owner mismatch.");
+    return result;
+  }
+  async selectCorrectionsDataset(datasetId: string, expectedSelectionRevision: number, signal?: AbortSignal) {
+    const result = CorrectionsDefaultSchema.parse(await this.request("/defaults/corrections", "POST", {
+      datasetId: z.string().trim().min(1).max(240).parse(datasetId),
+      expectedSelectionRevision: z.number().int().nonnegative().parse(expectedSelectionRevision),
+    }, signal));
+    if (result.teamId !== this.options.teamId) throw new Error("Corrections default workspace mismatch.");
+    return result;
   }
   /** Recover only this actor's retained operation; base bytes allow adapters to
    * reconstruct and verify the identical original CAS request before replay. */

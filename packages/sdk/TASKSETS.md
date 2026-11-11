@@ -325,6 +325,28 @@ in their originating Project. A release can still be used across Projects throug
 explicit associations; changing or removing that association does not rewrite
 where the draft was created.
 
+## Account Corrections defaults
+
+`OpenPondDatasetWorkspaceClient.defaultCorrections()` resolves the signed-in
+owner's account-provisioned private Dataset descriptor, linked untrained Model ID and
+Instruction following grader-draft identity. It uses the configured API endpoint
+and workspace. This is a read-only lookup; it never creates a Dataset, Model,
+grader, training run or learning policy. Account initialization owns provisioning
+and preserves existing examples and edits. A missing default requires account
+setup to complete rather than a client-side creation request.
+
+`selectCorrectionsDataset(datasetId, expectedSelectionRevision)` saves the
+preferred destination through the same hosted API. The account owns this setting
+across installations. Revision conflicts require a fresh read; repeating the
+same accepted selection after a lost response retains the original revision.
+An unavailable selected Dataset remains an explicit recovery state rather than
+silently redirecting captured issues to another destination.
+
+Use the returned `dataset.id` with the ordinary revisioned authoring or
+`addTask` APIs. The linked Model starts without a selected base model, recipe or
+trained version. A grader draft is configuration to review and qualify before
+scoring; resolving it does not execute a judge or authorize training.
+
 ## Prepared task assembly
 
 `openpond-sdk/dataset-workspaces` exports `createPreparedTaskAuthoringWorkspace`

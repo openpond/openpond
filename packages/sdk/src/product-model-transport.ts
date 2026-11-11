@@ -39,14 +39,32 @@ export class ProductModelTransport {
     return headers;
   }
   private async fetchResponse(url: string, init: RequestInit, budget: Budget, identity: ProductModelRequestIdentity) {
-    if (budget.signal.aborted || Date.now() >= budget.until) throw unknown(identity);
     let response: Response;
-    try {
-      response = await (this.connection.fetch ?? fetch)(url, {
-        ...init, redirect: "error", signal: budget.signal,
-      });
-    } catch {
-      throw unknown(identity);
+    let responseSignal = budget.signal;
+    for (;;) {
+      const remaining = budget.until - Date.now();
+      if (budget.signal.aborted || remaining <= 0) throw unknown(identity);
+      responseSignal = init.method === "GET"
+        ? this.budget(Math.min(30_000, remaining), budget.signal).signal : budget.signal;
+      try {
+        response = await (this.connection.fetch ?? fetch)(url, {
+          ...init, redirect: "error", signal: responseSignal,
+        });
+      } catch {
+        throw unknown(identity);
+      }
+      // A throttled observation is still the same retained operation. Retry
+      // only GET, within its original budget; never repeat the paid POST.
+      if (init.method !== "GET" || response.status !== 429) break;
+      const retryAfter = response.headers.get("retry-after");
+      const numeric = retryAfter !== null && /^\d+(?:\.\d+)?$/.test(retryAfter.trim())
+        ? Number(retryAfter) * 1000 : NaN;
+      const supplied = Number.isFinite(numeric) ? numeric : retryAfter ? Date.parse(retryAfter) - Date.now() : NaN;
+      const delay = Number.isFinite(supplied) ? Math.max(500, supplied) : 2_000;
+      await response.body?.cancel().catch(() => {});
+      if (delay >= budget.until - Date.now())
+        throw new ProductModelError("model_status_unavailable", 429, true, identity.requestId, identity.clientRequestId);
+      await waitForObservation(delay, budget.signal, identity);
     }
     const observedId = response.headers.get("x-openpond-request-id") ?? response.headers.get("x-request-id");
     // A generic HTTP trace header is not the retained operation identity.
@@ -59,7 +77,7 @@ export class ProductModelTransport {
         response.status, response.status === 408 || response.status >= 500,
         identity.requestId, identity.clientRequestId);
     }
-    const bounded = boundProductModelResponse(response, { signal: budget.signal, ...identity });
+    const bounded = boundProductModelResponse(response, { signal: responseSignal, ...identity });
     this.identities.set(bounded, { ...identity });
     return bounded;
   }
@@ -141,7 +159,7 @@ export class ProductModelTransport {
       await waitForObservation(delay, observation.signal, identity);
       try {
         status = await this.readStatus(`/${encodeURIComponent(identity.requestId!)}`, identity,
-          this.budget(Math.max(1, Math.min(30_000, observation.until - Date.now())), observation.signal), deadlineAt);
+          this.budget(Math.max(1, observation.until - Date.now()), observation.signal), deadlineAt);
       } catch (error) {
         if (error instanceof ProductModelError && ["model_recovery_identity_changed", "model_response_invalid"].includes(error.code)) throw error;
         throw unknown(identity, 202);
