@@ -71,8 +71,25 @@ export const ServerlessServingReviewV3Schema = ServerlessServingReviewV2Schema.e
     gpuTypeIds: z.array(Id).min(1).max(8).refine(ids => new Set(ids).size === ids.length),
   }).strict().optional(),
 }).strict();
+/** Public request-execution terms in the server-issued v4 review. */
+export const ServerlessServingReviewV4Schema = ServerlessServingReviewV3Schema.extend({
+  schemaVersion: z.literal("openpond.serverlessServingReview.v4"),
+  rules: z.object({
+    quantity: z.literal("request_engine_milliseconds"),
+    allocation: z.literal("per_request_engine_time"),
+    startupBillable: z.literal(false),
+    idleBillable: z.literal(false),
+    cleanupBillable: z.literal(false),
+    queueBillable: z.literal(false),
+    failure: z.literal("observed_engine_work"),
+    cancellation: z.literal("until_engine_release"),
+    tokenRetailUsd: z.literal("0.000000"),
+    minimumBillableMillis: z.literal(0),
+  }).strict(),
+}).strict();
 export const ServerlessServingReviewSchema = z.discriminatedUnion("schemaVersion", [
   ServerlessServingReviewV1Schema, ServerlessServingReviewV2Schema, ServerlessServingReviewV3Schema,
+  ServerlessServingReviewV4Schema,
 ]);
 export type ServerlessServingReview = z.infer<typeof ServerlessServingReviewSchema>;
 
@@ -129,7 +146,7 @@ export async function verifyServerlessServingReview(raw: ServerlessServingReview
 
 export async function createServerlessServingApproval(raw: ServerlessServingReview, spendingLimit?: string | null, gpuTypeId?: string) {
   const review = ServerlessServingReviewSchema.parse(raw), {contentHash, ...content} = review;
-  if (review.schemaVersion !== "openpond.serverlessServingReview.v3" ||
+  if ((review.schemaVersion !== "openpond.serverlessServingReview.v3" && review.schemaVersion !== "openpond.serverlessServingReview.v4") ||
     contentHash !== await canonicalSha256(content) || Date.parse(review.expiresAt) <= Date.now())
     throw new OpenPondProtocolError("serverless_serving_review_expired", "Refresh this saved Model's serving price.");
   if (gpuTypeId && !review.hardware?.gpuTypeIds.includes(gpuTypeId))

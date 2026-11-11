@@ -205,7 +205,7 @@ export function createChatContextBrowser(deps: {
       if (active.actorId !== access.actorId || active.teamId !== access.teamId || active.apiBaseUrl !== access.apiBaseUrl) throw new Error("Account changed while reading training history.");
       if (page.jobs.some(job => job.teamId !== access.teamId || job.modelProjectId !== hostedId)) throw new Error("Training history returned another model or workspace.");
       return { nextCursor: page.nextCursor, runs: page.jobs.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(job => ({ target: { kind: "training" as const, id: job.id, location: "cloud" as const, teamId: access.teamId, apiOrigin: new URL(access.apiBaseUrl).origin },
-        label: `${job.createdAt.slice(0, 16).replace("T", " ")} UTC · ${job.state === "succeeded" ? "Completed" : job.state}`, detail: `$${job.accruedSpendUsd.toFixed(4)} · ${job.id}` })) };
+        label: `${job.createdAt.slice(0, 16).replace("T", " ")} UTC · ${job.state === "succeeded" ? "Completed" : job.state}`, detail: `${job.accruedSpendUsd === null ? "Cost unavailable" : `$${job.accruedSpendUsd.toFixed(4)}`} · ${job.id}` })) };
     }
     const options: ChatContextOption[] = [];
     for (const job of (await deps.store.listTrainingJobs()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {

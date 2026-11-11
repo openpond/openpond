@@ -56,7 +56,9 @@ export function TrainingRunDiagnostics({
         callCount: 0,
         limitations: [
           "Identity is the immutable training submission hash; grading and output evidence remain in Evals and Outputs.",
-          `Observed accrued spend: $${job.accruedSpendUsd.toFixed(6)}. This is not a finalized provider receipt.`,
+          job.accruedSpendUsd === null
+            ? "Observed accrued spend is unavailable because customer-charge evidence is missing."
+            : `Observed accrued spend: $${job.accruedSpendUsd.toFixed(6)}. This is not a finalized provider receipt.`,
           "Training creation is not an execution start; elapsed execution time is unavailable.",
           "This training contract does not retain per-call billing, lease state or paired phase timings. Missing metadata stays unknown.",
           `Evidence snapshot: ${contentHash({ id: job.id, version: job.version, eventIds: items.map((event) => event.id) })}.`,
