@@ -156,7 +156,7 @@ export const MessageRow = memo(function MessageRow({
             />
           ) : null}
           {displayContent ? (
-            <UserMessageContent content={displayContent} />
+            <UserMessageContent content={displayContent} onOpenBrowserLink={onOpenBrowserLink} />
           ) : null}
         </div>
       </article>

@@ -44,20 +44,20 @@
         "test_cases": {
           "positive": [
             {
-              "description": "Workspace and model inventory. Setup: a dedicated sample workspace containing a synthetic Model named Plugin review model and at least one retained Experiment; authorize read access to this workspace.",
+              "description": "Workspace and model inventory. Setup: use the dedicated sample workspace containing a synthetic Model named Plugin review model; authorize read access. The Experiment collection may be empty and must be reported honestly.",
               "prompt": "Show my models and recent experiments in the connected OpenPond workspace, and explain which training methods are currently available. Do not start any work.",
               "tools_triggered": "connection_context, models_list, experiments_list, training_capabilities",
               "expected_behavior": "Report the workspace from connection_context, list only returned Model/Experiment records with their actual states, and distinguish supported methods from runtime availability using training_capabilities. No execute, publish, learning activation or resource write is called."
             },
             {
-              "description": "Dataset and grader release inspection. Setup: publish a synthetic arithmetic Dataset named Plugin review arithmetic with train/validation/holdout membership and an exact released grader; make both visible to the reviewer.",
-              "prompt": "Inspect the published Plugin review arithmetic dataset, its splits and the grader version it uses. Tell me whether its references are pinned without changing it.",
+              "description": "Dataset and grader release inspection. Setup: publish a synthetic arithmetic Dataset named OpenPond Plugin Review Arithmetic with train/validation/holdout membership and an exact released grader; make both visible to the reviewer.",
+              "prompt": "Inspect the published OpenPond Plugin Review Arithmetic dataset, its splits and the grader version it uses. Tell me whether its references are pinned without changing it.",
               "tools_triggered": "connection_context, datasets_list, datasets_get, datasets_versions, datasets_population, graders_catalog, graders_versions",
               "expected_behavior": "Resolve the named Dataset in the connected workspace, report its actual published revision and content identity, and inspect population with limit at most 100. Resolve the exact pinned grader release. Preserve split isolation and do not reveal sealed gold answers, verifier source or privileged context. Do not publish, append tasks or run grading."
             },
             {
               "description": "Save and reopen an experiment draft. Setup: the sample Model, released Dataset and grader from the prior cases are compatible with an available SFT source; grant app:write. This case authorizes draft authoring only.",
-              "prompt": "Save an SFT experiment draft named Plugin review draft using Plugin review model and the published Plugin review arithmetic dataset and its grader. Reopen it and show the exact references. Ask me for any configuration you cannot determine. Do not prepare, fund or start training.",
+              "prompt": "Save an SFT experiment draft named Plugin review draft using Plugin review model and the published OpenPond Plugin Review Arithmetic dataset and its grader. Reopen it and show the exact references. Ask me for any configuration you cannot determine. Do not prepare, fund or start training.",
               "tools_triggered": "connection_context, models_list, models_get, datasets_list, datasets_get, graders_catalog, experiment_drafts_save, experiment_drafts_get",
               "expected_behavior": "Resolve exact authorized source revisions, collect any required missing configuration, save with a stable operationId and the correct expectedRevision, and read back the accepted draft identity/revision. On uncertain delivery reconcile the same operation rather than allocate another identity. No training_prepare_experiment, execution, funding reservation, inference or policy activation occurs."
             },
@@ -68,10 +68,10 @@
               "expected_behavior": "Report the exact balance and currency from account_credit_balance for the connected workspace without extrapolating a guarantee of workload admission. If the role or service denies the read, explain the actual denial and do not fabricate a balance or attempt a different workspace. No payment, funding reservation or workload is triggered."
             },
             {
-              "description": "Compare retained evaluation evidence. Setup: retain two completed synthetic evaluations named Plugin review baseline and Plugin review candidate with compatible evaluation manifests and accessible execution/scoring evidence. No new evaluation is authorized.",
-              "prompt": "Compare the completed Plugin review baseline and Plugin review candidate evaluations. Explain the measured differences and any evidence limits. Do not rerun or rescore them.",
-              "tools_triggered": "connection_context, experiments_list, experiments_get, experiments_result, experiments_compare",
-              "expected_behavior": "Resolve the two exact retained evaluations, verify their identities and compatibility, and summarize only returned measured metrics with run/result references. Refuse to rank incompatible manifests or substitute training losses for evaluation quality. No experiments_run, experiments_duplicate, experiments_score or inference is called."
+              "description": "Preview supplied synthetic Dataset examples without importing them. Setup: use the connected sample workspace with read access; no saved Dataset, paid model call or retained evaluation is required. The path is a label for the inline text, not a local file to read.",
+              "prompt": "Preview these two JSONL examples for an OpenPond dataset and explain how they are parsed, their splits, and any issues:\n{\"id\":\"review-add-1\",\"instruction\":\"What is 1 + 1?\",\"reference\":\"2\",\"split\":\"train\"}\n{\"id\":\"review-add-2\",\"instruction\":\"What is 2 + 3?\",\"reference\":\"5\",\"split\":\"validation\"}\nDo not import, save, publish, grade or start any work.",
+              "tools_triggered": "connection_context, learning_preview_intake",
+              "expected_behavior": "Verify the connected workspace, then call learning_preview_intake with format jsonl and one file labeled review-arithmetic.jsonl containing exactly the two supplied records. Report two parsed records, their unchanged IDs, train/validation splits, reference answers 2 and 5, the returned preview content hash, and zero issues. Explain that this is a preview and no data was imported. Do not read local paths, invoke learning_import_intake, save or publish resources, run a grader, or start training/inference."
             }
           ],
           "negative": [

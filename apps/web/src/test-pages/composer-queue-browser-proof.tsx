@@ -8,17 +8,30 @@ import { AppToastProvider } from "../app/AppToastContext";
 import { appReducer, initialAppState, type ShowAppToast } from "../app/app-state";
 import { AppToast } from "../components/app-shell/AppToast";
 import { DraftBoundComposer } from "../components/chat/DraftBoundComposer";
+import { DesktopCorrectionsContext } from "../components/chat/DesktopCorrectionsContext";
+import { CorrectionsSettingsSection } from "../components/settings/CorrectionsSettingsSection";
+import { UserMessageContent } from "../components/chat/UserMessageContent";
 import { createComposerDraftStore } from "../lib/composer-draft-store";
 import { contextWindowStatusFromUsage } from "../lib/context-window";
 import { useToastPresentation } from "../hooks/useToastPresentation";
 import "../styles/theme.css";
 import "../styles.css";
+import "../styles/settings/settings-layout.css";
+import "../styles/settings/settings-forms.css";
 
 // Development-only boundary proof. Audio and API receipts are synthetic: no
 // microphone permission, server request, provider turn, or account write occurs.
 const connection = { serverUrl: "http://proof.invalid", token: "synthetic", platform: "web" };
 const localQueue = new URLSearchParams(window.location.search).has("local");
 const params = new URLSearchParams(window.location.search);
+const correctionsProof = params.has("corrections");
+const idleProof = params.has("idle");
+const newChatProof = params.has("new-chat");
+const historyProof = params.has("history");
+let correctionDataset = { id: "proof-corrections", name: "Corrections", revision: 1 };
+let correctionSelectionRevision = 0;
+const correctionState = () => ({ scopeKey: "a".repeat(64), teamId: "proof-workspace", actorId: "proof-owner", defaultDatasetId: "proof-corrections",
+  dataset: correctionDataset, destinationError: null, selectionRevision: correctionSelectionRevision, graderDraftId: "proof-grader", graderState: "draft" as const });
 const provider = params.get("provider") === "codex" ? "codex" : "claude-code";
 const initialDraft = {
   id: "local-draft",
@@ -40,6 +53,23 @@ const originals = {
   status: api.voiceTranscriptionStatus,
   transcribe: api.transcribeVoice,
   microphone: navigator.mediaDevices.getUserMedia,
+  fetch: globalThis.fetch,
+};
+if (params.has("correction-settings")) globalThis.fetch = async (resource, init) => {
+  if (String(resource).startsWith(connection.serverUrl) && init?.body) {
+    const request = JSON.parse(String(init.body));
+    if (request.operation === "desktopCorrections") {
+      if (request.value.action === "choices") return Response.json({ datasets: [
+        { id: "proof-corrections", name: "Corrections", revision: 1 }, { id: "proof-other", name: "Reviewed issues", revision: 1 },
+      ] });
+      if (request.value.action === "select") {
+        correctionDataset = { id: request.value.datasetId, name: request.value.datasetId === "proof-other" ? "Reviewed issues" : "Corrections", revision: 1 };
+        correctionSelectionRevision++;
+        changed(); return Response.json(correctionState());
+      }
+    }
+  }
+  return originals.fetch(resource, init);
 };
 const syntheticAudio = new AudioContext();
 const destination = syntheticAudio.createMediaStreamDestination();
@@ -54,8 +84,8 @@ sessionApi.taskInbox = async (_connection, sessionId) => {
   if (holdInitialInbox) await new Promise<void>(() => {});
   return {
     sessionId,
-    activeTurnId: "running-turn",
-    acceptingInput: true,
+    activeTurnId: idleProof ? null : "running-turn",
+    acceptingInput: !idleProof,
     paused: false,
     inputs: [...inputs.values()].filter((input) => input.sessionId === sessionId),
     waits: [],
@@ -260,17 +290,26 @@ function Proof() {
                   .join("\n")}
               </output>
               <div className="composer-stack dock" style={{ marginTop: 100 }}>
+                <DesktopCorrectionsContext.Provider value={correctionsProof ? {
+                  data: correctionState(),
+                  loading: false, error: null, webBaseUrl: "https://app.example.test", refresh: async () => { changed(); },
+                } : null}>
+                {params.has("correction-settings") ? <CorrectionsSettingsSection connection={connection} /> : null}
+                {correctionsProof ? <div aria-label="Issue message preview">
+                  {[...inputs.values()].map(input => <UserMessageContent key={input.id} content={input.body} />)}
+                </div> : null}
                 <DraftBoundComposer
                   draftStore={draftStore}
                   composerDraftStore={draftStore}
-                  mode="dock"
-                  busy
-                  running
+                  mode={newChatProof ? "start" : "dock"}
+                  busy={!idleProof && !historyProof}
+                  running={!idleProof && !historyProof}
                   attachmentRequest={attachmentRequest}
                   connection={localQueue ? null : connection}
                   provider={provider}
                   model="default"
-                  taskSessionId={localQueue ? null : scope}
+                  taskSessionId={localQueue || newChatProof || historyProof ? null : scope}
+                  conversationId={newChatProof ? null : historyProof ? `codex-history:${scope}` : scope}
                   initialSteerDrafts={localQueue ? [initialDraft] : undefined}
                   submissionScopeKey={scope}
                   getCurrentSubmissionScopeKey={() => activeScope.current}
@@ -307,7 +346,15 @@ function Proof() {
                   onCodexReasoningEffortChange={() => {}}
                   onOpenPondCommandAccessModeChange={() => {}}
                   showToast={showToast}
-                  onSubmit={async () => {
+                  onSubmit={async (_attachments, _action, _command, options) => {
+                    if (correctionsProof && (idleProof || historyProof)) {
+                      if (!options?.preservePrompt || !options.promptOverride) throw new Error("Issue logging consumed the draft.");
+                      const timestamp = new Date().toISOString();
+                      inputs.set("idle-issue", { id: "idle-issue", idempotencyKey: "idle-issue", sessionId: historyProof ? `codex-history:${scope}` : scope, sequence: inputs.size + 1,
+                        senderSessionId: null, senderKind: "user", kind: "message", body: options.promptOverride, payload: {}, replyTo: null,
+                        expectedTurnId: null, turnId: null, requestIds: [], state: "resolved", revision: 1, createdAt: timestamp, updatedAt: timestamp, error: null });
+                      changed(); return true;
+                    }
                     throw new Error("Queue incorrectly used ordinary Send.");
                   }}
                   onSaveTaskDraft={async () => {
@@ -315,6 +362,7 @@ function Proof() {
                   }}
                   onStop={() => {}}
                 />
+                </DesktopCorrectionsContext.Provider>
               </div>
             </div>
           </main>
@@ -342,4 +390,5 @@ import.meta.hot?.dispose(() => {
   sessionApi.updateTaskInput = originals.mutate;
   api.voiceTranscriptionStatus = originals.status;
   api.transcribeVoice = originals.transcribe;
+  globalThis.fetch = originals.fetch;
 });

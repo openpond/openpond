@@ -4,7 +4,8 @@ export const TRAINING_COMMAND_DEFINITION: CliCommandDefinition = {
   name: "training",
   usage: "openpond training <projects|inspect-project|create-project|prepare-project|pull-project|estimate|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]",
   usages: [
-    "openpond training hosted-review-placement|hosted-resolve-experiment <input.json> --team-id <id> [--json]",
+    "openpond training hosted-resolve-experiment <input.json> --team-id <id> [--json]",
+    "openpond training hosted-review-placement <input.json> --team-id <id> [--deadline-at <ISO-time>] [--json]",
     "openpond training hosted-queue|hosted-approve-operation-review <reviewed-input.json> --team-id <id> --yes [--json]",
     "openpond training hosted-operations --team-id <id> [--project-id <id>] [--cursor <id>] [--limit <1..100>] [--json]",
     "openpond training hosted-operation|hosted-find-operation|hosted-stop-operation|hosted-review-operation <id> --team-id <id> [--json]",

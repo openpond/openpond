@@ -7,6 +7,7 @@ import { DesktopGettingStarted } from "./components/onboarding/DesktopGettingSta
 import { NativeLoginProvider } from "./components/terminal/NativeLoginProvider";
 import { AppToastProvider } from "./app/AppToastContext";
 import { useAppStartupProgress } from "./components/splash/AppStartupBoundary";
+import { DesktopCorrectionsProvider } from "./components/chat/DesktopCorrectionsContext";
 
 const queries = createWorkspaceQueryClient();
 
@@ -21,8 +22,10 @@ function AppRuntime() {
   return <AppToastProvider showToast={primary.showToast}><NativeLoginProvider connection={primary.connection} onProviders={providers => {
     if (primary.bootstrap) primary.applyBootstrapPayload({ ...primary.bootstrap, providers });
   }}>
+    <DesktopCorrectionsProvider connection={primary.connection} payload={primary.bootstrap}>
     <AppRuntimeView primary={primary} secondary={secondary} />
     <DesktopGettingStarted ready={primary.startup.ready} connection={primary.connection}
       payload={primary.bootstrap} onPayload={primary.applyBootstrapPayload} />
+    </DesktopCorrectionsProvider>
   </NativeLoginProvider></AppToastProvider>;
 }
