@@ -24,6 +24,25 @@ export type LinkContextMenu =
 export type OpenBrowserLink = (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
 export type OpenFileLink = (path: string, options?: { source?: boolean }) => void;
 
+/** Keep user-authored whitespace and prose literal; only make web links usable. */
+export function renderUserMessageLinks(content: string, onOpenBrowserLink?: OpenBrowserLink): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let textStart = 0;
+  for (let index = 0; index < content.length;) {
+    const link = content[index] === "[" ? parseMarkdownLink(content, index) : matchBareLinkAt(content, index);
+    if (!link || !/^https?:\/\//i.test(link.href)) { index++; continue; }
+    if (index > textStart) nodes.push(content.slice(textStart, index));
+    nodes.push(<a key={index} href={link.href} target="_blank" rel="noreferrer"
+      onClick={event => { if (onOpenBrowserLink) { event.preventDefault(); onOpenBrowserLink(link.href); } }}>
+      {"label" in link && typeof link.label === "string" ? link.label.replace(/\\([\\[\]])/g, "$1") : link.href}
+    </a>);
+    index = link.end;
+    textStart = index;
+  }
+  if (textStart < content.length) nodes.push(content.slice(textStart));
+  return nodes;
+}
+
 export type MarkdownContext = {
   activeWorkspaceAppId: string | null;
   connection: ClientConnection | null;

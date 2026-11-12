@@ -326,6 +326,7 @@ export function RightChatPane({
           busy={activePanelView.running}
           running={activePanelView.running}
           taskSessionId={panel.runtimeSource === "live" ? panel.sessionId : null}
+          conversationId={panel.sessionId}
           goalSessionId={panel.sessionId}
           taskEvents={liveSessionSnapshot.events}
           submissionScopeKey={activePanelView.sessionId ?? activePanelView.id}

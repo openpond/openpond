@@ -31,6 +31,7 @@ import type { SettingsSection } from "../../lib/app-models";
 import type { TeamChatNotificationMode } from "../../lib/team-chat-notifications";
 import { AccountSettingsSection } from "./AccountSettingsSection";
 import { DefaultsSettingsSection } from "./DefaultsSettingsSection";
+import { CorrectionsSettingsSection } from "./CorrectionsSettingsSection";
 import { DiagnosticsSettingsSection } from "./DiagnosticsSettingsSection";
 import { EditorSettingsSection } from "./EditorSettingsSection";
 import {
@@ -386,6 +387,7 @@ export function SettingsView({
           <div className="settings-stacked-sections configuration-page">
             <ConfigurationSettings connection={connection} onSaved={async () => { if (connection) onPayload(await api.bootstrap(connection)); }} />
             <DefaultsSettingsSection preferences={preferences} {...defaultsSettings} />
+            <CorrectionsSettingsSection connection={connection} />
             <ContextSettingsSection embedded preferences={preferences} {...defaultsSettings} />
           </div>
         ) : section === "context" ? (
