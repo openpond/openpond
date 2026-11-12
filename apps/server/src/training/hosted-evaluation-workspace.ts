@@ -1,5 +1,6 @@
 import { createTrainingClient, TrainingExecutionListQuerySchema } from "openpond-sdk/training";
 import { readHostedWeightSpace } from "./hosted-weight-space-read.js";
+import { DesktopCorrectionsRequestSchema, DesktopCorrectionsStateSchema } from "@openpond/contracts";
 import {EvaluationOperationRecoveryPageSchema,RecoverableEvaluationActionSchema} from "@openpond/contracts";
 import { ModelProjectBaseModelSchema, createModelProjectsClient } from "openpond-sdk/model-projects";
 import { OpenPondToolLearningClient } from "openpond-sdk/tool-learning";
@@ -29,7 +30,7 @@ import { OpenPondTasksetPackageClient, inspectDatasetTrainingReviewPackage } fro
 
 const Id = z.string().trim().min(1).max(240);
 const Envelope = z.object({ teamId: Id, projectId: Id.nullable().default(null), operation: z.enum([
-  ...connectedWorkspaceOperations, "connectedSummary", "recordedExecution", "toolConnections", "datasets", "datasetReviewSource",
+  ...connectedWorkspaceOperations, "connectedSummary", "recordedExecution", "toolConnections", "datasets", "datasetReviewSource", "desktopCorrections",
   "prepareOperation", "acknowledgeOperation", "retainOperation", "pendingOperations", "feedbackSummary", "harnessSources", "profileEvaluationDiscovery", "diagnostics",
   "datasetExperiments", "experiments", "trainingExecutions", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "run", "prepareHarness", "experiment", "duplicate", "result", "cancel", "score", "passes", "pass", "passResult", "cancelPass", "compare",
 ]), value: z.unknown().optional() }).strict();
@@ -45,6 +46,36 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     const request = Envelope.parse(value);
     const access = await input.resolveAccess();
     if (request.teamId !== access.teamId) throw new Error("The active workspace changed. Refresh before continuing.");
+    if (request.operation === "desktopCorrections") {
+      const query = DesktopCorrectionsRequestSchema.parse(request.value);
+      if (!input.resolveActorId || await input.resolveActorId() !== query.actorId)
+        throw new Error("The signed-in account changed. Refresh before continuing.");
+      const client = new OpenPondDatasetWorkspaceClient({ baseUrl: access.apiBaseUrl, apiKey: access.token,
+        teamId: access.teamId, fetch: input.fetch });
+      let result: unknown;
+      if (query.action === "choices") {
+        const datasets = [];
+        let cursor: string | undefined;
+        do {
+          const page = await client.list({ cursor });
+          datasets.push(...page.datasets.filter(item => item.ownerScope === "personal" && item.status === "draft")
+            .map(({ id, name, revision }) => ({ id, name, revision })));
+          cursor = page.nextCursor ?? undefined;
+        } while (cursor);
+        result = { datasets };
+      } else {
+        if (query.action === "select" && (!query.datasetId || query.expectedSelectionRevision === undefined))
+          throw new Error("Choose a Dataset and its current setting revision.");
+        const { modelId, ...state } = query.action === "select"
+          ? await client.selectCorrectionsDataset(query.datasetId!, query.expectedSelectionRevision!) : await client.defaultCorrections();
+        void modelId;
+        if (state.actorId !== query.actorId) throw new Error("The signed-in account changed. Refresh before continuing.");
+        result = DesktopCorrectionsStateSchema.parse(state);
+      }
+      if (contentHash(await input.resolveAccess()) !== contentHash(access) || await input.resolveActorId() !== query.actorId)
+        throw new Error("The signed-in account or workspace changed. Refresh before continuing.");
+      return result;
+    }
     const options = { baseUrl: access.apiBaseUrl, apiKey: access.token, teamId: access.teamId, fetch: input.fetch };
     const experiments = new OpenPondExperimentsClient(options);
     const connected = new ConnectedEvidenceClient(options);

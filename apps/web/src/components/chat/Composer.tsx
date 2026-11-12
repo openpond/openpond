@@ -104,6 +104,7 @@ import {
   type ComposerMentionMenuItem,
 } from "./ComposerMentionMenu";
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
+import { DesktopLogIssueAction } from "./DesktopLogIssueAction";
 import {
   ComposerSkillMenu,
   type ComposerSkillMenuItem,
@@ -187,6 +188,7 @@ export function Composer({
   onOpenNativeParent,
   running = busy,
   taskSessionId = null,
+  conversationId = taskSessionId ?? readOnlySession?.id ?? null,
   goalSessionId = taskSessionId,
   taskEvents = EMPTY_TASK_EVENTS,
   submissionScopeKey = "default", composerDraftStore,
@@ -1898,6 +1900,8 @@ export function Composer({
           />
         </div>
         <ComposerPrimaryControls
+          issueAction={surface === "chat" ? <DesktopLogIssueAction key={conversationId ?? "new-chat"}
+            conversationId={conversationId} inbox={taskInbox} running={running} onSubmit={onSubmit} showToast={showToast} /> : null}
           trainingControl={surface === "chat" && enableResourceContext ? <ChatContextPicker context={contextSelection} disabled={busy} placement={dropdownPlacement} /> : null}
           surface={surface}
           teamUseModel={teamUseModel}

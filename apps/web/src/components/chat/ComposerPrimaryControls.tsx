@@ -66,6 +66,7 @@ export function ComposerPrimaryControls({
   modelOptions = [],
   hideModelControls = false,
   trainingControl,
+  issueAction,
   executionControl,
   allowedModelRefs,
   modelSelectionDisabled = false,
@@ -119,6 +120,7 @@ export function ComposerPrimaryControls({
   modelOptions?: DropdownOption[];
   hideModelControls?: boolean;
   trainingControl?: ReactNode;
+  issueAction?: ReactNode;
   executionControl?: ReactNode;
   allowedModelRefs?: readonly {providerId: ChatProvider; modelId: string}[];
   modelSelectionDisabled?: boolean;
@@ -408,6 +410,7 @@ export function ComposerPrimaryControls({
         />
       ) : null}
       <div className="composer-spacer" />
+      {issueAction}
       {!hideModelControls && (
         <span
           className={`context-status-shell ${contextWindowStatus.tone}`}
