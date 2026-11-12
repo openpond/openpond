@@ -1,0 +1,27 @@
+.desktop-log-issue {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.desktop-log-issue button {
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.desktop-log-issue button:hover {
+  background: var(--accent-primary-fill);
+}
+
+.desktop-log-issue button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+

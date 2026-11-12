@@ -58,6 +58,8 @@ export type ComposerProps = {
   busy: boolean;
   running?: boolean;
   taskSessionId?: string | null;
+  /** Selected chat, including imported history without a live task inbox. */
+  conversationId?: string | null;
   goalSessionId?: string | null;
   taskEvents?: readonly RuntimeEvent[];
   submissionScopeKey?: string;

@@ -1,8 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, ChevronUp } from "../icons";
+import { renderUserMessageLinks, type OpenBrowserLink } from "./MarkdownInline";
+import { useDesktopCorrections } from "./DesktopCorrectionsContext";
 
 /** User and task handoff bubbles share a five-visible-line preview. */
-export function UserMessageContent({ content }: { content: string }) {
+export function UserMessageContent({ content, onOpenBrowserLink }: { content: string; onOpenBrowserLink?: OpenBrowserLink }) {
+  const desktop = useDesktopCorrections() !== null;
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const body = useRef<HTMLDivElement>(null);
@@ -23,7 +26,7 @@ export function UserMessageContent({ content }: { content: string }) {
     <div className="user-message-content-wrap">
       <div ref={body} id={contentId}
         className={`user-message-content ${expanded ? "" : "collapsed"}`}>
-        {content}
+        {desktop ? renderUserMessageLinks(content, onOpenBrowserLink) : content}
       </div>
       {overflows ? (
         <button type="button" className="user-message-show-more"

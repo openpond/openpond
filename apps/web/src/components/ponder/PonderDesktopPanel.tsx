@@ -46,7 +46,7 @@ export function PonderDesktopPanel(props: Props) {
   useErrorToast(snapshotQuery.error?.message ?? null);
   const [hosted, setHosted] = useState(false);
   const [setup, setSetup] = useState(false);
-  const pendingSend = useRef<{scope: string; acknowledge?: (accepted: boolean) => void} | null>(null);
+  const pendingSend = useRef<{scope: string; preservePrompt?: boolean; acknowledge?: (accepted: boolean) => void} | null>(null);
   const [error, setError] = useState<string | null>(null);
   useErrorToast(error);
   const [busy, setBusy] = useState(false);
@@ -67,7 +67,7 @@ export function PonderDesktopPanel(props: Props) {
     pending?.acknowledge?.(true);
     pendingSend.current = null;
     setBusy(false);
-    setDraft(current => current.trim() === receipt.body.trim() ? "" : current);
+    if (!pending?.preservePrompt) setDraft(current => current.trim() === receipt.body.trim() ? "" : current);
     taskInbox.acknowledgeRetainedInput();
   }, [taskInbox.acknowledgedInput, local?.session?.id, operationScope]);
   useEffect(() => {
@@ -87,10 +87,10 @@ export function PonderDesktopPanel(props: Props) {
     } catch (cause) { if (activeScope.current === operationScope) setError(localPonderError(cause)); }
     finally { if (activeScope.current === operationScope) setBusy(false); }
   }
-  async function send(attachments: ChatAttachment[], promptOverride?: string) {
+  async function send(attachments: ChatAttachment[], promptOverride?: string, preservePrompt = false) {
     const session = local?.session, prompt = (promptOverride ?? draft).trim();
     if (!session || !prompt || busy || pendingSend.current) return false;
-    const operation = {scope: operationScope, acknowledge: undefined as ((accepted: boolean) => void) | undefined};
+    const operation = {scope: operationScope, preservePrompt, acknowledge: undefined as ((accepted: boolean) => void) | undefined};
     pendingSend.current = operation;
     const durableAcknowledgement = new Promise<boolean>(resolve => { operation.acknowledge = resolve; });
     setBusy(true);
@@ -101,7 +101,8 @@ export function PonderDesktopPanel(props: Props) {
       if (!await Promise.race([taskInbox.queue(input), durableAcknowledgement])) return false;
       if (activeScope.current !== operationScope) return false;
       setSubmissionVersion(value => value + 1);
-      setDraft(current => current === draft ? "" : current); setError(null); return true;
+      if (!preservePrompt) setDraft(current => current === draft ? "" : current);
+      setError(null); return true;
     } catch (cause) { if (activeScope.current === operationScope) setError(localPonderError(cause)); return false; }
     finally { if (pendingSend.current === operation) pendingSend.current = null; if (activeScope.current === operationScope) setBusy(false); }
   }
@@ -143,7 +144,7 @@ export function PonderDesktopPanel(props: Props) {
           goalSessionId={null} enableResourceContext={false}
           taskSessionId={local?.session?.id} taskEvents={history.events} prompt={draft} onPromptChange={setDraft}
           busy={busy || !local?.session} running={running} submissionScopeKey={`ponder-local:${local?.session?.id ?? "setup"}`}
-          onSubmit={(attachments, _action, _command, options) => send(attachments ?? [], options?.promptOverride)}
+          onSubmit={(attachments, _action, _command, options) => send(attachments ?? [], options?.promptOverride, options?.preservePrompt)}
           onStop={async () => { if (local?.session) { try { await sessionApi.interruptTurn(connection, local.session.id); } catch(cause) {setError(localPonderError(cause));} } }}/>}/>}
     </div>
     {setup && local ? <PonderSetupDialog onClose={() => setSetup(false)}>

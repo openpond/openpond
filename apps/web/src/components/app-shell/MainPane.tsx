@@ -1795,6 +1795,7 @@ export function MainPane({
                 busy={turnRunning}
                 running={turnRunning}
                 taskSessionId={liveSessionId}
+                conversationId={selectedSessionId}
                 goalSessionId={selectedSessionId}
                 taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
@@ -1893,6 +1894,7 @@ export function MainPane({
                 busy={turnRunning}
                 running={turnRunning}
                 taskSessionId={liveSessionId}
+                conversationId={selectedSessionId}
                 goalSessionId={selectedSessionId}
                 taskEvents={runtimeEvents}
                 submissionScopeKey={composerSubmissionScopeKey}
