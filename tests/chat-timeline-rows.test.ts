@@ -9,6 +9,18 @@ import {
 } from "../apps/web/src/lib/chat-timeline-rows";
 
 describe("chat timeline rows", () => {
+  // The report is conversation content; collapsing adjacent tools must not
+  // hide it or move it out of its original position in the transcript.
+  test("keeps subagent handoff reports outside collapsed activity runs", () => {
+    const tool: ChatMessage = { ...message("tool", "activity_group", ""), activities: [] };
+    const report: ChatMessage = { ...message("report", "activity_group", ""), activities: [{
+      id: "handoff", label: "Child message received", content: "Full report", timestamp: tool.timestamp,
+      subagentMessage: { direction: "received", summary: "Full report", body: "# Result\n\nFull report", messageId: "handoff", kind: "handoff", fromRunId: "child" },
+    }] };
+    const following = { ...tool, id: "following" };
+    const rows = buildChatTimelineRows([tool, report, following]).flatMap(row => row.type === "message" ? [row] : []);
+    expect(groupActivityRuns(rows).map(row => row.message)).toEqual([tool, report, following]);
+  });
 
   // A completed turn or late delivery must never hide peer communication.
   // Preserve every message and its position as the transcript grows.

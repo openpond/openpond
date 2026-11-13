@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Session } from "@openpond/contracts";
-import { Bot, GitBranch, Workflow } from "../icons";
+import { Bot, Workflow } from "../icons";
 
 export type SidebarThreadGroup = { id: string; title: string; role: "parent" | "child" };
 
@@ -43,7 +43,7 @@ export function SidebarThreadGroupIndicator({
   for (const character of group.id) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;
   const style = { color: `var(--sidebar-thread-group-${(hash % 8) + 1})` } as CSSProperties;
   const label = `${group.role === "parent" ? "Parent conversation" : "Subagent conversation"} · ${group.title}`;
-  const Icon = group.role === "child" ? Bot : inbox ? Workflow : GitBranch;
+  const Icon = inbox && group.role === "parent" ? Workflow : Bot;
   return (
     <span
       className="sidebar-thread-group-indicator"
