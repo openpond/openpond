@@ -1,18 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import type { ReactNode } from "react";
 import type { ActivityItem } from "../../lib/app-models";
-import { copyToClipboard } from "../../lib/clipboard";
+import { useFilePathContextMenu } from "../common/FilePathContextMenu";
 import { revealLocalFile } from "../../lib/desktop-files";
-import { Copy, FileText, FolderOpen } from "../icons";
+import { FileText, FolderOpen } from "../icons";
 
 type FileArtifact = NonNullable<ActivityItem["artifacts"]>[number];
-
-type FileArtifactContextMenu = {
-  path: string;
-  title: string;
-  x: number;
-  y: number;
-};
 
 export function ActivityFileArtifact({
   artifact,
@@ -23,26 +15,22 @@ export function ActivityFileArtifact({
   onOpenFileInSidebar?: (path: string) => void;
   preview?: ReactNode;
 }) {
-  const [contextMenu, setContextMenu] =
-    useState<FileArtifactContextMenu | null>(null);
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const { openFilePathMenu, filePathMenu } = useFilePathContextMenu();
 
   return (
     <>
       <div
         className="activity-artifact"
         title={artifact.path}
-        onClick={onOpenFileInSidebar ? event => {
-          if (!(event.target as Element).closest("button")) onOpenFileInSidebar(artifact.path);
-        } : undefined}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          setContextMenu({
-            path: artifact.path,
-            title: artifact.title,
-            ...contextMenuPosition(event.clientX, event.clientY),
-          });
-        }}
+        onClick={
+          onOpenFileInSidebar
+            ? (event) => {
+                if (!(event.target as Element).closest("button"))
+                  onOpenFileInSidebar(artifact.path);
+              }
+            : undefined
+        }
+        onContextMenu={(event) => openFilePathMenu(event, artifact.path, artifact.title)}
       >
         {onOpenFileInSidebar ? (
           <button
@@ -51,7 +39,13 @@ export function ActivityFileArtifact({
             type="button"
             onClick={() => onOpenFileInSidebar(artifact.path)}
           >
-            {preview ? <span className="activity-artifact-preview" aria-hidden>{preview}</span> : <FileText aria-hidden size={14} />}
+            {preview ? (
+              <span className="activity-artifact-preview" aria-hidden>
+                {preview}
+              </span>
+            ) : (
+              <FileText aria-hidden size={14} />
+            )}
             <strong>{artifact.title}</strong>
           </button>
         ) : (
@@ -71,77 +65,7 @@ export function ActivityFileArtifact({
           </button>
         </span>
       </div>
-      <FileArtifactContextMenu menu={contextMenu} onClose={closeContextMenu} />
+      {filePathMenu}
     </>
   );
-}
-
-function FileArtifactContextMenu({
-  menu,
-  onClose,
-}: {
-  menu: FileArtifactContextMenu | null;
-  onClose: () => void;
-}) {
-  const copyButtonRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    if (!menu) return undefined;
-    copyButtonRef.current?.focus();
-    const close = () => onClose();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("pointerdown", close);
-    window.addEventListener("blur", close);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("scroll", close, true);
-    return () => {
-      window.removeEventListener("pointerdown", close);
-      window.removeEventListener("blur", close);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [menu, onClose]);
-
-  if (!menu || typeof document === "undefined") return null;
-  return createPortal(
-    <div
-      aria-label={`${menu.title} file actions`}
-      className="activity-artifact-context-menu"
-      role="menu"
-      style={{ left: menu.x, top: menu.y }}
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      <button
-        ref={copyButtonRef}
-        role="menuitem"
-        type="button"
-        onClick={() => {
-          void copyToClipboard(menu.path);
-          onClose();
-        }}
-      >
-        <Copy aria-hidden size={14} />
-        <span>Copy path</span>
-      </button>
-    </div>,
-    document.body,
-  );
-}
-
-function contextMenuPosition(
-  requestedX: number,
-  requestedY: number,
-): { x: number; y: number } {
-  const margin = 8;
-  const width = 164;
-  const height = 42;
-  return {
-    x: Math.max(margin, Math.min(requestedX, window.innerWidth - width - margin)),
-    y: Math.max(
-      margin,
-      Math.min(requestedY, window.innerHeight - height - margin),
-    ),
-  };
 }
