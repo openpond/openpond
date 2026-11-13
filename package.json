@@ -1,6 +1,6 @@
 {
   "name": "@openpond/workspace",
-  "version": "0.2.73",
+  "version": "0.2.74",
   "private": true,
   "openpondReleaseVersioned": true,
   "type": "module",
