@@ -1,5 +1,6 @@
 import { acpSessionCatalog } from "./session-controls.js";
 import { homedir } from "node:os";
+import { realpath, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { AcpClient } from "@openpond/agent-runtime/acp/client";
@@ -9,6 +10,7 @@ import { ProviderModelSchema, isRegisteredAcpProvider, type ProviderSettings, ty
 import { isNativeAgentId, NATIVE_AGENTS, nativeAgentLaunch, type NativeAgentId } from "./config.js";
 import { createNativeCapabilityProbe } from "./capability-probes.js";
 import { refreshLocalExecutablePath } from "@openpond/runtime/executable-search-path";
+import { readClaudeInstallationStatus } from "./claude-installation-status.js";
 
 export type NativeAgentSetupResult = {
   provider: NativeAgentId;
@@ -21,8 +23,9 @@ export type NativeAgentSetupResult = {
   authMethods: Array<{ id: string; name: string; description?: string; type?: string }>;
   capabilities: import("@openpond/agent-runtime").AcpInitializeResult["agentCapabilities"] | null;
   session: AcpSessionResult | null;
+  installation?: import("@openpond/contracts/providers").NativeInstallationStatus;
 };
-const cache = new Map<string, { result: NativeAgentSetupResult; expires: number }>();
+const cache = new Map<string, { result: NativeAgentSetupResult; expires: number; executableFingerprint?: string }>();
 const probing = new Map<string, Promise<NativeAgentSetupResult>>();
 
 export async function probeNativeAgent(provider: NativeAgentId, config?: Partial<ProviderConfig>, options: { force?: boolean; authMethodId?: string; signal?: AbortSignal } = {}): Promise<NativeAgentSetupResult> {
@@ -30,8 +33,14 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
   if (!config?.binaryPath) await refreshLocalExecutablePath(options.force);
   options.signal?.throwIfAborted();
   const launch = nativeAgentLaunch(provider, config);
+  // Native installers replace a symlink in place. Keep session ownership stable,
+  // but never retain the previous executable's models after that replacement.
+  const executableFingerprint = await realpath(launch.command).then(async path => {
+    const info = await stat(path);
+    return JSON.stringify([path, info.size, info.mtimeMs]);
+  }).catch(() => "missing");
   const prior = cache.get(launch.instanceId);
-  if (!options.force && !options.authMethodId && prior && prior.expires > Date.now()) return prior.result;
+  if (!options.force && !options.authMethodId && prior && prior.expires > Date.now() && prior.executableFingerprint === executableFingerprint) return prior.result;
   const active = probing.get(launch.instanceId);
   if (active && !options.signal) return active;
   const operation = (async () => {
@@ -45,6 +54,7 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
     const stop = () => stopping ??= client.stop();
     const abort = () => { void stop(); };
     signal.addEventListener("abort", abort, { once: true });
+    let installation: Promise<void> | undefined;
     try {
       signal.throwIfAborted();
       const info = await client.initialize();
@@ -67,6 +77,7 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
         if (!auth.loggedIn) { result.status = "needs_login"; throw new Error("Sign in using Claude Code's native login, then reconnect."); }
         const version = await promisify(execFile)(launch.command, ["--version"], { env: launch.env, signal, timeout: 10_000, maxBuffer: 4096 });
         result.version = version.stdout.trim().slice(0, 200);
+        installation = readClaudeInstallationStatus(launch, result.version, signal).then(value => { result.installation = value; });
       }
       result.version ??= info.agentInfo?.version ?? null;
       result.authMethods = info.authMethods ?? [];
@@ -82,9 +93,9 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
       const code = error && typeof error === "object" && "code" in error ? error.code : null;
       result.status = code === "ENOENT" ? "missing" : result.status === "needs_login" || (code === -32000 && error instanceof Error && error.message === "Authentication required") ? "needs_login" : "unavailable";
       result.error = error instanceof Error ? error.message : "Native agent connection failed.";
-    } finally { signal.removeEventListener("abort", abort); await stop(); }
+    } finally { signal.removeEventListener("abort", abort); await Promise.all([stop(), installation]); }
     if (signal.aborted) throw signal.reason;
-    cache.set(launch.instanceId, { result, expires: Date.now() + (result.status === "ready" ? 300_000 : 30_000) });
+    cache.set(launch.instanceId, { result, executableFingerprint, expires: Date.now() + (result.status === "ready" ? 300_000 : 30_000) });
     return result;
   })();
   if (!options.signal) probing.set(launch.instanceId, operation);
@@ -114,6 +125,7 @@ export async function applyNativeAgentStatus(settings: ProviderSettings): Promis
     status.credential.connected = result?.status === "ready";
     status.credential.source = result?.status === "ready" ? "native_agent_login" : "none";
     status.lastError = result?.error ?? null;
+    if (result?.installation) status.nativeInstallation = result.installation;
     if (result?.session?.models) {
       const models = result.session.models.availableModels.map((model) => ProviderModelSchema.parse({ id: model.modelId, providerId: id, displayName: model.name, source: "provider", capabilities: { streaming: true, toolCalling: true, vision: status.capabilities.imageInput } }));
       settings.modelCaches[id] = { providerId: id, models, fetchedAt: new Date().toISOString(), source: "provider", lastError: null };

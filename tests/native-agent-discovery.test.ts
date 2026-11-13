@@ -5,13 +5,15 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { nativeAgentLaunch } from "../apps/server/src/runtime/native-agents/config.js";
-import { probeNativeAgent } from "../apps/server/src/runtime/native-agents/setup.js";
+import { applyNativeAgentStatus, probeNativeAgent } from "../apps/server/src/runtime/native-agents/setup.js";
+import { ProviderSettingsSchema } from "@openpond/contracts/providers";
 import { resolveLocalExecutablePath } from "../packages/runtime/src/executable-search-path.js";
 
 const execute = promisify(execFile);
 const fixtures: string[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   await Promise.all(fixtures.splice(0).map(home => rm(home, { recursive: true, force: true })));
 });
 
@@ -21,6 +23,7 @@ async function fixture() {
   vi.stubEnv("HOME", home);
   for (const key of ["NVM_DIR", "FNM_DIR", "MISE_DATA_DIR", "ASDF_DATA_DIR", "NODENV_ROOT", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "npm_config_prefix", "NPM_CONFIG_PREFIX", "NPM_CONFIG_USERCONFIG", "npm_config_userconfig"]) vi.stubEnv(key, undefined);
   vi.stubEnv("PATH", "/usr/bin:/bin");
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("2.1.323")));
   return home;
 }
 
@@ -35,6 +38,7 @@ async function launcher(home: string, relative: string) {
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args.includes('--version')) { console.log('2.1.300'); process.exit(0); }
+if (args[0] === 'doctor') { console.log('Auto-update channel: stable'); process.exit(0); }
 if (args[0] === 'auth') { console.log(JSON.stringify({loggedIn:true})); process.exit(0); }
 require('node:readline').createInterface({input:process.stdin}).on('line', line => {
  const value = JSON.parse(line);
@@ -65,6 +69,7 @@ describe.skipIf(process.platform === "win32")("native installer discovery", () =
     const executable = await launcher(home, relative);
     const result = await probeNativeAgent("claude-code", { sourceHome: path.join(home, ".claude") }, { force: true });
     expect(result.status, result.error ?? "").toBe("ready");
+    expect(result.installation).toMatchObject({ version: "2.1.300", channel: "stable", latestVersion: "2.1.323", updateAvailable: true });
     expect(result.session?.models?.availableModels.map(model => model.modelId)).toEqual(["fixture-model"]);
     const launch = nativeAgentLaunch("claude-code");
     expect(launch.command).toBe(executable);
@@ -83,6 +88,29 @@ describe.skipIf(process.platform === "win32")("native installer discovery", () =
     expect(after.command).toBe(executable);
     expect(after.instanceId).not.toBe(before.instanceId);
     expect((await execute(after.command, ['--version'], { env: after.env })).stdout.trim()).toBe("2.1.300");
+  });
+
+  // An updater can replace the binary behind the same launcher. A normal
+  // status load must discard the old model catalog without changing ownership.
+  test("reloads models after an in-place Claude update without a forced refresh", async () => {
+    const home = await fixture();
+    vi.stubEnv("DISCOVERY_TRACE", path.join(home, "trace"));
+    const binaryPath = await launcher(home, ".local/bin");
+    const config = { binaryPath, sourceHome: path.join(home, ".claude") };
+    const before = await probeNativeAgent("claude-code", config);
+    expect(before.status).toBe("ready");
+    const source = await readFile(binaryPath, "utf8");
+    await writeFile(binaryPath, source.replaceAll("2.1.300", "2.1.323").replaceAll("fixture-model", "new-model-after-update"));
+    const after = await probeNativeAgent("claude-code", config);
+    expect(after.instanceId).toBe(before.instanceId);
+    expect(after.version).toBe("2.1.323");
+    expect(after.installation?.updateAvailable).toBe(false);
+    expect(after.session?.models?.availableModels.map(model => model.modelId)).toEqual(["new-model-after-update"]);
+    const settings = ProviderSettingsSchema.parse({ providers: { "claude-code": { ...config, enabled: true } }, statuses: { "claude-code": { id: "claude-code", displayName: "Claude Code" } } });
+    const status = ProviderSettingsSchema.parse(await applyNativeAgentStatus(settings)).statuses["claude-code"]!;
+    expect(status.available).toBe(true);
+    expect(status.nativeInstallation).toMatchObject({ version: "2.1.323", latestVersion: "2.1.323", updateAvailable: false });
+    expect(status.modelIds).toEqual(["new-model-after-update"]);
   });
 
   test("falls back to another login shell when the configured shell fails", async () => {
