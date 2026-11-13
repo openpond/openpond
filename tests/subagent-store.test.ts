@@ -2,10 +2,49 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
-import type { SubagentMessage, SubagentRun } from "@openpond/contracts";
+import type { RuntimeEvent, SubagentMessage, SubagentRun } from "@openpond/contracts";
 import { SqliteStore } from "../apps/server/src/store/store";
 
 describe("subagent store", () => {
+  // A completion report must retain the whole answer across storage/reopen,
+  // rather than reporting its final token or mixing another turn/session in.
+  test("reads complete streamed and snapshotted child responses after reopen", async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "openpond-child-response-"));
+    let store = new SqliteStore(home);
+    let index = 0;
+    const append = (patch: Partial<RuntimeEvent>) => store.appendRuntimeEvent({
+      id: `response-event-${index++}`, sessionId: "child", turnId: "streamed",
+      name: "assistant.delta", source: "provider", timestamp: new Date().toISOString(), ...patch,
+    });
+    try {
+      expect(await store.latestAssistantTextForSession("child")).toBeNull();
+      await append({ output: "Prior response", turnId: "previous" });
+      await append({ output: "Working on the review", data: { itemId: "progress", phase: "commentary" } });
+      const chunks = ["Full review:", "\n\n", ...Array.from({ length: 30 }, (_, i) => `finding ${i}; `), "."];
+      for (const output of chunks) await append({ output, data: { itemId: "review", phase: "final_answer" } });
+      await append({ sessionId: "other-child", output: "Unrelated result." });
+      await store.close();
+      store = new SqliteStore(home);
+      expect(await store.latestAssistantTextForSession("child")).toBe(chunks.join(""));
+
+      await append({ turnId: "completed", output: ".", data: { itemId: "completed-review", phase: "final_answer" } });
+      await append({ turnId: "completed", name: "turn.completed", data: { turn: { items: [
+        { type: "agentMessage", text: "Full authoritative review.", phase: "final_answer" },
+        { type: "agentMessage", text: "Excluded commentary", phase: "commentary" },
+      ] } } });
+      expect(await store.latestAssistantTextForSession("child")).toBe("Full authoritative review.");
+
+      await append({ turnId: "native", output: "Partial", data: { nativeMessageId: "native" } });
+      await append({ turnId: "native", output: "Final native response.", data: { nativeMessageId: "native", nativeMessageSnapshot: true, phase: "final_answer" } });
+      expect(await store.latestAssistantTextForSession("child")).toBe("Final native response.");
+      await append({ turnId: "empty", name: "turn.completed", data: { turn: { items: [] } } });
+      expect(await store.latestAssistantTextForSession("child")).toBeNull();
+    } finally {
+      await store.close();
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("persists subagent runs and parent-scoped mailbox messages", async () => {
     const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-subagent-store-"));
     const store = new SqliteStore(storeDir);

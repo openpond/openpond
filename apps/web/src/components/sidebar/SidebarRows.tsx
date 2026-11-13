@@ -50,6 +50,7 @@ import { isTaskDraftSession } from "../../lib/task-drafts";
 import { SidebarAnimatedTitle } from "./SidebarAnimatedTitle";
 import { ConversationSourceIcon } from "./ConversationSourceIcon";
 import { SidebarRelativeTime } from "./SidebarRelativeTime";
+import { SidebarThreadGroupIndicator, type SidebarThreadGroup } from "./SidebarThreadGroupIndicator";
 import "../../styles/sidebar/thread-inbox.css";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
@@ -196,6 +197,7 @@ export function SidebarSessionRow({
   projectLabel,
   inbox = false,
   activityAt,
+  threadGroup,
   ariaDescribedBy,
   childSessionCount = 0,
   childSessionsExpanded = false,
@@ -225,6 +227,7 @@ export function SidebarSessionRow({
   projectLabel?: string | null;
   inbox?: boolean;
   activityAt?: number;
+  threadGroup?: SidebarThreadGroup;
   metadataPresentation?: "inline" | "hover-detail" | "flyout";
   ariaDescribedBy?: string;
   childSessionCount?: number;
@@ -246,7 +249,7 @@ export function SidebarSessionRow({
   const goalRunning = goalRuntime?.tone === "active" && !goalQueued;
   const subagentRunning = (subagentRuntime?.activeCount ?? 0) > 0;
   const hasChildSessions =
-    childSessionCount > 0 && Boolean(onToggleChildSessions);
+    !inbox && childSessionCount > 0 && Boolean(onToggleChildSessions);
   const rowRunning =
     subagentRunning ||
     goalRunning ||
@@ -323,6 +326,7 @@ export function SidebarSessionRow({
           )}
         </button>
       ) : null}
+      {!inbox && threadGroup ? <SidebarThreadGroupIndicator group={threadGroup} inbox={false} /> : null}
       <span
         className="row-label-shell"
         title={session.title}
@@ -338,6 +342,7 @@ export function SidebarSessionRow({
         </span>
         {inbox ? <span className="sidebar-inbox-project">
           {projectLabel ? <><span className="sidebar-inbox-project-name">{projectLabel}</span><span aria-hidden="true">|</span></> : null}
+          {threadGroup ? <SidebarThreadGroupIndicator group={threadGroup} inbox /> : null}
           <SidebarRelativeTime value={activityAt ?? session.createdAt} />
         </span> : null}
       </span>
