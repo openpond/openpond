@@ -4,12 +4,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { CodexAppServerClient } from "@openpond/codex-provider";
 import type { PlanUsageProvider, ProviderConfig, ProviderPlanUsage } from "@openpond/contracts";
+import { ProviderPlanUsageSchema } from "@openpond/contracts";
+import { readCache, writeCache } from "@openpond/persistence";
 import { nativeAgentLaunch } from "../runtime/native-agents/config.js";
 import { readClaudePlanCredentials } from "./claude-plan-credentials.js";
 import { claudeUsageWindows, codexUsageWindows, record } from "./plan-usage-normalization.js";
 
 type UsageResult = Pick<ProviderPlanUsage, "status" | "windows" | "message">;
-type PreparedRead = { key: string; read: () => Promise<UsageResult> };
+type PreparedRead = { key: string; persistent?: boolean; read: () => Promise<UsageResult> };
 const unavailable = (message: string): UsageResult => ({ status: "unavailable", windows: [], message });
 const signedOut = (message: string): UsageResult => ({ status: "signed_out", windows: [], message });
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -17,30 +19,53 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 export function createPlanUsageService(options: {
   prepare?: (provider: PlanUsageProvider, config?: Partial<ProviderConfig>) => Promise<PreparedRead>;
   now?: () => number;
+  home?: string;
 } = {}) {
   const now = options.now ?? Date.now;
   const prepare = options.prepare ?? prepareUsageRead;
   const cache = new Map<PlanUsageProvider, { key: string; value: ProviderPlanUsage }>();
   const pending = new Map<string, Promise<ProviderPlanUsage>>();
-  return async (provider: PlanUsageProvider, config?: Partial<ProviderConfig>): Promise<ProviderPlanUsage> => {
+  async function retained(provider: PlanUsageProvider, prepared: PreparedRead): Promise<ProviderPlanUsage | undefined> {
+    if (prepared.persistent === false) return;
+    const prior = cache.get(provider);
+    if (prior?.key === prepared.key) return prior.value;
+    if (!options.home) return;
+    const stored = await readCache(options.home, "provider-plan-usage", hash(`${provider}:${prepared.key}`), { allowStale: true }).catch(() => null);
+    const parsed = ProviderPlanUsageSchema.safeParse(stored?.payload);
+    if (parsed.success && parsed.data.provider === provider) {
+      cache.set(provider, { key: prepared.key, value: parsed.data });
+      return parsed.data;
+    }
+  }
+  const readUsage = async (provider: PlanUsageProvider, config?: Partial<ProviderConfig>): Promise<ProviderPlanUsage> => {
     const ttl = provider === "claude-code" ? 300_000 : 60_000;
     const snapshot = (result: UsageResult): ProviderPlanUsage => ({ provider, ...result, fetchedAt: new Date(now()).toISOString(), refreshAfter: new Date(now() + ttl).toISOString() });
     let prepared: PreparedRead;
     try { prepared = await prepare(provider, config); }
     catch { return snapshot(unavailable("Could not read the local provider login. Check the connection and try again.")); }
-    const prior = cache.get(provider);
-    if (prior?.key === prepared.key && Date.parse(prior.value.refreshAfter) > now()) return prior.value;
+    const prior = await retained(provider, prepared);
+    if (prior && Date.parse(prior.refreshAfter) > now()) return prior;
     const key = `${provider}:${prepared.key}`;
     const active = pending.get(key);
     if (active) return active;
-    const operation = prepared.read().catch(() => unavailable("Usage is temporarily unavailable. It will refresh automatically.")).then(result => {
-      const value = snapshot(result);
+    const operation = prepared.read().catch(() => unavailable("Usage is temporarily unavailable. It will refresh automatically.")).then(async result => {
+      // A native login can change while the provider request is in flight.
+      const current = await prepare(provider, config).catch(() => null);
+      if (!current || current.key !== prepared.key) return snapshot(unavailable("Provider login changed. Usage will refresh automatically."));
+      const value = result.status === "unavailable" && prior?.status === "ready"
+        ? { ...prior, message: result.message, refreshAfter: new Date(now() + ttl).toISOString() }
+        : snapshot(result);
       cache.set(provider, { key: prepared.key, value });
+      if (options.home && prepared.persistent !== false) await writeCache(options.home, "provider-plan-usage", hash(key), value, { ttlMs: ttl }).catch(() => undefined);
       return value;
     }).finally(() => pending.delete(key));
     pending.set(key, operation);
     return operation;
   };
+  return Object.assign(readUsage, { cached: async (provider: PlanUsageProvider, config?: Partial<ProviderConfig>) => {
+    const prepared = await prepare(provider, config).catch(() => null);
+    return prepared ? retained(provider, prepared) : undefined;
+  } });
 }
 
 async function prepareUsageRead(provider: PlanUsageProvider, config?: Partial<ProviderConfig>): Promise<PreparedRead> {
@@ -48,7 +73,7 @@ async function prepareUsageRead(provider: PlanUsageProvider, config?: Partial<Pr
     const launch = nativeAgentLaunch(provider, config);
     const credentials = await readClaudePlanCredentials(launch);
     return {
-      key: `${launch.instanceId}:${hash(credentials?.token ?? "signed-out")}`,
+      key: `${launch.instanceId}:${hash(credentials?.token ?? "signed-out")}:${credentials?.expiresAt !== null && credentials?.expiresAt !== undefined && credentials.expiresAt <= Date.now() ? "expired" : "current"}`,
       read: async () => {
         if (!credentials) return signedOut("Sign in to a Claude subscription using Claude Code to see plan usage.");
         if (credentials.expiresAt !== null && credentials.expiresAt <= Date.now()) return signedOut("Open Claude Code to renew your login, then refresh usage.");
@@ -67,8 +92,8 @@ async function prepareUsageRead(provider: PlanUsageProvider, config?: Partial<Pr
   }
   const home = process.env.CODEX_HOME || join(homedir(), ".codex");
   // Credential contents never leave this process. Changes invalidate account-scoped cache entries.
-  const identity = await readFile(join(home, "auth.json"), "utf8").then(hash).catch(() => "native-login");
-  return { key: `${config?.binaryPath || "codex"}:${home}:${identity}`, read: () => readCodexUsage(config?.binaryPath ?? undefined) };
+  const identity = await readFile(join(home, "auth.json"), "utf8").then(hash).catch(() => null);
+  return { key: `${config?.binaryPath || "codex"}:${home}:${identity ?? "native-login"}`, persistent: identity !== null, read: () => readCodexUsage(config?.binaryPath ?? undefined) };
 }
 
 async function readCodexUsage(binaryPath?: string): Promise<UsageResult> {

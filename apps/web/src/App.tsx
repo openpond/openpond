@@ -8,6 +8,8 @@ import { NativeLoginProvider } from "./components/terminal/NativeLoginProvider";
 import { AppToastProvider } from "./app/AppToastContext";
 import { useAppStartupProgress } from "./components/splash/AppStartupBoundary";
 import { DesktopCorrectionsProvider } from "./components/chat/DesktopCorrectionsContext";
+import { ProviderPlanUsageBootstrapContext } from "./hooks/useProviderPlanUsage";
+import { useMemo } from "react";
 
 const queries = createWorkspaceQueryClient();
 
@@ -18,14 +20,17 @@ export function App() {
 function AppRuntime() {
   const primary = useAppPrimaryRuntime();
   const secondary = useAppSecondaryRuntime(primary);
+  const usageBootstrap = useMemo(() => ({ connection: primary.connection, usage: primary.bootstrap?.providerPlanUsage ?? {} }), [primary.connection, primary.bootstrap?.providerPlanUsage]);
   useAppStartupProgress(primary.startup);
   return <AppToastProvider showToast={primary.showToast}><NativeLoginProvider connection={primary.connection} onProviders={providers => {
     if (primary.bootstrap) primary.applyBootstrapPayload({ ...primary.bootstrap, providers });
   }}>
+    <ProviderPlanUsageBootstrapContext.Provider value={usageBootstrap}>
     <DesktopCorrectionsProvider connection={primary.connection} payload={primary.bootstrap}>
     <AppRuntimeView primary={primary} secondary={secondary} />
     <DesktopGettingStarted ready={primary.startup.ready} connection={primary.connection}
       payload={primary.bootstrap} onPayload={primary.applyBootstrapPayload} />
     </DesktopCorrectionsProvider>
+    </ProviderPlanUsageBootstrapContext.Provider>
   </NativeLoginProvider></AppToastProvider>;
 }

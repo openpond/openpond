@@ -162,12 +162,18 @@ export function ComposerPrimaryControls({
   const cached = connection
     ? cachedNativeAgentCatalog(connection, provider, initialProviderSettings?.providers[provider])
     : null;
-  const refreshedSettings =
+  const discoveredSettings =
     nativeSettings?.connection === connection &&
     nativeSettings.provider === provider &&
     nativeSettings.instance === instance
       ? nativeSettings.settings
       : (cached?.settings ?? null);
+  // A normal status load can discover an updated CLI's catalog while this
+  // composer stays mounted. Do not let its retained probe mask newer models.
+  const refreshedSettings = discoveredSettings &&
+    (discoveredSettings.modelCaches[provider]?.fetchedAt ?? "") >=
+      (initialProviderSettings?.modelCaches[provider]?.fetchedAt ?? "")
+      ? discoveredSettings : null;
   const providerSettings = useMemo(() => {
     if (!refreshedSettings) return initialProviderSettings;
     if (!initialProviderSettings) return refreshedSettings;
