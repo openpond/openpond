@@ -25,7 +25,7 @@ export function assistantResponseText(events: readonly RuntimeEvent[]): string |
           item.phase !== "reasoning" &&
           item.phase !== "analysis",
       );
-    const final = messages.findLast((item) => item?.phase === "final_answer") ?? messages.at(-1);
+    const final = messages.filter((item) => item?.phase === "final_answer").at(-1) ?? messages.at(-1);
     if (final) return (final.text as string).trim();
   }
 
