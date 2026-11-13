@@ -6,7 +6,7 @@ const releaseOrigin = "https://downloads.claude.ai/claude-code-releases";
 const versionPattern = /^\d+\.\d+\.\d+$/;
 
 /** Public release metadata is shared; installation and account diagnostics are not. */
-export function createClaudeReleaseReader(fetchImpl: typeof fetch = fetch) {
+export function createClaudeReleaseReader(fetchImpl?: typeof fetch) {
   let pending: Promise<{ stableVersion: string | null; latestVersion: string | null; updateError: string | null; checkedAt: string }> | null = null;
   let expiresAt = 0;
   return () => {
@@ -15,7 +15,7 @@ export function createClaudeReleaseReader(fetchImpl: typeof fetch = fetch) {
     pending = (async () => {
       try {
         const [stableVersion, latestVersion] = await Promise.all(["stable", "latest"].map(async channel => {
-          const response = await fetchImpl(`${releaseOrigin}/${channel}`, { signal: AbortSignal.timeout(5_000), redirect: "error", credentials: "omit" });
+          const response = await (fetchImpl ?? fetch)(`${releaseOrigin}/${channel}`, { signal: AbortSignal.timeout(5_000), redirect: "error", credentials: "omit" });
           if (!response.ok) throw new Error("Release check failed");
           const version = (await response.text()).trim();
           if (!versionPattern.test(version)) throw new Error("Invalid release version");

@@ -7,7 +7,7 @@ import { planUsageIsStale } from "../../lib/provider-plan-usage";
 import "../../styles/settings/provider-plan-usage.css";
 
 function percent(value: number): string {
-  return `${Math.floor(value)}%`;
+  return `${Math.round(value)}%`;
 }
 
 function resetLabel(window: PlanUsageWindow): string {
@@ -42,11 +42,14 @@ export function ProviderPlanUsage({ connection, provider, sharedOnly = false }: 
 
   return <section className="provider-plan-usage" aria-label={`${name} plan usage`} aria-busy={query.isFetching}>
     {available ? <>
-      {(sharedOnly ? sharedWindows : usage.windows).map(window => <div className="plan-usage-window" key={window.id}>
-        <div><span>{window.label}</span><strong>{percent(window.remainingPercent)}{stale ? " · last known" : ""}</strong></div>
-        <meter min={0} max={100} low={10} high={25} optimum={100} value={window.remainingPercent} aria-label={`${name} ${window.label} remaining`} />
-        <small>{resetLabel(window)}</small>
-      </div>)}
+      {(sharedOnly ? sharedWindows : usage.windows).map(window => {
+        const usedPercent = Math.max(0, Math.min(100, 100 - window.remainingPercent));
+        return <div className="plan-usage-window" key={window.id}>
+          <div><span>{window.label}</span><strong>{percent(usedPercent)} used{stale ? " · last known" : ""}</strong></div>
+          <meter min={0} max={100} low={75} high={90} optimum={0} value={usedPercent} aria-label={`${name} ${window.label} used`} />
+          <small>{resetLabel(window)}</small>
+        </div>;
+      })}
     </> : <p role="status">{usage?.status === "signed_out" || usage?.status === "unsupported" ? usage.message : query.isPending ? (connection ? "Loading plan usage…" : "Connect to load plan usage.") : "No usage reading yet."}</p>}
   </section>;
 }
