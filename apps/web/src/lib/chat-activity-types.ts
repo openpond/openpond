@@ -38,6 +38,7 @@ export type ActivityItem = {
     toRunId?: string | null;
     toRole?: string | null;
     childSessionId?: string | null;
+    childTitle?: string | null;
     roleId?: string | null;
     modelRef?: {
       providerId: string;

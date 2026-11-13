@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useFilePathContextMenu } from "../common/FilePathContextMenu";
 import { ArrowUpRight, ChevronDown } from "../icons";
 import type { WorkspaceDiffFile, WorkspaceDiffSummary } from "@openpond/contracts";
 
@@ -61,11 +62,12 @@ function ChangeSummaryFile({
   onToggle: () => void;
 }) {
   const counts = displayFileCounts(file);
+  const { openFilePathMenu, filePathMenu } = useFilePathContextMenu();
   const patchUnavailable = isAccessErrorPatch(file.patch);
   return (
     <div className="change-summary-file">
       <div className="change-summary-file-trigger">
-        <button type="button" className="change-summary-file-toggle" onClick={onToggle}>
+        <button type="button" className="change-summary-file-toggle" onClick={onToggle} onContextMenu={event => openFilePathMenu(event, file.path)}>
           <span>{file.path}</span>
         </button>
         <span className="change-summary-counts">
@@ -93,6 +95,7 @@ function ChangeSummaryFile({
           <ChevronDown className={open ? "expanded" : ""} size={14} />
         </button>
       </div>
+      {filePathMenu}
       {open && patchUnavailable && (
         <div className="change-summary-patch-unavailable">Patch is no longer available for this workspace path.</div>
       )}

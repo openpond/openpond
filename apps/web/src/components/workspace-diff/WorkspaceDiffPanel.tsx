@@ -1381,7 +1381,7 @@ function WorkspaceDiffPanelInner({
   const waitingForLocalWorkspace = workspaceKind === "local_project" && !workspaceInitialized && !workspaceError;
   const panelLoading = sandboxMode ? sandboxLoading : loading;
   const panelError = sandboxMode ? sandboxError : workspaceError;
-  const sourceStatus = sourceStatusForDiff({
+  const sourceStatus = sandboxMode ? sourceStatusForDiff({
     changedFiles: displayDiff?.filesChanged ?? files.length,
     checkpointStatus,
     dirty: Boolean(displayDiff?.dirty),
@@ -1390,7 +1390,7 @@ function WorkspaceDiffPanelInner({
     preservedReadback: usingSandboxSourceReadback,
     sandboxMode,
     sourcePending: sandboxMode && !sandboxId,
-  });
+  }) : null;
   const emptyMessage = panelLoading
     ? "Loading workspace files"
     : panelError
