@@ -47,7 +47,6 @@ export function ProviderPlanUsage({ connection, provider, sharedOnly = false }: 
         <meter min={0} max={100} low={10} high={25} optimum={100} value={window.remainingPercent} aria-label={`${name} ${window.label} remaining`} />
         <small>{resetLabel(window)}</small>
       </div>)}
-      {stale ? <small>Last checked {new Date(usage.fetchedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.</small> : null}
     </> : <p role="status">{usage?.status === "signed_out" || usage?.status === "unsupported" ? usage.message : query.isPending ? (connection ? "Loading plan usage…" : "Connect to load plan usage.") : "No usage reading yet."}</p>}
   </section>;
 }
