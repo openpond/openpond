@@ -27,7 +27,7 @@ export function groupActivityRuns(rows: readonly ChatTimelineMessageRow[]): Chat
   for (const row of rows) {
     const message = row.message;
     const ordinaryActivity = message.role === "activity_group" && !message.deliverables?.length
-      && !message.userQuestion;
+      && !message.userQuestion && !message.activities?.some(activity => activity.subagentMessage);
     if (ordinaryActivity) run.push(row);
     else { flush(); result.push(row); }
   }

@@ -28,6 +28,24 @@ export { appendHarnessRefinementStatus } from "./chat-refiner-activity";
 
 export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEvent): void {
   const activity = activityFromEvent(item);
+  const terminalSubagent = item.name.startsWith("subagent.") && !activity.subagentMessage
+    && (activity.state === "completed" || activity.state === "failed");
+  if (terminalSubagent && activity.openSession) {
+    for (const message of messages) {
+      if (message.role !== "activity_group" || message.turnId !== item.turnId) continue;
+      let changed = false;
+      for (const previous of message.activities ?? []) {
+        if (previous.openSession?.sessionId !== activity.openSession.sessionId
+          || (previous.state !== "running" && previous.state !== "pending")) continue;
+        previous.state = activity.state;
+        changed = true;
+      }
+      if (changed && !message.activities?.some(entry => entry.state === "running" || entry.state === "pending")) {
+        message.traceState = activity.state === "failed" ? "failed" : "settled";
+        message.traceCompletedAt = item.timestamp;
+      }
+    }
+  }
   // A native background command can finish after one or more assistant replies.
   // Update its original row across those replies instead of duplicating it.
   if (asRecord(item.data)?.nativeBackgroundTask === true && activity.callId) {
@@ -67,18 +85,27 @@ export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEven
   if (activityGroup) {
     activityGroup.activities = appendActivityToList(activityGroup.activities ?? [], item, activity);
     activityGroup.timestamp = item.timestamp;
+    if (activity.state === "running" || activity.state === "pending") {
+      activityGroup.traceState = "running";
+      delete activityGroup.traceCompletedAt;
+    }
+    if (terminalSubagent && !activityGroup.activities.some(entry => entry.state === "running" || entry.state === "pending")) {
+      activityGroup.traceState = activity.state === "failed" ? "failed" : "settled";
+      activityGroup.traceCompletedAt = item.timestamp;
+    }
     return;
   }
 
-  settleRunningActivityGroups(messages, item);
+  if (!terminalSubagent) settleRunningActivityGroups(messages, item);
   messages.push({
     id: item.id,
     role: "activity_group",
     activities: [activity],
     timestamp: item.timestamp,
     turnId: item.turnId,
-    traceState: "running",
+    traceState: terminalSubagent ? activity.state === "failed" ? "failed" : "settled" : "running",
     traceStartedAt: item.timestamp,
+    ...(terminalSubagent ? { traceCompletedAt: item.timestamp } : {}),
   });
 }
 
@@ -423,6 +450,8 @@ function findMatchingWorkspaceActionActivity(activities: ActivityItem[], item: R
 }
 
 function activityState(item: RuntimeEvent): ActivityItem["state"] {
+  if (item.name === "subagent.failed") return "failed";
+  if (["subagent.completed", "subagent.reported", "subagent.archived", "subagent.workspace_retained"].includes(item.name)) return "completed";
   if (item.name === "turn.interrupted") return "failed";
   if (item.status === "failed") return "failed";
   if (item.status === "pending" || item.name === "approval.requested") return "pending";

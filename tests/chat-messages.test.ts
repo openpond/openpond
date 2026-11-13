@@ -38,6 +38,32 @@ function commandStarted(
 }
 
 describe("chat message projection", () => {
+  // Background children can finish after their parent turn. Completion must
+  // stop their running presentation without stopping another child or turn.
+  test("settles late child completions while independent work stays running", () => {
+    const lifecycle = (id: string, child: string, name: RuntimeEvent["name"], status?: RuntimeEvent["status"]) => runtimeEvent({
+      id, name, status, sessionId: "parent", turnId: "finished-parent-turn", data: { childSessionId: child },
+    });
+    const events = [
+      runtimeEvent({ id: "parent-start", name: "turn.started", sessionId: "parent", turnId: "finished-parent-turn", args: { prompt: "Review" } }),
+      runtimeEvent({ id: "parent-finish", name: "turn.completed", sessionId: "parent", turnId: "finished-parent-turn" }),
+      lifecycle("a-start", "child-a", "subagent.started", "started"),
+      lifecycle("b-start", "child-b", "subagent.started", "started"),
+      lifecycle("a-done", "child-a", "subagent.completed"),
+    ];
+    const active = buildChatMessages(events).filter(message => message.role === "activity_group");
+    expect(active.at(-1)?.traceState).toBe("running");
+    expect(active.flatMap(message => message.activities ?? []).filter(activity => activity.state === "running")
+      .map(activity => activity.openSession?.sessionId)).toEqual(["child-b"]);
+    const finished = buildChatMessages([...events, lifecycle("b-done", "child-b", "subagent.completed")]);
+    expect(finished.filter(message => message.role === "activity_group").every(message => message.traceState === "settled")).toBe(true);
+    expect(finished.flatMap(message => message.activities ?? []).some(activity => activity.state === "running" || activity.state === "pending")).toBe(false);
+
+    const unrelated = runtimeEvent({ id: "other-work", name: "tool.started", sessionId: "parent", turnId: "current-turn", action: "read_file" });
+    const late = buildChatMessages([...events, unrelated, lifecycle("b-late", "child-b", "subagent.completed")]);
+    expect(late.find(message => message.id === "other-work")?.traceState).toBe("running");
+    expect(late.at(-1)?.traceState).toBe("settled");
+  });
 
   test("projects subagent receipts as parent transcript activities", () => {
     const messages = buildChatMessages([
