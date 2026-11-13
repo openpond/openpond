@@ -7,9 +7,11 @@ import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import type { AppView } from "../../lib/app-models";
+import type { ChatProvider } from "@openpond/contracts";
+import { PlanUsageControl } from "./PlanUsageControl";
 import "../../styles/sidebar/desktop-navigation.css";
 
-export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps; open: boolean }) {
+export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: SidebarProps; open: boolean; provider: ChatProvider }) {
   const [accountOpen, setAccountOpen] = useState(false);
   const connectionStatus = useConnectionStatus(sidebar.connection);
   const destinations = [
@@ -80,9 +82,10 @@ export function DesktopNavigationRail({ sidebar, open }: { sidebar: SidebarProps
         onClick={() => void navigateDesktopRoute({ kind: "settings", section: "diagnostics" })}>
         <CircleAlert size={18} />
       </button> : null}
+      <PlanUsageControl connection={sidebar.connection} provider={sidebar.productArea === "chat" && sidebar.view === "chat" ? provider : null} accountOpen={accountOpen}
+        onOpen={() => setAccountOpen(false)} onOpenProviders={() => void navigateDesktopRoute({ kind: "settings", section: "providers" })} />
       <UserAuthFooter account={sidebar.account} open={accountOpen} onOpenChange={setAccountOpen}
         hasRunningWork={sidebar.runningSessionIds.size > 0 || Object.values(sidebar.terminalSummaries).some(summary => summary.tabCount > 0)}
-        connection={sidebar.connection} onOpenProviders={() => void navigateDesktopRoute({ kind: "settings", section: "providers" })}
         railTooltip={accountOpen ? undefined : "Account"}
         organizations={sidebar.organizations} selectedTeamId={sidebar.selectedTeamId}
         onSelectTeam={sidebar.onSelectTeam} onLogOut={sidebar.onLogOut}

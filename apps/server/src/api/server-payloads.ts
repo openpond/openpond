@@ -208,7 +208,7 @@ export function createServerPayloads(deps: {
   } = deps;
   const attachmentRootDir =
     deps.attachmentRootDir ?? path.join(storeDir, "attachments");
-  const readPlanUsage = createPlanUsageService();
+  const readPlanUsage = createPlanUsageService({ home: storeDir });
   async function providerPlanUsagePayload(provider: string) {
     if (provider !== "codex" && provider !== "claude-code") throw new Error("Unsupported plan usage provider");
     const file = await readProvidersFile(providersFilePath);
@@ -967,6 +967,10 @@ export function createServerPayloads(deps: {
     })] : codexHistorySessions;
     // Provider catalog refresh may persist configuration; return its final revision.
     const configuration = await resolveEffectiveConfig(storeDir);
+    const providerPlanUsage = Object.fromEntries((await Promise.all((["claude-code", "codex"] as const).map(async provider => {
+      const value = await readPlanUsage.cached(provider, providers.providers[provider]);
+      return value ? [[provider, value] as const] : [];
+    }))).flat());
     const payload: BootstrapPayload = {
       configuration: { rawRevision: configuration.sources.find((source) => source.layer === "user")!.revision, effectiveRevision: configuration.effectiveRevision, sources: configuration.sources, provenance: configuration.provenance },
       server: {
@@ -982,6 +986,7 @@ export function createServerPayloads(deps: {
       codex,
       preferences: configToPreferences(configuration.document, layoutPreferences(preferences)),
       providers,
+      providerPlanUsage,
       personalization,
       apps: openPond.apps,
       localProjects: linkedLocalProjects,

@@ -218,6 +218,18 @@ export const ProviderCatalogSchema = z.object({
 
 export type ProviderCatalog = z.infer<typeof ProviderCatalogSchema>;
 
+export const NativeInstallationStatusSchema = z.object({
+  executablePath: z.string(),
+  version: z.string().nullable(),
+  channel: z.enum(["stable", "latest"]).nullable(),
+  stableVersion: z.string().nullable(),
+  latestVersion: z.string().nullable(),
+  updateAvailable: z.boolean(),
+  checkedAt: z.string().datetime(),
+  updateError: z.string().nullable(),
+});
+export type NativeInstallationStatus = z.infer<typeof NativeInstallationStatusSchema>;
+
 export const ProviderStatusSchema = z.object({
   id: ProviderIdSchema,
   displayName: z.string().trim().min(1).max(160),
@@ -235,6 +247,7 @@ export const ProviderStatusSchema = z.object({
   defaultModel: z.string().trim().min(1).max(300).nullable().default(null),
   modelIds: z.array(z.string().trim().min(1).max(300)).max(1000).default([]),
   lastError: z.string().nullable().default(null),
+  nativeInstallation: NativeInstallationStatusSchema.optional(),
 });
 
 export type ProviderStatus = z.infer<typeof ProviderStatusSchema>;
