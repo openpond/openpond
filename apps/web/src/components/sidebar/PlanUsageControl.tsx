@@ -60,12 +60,11 @@ export function PlanUsageControl({ connection, provider, accountOpen, onOpen, on
       </span> : <Activity size={19} />}
     </button>
     {open ? <div className="plan-usage-popover" id={popupId} role="dialog" aria-label="Plan usage">
-      <div className="plan-usage-popover-heading"><strong>Plan usage</strong></div>
+      <div className="plan-usage-popover-heading"><button type="button" className="plan-usage-popover-title" onClick={() => { setOpen(false); onOpenProviders(); }}>Plan usage</button></div>
       {(["claude-code", "codex"] as const).map(source => <section className="plan-usage-popover-provider" key={source}>
         <div className="plan-usage-popover-provider-heading"><h3><img src={`/agent-sources/${source}.svg`} alt="" />{source === "claude-code" ? "Claude" : "Codex"}</h3></div>
         <ProviderPlanUsage connection={connection} provider={source} sharedOnly />
       </section>)}
-      <button type="button" className="plan-usage-manage" onClick={() => { setOpen(false); onOpenProviders(); }}>Manage providers</button>
     </div> : null}
   </div>;
 }
