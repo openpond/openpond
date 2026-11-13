@@ -1,0 +1,19 @@
+.plan-usage-control { position: relative; width: 36px; }
+.plan-usage-trigger { padding: 0; }
+.plan-usage-ring { width: 36px; height: 36px; position: relative; display: grid; place-items: center; }
+.plan-usage-ring svg { position: absolute; inset: 0; width: 36px; height: 36px; fill: none; stroke-width: 2; transform: rotate(-90deg); }
+.plan-usage-ring-track { stroke: var(--border-strong); }
+.plan-usage-ring-value { stroke: var(--status-success); transition: stroke-dasharray 250ms ease; }
+.plan-usage-ring-value.warning { stroke: var(--status-warning); }
+.plan-usage-ring-value.low { stroke: var(--status-danger); }
+.plan-usage-ring img { width: 18px; height: 18px; object-fit: contain; }
+.plan-usage-popover { position: fixed; z-index: 60; bottom: 52px; left: 52px; width: min(300px, calc(100vw - 64px)); max-height: calc(100vh - 76px); overflow-y: auto; padding: 16px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-floating); color: var(--text-primary); box-shadow: 0 14px 36px var(--shadow-color); }
+.plan-usage-popover-heading, .plan-usage-popover-provider-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.plan-usage-popover-heading { font-size: 13px; margin-bottom: 14px; }
+.plan-usage-popover-title { padding: 0; border: 0; background: transparent; color: var(--text-primary); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.plan-usage-popover-title:hover { text-decoration: underline; }
+.plan-usage-popover-title:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; border-radius: 3px; }
+.plan-usage-popover-provider + .plan-usage-popover-provider { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-default); }
+.plan-usage-popover-provider-heading h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; }
+.plan-usage-popover-provider-heading img { width: 16px; height: 16px; object-fit: contain; }
+.plan-usage-popover .provider-plan-usage { border-top: 0; padding-top: 8px; }

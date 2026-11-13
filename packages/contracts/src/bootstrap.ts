@@ -17,6 +17,7 @@ import {
 import { SidebarFileBookmarkSchema } from "./sidebar-files.js";
 import { CodexPersonalSkillSchema } from "./skills.js";
 import { OpenPondExtensionCatalogSchema } from "./extensions.js";
+import { ProviderPlanUsageSchema } from "./provider-plan-usage.js";
 
 export const BootstrapEventWindowSchema = z.object({
   latestSequence: z.number().int().nonnegative(),
@@ -33,6 +34,7 @@ export const BootstrapPayloadSchema = z.object({
   configuration: z.object({ rawRevision: z.string(), effectiveRevision: z.string(), sources: z.array(z.object({ layer: z.string(), path: z.string(), revision: z.string() })), provenance: z.record(z.string(), z.object({ layer: z.string(), path: z.string(), revision: z.string() })) }).optional(),
   preferences: AppPreferencesSchema.optional().default(() => AppPreferencesSchema.parse({})),
   providers: ProviderSettingsSchema.optional().default(() => ProviderSettingsSchema.parse({})),
+  providerPlanUsage: z.record(z.string(), ProviderPlanUsageSchema).optional(),
   personalization: PersonalizationSettingsSchema.optional().default(() =>
     PersonalizationSettingsSchema.parse({
       soul: PERSONALIZATION_TEMPLATES[0].content,

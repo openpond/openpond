@@ -45,7 +45,7 @@ export function AppShellController({
   return (
     <PageChromeProvider>
     <div className={className} style={style}>
-      <DesktopNavigationRail sidebar={sidebar} open={topBar.sidebarOpen} />
+      <DesktopNavigationRail sidebar={sidebar} open={topBar.sidebarOpen} provider={mainPane.activeProvider} />
       {topBar.sidebarAvailable !== false ? <RenderCommitBoundary id="sidebar">
         <Sidebar {...sidebar} open={topBar.sidebarOpen} />
         {topBar.sidebarOpen ? (

@@ -4,14 +4,10 @@ import type { AccountState } from "@openpond/contracts";
 import type { OpenPondOrganization } from "../../lib/organization-types";
 import { AccountHelpSubmenu } from "./AccountHelpSubmenu";
 import { DesktopUpdateMenu } from "./DesktopUpdateMenu";
-import type { ClientConnection } from "../../api/api-client";
 import { DropdownSelect } from "../DropdownSelect";
 import { AppearanceMenuItem } from "./AppearanceMenuItem";
-import { ProviderPlanUsage } from "../settings/ProviderPlanUsage";
 
 type UserAuthFooterProps = {
-  connection: ClientConnection | null;
-  onOpenProviders: () => void;
   account: AccountState | null;
   open: boolean;
   organizations: readonly OpenPondOrganization[];
@@ -68,8 +64,6 @@ export function userAuthIdentity(account: AccountState | null): UserAuthIdentity
 }
 
 export function UserAuthFooter({
-  connection,
-  onOpenProviders,
   account,
   open,
   organizations,
@@ -171,9 +165,6 @@ export function UserAuthFooter({
               }}
             />
           ) : null}
-          <div className="user-auth-plan-usage">
-            {(["claude-code", "codex"] as const).map(provider => <ProviderPlanUsage key={provider} connection={connection} provider={provider} compact onOpen={() => { onOpenChange(false); onOpenProviders(); }} />)}
-          </div>
           <div className="user-auth-menu-divider" />
           {onOpenActivity ? (
             <button

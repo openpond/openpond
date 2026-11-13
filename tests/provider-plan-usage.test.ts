@@ -55,8 +55,8 @@ describe("provider plan usage boundary", () => {
     await expired;
   });
 
-  // External failures can contain headers/tokens. No raw error or old numeric
-  // allowance may reach the renderer when the current fetch fails.
+  // External failures can contain headers/tokens. Without a retained reading,
+  // a failed fetch must not expose raw errors or invent an allowance.
   test("sanitizes failures and throttles retrying unavailable providers", async () => {
     const read = vi.fn(async () => { throw new Error("Bearer private-token"); });
     const service = createPlanUsageService({ prepare: async () => ({ key: "account", read }) });
@@ -66,6 +66,60 @@ describe("provider plan usage boundary", () => {
     expect(JSON.stringify(result)).not.toContain("private-token");
     await service("claude-code");
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  // Reloads and temporary outages must preserve the same account's last
+  // reading, while sign-out and account changes must remove those numbers.
+  test("restores retained readings after restart without crossing native accounts", async () => {
+    const home = await mkdtemp(join(tmpdir(), "openpond-usage-retention-"));
+    let now = 1800000000000;
+    let identity = "account-a";
+    let mode: "ready" | "offline" | "signed_out" = "ready";
+    const read = vi.fn(async () => {
+      if (mode === "offline") throw new Error("private upstream credential");
+      return mode === "signed_out" ? { status: "signed_out" as const, windows: [], message: "Sign in" }
+        : { status: "ready" as const, windows: [{ id: "codex:secondary", label: "Weekly", remainingPercent: 42, resetsAt: null, shared: true }], message: null };
+    });
+    const options = { home, now: () => now, prepare: async () => ({ key: identity, read }) };
+    try {
+      const first = createPlanUsageService(options);
+      const original = await first("codex");
+      const restarted = createPlanUsageService(options);
+      expect(await restarted.cached("codex")).toEqual(original);
+      expect(read).toHaveBeenCalledTimes(1);
+      now += 61_000;
+      mode = "offline";
+      const offline = await restarted("codex");
+      expect(offline.status).toBe("ready");
+      expect(offline.windows[0]?.remainingPercent).toBe(42);
+      expect(offline.fetchedAt).toBe(original.fetchedAt);
+      expect(offline.message).toBeTruthy();
+      expect(JSON.stringify(offline)).not.toContain("private upstream");
+      identity = "account-b";
+      expect(await restarted.cached("codex")).toBeUndefined();
+      expect((await restarted("codex")).windows).toEqual([]);
+      mode = "signed_out";
+      now += 61_000;
+      expect((await restarted("codex")).status).toBe("signed_out");
+      expect((await createPlanUsageService(options).cached("codex"))?.windows).toEqual([]);
+    } finally { await rm(home, { recursive: true, force: true }); }
+  });
+
+  // An old account's late response must not reintroduce its allowance after
+  // the native login changes during a refresh.
+  test("rejects a usage reading completed after a native account switch", async () => {
+    let identity = "before";
+    let finish!: () => void;
+    const service = createPlanUsageService({ prepare: async () => ({ key: identity, read: async () => {
+      await new Promise<void>(resolve => { finish = resolve; });
+      return { status: "ready", windows: [{ id: "five_hour", label: "5-hour", remainingPercent: 80, resetsAt: null, shared: true }], message: null };
+    } }) });
+    const pending = service("claude-code");
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    identity = "after";
+    finish();
+    expect((await pending).windows).toEqual([]);
+    expect(await service.cached("claude-code")).toBeUndefined();
   });
 
   // Exercises credential → provider request → renderer-safe result, including

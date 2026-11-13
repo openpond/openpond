@@ -4,6 +4,7 @@ import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { modelDisplayLabel } from "../../lib/model-display";
 import { useNativeLogin } from "../terminal/NativeLoginProvider";
 import { NativeSetupTerminal } from "../terminal/NativeSetupTerminal";
+import { DropdownSelect } from "../DropdownSelect";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, CircleAlert, Loader2, RefreshCw } from "../icons";
 import type { ChatProvider, ProviderConfig, ProviderConfigPatch, ProviderStatus, ProviderModel } from "@openpond/contracts";
@@ -121,8 +122,11 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
   }, [nativeLogin.result, providerId, config.binaryPath, config.sourceHome]);
 
   const models = result?.settings.modelCaches[providerId]?.models ?? cachedModels;
-  const modelNames = [...new Set(models.map(model => modelDisplayLabel(model.displayName || model.id)))];
-  const message = error ?? result?.error;
+  const selectedModel = result?.settings.providers[providerId]?.defaultModel ?? config.defaultModel ?? status.defaultModel ?? models[0]?.id ?? "";
+  const modelOptions = models.map(model => ({ value: model.id, label: `${modelDisplayLabel(model.displayName || model.id)}${model.id === "default" ? " (agent default)" : ""}` }));
+  if (selectedModel && !modelOptions.some(option => option.value === selectedModel)) modelOptions.unshift({ value: selectedModel, label: modelDisplayLabel(selectedModel) });
+  const installation = result?.settings.statuses[providerId]?.nativeInstallation ?? status.nativeInstallation;
+  const message = error ?? result?.error ?? installation?.updateError;
   return <div className="provider-dialog-body native-agent-setup">
     <p>{registered ? `Uses the configured ${status.displayName} ACP command and its own login.` : `Uses your existing ${status.displayName} installation and login.`}</p>
     <div className="native-connection-status">
@@ -130,8 +134,16 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
       <button type="button" className="settings-secondary" disabled={disabled || !connection} onClick={() => void check()} title="Refresh connection" aria-label="Refresh connection"><RefreshCw size={14} /> Refresh</button>
     </div>
     {message ? <ErrorToast error={message} /> : null}
-    {modelNames.length ? <section className="native-model-section" aria-label="Available models"><div className="native-model-heading"><h3>Models</h3><small>{modelNames.length} available</small></div><div className="native-model-list" tabIndex={0} aria-label="Models" role="list">{modelNames.map(name => <span key={name} role="listitem">{name}</span>)}</div><small>Choose a model when starting a chat.</small></section> : null}
-    {result?.version ? <small className="native-agent-version">{result.version}</small> : null}
+    {modelOptions.length ? <div className="settings-select-field">
+      <span>Default model</span>
+      <DropdownSelect label="Default model" value={selectedModel} options={modelOptions} searchable={modelOptions.length > 8} floating disabled={disabled || dirty || !connection} onChange={value => void check({ defaultModel: value })} />
+    </div> : null}
+    {installation ? <div className="native-agent-installation">
+      <small className="native-agent-version" title={installation.executablePath}>{installation.version}</small>
+      {installation.latestVersion ? <small>{installation.updateAvailable ? `Claude Code ${installation.latestVersion} is available.` : "Claude Code is up to date."}</small> : null}
+      {installation.channel ? <small>{installation.channel === "stable" ? `Stable channel${installation.stableVersion ? ` · ${installation.stableVersion}` : ""}. New models may require the latest channel.` : "Latest channel"}</small> : null}
+      {installation.updateAvailable ? <a href="https://code.claude.com/docs/en/setup#configure-release-channel" target="_blank" rel="noreferrer">Update instructions</a> : null}
+    </div> : result?.version ? <small className="native-agent-version">{result.version}</small> : null}
     {!registered && result?.status === "needs_login" ? <button type="button" className="settings-secondary" disabled={disabled || dirty || !connection} title={dirty ? "Save changes before signing in to a different installation" : undefined} onClick={() => providerId === "claude-code" && nativeLogin.active ? nativeLogin.resume() : void login()}>{providerId === "claude-code" && nativeLogin.active ? "Continue sign-in" : "Sign in"}</button> : null}
     {registered && result?.authMethods?.length ? <div className="acp-auth-methods">{result.authMethods.map(method => method.type === "terminal" ? <p key={method.id}>Use {method.name} in the agent’s own terminal, then refresh this connection.</p> : <button key={method.id} type="button" className="settings-secondary" disabled={disabled || dirty || !connection} onClick={() => void authenticate(method.id)} title={method.description}>{method.name}</button>)}</div> : null}
     {result?.status === "missing" && info.install ? <p><a href={info.install} target="_blank" rel="noreferrer">Install {status.displayName}</a>, then refresh this connection.</p> : null}
