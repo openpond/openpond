@@ -13,6 +13,14 @@ import { captureBrowserPage } from "../apps/desktop/src/desktop-native-snapshot"
 const chromePath = process.env.OPENPOND_TEST_CHROME ?? "/usr/bin/google-chrome";
 const hasChrome = await access(chromePath).then(() => true, () => false);
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+async function browserStep<T>(label: string, operation: Promise<T>, timeoutMs = 10_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([operation, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Chromium isolation step timed out: ${label}`)), timeoutMs);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 // Real Chromium must run author interactions while denying parent access and
 // every network path, including navigation after the author removes its CSP.
 it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded dynamic height", async () => {
@@ -39,16 +47,23 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
       await delay(200);
     }
     if (!port) throw new Error(`Chromium failed to start (exit ${chrome.exitCode ?? "pending"}): ${chromeError}`);
-    const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json();
-    cdp = await CdpClient.connect(target.webSocketDebuggerUrl);
-    const evaluate = async (expression: string) => (await cdp!.send<{ result: { value: any } }>("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result.value;
+    const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT", signal: AbortSignal.timeout(10_000) })).json();
+    cdp = await browserStep("connect", CdpClient.connect(target.webSocketDebuggerUrl));
+    let phase = "interaction and storage isolation";
+    const send = <T = any>(method: string, params: Record<string, unknown> = {}) =>
+      browserStep(`${phase}: ${method}`, cdp!.send<T>(method, params));
+    const evaluate = async (expression: string) => {
+      const result = await send<{ result: { value: any }; exceptionDetails?: { text: string } }>("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+      if (result.exceptionDetails) throw new Error(`${phase}: ${result.exceptionDetails.text}`);
+      return result.result.value;
+    };
     const load = async (html: string) => {
-      await cdp!.send("Page.navigate", { url: `data:text/html,${encodeURIComponent(htmlVisualDocument(html, "boundary"))}` });
+      await send("Page.navigate", { url: `data:text/html,${encodeURIComponent(htmlVisualDocument(html, "boundary"))}` });
       for (let i = 0; i < 30; i++) {
         if (await evaluate("window.__openpondVisual?.ready")) {
           // The ready message can precede the frame's first paint. Native
           // mouse input must wait until Chromium has committed its hit targets.
-          await cdp!.send("Page.bringToFront");
+          await send("Page.bringToFront");
           await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
           return;
         }
@@ -58,8 +73,8 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     };
     await load(`<button style="display:block;width:160px;height:60px" onclick="document.querySelector('section').style.height='380px';console.log('clicked')">Expand</button><section style="height:160px">Content</section><script>try{parent.document.body;console.log('parent readable')}catch{console.log('parent denied')}try{localStorage.setItem('secret','x');console.log('storage available')}catch{console.log('storage denied')}console.log(typeof window.openpond,typeof require)</script>`);
     expect(await evaluate("window.__openpondVisual.height")).toBe(220);
-    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 60, y: 25, button: "left", clickCount: 1 });
-    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 60, y: 25, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 60, y: 25, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 60, y: 25, button: "left", clickCount: 1 });
     for (let i = 0; i < 30 && await evaluate("window.__openpondVisual.height") !== 440; i++) await delay(100);
     const state = await evaluate("window.__openpondVisual");
     expect(state.height).toBe(440);
@@ -69,7 +84,8 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     await delay(100); expect(await evaluate("window.__openpondVisual.height")).toBe(440);
     // Lazy mounting near the viewport edge must not wait for animation frames:
     // the initial 80px child can be fully clipped even when its host is visible.
-    await cdp.send("Page.navigate", { url: "data:text/html,<body id=clipped-host></body>" });
+    phase = "clipped visual sizing";
+    await send("Page.navigate", { url: "data:text/html,<body id=clipped-host></body>" });
     for (let i=0; i<30 && !await evaluate("!!document.getElementById('clipped-host')"); i++) await delay(100);
     expect(await evaluate("!!document.getElementById('clipped-host')")).toBe(true);
     await evaluate(`(() => { window.measuredHeight=0; addEventListener('message', e => { if(e.data?.type==='openpond-visual-size')window.measuredHeight=e.data.height; }); const f=document.createElement('iframe');f.setAttribute('sandbox','allow-scripts');f.style.cssText='position:fixed;top:-300px;width:680px;height:640px';f.srcdoc=${JSON.stringify(htmlVisualDocument('<section style="height:640px">Clipped top</section>', "clipped"))};document.body.append(f); })()`);
@@ -78,16 +94,18 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     // Start the destructive navigation probe only after the visual reports
     // ready. A fixed timer can navigate away before load under CI contention,
     // testing scheduling rather than the parent's navigation boundary.
+    phase = "navigation and network isolation";
     await load(`<button style="display:block;width:160px;height:60px" onclick="console.log('navigation probe started');document.querySelectorAll('meta').forEach(e=>e.remove());location.href='${url}/navigate'">Probe navigation</button><p>Network probe</p><img src="${url}/image"><iframe src="${url}/nested"></iframe><style>@import url('${url}/style');</style><script>fetch('${url}/fetch').catch(()=>{});navigator.sendBeacon('${url}/beacon','x');try{new Worker('${url}/worker')}catch{};window.open('${url}/popup')</script>`);
-    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 60, y: 25, button: "left", clickCount: 1 });
-    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 60, y: 25, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 60, y: 25, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 60, y: 25, button: "left", clickCount: 1 });
     await delay(600);
     expect((await evaluate("window.__openpondVisual.console")).map((row: {text:string})=>row.text)).toContain("navigation probe started");
     expect(requests).toEqual([]);
     // Failure story: selecting a resource button for a screenshot must not
     // trigger its action, and exported DOM must preserve live form state while
     // stripping executable handlers before the isolated image renderer sees it.
-    await cdp.send("Page.navigate", { url: "data:text/html,<body id=snapshot-host></body>" });
+    phase = "visual snapshot selection";
+    await send("Page.navigate", { url: "data:text/html,<body id=snapshot-host></body>" });
     for (let i = 0; i < 30 && !await evaluate("!!document.getElementById('snapshot-host')"); i++) await delay(100);
     const snapshotHtml = '<button id="probe" style="width:160px;height:60px" data-openpond-resource-kind="dataset" data-openpond-resource-id="examples" data-openpond-resource-revision="1" onclick="document.querySelector(\'output\').textContent=\'acted\'">Select resource</button><input value="initial"><output>untouched</output><svg width="200" height="100" viewBox="0 0 200 100" style="display:block;margin-left:300px;margin-top:40px"><defs><linearGradient id="tone"><stop stop-color="#00aa77"/><stop offset="1" stop-color="#00aa77"/></linearGradient></defs><rect id="shape" x="30" y="20" width="60" height="40" fill="url(about:srcdoc#tone)" /></svg><script>document.querySelector("input").value="edited"</script>';
     await evaluate(`(() => {window.snapshotReady=false;window.resourceSelections=0;addEventListener('message',e=>{if(e.data?.type==='openpond-visual-size'&&e.data.ready)window.snapshotReady=true;if(e.data?.type==='openpond-visual-snapshot')window.captureResult=e.data;if(e.data?.type==='openpond-visual-snapshot-ready')window.pickerReady=e.data.requestId;if(e.data?.type==='openpond-visual-resource-select')window.resourceSelections++});const frame=document.createElement('iframe');frame.style.cssText='position:fixed;left:0;top:0;width:680px;height:600px;border:0';frame.setAttribute('sandbox','allow-scripts');frame.srcdoc=${JSON.stringify(htmlVisualDocument(snapshotHtml, "snapshot-test"))};document.body.append(frame)})()`);
@@ -98,13 +116,13 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
       if (action !== "node") return;
       for (let i = 0; i < 50 && await evaluate("window.pickerReady") !== requestId; i++) await delay(100);
       expect(await evaluate("window.pickerReady")).toBe(requestId);
-      await cdp!.send("Page.bringToFront");
+      await send("Page.bringToFront");
       await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     };
     await command("node", "node-test");
-    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 50, y: 25 });
-    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 50, y: 25, button: "left", clickCount: 1 });
-    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 50, y: 25, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 50, y: 25 });
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 50, y: 25, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 50, y: 25, button: "left", clickCount: 1 });
     for (let i = 0; i < 30 && !await evaluate("window.captureResult"); i++) await delay(100);
     const selected = await evaluate("window.captureResult");
     expect(selected.requestId).toBe("node-test");
@@ -121,35 +139,36 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     for (let i = 0; i < 30 && await evaluate("window.captureResult?.requestId") !== "cancel-test"; i++) await delay(100);
     expect(await evaluate("window.captureResult.canceled")).toBe(true);
     await command("node", "svg-test");
-    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 350, y: 130 });
-    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 350, y: 130, button: "left", clickCount: 1 });
-    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 350, y: 130, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 350, y: 130 });
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 350, y: 130, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 350, y: 130, button: "left", clickCount: 1 });
     for (let i = 0; i < 30 && await evaluate("window.captureResult?.requestId") !== "svg-test"; i++) await delay(100);
     const svgResult = await evaluate("window.captureResult");
     expect(svgResult).toMatchObject({ requestId: "svg-test" });
     expect(svgResult.error).toBeUndefined();
     const svg = svgResult.capture;
     expect(svg.selector).toBe("rect#shape");
-    await cdp.send("Page.navigate", { url: `data:text/html,${encodeURIComponent(`<body style="margin:0">${svg.html}</body>`)}` });
+    await send("Page.navigate", { url: `data:text/html,${encodeURIComponent(`<body style="margin:0">${svg.html}</body>`)}` });
     for (let i = 0; i < 30 && !await evaluate("!!document.querySelector('svg')"); i++) await delay(100);
-    const screenshot = await cdp.send<{ data: string }>("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 60, height: 40, scale: 1 } });
+    const screenshot = await send<{ data: string }>("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: 60, height: 40, scale: 1 } });
     const pixels = PNG.sync.read(Buffer.from(screenshot.data, "base64"));
     expect([...pixels.data.subarray((20 * pixels.width + 30) * 4, (20 * pixels.width + 30) * 4 + 4)]).toEqual([0, 170, 119, 255]);
 
     // Exercise the native capture protocol against real Chromium: a mock-only
     // check cannot detect a viewport/page coordinate mismatch or invalid CDP.
-    await cdp.send("Page.navigate", { url: `data:text/html,${encodeURIComponent('<body style="margin:0;height:2200px"><div id="native-target" style="position:absolute;left:30px;top:1200px;width:160px;height:60px;background:rgb(0,170,119)"></div>')}` });
+    phase = "native page capture";
+    await send("Page.navigate", { url: `data:text/html,${encodeURIComponent('<body style="margin:0;height:2200px"><div id="native-target" style="position:absolute;left:30px;top:1200px;width:160px;height:60px;background:rgb(0,170,119)"></div>')}` });
     for (let i = 0; i < 30 && !await evaluate("!!document.getElementById('native-target')"); i++) await delay(100);
     await evaluate("scrollTo(0,1000);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
-    await cdp.send("DOM.enable");
-    const document = await cdp.send<{ root: { nodeId: number } }>("DOM.getDocument");
-    const node = await cdp.send<{ nodeId: number }>("DOM.querySelector", { nodeId: document.root.nodeId, selector: "#native-target" });
-    const described = await cdp.send<{ node: { backendNodeId: number } }>("DOM.describeNode", { nodeId: node.nodeId });
+    await send("DOM.enable");
+    const document = await send<{ root: { nodeId: number } }>("DOM.getDocument");
+    const node = await send<{ nodeId: number }>("DOM.querySelector", { nodeId: document.root.nodeId, selector: "#native-target" });
+    const described = await send<{ node: { backendNodeId: number } }>("DOM.describeNode", { nodeId: node.nodeId });
     let inspecting = false;
     const debuggerApi = Object.assign(new EventEmitter(), {
       isAttached: () => true,
       sendCommand: async (method: string, params?: Record<string, unknown>) => {
-        const result = await cdp!.send(method, params);
+        const result = await send(method, params);
         if (method === "Overlay.setInspectMode" && params?.mode === "searchForNode") inspecting = true;
         return result;
       },
@@ -159,17 +178,20 @@ it.skipIf(!hasChrome)("isolates executable visual content and propagates bounded
     for (let i = 0; i < 30 && !inspecting; i++) await delay(100);
     expect(inspecting).toBe(true);
     debuggerApi.emit("message", {}, "Overlay.inspectNodeRequested", { backendNodeId: described.node.backendNodeId });
-    const native = await nativeCapture;
+    const native = await browserStep("native capture after node selection", nativeCapture);
     if (!native.ok) throw new Error(native.error);
     expect(native).toMatchObject({ ok: true, image: { selector: "div#native-target", width: 160, height: 60 } });
     const nativePixels = PNG.sync.read(Buffer.from(native.image.dataUrl.split(",")[1]!, "base64"));
     expect([...nativePixels.data.subarray((30 * nativePixels.width + 80) * 4, (30 * nativePixels.width + 80) * 4 + 4)]).toEqual([0, 170, 119, 255]);
   } finally {
-    await cdp?.send("Browser.close").catch(() => undefined);
+    if (cdp) await browserStep("browser cleanup", cdp.send("Browser.close"), 2_000).catch(() => undefined);
     cdp?.close();
     const exited = chrome.exitCode === null ? once(chrome, "exit") : Promise.resolve();
     chrome.kill(); await Promise.race([exited, delay(3000).then(() => chrome.kill("SIGKILL"))]);
     server.closeAllConnections();
     await new Promise<void>(resolve => server.close(() => resolve())); await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
-});
+// Chromium startup has its own 45-second allowance. Leave time for the full
+// boundary probe under CI contention; each browser command still has a short,
+// named deadline so a stalled animation frame or cleanup cannot hang the test.
+}, 120_000);
