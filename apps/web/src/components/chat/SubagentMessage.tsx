@@ -1,6 +1,9 @@
+import { useId, useState } from "react";
 import type { ClientConnection } from "../../api";
 import type { ActivityItem } from "../../lib/app-models";
-import { Bot } from "../icons";
+import { Bot, ChevronDown } from "../icons";
+import { ChatActivitySummary } from "./ChatActivitySummary";
+import { ConversationPeerLink } from "./ConversationPeerLink";
 import { MarkdownText } from "./MarkdownText";
 import { subagentRoleLabel } from "./SubagentAvatarGroup";
 
@@ -15,25 +18,49 @@ export function SubagentMessageDetailRow({
   activity,
   ...context
 }: SubagentMessageContext & { activity: ActivityItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const bodyId = useId();
   const message = activity.subagentMessage;
   if (!message) return null;
   const roleLabel = subagentRoleLabel(message.roleId ?? activity.openSession?.roleId);
-  const agentLabel = roleLabel === "Subagent" ? roleLabel : `${roleLabel} subagent`;
-  const title =
-    message.direction === "received"
-      ? agentLabel
-      : `Message to ${agentLabel.toLowerCase()}`;
+  const agentLabel =
+    message.childTitle || (roleLabel === "Subagent" ? roleLabel : `${roleLabel} subagent`);
+  const prefix = `${message.kind === "handoff" ? "Handoff" : "Message"} ${message.direction === "received" ? "from" : "to"}`;
   return (
-    <div className={`activity-child-message ${message.direction}`}>
-      <div className="activity-child-message-card">
-        <div className="activity-child-message-header">
-          <span className="activity-child-message-title">
-            <Bot aria-hidden size={14} />
-            <strong>{title}</strong>
-          </span>
-          <small>{message.kind.replace(/_/g, " ")}</small>
-        </div>
-        <div className="assistant-message">
+    <div className="activity-tool-row task-message-row">
+      <div className="task-message-summary-row">
+        <ChatActivitySummary
+          className="activity-tool-summary"
+          icon={<Bot aria-hidden className="activity-summary-kind-icon" size={12} />}
+        >
+          <span>{prefix}</span>{" "}
+          <ConversationPeerLink
+            connection={context.connection}
+            onOpenSession={context.onOpenSession}
+            peer={{
+              sessionId: message.childSessionId ?? activity.openSession?.sessionId ?? "",
+              title: agentLabel,
+              provider: message.modelRef?.providerId ?? "",
+            }}
+          />
+        </ChatActivitySummary>
+        <button
+          type="button"
+          className="activity-summary activity-tool-summary"
+          aria-controls={bodyId}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Hide" : "Show"} results: ${prefix} ${agentLabel}`}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <ChevronDown
+            aria-hidden
+            className={`activity-summary-toggle ${expanded ? "expanded" : ""}`}
+            size={14}
+          />
+        </button>
+      </div>
+      {expanded ? (
+        <div className="assistant-message" id={bodyId}>
           <MarkdownText
             content={message.body}
             connection={context.connection}
@@ -42,27 +69,7 @@ export function SubagentMessageDetailRow({
             onOpenConversation={context.onOpenSession}
           />
         </div>
-        <details className="activity-child-message-details">
-          <summary>Message details</summary>
-          <div className="activity-child-message-facts" aria-label="Child message metadata">
-            {subagentMessageFacts(message).map((fact) => (
-              <span key={fact.label}>
-                <small>{fact.label}</small>
-                <code title={fact.value}>{fact.value}</code>
-              </span>
-            ))}
-          </div>
-        </details>
-        {message.refs?.length ? (
-          <div className="activity-child-message-refs" aria-label="Child message references">
-            {message.refs.map((ref) => (
-              <span key={`${ref.kind}:${ref.id}`}>
-                {ref.kind}:{ref.id} ({ref.label})
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -78,27 +85,4 @@ export function SubagentMessageActivityGroup({
       ))}
     </article>
   );
-}
-
-function subagentMessageFacts(
-  message: NonNullable<ActivityItem["subagentMessage"]>,
-): Array<{ label: string; value: string }> {
-  return [
-    { label: "Message", value: message.messageId },
-    { label: "Kind", value: message.kind },
-    { label: "From", value: message.fromRunId },
-    message.roleId ? { label: "Role", value: message.roleId } : null,
-    message.modelRef
-      ? {
-          label: "Model",
-          value: `${message.modelRef.providerId}/${message.modelRef.modelId}`,
-        }
-      : null,
-    message.childSessionId ? { label: "Child", value: message.childSessionId } : null,
-    message.toRunId ? { label: "To run", value: message.toRunId } : null,
-    message.toRole ? { label: "To role", value: message.toRole } : null,
-    message.deliveryStatus ? { label: "Delivery", value: message.deliveryStatus } : null,
-    message.wakeReason ? { label: "Wake", value: message.wakeReason } : null,
-    message.createdAt ? { label: "Created", value: message.createdAt } : null,
-  ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
 }
