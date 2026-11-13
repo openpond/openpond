@@ -156,6 +156,9 @@ export function useChatFileOpen({
     const normalized = normalizeChatFilePath(requestedPath)?.path ?? requestedPath;
     const htmlSuffix = isHtmlFilePath(normalized) ? normalized.match(/[?#].*$/)?.[0] ?? "" : "";
     const lookupPath = htmlSuffix ? normalized.slice(0, -htmlSuffix.length) : normalized;
+    // A reconnect can delay path resolution. Acknowledge the click before
+    // waiting for the server, while keeping ambiguous-file selection intact.
+    if (!isHtmlFilePath(normalized) || options?.source) onShowDiffPanel();
     void api.resolveWorkspaceFile(connection, activeWorkspaceAppId, lookupPath).then(result => {
       if (version !== requestVersion.current) return;
       if (result.status === "resolved") {
@@ -170,7 +173,7 @@ export function useChatFileOpen({
     }).catch(error => {
       if (version === requestVersion.current) showToast(error instanceof Error ? error.message : "Could not locate this file.", "error");
     });
-  }, [connection, activeWorkspaceAppId, rightSidebarUsesSandbox, openResolvedFile, handleOpenBrowserLink, showToast]);
+  }, [connection, activeWorkspaceAppId, rightSidebarUsesSandbox, openResolvedFile, handleOpenBrowserLink, onShowDiffPanel, showToast]);
   const dismissFileResolution = useCallback(() => setFileResolution(null), []);
   const selectFileResolution = useCallback((path: string) => {
     const source = fileResolution?.source;

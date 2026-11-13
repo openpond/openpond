@@ -25,6 +25,7 @@ import type { SidebarFileStatus, WorkspaceDiffFile } from "@openpond/contracts";
 import { DiffOptionsMenu } from "./WorkspaceDiffOptions";
 import { WorkspaceFileBookmarkActions } from "./WorkspaceFileBookmarkActions";
 import { workspaceFileDisplayName } from "./WorkspaceFileLocation";
+import { useFilePathContextMenu } from "../common/FilePathContextMenu";
 import {
   nextRovingTabIndex,
   type DiffTab,
@@ -127,6 +128,7 @@ export function WorkspaceDiffTabs({
 }) {
   const addAnchorRef = useRef<HTMLDivElement | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
+  const { openFilePathMenu, filePathMenu } = useFilePathContextMenu();
   useEffect(() => {
     tabsRef.current?.querySelector<HTMLButtonElement>('button[role="tab"][aria-selected="true"]')
       ?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -242,6 +244,7 @@ export function WorkspaceDiffTabs({
               role="tab"
               aria-selected={visibleTab === "file" && selectedPath === file.path}
               title={file.path}
+              onContextMenu={event => openFilePathMenu(event, file.path, workspaceFileDisplayName(file.path))}
               onClick={() => onSelectFile(file.path)}
             >
               <FileText className="workspace-diff-tab-icon" size={13} />
@@ -410,6 +413,7 @@ export function WorkspaceDiffTabs({
         </div>
       ) : null}
       {toolbarActions}
+      {filePathMenu}
       <button
         type="button"
         className="diff-icon-button"

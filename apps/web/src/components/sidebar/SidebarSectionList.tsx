@@ -1,4 +1,5 @@
 import { SidebarInbox } from "./SidebarInbox";
+import { sidebarThreadGroups } from "./SidebarThreadGroupIndicator";
 import { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
 export { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
 import { SidebarNewThreadButton } from "./SidebarNavigation";
@@ -226,6 +227,10 @@ export function SidebarSectionList({
     subagentRuntimeBySessionId,
     terminalSummaries,
   ]);
+  const threadGroups = useMemo(
+    () => sidebarThreadGroups([...activeSessions, ...archivedSessions], childSessionRowsByParentId),
+    [activeSessions, archivedSessions, childSessionRowsByParentId],
+  );
   const allManualTaskRows = useMemo(
     () =>
       sidebarTaskRows({
@@ -491,6 +496,7 @@ export function SidebarSectionList({
             subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
             terminalIndicator={terminalIndicatorForSession(session.id)}
             projectLabel={projectLabelForSession(parentSession)}
+            threadGroup={threadGroups.get(session.id)}
             onSelect={() => selectSession(session)}
             onTogglePin={() => toggleSessionPinned(session)}
             onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
@@ -579,6 +585,7 @@ export function SidebarSectionList({
           archived={archived}
           inbox={inboxView}
           activityAt={sidebarInboxTime(session, activityTimes)}
+          threadGroup={threadGroups.get(session.id)}
           placeholder={isDragged}
           running={inProgressSessionIds.has(session.id)}
           goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}

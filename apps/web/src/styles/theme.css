@@ -59,6 +59,14 @@
   --chart-8: #7f9cff;
   --chart-9: #c879ff;
   --chart-10: #8bd35f;
+  --sidebar-thread-group-1: var(--chart-1);
+  --sidebar-thread-group-2: var(--chart-2);
+  --sidebar-thread-group-3: var(--chart-3);
+  --sidebar-thread-group-4: var(--chart-4);
+  --sidebar-thread-group-5: var(--chart-5);
+  --sidebar-thread-group-6: var(--chart-6);
+  --sidebar-thread-group-7: var(--chart-7);
+  --sidebar-thread-group-8: var(--chart-8);
   --chart-saturation: 65%;
   --chart-lightness: 68%;
   --compute-gpu: var(--accent-primary);

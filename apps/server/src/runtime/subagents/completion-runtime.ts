@@ -41,7 +41,8 @@ export function createSubagentCompletionRuntime(deps: {
     deps.inbox.signals.notify(input.childSession.id);
     await deps.appendRuntimeEvent(event({ sessionId: input.parentSession.id, turnId: input.run.parentTurnId ?? undefined,
       name: "subagent.message", source: "server", appId: input.parentSession.appId, status: "pending",
-      output: `${input.run.roleId} child ${input.run.status}.`, data: { message, delivery, taskInputIds: [receipt.id], childSessionId: input.childSession.id } }));
+      output: `${input.run.roleId} child ${input.run.status}.`, data: { message, delivery, taskInputIds: [receipt.id], childSessionId: input.childSession.id,
+        childSessionTitle: input.childSession.title, roleId: input.run.roleId, modelRef: input.run.modelRef } }));
     return message;
   }
 

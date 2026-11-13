@@ -18,6 +18,7 @@ import {
   type ThreadDetailProjection,
 } from "./store-codecs.js";
 import { SqliteStoreCore } from "./store-core.js";
+import { assistantResponseText } from "./assistant-response-text.js";
 import { normalizeSessionPayload, readStoreData, persistStoreData } from "./store-persistence.js";
 
 type EventPagePayloadRow = PayloadRow & {
@@ -492,18 +493,19 @@ export class SqliteChatStore extends SqliteStoreCore implements RuntimeHistorySt
   async latestAssistantTextForSession(sessionId: string): Promise<string | null> {
     await this.ready;
     await this.writeQueue;
+    const latest = await this.get<{ turn_id: string | null }>(
+      `SELECT turn_id FROM events WHERE session_id = ?
+       AND name IN ('assistant.delta', 'turn.completed') ORDER BY sequence DESC LIMIT 1`,
+      [sessionId],
+    );
+    if (!latest) return null;
     const rows = await this.all<EventPagePayloadRow>(
       `SELECT sequence, payload FROM events
-       WHERE session_id = ? AND name = ?
-       ORDER BY sequence DESC
-       LIMIT 25`,
-      [sessionId, "assistant.delta"],
+       WHERE session_id = ? AND turn_id IS ?
+       AND name IN ('assistant.delta', 'turn.completed') ORDER BY sequence ASC`,
+      [sessionId, latest.turn_id],
     );
-    for (const row of rows) {
-      const output = runtimeEventWithSequence(row.payload, row.sequence).output?.trim();
-      if (output) return output;
-    }
-    return null;
+    return assistantResponseText(rows.map(row => runtimeEventWithSequence(row.payload, row.sequence)));
   }
 
   async recentRuntimeEventWindow(limit: number): Promise<RuntimeEventRecentWindow> {

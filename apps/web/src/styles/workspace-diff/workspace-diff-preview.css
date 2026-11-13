@@ -100,7 +100,7 @@
   font-size: 13px;
 }
 
-.workspace-diff-file-heading div {
+.workspace-diff-file-heading > div {
   display: inline-flex;
   align-items: center;
   gap: 8px;
