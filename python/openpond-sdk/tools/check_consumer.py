@@ -9,7 +9,7 @@ from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('wheel',type=Path);p.add_argument('--sha256',required=True);p.add_argument('--receipt',type=Path,required=True);p.add_argument('--python',default=sys.executable);args=p.parse_args()
 wheel=args.wheel.resolve()
 if hashlib.sha256(wheel.read_bytes()).hexdigest()!=args.sha256:raise SystemExit('Wheel hash mismatch.')
-proof='''import importlib,json,sys
+proof='''import importlib,importlib.util,json,sys
 from pathlib import Path
 from importlib.metadata import version
 import ponder_sdk
@@ -23,8 +23,7 @@ assert models.TrainingPreparationReceipt.__annotations__
 assert inputs.TrainingPreparationRequest.__annotations__
 assert models.ToolLearningConsultationResponse.__args__
 assert inputs.ToolLearningConsultationRequest.__annotations__
-for module in ('qwen3', 'engram', 'neuron', 'alphaedit', 'decision'):
-    importlib.import_module('ponder_sdk.reference.'+module)
+assert importlib.util.find_spec('ponder_sdk.reference') is None
 assert all(name not in sys.modules for name in ('torch','transformers','peft'))
 with Client(base_url='https://example.invalid',api_key='fixture',team_id='team-fixture',dataset_id='dataset-fixture',serving_base_url='https://serving.invalid/v1',model_aliases={'support':'saved-model-fixture'}) as client:
     assert client.dataset_id=='dataset-fixture'
