@@ -10,8 +10,16 @@ def require(value):
         raise ProtocolError('weight_space_identity_mismatch')
 
 
+def base_identity(raw):
+    value = validate('NeuronSteeringModelSchema', raw)
+    require(value['modelId'] == 'Qwen/Qwen3-8B'
+            and value['revision'] == 'b968826d9c46dd6066d109eabc6255188de91218'
+            and value['hiddenSize'] == 4096 and value['intermediateSizes'] == [12288] * 36
+            and value['dtype'] == 'bfloat16' and value['adapter'] is None and value['quantization'] == 'none')
+    return value
+
+
 def verify_weight_space_request(raw):
-    from .reference.qwen3 import base_identity
     value = validate('WeightSpaceRequestSchema', raw)
     base_identity(value['model'])
     panels, limits = value['panels'], value['limits']
@@ -27,7 +35,6 @@ def verify_weight_space_request(raw):
 
 
 def verify_weight_space_artifact(raw, request=None, runtime_hash=None):
-    from .reference.qwen3 import base_identity
     value = validate('WeightSpaceArtifactSchema', raw)
     base_identity(value['model'])
     columns = value['columns']
