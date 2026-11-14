@@ -199,15 +199,7 @@ uv run --project python/openpond-sdk pytest python/openpond-sdk/tests
 uv build --project python/openpond-sdk --no-sources
 ```
 
-For a native worker package cohort, run `tools/prepare_release.py` with
-`--output <new-candidate-directory>` and `--expected-version <version>` to retain
-the exact wheel, source distribution and source inventory. Run
-`tools/stage_worker.py` with that `--candidate`, `--expected-version`,
-`--expected-manifest-sha256` and each consumer's `--destination`. Copying the candidate verifies
-its wheel hash, complete wheel RECORD, source inventory and schema bytes
-before writing the native checksum receipt. Align the worker's explicit version
-pins and regenerate its source identity before building an image. These commands
-do not publish packages or qualify a runtime.
+
 
 The request and response type directories (`inputs/` and `models/`) are generated
 from the packaged `schemas.json` authority and stay out of Git. Run
@@ -294,78 +286,6 @@ and operation ID after an uncertain reply; no write is automatically retried.
 The returned receipt acknowledges admission; status observes readiness and
 cleanup. Stop removes routing before capacity retirement and preserves shared
 consumers and unsettled calls. Runtime/lifecycle qualification is still pending.
-
-### Optional local activation reference
-
-Both native clients can retain steering and inspection configurations through
-the existing `training.save_experiment_draft`, `get_experiment_draft`,
-`list_experiment_drafts` and `archive_experiment_draft` operations on compatible
-hosts. Use `operationType: "neuron_steering"` or `"inspect_activations"` and an
-`activationForm` from the generated inputs. Blank numeric values remain strings;
-prompt/coordinate row IDs must be unique. Saving does not publish a profile,
-prepare execution or create compute. Hosted execution remains unavailable.
-
-Use `training.modification_capabilities(input)` in sync/async clients for a
-read-only model/runtime observation. Pass `teamId`, `modelId`, `source`, and
-known exact revision/tokenizer/template/asset fields using
-`ModelModificationCapabilitiesQuery`. The response is bound to that query and
-workspace, includes the current actor and expires within five minutes. The
-current host projection returns unsupported-model or unqualified-runtime
-reasons; no activation executor is advertised. Format support (`draftSchema`)
-is separate from permission. This read creates no Job or capacity.
-When the current actor is known, the lightweight
-`modification_identity.verify_modification_capabilities` helper additionally
-checks it with `expected_actor_id`.
-
-The generated models include hashed neuron-steering profiles, residual
-calibrations and bounded activation-reference requests/results. Lightweight
-verification helpers live in `ponder_sdk.neuron_steering`; importing the HTTP
-SDK does not import PyTorch or require it as a dependency.
-
-With PyTorch installed separately for your hardware, run the synthetic CPU
-example from the source distribution:
-
-```sh
-python examples/activation_reference.py --output reference-result.json
-```
-
-The example uses a tiny deterministic network, two tokenized prompts and Off,
-zero, signed-dose and token-scope variants. It is a numerical example, not a
-pretrained model benchmark. `ActivationReferenceExecutor` in
-The example now starts with saved text authoring and uses
-`ponder_sdk.activation_forms.compile_activation_form`. Supply the form, exact
-`NeuronSteeringModel` and an `ActivationFormTokenizer` carrying the matching base
-source, tokenizer descriptor and unpadded encoder. The compiler verifies those
-identities, rejects incomplete required numeric controls and creates the explicit
-baseline/sweep request. Inspection ignores inactive steering controls. Fixed
-calibration artifacts must be supplied both here and to the executor. The adapter
-is trusted local custody, not hosted tokenizer attestation; this compiler imports
-no PyTorch and starts no remote work.
-
-`ponder_sdk.reference.activations` accepts a trusted `DenseReferenceModel`
-adapter around an already loaded model. The executor downloads no weights and
-does not call the hosted API. Only serial, single-device, unquantized dense
-execution without adapters is implemented.
-
-Profiles use zero-based additive `down_proj` input interventions and FP32
-midpoint residual medians. Prompt-based normalization costs an additional
-unsteered prefill; fixed mode pins a calibration artifact. Captures and full
-context recomputation are bounded explicitly, including inspection of the last
-generated token. The host must route all access through the exclusive reference
-executor. Its lock is not a production batching or cache-isolation solution.
-
-The optional manual numerical workflow is deliberately separate from ordinary
-HTTP SDK tests:
-
-```sh
-python -m pytest reference-tests/test_dense_activation_workflow.py
-```
-
-Hosted neuron execution, immutable profile publication, CLI execution and managed
-serving are not provided by this reference. Draft UI/API authoring is separate.
-Original neuron coordinates cannot
-be carried to a different checkpoint without a new experiment.
-
 
 ### Retain local external observations
 
@@ -471,95 +391,6 @@ create an exact compact starting Model pin, and seed a continuation form with
 parent artifact; it does not substitute the base Model or resume optimizer/RNG
 state. The two-file learned module is separate from LoRA and activation profiles.
 Tensor custody, reload behavior and model quality require their own runtime evidence.
-
-### Standalone downloaded modification inference
-
-The optional `ponder_sdk.reference` loaders consume local exported files without
-an OpenPond account, worker or hosted endpoint. Install `ponder-sdk[inference]`
-in a separate Python 3.12 inference environment. The extra pins the Decision release's
-Torch/Transformers/PEFT dependency versions and the tested safetensors reader;
-it does not add these dependencies to the ordinary HTTP SDK. Choose the Torch
-wheel for your device separately when needed (a compatible CPU wheel also
-satisfies the pinned Torch version). No loader downloads weights or executes
-Python code from a model directory.
-
-`reference.qwen3.load_qwen3_snapshot` loads the local, unquantized BF16
-`Qwen/Qwen3-8B` snapshot at revision
-`b968826d9c46dd6066d109eabc6255188de91218`. Supply the exported exact model
-identity and tokenizer descriptor; file hashes, configuration, complete live
-weight hash, architecture and projection geometry are checked before use.
-Quantized, fused, sharded, adapted or different bases are refused. A caller can
-also construct a `Qwen3Snapshot` around an already loaded exact model and its
-source descriptors. Loaders verify it again and require exclusive ownership.
-`snapshot.steering_reference()` adapts that exact base to the existing
-`ActivationReferenceExecutor` for downloaded steering profiles and inspection;
-it retains the executor's serial, full-context, no-KV semantics.
-
-```python
-from ponder_sdk.reference.qwen3 import load_qwen3_snapshot
-from ponder_sdk.reference.engram import load_engram, RequestHistory
-
-snapshot = load_qwen3_snapshot(
-    "base-snapshot", model_identity=manifest["pins"]["baseModel"],
-    tokenizer_descriptor=tokenizer_descriptor, device="cuda:0",
-)
-memory = load_engram(snapshot, "downloaded-engram", expected_content_hash=export_hash)
-history = RequestHistory("local-generation", vocab_size=tokenizer_descriptor["vocabSize"])
-try:
-    # input_ids is a [1, tokens] LongTensor on the snapshot's device.
-    output = memory(input_ids, history=history, enabled=True, use_cache=True)
-    # For the next decode call, pass only the new token and this exact KV object.
-    # output = memory(next_token_ids, history=history,
-    #                 past_key_values=output.past_key_values, use_cache=True)
-finally:
-    history.release()
-    memory.detach()
-```
-
-Engram requires exactly `openpond_qwen_engram_paper_v1`, per-hash dimension 256,
-attention-input hooks at layers 1/3/7/15, and the two exported files
-`manifest.json` and `adapter.safetensors`. The loaded state includes shared
-embeddings, occupancy flags, projections and gates. Inference never changes
-occupancy or initializes new learned weights. This is separate from Spark or
-DeepSeek memory formats. A history owns one generation, module, On/Off choice
-and KV object; use a new history for each generation or toggle comparison.
-A failed forward closes its history, and callers from a different thread or
-asyncio task are refused even when the thread is shared. Keep manual
-`memory.request(...)` and `patch.request(...)` scopes synchronous: do not await
-inside them. The context managers do not change thread-local Torch inference
-mode across their yields; the synchronous numerical calls manage it locally.
-Uncached calls must supply the complete prefix. Direct access to the attached
-base must run inside `memory.request(...)`; ordinary `model.generate()` is not
-an implicit request/history adapter.
-
-`reference.neuron.load_neuron_patch(snapshot, directory,
-expected_content_hash=...)` verifies the two-file selected-neuron export and
-attaches its F32 column deltas without merging or rounding them into the base.
-Use `with patch.request(enabled=True): output = snapshot.model(...)`; Off is an
-explicit `enabled=False` request, and `patch.detach()` removes every hook.
-An optional original `request=` additionally verifies training provenance.
-The sealed coordinate/delta artifact is sufficient for inference loading.
-
-`reference.decision.load_decision(directory, expected_content_hash=...,
-artifact_id=..., model_identity=..., source_directories=..., device="cuda:0")`
-loads the four-file PEFT export (`manifest.json`, `adapter_model.safetensors`,
-`adapter_config.json`, `decision_contract.json`). Its six local source directories
-are keyed `backbone`, `originalAdapter`, `tokenizer`, `reference`,
-`backboneLicense` and `releaseLicense`; each must match its complete source
-manifest. The supported backbone is the full pinned Qwen3.5-9B conditional
-model, with the exact documented auxiliary-MTP omission, not a generic causal
-LoRA target. The bundled Apache-2.0 prompt code is byte-pinned and attributed.
-`scorer.score(request)` accepts the existing `DecisionScoringRequest`, bound to
-that exported artifact ID/hash, and returns a verified `DecisionScoringResult`.
-It computes every declared candidate's next-token logit and T1 probability,
-including integer expected levels; it does not grade generated JSON or text.
-
-The local scorer's runtime hash describes its actual package/source versions,
-not a hosted worker attestation. Limits/cancellation are cooperative between
-native calls. CPU file, projection, history and installed-package checks cover
-these boundaries; exact-model trained-result reload/forward and model-quality
-acceptance still require separate native evidence. No such acceptance is implied
-by installing the extra or passing the reference workflow.
 
 ## Optional OpenTelemetry adapter
 

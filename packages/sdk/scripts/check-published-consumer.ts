@@ -7,10 +7,12 @@ import { build } from "esbuild";
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
+  exports?: Record<string, unknown>;
 };
 
 type PackResult = Array<{
   filename: string;
+  files: Array<{path:string}>;
 }>;
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,7 +36,15 @@ async function main(): Promise<void> {
   const filename = packed[0]?.filename;
   if (!filename) throw new Error("npm pack did not produce an SDK tarball.");
 
+  if (manifest.exports?.["./private-worker"] || packed[0]!.files.some(file =>
+    /(?:^|\/)(?:private-worker(?:\/|\.)|worker_envelopes\.py$|worker-schemas\.json$)/.test(file.path)))
+    throw new Error("Internal worker protocols must not be published in the public SDK.");
   const tarball = path.join(packageRoot, filename);
+  for (const file of packed[0]!.files.filter(file => file.path.endsWith(".map"))) {
+    const map = JSON.parse(execFileSync("tar",["-xOf",tarball,`package/${file.path}`],{encoding:"utf8",maxBuffer:16*1024*1024}));
+    if ((map.sources as string[] | undefined)?.some(source => /(?:^|\/)private-worker(?:\/|\.)/.test(source)))
+      throw new Error("A public SDK bundle contains internal worker protocol source.");
+  }
   const consumer = await mkdtemp(path.join(tmpdir(), "openpond-sdk-consumer-"));
   try {
     const dependencies = [tarball];
