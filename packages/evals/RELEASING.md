@@ -36,3 +36,9 @@ leave the lockfile unchanged. The helper reports the selected path before commit
 A dry run requires clean, current master and prints the commands without changing
 Git or package versions. Existing trusted publishing, registry verification,
 package tags, and retry behavior are unchanged.
+
+Version `0.12.8` gives newly authored Reward support files content-addressed
+paths so training and evaluation Rewards, including different revisions of one
+Reward, can coexist in one private export. Existing published assets and checked
+Reward revisions remain immutable; edit, recheck and publish a new revision to
+use the new paths. Asset visibility and reference-integrity checks are unchanged.
