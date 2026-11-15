@@ -17,22 +17,23 @@ export const DEFAULT_REWARD_VERIFIER_SOURCE = `export function verify({ output, 
 }`;
 
 /** Both editors and execution owners compile the same draft bytes. No publication occurs here. */
-export function compileRewardAuthoring(input: { id: string; fields: RewardAuthoringFields; base: RewardRelease | null }): { reward: RewardRelease; assets: LearningTextAsset[] } {
+export function compileRewardAuthoring(input: { id: string; fields: RewardAuthoringFields; base: RewardRelease | null; assetPathLayout?: "content-addressed-v1" | "flat-v1" }): { reward: RewardRelease; assets: LearningTextAsset[] } {
   assertBoundedTaskJson(input, 262_144);
   const fields = RewardAuthoringFieldsSchema.parse(input.fields);
   const base = input.base ? RewardReleaseSchema.parse(input.base) : null;
   if (base && base.id !== input.id) throw new LearningDomainError("reward_authoring_base_mismatch", 422);
-  const fixtureAsset = fields.fixtures?.length ? rewardAsset(JSON.stringify(fields.fixtures), "reward-fixtures.json", "application/json") : null;
+  const createAsset = (text: string, filename: string, mediaType: string) => rewardAsset(text, filename, mediaType, input.assetPathLayout ?? "content-addressed-v1");
+  const fixtureAsset = fields.fixtures?.length ? createAsset(JSON.stringify(fields.fixtures), "reward-fixtures.json", "application/json") : null;
   let asset: LearningTextAsset | null = null;
   let implementation: RewardRelease["implementation"];
   let calibrationCheckRef: RewardRelease["calibrationCheckRef"];
   if (fields.kind === "custom_verifier") {
-    asset = rewardAsset(fields.code, "verifier.mjs", "application/javascript");
+    asset = createAsset(fields.code, "verifier.mjs", "application/javascript");
     implementation = { kind: fields.kind, verifierRef: asset.asset, exportName: fields.exportName, timeoutMs: authoringNumber(fields.timeout, "Time limit"), networkPolicy: "none",
       ...((fields.verifierRuntime ?? (base?.implementation.kind === "custom_verifier" ? base.implementation.runtime : undefined)) ? { runtime: fields.verifierRuntime ?? (base?.implementation.kind === "custom_verifier" ? base.implementation.runtime : undefined) } : {}) };
   } else if (fields.kind === "model_judge" || fields.kind === "human") {
     if (!fields.rubric.trim()) throw new LearningDomainError("reward_rubric_required", 422, "Write the rubric before checking or publishing this Reward.");
-    asset = rewardAsset(fields.rubric, "rubric.md", "text/markdown");
+    asset = createAsset(fields.rubric, "rubric.md", "text/markdown");
     if (fields.kind === "human") implementation = { kind: fields.kind, rubricRef: asset.asset, reviewerRole: fields.reviewerRole, form: HumanFormSchema.parse(JSON.parse(fields.humanForm || JSON.stringify({ schemaVersion: "openpond.humanForm.v1", mode: "individual", instructions: fields.rubric, criteria: [{ id: "quality", label: "Quality", instructions: fields.rubric, required: true, allowAbstain: true, kind: "score", minimum: 0, maximum: 1, step: 0.1 }] }))) };
     else {
       const model = { providerId: fields.providerId, modelId: fields.modelId, revision: fields.modelRevision.trim() || null };
@@ -47,7 +48,7 @@ export function compileRewardAuthoring(input: { id: string; fields: RewardAuthor
     }
   } else if (fields.kind === "learned_model") {
     parseRewardAuthoringObject(fields.inputContract, "Model input contract");
-    asset = rewardAsset(fields.inputContract, "input-contract.json", "application/json");
+    asset = createAsset(fields.inputContract, "input-contract.json", "application/json");
     implementation = { kind: fields.kind, modelVersion: { id: fields.learnedId, contentHash: fields.learnedHash }, inputContract: asset.asset };
   } else if (fields.kind === "state") implementation = { kind: fields.kind, config: { fields: split(fields.fields) } };
   else if (fields.kind === "content") implementation = { kind: fields.kind, config: { outputField: fields.outputField, expectedField: fields.expectedField, ...(fields.expectedValue ? { expectedValue: fields.expectedValue } : {}) } };
@@ -69,8 +70,8 @@ export function compileRewardAuthoring(input: { id: string; fields: RewardAuthor
 
 // Training and evaluation Rewards (including different revisions of one Reward)
 // share a private asset directory. Different bytes must never claim one path.
-function rewardAsset(text: string, filename: string, mediaType: string): LearningTextAsset {
-  return createLearningTextAsset({ text, path: `reward-assets/${sha256(text)}/${filename}`, mediaType, visibility: "verifier" });
+function rewardAsset(text: string, filename: string, mediaType: string, layout: "content-addressed-v1" | "flat-v1"): LearningTextAsset {
+  return createLearningTextAsset({ text, path: layout === "flat-v1" ? filename : `reward-assets/${sha256(text)}/${filename}`, mediaType, visibility: "verifier" });
 }
 
 export function rewardAuthoringFields(reward: RewardRelease | null, sourceAsset: LearningTextAsset | null, fixtureAsset: LearningTextAsset | null = null): RewardAuthoringFields {
