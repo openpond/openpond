@@ -1,7 +1,7 @@
 import { contentHash } from "@openpond/harness";
 import { BoundRewardResultSchema, type BoundRewardResult } from "../rewards.js";
 import { sameLearningRef, learningRef } from "./contracts.js";
-import { compileRewardCheck, matchRewardFixture, RewardCheckRunSchema, RewardCheckRuntimeSchema, type RewardCheckRun, type RewardCheckRuntime, type RewardFixture } from "./reward-checks.js";
+import { compileRewardCheck, compileRetainedRewardCheck, matchRewardFixture, RewardCheckRunSchema, RewardCheckRuntimeSchema, type RewardCheckRun, type RewardCheckRuntime, type RewardFixture } from "./reward-checks.js";
 import { requireLearningRelease, requireLearningResource, type LearningRepository } from "./repository.js";
 
 export interface RewardFixtureExecutor {
@@ -44,7 +44,7 @@ export function createRewardCheckWorker(repository: LearningRepository, executor
         const draft = await requireLearningRelease(tx, "draft", claim.run.draft);
         if (draft.targetKind !== "reward") throw new Error("reward_check_draft_kind_invalid");
         const base = draft.baseRelease ? await requireLearningRelease(tx, "reward", draft.baseRelease) : null;
-        const compiled = compileRewardCheck(draft, base);
+        const compiled = compileRetainedRewardCheck(draft, base, claim.run);
         if (compiled.snapshotHash !== claim.run.snapshotHash || !sameLearningRef(learningRef(compiled.reward), claim.run.reward) || contentHash(compiled.fixtureRefs) !== contentHash(claim.run.fixtureRefs)) throw new Error("reward_check_snapshot_mismatch");
         return compiled;
       });

@@ -3,7 +3,7 @@ import { ReleaseHashSchema, ReleaseIdSchema, ReleaseTimestampSchema, contentHash
 import { BoundRewardResultSchema, createRewardBinding, executeRewardBinding, type BoundRewardResult, type RewardRelease } from "../rewards.js";
 import type { CustomVerifierRunner, ModelJudgeRunner } from "../graders.js";
 import { TaskRecordSchema } from "../tasksets.js";
-import { LearningJsonObjectSchema, LearningRevisionRefSchema, learningRef } from "./contracts.js";
+import { LearningJsonObjectSchema, LearningRevisionRefSchema, learningRef, sameLearningRef } from "./contracts.js";
 import { authoringNumber, compileRewardAuthoring, parseRewardAuthoringObject } from "./reward-authoring.js";
 import type { AuthoringDraftFor, RewardFixtureAuthoringFields } from "./authoring.js";
 import { LearningDomainError } from "./errors.js";
@@ -58,11 +58,27 @@ export function compileRewardFixtures(fields: RewardFixtureAuthoringFields[]): R
   }));
 }
 
-export function compileRewardCheck(draft: AuthoringDraftFor<"reward">, base: RewardRelease | null) {
-  const compiled = compileRewardAuthoring({ id: draft.targetId, fields: draft.fields, base });
+export function compileRewardCheck(draft: AuthoringDraftFor<"reward">, base: RewardRelease | null, assetPathLayout: "content-addressed-v1" | "flat-v1" = "content-addressed-v1") {
+  const compiled = compileRewardAuthoring({ id: draft.targetId, fields: draft.fields, base, assetPathLayout });
   const fixtures = compileRewardFixtures(draft.fields.fixtures ?? []);
   const fixtureRefs = fixtures.map(fixture => ({ id: fixture.id, contentHash: contentHash(fixture) }));
   return { ...compiled, fixtures, fixtureRefs, snapshotHash: contentHash({ reward: compiled.reward, fixtures }) };
+}
+
+/** Reconstruct an immutable check using its exact reward, fixture and snapshot
+ * hashes. New checks always use content-addressed assets; retained pre-0.12.8
+ * evidence keeps the original flat layout without rewriting assets or receipts.
+ * A partial match or an unknown compilation is never accepted. */
+export function compileRetainedRewardCheck(draft: AuthoringDraftFor<"reward">, base: RewardRelease | null,
+  check: Pick<RewardCheckRun, "draft" | "reward" | "snapshotHash" | "fixtureRefs">) {
+  if (!sameLearningRef(check.draft, learningRef(draft)))
+    throw new LearningDomainError("reward_calibration_snapshot_mismatch", 422);
+  for (const layout of ["content-addressed-v1", "flat-v1"] as const) {
+    const compiled = compileRewardCheck(draft, base, layout);
+    if (sameLearningRef(check.reward, learningRef(compiled.reward)) && check.snapshotHash === compiled.snapshotHash
+      && contentHash(check.fixtureRefs) === contentHash(compiled.fixtureRefs)) return compiled;
+  }
+  throw new LearningDomainError("reward_calibration_snapshot_mismatch", 422);
 }
 
 /** Fixture data is authored test data, never an owner-recorded production attempt. */

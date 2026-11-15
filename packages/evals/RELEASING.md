@@ -42,3 +42,10 @@ paths so training and evaluation Rewards, including different revisions of one
 Reward, can coexist in one private export. Existing published assets and checked
 Reward revisions remain immutable; edit, recheck and publish a new revision to
 use the new paths. Asset visibility and reference-integrity checks are unchanged.
+
+Version `0.12.9` reconstructs retained Reward checks using their exact reward,
+fixture and snapshot hashes across the original flat and content-addressed asset
+layouts. This preserves existing calibrated grader closures and queued checks
+without rewriting their evidence or rerunning paid graders. New authoring and
+checks continue to use content-addressed paths; mixed or changed snapshots remain
+invalid.

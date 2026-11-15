@@ -4,12 +4,12 @@ import type { AuthoringDraftFor } from "./authoring.js";
 import { learningRef, sameLearningRef } from "./contracts.js";
 import { LearningDomainError } from "./errors.js";
 import { requireLearningRelease, requireLearningResource, type LearningTransaction } from "./repository.js";
-import { compileRewardCheck, matchRewardFixture, type RewardCheckRun } from "./reward-checks.js";
+import { compileRetainedRewardCheck, matchRewardFixture, type RewardCheckRun } from "./reward-checks.js";
 
 /** Qualification is tied to the exact private draft, fixtures and worker-owned
  * execution results. Model judges additionally require provider receipts. */
 export function qualifyRewardCheck(draft: AuthoringDraftFor<"reward">, base: RewardRelease | null, check: RewardCheckRun) {
-  const compiled = compileRewardCheck(draft, base);
+  const compiled = compileRetainedRewardCheck(draft, base, check);
   const implementation = compiled.reward.implementation;
   if (implementation.kind === "human" || implementation.kind === "learned_model")
     throw new LearningDomainError("reward_calibration_kind_unsupported", 422);

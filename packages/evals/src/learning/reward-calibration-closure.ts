@@ -8,7 +8,7 @@ import { createLearningTextAsset, LearningTextAssetSchema, verifyLearningTextAss
 import { assertLearningContentHash, learningRef, sameLearningRef, type LearningRevisionRef } from "./contracts.js";
 import { LearningDomainError } from "./errors.js";
 import { qualifyRewardCheck } from "./reward-calibration.js";
-import { compileRewardCheck, matchRewardFixture, RewardCheckRunSchema } from "./reward-checks.js";
+import { compileRetainedRewardCheck, matchRewardFixture, RewardCheckRunSchema } from "./reward-checks.js";
 import { requireLearningRelease, requireLearningResource, type LearningTransaction } from "./repository.js";
 export { learningRef, LearningRevisionRefSchema } from "./contracts.js";
 export { RewardFixtureSchema } from "./reward-checks.js";
@@ -38,8 +38,8 @@ export function verifyRewardCalibrationClosure(raw: unknown): RewardCalibrationC
   if (value.base) assertRewardHash(value.base);
   if (value.draft.baseRelease ? !value.base || !sameLearningRef(value.draft.baseRelease, learningRef(value.base)) : value.base !== null)
     fail("reward_calibration_closure_base_mismatch");
-  const compiled = compileRewardCheck(value.draft, value.base);
   const { check, reward } = value;
+  const compiled = compileRetainedRewardCheck(value.draft, value.base, check);
   if (!sameLearningRef(check.draft, learningRef(value.draft)) || !sameLearningRef(check.reward, learningRef(compiled.reward))
     || check.snapshotHash !== compiled.snapshotHash || contentHash(check.fixtureRefs) !== contentHash(compiled.fixtureRefs)
     || check.status !== "completed" || !check.runtime || check.matchesExpectations !== true || check.failure !== null
@@ -93,7 +93,7 @@ export async function exportRewardCalibrationClosure(tx: LearningTransaction, in
   const draft = await requireLearningRelease(tx, "draft", check.draft);
   if (draft.targetKind !== "reward") fail("reward_calibration_closure_draft_mismatch");
   const base = draft.baseRelease ? await requireLearningRelease(tx, "reward", draft.baseRelease) : null;
-  const compiled = compileRewardCheck(draft, base);
+  const compiled = compileRetainedRewardCheck(draft, base, check);
   const assets = await Promise.all(compiled.assets.map(asset => requireLearningResource(tx, "asset", asset.id, 1)));
   return createRewardCalibrationClosure({ schemaVersion: "openpond.rewardCalibrationClosure.v1", reward, check, draft, base, assets });
 }
