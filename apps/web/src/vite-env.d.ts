@@ -253,6 +253,9 @@ type BrowserDiagnostics = {
 
 interface Window {
   openpond?: {
+    analytics?: {
+      account: (value: { state: import("@openpond/contracts").AccountState["state"]; userId: string | null; baseUrl: string | null }, loginSucceeded: boolean) => Promise<void>;
+    };
     setAppearance?: (preference: "light" | "dark" | "system") => Promise<void>;
     updates?: import("@openpond/contracts").DesktopUpdatesBridge;
     notify?: (input: { id: string; title: string; body: string; ponder?: boolean }) => Promise<boolean>;

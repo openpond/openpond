@@ -490,6 +490,7 @@ export type TurnRunnerDependencies = {
   storageHome?: string;
   loadAppPreferences?: () => Promise<AppPreferences>;
   loadProviderSettings?: () => Promise<ProviderSettings>;
+  loadSubagentProviderSettings?: () => Promise<ProviderSettings>;
   maybeCreateScaffoldForTurn: SessionWorkspaceResolver["maybeCreateScaffoldForTurn"];
   hostedSystemPrompt: (
     basePrompt: string,
@@ -583,6 +584,7 @@ export type TurnRunner = TurnDispatcherPort & {
 };
 
 export type ActiveTurn = {
+  turnPermissions?: Pick<SendTurnRequest, "approvalPolicy" | "sandbox" | "codexPermissionMode" | "codexReasoningEffort">;
   session: Session;
   turn: Turn;
   controller: AbortController;

@@ -98,6 +98,7 @@ export function createCapabilityCatalogRuntime(deps: {
         ...(deps.subagentToolsAvailable() &&
         options.subagentToolsEnabled !== false
           ? {
+              listSubagentModels: deps.handlers.listSubagentModels,
               startSubagent: deps.handlers.startSubagent,
               statusSubagents: deps.handlers.statusSubagents,
               joinSubagent: deps.handlers.joinSubagent,

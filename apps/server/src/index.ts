@@ -1160,6 +1160,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       (await loadPersonalizationSettings(store, storeDir)).soul,
     loadAppPreferences,
     loadProviderSettings: async () => (await localByokRuntimeState()).settings,
+    loadSubagentProviderSettings: () => providerSettingsPayload({ refreshCatalog: false }),
     maybeCreateScaffoldForTurn,
     hostedSystemPrompt,
     appendAssistantText,

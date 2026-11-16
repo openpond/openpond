@@ -2,6 +2,16 @@
 
 Desktop, Web, CLI and TUI share one OpenPond home. Stable defaults to `~/.openpond`; nightly defaults to `~/.openpond-nightly`. Set `OPENPOND_HOME` or pass `--home <directory>` to choose another home. Development keeps its existing isolated home under `~/.openpond/openpond-app-dev` (nightly: `openpond-app-nightly-dev`).
 
+## Desktop product analytics
+
+Official desktop builds can send `desktop_first_opened`, `desktop_opened`, `desktop_authenticated` and `desktop_login_succeeded` to PostHog. First open means the first tracked launch for that OpenPond home, including existing installations upgrading to an instrumented release. App opens count processes, not renderer reloads. Authenticated activity counts each account once per process; successful logins count explicitly saved and verified credentials, not restored sessions or account switching.
+
+Events contain a random installation ID, a process session ID, version, release channel, OS and architecture. Authenticated events use the stable OpenPond user ID. No credentials, email addresses, conversation content, file paths or browser activity are sent. Anonymous installation events are not merged into person profiles. Download clicks on the website are separate from completed downloads and installed apps.
+
+Set `OPENPOND_ANALYTICS_ENABLED=0` to disable desktop analytics. Development is disabled by default; explicitly set `OPENPOND_ANALYTICS_ENABLED=1` to opt in, with events tagged `analytics_environment=development`. Packaged builds use `production`. Only accounts matching `OPENPOND_ANALYTICS_ACCOUNT_ORIGIN` (default `https://openpond.ai`) are tracked, preventing custom account identities from entering the production project.
+
+Release maintainers supply `OPENPOND_POSTHOG_TOKEN` (the public project token, never a personal API key) and optionally `OPENPOND_POSTHOG_HOST` to the desktop bundle step. The release workflow reads the token from its matching GitHub secret and the ingestion host from its matching repository variable, defaulting to US ingestion. Runtime variables with these names can override the bundled settings. Builds without a project token do not send events. First-open delivery retries on the next launch with the same event ID if ingestion fails; other activity is best-effort and never blocks app startup or authentication.
+
 ## Browser authentication
 
 Start `openpond ui` and open its full authenticated URL. For the app-server web command, use `--open-browser` or `--print-access-url`. The URL fragment hands the credential to the browser; the browser stores the connection and removes the fragment after connecting. Treat the authenticated URL as a credential. A bare server URL works only after that browser has a saved connection. Served HTML never contains the server token, including on loopback listeners or behind proxies.

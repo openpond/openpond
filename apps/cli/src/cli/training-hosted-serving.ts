@@ -1,9 +1,19 @@
 import { z } from "zod";
 
 const PrepareSchema = z.object({ baseProfileId: z.string().trim().min(1).max(191) }).strict();
+const RetirementReviewSchema = z.object({
+  expectedPoolVersion: z.number().int().positive(),
+  deployments: z.array(z.object({
+    id: z.string().trim().min(1).max(240),
+    artifactId: z.string().trim().min(1).max(240),
+    expectedVersion: z.number().int().positive(),
+  }).strict()).min(1).max(100),
+}).strict().refine(value => new Set(value.deployments.map(row => row.id)).size === value.deployments.length,
+  "Review each deployment exactly once");
 const RetireSchema = z.object({
   poolId: z.string().trim().min(1).max(191),
   reason: z.string().trim().min(3).max(512),
+  retirementReview: RetirementReviewSchema.optional(),
 }).strict();
 const PoolSchema = z.object({
   id: z.string().min(1),
@@ -38,10 +48,10 @@ export async function runHostedServingCommand(input: {
     body = JSON.stringify(request);
   } else if (input.action === "hosted-serving-pool-retire") {
     if (!input.confirmed) throw new Error("Retiring serving capacity requires --yes.");
-    const { poolId, reason } = RetireSchema.parse(await input.readInput());
+    const { poolId, reason, retirementReview } = RetireSchema.parse(await input.readInput());
     expectedPoolId = poolId;
     path += `/${encodeURIComponent(poolId)}/retire`;
-    body = JSON.stringify({ reason });
+    body = JSON.stringify({ reason, ...(retirementReview ? { retirementReview } : {}) });
   } else {
     throw new Error(`Unknown serving operation: ${input.action}`);
   }

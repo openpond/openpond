@@ -225,7 +225,9 @@ export function createTaskInboxRuntime(deps: {
     if (input.targetTurnId && (!input.targetSessionId || targetTurn?.sessionId !== input.targetSessionId)) {
       throw new Error("The turn does not belong to the target task.");
     }
-    if (input.targetSessionId && !targetTurn && !targetInput && targetRun?.status !== "queued") {
+    // A child marks its run running before native turn admission persists the
+    // first turn. Joining in that interval must still wait for its completion.
+    if (input.targetSessionId && !targetTurn && !targetInput && targetRun?.status !== "queued" && targetRun?.status !== "running") {
       throw new Error("The target has no matching execution to wait for. Supply the follow-up input receipt when waiting for new work.");
     }
     const timestamp = new Date().toISOString();

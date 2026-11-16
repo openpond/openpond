@@ -101,7 +101,7 @@ export function createCodexRuntimeManager({
       existing?.client.isRunning() && existing.permissionMode === turnInput.codexPermissionMode &&
       existing.reasoningEffort === (turnInput.codexReasoningEffort ?? null) &&
       existing.cwd === session.cwd &&
-      coordinationSignatures.get(session.id) === JSON.stringify(turnInput.coordination?.tools.map(tool => tool.name) ?? [])
+      coordinationSignatures.get(session.id) === JSON.stringify(turnInput.coordination?.tools ?? [])
     ) return existing;
     if (existing) {
       codexSessions.delete(session.id);
@@ -143,7 +143,7 @@ export function createCodexRuntimeManager({
     try {
       const coordination = turnInput.coordination ? await createTaskCoordinationMcp(turnInput.coordination) : null;
       if (coordination) coordinationServers.set(session.id, coordination);
-      coordinationSignatures.set(session.id, JSON.stringify(turnInput.coordination?.tools.map(tool => tool.name) ?? []));
+      coordinationSignatures.set(session.id, JSON.stringify(turnInput.coordination?.tools ?? []));
       const config = { ...codexSessionConfig(turnInput.codexPermissionMode, turnInput.codexReasoningEffort),
         ...(coordination ? { "mcp_servers.openpond_task": coordination.config } : {}) };
       const personalization = evaluation ? null : await loadPersonalizationSettings(store, storeDir);

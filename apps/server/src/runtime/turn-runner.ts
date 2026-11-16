@@ -109,9 +109,11 @@ import { createSubagentMessagingRuntime } from "./subagents/messaging-runtime.js
 import { createSubagentChildTurnRuntime } from "./subagents/child-turn-runtime.js";
 import { createSubagentCompletionRuntime } from "./subagents/completion-runtime.js";
 import { createSubagentToolRuntime } from "./subagents/tool-runtime.js";
+import { createSubagentCapabilityHandlers } from "./subagents/capability-handlers.js";
+import { createOpenPondCapabilityModelToolDefinitions } from "../openpond/capability-tool-registry.js";
+import { isTerminalOneShotTurn } from "./turns/request-context.js";
 import type {
   SubagentLifecycleControl,
-  SubagentToolHandlers,
   SubagentTurnHooks,
 } from "./subagents/facets.js";
 import { createSubagentLifecycleRuntime } from "./subagents/lifecycle-runtime.js";
@@ -704,18 +706,12 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       updateSession,
       appendSubagentReceipt,
     });
-  const {
-    cancelSubagentFromModelTool,
-    cleanupExpiredRetainedSubagentWorkspace,
-    joinSubagentFromModelTool,
-    followupSubagentFromModelTool,
-    runSubagentLifecycleAction,
-    startSubagentFromModelTool,
-    statusSubagentsFromModelTool,
-  } = createSubagentToolRuntime({
+  const loadSubagentProviderSettings = deps.loadSubagentProviderSettings ?? loadProviderSettings;
+  const subagentToolRuntime = createSubagentToolRuntime({
     inbox: taskInbox,
     requireSubagentDeps,
     loadAppPreferences,
+    loadProviderSettings: loadSubagentProviderSettings,
     getSession,
     appendSubagentReceipt,
     subagentWorkspaceTargetKeyForSession,
@@ -730,15 +726,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     queueSubagentFollowupMessage,
     archiveSubagentChildSession,
     subagentLifecycleActionNextStep,
-  }) satisfies SubagentToolHandlers;
+  });
+  const { cleanupExpiredRetainedSubagentWorkspace, runSubagentLifecycleAction } = subagentToolRuntime;
+  const subagentToolHandlers = createSubagentCapabilityHandlers(subagentToolRuntime,
+    loadSubagentProviderSettings, sendSubagentMessageFromModelTool);
   const capabilityCatalogDefinitions = createCapabilityCatalogRuntime({
     handlers: {
-      startSubagent: startSubagentFromModelTool,
-      statusSubagents: statusSubagentsFromModelTool,
-      joinSubagent: joinSubagentFromModelTool,
-      cancelSubagent: cancelSubagentFromModelTool,
-      followupSubagent: followupSubagentFromModelTool,
-      sendSubagentMessage: sendSubagentMessageFromModelTool,
+      ...subagentToolHandlers,
       ...(manageSidebarFile
         ? {
             manageSidebarFile: (context, input) =>
@@ -1164,6 +1158,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     });
     const controller = new AbortController();
     const activeTurn: ActiveTurn = {
+      turnPermissions,
       session,
       turn,
       controller,
@@ -1415,8 +1410,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         ? [createNativeQuestionTool(appendRuntimeEvent)] : [];
       const fileDefinitions = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
         && peerInput?.payload.taskReportingOnly !== true ? [filePreviewTool] : [];
+      const subagentDefinitions = !nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation
+        && peerInput?.payload.taskReportingOnly !== true && !desktopWorkflow(peerInput) && !isTerminalOneShotTurn(turn)
+        && session.experience !== "chat" && appPreferences.subagents.enabled && subagentToolsAvailable()
+        && (session.provider === "codex" || isNativeAgentId(session.provider))
+        ? createOpenPondCapabilityModelToolDefinitions({ ...subagentToolHandlers,
+            ...(session.subagentRunId ? { startSubagent: undefined } : {}), subagentRoles: appPreferences.subagents.roles }) : [];
       const toolLearningContext = !nativeEvaluation && !candidateAuthoring && !isolatedProfileEvaluation ? await nativeToolLearningContext(session).catch(() => "") : "";
       const extraSystemContext = [
+        subagentDefinitions.length && !session.subagentRunId ? "Use OpenPond's openpond_subagent_models and openpond_subagent_start to delegate to a chosen configured worker, including other providers. Use the OpenPond subagent tools for status, join, follow-up and cancellation of those children. Native Agent tools have their own provider model limits. Preserve the user's requested model and reasoning effort; do not silently substitute." : "",
         toolLearningContext,
         questionDefinitions.length ? NATIVE_QUESTION_INSTRUCTIONS : "",
         fileDefinitions.length ? FILE_PREVIEW_INSTRUCTIONS : "",
@@ -1761,11 +1763,17 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         if (session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template") throw new Error("Local native agents require a local workspace.");
         const coordinationDefinitions = session.experience === "chat" || session.systemKind ? [] : coordinationTools;
         const visualToolsEnabled = !nativeEvaluation && peerInput?.payload.taskReportingOnly !== true && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() === true;
-        const definitions = [...coordinationDefinitions, ...nativeEvaluationSkills, ...nativeCliSkillTools, ...nextStepTools, ...questionDefinitions, ...browserDefinitions, ...fileDefinitions, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : [])];
+        const definitions = [...coordinationDefinitions, ...subagentDefinitions, ...nativeEvaluationSkills, ...nativeCliSkillTools, ...nextStepTools, ...questionDefinitions, ...browserDefinitions, ...fileDefinitions, ...(visualToolsEnabled ? visualTools(htmlVisuals!) : [])];
         const content = await nativeImageContent({ storageHome: deps.storageHome ?? attachmentRootDir, attachmentRootDir, sessionId, turnId: turn.id, attachments: attachmentContexts });
         const providerTurnId = await runSteeredNativeTurn({ runtime: nativeAgents, inbox: taskInbox, store: inboxStore, getSession,
           taskToolInstructions: [coordinationDefinitions.length ? TASK_COORDINATION_INSTRUCTIONS : "", visualToolsEnabled ? HTML_VISUAL_INSTRUCTIONS : "", browserDefinitions.length ? NATIVE_BROWSER_INSTRUCTIONS : ""].filter(Boolean).join("\n\n"),
-          input: { content, session, turn, cwd, reportingOnly: peerInput?.payload.taskReportingOnly === true, prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
+          input: { content, session, turn, cwd, reportingOnly: peerInput?.payload.taskReportingOnly === true,
+          // Claude's own permission mode must respect a child role's ceiling;
+          // its provider-wide bypass preference cannot grant a read-only child edits.
+          mode: session.subagentRunId && session.provider === "claude-code"
+            ? turnPermissions.sandbox === "read-only" ? "plan" : turnPermissions.sandbox === "workspace-write" ? "manual" : undefined
+            : undefined,
+          prompt: codexPromptWithHarnessContext(providerPrompt, [personalizationSoul, admittedConfiguration?.instructions.userContext, extraSystemContext].filter(Boolean).join("\n\n")), model: turnModelRef?.modelId, signal: controller.signal,
           coordination: definitions.length ? {
             tools: definitions.map((definition) => ({ name: definition.name, description: definition.description, inputSchema: definition.parameters })),
             execute: async (name, args, callId, signal) => {
@@ -1774,7 +1782,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               const definition = definitions.find((tool) => tool.name === name);
               if (!definition) throw new Error("Unknown task coordination tool.");
               const result = await definition.execute({ session: active.session, turnId: active.turn.id,
-                turnPermissions: turnPermissionsFromSendTurnInput(SendTurnRequestSchema.parse({ prompt: active.turn.prompt })), provider: active.session.provider, model: active.turn.modelRef?.modelId ?? "native",
+                turnPermissions: active.turnPermissions ?? turnPermissions, provider: active.session.provider, model: active.turn.modelRef?.modelId ?? "native",
                 callId, args, signal: AbortSignal.any([signal, active.controller.signal]), workspaceDiffBaseline: null,
                 mentionedApps: [], userPrompt: active.turn.prompt, turnMetadata: active.turn.metadata });
               return nativeToolMcpResult(result);
@@ -1801,7 +1809,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (turnCwd && turnCwd !== session.cwd)
         session = await updateSession(session.id, { cwd: turnCwd });
       activeTurn.session = session;
-      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...nativeEvaluationSkills, ...nativeCliSkillTools, ...nextStepTools, ...questionDefinitions, ...browserDefinitions, ...fileDefinitions, ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : [])];
+      const coordinationDefinitions = [...(session.experience === "chat" || session.systemKind ? [] : coordinationTools), ...subagentDefinitions, ...nativeEvaluationSkills, ...nativeCliSkillTools, ...nextStepTools, ...questionDefinitions, ...browserDefinitions, ...fileDefinitions, ...(!nativeEvaluation && !session.systemKind && !candidateAuthoring && !isolatedProfileEvaluation && htmlVisuals?.available() ? visualTools(htmlVisuals) : [])];
       const runtime = await ensureCodexRuntime(session, {
         ...input,
         coordination: coordinationDefinitions.length ? {
@@ -1812,7 +1820,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             const definition = coordinationDefinitions.find((tool) => tool.name === name);
             if (!definition) throw new Error("Unknown task coordination tool.");
             const result = await definition.execute({ session: active.session, turnId: active.turn.id,
-              turnPermissions: turnPermissionsFromSendTurnInput(SendTurnRequestSchema.parse({ prompt: active.turn.prompt })), provider: "codex", model: active.turn.modelRef?.modelId ?? "codex",
+              turnPermissions: active.turnPermissions ?? turnPermissions, provider: "codex", model: active.turn.modelRef?.modelId ?? "codex",
               callId, args, signal: AbortSignal.any([signal, active.controller.signal]), workspaceDiffBaseline: null,
               mentionedApps: [], userPrompt: active.turn.prompt, turnMetadata: active.turn.metadata });
             return nativeToolMcpResult(result);

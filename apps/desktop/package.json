@@ -17,6 +17,7 @@
     "@openpond/runtime": "workspace:*",
     "electron": "43.8.2",
     "electron-updater": "6.6.2",
+    "posthog-node": "^5.69.0",
     "semver": "7.7.4",
     "zod": "^4.1.13"
   },

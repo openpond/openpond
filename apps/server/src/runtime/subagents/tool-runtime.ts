@@ -1,4 +1,6 @@
 import type { TaskInboxRuntime } from "../task-inbox/runtime.js";
+import type { ProviderSettings } from "@openpond/contracts/providers";
+import { assertSubagentModelSelection } from "./model-selection.js";
 import { randomUUID } from "node:crypto";
 import { SubagentLifecycleActionRequestSchema, SubagentProgressSchema, SubagentRunSchema, type SubagentLifecycleActionResponse, type SubagentRoleSettings, type SubagentRun } from "@openpond/contracts/subagents";
 import { type AppPreferences } from "@openpond/contracts/settings";
@@ -71,6 +73,7 @@ export function createSubagentToolRuntime(deps: {
     }): Promise<SubagentRun[]>;
   };
   loadAppPreferences(): Promise<AppPreferences>;
+  loadProviderSettings?: () => Promise<ProviderSettings>;
   getSession(sessionId: string): Promise<Session>;
   appendSubagentReceipt: AppendSubagentReceipt;
   subagentWorkspaceTargetKeyForSession(session: Session): Promise<string>;
@@ -134,6 +137,7 @@ export function createSubagentToolRuntime(deps: {
   const workspaceWriteStartReservations = new Set<string>();
   const requireSubagentDeps = deps.requireSubagentDeps;
   const loadAppPreferences = deps.loadAppPreferences;
+  const loadProviderSettings = deps.loadProviderSettings;
   const getSession = deps.getSession;
   const appendSubagentReceipt = deps.appendSubagentReceipt;
   const subagentWorkspaceTargetKeyForSession =
@@ -172,13 +176,16 @@ export function createSubagentToolRuntime(deps: {
     const parentModelRef = context.model
       ? { providerId: context.provider, modelId: context.model }
       : null;
-    const modelRef = role.modelRef ??
+    const modelRef = input.modelRef ?? role.modelRef ??
       preferences.subagents.defaultModelRef ??
       parentModelRef ??
       preferences.defaultChatModelRef ?? {
         providerId: preferences.defaultChatProvider,
         modelId: preferences.defaultChatModel,
       };
+    if (input.modelRef || input.reasoningEffort) {
+      assertSubagentModelSelection(await loadProviderSettings?.() ?? null, modelRef, input.reasoningEffort);
+    }
     const workspaceTargetKey = await subagentWorkspaceTargetKeyForSession(
       context.session
     );
@@ -244,6 +251,7 @@ export function createSubagentToolRuntime(deps: {
         context.turnPermissions,
         role
       );
+      if (input.reasoningEffort) childTurnPermissions.codexReasoningEffort = input.reasoningEffort;
       const isolation = await prepareSubagentWorkspaceIsolation({
         parentSession: context.session,
         role,

@@ -1,4 +1,5 @@
 import { CHAT_SELECTION_KEY, preferredChatModel, readChatSelectionPreference } from "../lib/chat-selection-preference";
+import { reportDesktopAccount } from "../lib/desktop-analytics";
 import { connectClientChoices, useHydratedClientChoice, clientChoiceSaveIssue, clientChoiceStorage, subscribeClientChoices } from "../lib/client-choice-storage";
 import {
   useCallback,
@@ -118,6 +119,10 @@ export function useAppBootstrap(params: {
   const [appPreferences, setAppPreferencesState] = useState<SidebarAppPreferences>({});
   const [startupStage, setStartupStage] = useState<AppStartupStageId>("connecting");
   const organizationRefreshAccountKey = openPondOrganizationCacheKey(bootstrap?.account);
+  const analyticsAccount = bootstrap?.account;
+  useEffect(() => {
+    if (analyticsAccount) reportDesktopAccount(analyticsAccount);
+  }, [analyticsAccount]);
   const appPreferenceChangeTimesRef = useRef<SidebarAppPreferenceChangeTimes>({});
   const sessionSidebarChangeTimesRef = useRef<SessionSidebarStateChangeTimes>({});
   const codexHistorySessionSidebarChangeTimesRef = useRef<SessionSidebarStateChangeTimes>({});

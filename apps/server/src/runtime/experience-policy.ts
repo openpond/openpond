@@ -66,6 +66,7 @@ const WORK_MODEL_TOOLS = new Set([
   "openpond_dataset_materialize",
   "openpond_dataset_test",
   "openpond_subagent_cancel",
+  "openpond_subagent_models",
   "openpond_subagent_followup",
   "openpond_subagent_join",
   "openpond_subagent_send_message",

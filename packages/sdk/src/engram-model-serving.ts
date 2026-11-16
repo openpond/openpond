@@ -1,3 +1,4 @@
+import { ServerlessServingApprovalSchema, ServerlessServingSnapshotSchema, ServerlessServingReviewV4Schema, verifySavedVariantServerlessServing } from "./serverless-serving.js";
 import { ManagedServingUsageApprovalSchema, ManagedServingUsageSnapshotSchema, ManagedServingUsageReviewResultSchema, managedServingUsageApprovalMatches, verifyManagedServingUsageBilling } from "./managed-serving-usage.js";
 import { z } from "zod";
 import { canonicalJson, canonicalSha256, OpenPondProtocolError } from "./protocol.js";
@@ -11,6 +12,7 @@ const BindingRef = z.object({ id: Id, revision: z.number().int().positive() }).s
 const Timestamp = z.iso.datetime();
 
 export const EngramModelServingControlRequestSchema = z.object({
+  serverlessApproval: ServerlessServingApprovalSchema.optional(),
   usageApproval: ManagedServingUsageApprovalSchema.optional(),
   schemaVersion: z.literal("openpond.engramModelServingControlRequest.v1"),
   teamId: Id, operationId: Id, versionHash: Hash,
@@ -23,6 +25,7 @@ export const EngramModelServingControlIntentSchema = EngramModelServingControlRe
 export const EngramModelServingControlCommandSchema = z.object({ modelProjectId: Id, request: EngramModelServingControlRequestSchema }).strict();
 
 export const EngramModelServingControlSchema = z.object({
+  serverless: ServerlessServingSnapshotSchema.optional(),
   usage: ManagedServingUsageSnapshotSchema.optional(),
   schemaVersion: z.literal("openpond.engramModelServingControl.v1"),
   teamId: Id, modelProjectId: Id, versionHash: Hash, actorId: Id, operationId: Id,
@@ -45,6 +48,7 @@ export const EngramServingAvailabilitySchema = z.object({
   runtimeHash: Hash.nullable(),
 }).strict();
 export const EngramModelServingContentSchema = z.object({
+  serverlessReview: ServerlessServingReviewV4Schema.nullable().optional(),
   usageBilling: ManagedServingUsageReviewResultSchema.optional(),
   schemaVersion: z.literal("openpond.engramModelServing.v1"),
   teamId: Id, modelProjectId: Id, observedAt: Timestamp, version: EngramModelVersionSchema,
@@ -93,6 +97,7 @@ export async function parseAndVerifyEngramModelServingControl(raw: unknown, expe
 }) {
   const value = EngramModelServingControlReceiptSchema.parse(raw), request = EngramModelServingControlRequestSchema.parse(expected.request);
   const {contentHash, ...content} = value, control = value.control;
+  await verifySavedVariantServerlessServing(undefined, control, {teamId: request.teamId, modelProjectId: expected.modelProjectId});
   await parseAndVerifyEngramModelVersion(value.version, {teamId: request.teamId, modelProjectId: expected.modelProjectId});
   if (!managedServingUsageApprovalMatches(request, control) || contentHash !== await canonicalSha256(content) || canonicalJson(value.request) !== canonicalJson(request)
     || value.teamId !== request.teamId || value.modelProjectId !== expected.modelProjectId || expected.actorId && value.actorId !== expected.actorId
@@ -108,6 +113,8 @@ export async function parseAndVerifyEngramModelServingControl(raw: unknown, expe
 
 export async function parseAndVerifyEngramModelServing(raw: unknown, expected: {teamId: string; modelProjectId: string; versionHash: string}) {
   const value = EngramModelServingSchema.parse(raw), {contentHash, ...content} = value;
+  await verifySavedVariantServerlessServing(value.serverlessReview, value.control, expected);
+  for (const previous of value.cleanup) await verifySavedVariantServerlessServing(undefined, previous, expected);
   await verifyManagedServingUsageBilling(value.usageBilling, { ...expected, method: "engram" }, value.control);
   await parseAndVerifyEngramModelVersion(value.version, expected);
   function fail(): never {throw new OpenPondProtocolError("engram_model_serving_mismatch", "The serving evidence differs from the exact memory Model or retained capacity.");}

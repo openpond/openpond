@@ -1,4 +1,6 @@
 import { existsSync } from "node:fs";
+import { DesktopAnalytics } from "./desktop-analytics.js";
+import { desktopAnalyticsConfig } from "./desktop-analytics-config.js";
 import { codexThreadUrl } from "./desktop-codex-thread.js";
 import { desktopBackground, initializeDesktopAppearance, setDesktopAppearance, trackWindowAppearance } from "./desktop-appearance.js";
 import { saveImageDownload } from "./desktop-image-download.js";
@@ -86,6 +88,7 @@ const localRequestTracker = new DesktopRequestTracker();
 const serverProcessSampler = new DesktopProcessTreeSampler();
 const backendManager = new DesktopBackendManager();
 let desktopUpdater: DesktopUpdateController | null = null;
+let desktopAnalytics: DesktopAnalytics | null = null;
 
 async function requestMicrophoneAccess(): Promise<boolean> {
   if (process.platform !== "darwin") return true;
@@ -669,6 +672,10 @@ function registerIpcHandlers(): void {
     return true;
   });
   handleTrackedIpc("openpond:appearance:set", (_event, value: unknown) => setDesktopAppearance(value));
+  handleTrackedIpc("openpond:analytics:account", (_event, value: unknown, loginSucceeded: unknown) => {
+    if (typeof loginSucceeded !== "boolean") throw new Error("Invalid analytics account update.");
+    desktopAnalytics?.account(value, loginSucceeded);
+  });
 }
 
 function handleTrackedIpc(channel: string, listener: Parameters<typeof ipcMain.handle>[1]): void {
@@ -882,6 +889,19 @@ app.whenReady().then(async () => {
   // Only development needs an override for the generic Electron host bundle.
   if (!app.isPackaged) app.dock?.setIcon(appIconPath());
   desktopLogger().info("desktop app ready", { packaged: app.isPackaged });
+  const analyticsConfig = desktopAnalyticsConfig(process.env, app.isPackaged);
+  if (analyticsConfig) {
+    try {
+      desktopAnalytics = new DesktopAnalytics({
+        home: appHomePath(), config: analyticsConfig, version: app.getVersion(),
+        channel: releaseChannel(), packaged: app.isPackaged,
+        onFailure: () => desktopLogger().debug("desktop analytics delivery unconfirmed"),
+      });
+      desktopAnalytics.start();
+    } catch {
+      desktopLogger().debug("desktop analytics unavailable");
+    }
+  }
   desktopUpdater = await createDesktopUpdater({
     publish: (state) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("openpond:updates:state", state);
@@ -922,7 +942,7 @@ function shutdownDesktop(): Promise<void> {
     desktopLogger().info("desktop app shutting down");
     stopBrowserControlWorker();
     serverProcessSampler.stop();
-    const results = await Promise.allSettled([closeBrowserSidebarManagers(), backendManager.close()]);
+    const results = await Promise.allSettled([closeBrowserSidebarManagers(), backendManager.close(), desktopAnalytics?.close()]);
     await desktopLogger().flush();
     const failed = results.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
