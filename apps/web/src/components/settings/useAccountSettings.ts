@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { BootstrapPayload } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
+import { reportDesktopAccount } from "../../lib/desktop-analytics";
 
 export type SaveOpenPondAccountInput = {
   apiKey: string;
@@ -83,6 +84,7 @@ export function useAccountSettings({
         environment: environment || "custom",
         setActive: true,
       });
+      reportDesktopAccount(savedPayload.account, true);
       onPayload(savedPayload);
     } catch (saveError) {
       onError(

@@ -30,8 +30,9 @@ export class OpenPondProtocolError extends Error {
 
 /**
  * Deterministic JSON used for content-addressed OpenPond protocol objects.
- * Object keys are sorted by Unicode code point, arrays retain their authored
- * order, and non-JSON/non-finite values are rejected rather than coerced.
+ * JSON.stringify enumerates array-index keys numerically and other keys in the
+ * UTF-16 order established by normalization. Arrays retain their authored order.
+ * Non-JSON and non-finite values are rejected.
  */
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(normalizeCanonicalJson(value));

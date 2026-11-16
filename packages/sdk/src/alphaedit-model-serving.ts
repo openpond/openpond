@@ -1,3 +1,4 @@
+import { ServerlessServingApprovalSchema, ServerlessServingSnapshotSchema, ServerlessServingReviewV4Schema, verifySavedVariantServerlessServing } from "./serverless-serving.js";
 import { ManagedServingUsageApprovalSchema, ManagedServingUsageSnapshotSchema, ManagedServingUsageReviewResultSchema, managedServingUsageApprovalMatches, verifyManagedServingUsageBilling } from "./managed-serving-usage.js";
 import { z } from "zod";
 import { canonicalJson, canonicalSha256, OpenPondProtocolError } from "./protocol.js";
@@ -9,6 +10,7 @@ const Id = z.string().trim().min(1).max(240), Hash = z.string().regex(/^[a-f0-9]
 const BindingRef = z.object({ id: Id, revision: z.number().int().positive() }).strict();
 export const AlphaEditModelServingQuerySchema = z.object({ teamId: Id, versionHash: Hash }).strict();
 export const AlphaEditModelServingControlRequestSchema = z.object({
+  serverlessApproval: ServerlessServingApprovalSchema.optional(),
   usageApproval: ManagedServingUsageApprovalSchema.optional(),
   schemaVersion: z.literal("openpond.alphaEditModelServingControlRequest.v1"),
   teamId: Id, operationId: Id, versionHash: Hash,
@@ -19,6 +21,7 @@ export type AlphaEditModelServingControlRequest = z.infer<typeof AlphaEditModelS
 export const AlphaEditModelServingControlIntentSchema = AlphaEditModelServingControlRequestSchema.omit({ operationId: true }).extend({ modelProjectId: Id }).strict();
 export const AlphaEditModelServingControlCommandSchema = z.object({ modelProjectId: Id, request: AlphaEditModelServingControlRequestSchema }).strict();
 export const AlphaEditModelServingControlSchema = z.object({
+  serverless: ServerlessServingSnapshotSchema.optional(),
   usage: ManagedServingUsageSnapshotSchema.optional(),
   schemaVersion: z.literal("openpond.alphaEditModelServingControl.v1"),
   teamId: Id, modelProjectId: Id, versionHash: Hash, actorId: Id, operationId: Id,
@@ -39,6 +42,7 @@ export const AlphaEditServingAvailabilitySchema = z.object({
   runtimeHash: Hash.nullable(),
 }).strict();
 export const AlphaEditModelServingContentSchema = z.object({
+  serverlessReview: ServerlessServingReviewV4Schema.nullable().optional(),
   usageBilling: ManagedServingUsageReviewResultSchema.optional(),
   schemaVersion: z.literal("openpond.alphaEditModelServing.v1"),
   teamId: Id, modelProjectId: Id, observedAt: z.iso.datetime(), version: AlphaEditModelVersionSchema,
@@ -84,6 +88,7 @@ export async function parseAndVerifyAlphaEditModelServingControl(raw: unknown, e
 }) {
   const value = AlphaEditModelServingControlReceiptSchema.parse(raw), request = AlphaEditModelServingControlRequestSchema.parse(expected.request);
   const { contentHash, ...content } = value, control = value.control;
+  await verifySavedVariantServerlessServing(undefined, control, {teamId: request.teamId, modelProjectId: expected.modelProjectId});
   await parseAndVerifyAlphaEditModelVersion(value.version, { teamId: request.teamId, modelProjectId: expected.modelProjectId,
     ownerUserId: value.actorId });
   if (!managedServingUsageApprovalMatches(request, control) || contentHash !== await canonicalSha256(content) || canonicalJson(value.request) !== canonicalJson(request)
@@ -100,6 +105,8 @@ export async function parseAndVerifyAlphaEditModelServing(raw: unknown, expected
   teamId: string; modelProjectId: string; versionHash: string; ownerUserId?: string;
 }) {
   const value = AlphaEditModelServingSchema.parse(raw), { contentHash, ...content } = value;
+  await verifySavedVariantServerlessServing(value.serverlessReview, value.control, expected);
+  for (const previous of value.cleanup) await verifySavedVariantServerlessServing(undefined, previous, expected);
   await verifyManagedServingUsageBilling(value.usageBilling, { ...expected, method: "alphaedit" }, value.control);
   await parseAndVerifyAlphaEditModelVersion(value.version, expected);
   function fail(): never { throw new OpenPondProtocolError("alphaedit_model_serving_mismatch", "The serving evidence differs from the exact AlphaEdit Model or retained resource custody."); }

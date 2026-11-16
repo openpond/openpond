@@ -1,3 +1,4 @@
+import type { ServerlessServingApproval, ServerlessServingSnapshot } from "./serverless-serving.js";
 import { z } from "zod";
 import { ComputeAppliedPriceSchema, canonicalComputeSpendCap } from "./managed-compute-price.js";
 import { canonicalSha256, OpenPondProtocolError } from "./protocol.js";
@@ -180,10 +181,15 @@ export async function verifyManagedServingUsageBilling(
 
 /** A successful activation must retain the exact reviewed cap and price owner. */
 export function managedServingUsageApprovalMatches(
-  request: { action: "activate" | "stop"; usageApproval?: ManagedServingUsageApproval },
-  control: { usage?: ManagedServingUsageSnapshot },
+  request: { action: "activate" | "stop"; usageApproval?: ManagedServingUsageApproval; serverlessApproval?: ServerlessServingApproval },
+  control: { usage?: ManagedServingUsageSnapshot; serverless?: ServerlessServingSnapshot },
 ) {
+  if (request.usageApproval && request.serverlessApproval || control.usage && control.serverless) return false;
   if (request.action === "stop") return true;
+  if (request.serverlessApproval) return Boolean(control.serverless &&
+    control.serverless.review.contentHash === request.serverlessApproval.reviewHash &&
+    control.serverless.customerCapUsd === request.serverlessApproval.customerCapUsd);
+  if (control.serverless) return false;
   const approved = request.usageApproval, usage = control.usage;
   if (!approved) return usage === undefined;
   return Boolean(usage && usage.reviewHash === approved.reviewHash && usage.customerCapUsd === approved.customerCapUsd);

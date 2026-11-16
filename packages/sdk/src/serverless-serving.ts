@@ -154,3 +154,28 @@ export async function createServerlessServingApproval(raw: ServerlessServingRevi
   return ServerlessServingApprovalSchema.parse({schemaVersion: "openpond.serverlessServingApproval.v1",
     reviewHash: contentHash, customerCapUsd: canonicalComputeSpendCap(spendingLimit), ...(gpuTypeId ? { gpuTypeId } : {})});
 }
+
+/** Shared variants price the immutable saved version itself. Their typed
+ * execution capsules independently bind the underlying module and runtime;
+ * no synthetic LoRA artifact or per-variant endpoint is introduced. */
+export async function verifySavedVariantServerlessServing(
+  review: z.infer<typeof ServerlessServingReviewV4Schema> | null | undefined,
+  control: { teamId: string; modelProjectId: string; versionHash: string; idleTimeoutSeconds: number;
+    serverless?: ServerlessServingSnapshot; usage?: unknown } | null | undefined,
+  expected: { teamId: string; modelProjectId: string; versionHash?: string },
+) {
+  function identity(versionHash: string) {
+    return {teamId: expected.teamId, modelProjectId: expected.modelProjectId, versionHash,
+      artifact: {id: expected.modelProjectId, contentHash: versionHash}};
+  }
+  if (review) {
+    if (!expected.versionHash) throw new OpenPondProtocolError("serverless_serving_review_mismatch", "The saved Model version is required.");
+    await verifyServerlessServingReview(review, identity(expected.versionHash));
+  }
+  if (!control?.serverless) return;
+  if (control.usage || control.teamId !== expected.teamId || control.modelProjectId !== expected.modelProjectId ||
+    control.serverless.review.schemaVersion !== "openpond.serverlessServingReview.v4" ||
+    control.idleTimeoutSeconds !== control.serverless.review.workerIdleTimeoutSeconds)
+    throw new OpenPondProtocolError("serverless_serving_review_mismatch", "Shared serving differs from this saved Model's accepted terms.");
+  await verifyServerlessServingReview(control.serverless.review, identity(control.versionHash));
+}

@@ -18,7 +18,7 @@ def create_serverless_serving_approval(raw: dict[str, Any], spending_limit: str 
                                       gpu_type_id: str | None = None) -> dict[str, Any]:
     review = validate('ServerlessServingReviewSchema', raw)
     verify_serverless_review(review, review['teamId'], review['modelProjectId'], review['versionHash'], review['artifact'])
-    if (review['schemaVersion'] != 'openpond.serverlessServingReview.v3'
+    if (review['schemaVersion'] not in ('openpond.serverlessServingReview.v3', 'openpond.serverlessServingReview.v4')
             or datetime.fromisoformat(review['expiresAt'].replace('Z', '+00:00')) <= datetime.now(timezone.utc)):
         raise ProtocolError('serverless_serving_review_expired')
     if gpu_type_id and gpu_type_id not in review.get('hardware', {}).get('gpuTypeIds', []):
@@ -39,6 +39,10 @@ def create_serverless_serving_approval(raw: dict[str, Any], spending_limit: str 
 
 
 def serverless_approval_matches(request: dict[str, Any], control: dict[str, Any]) -> bool:
+    if request.get('usageApproval') is not None and request.get('serverlessApproval') is not None or control.get('usage') is not None and control.get('serverless') is not None:
+        return False
+    if 'artifact' not in request:
+        verify_saved_variant_serverless(None, control, request['teamId'], control['modelProjectId'])
     if request['action'] == 'stop':
         return True
     approval, snapshot = request.get('serverlessApproval'), control.get('serverless')
@@ -47,6 +51,26 @@ def serverless_approval_matches(request: dict[str, Any], control: dict[str, Any]
     if snapshot is None or request.get('usageApproval') is not None or control.get('usage') is not None:
         return False
     review = snapshot['review']
-    verify_serverless_review(review, request['teamId'], control['modelProjectId'], request['versionHash'], request['artifact'])
+    verify_serverless_review(review, request['teamId'], control['modelProjectId'], request['versionHash'], request.get('artifact', {'id': control['modelProjectId'], 'contentHash': request['versionHash']}))
     return (approval['reviewHash'] == review['contentHash'] and approval['customerCapUsd'] == snapshot['customerCapUsd']
             and control['idleTimeoutSeconds'] == review['workerIdleTimeoutSeconds'])
+
+
+def verify_saved_variant_serverless(review: dict[str, Any] | None, control: dict[str, Any] | None,
+                                    team_id: str, model_id: str, version_hash: str | None = None) -> None:
+    if review is not None:
+        if review['schemaVersion'] != 'openpond.serverlessServingReview.v4' or version_hash is None:
+            raise ProtocolError('serverless_serving_review_mismatch')
+        verify_serverless_review(review, team_id, model_id, version_hash,
+                                 {'id': model_id, 'contentHash': version_hash})
+    snapshot = (control or {}).get('serverless')
+    if snapshot is None:
+        return
+    assert control is not None
+    accepted = snapshot['review']
+    if (control.get('usage') is not None or control['teamId'] != team_id or control['modelProjectId'] != model_id
+            or accepted['schemaVersion'] != 'openpond.serverlessServingReview.v4'
+            or control['idleTimeoutSeconds'] != accepted['workerIdleTimeoutSeconds']):
+        raise ProtocolError('serverless_serving_review_mismatch')
+    verify_serverless_review(accepted, team_id, model_id, control['versionHash'],
+                             {'id': model_id, 'contentHash': control['versionHash']})

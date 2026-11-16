@@ -11,6 +11,14 @@ OpenPond agents and skills start local by default. When you create one from chat
 
 Agents can call tools, coordinate subagents, run goal loops, expose actions, and move between local and hosted execution without becoming hidden chat state. Skills give any compatible agent a reusable procedure without duplicating that procedure in every prompt.
 
+## Desktop subagents
+
+In Work conversations, Claude Code and Codex can launch OpenPond child agents using any available configured worker model, including a different provider. For example, ask Claude Code to delegate a review to a GPT worker. Enable subagents and the relevant role in Settings, and connect the worker's provider first.
+
+The agent uses `openpond_subagent_models` to discover exact model references and supported reasoning efforts, then `openpond_subagent_start` with a role, objective, optional `modelRef`, and optional `reasoningEffort`. An explicit model overrides the role and global defaults for that child; unavailable models or unsupported reasoning efforts return an error without substituting another model. Omitting the model uses the configured role/default selection.
+
+Children use OpenPond's existing task runtime, role permissions, workspace isolation, concurrency limits, progress, and retained results. The parent can join, message, follow up, or cancel them through the subagent tools. Follow-ups reuse the same child conversation and model. Child agents cannot launch additional children. Claude Code's own native Agent tool retains its provider-specific model choices.
+
 ## Profile Layout
 
 A profile repository can contain multiple named profiles, agents, skills, and Tasksets. A generated agent package commonly looks like this:

@@ -10,6 +10,8 @@ import type {
   SidebarFileBookmark,
 } from "@openpond/contracts";
 import { SUBAGENT_ROLE_PRESETS } from "@openpond/contracts/subagents";
+import { ChatModelRefSchema } from "@openpond/contracts/providers";
+import { CodexReasoningEffortSchema, type CodexReasoningEffort } from "@openpond/contracts/settings";
 import type {
   ModelToolDefinition,
   ModelToolExecutionContext,
@@ -27,6 +29,8 @@ export type OpenPondSubagentStartToolInput = {
   objective: string;
   context?: string | null;
   required?: boolean | null;
+  modelRef?: ChatModelRef;
+  reasoningEffort?: CodexReasoningEffort;
 };
 
 export type OpenPondSubagentToolResult = {
@@ -110,6 +114,7 @@ export type ManageSidebarFileToolResult = {
 };
 
 export function createOpenPondCapabilityModelToolDefinitions(deps: {
+  listSubagentModels?: () => Promise<unknown>;
   startSubagent?: (
     context: ModelToolExecutionContext,
     input: OpenPondSubagentStartToolInput,
@@ -147,6 +152,17 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
 }): ModelToolDefinition[] {
   const enabledSubagentRoles = (deps.subagentRoles ?? []).filter((role) => role.enabled);
   const definitions: ModelToolDefinition[] = [];
+  if (deps.listSubagentModels) {
+    definitions.push({
+      name: "openpond_subagent_models",
+      description: "List available configured OpenPond worker models and their supported reasoning efforts. Use the returned modelRef to launch a child with openpond_subagent_start, including a different provider from this conversation. Do not substitute another model when the requested model is unavailable.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execute: async context => {
+        const data = await deps.listSubagentModels!();
+        return { toolCallId: context.callId, name: "openpond_subagent_models", ok: true, contentText: JSON.stringify(data), data };
+      },
+    });
+  }
   if (deps.manageSidebarFile) {
     definitions.push({
       name: "manage_sidebar_file",
@@ -180,7 +196,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     definitions.push({
       name: "openpond_subagent_start",
       description:
-        "Start an addressable specialist child conversation for a bounded role and objective. Use this for independent research, review, testing, planning, docs, or coding subtasks; the child can later hand important findings back to the parent through openpond_subagent_send_message.",
+        "Start an addressable OpenPond specialist child conversation for a bounded role and objective. Can launch a different provider/model (for example a GPT worker from Claude Code) using modelRef and reasoningEffort from openpond_subagent_models. Omit modelRef to use the configured role/default model. The child can hand findings back through openpond_subagent_send_message.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -205,6 +221,8 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
             type: "boolean",
             description: "Whether the parent task should treat this child result as required.",
           },
+          modelRef: { ...ChatModelRefSchema.toJSONSchema(), description: "Exact configured worker provider/model to use for this launch. Overrides the role/default model. Discover choices with openpond_subagent_models." },
+          reasoningEffort: { ...CodexReasoningEffortSchema.toJSONSchema(), description: "Optional reasoning effort advertised for the selected model." },
         },
         required: ["roleId", "objective"],
       },
@@ -419,11 +437,15 @@ function subagentStartToolInput(args: Record<string, unknown>): OpenPondSubagent
   const objective = stringArg(args, "objective");
   const context = optionalStringArg(args, "context");
   const required = optionalBooleanArg(args, "required");
+  const modelRef = args.modelRef === undefined ? undefined : ChatModelRefSchema.strict().parse(args.modelRef);
+  const reasoningEffort = args.reasoningEffort === undefined ? undefined : CodexReasoningEffortSchema.parse(args.reasoningEffort);
   return {
     roleId,
     objective,
     ...(context ? { context } : {}),
     ...(required === null ? {} : { required }),
+    ...(modelRef ? { modelRef } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
   };
 }
 

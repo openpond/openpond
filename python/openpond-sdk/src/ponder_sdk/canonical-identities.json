@@ -89,6 +89,57 @@
       },
       "canonical": "{\"nested\":[true,false,{\"a\":1,\"b\":2}]}",
       "sha256": "421f4604e52b696d8eb084190e28030fe39187d8d5adced1fa8fadef2dd9ded0"
+    },
+    {
+      "value": {
+        "recipe": {
+          "schemaVersion": "openpond.sftRecipe.v1",
+          "method": "sft",
+          "parameterization": "lora",
+          "baseModel": {
+            "id": "fixture-model",
+            "revision": "fixture-revision",
+            "tokenizerRevision": "fixture-revision",
+            "chatTemplateHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "dataset": {
+            "trainSplit": "train",
+            "validationSplit": "validation",
+            "validationTaskIds": [
+              "雪😀"
+            ],
+            "completionOnly": true,
+            "maxSequenceLength": 256,
+            "maxExamples": 1000,
+            "selectionStrategy": "stable_hash_top_n",
+            "selectionSeed": 17
+          },
+          "lora": {
+            "rank": 8,
+            "alpha": 16,
+            "dropout": 0,
+            "targetModules": [
+              "q_proj"
+            ]
+          },
+          "optimizer": {
+            "learningRate": 0.00005,
+            "epochs": 1,
+            "maxSteps": 2,
+            "batchSize": 1,
+            "gradientAccumulationSteps": 1,
+            "seed": 17
+          },
+          "resourceLimits": {
+            "cpuThreads": 1,
+            "memoryBytes": 1073741824,
+            "wallTimeMs": 60000
+          }
+        },
+        "examplesSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "canonical": "{\"examplesSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"recipe\":{\"baseModel\":{\"chatTemplateHash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"id\":\"fixture-model\",\"revision\":\"fixture-revision\",\"tokenizerRevision\":\"fixture-revision\"},\"dataset\":{\"completionOnly\":true,\"maxExamples\":1000,\"maxSequenceLength\":256,\"selectionSeed\":17,\"selectionStrategy\":\"stable_hash_top_n\",\"trainSplit\":\"train\",\"validationSplit\":\"validation\",\"validationTaskIds\":[\"雪😀\"]},\"lora\":{\"alpha\":16,\"dropout\":0,\"rank\":8,\"targetModules\":[\"q_proj\"]},\"method\":\"sft\",\"optimizer\":{\"batchSize\":1,\"epochs\":1,\"gradientAccumulationSteps\":1,\"learningRate\":0.00005,\"maxSteps\":2,\"seed\":17},\"parameterization\":\"lora\",\"resourceLimits\":{\"cpuThreads\":1,\"memoryBytes\":1073741824,\"wallTimeMs\":60000},\"schemaVersion\":\"openpond.sftRecipe.v1\"}}",
+      "sha256": "8aaa0cf13f0e33acd6771d986997417149125e5d930972029d4b1c4dfd28020e"
     }
   ]
 }

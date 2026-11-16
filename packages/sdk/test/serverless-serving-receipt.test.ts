@@ -69,3 +69,41 @@ it.each(["v1", "v2"] as const)("binds returned %s terms to their accepted review
   await expect(parseAndVerifyTrainingModelServingControl({...tampered, contentHash: await canonicalSha256(tampered)}, expected))
     .rejects.toMatchObject({code: "serverless_serving_review_mismatch"});
 });
+
+// A saved variant must bind its own immutable identity and accepted request-time
+// terms; neither a rehashed outer response nor a legacy usage record may replace them.
+it("verifies saved-variant request-time approvals and rejects conflicting or substituted terms", async () => {
+  const { ServerlessServingReviewV4Schema, verifySavedVariantServerlessServing } = await import("../src/serverless-serving.js");
+  const hash = "a".repeat(64);
+  const expected = {teamId: "fixture-team", modelProjectId: "fixture-model", versionHash: hash};
+  const content = {
+    schemaVersion: "openpond.serverlessServingReview.v4" as const, ...expected,
+    artifact: {id: expected.modelProjectId, contentHash: hash}, baseProfileId: "fixture-base",
+    workerImageDigest: `sha256:${hash}`, providerConfigurationHash: hash,
+    price: {schemaVersion: "openpond.computeAppliedPrice.v1", service: "model_serving", version: "fixture-price",
+      profileHash: hash, currency: "USD", unit: "resource_hour", hourlyUsd: "1.000000"},
+    workerIdleTimeoutSeconds: 60, maximumRequestMillis: 540000,
+    expiresAt: "2999-01-01T00:00:00.000Z",
+    hardware: {selection: "automatic", gpuTypeIds: ["fixture-gpu"]},
+    rules: {quantity: "request_engine_milliseconds", allocation: "per_request_engine_time", startupBillable: false,
+      idleBillable: false, cleanupBillable: false, queueBillable: false, failure: "observed_engine_work",
+      cancellation: "until_engine_release", tokenRetailUsd: "0.000000", minimumBillableMillis: 0},
+  };
+  const review = ServerlessServingReviewV4Schema.parse({...content, contentHash: await canonicalSha256(content)});
+  const approval = await createServerlessServingApproval(review, "2", "fixture-gpu");
+  const control = {...expected, idleTimeoutSeconds: 60, serverless: {
+    schemaVersion: "openpond.serverlessServing.v1" as const, ownerKey: "fixture-owner", review,
+    customerCapUsd: approval.customerCapUsd, state: "active" as const, quantityMicros: 0,
+    chargedUsd: "0.000000", reservedUsd: "0.000000", supplierCostStatus: "pending" as const,
+  }};
+  await expect(verifySavedVariantServerlessServing(review, control, expected)).resolves.toBeUndefined();
+  expect(approval).toMatchObject({reviewHash: review.contentHash, customerCapUsd: "2.000000"});
+  for (const changed of [
+    {...control, usage: {}}, {...control, teamId: "different-team"}, {...control, idleTimeoutSeconds: 5},
+    {...control, versionHash: "b".repeat(64)},
+    {...control, serverless: {...control.serverless, review: {...review, price: {...review.price, hourlyUsd: "9.000000"}}}},
+  ]) await expect(verifySavedVariantServerlessServing(review, changed, expected)).rejects.toMatchObject({code: "serverless_serving_review_mismatch"});
+  const substituted = {...content, artifact: {id: "synthetic-artifact", contentHash: hash}};
+  const substitutedReview = ServerlessServingReviewV4Schema.parse({...substituted, contentHash: await canonicalSha256(substituted)});
+  await expect(verifySavedVariantServerlessServing(substitutedReview, null, expected)).rejects.toMatchObject({code: "serverless_serving_review_mismatch"});
+});

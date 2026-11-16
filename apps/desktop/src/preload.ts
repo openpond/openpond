@@ -14,6 +14,9 @@ const updates: DesktopUpdatesBridge = {
 };
 
 contextBridge.exposeInMainWorld("openpond", {
+  analytics: {
+    account: (value: unknown, loginSucceeded: boolean) => ipcRenderer.invoke("openpond:analytics:account", value, loginSucceeded),
+  },
   updates,
   notify: (payload: unknown) => ipcRenderer.invoke("openpond:notification", payload),
   onPonderNotification: (callback: (payload: { id: string }) => void) => {

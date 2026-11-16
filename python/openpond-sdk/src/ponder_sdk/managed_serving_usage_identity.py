@@ -3,6 +3,7 @@ from typing import Any
 from decimal import Decimal
 from datetime import datetime
 from .errors import ProtocolError
+from .serverless_serving import serverless_approval_matches, verify_saved_variant_serverless
 from .wire import canonical_sha256, validate
 
 
@@ -22,6 +23,10 @@ def _usage_amounts(usage: dict[str, Any] | None) -> None:
 
 
 def approval_matches(request: dict[str, Any], control: dict[str, Any]) -> bool:
+    if request.get('usageApproval') is not None and request.get('serverlessApproval') is not None or control.get('usage') is not None and control.get('serverless') is not None:
+        return False
+    if request.get('serverlessApproval') is not None or control.get('serverless') is not None:
+        return serverless_approval_matches(request, control)
     if request['action'] == 'stop':
         return True
     approval, usage = request.get('usageApproval'), control.get('usage')
@@ -36,6 +41,10 @@ def approval_matches(request: dict[str, Any], control: dict[str, Any]) -> bool:
 
 def verify_usage_billing(value: dict[str, Any], team_id: str, model_id: str,
                          version_hash: str, method: str) -> None:
+    if method != 'training':
+        verify_saved_variant_serverless(value.get('serverlessReview'), value.get('control'), team_id, model_id, version_hash)
+        for previous in value.get('cleanup', []):
+            verify_saved_variant_serverless(None, previous, team_id, model_id)
     raw = value.get('usageBilling')
     if raw is None:
         return

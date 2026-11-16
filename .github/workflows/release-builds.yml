@@ -283,6 +283,9 @@ jobs:
 
       - if: needs.meta.outputs.target == 'desktop'
         run: pnpm run build:artifacts
+        env:
+          OPENPOND_POSTHOG_TOKEN: ${{ secrets.OPENPOND_POSTHOG_TOKEN }}
+          OPENPOND_POSTHOG_HOST: ${{ vars.OPENPOND_POSTHOG_HOST }}
       - if: needs.meta.outputs.target == 'cli'
         run: pnpm run bundle:server && pnpm run build:web
       - run: pnpm run cli:build:from-web

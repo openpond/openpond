@@ -1,3 +1,4 @@
+import { ServerlessServingApprovalSchema, ServerlessServingSnapshotSchema, ServerlessServingReviewV4Schema, verifySavedVariantServerlessServing } from "./serverless-serving.js";
 import { WeightSpaceModelServingSchema, parseAndVerifyWeightSpaceModelServing } from "./weight-space-model-serving.js";
 import { ManagedServingUsageApprovalSchema, ManagedServingUsageSnapshotSchema, ManagedServingUsageReviewResultSchema, managedServingUsageApprovalMatches, verifyManagedServingUsageBilling } from "./managed-serving-usage.js";
 import { EngramModelServingSchema, parseAndVerifyEngramModelServing } from "./engram-model-serving.js";
@@ -19,6 +20,7 @@ const BindingRef = z.object({ id: Id, revision: z.number().int().positive() }).s
 const Timestamp = z.iso.datetime();
 
 export const SteeringModelServingControlRequestSchema = z.object({
+  serverlessApproval: ServerlessServingApprovalSchema.optional(),
   usageApproval: ManagedServingUsageApprovalSchema.optional(),
   schemaVersion: z.literal("openpond.steeringModelServingControlRequest.v1"),
   teamId: Id, operationId: Id, versionHash: Hash,
@@ -31,6 +33,7 @@ export const SteeringModelServingControlIntentSchema = SteeringModelServingContr
 export const SteeringModelServingControlCommandSchema = z.object({ modelProjectId: Id, request: SteeringModelServingControlRequestSchema }).strict();
 
 export const SteeringModelServingControlSchema = z.object({
+  serverless: ServerlessServingSnapshotSchema.optional(),
   usage: ManagedServingUsageSnapshotSchema.optional(),
   schemaVersion: z.literal("openpond.steeringModelServingControl.v1"),
   teamId: Id, modelProjectId: Id, versionHash: Hash, actorId: Id, operationId: Id,
@@ -53,6 +56,7 @@ export const SteeringServingAvailabilitySchema = z.object({
   runtimeHash: Hash.nullable(),
 }).strict();
 export const SteeringModelServingContentSchema = z.object({
+  serverlessReview: ServerlessServingReviewV4Schema.nullable().optional(),
   usageBilling: ManagedServingUsageReviewResultSchema.optional(),
   schemaVersion: z.literal("openpond.steeringModelServing.v1"),
   teamId: Id, modelProjectId: Id, observedAt: Timestamp, version: SteeringModelVersionSchema,
@@ -110,6 +114,7 @@ export async function parseAndVerifySteeringModelServingControl(raw: unknown, ex
 }) {
   const value = SteeringModelServingControlReceiptSchema.parse(raw), request = SteeringModelServingControlRequestSchema.parse(expected.request);
   const { contentHash, ...content } = value, control = value.control;
+  await verifySavedVariantServerlessServing(undefined, control, {teamId: request.teamId, modelProjectId: expected.modelProjectId});
   await parseAndVerifySavedModelVersion(value.version, { teamId: request.teamId, modelProjectId: expected.modelProjectId });
   if (!managedServingUsageApprovalMatches(request, control) || contentHash !== await canonicalSha256(content) || canonicalJson(value.request) !== canonicalJson(request)
     || value.teamId !== request.teamId || value.modelProjectId !== expected.modelProjectId || expected.actorId && value.actorId !== expected.actorId
@@ -126,6 +131,8 @@ export async function parseAndVerifySteeringModelServingControl(raw: unknown, ex
 
 export async function parseAndVerifySteeringModelServing(raw: unknown, expected: { teamId: string; modelProjectId: string; versionHash: string }) {
   const value = SteeringModelServingSchema.parse(raw), { contentHash, ...content } = value;
+  await verifySavedVariantServerlessServing(value.serverlessReview, value.control, expected);
+  for (const previous of value.cleanup) await verifySavedVariantServerlessServing(undefined, previous, expected);
   await verifyManagedServingUsageBilling(value.usageBilling, { ...expected, method: "steering" }, value.control);
   await parseAndVerifySavedModelVersion(value.version, expected);
   function fail(): never { throw new OpenPondProtocolError("steering_model_serving_mismatch", "The serving evidence differs from the exact saved steering Model or retained capacity."); }

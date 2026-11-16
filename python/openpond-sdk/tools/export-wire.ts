@@ -146,7 +146,18 @@ const normalizationVectors=normalizationCases.map(({name,schema,input})=>{
  return {name,schema:z.toJSONSchema(schema,{target:'draft-2020-12',io:'output',override}),input,accepted:parsed.success,...(parsed.success?{output:parsed.data}:{})};
 });
 const values=['\ud83d\ude00','\ud800',JSON.parse('{"__proto__":{"retained":true},"ordinary":1}'),{'10':1,'2':2,'01':3,'4294967294':4,'4294967295':5},'\ud800',null,{omitted:'kept',present:null},{unicode:'雪😀é',keys:{'😀':1,'\uE000':2}},[-0,0,1,0.000001,1e-7,1e20,1e21,9007199254740991,1000000000000000100],{nested:[true,false,{b:2,a:1}]}];
-const vectors=await Promise.all(values.map(async value=>({value,canonical:canonicalJson(value),sha256:await canonicalSha256(value)})));
+const supervisedInput = {
+  recipe: training.ManagedSftRecipeSchema.parse({
+    schemaVersion: 'openpond.sftRecipe.v1', method: 'sft', parameterization: 'lora',
+    baseModel: {id: 'fixture-model', revision: 'fixture-revision', tokenizerRevision: 'fixture-revision', chatTemplateHash: 'a'.repeat(64)},
+    dataset: {trainSplit: 'train', validationSplit: 'validation', validationTaskIds: ['雪😀'], completionOnly: true, maxSequenceLength: 256},
+    lora: {rank: 8, alpha: 16, dropout: 0, targetModules: ['q_proj']},
+    optimizer: {learningRate: 0.00005, epochs: 1, maxSteps: 2, batchSize: 1, gradientAccumulationSteps: 1, seed: 17},
+    resourceLimits: {cpuThreads: 1, memoryBytes: 2 ** 30, wallTimeMs: 60_000},
+  }),
+  examplesSha256: 'b'.repeat(64),
+};
+const vectors=await Promise.all([...values, supervisedInput].map(async value=>({value,canonical:canonicalJson(value),sha256:await canonicalSha256(value)})));
 const root=new URL('../../../packages/sdk/fixtures/python-foundation/',import.meta.url);
 await mkdir(root,{recursive:true});
 const generator=await readFile(import.meta.url.startsWith('file:')?new URL(import.meta.url):import.meta.url,'utf8');
