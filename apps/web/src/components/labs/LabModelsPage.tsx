@@ -56,6 +56,12 @@ export function LabModelsPage({
 }) {
   const listHostedModelProjects = training.actions.listHostedModelProjects;
   const opening = useRef(false);
+  const liveScope = useRef(hostedScope);
+  liveScope.current = hostedScope;
+  useEffect(() => {
+    liveScope.current = hostedScope;
+    return () => { liveScope.current = null; };
+  }, [hostedScope]);
   const [profileId, setProfileId] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -178,7 +184,7 @@ export function LabModelsPage({
     opening.current = true;
     try {
       const result = await training.actions.openHostedModelProject(row.hosted.project.id, hostedCatalog.teamId, hostedApiOrigin);
-      if (result) onOpened(result.project.id);
+      if (result && liveScope.current === hostedScope) onOpened(result.project.id);
     } finally { opening.current = false; }
   }
 

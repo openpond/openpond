@@ -24,8 +24,11 @@ export interface ModelsRoute {
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
-  "get-started": "Get started", home: "Home", inbox: "Inbox", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Experiments", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Training", versions: "Versions", serving: "Inference",
+  "get-started": "Get started", home: "Overview", inbox: "Inbox", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Experiments", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Training", versions: "Versions", serving: "Inference",
 };
+export function isNativeTrainingResource(id: string | null | undefined): boolean {
+  return Boolean(id && ["managed-modification:", "managed-engram:", "managed-decision:", "managed-alphaedit:", "managed-neuron-training:", "managed-weight-space:"].some(prefix => id.startsWith(prefix)));
+}
 const collections: Partial<Record<ModelsPage, readonly ModelsCollection[]>> = {
   experiments: ["drafts"],
   tasks: ["drafts"], tasksets: ["drafts", "formats", "batches"], rewards: ["scorers", "combined"], evaluations: ["results", "review", "comparisons"], runs: ["series", "new"],
@@ -93,7 +96,8 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   if (sourceId !== null && ((page !== "labeling" && (page !== "evaluations" || collection !== "review")) || !sourceId.trim() || sourceId.length > 500)) return null;
   if (query.has("dataset") && (page !== "datasets" || !resourceId || query.get("dataset") !== "release")) return null;
   const hosted = ["home", "inbox", "datasets", "graders", "experiments"].includes(page);
-  const hostedTraining = page === "runs" && Boolean(resourceId?.startsWith("hosted-run:") || resourceId?.startsWith("hosted-policy:"));
+  const nativeTraining = page === "runs" && isNativeTrainingResource(resourceId);
+  const hostedTraining = nativeTraining || page === "runs" && Boolean(resourceId?.startsWith("hosted-run:") || resourceId?.startsWith("hosted-policy:"));
   const executionLocation=query.get("location");
   if(executionLocation!==null&&(!hosted||!["local","hosted"].includes(executionLocation)))return null;
   const executionKind=query.get("kind");
@@ -101,7 +105,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   if (encoded[0] === "console" && !hosted && page !== "runs" && page !== "serving") return null;
   const projectId = query.get("project") === "all" ? null : query.get("project");
   const passId = query.get("pass");
-  if ([projectId, passId].some(id => id !== null && (!id.trim() || id.length > 240)) || (!hosted && !hostedTraining && (projectId || passId)) || (page !== "experiments" && passId) || ((hosted || hostedTraining) && pathModelId)) return null;
+  if ([projectId, passId].some(id => id !== null && (!id.trim() || id.length > 240)) || (!hosted && !hostedTraining && (projectId || passId)) || (page !== "experiments" && passId) || ((hosted || hostedTraining && !nativeTraining) && pathModelId)) return null;
   if (passId && !resourceId) return null;
   const legacyModelId = query.get("model");
   if (hosted && legacyModelId !== null) return null;
@@ -132,7 +136,7 @@ export function modelsPath(route: ModelsRoute): string {
   }
   if(route.executionLocation)query.set("location",route.executionLocation);
   if (route.projectId) query.set("project", route.projectId);
-  else if (route.projectId === null && ["home", "inbox", "datasets", "graders", "experiments"].includes(route.page)) query.set("project", "all");
+  else if (route.projectId === null && (["home", "inbox", "datasets", "graders", "experiments"].includes(route.page) || route.page === "runs" && isNativeTrainingResource(route.resourceId))) query.set("project", "all");
   if (route.page === "datasets" && route.resourceId && route.datasetKind === "release") query.set("dataset", "release");
   if (route.page === "datasets" && route.sort) query.set("sort", route.sort);
   if (route.revision !== undefined && route.contentHash && route.resourceId && ["datasets", "graders"].includes(route.page)) { query.set("revision", String(route.revision)); query.set("hash", route.contentHash); }

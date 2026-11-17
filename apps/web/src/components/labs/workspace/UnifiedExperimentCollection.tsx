@@ -21,6 +21,7 @@ import { experimentDraftApi } from "./experiment-draft-api";
 import { modificationRecordingApi } from "./modification-recording-api";
 import { useManagedModificationClient } from "./managed-modification-api";
 import { ExperimentCollectionTable } from "./ExperimentCollectionTable";
+import { ExperimentOverviewTable } from "./ExperimentOverviewTable";
 import {
   managedModificationExperimentRecord,
   draftExperimentRecord,
@@ -39,12 +40,14 @@ export function UnifiedExperimentCollection({
   navigate,
   datasetHash,
   datasetId,
+  previewLimit,
 }: {
   api: WorkspaceApi;
   route: ModelsRoute;
   navigate: (route: ModelsRoute) => void;
   datasetHash?: string;
   datasetId?: string;
+  previewLimit?: number;
 }) {
   const localApi = useMemo(() => workspaceApiForLocation(api, "local"), [api]);
   const hostedApi = useMemo(() => workspaceApiForLocation(api, "hosted"), [api]);
@@ -444,6 +447,16 @@ export function UnifiedExperimentCollection({
     training.fetchNextPage,
     training.isFetchNextPageError,
   ]);
+  if (previewLimit) {
+    const sources = [local, hosted, training, drafts, observations, modifications, alphaEdits, neuronTrainings, weightSpaces, engrams, decisions,
+      modificationClient, alphaEditsClient, neuronTrainingsClient, weightSpacesClient, engramClient, decisionClient];
+    const error = sources.find(source => source.error)?.error;
+    return <>
+      <ErrorToast error={error} />
+      {error ? <button className="training-text-button" type="button" onClick={() => { for (const source of sources) if (source.error) void source.refetch(); }}>Retry experiments</button> : null}
+      <ExperimentOverviewTable rows={visible.slice(0, previewLimit)} loading={!visible.length && sources.some(source => source.isLoading)} route={route} navigate={navigate} />
+    </>;
+  }
   return (
     <>
       {local.error ? (

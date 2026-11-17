@@ -32,7 +32,7 @@ const Id = z.string().trim().min(1).max(240);
 const Envelope = z.object({ teamId: Id, projectId: Id.nullable().default(null), operation: z.enum([
   ...connectedWorkspaceOperations, "connectedSummary", "recordedExecution", "toolConnections", "datasets", "datasetReviewSource", "desktopCorrections",
   "prepareOperation", "acknowledgeOperation", "retainOperation", "pendingOperations", "feedbackSummary", "harnessSources", "profileEvaluationDiscovery", "diagnostics",
-  "datasetExperiments", "experiments", "trainingExecutions", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "run", "prepareHarness", "experiment", "duplicate", "result", "cancel", "score", "passes", "pass", "passResult", "cancelPass", "compare",
+  "modelNativeRuns", "datasetExperiments", "experiments", "trainingExecutions", "projects", "marketplaceCategories", "marketplaceVisibility", "marketplacePublish", "marketplaceChangeVisibility", "marketplaceBrowse", "marketplaceDetail", "marketplacePreview", "marketplaceAdopt", "marketplaceRetained", "marketplaceChecks", "resolveDataset", "datasetPopulation", "catalogDatasets", "catalogDataset", "attachDatasetGrader", "createDraft", "saveDraft", "saveDraftFile", "draftFiles", "draftFile", "publishDraft", "uploadFolder", "caseUsage", "case", "graderModels", "graderCatalog", "graderVersions", "graderUsage", "modelChoices", "learningRelay", "inventory", "dataset", "datasetVersions", "datasetVersion", "beginDatasetVersion", "saveDataset", "validateDataset", "publishDataset", "run", "prepareHarness", "experiment", "duplicate", "result", "cancel", "score", "passes", "pass", "passResult", "cancelPass", "compare",
 ]), value: z.unknown().optional() }).strict();
 const Identity = z.object({ id: Id }).passthrough();
 
@@ -77,6 +77,15 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
       return result;
     }
     const options = { baseUrl: access.apiBaseUrl, apiKey: access.token, teamId: access.teamId, fetch: input.fetch };
+    if (request.operation === "modelNativeRuns") {
+      const query = z.object({ modelProjectId: z.string().trim().min(1).max(500), limit: z.number().int().min(1).max(100).optional(), cursor: z.string().min(1).max(2048).optional() }).strict().parse(request.value);
+      const { modelProjectId, ...pagination } = query;
+      const actorId = await input.resolveActorId?.();
+      const page = await createModelProjectsClient({ baseUrl: access.apiBaseUrl, headers: { Authorization: `Bearer ${access.token}`, "x-openpond-team-id": access.teamId }, fetch: input.fetch }).nativeRuns(modelProjectId, { ...pagination, teamId: access.teamId });
+      if (contentHash(await input.resolveAccess()) !== contentHash(access) || await input.resolveActorId?.() !== actorId)
+        throw new Error("The signed-in account or workspace changed. Refresh before continuing.");
+      return page;
+    }
     const experiments = new OpenPondExperimentsClient(options);
     const connected = new ConnectedEvidenceClient(options);
     const projects = new OpenPondTrainingProjectClient(options);

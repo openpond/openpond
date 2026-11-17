@@ -1,5 +1,5 @@
 import { ErrorToast } from "../common/ErrorToast";
-import { ConnectedHome } from "./workspace/ConnectedHome";
+import { ConnectedOverview } from "./workspace/ConnectedOverview";
 import { HostedTrainingRunRoute } from "./HostedTrainingRunRoute";
 import { InboxRoute } from "../human-review/InboxRoute";
 import { HostedEvaluationWorkspace } from "./workspace/HostedEvaluationWorkspace";
@@ -9,11 +9,14 @@ import type { LearnedPreferenceRewardBinding, TasksetDraft } from "@openpond/con
 import { appendTaskIntake, taskIntakeSourceFiles } from "openpond-sdk/taskset-drafts";
 import { learningRef, type TaskBatch } from "openpond-sdk/learning";
 import { api } from "../../api";
+import { apiFetch } from "../../api/api-client";
+import { parseModelNativeRunPage } from "openpond-sdk/model-projects";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
 import { useErrorToast } from "../../app/AppToastContext";
 import { buildHostedTrainingModelChatHandoff, buildTrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import { HostedTrainingPolicyRoute } from "./HostedTrainingPolicyRoute";
 import { AppDialog } from "../dialogs/AppDialog";
+import { DropdownSelect } from "../DropdownSelect";
 import { DatasetSourcePickerDialog, type DatasetCreateSource } from "../datasets/DatasetSourcePickerDialog";
 import { HuggingFaceDatasetImportDialog } from "../datasets/HuggingFaceDatasetImportDialog";
 import { TasksetDraftEditor } from "../datasets/TasksetDraftEditor";
@@ -34,6 +37,8 @@ import { LabsView, type LabPrimaryTab } from "./LabsView";
 import { ModelRunEditorPage } from "./ModelRunEditorPage";
 import { ModelsResourceDetail } from "./ModelsResourceDetail";
 import { ModelsAggregatePage } from "./ModelsAggregatePage";
+import { ModelTrainingWorkspace } from "./ModelTrainingWorkspace";
+import { isNativeTrainingResource } from "./models-route";
 import { LearningRewardsPage } from "./learning/LearningRewardsPage";
 import { LearningCombinedRewardsPage } from "./learning/LearningCombinedRewardsPage";
 import { LearningTaskFormatsPage } from "./learning/LearningTaskFormatsPage";
@@ -64,11 +69,27 @@ export function LabsRoute(props: LabsRouteProps) {
   const [starterPreview, setStarterPreview] = useState<ModelStarterPreview | null>(null);
   const savedModelId = useRef<string | null>(null);
   const [importSource, setImportSource] = useState<"source" | DatasetCreateSource | null>(null);
+  const { setFullStateRequired } = training.training;
+  const needsFullState = modelCreateOpen || comparisonCreateOpen || importSource === "huggingface";
+  useEffect(() => {
+    setFullStateRequired(needsFullState);
+    return () => setFullStateRequired(false);
+  }, [needsFullState, setFullStateRequired]);
   const intakeBusy = useRef(false);
   const intakeDraft = useRef<{ previewHash: string; draft: TasksetDraft } | null>(null);
   const [runTarget, setRunTarget] = useState<{ tasksetId?: string; reward?: LearnedPreferenceRewardBinding | null } | null>(null);
   const [selectedRunTarget, setSelectedRunTarget] = useState("");
+  const [startingRun, setStartingRun] = useState(false);
+  const [runSetupError, setRunSetupError] = useState<unknown>(null);
+  useErrorToast(runSetupError);
   const workspaceKey = JSON.stringify([profileView.connection?.serverUrl ?? null, profileId, training.settingsPreferences.defaultTeamId ?? null, props.account?.apiBaseUrl ?? null, props.account?.activeProfile?.handle ?? null]);
+  const launchScope = JSON.stringify([workspaceKey, route ? modelsPath(route) : null, Boolean(runTarget), runTarget ? selectedRunTarget : null]);
+  const liveLaunchScope = useRef(launchScope);
+  liveLaunchScope.current = launchScope;
+  useEffect(() => {
+    liveLaunchScope.current = launchScope;
+    return () => { liveLaunchScope.current = ""; };
+  }, [launchScope]);
   // Packaged Desktop chooses a new local API port at launch. Catalog authority
   // is the hosted account/workspace, so its persisted key must survive that port.
   const starterCacheScope = props.account?.state === "signed_in" ? JSON.stringify([props.account.apiBaseUrl, props.account.activeProfile?.handle ?? null, profileId, training.settingsPreferences.defaultTeamId ?? null]) : null;
@@ -84,9 +105,9 @@ export function LabsRoute(props: LabsRouteProps) {
   const workproducts = useMemo(() => labWorkproductProjection({ profile, training: state, runs: createImprove.runs }), [profile, state, createImprove.runs]);
   const models = useMemo(() => {
     const team = training.settingsPreferences.defaultTeamId?.trim() ?? null;
-    const ids = new Set((state?.modelProjects ?? []).filter((project) => project.profileId === profileId && (project.hosted === null || project.hosted.teamId === team)).map((project) => project.id));
+    const ids = new Set((state?.modelProjects ?? []).filter((project) => project.profileId === profileId && (project.hosted === null || project.hosted.teamId === team && project.hosted.apiOrigin === props.account?.apiBaseUrl)).map((project) => project.id));
     return workproducts.filter((item) => item.kind === "model" && ids.has(item.id));
-  }, [state, profileId, training.settingsPreferences.defaultTeamId, workproducts]);
+  }, [state, profileId, training.settingsPreferences.defaultTeamId, props.account?.apiBaseUrl, workproducts]);
   const selected = models.find((model) => model.id === route?.modelId) ?? null;
   const refreshModel = route?.resourceId
     ? models.find(model => model.id === modelResourceOwner(route, state)) ?? null
@@ -129,7 +150,7 @@ export function LabsRoute(props: LabsRouteProps) {
   useEffect(() => {
     if (!route) { props.onDetailOpenChange(null); return; }
     const label = MODELS_PAGE_LABELS[route.page];
-    const hostedPage = ["datasets", "graders", "experiments"].includes(route.page);
+    const hostedPage = ["datasets", "graders", "experiments"].includes(route.page) || isNativeTrainingResource(route.resourceId);
     const kind = ["datasets", "tasksets", "tasks"].includes(route.page) ? "dataset" : ["graders", "rewards"].includes(route.page) ? "scoring" : ["experiments", "evaluations", "labeling"].includes(route.page) ? "evaluation" : "model";
     props.onDetailOpenChange({ rootLabel: route.area === "console" ? "Console" : "Models", kind, kindLabel: label, kindOnSelect: () => { void navigateModelsRoute(modelsLocation(route.page, route.modelId, { area: route.area, projectId: route.projectId })); }, workproductLabel: selected?.name ?? (route.modelId ? "Unavailable model" : null), segments: route.resourceId ? [{ label: hostedPage ? hostedResourceTitle?.key === hostedResourceKey ? hostedResourceTitle.name ?? "Loading resource…" : "Loading resource…" : route.resourceId }, ...(route.detailTab ? [{ label: route.detailTab }] : [])] : [] });
   }, [route, selected?.name, hostedResourceKey, hostedResourceTitle, props.onDetailOpenChange]);
@@ -184,14 +205,34 @@ export function LabsRoute(props: LabsRouteProps) {
     toast("Reviewed batch selected for this Model.", "success");
     openTaskset(taskset.id);
   }
-  function startRun(tasksetId?: string, reward?: LearnedPreferenceRewardBinding | null) {
-    if (route?.modelId) {
-      props.onNewModel(tasksetId, reward, route.modelId);
-      open(modelsLocation("runs", route.modelId, { collection: "new", resourceId: route.modelId }));
+  async function startRun(tasksetId?: string, reward?: LearnedPreferenceRewardBinding | null, modelId = route?.modelId) {
+    if (!modelId) {
+      setSelectedRunTarget("");
+      setRunTarget({ tasksetId, reward });
       return;
     }
-    setSelectedRunTarget("");
-    setRunTarget({ tasksetId, reward });
+    if (startingRun) return;
+    const project = state?.modelProjects.find(model => model.id === modelId);
+    if (!project || !models.some(model => model.id === modelId) || !profileView.connection) return;
+    setStartingRun(true);
+    setRunSetupError(null);
+    try {
+      // The standard editor must not reinterpret a native module's method as SFT.
+      // A fresh read also covers launch from the all-models picker.
+      if (project.hosted && !project.trainingSetup.method) {
+        const hosted = project.hosted;
+        const page = parseModelNativeRunPage(await apiFetch(profileView.connection, "/v1/training/evaluation-workspace", {
+          method: "POST", body: JSON.stringify({ teamId: hosted.teamId, projectId: null, operation: "modelNativeRuns", value: { modelProjectId: hosted.projectId } }),
+        }), { teamId: hosted.teamId, modelProjectId: hosted.projectId });
+        if (page.total > 0) throw new Error("This Model uses a native modification method. New training for that method must use its supported OpenPond CLI workflow; the standard training editor cannot continue its saved module.");
+      }
+      if (liveLaunchScope.current !== launchScope) return;
+      props.onNewModel(tasksetId, reward, modelId);
+      setRunTarget(null);
+      open(modelsLocation("runs", modelId, { collection: "new", resourceId: modelId }));
+    } catch (error) {
+      if (liveLaunchScope.current === launchScope) setRunSetupError(error);
+    } finally { setStartingRun(false); }
   }
   function finishRunEditor() {
     if (training.launchRequest) training.onLaunchHandled(training.launchRequest.id);
@@ -205,11 +246,16 @@ export function LabsRoute(props: LabsRouteProps) {
   else if (!route) page = unavailable("This Models location is unavailable.");
   else if (route.page === "home") {
     const teamId = training.settingsPreferences.defaultTeamId, actorId = props.account?.profile?.id;
-    page = profileView.connection && teamId && actorId ? <ConnectedHome key={workspaceKey} connection={profileView.connection} teamId={teamId} actorId={actorId} projectId={route.projectId}
-      onProjectChange={projectId=>open({...route,projectId})} onOpenSources={projectId=>open(modelsLocation("datasets",null,{area:"console",projectId}))} /> : unavailable("Sign in and select a workspace to view Home.");
+    page = profileView.connection && teamId && actorId && props.account?.apiBaseUrl ? <ConnectedOverview key={workspaceKey} connection={profileView.connection} teamId={teamId} actorId={actorId} accountKey={workspaceKey} apiOrigin={props.account.apiBaseUrl} profileId={profileId} projectId={route.projectId ?? null}
+      training={training.training} onNavigate={open} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }} onCreateDataset={() => setImportSource("source")} /> : unavailable("Sign in and select a workspace to view Overview.");
   }
   else if (route.page === "inbox") page = <InboxRoute connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} route={route} onNavigate={open} onSidebarControl={props.onEvaluationSidebarControl} />;
   else if (["datasets", "graders", "experiments"].includes(route.page)) page = <HostedEvaluationWorkspace key={workspaceKey} connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`} route={route} onNavigate={open} onResourceName={reportHostedResourceName} onSidebarControl={props.onEvaluationSidebarControl} onLocalDatasets={() => open(modelsLocation("tasksets"))} onOpenWork={props.onOpenRunConversation} />;
+  else if (route.page === "runs" && isNativeTrainingResource(route.resourceId)) page = <HostedEvaluationWorkspace key={`${workspaceKey}:${route.modelId}`} connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`}
+    modelProjectId={state?.modelProjects.find(model => model.id === route.modelId)?.hosted?.projectId ?? null}
+    route={{ ...route, page: "experiments", modelId: null, area: "console" }}
+    onNavigate={next => open(next.page === "experiments" && (!next.resourceId || isNativeTrainingResource(next.resourceId)) ? { ...next, page: "runs", modelId: route.modelId, executionLocation: undefined } : next)}
+    onResourceName={reportHostedResourceName} onSidebarControl={props.onEvaluationSidebarControl} onLocalDatasets={() => open(modelsLocation("tasksets"))} onOpenWork={props.onOpenRunConversation} />;
   else if (route.page === "runs" && route.resourceId?.startsWith("hosted-policy:")) {
     const teamId=training.settingsPreferences.defaultTeamId,actorId=props.account?.profile?.id;
     page=profileView.connection&&teamId&&actorId?<HostedTrainingPolicyRoute key={`${workspaceKey}:${route.resourceId}`} connection={profileView.connection} teamId={teamId} actorId={actorId} projectId={route.projectId??null} policyId={route.resourceId.slice(14)}
@@ -278,16 +324,21 @@ export function LabsRoute(props: LabsRouteProps) {
   } else if (route.page === "models" && !route.modelId) {
     page = <LabModelsPage activeProfileId={profileId} hostedScope={props.account?.state === "signed_in" ? `${props.account.apiBaseUrl}:${props.account.activeProfile?.handle}:${workspaceKey}` : null} hostedApiOrigin={props.account?.apiBaseUrl ?? null} items={models} loading={training.training.loading && !models.length} runs={createImprove.runs} state={state} training={training.training}
       onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={(_id, name, runCount) => toast(`${name} pulled with ${runCount} runs.`, "success")}
-      onOpened={(id) => open(modelsLocation("models", id))}
-      onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={(id) => { setStarterPreview(null); setEditingModelId(id); setModelCreateOpen(true); }}
+      onOpened={(id) => open(modelsLocation("runs", id, { area: "console" }))}
+      onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("runs", model.id, { area: "console" })); }} onUseModel={useModel} onConfigure={(id) => { setStarterPreview(null); setEditingModelId(id); setModelCreateOpen(true); }}
     />;
   } else if ((route.page === "runs" || (route.page === "versions" && !route.modelId)) && !route.resourceId) {
-    page = <>
-      <ModelsAggregatePage modelId={route.modelId} page={route.page} state={scopedState} models={route.modelId ? models.filter((model) => model.id === route.modelId) : models} runs={createImprove.runs} query={route.query} after={route.after}
+    const runs = <>
+      <ModelsAggregatePage embedded={route.page === "runs" && Boolean(route.modelId)} modelId={route.modelId} page={route.page} state={scopedState} models={route.modelId ? models.filter((model) => model.id === route.modelId) : models} runs={createImprove.runs} query={route.query} after={route.after}
+        onOpenModel={id => open(modelsLocation("runs", id, { area: "console" }))}
         onSearch={(query) => open({ ...route, query, after: null })} onPage={(after) => open({ ...route, after })}
         onOpen={(row) => open(row.ref.startsWith("series:") ? modelsLocation("runs", route.modelId, { collection: "series", resourceId: row.ref.slice(7) }) : modelsResourceLocation(route, row.ref))} onNewRun={() => startRun()} onNewComparison={() => setComparisonCreateOpen(true)}
       />
     </>;
+    const project = state?.modelProjects.find(model => model.id === route.modelId);
+    page = route.page === "runs" && project && profileView.connection
+      ? <ModelTrainingWorkspace key={`${workspaceKey}:${project.id}`} model={project} connection={profileView.connection} accountKey={workspaceKey} onNavigate={open} startingRun={startingRun} onNewRun={() => void startRun()}>{runs}</ModelTrainingWorkspace>
+      : runs;
   } else {
     const ownerId = modelResourceOwner(route, state);
     const owner = models.find((model) => model.id === ownerId) ?? null;
@@ -298,15 +349,16 @@ export function LabsRoute(props: LabsRouteProps) {
   const tab: LabPrimaryTab = (route?.page === "home" || route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" || route?.page === "labeling" ? "evals" : route?.page === "tasks" ? "tasksets" : route?.page === "datasets" ? "tasksets" : route?.page === "graders" ? "rewards" : route?.page === "experiments" || route?.page === "inbox" ? "evals" : route?.page ?? "overview";
   return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }}>
     {hostedRefreshError ? <ErrorToast error={hostedRefreshError} /> : null}
-    {route && (route.page === "runs" || route.page === "evaluations") ? <ModelsRunViews route={route} /> : null}
+    {route && !route.modelId && (route.page === "runs" || route.page === "evaluations") ? <ModelsRunViews route={route} /> : null}
     {page}
-    {comparisonCreateOpen && scopedState ? <LabComparisonSeriesCreateDialog busy={Boolean(training.training.busyAction)} profileId={scopedState.profileId} state={scopedState} onClose={() => setComparisonCreateOpen(false)} onCreate={async (series) => { const saved = await training.training.actions.saveComparisonSeries(series); if (!saved) return false; setComparisonCreateOpen(false); open(modelsLocation("runs", route?.modelId ?? null, { collection: "series", resourceId: saved.id })); return true; }} /> : null}
-    {modelCreateOpen ? <LabModelCreateDialog key={`${workspaceKey}:${editingModelId ?? starterPreview?.starter.contentHash ?? "new"}`} starter={starterPreview ? { preview: starterPreview, profileId } : null} project={state?.modelProjects.find((project) => project.id === editingModelId) ?? null} tasksets={labModelTasksets(state).filter((taskset) => taskset.profileId === profileId)} learningClient={learningClient} baseModelCandidates={state?.baseModelCandidates ?? []} busy={training.training.busyAction === "save-model-project" || training.training.busyAction === "create-model-from-starter"} initialName={nextModelName(state?.modelProjects ?? [])} onClose={() => setModelCreateOpen(false)} onCheck={(input) => input.starterRequest ? training.training.actions.checkModelStarter(input.starterRequest) : training.training.actions.checkModelProject(modelConfiguration(input), input.expectedRevision)} onCreate={createModel} onSaved={() => { setModelCreateOpen(false); setEditingModelId(null); setStarterPreview(null); open(modelsLocation("models", savedModelId.current)); }} onManageModels={training.onOpenTrainingSettings} renderTasksetBuilder={(onPublished, onClose, closeRef) => <TasksetDraftEditor closeRef={closeRef} defaultModel={training.defaultModel} training={training.training} onBack={onClose} onPublished={onPublished} />} /> : null}
+    {needsFullState && (!state || state.projection === "models") ? <AppDialog ariaLabel="Loading model setup" className="labs-rename-dialog" backdropClassName="labs-rename-backdrop" onClose={() => { setModelCreateOpen(false); setComparisonCreateOpen(false); setImportSource(null); }}><p role="status">Loading model setup…</p><button className="training-button secondary" type="button" onClick={() => void training.training.refresh()}>Retry</button></AppDialog> : null}
+    {comparisonCreateOpen && scopedState && scopedState.projection !== "models" ? <LabComparisonSeriesCreateDialog busy={Boolean(training.training.busyAction)} profileId={scopedState.profileId} state={scopedState} onClose={() => setComparisonCreateOpen(false)} onCreate={async (series) => { const saved = await training.training.actions.saveComparisonSeries(series); if (!saved) return false; setComparisonCreateOpen(false); open(modelsLocation("runs", route?.modelId ?? null, { collection: "series", resourceId: saved.id })); return true; }} /> : null}
+    {modelCreateOpen && state && state.projection !== "models" ? <LabModelCreateDialog key={`${workspaceKey}:${editingModelId ?? starterPreview?.starter.contentHash ?? "new"}`} starter={starterPreview ? { preview: starterPreview, profileId } : null} project={state?.modelProjects.find((project) => project.id === editingModelId) ?? null} tasksets={labModelTasksets(state).filter((taskset) => taskset.profileId === profileId)} learningClient={learningClient} baseModelCandidates={state?.baseModelCandidates ?? []} busy={training.training.busyAction === "save-model-project" || training.training.busyAction === "create-model-from-starter"} initialName={nextModelName(state?.modelProjects ?? [])} onClose={() => setModelCreateOpen(false)} onCheck={(input) => input.starterRequest ? training.training.actions.checkModelStarter(input.starterRequest) : training.training.actions.checkModelProject(modelConfiguration(input), input.expectedRevision)} onCreate={createModel} onSaved={() => { setModelCreateOpen(false); setEditingModelId(null); setStarterPreview(null); open(modelsLocation("runs", savedModelId.current, { area: "console" })); }} onManageModels={training.onOpenTrainingSettings} renderTasksetBuilder={(onPublished, onClose, closeRef) => <TasksetDraftEditor closeRef={closeRef} defaultModel={training.defaultModel} training={training.training} onBack={onClose} onPublished={onPublished} />} /> : null}
     {importSource === "source" ? <DatasetSourcePickerDialog onClose={() => setImportSource(null)} onSelect={async (source) => {
       if (source === "build") { const draft = await training.training.actions.createTasksetDraft("", route?.modelId); if (!draft) return; setImportSource(null); open(modelsLocation("tasks", route?.modelId ?? null, { collection: "drafts", resourceId: draft.id })); }
       else setImportSource(source);
     }} /> : null}
-    {importSource === "huggingface" ? <HuggingFaceDatasetImportDialog onBack={() => setImportSource("source")} onClose={() => setImportSource(null)} onImported={async (id) => { setImportSource(null); await training.training.refresh(); openTaskset(id); }} onOpenDatasetStorageSettings={training.onOpenDatasetStorageSettings} training={training.training} /> : null}
+    {importSource === "huggingface" && state && state.projection !== "models" ? <HuggingFaceDatasetImportDialog onBack={() => setImportSource("source")} onClose={() => setImportSource(null)} onImported={async (id) => { setImportSource(null); await training.training.refresh(); openTaskset(id); }} onOpenDatasetStorageSettings={training.onOpenDatasetStorageSettings} training={training.training} /> : null}
     {importSource === "upload" || importSource === "hermes" || importSource === "openclaw" ? <AppDialog ariaLabel="Import tasks" className="labs-rename-dialog labs-model-create-dialog" backdropClassName="labs-rename-backdrop" onClose={() => { if (!intakeBusy.current) setImportSource(null); }}>
       <TaskIntakeForm client={learningClient} initialFormat={importSource === "upload" ? "json" : importSource} onBusyChange={busy => { intakeBusy.current = busy; }} onBack={() => setImportSource("source")}
         onImported={sourceId => { if (priorWorkspace.current !== workspaceKey) return; setImportSource(null); open(modelsLocation("labeling", route?.modelId ?? null, { sourceId })); }}
@@ -341,9 +393,9 @@ export function LabsRoute(props: LabsRouteProps) {
     </AppDialog> : null}
     {runTarget ? <AppDialog ariaLabel="Choose model for training" className="labs-rename-dialog" backdropClassName="labs-rename-backdrop" onClose={() => setRunTarget(null)}>
       <h2>Train an existing model</h2><p>Choose the model this run will improve.</p>
-      <label>Model<select value={selectedRunTarget} onChange={(event) => setSelectedRunTarget(event.target.value)}><option value="">Choose model</option>{models.map((model) => <option value={model.id} key={model.id}>{model.name}</option>)}</select></label>
+      <label>Model<DropdownSelect label="Model for training" value={selectedRunTarget} onChange={setSelectedRunTarget} options={[{ value: "", label: "Choose model" }, ...models.map(model => ({ value: model.id, label: model.name }))]} /></label>
       {!models.length ? <p>Create a model from Models before starting a run.</p> : null}
-      <div className="model-build-actions"><button className="training-button secondary" type="button" onClick={() => setRunTarget(null)}>Cancel</button><button className="training-button" type="button" disabled={!selectedRunTarget} onClick={() => { props.onNewModel(runTarget.tasksetId, runTarget.reward, selectedRunTarget); setRunTarget(null); open(modelsLocation("runs", selectedRunTarget, { collection: "new", resourceId: selectedRunTarget })); }}>Continue</button></div>
+      <div className="model-build-actions"><button className="training-button secondary" type="button" onClick={() => setRunTarget(null)}>Cancel</button><button className="training-button" type="button" disabled={!selectedRunTarget || startingRun} onClick={() => void startRun(runTarget.tasksetId, runTarget.reward, selectedRunTarget)}>Continue</button></div>
     </AppDialog> : null}
   </LabsView>;
 }

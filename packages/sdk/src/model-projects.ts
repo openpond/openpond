@@ -1,5 +1,7 @@
 import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
+import { createModelNativeRunClient } from "./model-native-runs.js";
+export * from "./model-native-runs.js";
 import { TrainingGpuSelectionSchema } from "./training-compute-selection.js";
 import { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
 export { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
@@ -438,6 +440,7 @@ export function createModelProjectsClient(input: {
   }
 
   return {
+    ...createModelNativeRunClient(request),
     async configurationCandidates() {
       return z.object({ candidates: z.array(ModelProjectBaseModelCandidateSchema).max(1000) }).strict().parse(
         await request("/v1/model-projects/configuration/candidates", { headers: { accept: "application/json" } }),

@@ -52,7 +52,7 @@ import type {
   LearnedPreferenceRewardBinding,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
-import { TrainingStateResponseSchema } from "@openpond/contracts";
+import { ModelProjectSchema, TrainingStateResponseSchema } from "@openpond/contracts";
 import { checkModelConfiguration, modelConfigurationRequest } from "../lib/model-project-configuration";
 import type { HostedModelProjectCatalog } from "./hosted-model-project-types";
 import { createModelStarterActions } from "./model-starter-actions";
@@ -113,12 +113,14 @@ export type PreferenceDatasetReleaseView = {
 const ACTIVE_TRAINING_POLL_INTERVAL_MS = 10_000;
 const IDLE_TRAINING_POLL_INTERVAL_MS = 30_000;
 
-export function useTraining(input: { connection: ClientConnection | null; profileId: string; enabled?: boolean }) {
-  const { connection, profileId, enabled = true } = input;
+export function useTraining(input: { connection: ClientConnection | null; profileId: string; enabled?: boolean; projection?: "full" | "models" }) {
+  const { connection, profileId, enabled = true, projection: requestedProjection = "full" } = input;
+  const [fullStateRequired, setFullStateRequired] = useState(false);
+  const projection = fullStateRequired ? "full" : requestedProjection;
   const queries = useQueryClient();
   const connectionScope = connectionQueryScope(connection);
-  const queryKey = useMemo(() => ["training", connectionScope, profileId] as const, [connectionScope, profileId]);
-  const queryFn = useCallback(async ({ signal }: { signal: AbortSignal }) => TrainingStateResponseSchema.parse(await api.trainingState(connection!, profileId, signal)), [connection, profileId]);
+  const queryKey = useMemo(() => ["training", connectionScope, profileId, projection] as const, [connectionScope, profileId, projection]);
+  const queryFn = useCallback(async ({ signal }: { signal: AbortSignal }) => TrainingStateResponseSchema.parse(await api.trainingState(connection!, profileId, signal, projection)), [connection, profileId, projection]);
   const stateQuery = useQuery({
     queryKey: enabled ? queryKey : ["training-inactive", connectionScope, profileId],
     queryFn,
@@ -379,12 +381,30 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         }
       }
     },
-    openHostedModelProject: (hostedProjectId: string, teamId: string, apiOrigin: string, options: { silent?: boolean } = {}) =>
-      mutate<{ project: ModelProject; importedJobCount: number; importedMetricCount: number }>(
-        `open-hosted-model-project:${hostedProjectId}`,
-        `/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/open`,
-        { profileId, teamId, apiOrigin }, "POST", options,
-      ),
+    openHostedModelProject: async (hostedProjectId: string, teamId: string, apiOrigin: string, options: { silent?: boolean } = {}) => {
+      if (!connection) return null;
+      const key = `open-hosted-model-project:${hostedProjectId}`;
+      if (!options.silent) setBusyAction(key);
+      try {
+        const result = await api.trainingRequest<{ project: ModelProject; importedJobCount: number; importedMetricCount: number }>(connection,
+          `/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/open`, { profileId, teamId, apiOrigin }, "POST");
+        const opened = ModelProjectSchema.parse(result.project);
+        if (opened.hosted?.projectId !== hostedProjectId || opened.hosted.teamId !== teamId
+          || opened.hosted.apiOrigin !== new URL(apiOrigin).origin) throw new Error("The opened Model belongs to another workspace.");
+        // The owner already returned the opened Model. Navigation must not wait
+        // for an unrelated full history refresh, which can take many seconds.
+        await queries.cancelQueries({ queryKey, exact: true });
+        queries.setQueryData<TrainingStateResponse>(queryKey, previous => previous ? { ...previous,
+          modelProjects: [...previous.modelProjects.filter(project => project.id !== result.project.id), result.project],
+        } : previous);
+        void refreshAfterMutation();
+        if (!options.silent) setError(null);
+        return result;
+      } catch (caught) {
+        if (!options.silent) setError(message(caught));
+        return null;
+      } finally { if (!options.silent) setBusyAction(current => current === key ? null : current); }
+    },
     pullHostedModelProject: (hostedProjectId: string) =>
       mutate<{
         project: ModelProject;
@@ -933,7 +953,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         `${modelId}.openpond-lora.tar`,
       ),
     downloadBundle: async (bundleId: string) => downloadAuthenticated(`/bundles/${encodeURIComponent(bundleId)}/download`, "openpond-model-improvement-bundle.json"),
-  }), [connection, mutate, profileId, refresh]);
+  }), [connection, mutate, profileId, refresh, queries, queryKey, refreshAfterMutation]);
 
   async function downloadAuthenticated(path: string, fallbackName: string) {
     if (!connection) return false;
@@ -950,7 +970,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     finally { setBusyAction(null); }
   }
 
-  return { connection, payload, loading, busyAction, error: error ?? stateQuery.error?.message ?? null, refresh, actions };
+  return { connection, payload, loading, busyAction, error: error ?? stateQuery.error?.message ?? null, refresh, actions, setFullStateRequired };
 }
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error); }

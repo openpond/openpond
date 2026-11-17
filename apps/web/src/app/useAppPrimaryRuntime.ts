@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useModelsRoute } from "../components/labs/lab-primary-tab-state";
+import { isNativeTrainingResource } from "../components/labs/models-route";
 import type {
   RuntimeEvent,
   SidebarFileBookmark,
@@ -326,9 +328,16 @@ export function useAppPrimaryRuntime() {
   const connectedAppRows = useConnectedAppStatusRows(connection);
   const trainingProfileId = bootstrap?.profile?.activeProfile ?? "default";
   const trainingNavigation = useTrainingNavigation(bootstrap ? connection : null, trainingProfileId);
+  const modelsRoute = useModelsRoute();
+  const libraryProjection = view === "labs" && modelsRoute && (
+    ["home", "inbox", "datasets", "graders", "experiments"].includes(modelsRoute.page)
+    || modelsRoute.page === "models" && !modelsRoute.modelId
+    || modelsRoute.page === "runs" && modelsRoute.collection === "default" && (!modelsRoute.resourceId || isNativeTrainingResource(modelsRoute.resourceId))
+  );
   const training = useTraining({
     connection: bootstrap ? connection : null,
     profileId: trainingProfileId,
+    projection: libraryProjection ? "models" : "full",
     enabled: view === "labs" || Boolean(selectedSessionId && trainingNavigation.data?.creationSessionIds.includes(selectedSessionId)),
   });
   const {

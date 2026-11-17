@@ -938,6 +938,7 @@ export const TasksetOperationalStateSchema = deferredObject(() => ({
 
 export const TrainingStateResponseSchema = deferredObject(() => ({
   schemaVersion: z.literal("openpond.trainingState.v1"),
+  projection: z.enum(["full", "models"]).optional(),
   profileId: IdSchema,
   sources: z.array(TrainingSourceRefSchema),
   creations: z.array(TaskCreationSnapshotSchema),

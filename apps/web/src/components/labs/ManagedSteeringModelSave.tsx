@@ -23,7 +23,7 @@ export function ManagedSteeringModelSave({
   const [open, setOpen] = useState(false),
     [name, setName] = useState((execution?.name ?? "Steering Model").slice(0, 200));
   const [variantId, setVariantId] = useState(""),
-    [target, setTarget] = useState("");
+    [target, setTarget] = useState(api.modelProjectId ?? "");
   const variants = execution?.request.variants.filter((row) => row.profile !== null) ?? [];
   const selected = variants.some((row) => row.id === variantId)
     ? variantId
@@ -36,7 +36,7 @@ export function ManagedSteeringModelSave({
       open &&
       (Boolean(retained) ||
         name !== (execution?.name ?? "Steering Model").slice(0, 200) ||
-        Boolean(target) ||
+        (target !== (api.modelProjectId ?? "")) ||
         Boolean(variantId)),
     discardDescription: retained
       ? "The original save remains recoverable from this execution after closing."
@@ -131,6 +131,8 @@ export function ManagedSteeringModelSave({
                 label="Model destination"
                 value={retained?.modelProjectId ?? (retained ? "" : target)}
                 options={[
+                  ...(api.modelProjectId && api.modelProjectId !== retained?.modelProjectId && !owner.options?.models.some(model => model.id === api.modelProjectId)
+                    ? [{ value: api.modelProjectId, label: "Selected Model" }] : []),
                   { value: "", label: "Create new Model" },
                   ...(owner.options?.models ?? []).map((model) => ({
                     value: model.id,
@@ -142,7 +144,7 @@ export function ManagedSteeringModelSave({
                     ? [{ value: retained.modelProjectId, label: "Original selected Model" }]
                     : []),
                 ]}
-                disabled={owner.busy || Boolean(retained) || !owner.freshReady}
+                disabled={owner.busy || Boolean(retained) || Boolean(api.modelProjectId) || !owner.freshReady}
                 onChange={(value) => {
                   setTarget(value);
                   const model = owner.options?.models.find((row) => row.id === value);

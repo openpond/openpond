@@ -39,7 +39,7 @@ export function ManagedEngramModelSave({
   }
   const [open, setOpen] = useState(false),
     [name, setName] = useState((execution?.name ?? "Engram Model").slice(0, 200));
-  const [target, setTarget] = useState("");
+  const [target, setTarget] = useState(api.modelProjectId ?? "");
   const retained = owner.original?.command;
   const guard = useDraftNavigation({
     name: "Engram Model save",
@@ -48,7 +48,7 @@ export function ManagedEngramModelSave({
       open &&
       (Boolean(retained) ||
         name !== (execution?.name ?? "Engram Model").slice(0, 200) ||
-        Boolean(target)),
+        (target !== (api.modelProjectId ?? ""))),
     discardDescription: retained
       ? "The original save remains recoverable from this execution after closing."
       : undefined,
@@ -122,6 +122,8 @@ export function ManagedEngramModelSave({
                 label="Model destination"
                 value={retained?.modelProjectId ?? (retained ? "" : target)}
                 options={[
+                  ...(api.modelProjectId && api.modelProjectId !== retained?.modelProjectId && !owner.options?.models.some(model => model.id === api.modelProjectId)
+                    ? [{ value: api.modelProjectId, label: "Selected Model" }] : []),
                   { value: "", label: "Create new Model" },
                   ...(owner.options?.models ?? []).map((model) => ({
                     value: model.id,
@@ -133,7 +135,7 @@ export function ManagedEngramModelSave({
                     ? [{ value: retained.modelProjectId, label: "Original selected Model" }]
                     : []),
                 ]}
-                disabled={owner.busy || Boolean(retained) || !owner.freshReady}
+                disabled={owner.busy || Boolean(retained) || Boolean(api.modelProjectId) || !owner.freshReady}
                 onChange={(value) => {
                   setTarget(value);
                   const model = owner.options?.models.find((row) => row.id === value);

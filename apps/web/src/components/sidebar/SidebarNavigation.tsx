@@ -20,11 +20,9 @@ import {
   Shapes,
   SquarePen,
 } from "../icons";
-import { DropdownSelect } from "../DropdownSelect";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView } from "../../lib/app-models";
 import {
-  changeModelsScope,
   modelsLocation,
   MODELS_PAGES,
   MODELS_PAGE_LABELS,
@@ -72,7 +70,6 @@ export function SidebarNavigation({
   setSelectedSessionId,
   setView,
   view,
-  modelProjects = [],
   modelTrainingActivityByProjectId = {},
 }: SidebarDestinationProps) {
   const modelsRoute = useModelsRoute();
@@ -92,12 +89,6 @@ export function SidebarNavigation({
     setView("labs");
   }
 
-  async function selectModelProject(modelId: string) {
-    if (!await navigateModelsRoute(changeModelsScope(modelsRoute ?? modelsLocation(), modelId || null))) return;
-    clearWorkspaceSelection();
-    setView("labs");
-  }
-
   async function selectDesktopView(nextView: "apps" | "outputs" | "projects" | "scheduled") {
     if (!await navigateDesktopRoute({ kind: "view", view: nextView })) return;
     clearWorkspaceSelection();
@@ -112,22 +103,6 @@ export function SidebarNavigation({
     <nav className="sidebar-nav" aria-label="Primary">
       {productArea !== "chat" ? (
         <>
-          {!["home", "inbox", "datasets", "graders", "experiments"].includes(activePage) ? <div className="sidebar-model-project-picker">
-            <span className="sidebar-nav-group-label">Model</span>
-            <DropdownSelect
-              label="Model"
-              searchable={modelProjects.length > 8}
-              value={selectedModelProjectId ?? ""}
-              options={[
-                { value: "", label: "All models" },
-                ...(selectedModelProjectId && !modelProjects.some((project) => project.id === selectedModelProjectId)
-                  ? [{ value: selectedModelProjectId, label: "Unavailable model", disabled: true }]
-                  : []),
-                ...modelProjects.map((project) => ({ value: project.id, label: project.name })),
-              ]}
-              onChange={(id) => void selectModelProject(id)}
-            />
-          </div> : null}
           {MODELS_PAGES.filter(page => productArea === "console" ? ["home", "inbox", "datasets", "graders", "experiments", "runs", "serving"].includes(page) : page !== "home" && page !== "tasksets" && page !== "evaluations").map((page) => {
             const Icon = { "get-started": Boxes, home:Home, inbox: Inbox, models: Activity, datasets: Boxes, graders: Shield, experiments: CheckCircle2, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
             return (

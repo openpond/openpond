@@ -1133,6 +1133,8 @@ Usage:
   openpond training hosted-worker-stop|hosted-worker-resume|hosted-worker-retire|hosted-worker-warm-idle|hosted-worker-retain-session <control.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-tasksets [taskset-id] --team-id <id> [--project-id <id>] [--cursor <cursor>] [--limit <1..100>] [--search <text>] [--api-base-url <url>] [--json]
   openpond training hosted-model <model-project-id> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-bind-model-run <model-and-execution.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-model-runs <model-project-id> --team-id <id> [--limit <1..100>] [--cursor <cursor>] [--api-base-url <url>] [--json]
   openpond training hosted-sync-model <input.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-publish-taskset <publication.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-review-dataset <input.json> --team-id <id> [--api-base-url <url>] [--json]
