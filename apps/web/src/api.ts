@@ -719,10 +719,10 @@ export const api = {
         body: JSON.stringify(input),
       }
     ),
-  trainingState: (connection: ClientConnection, profileId: string, signal?: AbortSignal) =>
+  trainingState: (connection: ClientConnection, profileId: string, signal?: AbortSignal, projection: "full" | "models" = "full") =>
     apiFetch<TrainingStateResponse>(
       connection,
-      `/v1/training?profileId=${encodeURIComponent(profileId)}`,
+      `/v1/training?profileId=${encodeURIComponent(profileId)}&projection=${projection}`,
       { signal }
     ),
   trainingActivity: (connection: ClientConnection, profileId: string, signal?: AbortSignal) =>

@@ -22,6 +22,7 @@ export function createWorkspaceApi(
   scope: {
     teamId: string;
     projectId: string | null;
+    modelProjectId?: string | null;
     accountKey: string;
     actorId?: string | null;
     executionLocation?: "local" | "hosted";
@@ -33,6 +34,7 @@ export function createWorkspaceApi(
     scope.teamId,
     scope.projectId,
     scope.executionLocation ?? "hosted",
+    ...(scope.modelProjectId ? [scope.modelProjectId] : []),
   ]);
   return {
     key,
@@ -40,6 +42,7 @@ export function createWorkspaceApi(
     actorId: scope.actorId ?? null,
     teamId: scope.teamId,
     projectId: scope.projectId,
+    modelProjectId: scope.modelProjectId ?? null,
     location: scope.executionLocation ?? "hosted",
     accountKey: scope.accountKey,
     localDatasets<T>(action: string, payload: unknown = {}, id?: string, signal?: AbortSignal) {
@@ -124,5 +127,5 @@ export function createWorkspaceApi(
 
 export function workspaceApiForLocation(api: WorkspaceApi, executionLocation: "local" | "hosted") {
   return createWorkspaceApi(api.connection, { teamId: api.teamId, projectId: api.projectId,
-    actorId: api.actorId, accountKey: api.accountKey, executionLocation });
+    modelProjectId: api.modelProjectId, actorId: api.actorId, accountKey: api.accountKey, executionLocation });
 }

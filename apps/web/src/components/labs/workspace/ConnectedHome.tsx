@@ -7,20 +7,22 @@ import { createWorkspaceApi, type Inventory } from "./workspace-api";
 import { DropdownSelect } from "../../DropdownSelect";
 import "../../../styles/labs/connected-home.css";
 
-export function ConnectedHome({ connection, teamId, actorId, projectId, onProjectChange, onOpenSources }: {
-  connection: ClientConnection | null; teamId: string | null; actorId: string | null; projectId?: string | null;
+export function ConnectedHome({ connection, teamId, actorId, accountKey, projectId, embedded = false, onProjectChange, onOpenSources }: {
+  accountKey: string; connection: ClientConnection | null; teamId: string | null; actorId: string | null; projectId?: string | null;
+  embedded?: boolean;
   onProjectChange(projectId: string | null): void; onOpenSources(projectId: string | null): void;
 }) {
   const [range, setRange] = useState(() => ({ from: new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) }));
-  const api = connection && teamId && actorId ? createWorkspaceApi(connection, { teamId, actorId, projectId: projectId ?? null, accountKey: actorId }) : null;
-  const projects = useInfiniteQuery({ queryKey: ["connected-home-projects", teamId, actorId], enabled: Boolean(api), initialPageParam: undefined as string | undefined,
+  const api = connection && teamId && actorId ? createWorkspaceApi(connection, { teamId, actorId, projectId: projectId ?? null, accountKey }) : null;
+  const projects = useInfiniteQuery({ queryKey: ["connected-home-projects", api?.key], enabled: Boolean(api), initialPageParam: undefined as string | undefined,
     queryFn: ({ signal, pageParam }) => api!.request<Inventory["projects"]>("projects", pageParam ? { cursor: pageParam } : {}, signal), getNextPageParam: page => page.nextCursor ?? undefined });
   const input = { from: `${range.from}T00:00:00.000Z`, to: new Date(new Date(`${range.to}T00:00:00.000Z`).getTime() + 86_400_000).toISOString(), ...(projectId ? { projectId } : {}) };
   const summary = useQuery({ queryKey: ["connected-home", api?.key, input], enabled: Boolean(api), queryFn: async ({ signal }) => ConnectedHomeSummarySchema.parse(await api!.request("connectedSummary", input, signal)) });
   const data = summary.data, totals = data?.usage.total, fmt = (number: number) => number.toLocaleString();
-  if (!api) return <p role="status">Sign in and select a workspace to open Home.</p>;
-  return <main className="evaluation-workspace connected-home"><div className="connected-home-content"><header className="model-project-page-header"><div className="model-project-page-heading"><div><h1>Home</h1><p>Activity and recorded model usage for your workspace.</p></div><button className="training-button secondary" onClick={() => onOpenSources(projectId ?? null)}>Recorded activity and imports</button></div></header>
-    <div className="evaluation-workspace-scope connected-home-controls"><div className="connected-home-project"><span>Project</span><DropdownSelect label="Home project" searchable value={projectId ?? ""} options={[{value:"",label:"All Projects"},...(projects.data?.pages.flatMap(page => page.projects).filter(project => !project.archived).map(project => ({value:project.id,label:project.content.name})) ?? [])]} onChange={value => onProjectChange(value || null)} /></div>
+  if (!api) return <p role="status">Sign in and select a workspace to open Overview.</p>;
+  const Container = embedded ? "section" : "main";
+  return <Container className="evaluation-workspace connected-home" aria-label={embedded ? "Activity" : undefined}><div className="connected-home-content"><header className="model-project-page-header"><div className="model-project-page-heading"><div>{embedded ? <h2>Activity</h2> : <h1>Overview</h1>}<p>Activity and recorded model usage for your workspace.</p></div><button className="training-button secondary" onClick={() => onOpenSources(projectId ?? null)}>Recorded activity and imports</button></div></header>
+    <div className="evaluation-workspace-scope connected-home-controls"><div className="connected-home-project"><span>Project</span><DropdownSelect label="Overview project" searchable value={projectId ?? ""} options={[{value:"",label:"All Projects"},...(projects.data?.pages.flatMap(page => page.projects).filter(project => !project.archived).map(project => ({value:project.id,label:project.content.name})) ?? [])]} onChange={value => onProjectChange(value || null)} /></div>
       {projects.hasNextPage ? <button className="training-button secondary" disabled={projects.isFetchingNextPage} onClick={() => void projects.fetchNextPage()}>More Projects</button> : null}
       <label>From<input type="date" value={range.from} max={range.to} onChange={event => event.target.value && setRange(previous => ({ ...previous, from: event.target.value }))} /></label>
       <label>To<input type="date" value={range.to} min={range.from} onChange={event => event.target.value && setRange(previous => ({ ...previous, to: event.target.value }))} /></label><button className="training-button secondary" disabled={summary.isFetching || projects.isFetching} onClick={() => { void summary.refetch(); void projects.refetch(); }}>Refresh activity</button></div>
@@ -33,5 +35,5 @@ export function ConnectedHome({ connection, teamId, actorId, projectId, onProjec
         {data.usage.days.map((day, index) => { const height = 80 * day.invocations / Math.max(1, ...data.usage.days.map(row => row.invocations)); return <rect key={day.key} x={index * 16} y={85 - height} width={12} height={height} fill="currentColor"><title>{day.key}: {fmt(day.invocations)} invocations</title></rect>; })}</svg></figure> : null}
       <div className="training-table-wrap"><table className="training-data-table"><caption>Invocation usage by day</caption><thead><tr><th>Date</th><th>Invocations</th><th>Input</th><th>Cached input</th><th>Output</th><th>Missing total</th></tr></thead><tbody>{data.usage.days.map(day => <tr key={day.key}><td>{day.key}</td><td>{fmt(day.invocations)}</td><td>{fmt(day.inputTokens)}</td><td>{fmt(day.cachedInputTokens)}</td><td>{fmt(day.outputTokens)}</td><td>{fmt(day.missingTotal)}</td></tr>)}</tbody></table></div>
       <details><summary>Modes and models</summary>{[data.usage.modes, data.usage.models].map((group, index) => <table className="training-data-table" key={index}><caption>{index ? "Models" : "Modes"}</caption><thead><tr><th>Name</th><th>Invocations</th><th>Known total tokens</th></tr></thead><tbody>{group.map(row => <tr key={row.key}><td>{row.key.replaceAll("_", " ")}</td><td>{fmt(row.invocations)}</td><td>{fmt(row.totalTokens)}</td></tr>)}</tbody></table>)}</details></> : null}
-  </div></main>;
+  </div></Container>;
 }

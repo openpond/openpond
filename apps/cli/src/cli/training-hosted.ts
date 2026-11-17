@@ -160,6 +160,19 @@ export async function runHostedTrainingCommand(options: Options, rest: string[])
     const result = await createModelProjectsClient({ baseUrl, headers, fetch: request }).get(target);
     print(result); await attachModel(result.project.id); return;
   }
+  if (action === "hosted-bind-model-run") {
+    const { ModelRunBindingRequestSchema } = await import("openpond-sdk/model-projects");
+    const input = ModelRunBindingRequestSchema.parse(await readInput());
+    if (input.teamId !== teamId) throw new Error("The Model association belongs to another workspace.");
+    print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).bindNativeRun(input)); return;
+  }
+  if (action === "hosted-model-runs") {
+    if (!target) throw new Error("Supply a Model ID.");
+    print(await createModelProjectsClient({ baseUrl, headers, fetch: request }).nativeRuns(target, { teamId,
+      ...(options.limit === undefined ? {} : { limit: parseIntegerOption(options.limit, "limit") }),
+      ...(optionString(options, "cursor") ? { cursor: optionString(options, "cursor") } : {}),
+    })); return;
+  }
   if (action === "hosted-corrections" || action === "hosted-learning-inspect") {
     if (!target) throw new Error(`${action} requires a hosted Model Project ID.`);
     const { project } = await createModelProjectsClient({ baseUrl, headers, fetch: request }).get(target);

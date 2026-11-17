@@ -1036,6 +1036,11 @@ Options:
 ```text
 Usage:
   openpond training <projects|inspect-project|create-project|prepare-project|pull-project|estimate|start|status|watch|logs|cancel|resume|artifacts|benchmark> [identifier]
+  openpond training hosted-resolve-experiment <input.json> --team-id <id> [--json]
+  openpond training hosted-review-placement <input.json> --team-id <id> [--deadline-at <ISO-time>] [--json]
+  openpond training hosted-queue|hosted-approve-operation-review <reviewed-input.json> --team-id <id> --yes [--json]
+  openpond training hosted-operations --team-id <id> [--project-id <id>] [--cursor <id>] [--limit <1..100>] [--json]
+  openpond training hosted-operation|hosted-find-operation|hosted-stop-operation|hosted-review-operation <id> --team-id <id> [--json]
   openpond training schema [public-schema-name] [--json] — inspect installed public SDK schemas offline; omitting the name lists available schemas. Commands still enforce all semantic validation.
   openpond training estimate <hosted-model-project-id> --team-id <id> [--batch-id <id>] [--gpu-type <type> --availability-id <id> | --gpu-placement-objective <objective>] [--gpu-count <1|2>] [--api-base-url <url>] [--json]
   openpond training hosted-estimate <input.json> --team-id <id> [--api-base-url <url>] [--json]
@@ -1133,6 +1138,8 @@ Usage:
   openpond training hosted-worker-stop|hosted-worker-resume|hosted-worker-retire|hosted-worker-warm-idle|hosted-worker-retain-session <control.json> --team-id <id> [--api-base-url <url>] --yes [--json]
   openpond training hosted-tasksets [taskset-id] --team-id <id> [--project-id <id>] [--cursor <cursor>] [--limit <1..100>] [--search <text>] [--api-base-url <url>] [--json]
   openpond training hosted-model <model-project-id> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-bind-model-run <model-and-execution.json> --team-id <id> [--api-base-url <url>] [--json]
+  openpond training hosted-model-runs <model-project-id> --team-id <id> [--limit <1..100>] [--cursor <cursor>] [--api-base-url <url>] [--json]
   openpond training hosted-sync-model <input.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-publish-taskset <publication.json> --team-id <id> [--api-base-url <url>] [--json]
   openpond training hosted-review-dataset <input.json> --team-id <id> [--api-base-url <url>] [--json]

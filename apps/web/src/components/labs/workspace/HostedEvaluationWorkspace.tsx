@@ -41,6 +41,7 @@ function HostedEvaluationWorkspaceContent({
   onLocalDatasets,
   onResourceName,
   onOpenWork,
+  modelProjectId = null,
 }: {
   connection: ClientConnection | null;
   teamId: string | null;
@@ -51,6 +52,7 @@ function HostedEvaluationWorkspaceContent({
   onLocalDatasets: () => void;
   onResourceName: (name: string | null) => void;
   onOpenWork?: (id: string) => void;
+  modelProjectId?: string | null;
   onSidebarControl?: (control: EvaluationSidebarControl | null) => void;
 }) {
   const setup = useEvaluationSetup();
@@ -67,6 +69,7 @@ function HostedEvaluationWorkspaceContent({
             accountKey,
             actorId,
             projectId: route.projectId ?? null,
+            modelProjectId,
             executionLocation: route.resourceId
               ? (route.executionLocation ??
                 (route.resourceId.startsWith("local-") ? "local" : "hosted"))
@@ -81,6 +84,7 @@ function HostedEvaluationWorkspaceContent({
       route.projectId,
       route.executionLocation,
       route.resourceId,
+      modelProjectId,
     ],
   );
   const hostedApi = useMemo(() => (api ? workspaceApiForLocation(api, "hosted") : null), [api]);
@@ -91,6 +95,7 @@ function HostedEvaluationWorkspaceContent({
             teamId: api.teamId,
             accountKey: api.accountKey,
             actorId: api.actorId,
+            modelProjectId: api.modelProjectId,
             projectId:
               setup.reviewRoute?.projectId === undefined
                 ? api.projectId

@@ -26,7 +26,9 @@ export function useHostedModelRefresh(model: ModelProject | null, teamId: string
       // Keep history current without reimporting a terminal project every 10s.
       timer = setTimeout(() => { void read(); }, active ? 15_000 : 60_000);
     }
-    void read();
+    // Opening already imports this Model's runs. Avoid immediately repeating
+    // that expensive synchronization as its destination mounts.
+    timer = setTimeout(() => { void read(); }, active ? 15_000 : 60_000);
     return () => { stopped = true; clearTimeout(timer); };
   }, [hostedId, teamId, apiOrigin, linkedTeam, linkedOrigin, refresh, key, active]);
   return failure?.key === key ? failure.message : null;

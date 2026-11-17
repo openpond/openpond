@@ -65,6 +65,7 @@ import { attachModelTargetRefs } from "../runtime/create-pipeline/target-adapter
 import { createEvidenceSnapshot, createTasksetRef } from "./create-improve-taskset-lineage.js";
 import { legacyBaseModelPreference } from "./base-model-candidates.js";
 import { createTrainingStateReader } from "./training-state.js";
+import { readModelLibraryState } from "./model-library-state.js";
 import {
   linkHarnessReviewTaskset,
   startHarnessReviewTasksetAuthoring,
@@ -178,7 +179,13 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
     if (action === "begin_model_batch_review") return beginLocalModelBatchReview({ store: deps.store, storeDir: deps.storeDir,
       profileId: requiredString(input.profileId, "profileId"), request: input.request });
     if (action === "navigation") return deps.store.readTrainingNavigation(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
-    if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
+    if (action === "state") {
+      const profileId = string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default";
+      const projection = requestUrl?.searchParams.get("projection") ?? "full";
+      if (projection === "models") return readModelLibraryState(deps, profileId);
+      if (projection !== "full") throw new Error("Unknown training state projection.");
+      return state(profileId);
+    }
     if (action === "activity") return activity(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "portable_catalog") {
       return deps.training.portableCatalog(
