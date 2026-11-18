@@ -67,7 +67,8 @@ def preparation_input(operation_id: str, revision: int, mapping_hash: str, allow
 
 
 def finish_input(operation_id: str, name: str, materialization_id: str, revision: int,
-                 mapping_hash: str, index_hash: str, owner_scope: str) -> dict:
+                 mapping_hash: str, index_hash: str, owner_scope: str,
+                 origin_project_id: str | None = None) -> dict:
     if (not isinstance(name, str) or re.search(r"[\x00\ud800-\udfff]", name) is not None
         or not 1 <= len(name.strip().encode("utf-16-le")) // 2 <= 500
         or not 1 <= byte_count(revision) <= 128 or not is_digest(mapping_hash)
@@ -75,7 +76,7 @@ def finish_input(operation_id: str, name: str, materialization_id: str, revision
         raise ProtocolError("dataset_finish_request_invalid")
     return {"operationId": operation_id, "name": name.strip(), "materializationId": materialization_id,
             "mappingRevision": revision, "mappingHash": mapping_hash, "indexHash": index_hash,
-            "ownerScope": owner_scope}
+            "ownerScope": owner_scope, **({"originProjectId": origin_project_id} if origin_project_id is not None else {})}
 
 
 def finished_draft(value: object, import_id: str, request: dict) -> DatasetImportDraftReceipt:

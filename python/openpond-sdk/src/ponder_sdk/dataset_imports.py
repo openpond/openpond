@@ -274,10 +274,12 @@ class DatasetImports:
 
     def finish(self, import_id: str, *, operation_id: str, name: str, materialization_id: str,
                mapping_revision: int, mapping_hash: str, index_hash: str,
-               owner_scope: Literal["personal", "workspace"] = "workspace") -> DatasetImportDraftReceipt:
+               owner_scope: Literal["personal", "workspace"] = "workspace",
+               origin_project_id: str | None = None) -> DatasetImportDraftReceipt:
         """Save the verified selection as a draft. Reuse the request to retry."""
         request = finish_input(identifier(operation_id), name, identifier(materialization_id),
-                               mapping_revision, mapping_hash, index_hash, owner_scope)
+                               mapping_revision, mapping_hash, index_hash, owner_scope,
+                               identifier(origin_project_id) if origin_project_id is not None else None)
         return finished_draft(self._request("POST", import_path(import_id) + "/finish", request), import_id, request)
 
     def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20, mapping_revision: int | None = None) -> DatasetImportPreview:
@@ -358,10 +360,12 @@ class AsyncDatasetImports:
 
     async def finish(self, import_id: str, *, operation_id: str, name: str, materialization_id: str,
                      mapping_revision: int, mapping_hash: str, index_hash: str,
-                     owner_scope: Literal["personal", "workspace"] = "workspace") -> DatasetImportDraftReceipt:
+                     owner_scope: Literal["personal", "workspace"] = "workspace",
+                     origin_project_id: str | None = None) -> DatasetImportDraftReceipt:
         """Save the verified selection as a draft. Reuse the request to retry."""
         request = finish_input(identifier(operation_id), name, identifier(materialization_id),
-                               mapping_revision, mapping_hash, index_hash, owner_scope)
+                               mapping_revision, mapping_hash, index_hash, owner_scope,
+                               identifier(origin_project_id) if origin_project_id is not None else None)
         return finished_draft(await self._request("POST", import_path(import_id) + "/finish", request), import_id, request)
 
     async def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20, mapping_revision: int | None = None) -> DatasetImportPreview:

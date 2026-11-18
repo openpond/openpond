@@ -55,6 +55,7 @@ export const FinishDatasetImportSchema = BeginDatasetMaterializationSchema
   .extend({
     name: z.string().trim().min(1).max(500).refine(value => !value.includes("\0") && !/\p{Cs}/u.test(value)),
     ownerScope: z.enum(["workspace", "personal"]).default("workspace"),
+    originProjectId: id.optional(),
     materializationId: id,
     indexHash: hash,
   }).strict();

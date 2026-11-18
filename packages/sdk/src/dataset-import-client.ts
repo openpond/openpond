@@ -31,6 +31,7 @@ const knownError = z.enum([
   "dataset_inspection_pending", "dataset_inspection_rejected_rows",
   "dataset_materialization_mapping_superseded", "dataset_materialization_family_split_conflict",
   "dataset_import_attached", "dataset_operation_conflict", "dataset_revision_conflict",
+  "dataset_project_unavailable", "dataset_owner_scope_mismatch", "transport_unavailable", "authentication_required",
 ]);
 
 export class DatasetImportRequestError extends Error {
@@ -42,8 +43,7 @@ export class DatasetImportRequestError extends Error {
   }
 }
 
-type RequestOptions = {
-  apiKey: string;
+type RequestOptions = ({ apiKey: string; browserSession?: false } | { browserSession: true; apiKey?: never }) & {
   teamId: string;
   baseUrl?: string;
   fetch?: typeof fetch;
@@ -71,8 +71,10 @@ export interface DatasetImportSource {
 export class OpenPondDatasetImportClient {
   private readonly baseUrl: string;
   constructor(private readonly options: RequestOptions) {
-    const base = cleanHttpUrl(options.baseUrl ?? DEFAULT_API_BASE_URL);
-    if (base.search || !options.apiKey.trim() || !options.teamId.trim())
+    const browserOrigin = options.browserSession ? globalThis.location?.origin : undefined;
+    const base = cleanHttpUrl(options.baseUrl ?? browserOrigin ?? DEFAULT_API_BASE_URL);
+    if (base.search || !options.teamId.trim() ||
+        (options.browserSession ? base.origin !== browserOrigin : !options.apiKey?.trim()))
       throw new Error("A clean API origin and workspace credentials are required.");
     this.baseUrl = base.toString().replace(/\/+$/, "");
   }
@@ -87,6 +89,10 @@ export class OpenPondDatasetImportClient {
       return !match;
     })) throw new Error("Dataset import receipt does not match the declared files.");
     return result;
+  }
+
+  availability(signal?: AbortSignal) {
+    return this.request("/v1/dataset-imports", z.object({ enabled: z.boolean() }).strict(), undefined, signal);
   }
 
   async get(id: string, signal?: AbortSignal) {
@@ -314,8 +320,9 @@ export class OpenPondDatasetImportClient {
   private async request<S extends z.ZodType>(path: string, schema: S, body: unknown, signal?: AbortSignal, writeMethod: "POST" | "PUT" = "POST"): Promise<z.output<S>> {
     const response = await (this.options.fetch ?? fetch)(`${this.baseUrl}${path}`, {
       method: body === undefined ? "GET" : writeMethod,
-      redirect: "error", signal,
-      headers: { Authorization: `Bearer ${this.options.apiKey}`, "X-OpenPond-Team-Id": this.options.teamId, "Content-Type": "application/json" },
+      redirect: "error", signal, credentials: this.options.browserSession ? "same-origin" : "omit",
+      headers: { ...(this.options.browserSession ? {} : { Authorization: `Bearer ${this.options.apiKey}` }),
+        "X-OpenPond-Team-Id": this.options.teamId, "Content-Type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {

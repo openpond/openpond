@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { contentHash } from "@openpond/harness";
 import { OpenPondDatasetImportClient, OpenPondDatasetWorkspaceClient } from "../src/dataset-workspaces.js";
 import { createTasksetDraft, createTasksetDraftWorkspace } from "../src/taskset-drafts.js";
@@ -35,7 +35,8 @@ async function server(handler: (request: IncomingMessage, response: ServerRespon
   };
 }
 
-test("resumes after a lost part acknowledgement without forwarding API credentials to storage", async () => {
+test.each(["API key", "browser session"] as const)("%s resumes a lost part without forwarding credentials to storage", async (mode) => {
+  const browserSession = mode === "browser session";
   const source = new Blob(["aaaa", "bb"]);
   const sha256 = createHash("sha256").update("aaaabb").digest("hex");
   const uploaded = [{ partNumber: 1, sizeBytes: 4, etag: '"one"' }];
@@ -56,11 +57,14 @@ test("resumes after a lost part acknowledgement without forwarding API credentia
   });
   const file = { fileId: "file-1", relativePath: "examples.jsonl", state: "uploading", sizeBytes: 6, partSize: 4, failureCode: null, object: null };
   const api = await server(async (request, response) => {
-    expect(request.headers.authorization).toBe("Bearer synthetic-fixture");
+    expect(request.headers.authorization).toBe(browserSession ? undefined : "Bearer synthetic-fixture");
     expect(request.headers["x-openpond-team-id"]).toBe("team-fixture");
     apiRequests++;
     const result = (value: unknown) => response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(value));
-    if (request.method === "GET") {
+    if (request.url === "/v1/dataset-imports") {
+      expect(request.method).toBe("GET");
+      result({ enabled: true });
+    } else if (request.method === "GET") {
       result({ ...file, parts: uploaded, nextCursor: null });
     } else if (request.url?.endsWith("/parts")) {
       expect(JSON.parse((await body(request)).toString())).toEqual({ partNumbers: [2] });
@@ -77,9 +81,22 @@ test("resumes after a lost part acknowledgement without forwarding API credentia
     }
   });
   try {
+    if (browserSession) {
+      vi.stubGlobal("location", new URL(api.origin));
+      expect(() => new OpenPondDatasetImportClient({
+        browserSession: true, teamId: "team-fixture", baseUrl: objects.origin,
+      })).toThrow();
+    }
     const client = () => new OpenPondDatasetImportClient({
-      apiKey: "synthetic-fixture", teamId: "team-fixture", baseUrl: api.origin,
+      ...(browserSession ? { browserSession: true as const } : { apiKey: "synthetic-fixture" }),
+      teamId: "team-fixture", baseUrl: api.origin,
+      fetch: (input, init) => {
+        const isAppRequest = String(input).startsWith(`${api.origin}/`);
+        expect(init?.credentials).toBe(browserSession && isAppRequest ? "same-origin" : "omit");
+        return fetch(input, init);
+      },
     });
+    expect(await client().availability()).toEqual({ enabled: true });
     const reads: Array<[number, number]> = [];
     const fileSource = { sha256, sizeBytes: source.size, read(start: number, end: number) {
       reads.push([start, end]);
@@ -93,8 +110,9 @@ test("resumes after a lost part acknowledgement without forwarding API credentia
     expect(reads).toEqual([[4, 6]]);
     expect(puts).toBe(1);
     expect(completeCalls).toBe(1);
-    expect(apiRequests).toBe(4);
+    expect(apiRequests).toBe(5);
   } finally {
+    if (browserSession) vi.unstubAllGlobals();
     await Promise.all([api.close(), objects.close()]);
   }
 });
