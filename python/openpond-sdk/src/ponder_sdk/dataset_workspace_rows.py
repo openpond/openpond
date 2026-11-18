@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 import re
-from typing import TypedDict, cast
+from typing import Literal, TypedDict, cast
 from urllib.parse import quote, urlencode
 
 from .dataset_import_materialization import SPLITS, Split, is_digest
@@ -35,6 +35,54 @@ class DatasetWorkspaceRowPage(TypedDict):
     total: int
     rows: list[DatasetWorkspaceRow]
     nextCursor: str | None
+
+
+class DatasetWorkspaceSourceFile(TypedDict):
+    fileId: str
+    relativePath: str
+    sizeBytes: int
+    sha256: str
+    use: Literal["tasks", "sources"]
+
+
+class DatasetWorkspaceSources(TypedDict):
+    teamId: str
+    datasetId: str
+    revision: int
+    indexHash: str
+    files: list[DatasetWorkspaceSourceFile]
+
+
+def _sources_path(dataset_id: str, revision: int | None, *, version: bool = False) -> str:
+    workspace = f"/v1/dataset-workspaces/{quote(identifier(dataset_id), safe='')}"
+    if (revision is not None and byte_count(revision) == 0) or (version and revision is None):
+        raise ProtocolError("dataset_sources_query_invalid")
+    if version:
+        return f"{workspace}/versions/{revision}/sources"
+    query = f"?{urlencode({'revision': revision})}" if revision is not None else ""
+    return f"{workspace}/sources{query}"
+
+
+def _sources(value: object, team_id: str, dataset_id: str, revision: int | None) -> DatasetWorkspaceSources:
+    receipt = payload(value)
+    files = receipt.get("files")
+    if (set(receipt) != {"teamId", "datasetId", "revision", "indexHash", "files"}
+        or receipt.get("teamId") != team_id or receipt.get("datasetId") != dataset_id
+        or not byte_count(receipt.get("revision")) or (revision is not None and receipt.get("revision") != revision)
+        or not is_digest(receipt.get("indexHash")) or not isinstance(files, list) or not 1 <= len(files) <= 100):
+        raise ProtocolError("dataset_sources_response_invalid")
+    identities = set()
+    for value in files:
+        file = payload(value)
+        file_id = identifier(file.get("fileId"))
+        path = file.get("relativePath")
+        if (set(file) != {"fileId", "relativePath", "sizeBytes", "sha256", "use"}
+            or file_id in identities or not isinstance(path, str) or not 1 <= len(path) <= 500
+            or not byte_count(file.get("sizeBytes")) or not is_digest(file.get("sha256"))
+            or file.get("use") not in ("tasks", "sources")):
+            raise ProtocolError("dataset_sources_response_invalid")
+        identities.add(file_id)
+    return cast(DatasetWorkspaceSources, receipt)
 
 
 def _cursor(value: object) -> bool:
@@ -93,6 +141,18 @@ class DatasetRows:
     _transport: Transport
     team_id: str
 
+    def sources(self, dataset_id: str, *, revision: int | None = None) -> DatasetWorkspaceSources:
+        """List the verified originals retained by a saved dataset."""
+        value = self._transport.request("GET", _sources_path(dataset_id, revision),
+                                        media="application/json", response_limit=512 * 1024)
+        return _sources(value, self.team_id, dataset_id, revision)
+
+    def version_sources(self, dataset_id: str, revision: int) -> DatasetWorkspaceSources:
+        """List the verified originals retained by one immutable version."""
+        value = self._transport.request("GET", _sources_path(dataset_id, revision, version=True),
+                                        media="application/json", response_limit=512 * 1024)
+        return _sources(value, self.team_id, dataset_id, revision)
+
     def rows(self, dataset_id: str, *, revision: int | None = None, cursor: str | None = None,
              limit: int = 20, splits: Sequence[Split] = (), file_id: str | None = None) -> DatasetWorkspaceRowPage:
         """Read a saved import page with optional split and source-file filters."""
@@ -113,6 +173,18 @@ class DatasetRows:
 class AsyncDatasetRows:
     _transport: AsyncTransport
     team_id: str
+
+    async def sources(self, dataset_id: str, *, revision: int | None = None) -> DatasetWorkspaceSources:
+        """List the verified originals retained by a saved dataset."""
+        value = await self._transport.request("GET", _sources_path(dataset_id, revision),
+                                              media="application/json", response_limit=512 * 1024)
+        return _sources(value, self.team_id, dataset_id, revision)
+
+    async def version_sources(self, dataset_id: str, revision: int) -> DatasetWorkspaceSources:
+        """List the verified originals retained by one immutable version."""
+        value = await self._transport.request("GET", _sources_path(dataset_id, revision, version=True),
+                                              media="application/json", response_limit=512 * 1024)
+        return _sources(value, self.team_id, dataset_id, revision)
 
     async def rows(self, dataset_id: str, *, revision: int | None = None, cursor: str | None = None,
                    limit: int = 20, splits: Sequence[Split] = (), file_id: str | None = None) -> DatasetWorkspaceRowPage:

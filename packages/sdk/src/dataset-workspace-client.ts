@@ -24,9 +24,11 @@ import { OpenPondDatasetPreparationClient } from "./dataset-preparation-client.j
 import { readDatasetWorkspaceFailure } from "./dataset-workspace-error.js";
 import { CorrectionsDefaultSchema } from "./corrections-default.js";
 import { DatasetWorkspaceRowsQuerySchema, DatasetWorkspaceRowsSchema } from "./dataset-workspace-rows.js";
+import { DatasetWorkspaceSourcesSchema } from "./dataset-workspace-sources.js";
 import { CreateDatasetVersionSchema, DatasetVersionManifestSchema, DatasetVersionValidationSchema } from "./dataset-workspace-versions.js";
 
 type RowOptions = z.input<typeof DatasetWorkspaceRowsQuerySchema> & { signal?: AbortSignal };
+const datasetRevision = DatasetWorkspaceSourcesSchema.shape.revision;
 
 /** Hosted independent authoring. Writes use explicit revision/operation identity;
  * callers retain the operation ID when retrying an uncertain response. */
@@ -84,6 +86,26 @@ export class OpenPondDatasetWorkspaceClient {
       await this.request(`/${encodeURIComponent(id)}`, "GET", undefined, signal),
       id,
     );
+  }
+  /** List the verified originals retained by the current saved import. */
+  async sources(id: string, options: { revision?: number; signal?: AbortSignal } = {}) {
+    const { revision, signal } = options;
+    const query = revision === undefined ? "" : `?revision=${datasetRevision.parse(revision)}`;
+    return this.readSources(id, `/${encodeURIComponent(id)}/sources${query}`, revision, signal);
+  }
+  /** List the verified originals retained by one immutable version. */
+  async versionSources(id: string, revision: number, signal?: AbortSignal) {
+    const pinned = datasetRevision.parse(revision);
+    return this.readSources(id, `/${encodeURIComponent(id)}/versions/${pinned}/sources`, pinned, signal);
+  }
+  private async readSources(id: string, path: string, revision?: number, signal?: AbortSignal) {
+    const result = DatasetWorkspaceSourcesSchema.parse(await this.request(
+      path, "GET", undefined, signal, 512 * 1024,
+    ));
+    if (result.teamId !== this.options.teamId || result.datasetId !== id ||
+        (revision !== undefined && result.revision !== revision))
+      throw new Error("Dataset source file scope mismatch.");
+    return result;
   }
   /** Browse a saved import. Keep the revision and split selection on later pages. */
   async rows(

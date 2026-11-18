@@ -2,7 +2,7 @@ import { DatasetWorkspaceRowsQuerySchema, type OpenPondDatasetWorkspaceClient } 
 import { optionString } from "./common";
 import { exportPublishedDatasetRows } from "./dataset-row-export";
 
-const actions = ["rows", "export-rows", "validate-version", "create-version", "version-manifest", "begin-version"] as const;
+const actions = ["rows", "sources", "export-rows", "validate-version", "create-version", "version-manifest", "begin-version"] as const;
 type Action = (typeof actions)[number];
 export function isDatasetVersionAction(value: string | undefined): value is Action {
   return actions.some(action => action === value);
@@ -52,6 +52,14 @@ export async function runDatasetVersionCommand(
       splits: query.splits, fileId: query.fileId, cursor: query.cursor, limit: query.limit,
     });
     return client.rows(id, query);
+  }
+  if (action === "sources") {
+    const revision = optionString(options, "revision");
+    const version = optionString(options, "versionRevision");
+    if (revision && version) throw new Error("Choose --revision or --version-revision.");
+    return version
+      ? client.versionSources(id, parsedRevision("versionRevision"))
+      : client.sources(id, { revision: revision ? parsedRevision("revision") : undefined });
   }
   if (action === "version-manifest") return client.versionManifest(id, parsedRevision("versionRevision"));
   const expectedRevision = parsedRevision("expectedRevision");

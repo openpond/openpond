@@ -99,6 +99,8 @@ Save the ready selection with `upload-finish <import-id> --input-file finish.jso
 
 Browse the saved draft with `rows <dataset-id> --revision <revision>` or the TypeScript and Python dataset workspace clients' `rows` methods. Use `--split train,validation` to select splits and reuse the returned cursor with the same revision and selection. Each page returns policy-visible fields, source row identity, and the exact total for the selection. A page can be shorter than the requested limit at a shard or response-size boundary.
 
+Use `sources <dataset-id>` to list the verified originals and their relative paths, sizes, digests and roles. Pass `--revision` to require the current draft revision or `--version-revision` to read a published version. Pass a returned file ID to `rows --file-id` to read that file's task rows. The TypeScript client provides `sources` and `versionSources`, and the Python client provides `sources` and `version_sources`.
+
 Use `validate-version <dataset-id> --expected-revision <revision>` before `create-version`. Pass the same draft revision, a stable operation ID, and the workspace, index, and package hashes from validation. Read the published manifest with `version-manifest <dataset-id> --version-revision <revision>` and page its rows with `rows <dataset-id> --version-revision <revision>`. A later editable revision preserves previously published manifests and row cursors.
 
 ## Starting a reviewed hosted preparation
