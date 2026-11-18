@@ -288,6 +288,27 @@ def test_deduplicates_identical_stable_row_ids_and_projects_private_safe_grpo(
     assert easy_baseline_receipt["selectionStrategy"] == "rft_easy_curriculum_v1"
     assert easy_baseline_receipt["taskIdsHash"] == easy_grpo_receipt["taskIdsHash"]
     assert "expectedOutput" not in easy_grpo.read_text(encoding="utf-8")
+    ids = [json.loads(line)["id"] for line in easy_grpo.read_text().splitlines()]
+    assert easy_grpo_receipt["taskIdsHash"] == hashlib.sha256(
+        json.dumps(ids, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    assert easy_grpo_receipt["contentHash"] == _sha256(easy_grpo)
+    assert easy_grpo_receipt["sizeBytes"] == easy_grpo.stat().st_size
+    with pytest.raises(ValueError, match="no approved train examples"):
+        project(argparse.Namespace(
+            manifest=str(manifest),
+            root=str(output),
+            output=str(easy_grpo),
+            split="train",
+            mode="grpo",
+            limit=3,
+            seed=17,
+            approved_sources=None,
+            approved_sources_json="[]",
+        ))
+    assert _sha256(easy_grpo) == easy_grpo_receipt["contentHash"]
+    assert not list(tmp_path.glob(".dataset-*"))
+    assert not list(output.glob(".dataset-*"))
     assert all(record["expectedOutput"] for record in baseline_records)
 
 

@@ -8,6 +8,7 @@ import type { DatasetProjectionResult } from "./dataset-artifact-service.js";
 
 export type ProjectDatasetArtifact = (input: {
   tasksetId: string;
+  expectedArtifactHash: string;
   split: "train" | "validation" | "test" | "frozen_eval";
   mode: "sft" | "grpo";
   limit: number;
@@ -61,6 +62,7 @@ export function createTrainingDatasetSelection(input: {
     }
     return input.projectDatasetArtifact({
       tasksetId: taskset.id,
+      expectedArtifactHash: taskset.datasetArtifact.contentHash,
       split,
       mode: plan.recipe.method,
       limit,
