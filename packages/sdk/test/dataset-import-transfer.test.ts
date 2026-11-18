@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { expect, test } from "vitest";
+import { contentHash } from "@openpond/harness";
 import { OpenPondDatasetImportClient } from "../src/dataset-workspaces.js";
 
 async function body(request: IncomingMessage) {
@@ -98,38 +99,60 @@ test("resumes after a lost part acknowledgement without forwarding API credentia
 });
 
 test("retains the inspection revision across bounded preview pages", async () => {
+  const mapping = {
+    operationId: "mapping-fixture",
+    expectedRevision: 0,
+    groups: [{ kind: "sources" as const, fileIds: ["file-1"] }],
+  };
+  const mappingHash = contentHash({ version: "openpond.datasetImportMapping.v1", groups: mapping.groups });
+  const mappingReceipt = { importId: "import-1", revision: 1, mappingHash, groups: mapping.groups };
   const row = (ordinal: number) => ({
     ordinal,
     id: createHash("sha256").update(String(ordinal)).digest("hex"),
     values: { input: { text: String(ordinal) } },
   });
-  const api = await server((request, response) => {
-    expect(request.method).toBe("GET");
+  const api = await server(async (request, response) => {
     const url = new URL(request.url!, "http://127.0.0.1");
+    const reply = (value: unknown) => response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(value));
+    if (url.pathname === "/v1/dataset-imports/import-1/mapping") {
+      if (request.method === "PUT") expect(JSON.parse((await body(request)).toString())).toEqual(mapping);
+      else expect(request.method).toBe("GET");
+      reply(mappingReceipt);
+      return;
+    }
+    expect(request.method).toBe("GET");
     expect(url.pathname).toBe("/v1/dataset-imports/import-1/preview");
     expect(url.searchParams.get("fileId")).toBe("file-1");
     expect(url.searchParams.get("limit")).toBe("1");
     const after = url.searchParams.get("after");
-    if (after) expect(url.searchParams.get("revision")).toBe("1");
+    if (after) {
+      expect(url.searchParams.get("revision")).toBe("1");
+      expect(url.searchParams.get("mappingRevision")).toBe("1");
+    }
     const page = {
       importId: "import-1", fileId: "file-1", relativePath: "examples.jsonl",
       sizeBytes: 1024, uploadState: "verified", revision: 1,
       state: after ? "ready" : "inspecting", format: "jsonl",
       scannedBytes: after ? 1024 : 512, acceptedRows: 2, rejectedRows: 1,
       totalRows: after ? 3 : null, provisional: !after, previewedRows: 2, failureCode: null,
-      rows: [row(after ? 3 : 1)], nextCursor: after ? null : "1",
+      ...(after && { mappingRevision: 1, mappingHash }),
+      rows: [after ? { ...row(3), projection: { state: "source" } } : row(1)],
+      nextCursor: after ? null : "1",
     };
-    response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(page));
+    reply(page);
   });
   try {
     const client = new OpenPondDatasetImportClient({ apiKey: "fixture", teamId: "team-fixture", baseUrl: api.origin });
     const first = await client.preview("import-1", { fileId: "file-1", limit: 1 });
     expect(first.provisional).toBe(true);
+    const saved = await client.saveMapping("import-1", mapping);
+    expect(await client.mapping("import-1")).toEqual(saved);
     const last = await client.preview("import-1", {
-      fileId: "file-1", limit: 1, revision: first.revision!, after: first.nextCursor!,
+      fileId: "file-1", limit: 1, revision: first.revision!, after: first.nextCursor!, mappingRevision: saved.revision,
     });
     expect(last.totalRows).toBe(3);
     expect(last.rows[0]?.values).toEqual({ input: { text: "3" } });
+    expect(last.rows[0]?.projection).toEqual({ state: "source" });
   } finally {
     await api.close();
   }

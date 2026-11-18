@@ -4,7 +4,7 @@ import { basename } from "node:path";
 import { OpenPondDatasetImportClient, type DatasetImportSource } from "openpond-sdk/dataset-workspaces";
 import { optionString } from "./common";
 
-export const DATASET_TRANSFER_ACTIONS = ["stage-file", "upload-status", "upload-preview", "cancel-upload", "storage"] as const;
+export const DATASET_TRANSFER_ACTIONS = ["stage-file", "upload-status", "upload-preview", "upload-mapping", "cancel-upload", "storage"] as const;
 type Action = (typeof DATASET_TRANSFER_ACTIONS)[number];
 
 export function isDatasetTransferAction(value: string | undefined): value is Action {
@@ -41,14 +41,23 @@ export async function runDatasetTransferCommand(
   }
   if (!pathOrImportId) throw new Error("Provide a source file or import ID.");
   if (action === "upload-status") return client.get(pathOrImportId);
+  if (action === "upload-mapping") {
+    const path = optionString(options, "inputFile");
+    if (!path) return client.mapping(pathOrImportId);
+    const file = await openAsBlob(path);
+    if (file.size > 128 * 1024) throw new Error("Dataset mapping requests must be at most 128 KiB.");
+    return client.saveMapping(pathOrImportId, JSON.parse(await file.text()));
+  }
   if (action === "upload-preview") {
     const fileId = optionString(options, "fileId");
     if (!fileId) throw new Error("Provide --file-id from the upload receipt.");
     const revision = optionString(options, "revision");
+    const mappingRevision = optionString(options, "mappingRevision");
     const limit = optionString(options, "limit");
     return client.preview(pathOrImportId, {
       fileId,
       revision: revision ? Number(revision) : undefined,
+      mappingRevision: mappingRevision ? Number(mappingRevision) : undefined,
       after: optionString(options, "cursor") || undefined,
       limit: limit ? Number(limit) : undefined,
     });

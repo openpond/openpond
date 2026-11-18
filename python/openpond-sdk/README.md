@@ -135,6 +135,11 @@ returned `revision` and `nextCursor` as `revision` and `after` to page forward.
 Use `storage` to read available capacity or `cancel` with its own stable operation
 ID to request cleanup. All methods are also available on `AsyncClient`.
 
+Use `save_mapping` with a stable operation ID, the current revision (zero for
+the first mapping), and file groups to assign fields or choose source-only
+retention. Pass the saved revision as `mapping_revision` to `preview` to inspect
+the proposed task fields before finishing an import.
+
 ### Learning and training
 
 Learning methods accept the existing typed command/read envelopes, including

@@ -66,6 +66,7 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
     uploaded = {1: '"one"'}
     sent = []
     completions = []
+    groups = [{"kind": "sources", "fileIds": ["file-1"]}]
 
     def put(handler):
         assert not handler.headers.get("Authorization")
@@ -98,18 +99,29 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
             elif url.path.endswith("/complete"):
                 completions.append(json.loads(request_body(handler)))
                 json_response(handler, {**file, "state": "queued"})
+            elif url.path.endswith("/mapping"):
+                if handler.command == "PUT":
+                    assert json.loads(request_body(handler)) == {
+                        "operationId": "sample-mapping", "expectedRevision": 0, "groups": groups,
+                    }
+                else:
+                    assert handler.command == "GET"
+                json_response(handler, {"importId": "import-1", "revision": 1, "mappingHash": "b" * 64, "groups": groups})
             elif url.path.endswith("/preview"):
                 query = parse_qs(url.query)
                 assert query["fileId"] == ["file-1"]
                 assert query["revision"] == ["1"]
                 assert query["after"] == ["1"]
+                assert query["mappingRevision"] == ["1"]
                 json_response(handler, {
                     "importId": "import-1", "fileId": "file-1", "relativePath": source.name,
                     "sizeBytes": 9, "uploadState": "verified", "revision": 1,
                     "state": "ready", "format": "jsonl", "scannedBytes": 9,
                     "acceptedRows": 2, "rejectedRows": 1, "totalRows": 3,
                     "provisional": False, "previewedRows": 2, "failureCode": None,
-                    "rows": [{"id": "a" * 64, "ordinal": 3, "values": {"input": {"text": "kept"}}}],
+                    "mappingRevision": 1, "mappingHash": "b" * 64,
+                    "rows": [{"id": "a" * 64, "ordinal": 3, "values": {"input": {"text": "kept"}},
+                              "projection": {"state": "source"}}],
                     "nextCursor": None,
                 })
             else:
@@ -128,7 +140,11 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                         await client.dataset_imports.upload_file(*args, operation_id="finish")
                     assert failure.value.outcome_unknown
                     submitted = await client.dataset_imports.upload_file(*args, operation_id="finish")
-                    preview = await client.dataset_imports.preview(*preview_args, revision=1, after="1")
+                    mapping = await client.dataset_imports.save_mapping(
+                        "import-1", operation_id="sample-mapping", expected_revision=0, groups=groups,
+                    )
+                    assert await client.dataset_imports.mapping("import-1") == mapping
+                    preview = await client.dataset_imports.preview(*preview_args, revision=1, after="1", mapping_revision=mapping["revision"])
                     return submitted, preview
 
             if asynchronous:
@@ -139,11 +155,16 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                         client.dataset_imports.upload_file(*args, operation_id="finish")
                     assert failure.value.outcome_unknown
                     queued = client.dataset_imports.upload_file(*args, operation_id="finish")
-                    page = client.dataset_imports.preview(*preview_args, revision=1, after="1")
+                    mapping = client.dataset_imports.save_mapping(
+                        "import-1", operation_id="sample-mapping", expected_revision=0, groups=groups,
+                    )
+                    assert client.dataset_imports.mapping("import-1") == mapping
+                    page = client.dataset_imports.preview(*preview_args, revision=1, after="1", mapping_revision=mapping["revision"])
 
     assert queued["state"] == "queued"
     assert page["totalRows"] == 3
     assert page["rows"][0]["values"] == {"input": {"text": "kept"}}
+    assert page["rows"][0]["projection"] == {"state": "source"}
     assert sent == [2, 3]
     assert completions == [{"operationId": "finish", "sha256": sha256(source.read_bytes()).hexdigest(),
                             "parts": [{"partNumber": n, "etag": tag} for n, tag in uploaded.items()]}]

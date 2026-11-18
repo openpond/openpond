@@ -89,6 +89,8 @@ Inspection starts after each supported file is verified. `upload-preview` return
 
 In TypeScript, import `OpenPondDatasetImportClient` from `openpond-sdk/dataset-workspaces`. Call `begin` with declared file paths and sizes and pass each returned file ID to `uploadFile` with a seekable source, its SHA-256 and a stable completion operation ID. Call `get` to observe verification after a queued response and `preview` to read the source sample and counts.
 
+Read the current mapping with `upload-mapping`. Save a mapping with `upload-mapping --input-file mapping.json` or the TypeScript client's `saveMapping`. The request carries an `operationId`, the `expectedRevision` (zero for the first mapping), and groups of file IDs. A task group specifies input paths and a split. It can also specify reference, context, and family paths. Path arrays preserve literal field names that contain dots. A source-only group retains files as source material. Pass the saved mapping revision via `upload-preview --mapping-revision` to read each sampled row's projection.
+
 ## Starting a reviewed hosted preparation
 
 `openpond training hosted-start` accepts an existing preparation receipt and an optional signed estimate review:

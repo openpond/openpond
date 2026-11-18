@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contentHash } from "@openpond/harness";
 import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { readBoundedJsonResponse } from "./protocol.js";
 import {
@@ -6,6 +7,7 @@ import {
   DatasetImportFilePartPageSchema, DatasetImportFileSchema, DatasetImportPartRequestSchema,
   DatasetImportPartUrlsSchema, DatasetImportSchema, DatasetStorageSchema,
   DatasetImportPreviewQuerySchema, DatasetImportPreviewSchema,
+  DatasetImportMappingReceiptSchema, SaveDatasetImportMappingSchema,
   type DatasetImportFile, type DatasetImportPart,
 } from "./dataset-import-contracts.js";
 
@@ -16,6 +18,7 @@ const knownError = z.enum([
   "dataset_import_request_invalid", "dataset_import_retry", "dataset_storage_unavailable",
   "dataset_object_hash_mismatch", "dataset_object_size_mismatch", "dataset_upload_parts_changed",
   "dataset_storage_transfer_failed", "dataset_import_request_failed",
+  "dataset_mapping_revision_limit", "dataset_mapping_source_mismatch",
 ]);
 
 export class DatasetImportRequestError extends Error {
@@ -106,17 +109,41 @@ export class OpenPondDatasetImportClient {
     return this.request("/v1/dataset-storage", DatasetStorageSchema, undefined, signal);
   }
 
+  async mapping(id: string, signal?: AbortSignal) {
+    const receipt = await this.request(`${this.path(id)}/mapping`, DatasetImportMappingReceiptSchema.nullable(), undefined, signal);
+    if (receipt && (receipt.importId !== id || receipt.mappingHash !==
+      contentHash({ version: "openpond.datasetImportMapping.v1", groups: receipt.groups })))
+      throw new Error("Dataset mapping response identity or hash mismatch.");
+    return receipt;
+  }
+
+  async saveMapping(id: string, input: z.input<typeof SaveDatasetImportMappingSchema>, signal?: AbortSignal) {
+    const request = SaveDatasetImportMappingSchema.parse(input);
+    const receipt = await this.request(`${this.path(id)}/mapping`, DatasetImportMappingReceiptSchema, request, signal, "PUT");
+    const expectedHash = contentHash({ version: "openpond.datasetImportMapping.v1", groups: request.groups });
+    if (receipt.importId !== id || receipt.revision !== request.expectedRevision + 1 ||
+      receipt.mappingHash !== expectedHash || receipt.mappingHash !==
+      contentHash({ version: "openpond.datasetImportMapping.v1", groups: receipt.groups }))
+      throw new Error("Dataset mapping response identity or hash mismatch.");
+    return receipt;
+  }
+
   /** Read a bounded source sample and the verification-stage scan counts. */
   async preview(id: string, input: z.input<typeof DatasetImportPreviewQuerySchema>, signal?: AbortSignal) {
     const query = DatasetImportPreviewQuerySchema.parse(input);
     const params = new URLSearchParams({ fileId: query.fileId, limit: String(query.limit) });
     if (query.revision !== undefined) params.set("revision", String(query.revision));
+    if (query.mappingRevision !== undefined) params.set("mappingRevision", String(query.mappingRevision));
     if (query.after) params.set("after", query.after);
     const page = await this.request(`${this.path(id)}/preview?${params}`, DatasetImportPreviewSchema, undefined, signal);
     const after = query.after ? Number(query.after) : 0;
     const lastRow = page.rows.at(-1);
     if (page.importId !== id || page.fileId !== query.fileId ||
       (query.revision !== undefined && page.revision !== query.revision) ||
+      page.mappingRevision !== query.mappingRevision ||
+      (page.mappingHash !== undefined) !== (query.mappingRevision !== undefined) ||
+      page.rows.some(row => (row.projection !== undefined) !== (query.mappingRevision !== undefined) ||
+        (row.projection?.state === "mapped" && row.projection.task.id !== row.id)) ||
       page.scannedBytes > page.sizeBytes || page.rows.length > query.limit ||
       page.previewedRows > page.acceptedRows || page.rows.length > page.previewedRows ||
       page.provisional !== (page.state !== "ready") ||
@@ -223,9 +250,9 @@ export class OpenPondDatasetImportClient {
     return encodeURIComponent(id);
   }
 
-  private async request<S extends z.ZodType>(path: string, schema: S, body: unknown, signal?: AbortSignal): Promise<z.output<S>> {
+  private async request<S extends z.ZodType>(path: string, schema: S, body: unknown, signal?: AbortSignal, writeMethod: "POST" | "PUT" = "POST"): Promise<z.output<S>> {
     const response = await (this.options.fetch ?? fetch)(`${this.baseUrl}${path}`, {
-      method: body === undefined ? "GET" : "POST",
+      method: body === undefined ? "GET" : writeMethod,
       redirect: "error", signal,
       headers: { Authorization: `Bearer ${this.options.apiKey}`, "X-OpenPond-Team-Id": this.options.teamId, "Content-Type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),

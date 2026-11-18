@@ -10,6 +10,9 @@ from urllib.parse import quote, urlencode
 import httpx
 from typing_extensions import NotRequired
 
+from .dataset_import_mapping import (
+    DatasetImportMappingReceipt, MappingGroup, MappingProjection, mapping_receipt,
+)
 from .dataset_transfer_parts import (
     FileSource, UploadedParts, byte_count, payload, signed_part, transfer_etag,
 )
@@ -56,6 +59,7 @@ class DatasetImportPreviewRow(TypedDict):
     id: str
     ordinal: int
     values: dict[str, JsonValue]
+    projection: NotRequired[MappingProjection]
 
 
 class DatasetImportPreview(TypedDict):
@@ -76,6 +80,8 @@ class DatasetImportPreview(TypedDict):
     failureCode: str | None
     rows: list[DatasetImportPreviewRow]
     nextCursor: str | None
+    mappingRevision: NotRequired[int]
+    mappingHash: NotRequired[str]
 
 
 class DatasetHigherLimits(TypedDict):
@@ -153,7 +159,7 @@ def completion_receipt(value: object, parts: UploadedParts) -> DatasetImportFile
     return cast(DatasetImportFile, file)
 
 
-def preview_path(import_id: str, file_id: str, revision: int | None, after: str | None, limit: int) -> str:
+def preview_path(import_id: str, file_id: str, revision: int | None, after: str | None, limit: int, mapping_revision: int | None) -> str:
     query: dict[str, str | int] = {"fileId": identifier(file_id), "limit": limit}
     if type(limit) is not int or not 1 <= limit <= 64:
         raise ProtocolError("dataset_preview_limit_invalid")
@@ -161,6 +167,10 @@ def preview_path(import_id: str, file_id: str, revision: int | None, after: str 
         if not byte_count(revision):
             raise ProtocolError("dataset_preview_revision_invalid")
         query["revision"] = revision
+    if mapping_revision is not None:
+        if not byte_count(mapping_revision):
+            raise ProtocolError("dataset_mapping_revision_invalid")
+        query["mappingRevision"] = mapping_revision
     if after is not None:
         if revision is None or not isinstance(after, str) or not re.fullmatch(r"[1-9][0-9]{0,15}", after):
             raise ProtocolError("dataset_preview_cursor_invalid")
@@ -169,12 +179,18 @@ def preview_path(import_id: str, file_id: str, revision: int | None, after: str 
     return f"{import_path(import_id)}/preview?{urlencode(query)}"
 
 
-def preview_receipt(value: object, import_id: str, file_id: str, revision: int | None, after: str | None, limit: int) -> DatasetImportPreview:
+def preview_receipt(value: object, import_id: str, file_id: str, revision: int | None, after: str | None, limit: int, mapping_revision: int | None) -> DatasetImportPreview:
     page = payload(value)
     if page.get("importId") != import_id or page.get("fileId") != file_id or (
         revision is not None and page.get("revision") != revision
     ):
         raise ProtocolError("dataset_import_response_identity_mismatch")
+    mapping_hash = page.get("mappingHash")
+    if (page.get("mappingRevision") != mapping_revision
+        or (mapping_revision is None and mapping_hash is not None)
+        or (mapping_revision is not None and
+            (not isinstance(mapping_hash, str) or not re.fullmatch(r"[a-f0-9]{64}", mapping_hash)))):
+        raise ProtocolError("dataset_mapping_response_invalid")
     accepted = byte_count(page.get("acceptedRows"))
     rejected = byte_count(page.get("rejectedRows"))
     rows = page.get("rows")
@@ -191,11 +207,23 @@ def preview_receipt(value: object, import_id: str, file_id: str, revision: int |
         ordinal = byte_count(row.get("ordinal"))
         if not last < ordinal <= accepted + rejected or not isinstance(row.get("values"), dict):
             raise ProtocolError("dataset_preview_response_invalid")
+        if mapping_revision is not None:
+            projection = payload(row.get("projection"))
+            state = projection.get("state")
+            if (state not in ("mapped", "rejected", "source", "excluded")
+                or (state == "mapped" and payload(projection.get("task")).get("id") != row.get("id"))):
+                raise ProtocolError("dataset_mapping_response_invalid")
         last = ordinal
     cursor = page.get("nextCursor")
     if cursor is not None and (not rows or cursor != str(last)):
         raise ProtocolError("dataset_preview_response_invalid")
     return cast(DatasetImportPreview, page)
+
+
+def mapping_request(operation_id: str, expected_revision: int, groups: Sequence[MappingGroup]) -> dict:
+    if byte_count(expected_revision) > 128 or not 1 <= len(groups) <= 100:
+        raise ProtocolError("dataset_mapping_request_invalid")
+    return {"operationId": identifier(operation_id), "expectedRevision": expected_revision, "groups": list(groups)}
 
 
 class DatasetImports:
@@ -217,9 +245,18 @@ class DatasetImports:
     def storage(self) -> DatasetStorageUsage:
         return cast(DatasetStorageUsage, payload(self._request("GET", "/v1/dataset-storage")))
 
-    def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20) -> DatasetImportPreview:
-        path = preview_path(import_id, file_id, revision, after, limit)
-        return preview_receipt(self._request("GET", path), import_id, file_id, revision, after, limit)
+    def mapping(self, import_id: str) -> DatasetImportMappingReceipt | None:
+        result = self._request("GET", import_path(import_id) + "/mapping")
+        return None if result is None else mapping_receipt(result, import_id)
+
+    def save_mapping(self, import_id: str, *, operation_id: str, expected_revision: int, groups: Sequence[MappingGroup]) -> DatasetImportMappingReceipt:
+        body = mapping_request(operation_id, expected_revision, groups)
+        result = self._request("PUT", import_path(import_id) + "/mapping", body)
+        return mapping_receipt(result, import_id, expected_revision=expected_revision, groups=groups)
+
+    def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20, mapping_revision: int | None = None) -> DatasetImportPreview:
+        path = preview_path(import_id, file_id, revision, after, limit, mapping_revision)
+        return preview_receipt(self._request("GET", path), import_id, file_id, revision, after, limit, mapping_revision)
 
     def upload_file(self, import_id: str, file_id: str, path: str | Path, *, operation_id: str, on_progress: Progress | None = None) -> DatasetImportFile:
         """Submit verification. Reuse the same file and operation ID after interruption."""
@@ -271,9 +308,18 @@ class AsyncDatasetImports:
     async def storage(self) -> DatasetStorageUsage:
         return cast(DatasetStorageUsage, payload(await self._request("GET", "/v1/dataset-storage")))
 
-    async def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20) -> DatasetImportPreview:
-        path = preview_path(import_id, file_id, revision, after, limit)
-        return preview_receipt(await self._request("GET", path), import_id, file_id, revision, after, limit)
+    async def mapping(self, import_id: str) -> DatasetImportMappingReceipt | None:
+        result = await self._request("GET", import_path(import_id) + "/mapping")
+        return None if result is None else mapping_receipt(result, import_id)
+
+    async def save_mapping(self, import_id: str, *, operation_id: str, expected_revision: int, groups: Sequence[MappingGroup]) -> DatasetImportMappingReceipt:
+        body = mapping_request(operation_id, expected_revision, groups)
+        result = await self._request("PUT", import_path(import_id) + "/mapping", body)
+        return mapping_receipt(result, import_id, expected_revision=expected_revision, groups=groups)
+
+    async def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20, mapping_revision: int | None = None) -> DatasetImportPreview:
+        path = preview_path(import_id, file_id, revision, after, limit, mapping_revision)
+        return preview_receipt(await self._request("GET", path), import_id, file_id, revision, after, limit, mapping_revision)
 
     async def upload_file(self, import_id: str, file_id: str, path: str | Path, *, operation_id: str, on_progress: Progress | None = None) -> DatasetImportFile:
         """Submit verification without blocking the event loop on file reads."""

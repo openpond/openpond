@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TaskDataRecordSchema, TasksetSplitSchema } from "./taskset-draft-core.js";
 
 const id = z.string().min(1).max(240).regex(/^[a-zA-Z0-9._:-]+$/u);
 const bytes = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -68,9 +69,59 @@ export const DatasetStorageSchema = z.object({
   ]).optional(),
 }).strict();
 
+const fieldName = z.string().min(1).max(200).regex(/^[^\p{Cc}]+$/u);
+const fieldPath = z.array(fieldName).min(1).max(12);
+const column = z.object({ name: fieldName, path: fieldPath }).strict();
+const uniqueColumnNames = (columns: Array<z.infer<typeof column>>) =>
+  new Set(columns.map(entry => entry.name)).size === columns.length;
+const selectedFiles = z.array(id).min(1).max(100);
+
+export const DatasetImportMappingGroupsSchema = z.array(z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sources"), fileIds: selectedFiles }).strict(),
+  z.object({
+    kind: z.literal("tasks"),
+    fileIds: selectedFiles,
+    input: z.array(column).min(1).max(24).refine(uniqueColumnNames),
+    reference: fieldPath.optional(),
+    context: z.array(column).max(24).refine(uniqueColumnNames).optional(),
+    family: fieldPath.optional(),
+    split: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("fixed"), value: TasksetSplitSchema }).strict(),
+      z.object({ kind: z.literal("column"), path: fieldPath }).strict(),
+    ]),
+  }).strict().refine(group => {
+    const reference = group.reference;
+    if (!reference) return true;
+    return [...group.input, ...(group.context ?? [])].every(({ path }) =>
+      path.slice(0, reference.length).some((segment, index) => segment !== reference[index]));
+  }, "Keep the reference field separate from policy-visible inputs and context."),
+])).min(1).max(100).refine(groups => {
+  const files = groups.flatMap(group => group.fileIds);
+  return files.length <= 100 && new Set(files).size === files.length;
+});
+
+export const SaveDatasetImportMappingSchema = z.object({
+  operationId: id,
+  expectedRevision: z.number().int().min(0).max(128),
+  groups: DatasetImportMappingGroupsSchema,
+}).strict();
+
+export const DatasetImportMappingReceiptSchema = z.object({
+  importId: id, revision: bytes.positive().max(128), mappingHash: hash,
+  groups: DatasetImportMappingGroupsSchema,
+}).strict();
+
+const projection = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("mapped"), task: TaskDataRecordSchema }).strict(),
+  z.object({ state: z.literal("rejected"), code: id }).strict(),
+  z.object({ state: z.literal("source") }).strict(),
+  z.object({ state: z.literal("excluded") }).strict(),
+]);
+
 export const DatasetImportPreviewQuerySchema = z.object({
   fileId: id,
   revision: bytes.positive().optional(),
+  mappingRevision: bytes.positive().optional(),
   after: z.string().regex(/^[1-9]\d{0,15}$/u).refine(cursor => Number.isSafeInteger(Number(cursor))).optional(),
   limit: z.number().int().min(1).max(64).default(20),
 }).strict().refine(query => query.after === undefined || query.revision !== undefined);
@@ -82,8 +133,10 @@ export const DatasetImportPreviewSchema = z.object({
   format: z.enum(["csv", "json", "jsonl"]).nullable(),
   scannedBytes: bytes, acceptedRows: bytes, rejectedRows: bytes, totalRows: bytes.nullable(),
   provisional: z.boolean(), previewedRows: z.number().int().min(0).max(64), failureCode: id.nullable(),
+  mappingRevision: bytes.positive().optional(), mappingHash: hash.optional(),
   rows: z.array(z.object({
     id: hash, ordinal: bytes.positive(), values: z.record(z.string(), z.unknown()),
+    projection: projection.optional(),
   }).strict()).max(64),
   nextCursor: DatasetImportPreviewQuerySchema.shape.after.unwrap().nullable(),
 }).strict();
@@ -92,3 +145,4 @@ export type DatasetImport = z.infer<typeof DatasetImportSchema>;
 export type DatasetImportFile = z.infer<typeof DatasetImportFileSchema>;
 export type DatasetImportPart = z.infer<typeof part>;
 export type DatasetImportPreview = z.infer<typeof DatasetImportPreviewSchema>;
+export type DatasetImportMappingReceipt = z.infer<typeof DatasetImportMappingReceiptSchema>;
