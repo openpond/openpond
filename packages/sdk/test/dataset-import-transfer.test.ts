@@ -242,10 +242,10 @@ test("retains the mapping and prepared index through the draft receipt", async (
       expect(url.searchParams.get("mappingRevision")).toBe("1");
     }
     const page = {
-      importId: "import-1", fileId: "file-1", relativePath: "examples.jsonl",
+      importId: "import-1", fileId: "file-1", relativePath: "examples.parquet",
       sizeBytes: 1024, uploadState: "verified", revision: 1,
-      state: after ? "ready" : "inspecting", format: "jsonl",
-      scannedBytes: after ? 1024 : 512, acceptedRows: 2, rejectedRows: 1,
+      state: after ? "ready" : "inspecting", format: "parquet",
+      scannedBytes: 1024, acceptedRows: 2, rejectedRows: 1,
       totalRows: after ? 3 : null, provisional: !after, previewedRows: 2, failureCode: null,
       ...(after && { mappingRevision: 1, mappingHash }),
       rows: [after ? { ...row(3), projection: { state: "source" } } : row(1)],

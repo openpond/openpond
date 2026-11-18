@@ -58,8 +58,9 @@ def request_body(handler):
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
-def test_native_resume_and_preview(tmp_path, asynchronous):
-    source = tmp_path / "examples.jsonl"
+@pytest.mark.parametrize("source_format", ["jsonl", "parquet"])
+def test_native_resume_and_preview(tmp_path, asynchronous, source_format):
+    source = tmp_path / f"examples.{source_format}"
     source.write_bytes(b"aaabbbccc")
     file = {"fileId": "file-1", "relativePath": source.name, "sizeBytes": 9,
             "partSize": 3, "state": "uploading", "object": None, "failureCode": None}
@@ -127,7 +128,7 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                 json_response(handler, {
                     "importId": "import-1", "fileId": "file-1", "relativePath": source.name,
                     "sizeBytes": 9, "uploadState": "verified", "revision": 1,
-                    "state": "ready", "format": "jsonl", "scannedBytes": 9,
+                    "state": "ready", "format": source_format, "scannedBytes": 9,
                     "acceptedRows": 2, "rejectedRows": 1, "totalRows": 3,
                     "provisional": False, "previewedRows": 2, "failureCode": None,
                     "mappingRevision": 1, "mappingHash": "b" * 64,
@@ -251,6 +252,7 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
 
     assert queued["state"] == "queued"
     assert page["totalRows"] == 3
+    assert page["format"] == source_format
     assert page["rows"][0]["values"] == {"input": {"text": "kept"}}
     assert page["rows"][0]["projection"] == {"state": "source"}
     assert sent == [2, 3]
