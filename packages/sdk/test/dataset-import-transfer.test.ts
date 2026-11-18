@@ -222,6 +222,8 @@ test("retains the mapping and prepared index through the draft receipt", async (
       expect(url.searchParams.get("revision")).toBe(String(revision));
       expect(url.searchParams.get("limit")).toBe("1");
       expect(url.searchParams.get("split")).toBe("train");
+      const fileId = url.searchParams.get("fileId");
+      expect(revision === 2 ? ["file-1", "other-file"].includes(fileId ?? "") : fileId === null).toBe(true);
       const after = url.searchParams.get("cursor");
       expect(after === null || after === "after-first").toBe(true);
       reply({ teamId: "team-fixture", datasetId: draft.datasetId, revision, indexHash: draft.indexHash,
@@ -283,8 +285,9 @@ test("retains the mapping and prepared index through the draft receipt", async (
       workspaceHash: validated.workspaceHash, indexHash: validated.indexHash, packageHash: validated.packageHash });
     expect(created.publication?.release).toEqual(validated.release);
     expect((await workspaces.versionManifest(draft.datasetId, created.revision)).indexHash).toBe(draft.indexHash);
-    const versionRows = await workspaces.versionRows(draft.datasetId, created.revision, { limit: 1, splits: ["train"] });
+    const versionRows = await workspaces.versionRows(draft.datasetId, created.revision, { limit: 1, splits: ["train"], fileId: "file-1" });
     expect(versionRows.revision).toBe(2);
+    await expect(workspaces.versionRows(draft.datasetId, created.revision, { limit: 1, splits: ["train"], fileId: "other-file" })).rejects.toThrow("Dataset row page scope or contents mismatch");
     sendStaleDraft = true;
     await expect(client.finish("import-1", finishRequest)).rejects.toThrow("Dataset draft response identity mismatch");
   } finally {

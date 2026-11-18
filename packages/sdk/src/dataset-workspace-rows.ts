@@ -9,6 +9,7 @@ const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const DatasetWorkspaceRowsQuerySchema = z.object({
   revision: count.positive().optional(),
   splits: z.array(TasksetSplitSchema).max(4).default([]),
+  fileId: z.string().regex(/^[A-Za-z0-9._:-]{1,240}$/u).refine(value => value !== "." && value !== "..").optional(),
   cursor: cursor.optional(),
   limit: count.min(1).max(100).default(20),
 }).strict();

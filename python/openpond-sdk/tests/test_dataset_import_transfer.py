@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 from ponder_sdk import AsyncClient, Client
-from ponder_sdk.errors import PonderError
+from ponder_sdk.errors import PonderError, ProtocolError
 
 
 @contextmanager
@@ -170,7 +170,10 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                     "publishedAt": "2026-01-01T00:00:00.000Z"})
             elif url.path in ("/v1/dataset-workspaces/draft-1/rows", "/v1/dataset-workspaces/draft-1/versions/2/rows"):
                 revision = 2 if "/versions/" in url.path else 1
-                assert parse_qs(url.query) == {"revision": [str(revision)], "limit": ["1"], "split": ["train"]}
+                query = parse_qs(url.query)
+                if revision == 2:
+                    assert query.pop("fileId") in (["file-1"], ["other-file"])
+                assert query == {"revision": [str(revision)], "limit": ["1"], "split": ["train"]}
                 json_response(handler, {"teamId": "workspace-fixture", "datasetId": "draft-1", "revision": revision,
                     "indexHash": "c" * 64, "total": 1, "nextCursor": None, "rows": [{"id": "e" * 64,
                         "split": "train", "input": {"prompt": "kept"}, "policyVisibleContext": {},
@@ -209,8 +212,10 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                         await client.datasets.create_version("draft-1", **version_request)
                     assert failure.value.code == "dataset_validation_changed"
                     manifest = await client.datasets.version_manifest("draft-1", 2)
-                    version_page = await client.datasets.version_rows("draft-1", 2, limit=1, splits=["train"])
+                    version_page = await client.datasets.version_rows("draft-1", 2, limit=1, splits=["train"], file_id="file-1")
                     assert version_page["indexHash"] == manifest["indexHash"] and version_page["revision"] == 2
+                    with pytest.raises(ProtocolError, match="dataset_rows_response_invalid"):
+                        await client.datasets.version_rows("draft-1", 2, limit=1, splits=["train"], file_id="other-file")
                     return submitted, preview
 
             if asynchronous:
@@ -239,8 +244,10 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                         client.datasets.create_version("draft-1", **version_request)
                     assert failure.value.code == "dataset_validation_changed"
                     manifest = client.datasets.version_manifest("draft-1", 2)
-                    version_page = client.datasets.version_rows("draft-1", 2, limit=1, splits=["train"])
+                    version_page = client.datasets.version_rows("draft-1", 2, limit=1, splits=["train"], file_id="file-1")
                     assert version_page["indexHash"] == manifest["indexHash"] and version_page["revision"] == 2
+                    with pytest.raises(ProtocolError, match="dataset_rows_response_invalid"):
+                        client.datasets.version_rows("draft-1", 2, limit=1, splits=["train"], file_id="other-file")
 
     assert queued["state"] == "queued"
     assert page["totalRows"] == 3
