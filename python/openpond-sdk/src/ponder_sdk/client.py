@@ -11,6 +11,7 @@ from .learning import Learning,AsyncLearning
 from .post_training import PostTraining,AsyncPostTraining
 from .evaluation_runs import EvaluationRuns,AsyncEvaluationRuns
 from .datasets import Datasets,AsyncDatasets
+from .dataset_imports import DatasetImports,AsyncDatasetImports
 from .tool_learning import ToolLearning,AsyncToolLearning
 from .dataset_preparations import DatasetPreparations,AsyncDatasetPreparations
 
@@ -28,6 +29,7 @@ class Client:
         self.post_training=PostTraining(self._transport,team_id)
         self.evaluation_runs=EvaluationRuns(self._transport,team_id)
         self.datasets=Datasets(self._transport,team_id)
+        self.dataset_imports=DatasetImports(self._transport)
         self.dataset_preparations=DatasetPreparations(self._transport,team_id)
     def dataset(self, dataset_id: str) -> DatasetBinding:
         return DatasetBinding(self.datasets, dataset_id)
@@ -60,6 +62,7 @@ class AsyncClient:
         self.post_training=AsyncPostTraining(self._transport,team_id)
         self.evaluation_runs=AsyncEvaluationRuns(self._transport,team_id)
         self.datasets=AsyncDatasets(self._transport,team_id)
+        self.dataset_imports=AsyncDatasetImports(self._transport)
         self.dataset_preparations=AsyncDatasetPreparations(self._transport,team_id)
     def dataset(self, dataset_id: str) -> AsyncDatasetBinding:
         return AsyncDatasetBinding(self.datasets, dataset_id)

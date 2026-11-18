@@ -107,6 +107,36 @@ custom Harness/Reward authoring and a universal Harness hashing bridge are not
 part of this package. Portable resource formats are accepted;
 this SDK does not execute Python-authored custom Rewards or environments.
 
+### Hosted dataset source uploads
+
+Use `client.dataset_imports` with a configured API origin that supports resumable
+dataset uploads. For example, with an existing authenticated `client`:
+
+```python
+from pathlib import Path
+
+path = Path("examples.jsonl")
+receipt = client.dataset_imports.begin(
+    operation_id="examples-upload-1",
+    files=[{"relativePath": path.name, "sizeBytes": path.stat().st_size}],
+)
+import_id = receipt["importId"]
+file_id = receipt["files"][0]["fileId"]
+queued = client.dataset_imports.upload_file(
+    import_id, file_id, path, operation_id="examples-upload-1:complete"
+)
+preview = client.dataset_imports.preview(import_id, file_id, limit=10)
+```
+
+Reuse the original operation IDs and exact file bytes to resume. The upload
+helper hashes and sends the file in bounded chunks. Use `get` for verification
+status and `preview` for the source sample and accepted/rejected counts. Pass the
+returned `revision` and `nextCursor` as `revision` and `after` to page forward.
+Use `storage` to read available capacity or `cancel` with its own stable operation
+ID to request cleanup. All methods are also available on `AsyncClient`.
+
+### Learning and training
+
 Learning methods accept the existing typed command/read envelopes, including
 explicit workspace `scope`, not a second workflow language. Generic `command`
 provides the current evidence/feedback/review/batch/policy/iteration controls.
