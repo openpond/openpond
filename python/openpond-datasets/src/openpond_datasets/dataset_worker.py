@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import argparse
-import heapq
 import hashlib
 import json
 from pathlib import Path
 import re
 import sys
+from tempfile import NamedTemporaryFile
 from typing import Any, Iterable
 import unicodedata
 
 import pyarrow as pa
 import pyarrow.dataset as pads
 import pyarrow.parquet as pq
+
+from .dataset_index import temporary_dataset_index
 
 
 CANONICAL_SCHEMA = pa.schema(
@@ -67,87 +69,76 @@ def materialize(args: argparse.Namespace) -> int:
     duplicate_rows = 0
     processed = 0
     assignments = required_record(split_policy, "assignments")
-    seen_rows: dict[str, str] = {}
-    cluster_splits: dict[str, str] = {}
 
-    try:
-        for file, upstream_split in files:
-            assigned_split = assignments.get(upstream_split, upstream_split)
-            if assigned_split not in counts:
-                raise ValueError(
-                    f"Unsupported canonical split {assigned_split!r}."
-                )
-            dataset = pads.dataset(str(file), format="parquet")
-            for batch in dataset.scanner(batch_size=row_group_rows).to_batches():
-                canonical: dict[str, list[dict[str, Any]]] = {
-                    split: [] for split in counts
-                }
-                for source_row in batch.to_pylist():
-                    processed += 1
-                    try:
-                        record = canonical_record(
-                            source_row,
-                            processed - 1,
-                            source_id=source_id,
-                            source_hash=source_hash,
-                            mapping=mapping,
-                            mapping_hash=mapping_hash,
-                            assigned_split=assigned_split,
-                        )
-                    except (KeyError, TypeError, ValueError):
-                        if mapping.get("invalidRowPolicy") != "drop_with_receipt":
-                            raise
-                        dropped += 1
-                        continue
-                    fingerprint = record_fingerprint(record)
-                    existing_fingerprint = seen_rows.get(record["id"])
-                    if existing_fingerprint is not None:
-                        if existing_fingerprint != fingerprint:
-                            raise ValueError(
-                                "Duplicate mapped row identity produced conflicting "
-                                f"content: {record['id']}"
+    with temporary_dataset_index(output_root) as index:
+        try:
+            for file, upstream_split in files:
+                assigned_split = assignments.get(upstream_split, upstream_split)
+                if assigned_split not in counts:
+                    raise ValueError(
+                        f"Unsupported canonical split {assigned_split!r}."
+                    )
+                dataset = pads.dataset(str(file), format="parquet")
+                for batch in dataset.scanner(batch_size=row_group_rows).to_batches():
+                    canonical: dict[str, list[dict[str, Any]]] = {
+                        split: [] for split in counts
+                    }
+                    for source_row in batch.to_pylist():
+                        processed += 1
+                        try:
+                            record = canonical_record(
+                                source_row,
+                                processed - 1,
+                                source_id=source_id,
+                                source_hash=source_hash,
+                                mapping=mapping,
+                                mapping_hash=mapping_hash,
+                                assigned_split=assigned_split,
                             )
-                        duplicate_rows += 1
-                        continue
-                    seen_rows[record["id"]] = fingerprint
-                    existing_split = cluster_splits.setdefault(
-                        record["clusterKey"], record["split"]
-                    )
-                    if existing_split != record["split"]:
-                        raise ValueError(
-                            "A Dataset cluster was assigned to more than one split."
+                        except (KeyError, TypeError, ValueError):
+                            if mapping.get("invalidRowPolicy") != "drop_with_receipt":
+                                raise
+                            dropped += 1
+                            continue
+                        if not index.add_row(
+                            record["id"], record_fingerprint(record), source="mapped"
+                        ):
+                            duplicate_rows += 1
+                            continue
+                        index.assign_cluster(record["clusterKey"], record["split"])
+                        split = record["split"]
+                        canonical[split].append(physical_record(record))
+                        counts[split] += 1
+                        first_ids.setdefault(split, record["id"])
+                        if len(previews) < preview_rows:
+                            previews.append(record)
+                    for split, rows in canonical.items():
+                        if not rows:
+                            continue
+                        writer = writers.setdefault(
+                            split,
+                            ShardWriter(
+                                output_root=output_root,
+                                split=split,
+                                shard_rows=shard_rows,
+                                row_group_rows=row_group_rows,
+                            ),
                         )
-                    split = record["split"]
-                    canonical[split].append(physical_record(record))
-                    counts[split] += 1
-                    first_ids.setdefault(split, record["id"])
-                    if len(previews) < preview_rows:
-                        previews.append(record)
-                for split, rows in canonical.items():
-                    if not rows:
-                        continue
-                    writer = writers.setdefault(
-                        split,
-                        ShardWriter(
-                            output_root=output_root,
-                            split=split,
-                            shard_rows=shard_rows,
-                            row_group_rows=row_group_rows,
-                        ),
-                    )
-                    writer.write(rows)
-                if processed % 10_000 < batch.num_rows:
-                    emit(
-                        {
-                            "type": "progress",
-                            "phase": "parquet_write",
-                            "completedRows": processed,
-                            "writtenRows": sum(counts.values()),
-                        }
-                    )
-    finally:
-        for writer in writers.values():
-            writer.close()
+                        writer.write(rows)
+                    index.checkpoint()
+                    if processed % 10_000 < batch.num_rows:
+                        emit(
+                            {
+                                "type": "progress",
+                                "phase": "parquet_write",
+                                "completedRows": processed,
+                                "writtenRows": sum(counts.values()),
+                            }
+                        )
+        finally:
+            for writer in writers.values():
+                writer.close()
+        unique_clusters = index.unique_clusters()
 
     shards = [
         shard
@@ -162,8 +153,8 @@ def materialize(args: argparse.Namespace) -> int:
         "writtenRows": sum(counts.values()),
         "droppedRows": dropped,
         "duplicateRows": duplicate_rows,
-        "uniqueRowIdentities": len(seen_rows),
-        "uniqueClusters": len(cluster_splits),
+        "uniqueRowIdentities": sum(counts.values()),
+        "uniqueClusters": unique_clusters,
         "splitCounts": counts,
         "splitIsolationVerified": True,
         "splitIsolationStrategy": "cluster_key_hash",
@@ -275,112 +266,103 @@ def task(args: argparse.Namespace) -> int:
 
 
 def project(args: argparse.Namespace) -> int:
-    manifest = load_json(Path(args.manifest).resolve())
+    manifest = (
+        json.load(sys.stdin) if args.manifest == "-"
+        else load_json(Path(args.manifest).resolve())
+    )
+    if not isinstance(manifest, dict):
+        raise ValueError("The Dataset artifact manifest must be a JSON object.")
     require_schema(manifest, "openpond.datasetArtifact.v1")
     root = Path(args.root).resolve()
     output = Path(args.output).resolve()
     split = args.split
     limit = max(1, min(args.limit, 100_000))
     mode = args.mode
-    approved_sources = {
+    approved_sources: set[str] | None = {
         value.strip()
         for value in (args.approved_sources or "").split(",")
         if value.strip()
-    }
+    } or None
+    explicit_approvals = getattr(args, "approved_sources_json", None)
+    if explicit_approvals is not None:
+        approved_sources = set(
+            required_string_list(
+                {"approvedSources": json.loads(explicit_approvals)}, "approvedSources"
+            )
+        )
     selection_strategy = getattr(args, "selection_strategy", "stable_hash_top_n")
-    selected: list[tuple[int, str, str]] = []
-    seen: dict[str, str] = {}
-    seen_curriculum_prompts: set[str] = set()
     eligible_rows = 0
     duplicate_rows = 0
-
-    for shard in manifest.get("shards", []):
-        if not isinstance(shard, dict) or shard.get("split") != split:
-            continue
-        relative = required_string(shard, "path")
-        file = safe_child(root, relative)
-        expected = required_string(shard, "contentHash")
-        if sha256_file(file) != expected:
-            raise ValueError(
-                f"Dataset shard failed integrity verification: {relative}"
-            )
-        parquet = pq.ParquetFile(file)
-        for batch in parquet.iter_batches(batch_size=1_024):
-            for physical in batch.to_pylist():
-                logical = logical_record(physical)
-                if approved_sources and not all(
-                    source in approved_sources
-                    for source in logical["sourceRefs"]
-                ):
-                    continue
-                fingerprint = record_fingerprint(logical)
-                existing_fingerprint = seen.get(logical["id"])
-                if existing_fingerprint is not None:
-                    if existing_fingerprint != fingerprint:
-                        raise ValueError(
-                            "Duplicate artifact row identity produced conflicting "
-                            f"content: {logical['id']}"
-                        )
-                    duplicate_rows += 1
-                    continue
-                seen[logical["id"]] = fingerprint
-                if selection_strategy == "rft_easy_curriculum_v1":
-                    curriculum_prompt = normalized_curriculum_prompt(logical)
-                    if curriculum_prompt in seen_curriculum_prompts:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with temporary_dataset_index(output.parent) as index:
+        for shard in manifest.get("shards", []):
+            if not isinstance(shard, dict) or shard.get("split") != split:
+                continue
+            relative = required_string(shard, "path")
+            file = safe_child(root, relative)
+            expected = required_string(shard, "contentHash")
+            if sha256_file(file) != expected:
+                raise ValueError(
+                    f"Dataset shard failed integrity verification: {relative}"
+                )
+            parquet = pq.ParquetFile(file)
+            for batch in parquet.iter_batches(batch_size=1_024):
+                for physical in batch.to_pylist():
+                    logical = logical_record(physical)
+                    if approved_sources is not None and not all(
+                        source in approved_sources
+                        for source in logical["sourceRefs"]
+                    ):
+                        continue
+                    if not index.add_row(
+                        logical["id"], record_fingerprint(logical), source="artifact"
+                    ):
                         duplicate_rows += 1
                         continue
-                    seen_curriculum_prompts.add(curriculum_prompt)
-                projected = projected_record(logical, mode)
-                encoded = canonical_json(projected)
-                stable_priority = int(
-                    sha256_json([
-                        manifest.get("contentHash"),
-                        args.seed,
-                        split,
-                        logical["id"],
-                    ]),
-                    16,
-                )
-                priority = (
-                    curriculum_priority(logical, stable_priority)
-                    if selection_strategy == "rft_easy_curriculum_v1"
-                    else stable_priority
-                )
-                eligible_rows += 1
-                candidate = (-priority, logical["id"], encoded)
-                if len(selected) < limit:
-                    heapq.heappush(selected, candidate)
-                elif priority < -selected[0][0]:
-                    heapq.heapreplace(selected, candidate)
+                    if (
+                        selection_strategy == "rft_easy_curriculum_v1"
+                        and not index.add_curriculum_prompt(
+                            normalized_curriculum_prompt(logical)
+                        )
+                    ):
+                        duplicate_rows += 1
+                        continue
+                    projected = projected_record(logical, mode)
+                    encoded = canonical_json(projected)
+                    stable_priority = int(
+                        sha256_json([
+                            manifest.get("contentHash"),
+                            args.seed,
+                            split,
+                            logical["id"],
+                        ]),
+                        16,
+                    )
+                    priority = (
+                        curriculum_priority(logical, stable_priority)
+                        if selection_strategy == "rft_easy_curriculum_v1"
+                        else stable_priority
+                    )
+                    eligible_rows += 1
+                    index.select(priority, logical["id"], encoded, limit)
+                index.checkpoint()
+        if index.selection_count == 0:
+            raise ValueError(
+                f"Dataset projection produced no approved {split} examples."
+            )
+        output_receipt = write_projection(output, index.selected_rows())
 
-    if not selected:
-        raise ValueError(
-            f"Dataset projection produced no approved {split} examples."
-        )
-    ordered = sorted(
-        ((-negative_priority, task_id, encoded)
-         for negative_priority, task_id, encoded in selected),
-        key=lambda item: (item[0], item[1]),
-    )
-    payload = "".join(f"{encoded}\n" for _priority, _task_id, encoded in ordered)
-    atomic_text(output, payload)
-    payload_bytes = payload.encode("utf-8")
     print(
         json.dumps(
             {
                 "schemaVersion": "openpond.datasetProjectionResult.v1",
                 "split": split,
                 "mode": mode,
-                "exampleCount": len(ordered),
                 "eligibleRows": eligible_rows,
                 "duplicateRows": duplicate_rows,
                 "selectionSeed": args.seed,
                 "selectionStrategy": selection_strategy,
-                "contentHash": sha256_bytes(payload_bytes),
-                "sizeBytes": len(payload_bytes),
-                "taskIdsHash": sha256_json(
-                    [task_id for _priority, task_id, _encoded in ordered]
-                ),
+                **output_receipt,
             },
             ensure_ascii=False,
         )
@@ -797,11 +779,37 @@ def atomic_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
-def atomic_text(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(f"{path.suffix}.{Path.cwd().name}.tmp")
-    temporary.write_text(value, encoding="utf-8")
-    temporary.replace(path)
+def write_projection(path: Path, rows: Iterable[tuple[str, str]]) -> dict[str, Any]:
+    payload_hash = hashlib.sha256()
+    task_ids_hash = hashlib.sha256(b"[")
+    size_bytes = 0
+    example_count = 0
+    temporary = None
+    try:
+        with NamedTemporaryFile(
+            mode="wb", dir=path.parent, prefix=".dataset-projection-", delete=False
+        ) as output:
+            temporary = Path(output.name)
+            for task_id, encoded in rows:
+                line = f"{encoded}\n".encode("utf-8")
+                output.write(line)
+                payload_hash.update(line)
+                size_bytes += len(line)
+                if example_count:
+                    task_ids_hash.update(b",")
+                task_ids_hash.update(canonical_json(task_id).encode("utf-8"))
+                example_count += 1
+        task_ids_hash.update(b"]")
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return {
+        "exampleCount": example_count,
+        "contentHash": payload_hash.hexdigest(),
+        "sizeBytes": size_bytes,
+        "taskIdsHash": task_ids_hash.hexdigest(),
+    }
 
 
 def emit(value: dict[str, Any]) -> None:
@@ -906,7 +914,7 @@ def parser() -> argparse.ArgumentParser:
     task_parser.add_argument("--task-id", required=True)
     task_parser.add_argument("--split")
     project_parser = subparsers.add_parser("project")
-    project_parser.add_argument("--manifest", required=True)
+    project_parser.add_argument("--manifest", required=True, help="Manifest path or - for stdin.")
     project_parser.add_argument("--root", required=True)
     project_parser.add_argument("--output", required=True)
     project_parser.add_argument(
@@ -924,7 +932,9 @@ def parser() -> argparse.ArgumentParser:
         choices=["stable_hash_top_n", "rft_easy_curriculum_v1"],
         default="stable_hash_top_n",
     )
-    project_parser.add_argument("--approved-sources")
+    approval_options = project_parser.add_mutually_exclusive_group()
+    approval_options.add_argument("--approved-sources")
+    approval_options.add_argument("--approved-sources-json")
     return result
 
 
