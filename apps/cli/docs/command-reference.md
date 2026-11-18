@@ -104,6 +104,7 @@ Usage:
   openpond datasets <stage-file|upload-status|cancel-upload|storage> [file|import-id] --team <id> --api-base-url <origin> [--operation-id <id>]
   openpond datasets stage-folder <folder> --team <id> --api-base-url <origin> --operation-id <id>
   openpond datasets rows <dataset-id> --team <id> --api-base-url <origin> [--revision <n> | --version-revision <n>] [--split <name[,name]>] [--file-id <id>] [--cursor <token>] [--limit <n>]
+  openpond datasets export-rows <dataset-id> --version-revision <n> --output-file <path> [--split <name[,name]>] [--file-id <id>] --team <id> --api-base-url <origin>
   openpond datasets validate-version <dataset-id> --expected-revision <n> --team <id> --api-base-url <origin>
   openpond datasets create-version <dataset-id> --expected-revision <n> --operation-id <id> --workspace-hash <sha> --index-hash <sha> --package-hash <sha> --team <id> --api-base-url <origin>
   openpond datasets version-manifest <dataset-id> --version-revision <n> --team <id> --api-base-url <origin>
@@ -134,6 +135,7 @@ Options:
   --materialization-id <string>
   --offset <integer>
   --operation-id <string>
+  --output-file <string>
   --package-hash <string>
   --project <string>
   --publish
