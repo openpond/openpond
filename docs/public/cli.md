@@ -95,6 +95,8 @@ Prepare task shards with `upload-materialize <import-id> --input-file prepare.js
 
 Save the ready selection with `upload-finish <import-id> --input-file finish.json`, `OpenPondDatasetImportClient.finish`, or Python's `client.dataset_imports.finish`. Supply a name, a stable operation ID, and the ready receipt's materialization ID, mapping revision, mapping hash, and index hash. The receipt returns the saved dataset ID, draft revision, and exact row counts. Retry with the same request to recover that receipt.
 
+Browse the saved draft with `rows <dataset-id> --revision <revision>` or the TypeScript and Python dataset workspace clients' `rows` methods. Use `--split train,validation` to select splits and reuse the returned cursor with the same revision and selection. Each page returns policy-visible fields, source row identity, and the exact total for the selection. A page can be shorter than the requested limit at a shard or response-size boundary.
+
 ## Starting a reviewed hosted preparation
 
 `openpond training hosted-start` accepts an existing preparation receipt and an optional signed estimate review:

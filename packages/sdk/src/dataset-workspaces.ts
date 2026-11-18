@@ -4,6 +4,7 @@ export { OpenPondDatasetWorkspaceClient } from "./dataset-workspace-client.js";
 export { DatasetWorkspaceRequestError, type DatasetWorkspaceErrorCode } from "./dataset-workspace-error.js";
 export * from "./dataset-population.js";
 export * from "./dataset-workspace-operations.js";
+export * from "./dataset-workspace-rows.js";
 export * from "./dataset-preparation-contracts.js";
 export * from "./dataset-preparation-research-contracts.js";
 export * from "./dataset-preparation-workspace.js";

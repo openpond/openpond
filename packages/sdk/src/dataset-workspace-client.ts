@@ -23,6 +23,7 @@ import {
 import { OpenPondDatasetPreparationClient } from "./dataset-preparation-client.js";
 import { readDatasetWorkspaceFailure } from "./dataset-workspace-error.js";
 import { CorrectionsDefaultSchema } from "./corrections-default.js";
+import { DatasetWorkspaceRowsQuerySchema, DatasetWorkspaceRowsSchema } from "./dataset-workspace-rows.js";
 
 /** Hosted independent authoring. Writes use explicit revision/operation identity;
  * callers retain the operation ID when retrying an uncertain response. */
@@ -80,6 +81,30 @@ export class OpenPondDatasetWorkspaceClient {
       await this.request(`/${encodeURIComponent(id)}`, "GET", undefined, signal),
       id,
     );
+  }
+  /** Browse a saved import. Keep the revision and split selection on later pages. */
+  async rows(
+    id: string,
+    options: z.input<typeof DatasetWorkspaceRowsQuerySchema> & { signal?: AbortSignal } = {},
+  ) {
+    const { signal, ...input } = options;
+    const query = DatasetWorkspaceRowsQuerySchema.parse(input);
+    const params = new URLSearchParams({ limit: String(query.limit) });
+    if (query.revision !== undefined) params.set("revision", String(query.revision));
+    if (query.cursor) params.set("cursor", query.cursor);
+    if (query.splits.length) params.set("split", query.splits.join(","));
+    const page = DatasetWorkspaceRowsSchema.parse(
+      await this.request(`/${encodeURIComponent(id)}/rows?${params}`, "GET", undefined, signal, 512 * 1024),
+    );
+    if (page.teamId !== this.options.teamId || page.datasetId !== id ||
+        (query.revision !== undefined && page.revision !== query.revision) ||
+        page.rows.length > Math.min(query.limit, page.total) ||
+        (page.rows.length === 0) !== (page.total === 0) ||
+        (page.nextCursor !== null && (page.nextCursor === query.cursor || page.rows.length === page.total)) ||
+        page.rows.some(row => query.splits.length > 0 && !query.splits.includes(row.split)) ||
+        new Set(page.rows.map(row => row.id)).size !== page.rows.length)
+      throw new Error("Dataset row page scope or contents mismatch.");
+    return page;
   }
   /** Resolve this actor's account-provisioned Dataset and untrained Model. */
   async defaultCorrections(signal?: AbortSignal) {

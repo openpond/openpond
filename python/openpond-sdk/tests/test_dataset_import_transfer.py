@@ -151,6 +151,12 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                     "workspaceHash": "d" * 64, "materializationId": "prepare-1", "mappingRevision": 1,
                     "mappingHash": "b" * 64, "indexHash": "c" * 64,
                     "acceptedRows": 0, "rejectedRows": 0, "shardCount": 0})
+            elif url.path == "/v1/dataset-workspaces/draft-1/rows":
+                assert parse_qs(url.query) == {"revision": ["1"], "limit": ["1"], "split": ["train"]}
+                json_response(handler, {"teamId": "workspace-fixture", "datasetId": "draft-1", "revision": 1,
+                    "indexHash": "c" * 64, "total": 1, "nextCursor": None, "rows": [{"id": "e" * 64,
+                        "split": "train", "input": {"prompt": "kept"}, "policyVisibleContext": {},
+                        "source": {"fileId": "file-1", "ordinal": 1}}]})
             else:
                 json_response(handler, {**file, "parts": [
                     {"partNumber": number, "sizeBytes": 3, "etag": tag}
@@ -178,6 +184,8 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                     )
                     assert (await client.dataset_imports.materialization("import-1", job["materializationId"]))["state"] == "ready"
                     assert (await client.dataset_imports.finish("import-1", **finish))["datasetId"] == "draft-1"
+                    rows = await client.datasets.rows("draft-1", revision=1, limit=1, splits=["train"])
+                    assert rows["rows"][0]["input"] == {"prompt": "kept"}
                     return submitted, preview
 
             if asynchronous:
@@ -199,6 +207,8 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                     )
                     assert client.dataset_imports.materialization("import-1", job["materializationId"])["state"] == "ready"
                     assert client.dataset_imports.finish("import-1", **finish)["datasetId"] == "draft-1"
+                    rows = client.datasets.rows("draft-1", revision=1, limit=1, splits=["train"])
+                    assert rows["rows"][0]["input"] == {"prompt": "kept"}
 
     assert queued["state"] == "queued"
     assert page["totalRows"] == 3

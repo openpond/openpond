@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { expect, test } from "vitest";
 import { contentHash } from "@openpond/harness";
-import { OpenPondDatasetImportClient } from "../src/dataset-workspaces.js";
+import { OpenPondDatasetImportClient, OpenPondDatasetWorkspaceClient } from "../src/dataset-workspaces.js";
 
 async function body(request: IncomingMessage) {
   const chunks: Buffer[] = [];
@@ -159,6 +159,19 @@ test("retains the mapping and prepared index through the draft receipt", async (
       reply(sendStaleDraft ? { ...draft, indexHash: contentHash("stale-index") } : draft);
       return;
     }
+    if (url.pathname === "/v1/dataset-workspaces/draft-1/rows") {
+      expect(request.method).toBe("GET");
+      expect(url.searchParams.get("revision")).toBe("1");
+      expect(url.searchParams.get("limit")).toBe("1");
+      expect(url.searchParams.get("split")).toBe("train");
+      const after = url.searchParams.get("cursor");
+      expect(after === null || after === "after-first").toBe(true);
+      reply({ teamId: "team-fixture", datasetId: draft.datasetId, revision: 1, indexHash: draft.indexHash,
+        total: 2, rows: [{ id: contentHash(after ? "second" : "first"), split: "train",
+          input: { prompt: after ? "second" : "first" }, policyVisibleContext: {},
+          source: { fileId: "file-1", ordinal: after ? 2 : 1 } }], nextCursor: after ? null : "after-first" });
+      return;
+    }
     expect(request.method).toBe("GET");
     expect(url.pathname).toBe("/v1/dataset-imports/import-1/preview");
     expect(url.searchParams.get("fileId")).toBe("file-1");
@@ -200,6 +213,13 @@ test("retains the mapping and prepared index through the draft receipt", async (
       state: "ready", mappingHash, shardCount: 0, shards: [],
     });
     expect(await client.finish("import-1", finishRequest)).toEqual(draft);
+    const workspaces = new OpenPondDatasetWorkspaceClient({ apiKey: "fixture", teamId: "team-fixture", baseUrl: api.origin });
+    const rows = { revision: draft.revision, limit: 1, splits: ["train" as const] };
+    const firstPage = await workspaces.rows(draft.datasetId, rows);
+    const lastPage = await workspaces.rows(draft.datasetId, { ...rows, cursor: firstPage.nextCursor! });
+    expect(firstPage.indexHash).toBe(draft.indexHash);
+    expect(lastPage.rows.map(({ source }) => source.ordinal)).toEqual([2]);
+    expect(lastPage.nextCursor).toBe(null);
     sendStaleDraft = true;
     await expect(client.finish("import-1", finishRequest)).rejects.toThrow("Dataset draft response identity mismatch");
   } finally {
