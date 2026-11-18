@@ -1,0 +1,51 @@
+import { DatasetWorkspaceRowsQuerySchema, type OpenPondDatasetWorkspaceClient } from "openpond-sdk/dataset-workspaces";
+import { optionString } from "./common";
+
+const actions = ["rows", "validate-version", "create-version", "version-manifest", "begin-version"] as const;
+type Action = (typeof actions)[number];
+export function isDatasetVersionAction(value: string | undefined): value is Action {
+  return actions.some(action => action === value);
+}
+
+export async function runDatasetVersionCommand(
+  client: OpenPondDatasetWorkspaceClient,
+  action: Action,
+  id: string | undefined,
+  options: Record<string, string | boolean>,
+) {
+  if (!id) throw new Error("Provide the saved dataset ID.");
+  const parsedRevision = (name: string) => {
+    const value = Number(optionString(options, name));
+    if (!Number.isSafeInteger(value) || value < 1) throw new Error("Provide a positive dataset revision.");
+    return value;
+  };
+  if (action === "rows") {
+    const revision = optionString(options, "revision");
+    const version = optionString(options, "versionRevision");
+    if (revision && version) throw new Error("Choose --revision or --version-revision.");
+    const split = optionString(options, "split");
+    const limit = optionString(options, "limit");
+    const query = DatasetWorkspaceRowsQuerySchema.parse({
+      revision: revision ? Number(revision) : undefined,
+      splits: split ? split.split(",") : undefined,
+      cursor: optionString(options, "cursor") || undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+    if (version) return client.versionRows(id, parsedRevision("versionRevision"), {
+      splits: query.splits, cursor: query.cursor, limit: query.limit,
+    });
+    return client.rows(id, query);
+  }
+  if (action === "version-manifest") return client.versionManifest(id, parsedRevision("versionRevision"));
+  const expectedRevision = parsedRevision("expectedRevision");
+  if (action === "validate-version") return client.validateVersion(id, expectedRevision);
+  const operationId = optionString(options, "operationId");
+  if (!operationId) throw new Error("Provide a stable --operation-id and reuse it on retry.");
+  if (action === "begin-version") return client.beginVersion(id, { operationId, expectedRevision });
+  const workspaceHash = optionString(options, "workspaceHash");
+  const indexHash = optionString(options, "indexHash");
+  const packageHash = optionString(options, "packageHash");
+  if (!workspaceHash || !indexHash || !packageHash)
+    throw new Error("Provide --workspace-hash, --index-hash and --package-hash from validation.");
+  return client.createVersion(id, { operationId, expectedRevision, workspaceHash, indexHash, packageHash });
+}

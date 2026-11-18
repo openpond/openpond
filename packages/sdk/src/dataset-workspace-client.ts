@@ -24,6 +24,9 @@ import { OpenPondDatasetPreparationClient } from "./dataset-preparation-client.j
 import { readDatasetWorkspaceFailure } from "./dataset-workspace-error.js";
 import { CorrectionsDefaultSchema } from "./corrections-default.js";
 import { DatasetWorkspaceRowsQuerySchema, DatasetWorkspaceRowsSchema } from "./dataset-workspace-rows.js";
+import { CreateDatasetVersionSchema, DatasetVersionManifestSchema, DatasetVersionValidationSchema } from "./dataset-workspace-versions.js";
+
+type RowOptions = z.input<typeof DatasetWorkspaceRowsQuerySchema> & { signal?: AbortSignal };
 
 /** Hosted independent authoring. Writes use explicit revision/operation identity;
  * callers retain the operation ID when retrying an uncertain response. */
@@ -85,8 +88,16 @@ export class OpenPondDatasetWorkspaceClient {
   /** Browse a saved import. Keep the revision and split selection on later pages. */
   async rows(
     id: string,
-    options: z.input<typeof DatasetWorkspaceRowsQuerySchema> & { signal?: AbortSignal } = {},
+    options: RowOptions = {},
   ) {
+    return this.readRowPage(id, `/${encodeURIComponent(id)}/rows`, options);
+  }
+  /** Read policy-visible rows from one immutable published revision. */
+  async versionRows(id: string, revision: number, options: Omit<RowOptions, "revision"> = {}) {
+    const pinned = z.number().int().positive().parse(revision);
+    return this.readRowPage(id, `/${encodeURIComponent(id)}/versions/${pinned}/rows`, { ...options, revision: pinned });
+  }
+  private async readRowPage(id: string, path: string, options: RowOptions) {
     const { signal, ...input } = options;
     const query = DatasetWorkspaceRowsQuerySchema.parse(input);
     const params = new URLSearchParams({ limit: String(query.limit) });
@@ -94,7 +105,7 @@ export class OpenPondDatasetWorkspaceClient {
     if (query.cursor) params.set("cursor", query.cursor);
     if (query.splits.length) params.set("split", query.splits.join(","));
     const page = DatasetWorkspaceRowsSchema.parse(
-      await this.request(`/${encodeURIComponent(id)}/rows?${params}`, "GET", undefined, signal, 512 * 1024),
+      await this.request(`${path}?${params}`, "GET", undefined, signal, 512 * 1024),
     );
     if (page.teamId !== this.options.teamId || page.datasetId !== id ||
         (query.revision !== undefined && page.revision !== query.revision) ||
@@ -215,6 +226,43 @@ export class OpenPondDatasetWorkspaceClient {
     );
     if (result.revision !== workspaceRevision || result.workspace.draft.status !== "published")
       throw new Error("Dataset immutable version mismatch.");
+    return result;
+  }
+  /** Validate the exact saved draft and its retained shard index. */
+  async validateVersion(id: string, expectedRevision: number, signal?: AbortSignal) {
+    z.number().int().positive().parse(expectedRevision);
+    const result = DatasetVersionValidationSchema.parse(await this.request(
+      `/${encodeURIComponent(id)}/versions/validate`, "POST", { expectedRevision }, signal, 16 * 1024,
+    ));
+    if (result.teamId !== this.options.teamId || result.datasetId !== id || result.revision !== expectedRevision ||
+        result.release.id !== id || result.release.revision !== expectedRevision + 1 || result.release.contentHash !== result.packageHash)
+      throw new Error("Dataset version validation receipt mismatch.");
+    return result;
+  }
+  /** Publish the validated shard manifest. Reuse the pinned request on retry. */
+  async createVersion(id: string, input: z.input<typeof CreateDatasetVersionSchema>, signal?: AbortSignal) {
+    const request = CreateDatasetVersionSchema.parse(input);
+    const result = this.readback(await this.request(
+      `/${encodeURIComponent(id)}/versions`, "POST", request, signal, 64 * 1024,
+    ), id);
+    const release = result.publication?.release;
+    const hosted = z.object({ indexHash: DatasetVersionValidationSchema.shape.indexHash }).safeParse(result.workspace.draft.metadata.hostedImport);
+    if (result.revision !== request.expectedRevision + 1 || result.workspace.draft.status !== "published" ||
+        result.publication?.packageHash !== request.packageHash || release?.contentHash !== request.packageHash ||
+        release.id !== id || release.revision !== result.revision || !hosted.success || hosted.data.indexHash !== request.indexHash)
+      throw new Error("Dataset version creation receipt mismatch.");
+    return result;
+  }
+  async versionManifest(id: string, revision: number, signal?: AbortSignal) {
+    const pinned = z.number().int().positive().parse(revision);
+    const result = DatasetVersionManifestSchema.parse(await this.request(
+      `/${encodeURIComponent(id)}/versions/${pinned}/manifest`, "GET", undefined, signal, 16 * 1024,
+    ));
+    if (result.teamId !== this.options.teamId || result.datasetId !== id || result.revision !== pinned ||
+        result.release.id !== id || result.release.revision !== pinned || result.draftRevision !== pinned - 1 ||
+        result.release.contentHash !== result.packageHash ||
+        Object.values(result.splitCounts).reduce((sum, value) => sum + value, 0) !== result.acceptedRows)
+      throw new Error("Dataset version manifest mismatch.");
     return result;
   }
   async save(input: z.input<typeof DatasetWorkspaceWriteSchema>, signal?: AbortSignal) {

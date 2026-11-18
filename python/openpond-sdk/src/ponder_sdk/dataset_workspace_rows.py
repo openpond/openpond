@@ -41,7 +41,8 @@ def _cursor(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,240}", value) is not None
 
 
-def _path(dataset_id: str, limit: int, revision: int | None, cursor: str | None, splits: Sequence[Split]) -> str:
+def _path(dataset_id: str, limit: int, revision: int | None, cursor: str | None, splits: Sequence[Split],
+          version: bool = False) -> str:
     if (not 1 <= byte_count(limit) <= 100 or (revision is not None and not byte_count(revision))
         or (cursor is not None and not _cursor(cursor)) or len(splits) > 4
         or any(not isinstance(split, str) or split not in SPLITS for split in splits)):
@@ -53,7 +54,9 @@ def _path(dataset_id: str, limit: int, revision: int | None, cursor: str | None,
         query["cursor"] = cursor
     if splits:
         query["split"] = ",".join(splits)
-    return f"/v1/dataset-workspaces/{quote(identifier(dataset_id), safe='')}/rows?{urlencode(query)}"
+    workspace = f"/v1/dataset-workspaces/{quote(identifier(dataset_id), safe='')}"
+    route = f"{workspace}/versions/{revision}/rows" if version else f"{workspace}/rows"
+    return f"{route}?{urlencode(query)}"
 
 
 def _page(value: object, team_id: str, dataset_id: str, limit: int, revision: int | None,
@@ -94,6 +97,15 @@ class DatasetRows:
         value = self._transport.request("GET", path, media="application/json", response_limit=512 * 1024)
         return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits)
 
+    def version_rows(self, dataset_id: str, revision: int, *, cursor: str | None = None,
+                     limit: int = 20, splits: Sequence[Split] = ()) -> DatasetWorkspaceRowPage:
+        """Read policy-visible rows from an immutable published revision."""
+        if not byte_count(revision):
+            raise ProtocolError("dataset_rows_query_invalid")
+        path = _path(dataset_id, limit, revision, cursor, splits, version=True)
+        value = self._transport.request("GET", path, media="application/json", response_limit=512 * 1024)
+        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits)
+
 
 class AsyncDatasetRows:
     _transport: AsyncTransport
@@ -103,5 +115,14 @@ class AsyncDatasetRows:
                    limit: int = 20, splits: Sequence[Split] = ()) -> DatasetWorkspaceRowPage:
         """Read a saved import page with its revision and split selection."""
         path = _path(dataset_id, limit, revision, cursor, splits)
+        value = await self._transport.request("GET", path, media="application/json", response_limit=512 * 1024)
+        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits)
+
+    async def version_rows(self, dataset_id: str, revision: int, *, cursor: str | None = None,
+                           limit: int = 20, splits: Sequence[Split] = ()) -> DatasetWorkspaceRowPage:
+        """Read policy-visible rows from an immutable published revision."""
+        if not byte_count(revision):
+            raise ProtocolError("dataset_rows_query_invalid")
+        path = _path(dataset_id, limit, revision, cursor, splits, version=True)
         value = await self._transport.request("GET", path, media="application/json", response_limit=512 * 1024)
         return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits)

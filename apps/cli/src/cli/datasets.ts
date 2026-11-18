@@ -1,12 +1,13 @@
 import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import { captureTasksetDraftWorkspace } from "@openpond/taskset-sdk";
-import { DatasetWorkspaceRowsQuerySchema, OpenPondDatasetImportClient, OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
+import { OpenPondDatasetImportClient, OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
 import { loadConfig } from "../config";
 import { ensureApiKey, optionString, resolveAccountOption, resolveApiBaseUrlOption, resolveBaseUrlOption, resolveBaseUrl, parseBooleanOption } from "./common";
 import { DATASET_PREPARATION_USAGE, runDatasetPreparationCommand } from "./datasets-preparation";
 import { runLocalDatasetsCommand } from "./datasets-local";
 import { isDatasetTransferAction, runDatasetTransferCommand } from "./datasets-transfer";
+import { isDatasetVersionAction, runDatasetVersionCommand } from "./datasets-versions";
 import { readFile } from "node:fs/promises";
 
 export async function runDatasetsCommand(options: Record<string, string | boolean>, rest: string[]) {
@@ -19,7 +20,7 @@ export async function runDatasetsCommand(options: Record<string, string | boolea
     const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
     return runDatasetPreparationCommand(client.preparations, options, rest.slice(1));
   }
-  if (isDatasetTransferAction(action) || action === "rows") {
+  if (isDatasetTransferAction(action) || isDatasetVersionAction(action)) {
     if (!teamId || !baseUrl || rest.length > 2)
       throw new Error("Use --team and --api-base-url with hosted dataset transfer commands.");
     const account = resolveAccountOption(options);
@@ -37,19 +38,9 @@ export async function runDatasetsCommand(options: Record<string, string | boolea
       const config = await loadConfig();
       apiKey = await ensureApiKey(config, resolveBaseUrl(config));
     }
-    if (action === "rows") {
-      if (!id) throw new Error("Provide the saved dataset ID.");
-      const revision = optionString(options, "revision");
-      const split = optionString(options, "split");
-      const limit = optionString(options, "limit");
-      const query = DatasetWorkspaceRowsQuerySchema.parse({
-        revision: revision ? Number(revision) : undefined,
-        splits: split ? split.split(",") : undefined,
-        cursor: optionString(options, "cursor") || undefined,
-        limit: limit ? Number(limit) : undefined,
-      });
+    if (isDatasetVersionAction(action)) {
       const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey });
-      console.log(JSON.stringify(await client.rows(id, query), null, 2));
+      console.log(JSON.stringify(await runDatasetVersionCommand(client, action, id, options), null, 2));
       return;
     }
     const client = new OpenPondDatasetImportClient({

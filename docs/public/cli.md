@@ -97,6 +97,8 @@ Save the ready selection with `upload-finish <import-id> --input-file finish.jso
 
 Browse the saved draft with `rows <dataset-id> --revision <revision>` or the TypeScript and Python dataset workspace clients' `rows` methods. Use `--split train,validation` to select splits and reuse the returned cursor with the same revision and selection. Each page returns policy-visible fields, source row identity, and the exact total for the selection. A page can be shorter than the requested limit at a shard or response-size boundary.
 
+Use `validate-version <dataset-id> --expected-revision <revision>` before `create-version`. Pass the same draft revision, a stable operation ID, and the workspace, index, and package hashes from validation. Read the published manifest with `version-manifest <dataset-id> --version-revision <revision>` and page its rows with `rows <dataset-id> --version-revision <revision>`. A later editable revision preserves previously published manifests and row cursors.
+
 ## Starting a reviewed hosted preparation
 
 `openpond training hosted-start` accepts an existing preparation receipt and an optional signed estimate review:

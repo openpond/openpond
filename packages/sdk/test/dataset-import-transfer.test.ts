@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { expect, test } from "vitest";
 import { contentHash } from "@openpond/harness";
 import { OpenPondDatasetImportClient, OpenPondDatasetWorkspaceClient } from "../src/dataset-workspaces.js";
+import { createTasksetDraft, createTasksetDraftWorkspace } from "../src/taskset-drafts.js";
 
 async function body(request: IncomingMessage) {
   const chunks: Buffer[] = [];
@@ -123,6 +124,20 @@ test("retains the mapping and prepared index through the draft receipt", async (
     acceptedRows: 0, rejectedRows: 0, shardCount: 0,
   };
   let sendStaleDraft = false;
+  const versionPin = {
+    teamId: "team-fixture", datasetId: draft.datasetId, revision: 1, workspaceHash: draft.workspaceHash,
+    packageHash: contentHash("fixture-version"), indexHash: draft.indexHash,
+    release: { id: draft.datasetId, revision: 2, contentHash: contentHash("fixture-version") },
+  };
+  const publishedDraft = createTasksetDraft({
+    profileId: versionPin.teamId, id: draft.datasetId, name: "Fixture", now: "2026-01-01T00:00:00.000Z",
+  });
+  const versionWorkspace = createTasksetDraftWorkspace({
+    schemaVersion: "openpond.tasksetDraftWorkspace.v1", files: [], draft: {
+      ...publishedDraft, status: "published", publishedTasksetRef: versionPin.release, revision: 2,
+      metadata: { hostedImport: { indexHash: draft.indexHash } },
+    },
+  });
   const row = (ordinal: number) => ({
     ordinal,
     id: createHash("sha256").update(String(ordinal)).digest("hex"),
@@ -159,14 +174,39 @@ test("retains the mapping and prepared index through the draft receipt", async (
       reply(sendStaleDraft ? { ...draft, indexHash: contentHash("stale-index") } : draft);
       return;
     }
-    if (url.pathname === "/v1/dataset-workspaces/draft-1/rows") {
+    if (url.pathname === "/v1/dataset-workspaces/draft-1/versions/validate") {
+      expect(request.method).toBe("POST");
+      expect(JSON.parse((await body(request)).toString())).toEqual({ expectedRevision: 1 });
+      reply(versionPin);
+      return;
+    }
+    if (url.pathname === "/v1/dataset-workspaces/draft-1/versions") {
+      expect(request.method).toBe("POST");
+      expect(JSON.parse((await body(request)).toString())).toEqual({
+        operationId: "publish-fixture", expectedRevision: 1, workspaceHash: draft.workspaceHash,
+        packageHash: versionPin.packageHash, indexHash: draft.indexHash,
+      });
+      reply({ schemaVersion: "openpond.datasetWorkspaceReceipt.v1", teamId: versionPin.teamId,
+        datasetId: draft.datasetId, revision: 2, workspace: versionWorkspace,
+        publication: { tasksetId: "taskset-fixture", release: versionPin.release, packageHash: versionPin.packageHash } });
+      return;
+    }
+    if (url.pathname === "/v1/dataset-workspaces/draft-1/versions/2/manifest") {
       expect(request.method).toBe("GET");
-      expect(url.searchParams.get("revision")).toBe("1");
+      reply({ ...versionPin, revision: 2, draftRevision: 1, acceptedRows: 2, rejectedRows: 0,
+        shardCount: 1, splitCounts: { train: 2, validation: 0, test: 0, frozen_eval: 0 },
+        publishedAt: "2026-01-01T00:00:00.000Z" });
+      return;
+    }
+    if (["/v1/dataset-workspaces/draft-1/rows", "/v1/dataset-workspaces/draft-1/versions/2/rows"].includes(url.pathname)) {
+      expect(request.method).toBe("GET");
+      const revision = url.pathname.includes("/versions/") ? 2 : 1;
+      expect(url.searchParams.get("revision")).toBe(String(revision));
       expect(url.searchParams.get("limit")).toBe("1");
       expect(url.searchParams.get("split")).toBe("train");
       const after = url.searchParams.get("cursor");
       expect(after === null || after === "after-first").toBe(true);
-      reply({ teamId: "team-fixture", datasetId: draft.datasetId, revision: 1, indexHash: draft.indexHash,
+      reply({ teamId: "team-fixture", datasetId: draft.datasetId, revision, indexHash: draft.indexHash,
         total: 2, rows: [{ id: contentHash(after ? "second" : "first"), split: "train",
           input: { prompt: after ? "second" : "first" }, policyVisibleContext: {},
           source: { fileId: "file-1", ordinal: after ? 2 : 1 } }], nextCursor: after ? null : "after-first" });
@@ -220,6 +260,13 @@ test("retains the mapping and prepared index through the draft receipt", async (
     expect(firstPage.indexHash).toBe(draft.indexHash);
     expect(lastPage.rows.map(({ source }) => source.ordinal)).toEqual([2]);
     expect(lastPage.nextCursor).toBe(null);
+    const validated = await workspaces.validateVersion(draft.datasetId, 1);
+    const created = await workspaces.createVersion(draft.datasetId, { operationId: "publish-fixture", expectedRevision: 1,
+      workspaceHash: validated.workspaceHash, indexHash: validated.indexHash, packageHash: validated.packageHash });
+    expect(created.publication?.release).toEqual(validated.release);
+    expect((await workspaces.versionManifest(draft.datasetId, created.revision)).indexHash).toBe(draft.indexHash);
+    const versionRows = await workspaces.versionRows(draft.datasetId, created.revision, { limit: 1, splits: ["train"] });
+    expect(versionRows.revision).toBe(2);
     sendStaleDraft = true;
     await expect(client.finish("import-1", finishRequest)).rejects.toThrow("Dataset draft response identity mismatch");
   } finally {

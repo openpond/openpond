@@ -102,7 +102,11 @@ Usage:
   openpond datasets model-inputs <model-id> --local [--view summary|tasks|graders] [--role training|evaluation] [--split train|validation|test|frozen_eval] [--task-id <id>] [--limit <1..100>] [--offset <n>] [--location cloud --team <id> --api-origin <origin>] [--json]
   openpond datasets <upload|save|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]
   openpond datasets <stage-file|upload-status|cancel-upload|storage> [file|import-id] --team <id> --api-base-url <origin> [--operation-id <id>]
-  openpond datasets rows <dataset-id> --team <id> --api-base-url <origin> [--revision <n>] [--split <name[,name]>] [--cursor <token>] [--limit <n>]
+  openpond datasets rows <dataset-id> --team <id> --api-base-url <origin> [--revision <n> | --version-revision <n>] [--split <name[,name]>] [--cursor <token>] [--limit <n>]
+  openpond datasets validate-version <dataset-id> --expected-revision <n> --team <id> --api-base-url <origin>
+  openpond datasets create-version <dataset-id> --expected-revision <n> --operation-id <id> --workspace-hash <sha> --index-hash <sha> --package-hash <sha> --team <id> --api-base-url <origin>
+  openpond datasets version-manifest <dataset-id> --version-revision <n> --team <id> --api-base-url <origin>
+  openpond datasets begin-version <dataset-id> --expected-revision <n> --operation-id <id> --team <id> --api-base-url <origin>
   openpond datasets upload-preview <import-id> --file-id <id> --team <id> --api-base-url <origin> [--limit <n>] [--revision <n>] [--cursor <id>] [--mapping-revision <n>]
   openpond datasets upload-mapping <import-id> --team <id> --api-base-url <origin> [--input-file <path>]
   openpond datasets upload-materialize <import-id> --input-file <path> --team <id> --api-base-url <origin>

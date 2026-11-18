@@ -44,9 +44,9 @@ def local_server(handle):
         assert not errors
 
 
-def json_response(handler, data):
+def json_response(handler, data, status=200):
     body = json.dumps(data).encode()
-    handler.send_response(200)
+    handler.send_response(status)
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
@@ -73,6 +73,11 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
               "splitCounts": None, "indexHash": None, "failureCode": None}
     finish = dict(operation_id="save-sample", name="Verified sample", materialization_id="prepare-1",
                   mapping_revision=1, mapping_hash="b" * 64, index_hash="c" * 64)
+    pinned_version = {"teamId": "workspace-fixture", "datasetId": "draft-1", "revision": 1,
+                      "workspaceHash": "d" * 64, "packageHash": "f" * 64, "indexHash": "c" * 64,
+                      "release": {"id": "draft-1", "revision": 2, "contentHash": "f" * 64}}
+    version_request = dict(operation_id="create-version", expected_revision=1, workspace_hash="d" * 64,
+                           index_hash="c" * 64, package_hash="f" * 64)
 
     def put(handler):
         assert not handler.headers.get("Authorization")
@@ -151,9 +156,22 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                     "workspaceHash": "d" * 64, "materializationId": "prepare-1", "mappingRevision": 1,
                     "mappingHash": "b" * 64, "indexHash": "c" * 64,
                     "acceptedRows": 0, "rejectedRows": 0, "shardCount": 0})
-            elif url.path == "/v1/dataset-workspaces/draft-1/rows":
-                assert parse_qs(url.query) == {"revision": ["1"], "limit": ["1"], "split": ["train"]}
-                json_response(handler, {"teamId": "workspace-fixture", "datasetId": "draft-1", "revision": 1,
+            elif url.path == "/v1/dataset-workspaces/draft-1/versions/validate":
+                assert handler.command == "POST" and json.loads(request_body(handler)) == {"expectedRevision": 1}
+                json_response(handler, pinned_version)
+            elif url.path == "/v1/dataset-workspaces/draft-1/versions":
+                assert handler.command == "POST"
+                assert json.loads(request_body(handler)) == {"operationId": "create-version", "expectedRevision": 1,
+                    "workspaceHash": "d" * 64, "indexHash": "c" * 64, "packageHash": "f" * 64}
+                json_response(handler, {"code": "dataset_validation_changed"}, status=409)
+            elif url.path == "/v1/dataset-workspaces/draft-1/versions/2/manifest":
+                json_response(handler, {**pinned_version, "revision": 2, "draftRevision": 1, "acceptedRows": 1,
+                    "rejectedRows": 0, "shardCount": 1, "splitCounts": {"train": 1, "validation": 0, "test": 0, "frozen_eval": 0},
+                    "publishedAt": "2026-01-01T00:00:00.000Z"})
+            elif url.path in ("/v1/dataset-workspaces/draft-1/rows", "/v1/dataset-workspaces/draft-1/versions/2/rows"):
+                revision = 2 if "/versions/" in url.path else 1
+                assert parse_qs(url.query) == {"revision": [str(revision)], "limit": ["1"], "split": ["train"]}
+                json_response(handler, {"teamId": "workspace-fixture", "datasetId": "draft-1", "revision": revision,
                     "indexHash": "c" * 64, "total": 1, "nextCursor": None, "rows": [{"id": "e" * 64,
                         "split": "train", "input": {"prompt": "kept"}, "policyVisibleContext": {},
                         "source": {"fileId": "file-1", "ordinal": 1}}]})
@@ -186,6 +204,13 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                     assert (await client.dataset_imports.finish("import-1", **finish))["datasetId"] == "draft-1"
                     rows = await client.datasets.rows("draft-1", revision=1, limit=1, splits=["train"])
                     assert rows["rows"][0]["input"] == {"prompt": "kept"}
+                    assert await client.datasets.validate_version("draft-1", expected_revision=1) == pinned_version
+                    with pytest.raises(PonderError) as failure:
+                        await client.datasets.create_version("draft-1", **version_request)
+                    assert failure.value.code == "dataset_validation_changed"
+                    manifest = await client.datasets.version_manifest("draft-1", 2)
+                    version_page = await client.datasets.version_rows("draft-1", 2, limit=1, splits=["train"])
+                    assert version_page["indexHash"] == manifest["indexHash"] and version_page["revision"] == 2
                     return submitted, preview
 
             if asynchronous:
@@ -209,6 +234,13 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                     assert client.dataset_imports.finish("import-1", **finish)["datasetId"] == "draft-1"
                     rows = client.datasets.rows("draft-1", revision=1, limit=1, splits=["train"])
                     assert rows["rows"][0]["input"] == {"prompt": "kept"}
+                    assert client.datasets.validate_version("draft-1", expected_revision=1) == pinned_version
+                    with pytest.raises(PonderError) as failure:
+                        client.datasets.create_version("draft-1", **version_request)
+                    assert failure.value.code == "dataset_validation_changed"
+                    manifest = client.datasets.version_manifest("draft-1", 2)
+                    version_page = client.datasets.version_rows("draft-1", 2, limit=1, splits=["train"])
+                    assert version_page["indexHash"] == manifest["indexHash"] and version_page["revision"] == 2
 
     assert queued["state"] == "queued"
     assert page["totalRows"] == 3
