@@ -85,6 +85,8 @@ openpond datasets upload-preview "$IMPORT_ID" --file-id "$FILE_ID" --team "$WORK
 
 Repeat `stage-file` with the same file bytes and operation ID after an interruption. Use the returned import ID to check verification status or request cleanup with `cancel-upload` and a stable cancellation operation ID. A verified transfer retains the original file. Creating a dataset version is a separate operation.
 
+Use `stage-folder <folder>` with the same workspace, API origin, and operation ID options to stage a directory of up to 100 nonempty regular files. Relative paths are preserved. CSV, JSON, JSONL, and Parquet can be mapped to task rows. Add any other verified files you want to keep to a source-only mapping group.
+
 Inspection starts after each supported file is verified. `upload-preview` returns a bounded sample and separate accepted and rejected counts. For another page, pass the current `revision` as `--revision` and `nextCursor` as `--cursor`. Counts remain provisional until inspection completes.
 
 In TypeScript, import `OpenPondDatasetImportClient` from `openpond-sdk/dataset-workspaces`. Call `begin` with declared file paths and sizes and pass each returned file ID to `uploadFile` with a seekable source, its SHA-256 and a stable completion operation ID. Call `get` to observe verification after a queued response and `preview` to read the source sample and counts.
