@@ -1,7 +1,7 @@
 import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import { captureTasksetDraftWorkspace } from "@openpond/taskset-sdk";
-import { OpenPondDatasetImportClient, OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
+import { DatasetPopulationQuerySchema, OpenPondDatasetImportClient, OpenPondDatasetPopulationClient, OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
 import { loadConfig } from "../config";
 import { ensureApiKey, optionString, resolveAccountOption, resolveApiBaseUrlOption, resolveBaseUrlOption, resolveBaseUrl, parseBooleanOption } from "./common";
 import { DATASET_PREPARATION_USAGE, runDatasetPreparationCommand } from "./datasets-preparation";
@@ -20,9 +20,9 @@ export async function runDatasetsCommand(options: Record<string, string | boolea
     const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
     return runDatasetPreparationCommand(client.preparations, options, rest.slice(1));
   }
-  if (isDatasetTransferAction(action) || isDatasetVersionAction(action)) {
+  if (action === "population" || isDatasetTransferAction(action) || isDatasetVersionAction(action)) {
     if (!teamId || !baseUrl || rest.length > 2)
-      throw new Error("Use --team and --api-base-url with hosted dataset transfer commands.");
+      throw new Error("Use --team and --api-base-url with hosted dataset commands.");
     const account = resolveAccountOption(options);
     const accountBase = resolveBaseUrlOption(options);
     const context = await loadOpenPondAccountContext(account, accountBase);
@@ -37,6 +37,22 @@ export async function runDatasetsCommand(options: Record<string, string | boolea
       if (context.account) throw new Error("Select an account for the requested API origin or supply an API key for that origin.");
       const config = await loadConfig();
       apiKey = await ensureApiKey(config, resolveBaseUrl(config));
+    }
+    if (action === "population") {
+      const revision = optionString(options, "versionRevision");
+      const contentHash = optionString(options, "packageHash");
+      const limit = optionString(options, "limit");
+      if (!id || !revision || !contentHash)
+        throw new Error("Provide the dataset ID, --version-revision and --package-hash from the published version.");
+      const query = DatasetPopulationQuerySchema.parse({
+        release: { id, revision: Number(revision), contentHash },
+        view: optionString(options, "view") || undefined,
+        afterId: optionString(options, "cursor") || undefined,
+        limit: limit ? Number(limit) : undefined,
+      });
+      const client = new OpenPondDatasetPopulationClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey });
+      console.log(JSON.stringify(await client.read(query), null, 2));
+      return;
     }
     if (isDatasetVersionAction(action)) {
       const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey });

@@ -106,6 +106,7 @@ Usage:
   openpond datasets validate-version <dataset-id> --expected-revision <n> --team <id> --api-base-url <origin>
   openpond datasets create-version <dataset-id> --expected-revision <n> --operation-id <id> --workspace-hash <sha> --index-hash <sha> --package-hash <sha> --team <id> --api-base-url <origin>
   openpond datasets version-manifest <dataset-id> --version-revision <n> --team <id> --api-base-url <origin>
+  openpond datasets population <dataset-id> --version-revision <n> --package-hash <sha> --team <id> --api-base-url <origin> [--view ids|policy] [--cursor <task-id>] [--limit <n>]
   openpond datasets begin-version <dataset-id> --expected-revision <n> --operation-id <id> --team <id> --api-base-url <origin>
   openpond datasets upload-preview <import-id> --file-id <id> --team <id> --api-base-url <origin> [--limit <n>] [--revision <n>] [--cursor <id>] [--mapping-revision <n>]
   openpond datasets upload-mapping <import-id> --team <id> --api-base-url <origin> [--input-file <path>]
@@ -122,6 +123,7 @@ Options:
   --file-id <string>
   --focus-only
   --grader-id <string>
+  --index-hash <string>
   --input-file <string>
   --json
   --limit <integer>
@@ -140,6 +142,7 @@ Options:
   --split <string>
   --task-id <string>
   --team <string>
+  --version-revision <integer>
   --view <string>
   --workspace-hash <string>
 ```
