@@ -6,7 +6,7 @@ import { OpenPondDatasetImportClient, type DatasetImportSource } from "openpond-
 import { optionString } from "./common";
 
 export const DATASET_TRANSFER_ACTIONS = [
-  "stage-file", "stage-folder", "upload-status", "upload-preview", "upload-mapping",
+  "stage-file", "stage-folder", "upload-begin", "upload-status", "upload-preview", "upload-mapping",
   "upload-materialize", "upload-materialization", "upload-finish", "cancel-upload", "storage",
 ] as const;
 type Action = (typeof DATASET_TRANSFER_ACTIONS)[number];
@@ -16,7 +16,6 @@ export function isDatasetTransferAction(value: string | undefined): value is Act
 }
 
 async function fileSource(file: Blob): Promise<DatasetImportSource> {
-  if (!file.size) throw new Error("Dataset source files must contain at least one byte.");
   const digest = createHash("sha256");
   const reader = file.stream().getReader();
   try {
@@ -87,6 +86,11 @@ export async function runDatasetTransferCommand(
     if (pathOrImportId) throw new Error("Storage does not accept an import ID.");
     return client.storage();
   }
+  if (action === "upload-begin") {
+    const path = optionString(options, "inputFile");
+    if (pathOrImportId || !path) throw new Error("Provide --input-file containing the operationId and declared files.");
+    return client.begin(await readRequest(path, 256 * 1024));
+  }
   if (!pathOrImportId) throw new Error("Provide a source file or import ID.");
   if (action === "upload-status") return client.get(pathOrImportId);
   if (action === "upload-mapping") {
@@ -133,12 +137,13 @@ export async function runDatasetTransferCommand(
   if (action === "cancel-upload") return client.cancel(pathOrImportId, operationId);
   if (action === "stage-folder") return stageFolder(client, operationId, pathOrImportId);
 
-  const source = await fileSource(await openAsBlob(pathOrImportId));
+  const source = await openAsBlob(pathOrImportId);
+  if (!source.size) throw new Error("Dataset source files must contain at least one byte.");
   const relativePath = basename(pathOrImportId).normalize("NFC");
-  const imported = await client.begin({ operationId, files: [{ relativePath, sizeBytes: source.sizeBytes }] });
+  const imported = await client.begin({ operationId, files: [{ relativePath, sizeBytes: source.size }] });
   const [file] = imported.files;
-  if (imported.files.length !== 1 || !file || file.relativePath !== relativePath || file.sizeBytes !== source.sizeBytes)
+  if (imported.files.length !== 1 || !file || file.relativePath !== relativePath || file.sizeBytes !== source.size)
     throw new Error("Dataset import receipt does not match the selected file.");
-  const result = await client.uploadFile(imported.importId, file.fileId, source, { operationId: `${operationId}:complete` });
+  const result = await client.uploadFile(imported.importId, file.fileId, await fileSource(source), { operationId: `${operationId}:complete` });
   return { importId: imported.importId, fileId: file.fileId, state: result.state, object: result.object };
 }
