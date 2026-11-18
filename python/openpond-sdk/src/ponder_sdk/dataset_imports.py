@@ -75,7 +75,7 @@ class DatasetImportPreview(TypedDict):
     uploadState: Literal["pending", "uploading", "queued", "verified", "failed", "deleted"]
     revision: int | None
     state: Literal["waiting_for_upload", "queued", "inspecting", "ready", "failed", "unsupported"]
-    format: Literal["csv", "json", "jsonl"] | None
+    format: Literal["csv", "json", "jsonl", "parquet"] | None
     scannedBytes: int
     acceptedRows: int
     rejectedRows: int

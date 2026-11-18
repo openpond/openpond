@@ -36,8 +36,8 @@ async function* folderFiles(directory: string, prefix = ""): AsyncGenerator<{ pa
     const path = join(directory, entry.name);
     const relativePath = `${prefix}${entry.name}`.normalize("NFC");
     if (entry.isDirectory()) yield* folderFiles(path, `${relativePath}/`);
-    else if (entry.isFile() && /\.(?:csv|json|jsonl|ndjson)$/iu.test(entry.name)) yield { path, relativePath };
-    else throw new Error(`Remove unsupported folder entry ${relativePath}. Choose regular CSV, JSON or JSONL files.`);
+    else if (entry.isFile() && /\.(?:csv|json|jsonl|ndjson|parquet)$/iu.test(entry.name)) yield { path, relativePath };
+    else throw new Error(`Remove unsupported folder entry ${relativePath}. Choose regular CSV, JSON, JSONL or Parquet files.`);
   }
 }
 
@@ -47,7 +47,7 @@ async function stageFolder(client: OpenPondDatasetImportClient, operationId: str
     if (files.length === 100) throw new Error("Choose a folder with up to 100 source files.");
     files.push(file);
   }
-  if (!files.length) throw new Error("Choose a folder containing CSV, JSON or JSONL files.");
+  if (!files.length) throw new Error("Choose a folder containing CSV, JSON, JSONL or Parquet files.");
   files.sort((left, right) => left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0);
   const sources = new Map<string, Blob>();
   for (const { path, relativePath } of files) {

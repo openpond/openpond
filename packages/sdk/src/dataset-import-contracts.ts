@@ -130,7 +130,7 @@ export const DatasetImportPreviewSchema = z.object({
   importId: id, fileId: id, relativePath, sizeBytes: bytes.positive(), uploadState,
   revision: bytes.positive().nullable(),
   state: z.enum(["waiting_for_upload", "queued", "inspecting", "ready", "failed", "unsupported"]),
-  format: z.enum(["csv", "json", "jsonl"]).nullable(),
+  format: z.enum(["csv", "json", "jsonl", "parquet"]).nullable(),
   scannedBytes: bytes, acceptedRows: bytes, rejectedRows: bytes, totalRows: bytes.nullable(),
   provisional: z.boolean(), previewedRows: z.number().int().min(0).max(64), failureCode: id.nullable(),
   mappingRevision: bytes.positive().optional(), mappingHash: hash.optional(),
