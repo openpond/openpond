@@ -69,6 +69,24 @@ it("prepares Dataset review without approval or policy leakage", () => {
   expect(JSON.stringify(source)).toBe(originalBytes);
   expect(() => prepareDatasetTrainingReview({ ...input, request: { ...request, packageHash: "a".repeat(64) } })).toThrow();
   expect(() => prepareDatasetTrainingReview({ ...input, request: { ...request, taskIds: ["missing-task"] } })).toThrow();
+
+  const release = { id: "external-dataset", revision: 3, contentHash: "b".repeat(64) };
+  const { package: _package, ...shared } = input;
+  const selected = { ...source.taskset.tasks[0]!, privilegedContextRef: null, artifactRefs: [] };
+  const selectedInput = {
+    ...shared,
+    request: { ...request, dataset: release, packageHash: release.contentHash },
+    selection: { release, totalTaskCount: 70_000, name: "External dataset",
+      execution: { policy: source.taskset.policy, environment: source.taskset.environment,
+        tools: source.taskset.tools, capabilities: source.taskset.capabilities }, tasks: [selected] },
+  };
+  const selectedReview = prepareDatasetTrainingReview(selectedInput);
+  expect(selectedReview.source.datasetOrigin).toEqual({ receiptId: selectedReview.id, packageHash: release.contentHash, taskset: release });
+  expect(selectedReview.evidence.map(item => item.submission.exampleId)).toEqual([selected.id]);
+  expect(selectedReview.proposals[0]).toMatchObject({ status: "pending_review", review: null });
+  expect(() => prepareDatasetTrainingReview({ ...selectedInput, request: { ...selectedInput.request, taskIds: null } })).toThrow();
+  expect(() => prepareDatasetTrainingReview({ ...selectedInput, selection: { ...selectedInput.selection,
+    tasks: [{ ...selected, privilegedContextRef: "unretained-evaluator-context" }] } })).toThrow();
 });
 
 // Ordinary executable packages must close their private graph at admission,

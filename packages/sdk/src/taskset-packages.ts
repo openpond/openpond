@@ -7,7 +7,7 @@ export * from "./model-batch-review.js";
 export * from "./dataset-training-review-contracts.js";
 export * from "./dataset-training-review-files.js";
 export * from "./dataset-training-review-source.js";
-export { prepareDatasetTrainingReview, datasetTrainingReviewIdentity } from "./dataset-training-review-preparation.js";
+export { prepareDatasetTrainingReview, datasetTrainingReviewIdentity, type DatasetTrainingReviewSelection } from "./dataset-training-review-preparation.js";
 export * from "./model-taskset-authoring.js";
 export * from "./taskset-authored-portable-release.js";
 export * from "./taskset-package-projection.js";
