@@ -4,6 +4,8 @@ export { OpenPondDatasetWorkspaceClient } from "./dataset-workspace-client.js";
 export { DatasetWorkspaceRequestError, type DatasetWorkspaceErrorCode } from "./dataset-workspace-error.js";
 export * from "./dataset-population.js";
 export * from "./dataset-workspace-operations.js";
+export * from "./dataset-workspace-rows.js";
+export * from "./dataset-workspace-versions.js";
 export * from "./dataset-preparation-contracts.js";
 export * from "./dataset-preparation-research-contracts.js";
 export * from "./dataset-preparation-workspace.js";
@@ -15,3 +17,7 @@ export { OpenPondDatasetPreparationClient, DatasetPreparationRequestError } from
 export { assemblePreparedTaskWorkspaces } from "./dataset-preparation-assembly.js";
 
 export * from "./dataset-task-ingestion.js";
+
+export * from "./dataset-import-contracts.js";
+export * from "./dataset-import-materialization.js";
+export { OpenPondDatasetImportClient, DatasetImportRequestError, type DatasetImportSource } from "./dataset-import-client.js";

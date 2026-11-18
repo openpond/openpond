@@ -72,6 +72,33 @@ Preparation and apply do not qualify graders, approve source/privacy reviews, ch
 
 Project Actions use `openpond/actions` by default. `actions check` validates and builds their registry, `actions build` produces the deterministic local bundle, `actions run` invokes one built action in a child process, and `actions dev` watches the source tree and rebuilds after changes. These commands do not use hosted sandboxes or require an OpenPond API key.
 
+## Transferring a hosted dataset source
+
+Use the workspace's configured API origin where resumable dataset uploads are available.
+
+```bash
+openpond datasets storage --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN"
+openpond datasets stage-file ./examples.jsonl --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN" --operation-id examples-upload-1
+openpond datasets upload-status "$IMPORT_ID" --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN"
+openpond datasets upload-preview "$IMPORT_ID" --file-id "$FILE_ID" --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN" --limit 10
+```
+
+Repeat `stage-file` with the same file bytes and operation ID after an interruption. Use the returned import ID to check verification status or request cleanup with `cancel-upload` and a stable cancellation operation ID. A verified transfer retains the original file. Creating a dataset version is a separate operation.
+
+Inspection starts after each supported file is verified. `upload-preview` returns a bounded sample and separate accepted and rejected counts. For another page, pass the current `revision` as `--revision` and `nextCursor` as `--cursor`. Counts remain provisional until inspection completes.
+
+In TypeScript, import `OpenPondDatasetImportClient` from `openpond-sdk/dataset-workspaces`. Call `begin` with declared file paths and sizes and pass each returned file ID to `uploadFile` with a seekable source, its SHA-256 and a stable completion operation ID. Call `get` to observe verification after a queued response and `preview` to read the source sample and counts.
+
+Read the current mapping with `upload-mapping`. Save a mapping with `upload-mapping --input-file mapping.json` or the TypeScript client's `saveMapping`. The request carries an `operationId`, the `expectedRevision` (zero for the first mapping), and groups of file IDs. A task group specifies input paths and a split. It can also specify reference, context, and family paths. Path arrays preserve literal field names that contain dots. A source-only group retains files as source material. Pass the saved mapping revision via `upload-preview --mapping-revision` to read each sampled row's projection.
+
+Prepare task shards with `upload-materialize <import-id> --input-file prepare.json`. Pass the saved `mappingRevision` and `mappingHash` with a stable `operationId`. Set `allowRejectedRows` after reviewing the exclusions. Read progress and page ready shard references with `upload-materialization <import-id> --materialization-id <id>`.
+
+Save the ready selection with `upload-finish <import-id> --input-file finish.json`, `OpenPondDatasetImportClient.finish`, or Python's `client.dataset_imports.finish`. Supply a name, a stable operation ID, and the ready receipt's materialization ID, mapping revision, mapping hash, and index hash. The receipt returns the saved dataset ID, draft revision, and exact row counts. Retry with the same request to recover that receipt.
+
+Browse the saved draft with `rows <dataset-id> --revision <revision>` or the TypeScript and Python dataset workspace clients' `rows` methods. Use `--split train,validation` to select splits and reuse the returned cursor with the same revision and selection. Each page returns policy-visible fields, source row identity, and the exact total for the selection. A page can be shorter than the requested limit at a shard or response-size boundary.
+
+Use `validate-version <dataset-id> --expected-revision <revision>` before `create-version`. Pass the same draft revision, a stable operation ID, and the workspace, index, and package hashes from validation. Read the published manifest with `version-manifest <dataset-id> --version-revision <revision>` and page its rows with `rows <dataset-id> --version-revision <revision>`. A later editable revision preserves previously published manifests and row cursors.
+
 ## Starting a reviewed hosted preparation
 
 `openpond training hosted-start` accepts an existing preparation receipt and an optional signed estimate review:

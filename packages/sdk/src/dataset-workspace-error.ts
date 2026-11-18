@@ -14,6 +14,12 @@ const Code = z.enum([
   "dataset_workspace_changed",
   "dataset_validation_changed",
   "dataset_source_context_immutable",
+  "dataset_cursor_invalid",
+  "dataset_shard_unavailable",
+  "dataset_storage_kind_unsupported",
+  "dataset_not_editable",
+  "dataset_version_not_found",
+  "dataset_version_row_limit",
 ]);
 export type DatasetWorkspaceErrorCode = z.infer<typeof Code>;
 

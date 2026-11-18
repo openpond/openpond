@@ -106,7 +106,7 @@ async function main(): Promise<void> {
           'export { ExperimentImprovementCommandSchema, ExperimentImprovementOptionsSchema, verifyExperimentImprovementState } from "openpond-sdk/experiment-improvements";',
           'export { HumanReviewCommandSchema } from "openpond-sdk/human-review";',
           'export { RunExperimentSchema, ExperimentScoringRequestSchema } from "openpond-sdk/experiments";',
-          'export { DatasetWorkspaceReceiptSchema, DatasetPreparationCreateSchema, DatasetPreparationRunSchema, OpenPondDatasetPreparationClient } from "openpond-sdk/dataset-workspaces";',
+          'export { DatasetWorkspaceReceiptSchema, DatasetPreparationCreateSchema, DatasetPreparationRunSchema, OpenPondDatasetPreparationClient, OpenPondDatasetImportClient } from "openpond-sdk/dataset-workspaces";',
           'export { PostTrainingAttachmentSchema, PostTrainingControlSchema, createPostTrainingClient } from "openpond-sdk/post-training";',
           'export { CandidateEvaluationRequestSchema, createCandidateEvaluationClient } from "openpond-sdk/candidate-evaluations";',
           'export { ExperimentEvaluationScheduleCommandSchema, ExperimentEvaluationScheduleInputSchema, OpenPondExperimentEvaluationScheduleClient } from "openpond-sdk/experiment-evaluation-schedules";',

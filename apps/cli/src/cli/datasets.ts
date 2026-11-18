@@ -1,10 +1,13 @@
 import { hostedCliFetch } from "./common/hosted-cli-fetch";
+import { loadOpenPondAccountContext } from "@openpond/runtime";
 import { captureTasksetDraftWorkspace } from "@openpond/taskset-sdk";
-import { OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
+import { OpenPondDatasetImportClient, OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
 import { loadConfig } from "../config";
-import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl, parseBooleanOption } from "./common";
+import { ensureApiKey, optionString, resolveAccountOption, resolveApiBaseUrlOption, resolveBaseUrlOption, resolveBaseUrl, parseBooleanOption } from "./common";
 import { DATASET_PREPARATION_USAGE, runDatasetPreparationCommand } from "./datasets-preparation";
 import { runLocalDatasetsCommand } from "./datasets-local";
+import { isDatasetTransferAction, runDatasetTransferCommand } from "./datasets-transfer";
+import { isDatasetVersionAction, runDatasetVersionCommand } from "./datasets-versions";
 import { readFile } from "node:fs/promises";
 
 export async function runDatasetsCommand(options: Record<string, string | boolean>, rest: string[]) {
@@ -16,6 +19,35 @@ export async function runDatasetsCommand(options: Record<string, string | boolea
     const config = await loadConfig();
     const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
     return runDatasetPreparationCommand(client.preparations, options, rest.slice(1));
+  }
+  if (isDatasetTransferAction(action) || isDatasetVersionAction(action)) {
+    if (!teamId || !baseUrl || rest.length > 2)
+      throw new Error("Use --team and --api-base-url with hosted dataset transfer commands.");
+    const account = resolveAccountOption(options);
+    const accountBase = resolveBaseUrlOption(options);
+    const context = await loadOpenPondAccountContext(account, accountBase);
+    if ((account || accountBase) && (!context.account || !context.token || !account))
+      throw new Error("Select a signed-in account with --account for the requested API origin.");
+    const matchingToken = context.account && new URL(context.apiBaseUrl).origin === new URL(baseUrl).origin
+      ? context.token : null;
+    if ((account || accountBase) && !matchingToken)
+      throw new Error("The API URL must match the selected account's API origin.");
+    let apiKey = account ? matchingToken : process.env.OPENPOND_API_KEY?.trim() || matchingToken;
+    if (!apiKey) {
+      if (context.account) throw new Error("Select an account for the requested API origin or supply an API key for that origin.");
+      const config = await loadConfig();
+      apiKey = await ensureApiKey(config, resolveBaseUrl(config));
+    }
+    if (isDatasetVersionAction(action)) {
+      const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey });
+      console.log(JSON.stringify(await runDatasetVersionCommand(client, action, id, options), null, 2));
+      return;
+    }
+    const client = new OpenPondDatasetImportClient({
+      teamId, baseUrl, fetch: hostedCliFetch, apiKey,
+    });
+    console.log(JSON.stringify(await runDatasetTransferCommand(client, action, id, options), null, 2));
+    return;
   }
   if (!teamId || !baseUrl || !action || rest.length > 2 || !["upload", "save", "read", "list", "validate", "publish"].includes(action))
     throw new Error("usage: datasets <upload|save|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>]");

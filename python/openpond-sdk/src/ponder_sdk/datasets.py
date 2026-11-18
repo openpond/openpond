@@ -4,8 +4,10 @@ from typing import Union, cast
 from . import inputs, models
 from .wire import JsonValue
 from .resources import Resource, AsyncResource, LearningPage
+from .dataset_workspace_rows import DatasetRows, AsyncDatasetRows
+from .dataset_workspace_versions import DatasetVersions, AsyncDatasetVersions
 
-class Datasets(Resource):
+class Datasets(DatasetRows, DatasetVersions, Resource):
     def list(self, input: inputs.DatasetWorkspaceListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.DatasetWorkspaceList:
         """GET /v1/dataset-workspaces. Read/reconcile; no mutation."""
         return cast('models.DatasetWorkspaceList', self._execute('OpenPondDatasetWorkspaceClient.list', {}, input, query, expected))
@@ -46,7 +48,7 @@ class Datasets(Resource):
         """POST /v1/dataset-workspaces/{id}/tasks. Explicit operation; never automatically replayed."""
         return cast('models.DatasetTaskAppendReceipt', self._execute('OpenPondDatasetWorkspaceClient.add_task', {'id': id}, input, query, expected))
 
-class AsyncDatasets(AsyncResource):
+class AsyncDatasets(AsyncDatasetRows, AsyncDatasetVersions, AsyncResource):
     async def list(self, input: inputs.DatasetWorkspaceListQuery | None = None, *, query: dict[str, JsonValue] | None = None, expected: models.ModelProjectImmutableRef | None = None) -> models.DatasetWorkspaceList:
         """GET /v1/dataset-workspaces. Read/reconcile; no mutation."""
         return cast('models.DatasetWorkspaceList', await self._execute('OpenPondDatasetWorkspaceClient.list', {}, input, query, expected))
