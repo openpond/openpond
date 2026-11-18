@@ -13,6 +13,7 @@ import {
   type DatasetRowPage,
   type DatasetRowPageRequest,
 } from "@openpond/contracts";
+import { contentHash } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 
 const MAX_WORKER_OUTPUT_BYTES = 12 * 1024 * 1024;
@@ -147,6 +148,7 @@ export function createDatasetArtifactService(deps: {
 
   async function project(input: {
     tasksetId: string;
+    expectedArtifactHash: string;
     split: DatasetProjectionResult["split"];
     mode: DatasetProjectionResult["mode"];
     limit: number;
@@ -167,36 +169,53 @@ export function createDatasetArtifactService(deps: {
     }
     const entry = await deps.store.getDatasetArtifactForTaskset(input.tasksetId);
     if (!entry) throw new Error("Dataset artifact not found.");
-    const manifestPath = safeArtifactPath(
-      entry.storageRoot,
-      entry.relativeManifestPath,
-    );
-    await access(manifestPath);
+    const { contentHash: artifactHash, ...manifestBody } = entry.manifest;
+    if (
+      artifactHash !== input.expectedArtifactHash
+      || contentHash(manifestBody) !== artifactHash
+      || entry.manifest.tasksetId !== input.tasksetId
+    ) {
+      throw new Error("Training Plan references a different Dataset artifact.");
+    }
     const outputPath = path.resolve(input.outputPath);
-    const output = await runDatasetWorker(deps.workerProjectDir, [
-      "project",
-      "--manifest",
-      manifestPath,
-      "--root",
-      entry.storageRoot,
-      "--output",
-      outputPath,
-      "--split",
-      input.split,
-      "--mode",
-      input.mode,
-      "--limit",
-      String(input.limit),
-      "--seed",
-      String(input.seed),
-      "--selection-strategy",
-      input.selectionStrategy ?? "stable_hash_top_n",
-      ...(input.approvedSourceIds.length
-        ? ["--approved-sources", input.approvedSourceIds.join(",")]
-        : []),
-    ]);
+    const selectionStrategy = input.selectionStrategy ?? "stable_hash_top_n";
+    const output = await runDatasetWorker(
+      deps.workerProjectDir,
+      [
+        "project",
+        "--manifest",
+        "-",
+        "--root",
+        entry.storageRoot,
+        "--output",
+        outputPath,
+        "--split",
+        input.split,
+        "--mode",
+        input.mode,
+        "--limit",
+        String(input.limit),
+        "--seed",
+        String(input.seed),
+        "--selection-strategy",
+        selectionStrategy,
+        "--approved-sources-json",
+        JSON.stringify(input.approvedSourceIds),
+      ],
+      JSON.stringify(entry.manifest),
+    );
     const parsed = JSON.parse(output) as Record<string, unknown>;
     const result = parseProjectionResult(parsed, outputPath);
+    if (
+      result.split !== input.split
+      || result.mode !== input.mode
+      || result.selectionSeed !== input.seed
+      || result.selectionStrategy !== selectionStrategy
+      || result.eligibleRows < 1
+      || result.exampleCount !== Math.min(input.limit, result.eligibleRows)
+    ) {
+      throw new Error("Dataset projection differs from the requested training selection.");
+    }
     await access(outputPath);
     return result;
   }
@@ -345,6 +364,7 @@ function decodeCursor(
 async function runDatasetWorker(
   projectDir: string,
   args: string[],
+  input?: string,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -357,7 +377,7 @@ async function runDatasetWorker(
           PYTHONUNBUFFERED: "1",
           HF_HUB_DISABLE_TELEMETRY: "1",
         },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe"],
       },
     );
     const stdout: Buffer[] = [];
@@ -375,6 +395,13 @@ async function runDatasetWorker(
     child.stdout.on("data", (chunk: Buffer) => append(stdout, chunk));
     child.stderr.on("data", (chunk: Buffer) => append(stderr, chunk));
     child.once("error", reject);
+    child.stdin.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EPIPE") {
+        child.kill();
+        reject(error);
+      }
+    });
+    child.stdin.end(input, "utf8");
     child.once("close", (code) => {
       if (code !== 0) {
         reject(

@@ -4,7 +4,6 @@ import {
   copyFile,
   mkdir,
   readFile,
-  stat,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -230,12 +229,14 @@ async function fileIdentity(
   filePath: string,
 ): Promise<{ contentHash: string; sizeBytes: number }> {
   const digest = createHash("sha256");
+  let sizeBytes = 0;
   for await (const chunk of createReadStream(filePath)) {
     digest.update(chunk);
+    sizeBytes += chunk.byteLength;
   }
   return {
     contentHash: digest.digest("hex"),
-    sizeBytes: (await stat(filePath)).size,
+    sizeBytes,
   };
 }
 
@@ -249,9 +250,9 @@ export async function validateTrainingBundle(directory: string): Promise<{ valid
   for (const file of manifest.files) {
     if (file.path === "manifest.json") continue;
     try {
-      const bytes = await readFile(path.join(directory, file.path));
-      if (sha256(bytes) !== file.sha256) issues.push(`${file.path}: hash mismatch`);
-      if (bytes.byteLength !== file.sizeBytes) issues.push(`${file.path}: size mismatch`);
+      const identity = await fileIdentity(path.join(directory, file.path));
+      if (identity.contentHash !== file.sha256) issues.push(`${file.path}: hash mismatch`);
+      if (identity.sizeBytes !== file.sizeBytes) issues.push(`${file.path}: size mismatch`);
     } catch { issues.push(`${file.path}: missing`); }
   }
   if (manifest.containsRawChats || manifest.containsSecrets || manifest.containsHiddenGraderAssets) issues.push("Bundle privacy flags are unsafe.");
