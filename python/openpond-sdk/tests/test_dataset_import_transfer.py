@@ -67,6 +67,10 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
     sent = []
     completions = []
     groups = [{"kind": "sources", "fileIds": ["file-1"]}]
+    staged = {"importId": "import-1", "materializationId": "prepare-1",
+              "mappingRevision": 1, "mappingHash": "b" * 64, "state": "queued",
+              "acceptedRows": 0, "rejectedRows": 0, "shardCount": 0,
+              "splitCounts": None, "indexHash": None, "failureCode": None}
 
     def put(handler):
         assert not handler.headers.get("Authorization")
@@ -124,6 +128,17 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                               "projection": {"state": "source"}}],
                     "nextCursor": None,
                 })
+            elif url.path.endswith("/materializations"):
+                assert handler.command == "POST"
+                assert json.loads(request_body(handler)) == {
+                    "operationId": "prepare-sample", "mappingRevision": 1,
+                    "mappingHash": "b" * 64, "allowRejectedRows": False,
+                }
+                json_response(handler, staged)
+            elif url.path.endswith("/materializations/prepare-1"):
+                json_response(handler, {**staged, "state": "ready",
+                    "splitCounts": {"train": 0, "validation": 0, "test": 0, "frozen_eval": 0},
+                    "indexHash": "c" * 64, "shards": [], "nextCursor": None})
             else:
                 json_response(handler, {**file, "parts": [
                     {"partNumber": number, "sizeBytes": 3, "etag": tag}
@@ -145,6 +160,11 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                     )
                     assert await client.dataset_imports.mapping("import-1") == mapping
                     preview = await client.dataset_imports.preview(*preview_args, revision=1, after="1", mapping_revision=mapping["revision"])
+                    job = await client.dataset_imports.materialize(
+                        "import-1", operation_id="prepare-sample",
+                        mapping_revision=mapping["revision"], mapping_hash=mapping["mappingHash"],
+                    )
+                    assert (await client.dataset_imports.materialization("import-1", job["materializationId"]))["state"] == "ready"
                     return submitted, preview
 
             if asynchronous:
@@ -160,6 +180,11 @@ def test_native_resume_and_preview(tmp_path, asynchronous):
                     )
                     assert client.dataset_imports.mapping("import-1") == mapping
                     page = client.dataset_imports.preview(*preview_args, revision=1, after="1", mapping_revision=mapping["revision"])
+                    job = client.dataset_imports.materialize(
+                        "import-1", operation_id="prepare-sample",
+                        mapping_revision=mapping["revision"], mapping_hash=mapping["mappingHash"],
+                    )
+                    assert client.dataset_imports.materialization("import-1", job["materializationId"])["state"] == "ready"
 
     assert queued["state"] == "queued"
     assert page["totalRows"] == 3

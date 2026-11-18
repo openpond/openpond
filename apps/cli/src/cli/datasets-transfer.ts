@@ -4,7 +4,10 @@ import { basename } from "node:path";
 import { OpenPondDatasetImportClient, type DatasetImportSource } from "openpond-sdk/dataset-workspaces";
 import { optionString } from "./common";
 
-export const DATASET_TRANSFER_ACTIONS = ["stage-file", "upload-status", "upload-preview", "upload-mapping", "cancel-upload", "storage"] as const;
+export const DATASET_TRANSFER_ACTIONS = [
+  "stage-file", "upload-status", "upload-preview", "upload-mapping",
+  "upload-materialize", "upload-materialization", "cancel-upload", "storage",
+] as const;
 type Action = (typeof DATASET_TRANSFER_ACTIONS)[number];
 
 export function isDatasetTransferAction(value: string | undefined): value is Action {
@@ -29,6 +32,12 @@ async function fileSource(path: string): Promise<DatasetImportSource> {
   return { sizeBytes: file.size, sha256: digest.digest("hex"), read: (start, end) => file.slice(start, end) };
 }
 
+async function readRequest(path: string, maximumBytes: number) {
+  const file = await openAsBlob(path);
+  if (file.size > maximumBytes) throw new Error("The dataset request exceeds its permitted size.");
+  return JSON.parse(await file.text());
+}
+
 export async function runDatasetTransferCommand(
   client: OpenPondDatasetImportClient,
   action: Action,
@@ -44,9 +53,21 @@ export async function runDatasetTransferCommand(
   if (action === "upload-mapping") {
     const path = optionString(options, "inputFile");
     if (!path) return client.mapping(pathOrImportId);
-    const file = await openAsBlob(path);
-    if (file.size > 128 * 1024) throw new Error("Dataset mapping requests must be at most 128 KiB.");
-    return client.saveMapping(pathOrImportId, JSON.parse(await file.text()));
+    return client.saveMapping(pathOrImportId, await readRequest(path, 128 * 1024));
+  }
+  if (action === "upload-materialize") {
+    const path = optionString(options, "inputFile");
+    if (!path) throw new Error("Provide --input-file containing the pinned materialization request.");
+    return client.materialize(pathOrImportId, await readRequest(path, 4_096));
+  }
+  if (action === "upload-materialization") {
+    const materializationId = optionString(options, "materializationId");
+    if (!materializationId) throw new Error("Provide --materialization-id from the preparation receipt.");
+    const limit = optionString(options, "limit");
+    return client.materialization(pathOrImportId, materializationId, {
+      limit: limit ? Number(limit) : undefined,
+      after: optionString(options, "cursor") || undefined,
+    });
   }
   if (action === "upload-preview") {
     const fileId = optionString(options, "fileId");

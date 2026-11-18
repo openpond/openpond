@@ -13,6 +13,10 @@ from typing_extensions import NotRequired
 from .dataset_import_mapping import (
     DatasetImportMappingReceipt, MappingGroup, MappingProjection, mapping_receipt,
 )
+from .dataset_import_materialization import (
+    MaterializationPage, MaterializationReceipt, materialization_page,
+    materialization_receipt, page_query, preparation_input,
+)
 from .dataset_transfer_parts import (
     FileSource, UploadedParts, byte_count, payload, signed_part, transfer_etag,
 )
@@ -254,6 +258,19 @@ class DatasetImports:
         result = self._request("PUT", import_path(import_id) + "/mapping", body)
         return mapping_receipt(result, import_id, expected_revision=expected_revision, groups=groups)
 
+    def materialize(self, import_id: str, *, operation_id: str, mapping_revision: int, mapping_hash: str, allow_rejected_rows: bool = False) -> MaterializationReceipt:
+        body = preparation_input(identifier(operation_id), mapping_revision, mapping_hash, allow_rejected_rows)
+        receipt = materialization_receipt(self._request("POST", import_path(import_id) + "/materializations", body), import_id)
+        identifier(receipt["materializationId"])
+        if receipt["mappingRevision"] != mapping_revision or receipt["mappingHash"] != mapping_hash:
+            raise ProtocolError("dataset_materialization_response_invalid")
+        return receipt
+
+    def materialization(self, import_id: str, materialization_id: str, *, after: str | None = None, limit: int = 20) -> MaterializationPage:
+        identity = quote(identifier(materialization_id), safe="")
+        path = f"{import_path(import_id)}/materializations/{identity}?{urlencode(page_query(after, limit))}"
+        return materialization_page(self._request("GET", path), import_id, materialization_id, after, limit)
+
     def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20, mapping_revision: int | None = None) -> DatasetImportPreview:
         path = preview_path(import_id, file_id, revision, after, limit, mapping_revision)
         return preview_receipt(self._request("GET", path), import_id, file_id, revision, after, limit, mapping_revision)
@@ -316,6 +333,19 @@ class AsyncDatasetImports:
         body = mapping_request(operation_id, expected_revision, groups)
         result = await self._request("PUT", import_path(import_id) + "/mapping", body)
         return mapping_receipt(result, import_id, expected_revision=expected_revision, groups=groups)
+
+    async def materialize(self, import_id: str, *, operation_id: str, mapping_revision: int, mapping_hash: str, allow_rejected_rows: bool = False) -> MaterializationReceipt:
+        body = preparation_input(identifier(operation_id), mapping_revision, mapping_hash, allow_rejected_rows)
+        receipt = materialization_receipt(await self._request("POST", import_path(import_id) + "/materializations", body), import_id)
+        identifier(receipt["materializationId"])
+        if receipt["mappingRevision"] != mapping_revision or receipt["mappingHash"] != mapping_hash:
+            raise ProtocolError("dataset_materialization_response_invalid")
+        return receipt
+
+    async def materialization(self, import_id: str, materialization_id: str, *, after: str | None = None, limit: int = 20) -> MaterializationPage:
+        identity = quote(identifier(materialization_id), safe="")
+        path = f"{import_path(import_id)}/materializations/{identity}?{urlencode(page_query(after, limit))}"
+        return materialization_page(await self._request("GET", path), import_id, materialization_id, after, limit)
 
     async def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20, mapping_revision: int | None = None) -> DatasetImportPreview:
         path = preview_path(import_id, file_id, revision, after, limit, mapping_revision)

@@ -140,6 +140,11 @@ the first mapping), and file groups to assign fields or choose source-only
 retention. Pass the saved revision as `mapping_revision` to `preview` to inspect
 the proposed task fields before finishing an import.
 
+`materialize` prepares the selected tasks as bounded Parquet shards. Pass the
+saved mapping hash and revision with a stable operation ID. Read the job and
+page its ready shard references with `materialization`. Counts and the index
+hash identify the prepared artifacts for a dataset draft.
+
 ### Learning and training
 
 Learning methods accept the existing typed command/read envelopes, including

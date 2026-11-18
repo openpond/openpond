@@ -91,6 +91,8 @@ In TypeScript, import `OpenPondDatasetImportClient` from `openpond-sdk/dataset-w
 
 Read the current mapping with `upload-mapping`. Save a mapping with `upload-mapping --input-file mapping.json` or the TypeScript client's `saveMapping`. The request carries an `operationId`, the `expectedRevision` (zero for the first mapping), and groups of file IDs. A task group specifies input paths and a split. It can also specify reference, context, and family paths. Path arrays preserve literal field names that contain dots. A source-only group retains files as source material. Pass the saved mapping revision via `upload-preview --mapping-revision` to read each sampled row's projection.
 
+Prepare task shards with `upload-materialize --input-file prepare.json`. Pass the saved `mappingRevision` and `mappingHash` with a stable `operationId`. Set `allowRejectedRows` only after reviewing the exclusions. Read progress and page ready shard references with `upload-materialization --materialization-id <id>`. The ready receipt identifies the prepared artifacts for a dataset draft.
+
 ## Starting a reviewed hosted preparation
 
 `openpond training hosted-start` accepts an existing preparation receipt and an optional signed estimate review:

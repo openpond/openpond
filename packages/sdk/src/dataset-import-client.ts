@@ -3,6 +3,13 @@ import { contentHash } from "@openpond/harness";
 import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { readBoundedJsonResponse } from "./protocol.js";
 import {
+  BeginDatasetMaterializationSchema,
+  DatasetMaterializationPageQuerySchema,
+  DatasetMaterializationPageSchema,
+  DatasetMaterializationSchema,
+  type DatasetMaterialization,
+} from "./dataset-import-materialization.js";
+import {
   BeginDatasetImportSchema, CancelDatasetImportSchema, CompleteDatasetImportFileSchema,
   DatasetImportFilePartPageSchema, DatasetImportFileSchema, DatasetImportPartRequestSchema,
   DatasetImportPartUrlsSchema, DatasetImportSchema, DatasetStorageSchema,
@@ -19,6 +26,8 @@ const knownError = z.enum([
   "dataset_object_hash_mismatch", "dataset_object_size_mismatch", "dataset_upload_parts_changed",
   "dataset_storage_transfer_failed", "dataset_import_request_failed",
   "dataset_mapping_revision_limit", "dataset_mapping_source_mismatch",
+  "dataset_inspection_pending", "dataset_inspection_rejected_rows",
+  "dataset_materialization_mapping_superseded", "dataset_materialization_family_split_conflict",
 ]);
 
 export class DatasetImportRequestError extends Error {
@@ -126,6 +135,44 @@ export class OpenPondDatasetImportClient {
       contentHash({ version: "openpond.datasetImportMapping.v1", groups: receipt.groups }))
       throw new Error("Dataset mapping response identity or hash mismatch.");
     return receipt;
+  }
+
+  /** Prepare verified shards for the pinned mapping. A ready receipt identifies
+   * the staged artifacts for the subsequent dataset draft operation. */
+  async materialize(id: string, input: z.input<typeof BeginDatasetMaterializationSchema>, signal?: AbortSignal) {
+    const request = BeginDatasetMaterializationSchema.parse(input);
+    const receipt = await this.request(`${this.path(id)}/materializations`, DatasetMaterializationSchema, request, signal);
+    if (receipt.importId !== id || receipt.mappingRevision !== request.mappingRevision ||
+        receipt.mappingHash !== request.mappingHash)
+      throw new Error("Dataset materialization response identity mismatch.");
+    this.assertMaterializationCounts(receipt);
+    return receipt;
+  }
+
+  async materialization(id: string, materializationId: string, input: z.input<typeof DatasetMaterializationPageQuerySchema> = {}, signal?: AbortSignal) {
+    const query = DatasetMaterializationPageQuerySchema.parse(input);
+    const params = new URLSearchParams({ limit: String(query.limit) });
+    if (query.after) params.set("after", query.after);
+    const page = await this.request(
+      `${this.path(id)}/materializations/${this.pathSegment(materializationId)}?${params}`,
+      DatasetMaterializationPageSchema, undefined, signal,
+    );
+    this.assertMaterializationCounts(page);
+    const after = query.after ? Number(query.after) : 0;
+    if (page.importId !== id || page.materializationId !== materializationId ||
+        page.shards.length > query.limit ||
+        (page.state !== "ready" && (page.shards.length || page.nextCursor)) ||
+        page.shards.some((shard, index) => shard.ordinal !== after + index + 1 || shard.ordinal > page.shardCount) ||
+        (page.nextCursor !== null && page.nextCursor !== String(page.shards.at(-1)?.ordinal)))
+      throw new Error("Dataset shard page identity, order or bounds mismatch.");
+    return page;
+  }
+
+  private assertMaterializationCounts(receipt: DatasetMaterialization) {
+    const hasResult = receipt.indexHash !== null && receipt.splitCounts !== null;
+    if ((receipt.state === "ready") !== hasResult ||
+        (receipt.splitCounts && Object.values(receipt.splitCounts).reduce((sum, value) => sum + value, 0) !== receipt.acceptedRows))
+      throw new Error("Dataset materialization counts mismatch.");
   }
 
   /** Read a bounded source sample and the verification-stage scan counts. */

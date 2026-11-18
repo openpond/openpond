@@ -106,6 +106,11 @@ test("retains the inspection revision across bounded preview pages", async () =>
   };
   const mappingHash = contentHash({ version: "openpond.datasetImportMapping.v1", groups: mapping.groups });
   const mappingReceipt = { importId: "import-1", revision: 1, mappingHash, groups: mapping.groups };
+  const prepared = {
+    importId: "import-1", materializationId: "prepare-1", mappingRevision: 1, mappingHash,
+    state: "queued", acceptedRows: 0, rejectedRows: 0, shardCount: 0,
+    splitCounts: null, indexHash: null, failureCode: null,
+  };
   const row = (ordinal: number) => ({
     ordinal,
     id: createHash("sha256").update(String(ordinal)).digest("hex"),
@@ -118,6 +123,22 @@ test("retains the inspection revision across bounded preview pages", async () =>
       if (request.method === "PUT") expect(JSON.parse((await body(request)).toString())).toEqual(mapping);
       else expect(request.method).toBe("GET");
       reply(mappingReceipt);
+      return;
+    }
+    if (url.pathname === "/v1/dataset-imports/import-1/materializations") {
+      expect(request.method).toBe("POST");
+      expect(JSON.parse((await body(request)).toString())).toEqual({
+        operationId: "prepare-fixture", mappingRevision: 1, mappingHash, allowRejectedRows: false,
+      });
+      reply(prepared);
+      return;
+    }
+    if (url.pathname === "/v1/dataset-imports/import-1/materializations/prepare-1") {
+      expect(request.method).toBe("GET");
+      reply({
+        ...prepared, state: "ready", splitCounts: { train: 0, validation: 0, test: 0, frozen_eval: 0 },
+        indexHash: contentHash("fixture-index"), shards: [], nextCursor: null,
+      });
       return;
     }
     expect(request.method).toBe("GET");
@@ -153,6 +174,13 @@ test("retains the inspection revision across bounded preview pages", async () =>
     expect(last.totalRows).toBe(3);
     expect(last.rows[0]?.values).toEqual({ input: { text: "3" } });
     expect(last.rows[0]?.projection).toEqual({ state: "source" });
+    const job = await client.materialize("import-1", {
+      operationId: "prepare-fixture", mappingRevision: saved.revision, mappingHash: saved.mappingHash,
+    });
+    expect(job.state).toBe("queued");
+    expect(await client.materialization("import-1", job.materializationId)).toMatchObject({
+      state: "ready", mappingHash, shardCount: 0, shards: [],
+    });
   } finally {
     await api.close();
   }
