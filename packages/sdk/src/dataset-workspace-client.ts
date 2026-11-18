@@ -104,6 +104,7 @@ export class OpenPondDatasetWorkspaceClient {
     if (query.revision !== undefined) params.set("revision", String(query.revision));
     if (query.cursor) params.set("cursor", query.cursor);
     if (query.splits.length) params.set("split", query.splits.join(","));
+    if (query.fileId) params.set("fileId", query.fileId);
     const page = DatasetWorkspaceRowsSchema.parse(
       await this.request(`${path}?${params}`, "GET", undefined, signal, 512 * 1024),
     );
@@ -112,7 +113,8 @@ export class OpenPondDatasetWorkspaceClient {
         page.rows.length > Math.min(query.limit, page.total) ||
         (page.rows.length === 0) !== (page.total === 0) ||
         (page.nextCursor !== null && (page.nextCursor === query.cursor || page.rows.length === page.total)) ||
-        page.rows.some(row => query.splits.length > 0 && !query.splits.includes(row.split)) ||
+        page.rows.some(row => (query.splits.length > 0 && !query.splits.includes(row.split)) ||
+          (query.fileId !== undefined && row.source.fileId !== query.fileId)) ||
         new Set(page.rows.map(row => row.id)).size !== page.rows.length)
       throw new Error("Dataset row page scope or contents mismatch.");
     return page;

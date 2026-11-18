@@ -42,7 +42,7 @@ def _cursor(value: object) -> bool:
 
 
 def _path(dataset_id: str, limit: int, revision: int | None, cursor: str | None, splits: Sequence[Split],
-          version: bool = False) -> str:
+          file_id: str | None, *, version: bool = False) -> str:
     if (not 1 <= byte_count(limit) <= 100 or (revision is not None and not byte_count(revision))
         or (cursor is not None and not _cursor(cursor)) or len(splits) > 4
         or any(not isinstance(split, str) or split not in SPLITS for split in splits)):
@@ -54,13 +54,15 @@ def _path(dataset_id: str, limit: int, revision: int | None, cursor: str | None,
         query["cursor"] = cursor
     if splits:
         query["split"] = ",".join(splits)
+    if file_id is not None:
+        query["fileId"] = identifier(file_id)
     workspace = f"/v1/dataset-workspaces/{quote(identifier(dataset_id), safe='')}"
     route = f"{workspace}/versions/{revision}/rows" if version else f"{workspace}/rows"
     return f"{route}?{urlencode(query)}"
 
 
 def _page(value: object, team_id: str, dataset_id: str, limit: int, revision: int | None,
-          cursor: str | None, splits: Sequence[Split]) -> DatasetWorkspaceRowPage:
+          cursor: str | None, splits: Sequence[Split], file_id: str | None) -> DatasetWorkspaceRowPage:
     page = payload(value)
     page_revision, total = byte_count(page.get("revision")), byte_count(page.get("total"))
     rows, next_cursor = page.get("rows"), page.get("nextCursor")
@@ -79,7 +81,8 @@ def _page(value: object, team_id: str, dataset_id: str, limit: int, revision: in
             or not isinstance(task_id, str) or not is_digest(task_id) or task_id in identities
             or not isinstance(split, str) or split not in SPLITS or (splits and split not in splits)
             or not isinstance(row.get("input"), dict) or not isinstance(row.get("policyVisibleContext"), dict)
-            or set(source) != {"fileId", "ordinal"} or not byte_count(source.get("ordinal"))):
+            or set(source) != {"fileId", "ordinal"} or not byte_count(source.get("ordinal"))
+            or (file_id is not None and source.get("fileId") != file_id)):
             raise ProtocolError("dataset_rows_response_invalid")
         identifier(source.get("fileId"))
         identities.add(task_id)
@@ -91,20 +94,20 @@ class DatasetRows:
     team_id: str
 
     def rows(self, dataset_id: str, *, revision: int | None = None, cursor: str | None = None,
-             limit: int = 20, splits: Sequence[Split] = ()) -> DatasetWorkspaceRowPage:
-        """Read a saved import page with its revision and split selection."""
-        path = _path(dataset_id, limit, revision, cursor, splits)
+             limit: int = 20, splits: Sequence[Split] = (), file_id: str | None = None) -> DatasetWorkspaceRowPage:
+        """Read a saved import page with optional split and source-file filters."""
+        path = _path(dataset_id, limit, revision, cursor, splits, file_id)
         value = self._transport.request("GET", path, media="application/json", response_limit=512 * 1024)
-        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits)
+        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits, file_id)
 
     def version_rows(self, dataset_id: str, revision: int, *, cursor: str | None = None,
-                     limit: int = 20, splits: Sequence[Split] = ()) -> DatasetWorkspaceRowPage:
+                     limit: int = 20, splits: Sequence[Split] = (), file_id: str | None = None) -> DatasetWorkspaceRowPage:
         """Read policy-visible rows from an immutable published revision."""
         if not byte_count(revision):
             raise ProtocolError("dataset_rows_query_invalid")
-        path = _path(dataset_id, limit, revision, cursor, splits, version=True)
+        path = _path(dataset_id, limit, revision, cursor, splits, file_id, version=True)
         value = self._transport.request("GET", path, media="application/json", response_limit=512 * 1024)
-        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits)
+        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits, file_id)
 
 
 class AsyncDatasetRows:
@@ -112,17 +115,17 @@ class AsyncDatasetRows:
     team_id: str
 
     async def rows(self, dataset_id: str, *, revision: int | None = None, cursor: str | None = None,
-                   limit: int = 20, splits: Sequence[Split] = ()) -> DatasetWorkspaceRowPage:
-        """Read a saved import page with its revision and split selection."""
-        path = _path(dataset_id, limit, revision, cursor, splits)
+                   limit: int = 20, splits: Sequence[Split] = (), file_id: str | None = None) -> DatasetWorkspaceRowPage:
+        """Read a saved import page with optional split and source-file filters."""
+        path = _path(dataset_id, limit, revision, cursor, splits, file_id)
         value = await self._transport.request("GET", path, media="application/json", response_limit=512 * 1024)
-        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits)
+        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits, file_id)
 
     async def version_rows(self, dataset_id: str, revision: int, *, cursor: str | None = None,
-                           limit: int = 20, splits: Sequence[Split] = ()) -> DatasetWorkspaceRowPage:
+                           limit: int = 20, splits: Sequence[Split] = (), file_id: str | None = None) -> DatasetWorkspaceRowPage:
         """Read policy-visible rows from an immutable published revision."""
         if not byte_count(revision):
             raise ProtocolError("dataset_rows_query_invalid")
-        path = _path(dataset_id, limit, revision, cursor, splits, version=True)
+        path = _path(dataset_id, limit, revision, cursor, splits, file_id, version=True)
         value = await self._transport.request("GET", path, media="application/json", response_limit=512 * 1024)
-        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits)
+        return _page(value, self.team_id, dataset_id, limit, revision, cursor, splits, file_id)

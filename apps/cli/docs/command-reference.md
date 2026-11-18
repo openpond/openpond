@@ -103,7 +103,7 @@ Usage:
   openpond datasets <upload|save|read|list|validate|publish|preparation> [folder|id] --team <id> --api-base-url <origin> [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>] [--dataset-id <id>] [--input-file <path>]
   openpond datasets <stage-file|upload-status|cancel-upload|storage> [file|import-id] --team <id> --api-base-url <origin> [--operation-id <id>]
   openpond datasets stage-folder <folder> --team <id> --api-base-url <origin> --operation-id <id>
-  openpond datasets rows <dataset-id> --team <id> --api-base-url <origin> [--revision <n> | --version-revision <n>] [--split <name[,name]>] [--cursor <token>] [--limit <n>]
+  openpond datasets rows <dataset-id> --team <id> --api-base-url <origin> [--revision <n> | --version-revision <n>] [--split <name[,name]>] [--file-id <id>] [--cursor <token>] [--limit <n>]
   openpond datasets validate-version <dataset-id> --expected-revision <n> --team <id> --api-base-url <origin>
   openpond datasets create-version <dataset-id> --expected-revision <n> --operation-id <id> --workspace-hash <sha> --index-hash <sha> --package-hash <sha> --team <id> --api-base-url <origin>
   openpond datasets version-manifest <dataset-id> --version-revision <n> --team <id> --api-base-url <origin>

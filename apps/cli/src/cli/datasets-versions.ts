@@ -28,11 +28,12 @@ export async function runDatasetVersionCommand(
     const query = DatasetWorkspaceRowsQuerySchema.parse({
       revision: revision ? Number(revision) : undefined,
       splits: split ? split.split(",") : undefined,
+      fileId: optionString(options, "fileId") || undefined,
       cursor: optionString(options, "cursor") || undefined,
       limit: limit ? Number(limit) : undefined,
     });
     if (version) return client.versionRows(id, parsedRevision("versionRevision"), {
-      splits: query.splits, cursor: query.cursor, limit: query.limit,
+      splits: query.splits, fileId: query.fileId, cursor: query.cursor, limit: query.limit,
     });
     return client.rows(id, query);
   }
