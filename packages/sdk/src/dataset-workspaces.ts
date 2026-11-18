@@ -5,6 +5,7 @@ export { DatasetWorkspaceRequestError, type DatasetWorkspaceErrorCode } from "./
 export * from "./dataset-population.js";
 export * from "./dataset-workspace-operations.js";
 export * from "./dataset-workspace-rows.js";
+export * from "./dataset-workspace-sources.js";
 export * from "./dataset-workspace-versions.js";
 export * from "./dataset-preparation-contracts.js";
 export * from "./dataset-preparation-research-contracts.js";
