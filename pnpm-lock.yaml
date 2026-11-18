@@ -686,7 +686,7 @@ importers:
         specifier: '>=7.0.165 <8'
         version: 7.0.165(zod@4.4.3)
       openpond-sdk:
-        specifier: 0.13.3
+        specifier: 0.13.4
         version: link:../sdk
 
   packages/runtime:
