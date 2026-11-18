@@ -91,7 +91,9 @@ In TypeScript, import `OpenPondDatasetImportClient` from `openpond-sdk/dataset-w
 
 Read the current mapping with `upload-mapping`. Save a mapping with `upload-mapping --input-file mapping.json` or the TypeScript client's `saveMapping`. The request carries an `operationId`, the `expectedRevision` (zero for the first mapping), and groups of file IDs. A task group specifies input paths and a split. It can also specify reference, context, and family paths. Path arrays preserve literal field names that contain dots. A source-only group retains files as source material. Pass the saved mapping revision via `upload-preview --mapping-revision` to read each sampled row's projection.
 
-Prepare task shards with `upload-materialize --input-file prepare.json`. Pass the saved `mappingRevision` and `mappingHash` with a stable `operationId`. Set `allowRejectedRows` only after reviewing the exclusions. Read progress and page ready shard references with `upload-materialization --materialization-id <id>`. The ready receipt identifies the prepared artifacts for a dataset draft.
+Prepare task shards with `upload-materialize <import-id> --input-file prepare.json`. Pass the saved `mappingRevision` and `mappingHash` with a stable `operationId`. Set `allowRejectedRows` after reviewing the exclusions. Read progress and page ready shard references with `upload-materialization <import-id> --materialization-id <id>`.
+
+Save the ready selection with `upload-finish <import-id> --input-file finish.json`, `OpenPondDatasetImportClient.finish`, or Python's `client.dataset_imports.finish`. Supply a name, a stable operation ID, and the ready receipt's materialization ID, mapping revision, mapping hash, and index hash. The receipt returns the saved dataset ID, draft revision, and exact row counts. Retry with the same request to recover that receipt.
 
 ## Starting a reviewed hosted preparation
 

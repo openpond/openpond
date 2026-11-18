@@ -40,7 +40,7 @@ export const DatasetImportFileSchema = source.extend({
     context.addIssue({ code: "custom", message: "Dataset source object identity mismatch." });
 });
 export const DatasetImportSchema = z.object({
-  importId: id, state: z.enum(["uploading", "uploaded", "cancelling", "cancelled"]),
+  importId: id, state: z.enum(["uploading", "uploaded", "attached", "cancelling", "cancelled"]),
   reservedBytes: bytes, expiresAt: z.iso.datetime(),
   files: z.array(DatasetImportFileSchema).min(1).max(100),
 }).strict();

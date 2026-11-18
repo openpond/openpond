@@ -14,7 +14,8 @@ from .dataset_import_mapping import (
     DatasetImportMappingReceipt, MappingGroup, MappingProjection, mapping_receipt,
 )
 from .dataset_import_materialization import (
-    MaterializationPage, MaterializationReceipt, materialization_page,
+    DatasetImportDraftReceipt, MaterializationPage, MaterializationReceipt,
+    finish_input, finished_draft, materialization_page,
     materialization_receipt, page_query, preparation_input,
 )
 from .dataset_transfer_parts import (
@@ -53,7 +54,7 @@ class DatasetImportFile(DatasetSourceDeclaration):
 
 class DatasetImportReceipt(TypedDict):
     importId: str
-    state: Literal["uploading", "uploaded", "cancelling", "cancelled"]
+    state: Literal["uploading", "uploaded", "attached", "cancelling", "cancelled"]
     reservedBytes: int
     expiresAt: str
     files: list[DatasetImportFile]
@@ -271,6 +272,14 @@ class DatasetImports:
         path = f"{import_path(import_id)}/materializations/{identity}?{urlencode(page_query(after, limit))}"
         return materialization_page(self._request("GET", path), import_id, materialization_id, after, limit)
 
+    def finish(self, import_id: str, *, operation_id: str, name: str, materialization_id: str,
+               mapping_revision: int, mapping_hash: str, index_hash: str,
+               owner_scope: Literal["personal", "workspace"] = "workspace") -> DatasetImportDraftReceipt:
+        """Save the verified selection as a draft. Reuse the request to retry."""
+        request = finish_input(identifier(operation_id), name, identifier(materialization_id),
+                               mapping_revision, mapping_hash, index_hash, owner_scope)
+        return finished_draft(self._request("POST", import_path(import_id) + "/finish", request), import_id, request)
+
     def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20, mapping_revision: int | None = None) -> DatasetImportPreview:
         path = preview_path(import_id, file_id, revision, after, limit, mapping_revision)
         return preview_receipt(self._request("GET", path), import_id, file_id, revision, after, limit, mapping_revision)
@@ -346,6 +355,14 @@ class AsyncDatasetImports:
         identity = quote(identifier(materialization_id), safe="")
         path = f"{import_path(import_id)}/materializations/{identity}?{urlencode(page_query(after, limit))}"
         return materialization_page(await self._request("GET", path), import_id, materialization_id, after, limit)
+
+    async def finish(self, import_id: str, *, operation_id: str, name: str, materialization_id: str,
+                     mapping_revision: int, mapping_hash: str, index_hash: str,
+                     owner_scope: Literal["personal", "workspace"] = "workspace") -> DatasetImportDraftReceipt:
+        """Save the verified selection as a draft. Reuse the request to retry."""
+        request = finish_input(identifier(operation_id), name, identifier(materialization_id),
+                               mapping_revision, mapping_hash, index_hash, owner_scope)
+        return finished_draft(await self._request("POST", import_path(import_id) + "/finish", request), import_id, request)
 
     async def preview(self, import_id: str, file_id: str, *, revision: int | None = None, after: str | None = None, limit: int = 20, mapping_revision: int | None = None) -> DatasetImportPreview:
         path = preview_path(import_id, file_id, revision, after, limit, mapping_revision)

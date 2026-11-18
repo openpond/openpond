@@ -41,6 +41,20 @@ class MaterializationPage(MaterializationReceipt):
     nextCursor: str | None
 
 
+class DatasetImportDraftReceipt(TypedDict):
+    importId: str
+    datasetId: str
+    revision: int
+    workspaceHash: str
+    materializationId: str
+    mappingRevision: int
+    mappingHash: str
+    indexHash: str
+    acceptedRows: int
+    rejectedRows: int
+    shardCount: int
+
+
 def is_digest(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value) is not None
 
@@ -50,6 +64,33 @@ def preparation_input(operation_id: str, revision: int, mapping_hash: str, allow
         raise ProtocolError("dataset_materialization_request_invalid")
     return {"operationId": operation_id, "mappingRevision": revision,
             "mappingHash": mapping_hash, "allowRejectedRows": allow_rejected}
+
+
+def finish_input(operation_id: str, name: str, materialization_id: str, revision: int,
+                 mapping_hash: str, index_hash: str, owner_scope: str) -> dict:
+    if (not isinstance(name, str) or re.search(r"[\x00\ud800-\udfff]", name) is not None
+        or not 1 <= len(name.strip().encode("utf-16-le")) // 2 <= 500
+        or not 1 <= byte_count(revision) <= 128 or not is_digest(mapping_hash)
+        or not is_digest(index_hash) or owner_scope not in ("personal", "workspace")):
+        raise ProtocolError("dataset_finish_request_invalid")
+    return {"operationId": operation_id, "name": name.strip(), "materializationId": materialization_id,
+            "mappingRevision": revision, "mappingHash": mapping_hash, "indexHash": index_hash,
+            "ownerScope": owner_scope}
+
+
+def finished_draft(value: object, import_id: str, request: dict) -> DatasetImportDraftReceipt:
+    receipt = payload(value)
+    if (receipt.get("importId") != import_id or not is_digest(receipt.get("workspaceHash")) or
+        byte_count(receipt.get("revision")) == 0 or
+        not isinstance(receipt.get("datasetId"), str) or
+        not re.fullmatch(r"[a-zA-Z0-9._:-]{1,240}", receipt["datasetId"]) or
+        not 1 <= byte_count(receipt.get("mappingRevision")) <= 128 or
+        any(receipt.get(field) != request[field]
+            for field in ("materializationId", "mappingRevision", "mappingHash", "indexHash"))):
+        raise ProtocolError("dataset_finish_response_invalid")
+    for field in ("acceptedRows", "rejectedRows", "shardCount"):
+        byte_count(receipt.get(field))
+    return cast(DatasetImportDraftReceipt, receipt)
 
 
 def materialization_receipt(value: object, import_id: str) -> MaterializationReceipt:

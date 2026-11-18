@@ -6,7 +6,7 @@ import { optionString } from "./common";
 
 export const DATASET_TRANSFER_ACTIONS = [
   "stage-file", "upload-status", "upload-preview", "upload-mapping",
-  "upload-materialize", "upload-materialization", "cancel-upload", "storage",
+  "upload-materialize", "upload-materialization", "upload-finish", "cancel-upload", "storage",
 ] as const;
 type Action = (typeof DATASET_TRANSFER_ACTIONS)[number];
 
@@ -59,6 +59,11 @@ export async function runDatasetTransferCommand(
     const path = optionString(options, "inputFile");
     if (!path) throw new Error("Provide --input-file containing the pinned materialization request.");
     return client.materialize(pathOrImportId, await readRequest(path, 4_096));
+  }
+  if (action === "upload-finish") {
+    const path = optionString(options, "inputFile");
+    if (!path) throw new Error("Provide --input-file containing the pinned finish request.");
+    return client.finish(pathOrImportId, await readRequest(path, 4_096));
   }
   if (action === "upload-materialization") {
     const materializationId = optionString(options, "materializationId");

@@ -4,9 +4,11 @@ import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { readBoundedJsonResponse } from "./protocol.js";
 import {
   BeginDatasetMaterializationSchema,
+  DatasetImportDraftReceiptSchema,
   DatasetMaterializationPageQuerySchema,
   DatasetMaterializationPageSchema,
   DatasetMaterializationSchema,
+  FinishDatasetImportSchema,
   type DatasetMaterialization,
 } from "./dataset-import-materialization.js";
 import {
@@ -28,6 +30,7 @@ const knownError = z.enum([
   "dataset_mapping_revision_limit", "dataset_mapping_source_mismatch",
   "dataset_inspection_pending", "dataset_inspection_rejected_rows",
   "dataset_materialization_mapping_superseded", "dataset_materialization_family_split_conflict",
+  "dataset_import_attached", "dataset_operation_conflict", "dataset_revision_conflict",
 ]);
 
 export class DatasetImportRequestError extends Error {
@@ -166,6 +169,17 @@ export class OpenPondDatasetImportClient {
         (page.nextCursor !== null && page.nextCursor !== String(page.shards.at(-1)?.ordinal)))
       throw new Error("Dataset shard page identity, order or bounds mismatch.");
     return page;
+  }
+
+  /** Save the verified selection as a draft. Reuse the operation ID and pins to retry. */
+  async finish(id: string, input: z.input<typeof FinishDatasetImportSchema>, signal?: AbortSignal) {
+    const request = FinishDatasetImportSchema.parse(input);
+    const receipt = await this.request(`${this.path(id)}/finish`, DatasetImportDraftReceiptSchema, request, signal);
+    if (receipt.importId !== id || receipt.materializationId !== request.materializationId ||
+        receipt.mappingRevision !== request.mappingRevision || receipt.mappingHash !== request.mappingHash ||
+        receipt.indexHash !== request.indexHash)
+      throw new Error("Dataset draft response identity mismatch.");
+    return receipt;
   }
 
   private assertMaterializationCounts(receipt: DatasetMaterialization) {

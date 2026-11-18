@@ -50,6 +50,25 @@ export const DatasetMaterializationPageSchema = DatasetMaterializationSchema.ext
   nextCursor: cursor.nullable(),
 }).strict();
 
+export const FinishDatasetImportSchema = BeginDatasetMaterializationSchema
+  .omit({ allowRejectedRows: true })
+  .extend({
+    name: z.string().trim().min(1).max(500).refine(value => !value.includes("\0") && !/\p{Cs}/u.test(value)),
+    ownerScope: z.enum(["workspace", "personal"]).default("workspace"),
+    materializationId: id,
+    indexHash: hash,
+  }).strict();
+
+export const DatasetImportDraftReceiptSchema = DatasetMaterializationSchema
+  .omit({ state: true, splitCounts: true, failureCode: true })
+  .extend({
+    indexHash: hash,
+    datasetId: id,
+    revision: count.positive(),
+    workspaceHash: hash,
+  }).strict();
+
 export type DatasetMaterialization = z.infer<typeof DatasetMaterializationSchema>;
 export type DatasetMaterializationShard = z.infer<typeof DatasetMaterializationShardSchema>;
 export type DatasetMaterializationPage = z.infer<typeof DatasetMaterializationPageSchema>;
+export type DatasetImportDraftReceipt = z.infer<typeof DatasetImportDraftReceiptSchema>;

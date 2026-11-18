@@ -98,7 +98,7 @@ test("resumes after a lost part acknowledgement without forwarding API credentia
   }
 });
 
-test("retains the inspection revision across bounded preview pages", async () => {
+test("retains the mapping and prepared index through the draft receipt", async () => {
   const mapping = {
     operationId: "mapping-fixture",
     expectedRevision: 0,
@@ -111,6 +111,18 @@ test("retains the inspection revision across bounded preview pages", async () =>
     state: "queued", acceptedRows: 0, rejectedRows: 0, shardCount: 0,
     splitCounts: null, indexHash: null, failureCode: null,
   };
+  const finishRequest = {
+    operationId: "save-fixture", name: "Verified import", ownerScope: "personal" as const,
+    materializationId: prepared.materializationId, mappingRevision: 1, mappingHash,
+    indexHash: contentHash("fixture-index"),
+  };
+  const draft = {
+    importId: prepared.importId, datasetId: "draft-1", revision: 1,
+    workspaceHash: contentHash("fixture-workspace"), materializationId: prepared.materializationId,
+    mappingRevision: 1, mappingHash, indexHash: finishRequest.indexHash,
+    acceptedRows: 0, rejectedRows: 0, shardCount: 0,
+  };
+  let sendStaleDraft = false;
   const row = (ordinal: number) => ({
     ordinal,
     id: createHash("sha256").update(String(ordinal)).digest("hex"),
@@ -137,8 +149,14 @@ test("retains the inspection revision across bounded preview pages", async () =>
       expect(request.method).toBe("GET");
       reply({
         ...prepared, state: "ready", splitCounts: { train: 0, validation: 0, test: 0, frozen_eval: 0 },
-        indexHash: contentHash("fixture-index"), shards: [], nextCursor: null,
+        indexHash: finishRequest.indexHash, shards: [], nextCursor: null,
       });
+      return;
+    }
+    if (url.pathname === "/v1/dataset-imports/import-1/finish") {
+      expect(request.method).toBe("POST");
+      expect(JSON.parse((await body(request)).toString())).toEqual(finishRequest);
+      reply(sendStaleDraft ? { ...draft, indexHash: contentHash("stale-index") } : draft);
       return;
     }
     expect(request.method).toBe("GET");
@@ -181,6 +199,9 @@ test("retains the inspection revision across bounded preview pages", async () =>
     expect(await client.materialization("import-1", job.materializationId)).toMatchObject({
       state: "ready", mappingHash, shardCount: 0, shards: [],
     });
+    expect(await client.finish("import-1", finishRequest)).toEqual(draft);
+    sendStaleDraft = true;
+    await expect(client.finish("import-1", finishRequest)).rejects.toThrow("Dataset draft response identity mismatch");
   } finally {
     await api.close();
   }

@@ -105,6 +105,7 @@ Usage:
   openpond datasets upload-preview <import-id> --file-id <id> --team <id> --api-base-url <origin> [--limit <n>] [--revision <n>] [--cursor <id>] [--mapping-revision <n>]
   openpond datasets upload-mapping <import-id> --team <id> --api-base-url <origin> [--input-file <path>]
   openpond datasets upload-materialize <import-id> --input-file <path> --team <id> --api-base-url <origin>
+  openpond datasets upload-finish <import-id> --input-file <path> --team <id> --api-base-url <origin>
   openpond datasets upload-materialization <import-id> --materialization-id <id> --team <id> --api-base-url <origin> [--cursor <id>] [--limit <n>]
   openpond datasets preparation <grant-create|grant-read|create|read|list|candidates|operation|start|pause|resume|cancel|resolve|release> <dataset-id> [run-or-grant-id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--cursor <id>]
 
