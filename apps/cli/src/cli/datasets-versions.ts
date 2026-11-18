@@ -1,7 +1,8 @@
 import { DatasetWorkspaceRowsQuerySchema, type OpenPondDatasetWorkspaceClient } from "openpond-sdk/dataset-workspaces";
 import { optionString } from "./common";
+import { exportPublishedDatasetRows } from "./dataset-row-export";
 
-const actions = ["rows", "validate-version", "create-version", "version-manifest", "begin-version"] as const;
+const actions = ["rows", "export-rows", "validate-version", "create-version", "version-manifest", "begin-version"] as const;
 type Action = (typeof actions)[number];
 export function isDatasetVersionAction(value: string | undefined): value is Action {
   return actions.some(action => action === value);
@@ -19,6 +20,21 @@ export async function runDatasetVersionCommand(
     if (!Number.isSafeInteger(value) || value < 1) throw new Error("Provide a positive dataset revision.");
     return value;
   };
+  if (action === "export-rows") {
+    const outputFile = optionString(options, "outputFile");
+    if (!outputFile) throw new Error("Provide --output-file for the NDJSON export.");
+    if (optionString(options, "revision") || optionString(options, "cursor") || optionString(options, "limit"))
+      throw new Error("Export requires a published version and reads the complete selection.");
+    const split = optionString(options, "split");
+    const { splits, fileId, limit } = DatasetWorkspaceRowsQuerySchema.parse({
+      splits: split ? split.split(",") : undefined,
+      fileId: optionString(options, "fileId") || undefined,
+      limit: 100,
+    });
+    return exportPublishedDatasetRows(client, {
+      datasetId: id, revision: parsedRevision("versionRevision"), outputFile, query: { splits, fileId, limit },
+    });
+  }
   if (action === "rows") {
     const revision = optionString(options, "revision");
     const version = optionString(options, "versionRevision");
