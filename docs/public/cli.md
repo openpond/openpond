@@ -80,11 +80,14 @@ Use the workspace's configured API origin where resumable dataset uploads are av
 openpond datasets storage --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN"
 openpond datasets stage-file ./examples.jsonl --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN" --operation-id examples-upload-1
 openpond datasets upload-status "$IMPORT_ID" --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN"
+openpond datasets upload-preview "$IMPORT_ID" --file-id "$FILE_ID" --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN" --limit 10
 ```
 
 Repeat `stage-file` with the same file bytes and operation ID after an interruption. Use the returned import ID to check verification status or request cleanup with `cancel-upload` and a stable cancellation operation ID. A verified transfer retains the original file. Creating a dataset version is a separate operation.
 
-In TypeScript, import `OpenPondDatasetImportClient` from `openpond-sdk/dataset-workspaces`. Call `begin` with declared file paths and sizes and pass each returned file ID to `uploadFile` with a seekable source, its SHA-256 and a stable completion operation ID. Call `get` to observe verification after a queued response.
+Inspection starts after each supported file is verified. `upload-preview` returns a bounded sample and separate accepted and rejected counts. For another page, pass the current `revision` as `--revision` and `nextCursor` as `--cursor`. Counts remain provisional until inspection completes.
+
+In TypeScript, import `OpenPondDatasetImportClient` from `openpond-sdk/dataset-workspaces`. Call `begin` with declared file paths and sizes and pass each returned file ID to `uploadFile` with a seekable source, its SHA-256 and a stable completion operation ID. Call `get` to observe verification after a queued response and `preview` to read the source sample and counts.
 
 ## Starting a reviewed hosted preparation
 

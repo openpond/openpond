@@ -11,6 +11,7 @@ const relativePath = z.string().min(1).max(500).refine(path =>
 );
 const source = z.object({ relativePath, sizeBytes: bytes.positive() }).strict();
 const part = z.object({ partNumber, etag }).strict();
+const uploadState = z.enum(["pending", "uploading", "queued", "verified", "failed", "deleted"]);
 
 export const BeginDatasetImportSchema = z.object({
   operationId: id,
@@ -30,7 +31,7 @@ const object = z.object({
 }).strict();
 export const DatasetImportFileSchema = source.extend({
   fileId: id, partSize: bytes.positive(),
-  state: z.enum(["pending", "uploading", "queued", "verified", "failed", "deleted"]),
+  state: uploadState,
   failureCode: id.nullable(), object: object.nullable(),
 }).strict().superRefine((file, context) => {
   if ((file.state === "verified") !== (file.object !== null) ||
@@ -67,6 +68,27 @@ export const DatasetStorageSchema = z.object({
   ]).optional(),
 }).strict();
 
+export const DatasetImportPreviewQuerySchema = z.object({
+  fileId: id,
+  revision: bytes.positive().optional(),
+  after: z.string().regex(/^[1-9]\d{0,15}$/u).refine(cursor => Number.isSafeInteger(Number(cursor))).optional(),
+  limit: z.number().int().min(1).max(64).default(20),
+}).strict().refine(query => query.after === undefined || query.revision !== undefined);
+
+export const DatasetImportPreviewSchema = z.object({
+  importId: id, fileId: id, relativePath, sizeBytes: bytes.positive(), uploadState,
+  revision: bytes.positive().nullable(),
+  state: z.enum(["waiting_for_upload", "queued", "inspecting", "ready", "failed", "unsupported"]),
+  format: z.enum(["csv", "json", "jsonl"]).nullable(),
+  scannedBytes: bytes, acceptedRows: bytes, rejectedRows: bytes, totalRows: bytes.nullable(),
+  provisional: z.boolean(), previewedRows: z.number().int().min(0).max(64), failureCode: id.nullable(),
+  rows: z.array(z.object({
+    id: hash, ordinal: bytes.positive(), values: z.record(z.string(), z.unknown()),
+  }).strict()).max(64),
+  nextCursor: DatasetImportPreviewQuerySchema.shape.after.unwrap().nullable(),
+}).strict();
+
 export type DatasetImport = z.infer<typeof DatasetImportSchema>;
 export type DatasetImportFile = z.infer<typeof DatasetImportFileSchema>;
 export type DatasetImportPart = z.infer<typeof part>;
+export type DatasetImportPreview = z.infer<typeof DatasetImportPreviewSchema>;

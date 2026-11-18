@@ -5,6 +5,7 @@ import {
   BeginDatasetImportSchema, CancelDatasetImportSchema, CompleteDatasetImportFileSchema,
   DatasetImportFilePartPageSchema, DatasetImportFileSchema, DatasetImportPartRequestSchema,
   DatasetImportPartUrlsSchema, DatasetImportSchema, DatasetStorageSchema,
+  DatasetImportPreviewQuerySchema, DatasetImportPreviewSchema,
   type DatasetImportFile, type DatasetImportPart,
 } from "./dataset-import-contracts.js";
 
@@ -103,6 +104,28 @@ export class OpenPondDatasetImportClient {
 
   storage(signal?: AbortSignal) {
     return this.request("/v1/dataset-storage", DatasetStorageSchema, undefined, signal);
+  }
+
+  /** Read a bounded source sample and the verification-stage scan counts. */
+  async preview(id: string, input: z.input<typeof DatasetImportPreviewQuerySchema>, signal?: AbortSignal) {
+    const query = DatasetImportPreviewQuerySchema.parse(input);
+    const params = new URLSearchParams({ fileId: query.fileId, limit: String(query.limit) });
+    if (query.revision !== undefined) params.set("revision", String(query.revision));
+    if (query.after) params.set("after", query.after);
+    const page = await this.request(`${this.path(id)}/preview?${params}`, DatasetImportPreviewSchema, undefined, signal);
+    const after = query.after ? Number(query.after) : 0;
+    const lastRow = page.rows.at(-1);
+    if (page.importId !== id || page.fileId !== query.fileId ||
+      (query.revision !== undefined && page.revision !== query.revision) ||
+      page.scannedBytes > page.sizeBytes || page.rows.length > query.limit ||
+      page.previewedRows > page.acceptedRows || page.rows.length > page.previewedRows ||
+      page.provisional !== (page.state !== "ready") ||
+      page.totalRows !== (page.provisional ? null : page.acceptedRows + page.rejectedRows) ||
+      page.rows.some((row, index) => row.ordinal <= (page.rows[index - 1]?.ordinal ?? after) ||
+        row.ordinal > page.acceptedRows + page.rejectedRows) ||
+      (page.nextCursor !== null && (!lastRow || page.nextCursor !== String(lastRow.ordinal))))
+      throw new Error("Dataset preview response identity, order or counts mismatch.");
+    return page;
   }
 
   /** Upload missing parts and submit verification. Use get to observe the

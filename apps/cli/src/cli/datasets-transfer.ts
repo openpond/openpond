@@ -4,7 +4,7 @@ import { basename } from "node:path";
 import { OpenPondDatasetImportClient, type DatasetImportSource } from "openpond-sdk/dataset-workspaces";
 import { optionString } from "./common";
 
-export const DATASET_TRANSFER_ACTIONS = ["stage-file", "upload-status", "cancel-upload", "storage"] as const;
+export const DATASET_TRANSFER_ACTIONS = ["stage-file", "upload-status", "upload-preview", "cancel-upload", "storage"] as const;
 type Action = (typeof DATASET_TRANSFER_ACTIONS)[number];
 
 export function isDatasetTransferAction(value: string | undefined): value is Action {
@@ -41,6 +41,18 @@ export async function runDatasetTransferCommand(
   }
   if (!pathOrImportId) throw new Error("Provide a source file or import ID.");
   if (action === "upload-status") return client.get(pathOrImportId);
+  if (action === "upload-preview") {
+    const fileId = optionString(options, "fileId");
+    if (!fileId) throw new Error("Provide --file-id from the upload receipt.");
+    const revision = optionString(options, "revision");
+    const limit = optionString(options, "limit");
+    return client.preview(pathOrImportId, {
+      fileId,
+      revision: revision ? Number(revision) : undefined,
+      after: optionString(options, "cursor") || undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
   const operationId = optionString(options, "operationId");
   if (!operationId || !/^[a-zA-Z0-9._:-]{1,220}$/u.test(operationId))
     throw new Error("Provide a stable --operation-id of at most 220 letters, digits, or ._:- characters.");

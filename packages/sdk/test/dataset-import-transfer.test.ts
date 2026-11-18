@@ -96,3 +96,41 @@ test("resumes after a lost part acknowledgement without forwarding API credentia
     await Promise.all([api.close(), objects.close()]);
   }
 });
+
+test("retains the inspection revision across bounded preview pages", async () => {
+  const row = (ordinal: number) => ({
+    ordinal,
+    id: createHash("sha256").update(String(ordinal)).digest("hex"),
+    values: { input: { text: String(ordinal) } },
+  });
+  const api = await server((request, response) => {
+    expect(request.method).toBe("GET");
+    const url = new URL(request.url!, "http://127.0.0.1");
+    expect(url.pathname).toBe("/v1/dataset-imports/import-1/preview");
+    expect(url.searchParams.get("fileId")).toBe("file-1");
+    expect(url.searchParams.get("limit")).toBe("1");
+    const after = url.searchParams.get("after");
+    if (after) expect(url.searchParams.get("revision")).toBe("1");
+    const page = {
+      importId: "import-1", fileId: "file-1", relativePath: "examples.jsonl",
+      sizeBytes: 1024, uploadState: "verified", revision: 1,
+      state: after ? "ready" : "inspecting", format: "jsonl",
+      scannedBytes: after ? 1024 : 512, acceptedRows: 2, rejectedRows: 1,
+      totalRows: after ? 3 : null, provisional: !after, previewedRows: 2, failureCode: null,
+      rows: [row(after ? 3 : 1)], nextCursor: after ? null : "1",
+    };
+    response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(page));
+  });
+  try {
+    const client = new OpenPondDatasetImportClient({ apiKey: "fixture", teamId: "team-fixture", baseUrl: api.origin });
+    const first = await client.preview("import-1", { fileId: "file-1", limit: 1 });
+    expect(first.provisional).toBe(true);
+    const last = await client.preview("import-1", {
+      fileId: "file-1", limit: 1, revision: first.revision!, after: first.nextCursor!,
+    });
+    expect(last.totalRows).toBe(3);
+    expect(last.rows[0]?.values).toEqual({ input: { text: "3" } });
+  } finally {
+    await api.close();
+  }
+});
