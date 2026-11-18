@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { openAsBlob } from "node:fs";
-import { basename } from "node:path";
+import { opendir } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { OpenPondDatasetImportClient, type DatasetImportSource } from "openpond-sdk/dataset-workspaces";
 import { optionString } from "./common";
 
 export const DATASET_TRANSFER_ACTIONS = [
-  "stage-file", "upload-status", "upload-preview", "upload-mapping",
+  "stage-file", "stage-folder", "upload-status", "upload-preview", "upload-mapping",
   "upload-materialize", "upload-materialization", "upload-finish", "cancel-upload", "storage",
 ] as const;
 type Action = (typeof DATASET_TRANSFER_ACTIONS)[number];
@@ -14,8 +15,7 @@ export function isDatasetTransferAction(value: string | undefined): value is Act
   return DATASET_TRANSFER_ACTIONS.some(action => action === value);
 }
 
-async function fileSource(path: string): Promise<DatasetImportSource> {
-  const file = await openAsBlob(path);
+async function fileSource(file: Blob): Promise<DatasetImportSource> {
   if (!file.size) throw new Error("Dataset source files must contain at least one byte.");
   const digest = createHash("sha256");
   const reader = file.stream().getReader();
@@ -30,6 +30,45 @@ async function fileSource(path: string): Promise<DatasetImportSource> {
     reader.releaseLock();
   }
   return { sizeBytes: file.size, sha256: digest.digest("hex"), read: (start, end) => file.slice(start, end) };
+}
+
+async function* folderFiles(directory: string, prefix = ""): AsyncGenerator<{ path: string; relativePath: string }> {
+  for await (const entry of await opendir(directory)) {
+    const path = join(directory, entry.name);
+    const relativePath = `${prefix}${entry.name}`.normalize("NFC");
+    if (entry.isDirectory()) yield* folderFiles(path, `${relativePath}/`);
+    else if (entry.isFile() && /\.(?:csv|json|jsonl|ndjson)$/iu.test(entry.name)) yield { path, relativePath };
+    else throw new Error(`Remove unsupported folder entry ${relativePath}. Choose regular CSV, JSON or JSONL files.`);
+  }
+}
+
+async function stageFolder(client: OpenPondDatasetImportClient, operationId: string, directory: string) {
+  const files: Array<{ path: string; relativePath: string }> = [];
+  for await (const file of folderFiles(directory)) {
+    if (files.length === 100) throw new Error("Choose a folder with up to 100 source files.");
+    files.push(file);
+  }
+  if (!files.length) throw new Error("Choose a folder containing CSV, JSON or JSONL files.");
+  files.sort((left, right) => left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0);
+  const sources = new Map<string, Blob>();
+  for (const { path, relativePath } of files) {
+    if (sources.has(relativePath)) throw new Error(`Duplicate normalized dataset path ${relativePath}.`);
+    const source = await openAsBlob(path);
+    if (!source.size) throw new Error(`Dataset source file ${relativePath} is empty.`);
+    sources.set(relativePath, source);
+  }
+  const imported = await client.begin({ operationId, files: [...sources].map(([relativePath, source]) => ({
+    relativePath, sizeBytes: source.size,
+  })) });
+  const completed = [];
+  for (const file of imported.files) {
+    const source = sources.get(file.relativePath);
+    if (!source) throw new Error("Dataset import receipt does not match the selected folder.");
+    const uploaded = await client.uploadFile(imported.importId, file.fileId, await fileSource(source), { operationId: `${operationId}:complete` });
+    if (uploaded.relativePath !== file.relativePath) throw new Error("Dataset upload changed the declared file path.");
+    completed.push(uploaded);
+  }
+  return { importId: imported.importId, files: completed };
 }
 
 async function readRequest(path: string, maximumBytes: number) {
@@ -92,8 +131,9 @@ export async function runDatasetTransferCommand(
   if (!operationId || !/^[a-zA-Z0-9._:-]{1,220}$/u.test(operationId))
     throw new Error("Provide a stable --operation-id of at most 220 letters, digits, or ._:- characters.");
   if (action === "cancel-upload") return client.cancel(pathOrImportId, operationId);
+  if (action === "stage-folder") return stageFolder(client, operationId, pathOrImportId);
 
-  const source = await fileSource(pathOrImportId);
+  const source = await fileSource(await openAsBlob(pathOrImportId));
   const relativePath = basename(pathOrImportId).normalize("NFC");
   const imported = await client.begin({ operationId, files: [{ relativePath, sizeBytes: source.sizeBytes }] });
   const [file] = imported.files;
