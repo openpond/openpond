@@ -650,7 +650,7 @@ importers:
         version: 1.32.1(zod@4.4.3)
       openpond-sdk:
         specifier: ^0.12.25
-        version: link:../sdk
+        version: 0.12.28(@ai-sdk/openai-compatible@3.0.87(zod@4.4.3))(@opentelemetry/sdk-trace@3.1.0(@opentelemetry/api@1.10.0))(ai@7.0.165(zod@4.4.3))
       zod:
         specifier: ^4.1.13
         version: 4.4.3
@@ -686,7 +686,7 @@ importers:
         specifier: '>=7.0.165 <8'
         version: 7.0.165(zod@4.4.3)
       openpond-sdk:
-        specifier: 0.12.29
+        specifier: 0.13.0
         version: link:../sdk
 
   packages/runtime:
@@ -1232,6 +1232,16 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
+
+  '@openpond/evals@0.12.9':
+    resolution: {integrity: sha512-mM4GKKwCl82ATT9VXiOXIhbO+bUtMq2btM0jtBA1lnxp4haks//o6yxR55eyscwu2s4rvQq6YYUbIL6JjxF7fA==}
+    engines: {node: '>=22.14.0 <25'}
+    peerDependencies:
+      '@openpond/harness': ^0.4.11
+
+  '@openpond/harness@0.4.11':
+    resolution: {integrity: sha512-pzaoLXWNGVRy3s1pffpLnUToBOrpdNgqiU9USglP4YExDuW4YEBrrF/LCZSPNRbc237EMPupfrIu+AyYkSHR2g==}
+    engines: {node: '>=22.14.0 <25'}
 
   '@opentelemetry/api@1.10.0':
     resolution: {integrity: sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ==}
@@ -3510,6 +3520,21 @@ packages:
       zod:
         optional: true
 
+  openpond-sdk@0.12.28:
+    resolution: {integrity: sha512-uW9+EBmBSF4yWoS9QEM5sTMFRZxCxCIJyYVpQd05Kk2gSwAXxecMYtrJyNgALcwvM3xooyc5sN7F3qKxaD7w4g==}
+    engines: {node: '>=22.14.0 <25'}
+    peerDependencies:
+      '@ai-sdk/openai-compatible': '>=3.0.87 <4'
+      '@opentelemetry/sdk-trace': '>=3.1.0 <4'
+      ai: '>=7.0.165 <8'
+    peerDependenciesMeta:
+      '@ai-sdk/openai-compatible':
+        optional: true
+      '@opentelemetry/sdk-trace':
+        optional: true
+      ai:
+        optional: true
+
   oxfmt@0.72.0:
     resolution: {integrity: sha512-16OQeL0uhPZbfmT9S9WWM0Nv9+BmVi8Ra1uTYaSKj/qSCs6FB30KOhz9JoNYw6thT+K5bVxsk/tSEOu497i34g==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -4781,6 +4806,23 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
+
+  '@openpond/evals@0.12.9(@openpond/harness@0.4.11)':
+    dependencies:
+      '@jitl/quickjs-singlefile-cjs-release-sync': 0.32.0
+      '@openpond/harness': 0.4.11
+      '@sqlite.org/sqlite-wasm': 3.53.0-build1
+      acorn: 8.15.0
+      ajv: 8.20.0
+      cron-parser: 5.6.2
+      quickjs-emscripten-core: 0.32.0
+      zod: 4.4.3
+
+  '@openpond/harness@0.4.11':
+    dependencies:
+      ajv: 8.20.0
+      yaml: 2.9.0
+      zod: 4.4.3
 
   '@opentelemetry/api@1.10.0': {}
 
@@ -6870,6 +6912,18 @@ snapshots:
       zod: 4.4.3
     transitivePeerDependencies:
       - encoding
+
+  openpond-sdk@0.12.28(@ai-sdk/openai-compatible@3.0.87(zod@4.4.3))(@opentelemetry/sdk-trace@3.1.0(@opentelemetry/api@1.10.0))(ai@7.0.165(zod@4.4.3)):
+    dependencies:
+      '@openpond/evals': 0.12.9(@openpond/harness@0.4.11)
+      '@openpond/harness': 0.4.11
+      esbuild: 0.28.1
+      yaml: 2.9.0
+      zod: 4.4.3
+    optionalDependencies:
+      '@ai-sdk/openai-compatible': 3.0.87(zod@4.4.3)
+      '@opentelemetry/sdk-trace': 3.1.0(@opentelemetry/api@1.10.0)
+      ai: 7.0.165(zod@4.4.3)
 
   oxfmt@0.72.0:
     dependencies:
