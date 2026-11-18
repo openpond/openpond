@@ -8,6 +8,7 @@ import type { DatasetProjectionResult } from "./dataset-artifact-service.js";
 
 export type ProjectDatasetArtifact = (input: {
   tasksetId: string;
+  expectedArtifactId: string;
   expectedArtifactHash: string;
   split: "train" | "validation" | "test" | "frozen_eval";
   mode: "sft" | "grpo";
@@ -31,6 +32,7 @@ export function toProjectedTrainingData(
         selectionSeed: projection.selectionSeed,
         selectionStrategy: projection.selectionStrategy,
         taskIdsHash: projection.taskIdsHash,
+        dataset: projection.dataset,
       }
     : null;
 }
@@ -62,6 +64,7 @@ export function createTrainingDatasetSelection(input: {
     }
     return input.projectDatasetArtifact({
       tasksetId: taskset.id,
+      expectedArtifactId: taskset.datasetArtifact.id,
       expectedArtifactHash: taskset.datasetArtifact.contentHash,
       split,
       mode: plan.recipe.method,

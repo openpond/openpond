@@ -17,6 +17,18 @@ import {
 import { canonicalJson, contentHash, sha256 } from "@openpond/taskset-sdk";
 import { TaskBatchPackageMetadataSchema } from "@openpond/evals";
 
+export type ProjectedDatasetBinding = {
+  tasksetId: string;
+  artifactId: string;
+  artifactRevision: number;
+  manifestHash: string;
+  mappingHash: string;
+  approvedSourceIdsHash: string;
+  split: "train" | "validation" | "test" | "frozen_eval";
+  mode: "sft" | "grpo" | "baseline";
+  availableRows: number;
+};
+
 export type ProjectedTrainingData = {
   path: string;
   contentHash: string;
@@ -26,9 +38,10 @@ export type ProjectedTrainingData = {
   selectionSeed: number;
   selectionStrategy: DatasetSelectionStrategy;
   taskIdsHash: string;
+  dataset: ProjectedDatasetBinding;
 };
 
-type ResolvedTrainingData = Omit<ProjectedTrainingData, "path"> & (
+type ResolvedTrainingData = Omit<ProjectedTrainingData, "path" | "dataset"> & (
   | { sourcePath: string }
   | { content: string }
 );
@@ -42,11 +55,13 @@ export async function buildTrainingBundle(input: {
   if (!input.plan.compatibility.compatible) throw new Error("Training Plan is incompatible and cannot be bundled.");
   if (!input.plan.dataPolicy.exportApproved) throw new Error("Training export approval is required before bundle creation.");
   if (input.taskset.contentHash !== input.plan.tasksetHash) throw new Error("Training Plan references a different Taskset hash.");
+  const projection = input.projectedTrainingData;
+  if (projection) requireProjectedDataset(input.taskset, input.plan, projection);
   const approved = new Set(input.plan.dataPolicy.approvedSourceIds);
-  const taskData: ResolvedTrainingData = input.projectedTrainingData
+  const taskData: ResolvedTrainingData = projection
     ? {
-        ...input.projectedTrainingData,
-        sourcePath: input.projectedTrainingData.path,
+        ...projection,
+        sourcePath: projection.path,
       }
     : inlineTrainingData(input.taskset, input.plan, approved);
   if (taskData.exampleCount === 0) throw new Error("Training Bundle has no approved training examples.");
@@ -68,6 +83,7 @@ export async function buildTrainingBundle(input: {
           selectionSeed: taskData.selectionSeed,
           selectionStrategy: taskData.selectionStrategy,
           taskIdsHash: taskData.taskIdsHash,
+          ...(projection && { dataset: projection.dataset }),
         },
       }),
     },
@@ -109,6 +125,31 @@ export async function buildTrainingBundle(input: {
   const manifest = TrainingBundleManifestSchema.parse({ ...provisional, contentHash: manifestHash, files: provisional.files.map((file) => file.path === "manifest.json" ? { ...file, sha256: manifestHash, sizeBytes: 0 } : file) });
   await writeFile(path.join(input.directory, "manifest.json"), canonicalJson(manifest), "utf8");
   return manifest;
+}
+
+function requireProjectedDataset(taskset: Taskset, plan: TrainingPlan, projection: ProjectedTrainingData) {
+  const { dataset } = projection;
+  const { datasetArtifact: artifact } = taskset;
+  const { recipe } = plan;
+  if (!artifact || !dataset || (recipe.method !== "sft" && recipe.method !== "grpo"))
+    throw new Error("Projected training data requires a pinned Dataset artifact and an SFT or GRPO Plan.");
+  const seed = recipe.method === "grpo" ? recipe.rollout.seed : recipe.optimizer.seed;
+  const strategy = recipe.method === "grpo"
+    ? recipe.dataset.selectionStrategy ?? "stable_hash_top_n"
+    : "stable_hash_top_n";
+  if (dataset.tasksetId !== taskset.id || artifact.tasksetId !== taskset.id ||
+      dataset.artifactId !== artifact.id ||
+      dataset.artifactRevision !== artifact.tasksetRevision ||
+      dataset.manifestHash !== artifact.contentHash || dataset.mappingHash !== artifact.mappingHash ||
+      dataset.approvedSourceIdsHash !== contentHash(plan.dataPolicy.approvedSourceIds) ||
+      dataset.split !== "train" || dataset.mode !== recipe.method ||
+      dataset.availableRows !== artifact.splitCounts.train ||
+      projection.selectionSeed !== seed || projection.selectionStrategy !== strategy ||
+      !Number.isSafeInteger(projection.eligibleRows) || projection.eligibleRows < 1 ||
+      projection.eligibleRows > dataset.availableRows ||
+      projection.exampleCount !== Math.min(projection.eligibleRows, recipe.dataset.maxExamples)) {
+    throw new Error("Projected training data differs from the pinned Dataset and Training Plan selection.");
+  }
 }
 
 function inlineTrainingData(

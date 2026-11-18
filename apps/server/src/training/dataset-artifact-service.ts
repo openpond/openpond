@@ -14,6 +14,7 @@ import {
   type DatasetRowPageRequest,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
+import type { ProjectedDatasetBinding } from "@openpond/training-sdk";
 import type { SqliteStore } from "../store/store.js";
 
 const MAX_WORKER_OUTPUT_BYTES = 12 * 1024 * 1024;
@@ -31,6 +32,7 @@ export type DatasetProjectionResult = {
   sizeBytes: number;
   taskIdsHash: string;
   outputPath: string;
+  dataset: ProjectedDatasetBinding;
 };
 
 export function createDatasetArtifactService(deps: {
@@ -148,6 +150,7 @@ export function createDatasetArtifactService(deps: {
 
   async function project(input: {
     tasksetId: string;
+    expectedArtifactId: string;
     expectedArtifactHash: string;
     split: DatasetProjectionResult["split"];
     mode: DatasetProjectionResult["mode"];
@@ -167,11 +170,12 @@ export function createDatasetArtifactService(deps: {
     if (!Number.isSafeInteger(input.seed)) {
       throw new Error("Dataset projection seed must be an integer.");
     }
-    const entry = await deps.store.getDatasetArtifactForTaskset(input.tasksetId);
+    const entry = await deps.store.getDatasetArtifactRegistryEntry(input.expectedArtifactId);
     if (!entry) throw new Error("Dataset artifact not found.");
     const { contentHash: artifactHash, ...manifestBody } = entry.manifest;
     if (
       artifactHash !== input.expectedArtifactHash
+      || entry.manifest.id !== input.expectedArtifactId
       || contentHash(manifestBody) !== artifactHash
       || entry.manifest.tasksetId !== input.tasksetId
     ) {
@@ -179,6 +183,7 @@ export function createDatasetArtifactService(deps: {
     }
     const outputPath = path.resolve(input.outputPath);
     const selectionStrategy = input.selectionStrategy ?? "stable_hash_top_n";
+    const availableRows = entry.manifest.splitCounts[input.split] ?? 0;
     const output = await runDatasetWorker(
       deps.workerProjectDir,
       [
@@ -205,19 +210,34 @@ export function createDatasetArtifactService(deps: {
       JSON.stringify(entry.manifest),
     );
     const parsed = JSON.parse(output) as Record<string, unknown>;
-    const result = parseProjectionResult(parsed, outputPath);
+    const result = parseProjectionResult(parsed);
     if (
       result.split !== input.split
       || result.mode !== input.mode
       || result.selectionSeed !== input.seed
       || result.selectionStrategy !== selectionStrategy
       || result.eligibleRows < 1
+      || result.eligibleRows > availableRows
       || result.exampleCount !== Math.min(input.limit, result.eligibleRows)
     ) {
       throw new Error("Dataset projection differs from the requested training selection.");
     }
     await access(outputPath);
-    return result;
+    return {
+      ...result,
+      outputPath,
+      dataset: {
+        tasksetId: entry.manifest.tasksetId,
+        artifactId: entry.manifest.id,
+        artifactRevision: entry.manifest.tasksetRevision,
+        manifestHash: artifactHash,
+        mappingHash: entry.manifest.mappingHash,
+        approvedSourceIdsHash: contentHash(input.approvedSourceIds),
+        split: input.split,
+        mode: input.mode,
+        availableRows,
+      },
+    };
   }
 
   return { project, rows, summaries, task };
@@ -234,8 +254,7 @@ export function parseDatasetPageRows(
 
 function parseProjectionResult(
   value: Record<string, unknown>,
-  outputPath: string,
-): DatasetProjectionResult {
+): Omit<DatasetProjectionResult, "outputPath" | "dataset"> {
   if (
     value.schemaVersion !== "openpond.datasetProjectionResult.v1"
     || !["train", "validation", "test", "frozen_eval"].includes(
@@ -257,10 +276,7 @@ function parseProjectionResult(
   ) {
     throw new Error("Dataset projection worker returned an invalid result.");
   }
-  return {
-    ...(value as Omit<DatasetProjectionResult, "outputPath">),
-    outputPath,
-  };
+  return value as Omit<DatasetProjectionResult, "outputPath" | "dataset">;
 }
 
 function locateShard(
