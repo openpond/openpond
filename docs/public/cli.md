@@ -72,6 +72,20 @@ Preparation and apply do not qualify graders, approve source/privacy reviews, ch
 
 Project Actions use `openpond/actions` by default. `actions check` validates and builds their registry, `actions build` produces the deterministic local bundle, `actions run` invokes one built action in a child process, and `actions dev` watches the source tree and rebuilds after changes. These commands do not use hosted sandboxes or require an OpenPond API key.
 
+## Transferring a hosted dataset source
+
+Use the workspace's configured API origin where resumable dataset uploads are available.
+
+```bash
+openpond datasets storage --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN"
+openpond datasets stage-file ./examples.jsonl --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN" --operation-id examples-upload-1
+openpond datasets upload-status "$IMPORT_ID" --team "$WORKSPACE_ID" --api-base-url "$API_ORIGIN"
+```
+
+Repeat `stage-file` with the same file bytes and operation ID after an interruption. Use the returned import ID to check verification status or request cleanup with `cancel-upload` and a stable cancellation operation ID. A verified transfer retains the original file. Creating a dataset version is a separate operation.
+
+In TypeScript, import `OpenPondDatasetImportClient` from `openpond-sdk/dataset-workspaces`. Call `begin` with declared file paths and sizes and pass each returned file ID to `uploadFile` with a seekable source, its SHA-256 and a stable completion operation ID. Call `get` to observe verification after a queued response.
+
 ## Starting a reviewed hosted preparation
 
 `openpond training hosted-start` accepts an existing preparation receipt and an optional signed estimate review:

@@ -15,3 +15,6 @@ export { OpenPondDatasetPreparationClient, DatasetPreparationRequestError } from
 export { assemblePreparedTaskWorkspaces } from "./dataset-preparation-assembly.js";
 
 export * from "./dataset-task-ingestion.js";
+
+export * from "./dataset-import-contracts.js";
+export { OpenPondDatasetImportClient, DatasetImportRequestError, type DatasetImportSource } from "./dataset-import-client.js";

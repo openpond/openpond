@@ -1,10 +1,11 @@
 import { hostedCliFetch } from "./common/hosted-cli-fetch";
 import { captureTasksetDraftWorkspace } from "@openpond/taskset-sdk";
-import { OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
+import { OpenPondDatasetImportClient, OpenPondDatasetWorkspaceClient, compileTasksetDraftWorkspace } from "openpond-sdk/dataset-workspaces";
 import { loadConfig } from "../config";
 import { ensureApiKey, optionString, resolveApiBaseUrlOption, resolveBaseUrl, parseBooleanOption } from "./common";
 import { DATASET_PREPARATION_USAGE, runDatasetPreparationCommand } from "./datasets-preparation";
 import { runLocalDatasetsCommand } from "./datasets-local";
+import { isDatasetTransferAction, runDatasetTransferCommand } from "./datasets-transfer";
 import { readFile } from "node:fs/promises";
 
 export async function runDatasetsCommand(options: Record<string, string | boolean>, rest: string[]) {
@@ -16,6 +17,16 @@ export async function runDatasetsCommand(options: Record<string, string | boolea
     const config = await loadConfig();
     const client = new OpenPondDatasetWorkspaceClient({ teamId, baseUrl, fetch: hostedCliFetch, apiKey: await ensureApiKey(config, resolveBaseUrl(config)) });
     return runDatasetPreparationCommand(client.preparations, options, rest.slice(1));
+  }
+  if (isDatasetTransferAction(action)) {
+    if (!teamId || !baseUrl || rest.length > 2)
+      throw new Error("Use --team and --api-base-url with hosted dataset transfer commands.");
+    const config = await loadConfig();
+    const client = new OpenPondDatasetImportClient({
+      teamId, baseUrl, fetch: hostedCliFetch, apiKey: await ensureApiKey(config, resolveBaseUrl(config)),
+    });
+    console.log(JSON.stringify(await runDatasetTransferCommand(client, action, id, options), null, 2));
+    return;
   }
   if (!teamId || !baseUrl || !action || rest.length > 2 || !["upload", "save", "read", "list", "validate", "publish"].includes(action))
     throw new Error("usage: datasets <upload|save|read|list|validate|publish> [folder|id] --team <id> --api-base-url <origin> [--input-file <path>] [--operation-id <id>] [--expected-revision <n>] [--publish] [--project <id>]");
