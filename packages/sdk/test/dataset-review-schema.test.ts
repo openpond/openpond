@@ -4,7 +4,7 @@ import { createDatasetTrainingReviewClient, DatasetTrainingReviewRequestSchema }
 // A review schema supported by generic JSON but rejected by task definitions
 // must fail locally, rather than become an opaque server400 after import work.
 it("rejects unsupported task-schema keywords before a dataset review is dispatched", async () => {
-  const schema = (items: Record<string, unknown>) => ({ type: "object", properties: { paths: { type: "array", items } } });
+  const schema = <T extends Record<string, unknown>>(items: T) => ({ type: "object", properties: { paths: { type: "array", items } } });
   const request = {
     schemaVersion: "openpond.datasetTrainingReviewRequest.v1" as const,
     teamId: "team", operationId: "review", dataset: { id: "dataset", revision: 1, contentHash: "a".repeat(64) },
