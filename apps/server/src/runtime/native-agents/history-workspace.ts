@@ -6,6 +6,7 @@ import { ClaudeCliClient } from "@openpond/agent-runtime/acp/claude-cli-client";
 import { readProvidersFile } from "../../openpond/provider-settings.js";
 import { nativeAgentLaunch, type NativeAgentId } from "./config.js";
 import { probeNativeAgent } from "./setup.js";
+import { isAntigravityConfig } from "./antigravity-profile.js";
 
 export async function nativeHistoryWorkspaceAvailable(cwd: string): Promise<boolean> {
   if (!isAbsolute(cwd)) return false;
@@ -23,7 +24,7 @@ export function createNativeHistoryWorkspace(providersFilePath: string) {
       const file = await readProvidersFile(providersFilePath);
       if (!file.providers[provider]?.enabled) return { available: false, reason: "Enable the original agent in Connections before continuing this conversation." };
       const status = await probeNativeAgent(provider, file.providers[provider]);
-      const qualified = status.status === "ready" && status.capabilities?.loadSession === true;
+      const qualified = status.status === "ready" && (isAntigravityConfig(file.providers[provider]) ? Boolean(status.capabilities?.sessionCapabilities?.resume) : status.capabilities?.loadSession === true);
       return { available: qualified, reason: qualified ? null : status.error ?? "This agent does not advertise saved-session continuation. Check its installation and login in Connections, then check again." };
     },
     async qualifyWorkspace(input: { provider: NativeAgentId; sessionId: string; instanceId: string; cwd: string }) {
@@ -39,7 +40,7 @@ export function createNativeHistoryWorkspace(providersFilePath: string) {
       });
       try {
         const info = await client.initialize();
-        if (!info.agentCapabilities?.loadSession) throw new Error("This agent cannot resume saved conversations.");
+        if (isAntigravityConfig(config) ? !info.agentCapabilities?.sessionCapabilities?.resume : !info.agentCapabilities?.loadSession) throw new Error("This agent cannot resume saved conversations.");
         if (config.acp?.authMethodId) await client.authenticate(config.acp.authMethodId);
         else if (input.provider === "grok-build" && info.authMethods?.some(method => method.id === "cached_token")) await client.authenticate("cached_token");
         const native = await client.loadSession(input.sessionId, input.cwd);

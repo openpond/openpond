@@ -1,6 +1,6 @@
 {
   "name": "@openpond/agent-runtime",
-  "version": "0.2.76",
+  "version": "0.2.77",
   "openpondReleaseVersioned": true,
   "description": "Private host-neutral agent execution engine for OpenPond app-server",
   "license": "MIT",
@@ -10,6 +10,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./acp/process-tree": {
+      "types": "./dist/acp/process-tree.d.ts",
+      "import": "./dist/acp/process-tree.js"
+    },
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"

@@ -1,9 +1,18 @@
 import { z } from "zod";
 import { LearningJsonObjectSchema, LearningRevisionRefSchema, LearningSourceSchema, TaskEvidenceSchema, TaskFeedbackSchema, TaskDefinitionSchema, TaskAdmissionDecisionSchema } from "@openpond/evals/learning";
 import { RewardBindingSchema } from "@openpond/evals/rewards";
+import { validateTaskSchema } from "@openpond/evals/task-schema";
 // Reuse the canonical release ID already exposed by Evals without bundling a
 // second copy of Harness's schema graph into the browser contract entrypoint.
 const ReleaseIdSchema = LearningRevisionRefSchema.shape.id;
+
+// Match the task-definition boundary before issuing a remote review request.
+const ReviewTaskSchema = LearningJsonObjectSchema.superRefine((schema, context) => {
+  if (schema.type !== "object") context.addIssue({ code: "custom",
+    message: "Task input/output use object envelopes; declare type: object." });
+  const report = validateTaskSchema(schema);
+  if (!report.valid) context.addIssue({ code: "custom", message: report.issues[0]!.message });
+});
 
 /** Editor data from a server-validated package; excludes portable file bytes. */
 export const ModelBatchReviewInspectionSchema = z.object({
@@ -26,8 +35,8 @@ export const ModelBatchReviewRequestSchema = z.object({
   definition: z.object({
     name: z.string().trim().min(1).max(500).optional(),
     instructions: z.string().trim().min(1).max(20_000).optional(),
-    inputSchema: LearningJsonObjectSchema.optional(),
-    outputSchema: LearningJsonObjectSchema.optional(),
+    inputSchema: ReviewTaskSchema.optional(),
+    outputSchema: ReviewTaskSchema.optional(),
     requiredOutputs: TaskDefinitionSchema.shape.requiredOutputs,
   }).strict(),
   examples: z.array(z.object({

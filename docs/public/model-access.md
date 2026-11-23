@@ -28,6 +28,10 @@ BYOK is useful for:
 
 OpenPond has first-class support for OpenAI Codex workflows. Codex-backed sessions can use Codex-native behavior while still fitting into the OpenPond desktop environment, project context, Git-backed source model, and goal-oriented workflows.
 
+## Google Antigravity
+
+Connect your Google AI subscription through **Settings → Providers → Google Antigravity**. OpenPond installs Google's current runtime, guides you through Google sign-in and discovers the models available to your account, including Gemini 4 Neon for eligible plans. See [Google Antigravity setup](antigravity.md).
+
 ## Open Source Models
 
 OpenPond's orchestration layer is designed to help open source models operate with stronger agentic structure:

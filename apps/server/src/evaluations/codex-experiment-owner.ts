@@ -1,3 +1,4 @@
+import { NATIVE_OUTPUT_SCHEMA_ENCODING_VERSION } from "../providers/native-output-schema.js";
 import {mkdtemp,rm} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,7 +11,9 @@ import type {LocalInferenceState} from "./local-experiment-local-inference.js";
 import type {LocalModelAdmission} from "./local-experiment-model.js";
 import type {LocalExperimentDefinition} from "./local-experiment-contract.js";
 import {LocalExperimentError} from "./local-experiment-contract.js";
+import {CodexExperimentRuntimeSchema, type CodexExperimentRuntime} from "openpond-sdk/experiments";
 
+const MAX_INPUT_BYTES=1_048_576;
 const Completion=z.object({response:z.object({choices:z.array(z.object({message:z.object({content:z.string().nullable(),tool_calls:z.array(z.object({id:z.string(),type:z.literal("function"),function:z.object({name:z.string(),arguments:z.string()})}))})})).length(1)}),usage:z.object({promptTokens:z.number().int().nonnegative(),completionTokens:z.number().int().nonnegative(),totalTokens:z.number().int().nonnegative()}).optional()});
 function fail(message:string):never {throw new LocalExperimentError("codex_experiment_not_ready",message,422);}
 
@@ -18,7 +21,7 @@ function fail(message:string):never {throw new LocalExperimentError("codex_exper
  * history, repo files nor private grader inputs enter its ephemeral thread. */
 export function createCodexExperimentOwner(deps:{state:LocalInferenceState;status?:()=>Promise<CodexStatus>;
   runtime?:typeof createCodexTasksetPolicyRuntime}) {
-  async function resolve(modelId?:string) {
+  async function resolve(modelId?:string,reasoningEffort:CodexExperimentRuntime["reasoningEffort"]="low") {
     if(!deps.status)fail("The signed-in Codex runtime is unavailable.");
     const status=await deps.status();
     const accountHash=codexEvaluationAccountHash(status.account);
@@ -26,16 +29,21 @@ export function createCodexExperimentOwner(deps:{state:LocalInferenceState;statu
     const current=await deps.state();
     if(!current.settings.providers.codex?.enabled)fail("Enable Codex in Settings before evaluating.");
     const settings=await withCodexModelCatalog(current.settings,status);
-    const models=settings.modelCaches.codex?.models.filter(model=>model.capabilities.reasoningEfforts?.includes("low")) ?? [];
+    const models=settings.modelCaches.codex?.models.filter(model=>model.capabilities.reasoningEfforts?.some(effort=>CodexExperimentRuntimeSchema.shape.reasoningEffort.safeParse(effort).success)) ?? [];
     if(!modelId)return {status,accountHash,models};
     const model=models.find(model=>model.id===modelId);
-    if(!model)fail("Refresh the installed Codex catalog and select a model supporting Lite reasoning.");
-    const configurationHash=contentHash({providerId:"codex",modelId,accountHash,binaryPath:status.binaryPath,version:status.version,capabilities:model.capabilities,reasoningEffort:"low",isolation:"openpond.codex-text-evaluation.v1"});
+    if(!model || !model.capabilities.reasoningEfforts?.includes(reasoningEffort))fail("Select a model and reasoning effort supported by the installed Codex catalog.");
+    const configurationHash=contentHash({providerId:"codex",modelId,accountHash,binaryPath:status.binaryPath,version:status.version,capabilities:model.capabilities,reasoningEffort,outputLimit:16384,maximumInputBytes:MAX_INPUT_BYTES,structuredOutputEncoding:NATIVE_OUTPUT_SCHEMA_ENCODING_VERSION,isolation:"openpond.codex-text-evaluation.v2"});
     return {status,accountHash,models,model,configurationHash};
   }
+  async function choice(modelId:string,reasoningEffort:CodexExperimentRuntime["reasoningEffort"]="low") {
+    const selected=await resolve(modelId,reasoningEffort);
+    return {id:modelId,name:selected.model!.displayName+" · "+reasoningEffort,providerId:"codex" as const,configurationHash:selected.configurationHash!,accountHash:selected.accountHash,reasoningEffort,reasoningEfforts:selected.model!.capabilities.reasoningEfforts,outputLimit:16384};
+  }
   return {
+    choice,
     async readiness() {
-      try {const current=await resolve();return {ready:true as const,choices:await Promise.all(current.models.map(async model=>{const selected=await resolve(model.id);return {id:model.id,name:model.displayName+" · Lite",providerId:"codex" as const,configurationHash:selected.configurationHash!,accountHash:selected.accountHash,reasoningEffort:"low" as const,outputLimit:4096};}))};}
+      try {const current=await resolve();return {ready:true as const,choices:await Promise.all(current.models.map(model=>choice(model.id,model.capabilities.reasoningEfforts?.includes("low")?"low":CodexExperimentRuntimeSchema.shape.reasoningEffort.parse(model.capabilities.reasoningEfforts?.find(effort=>CodexExperimentRuntimeSchema.shape.reasoningEffort.safeParse(effort).success)))))};}
       catch(error) {if(!(error instanceof LocalExperimentError))throw error;return {ready:false as const,reason:error.message,choices:[]};}
     },
     async prepare(configuration:LocalExperimentDefinition["configuration"]):Promise<LocalModelAdmission> {
@@ -43,19 +51,21 @@ export function createCodexExperimentOwner(deps:{state:LocalInferenceState;statu
       if(!["hosted_chat","hosted_harness"].includes(policy.kind) || !("localRuntime" in policy) || policy.localRuntime?.providerId!=="codex")fail("Select an exact Codex experiment runtime.");
       if(policy.kind!=="hosted_chat" && policy.kind!=="hosted_harness")fail("Select a supported Codex target.");
       const profile = policy.kind === "hosted_harness";
-      const runtime=policy.localRuntime,selected=await resolve(policy.modelId);
-      if(selected.configurationHash!==runtime.configurationHash || selected.accountHash!==runtime.accountHash || runtime.reasoningEffort!=="low")fail("Codex account, model or runtime changed. Review its current model pin.");
-      if(policy.candidate || policy.kind === "hosted_chat" && (policy.harness || policy.temperature!==0 || policy.topP!==1 || policy.maxOutputTokens>4096) || runtime.maximumRequestCostUsd>configuration.maximumCostUsd)fail("Codex evaluation requires its qualified text or Profile owner and a supported request allocation.");
-      const maxOutputTokens=policy.kind === "hosted_chat" ? policy.maxOutputTokens : 4096;
+      const runtime=policy.localRuntime,selected=await resolve(policy.modelId,runtime.reasoningEffort);
+      if(selected.configurationHash!==runtime.configurationHash || selected.accountHash!==runtime.accountHash)fail("Codex account, model or runtime changed. Review its current model pin.");
+      if(policy.candidate || policy.kind === "hosted_chat" && (policy.harness || policy.temperature!==0 || policy.topP!==1 || policy.maxOutputTokens>16384) || runtime.maximumRequestCostUsd>configuration.maximumCostUsd)fail("Codex evaluation requires its qualified text or Profile owner and a supported request allocation.");
+      const maxOutputTokens=policy.kind === "hosted_chat" ? policy.maxOutputTokens : 16384;
       const messages=policy.kind === "hosted_chat" ? policy.messages??[] : [];
       const model={providerId:"codex" as const,modelId:policy.modelId,maxOutputTokens,messages,configurationHash:contentHash({modelId:policy.modelId,runtime,messages,maxOutputTokens})};
       return {model,pricing:null,maximumChargeUsd:runtime.maximumRequestCostUsd,streamFactory(scope){return async function*(request) {
-        const latest=await resolve(model.modelId);
+        const latest=await resolve(model.modelId,runtime.reasoningEffort);
         if(latest.configurationHash!==runtime.configurationHash)fail("Codex account or runtime changed before dispatch.");
         if(!profile && request.tools?.length)fail("Codex text evaluations do not admit environment tools.");
-        if(Buffer.byteLength(JSON.stringify(request.messages))>262144)fail("Codex evaluation input exceeds its retained text allowance.");
+        const inputBytes=Buffer.byteLength(JSON.stringify(request.messages));
+        if(inputBytes>MAX_INPUT_BYTES)fail("Codex evaluation input exceeds its 1 MiB retained text allowance.");
+        await scope.store.appendLocalExperimentEvent({...scope,id:scope.executionId,type:"codex.input_admitted",payload:{modelId:model.modelId,inputBytes,maximumInputBytes:MAX_INPUT_BYTES,configurationHash:runtime.configurationHash}});
         const cwd=await mkdtemp(path.join(os.tmpdir(),"openpond-codex-eval-"));
-        const executor=(deps.runtime ?? createCodexTasksetPolicyRuntime)({modelId:model.modelId,runId:scope.executionId,cwd,binaryPath:latest.status.binaryPath!,reasoningEffort:runtime.reasoningEffort,isolatedAccountHash:runtime.accountHash});
+        const executor=(deps.runtime ?? createCodexTasksetPolicyRuntime)({modelId:model.modelId,runId:scope.executionId,cwd,binaryPath:latest.status.binaryPath!,reasoningEffort:runtime.reasoningEffort,isolatedAccountHash:runtime.accountHash,outputSchema:runtime.outputSchema});
         const timeout=AbortSignal.timeout(runtime.requestTimeoutMs),signal=request.signal?AbortSignal.any([request.signal,timeout]):timeout;
         const abort=()=>{void executor.close().catch(()=>undefined);};signal.addEventListener("abort",abort,{once:true});
         try {

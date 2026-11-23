@@ -1,3 +1,4 @@
+import { codexOutputSchema } from "../providers/native-output-schema.js";
 import {
   CodexAppServerClient,
   defaultServerRequestResult,
@@ -50,6 +51,7 @@ export function createCodexTasksetPolicyRuntime(input: {
   binaryPath?: string;
   reasoningEffort?: "low" | "medium" | "high" | "xhigh";
   isolatedAccountHash?: string;
+  outputSchema?: Record<string,unknown>;
 }): CodexTasksetPolicyRuntime {
   let active: ActiveCompletion | null = null;
   const client = new CodexAppServerClient({
@@ -122,6 +124,7 @@ export function createCodexTasksetPolicyRuntime(input: {
           model: input.modelId,
           approvalPolicy: "never",
           sandbox: "read-only",
+          ...(input.outputSchema ? {outputSchema:codexOutputSchema(input.outputSchema)} : {}),
         });
         state.turnId = turn.turnId;
         await waitForTurnWithSignal(client, thread.threadId, turn.turnId, signal);

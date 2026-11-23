@@ -7,7 +7,13 @@ import type { LearningCommand } from "./operations.js";
 
 export async function saveAuthoringDraft(tx: LearningTransaction, input: { draft: AuthoringDraftInput; expectedRevision: number }, now: string) {
   // A 100-record page remains below the common 16 MiB response limit.
-  assertBoundedTaskJson(input.draft, 131_072);
+  try {
+    assertBoundedTaskJson(input.draft, 131_072);
+  } catch (error) {
+    if (error instanceof Error && error.message === "task_json_size_exceeded")
+      throw new LearningDomainError("authoring_draft_too_large", 422);
+    throw error;
+  }
   const previous = await tx.get("draft", input.draft.id);
   if (previous && (previous.status !== "draft" || previous.targetId !== input.draft.targetId || previous.targetKind !== input.draft.targetKind || (previous.baseRelease === null ? input.draft.baseRelease !== null : input.draft.baseRelease === null || !sameLearningRef(previous.baseRelease, input.draft.baseRelease)))) throw new LearningDomainError("authoring_draft_identity_conflict", 409);
   if (input.draft.baseRelease) {

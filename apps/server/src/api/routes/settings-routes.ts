@@ -7,6 +7,12 @@ export async function handleSettingsRoutes({
   requestUrl,
   response,
 }: HttpRouteContext): Promise<boolean> {
+  if (requestUrl.pathname === "/v1/providers/antigravity" && deps.antigravityPayload) {
+    if (request.method === "GET") sendJson(response, 200, await deps.antigravityPayload({ action: "status" }));
+    else if (request.method === "POST") sendJson(response, 200, await deps.antigravityPayload(await readJson(request)));
+    else return false;
+    return true;
+  }
   if (requestUrl.pathname === "/v1/providers/acp-registry" && deps.acpRegistryPayload) {
     if (request.method === "GET") sendJson(response, 200, await deps.acpRegistryPayload("list", { query: requestUrl.searchParams.get("query") ?? undefined, refresh: requestUrl.searchParams.get("refresh") === "true" }));
     else if (request.method === "POST") sendJson(response, 201, await deps.acpRegistryPayload("register", await readJson(request)));

@@ -70,11 +70,12 @@ export class AcpClient {
 
   async loadSession(sessionId: string, cwd: string, mcpServers: AcpObject[] = []): Promise<AcpSessionResult> {
     const info = await this.initialize();
-    if (!info.agentCapabilities?.loadSession) throw new Error("This agent does not support native session loading.");
+    const method = this.options.resumeMethod ?? "session/load";
+    if (method === "session/resume" ? !info.agentCapabilities?.sessionCapabilities?.resume : !info.agentCapabilities?.loadSession) throw new Error("This agent does not support native session continuation.");
     // Load may replay session/update events before replying. Admit only this explicit native identity.
     this.sessions.add(sessionId);
     try {
-      const result = await this.request("session/load", { sessionId, cwd, mcpServers }) as Omit<AcpSessionResult, "sessionId">;
+      const result = await this.request(method, { sessionId, cwd, mcpServers }) as Omit<AcpSessionResult, "sessionId">;
       await this.updateQueue;
       return { ...result, sessionId };
     } catch (error) { this.sessions.delete(sessionId); throw error; }
@@ -174,6 +175,11 @@ export class AcpClient {
       const line = this.buffer.slice(0, newline);
       this.buffer = this.buffer.slice(newline + 1);
       if (!line.trim()) continue;
+      if (this.options.authRequiredPrefix && line.startsWith(this.options.authRequiredPrefix)) {
+        this.fail(new AcpRpcError(-32000, "Authentication required"));
+        void this.stop();
+        return;
+      }
       try {
         if (Buffer.byteLength(line) > MAX_FRAME_BYTES) throw new Error("ACP frame exceeds the size limit.");
         this.receive(JSON.parse(line));

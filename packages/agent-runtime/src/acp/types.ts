@@ -26,6 +26,8 @@ export type AcpClientOptions = {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   requestTimeoutMs?: number;
+  resumeMethod?: "session/load" | "session/resume";
+  authRequiredPrefix?: string;
   onUpdate?: (sessionId: string, update: AcpObject) => void | Promise<void>;
   onPermission?: (request: AcpPermissionRequest, signal: AbortSignal) => Promise<AcpPermissionResult>;
   onExit?: (error: Error) => void;

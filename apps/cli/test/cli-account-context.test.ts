@@ -24,6 +24,27 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+// Explicit endpoints must work with the account already selected in this home,
+// while the origin check still prevents sending that account's key elsewhere.
+test("dataset version reads accept the configured account at its exact API origin", async () => {
+  const request = vi.fn(async (url: string, init?: RequestInit) => {
+    expect(url).toContain(`${state.apiOrigin}/v1/dataset-workspaces/fixture/`);
+    expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${state.token}`);
+    return new Response(JSON.stringify({ code: "dataset_not_found" }), {
+      status: 404, headers: { "content-type": "application/json" },
+    });
+  });
+  vi.stubGlobal("fetch", request);
+  const read = (origin: string) => runCliCommand(parseArgs([
+    "datasets", "rows", "fixture", "--team", "fixture-team",
+    "--base-url", "https://fixture.test", "--api-base-url", origin, "--json",
+  ]));
+  await expect(read(state.apiOrigin)).rejects.toThrow("Dataset request failed (404)");
+  expect(request).toHaveBeenCalledTimes(1);
+  await expect(read("https://other.test")).rejects.toThrow("must match the selected account");
+  expect(request).toHaveBeenCalledTimes(1);
+});
+
 // The companion must never receive credentials or select a different tenant
 // when a configured default disappears; cross-origin reads must fail closed.
 test("official account context binds safe team discovery to its account and refuses stale default fallback", async () => {

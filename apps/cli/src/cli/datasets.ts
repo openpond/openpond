@@ -26,7 +26,7 @@ export async function runDatasetsCommand(options: Record<string, string | boolea
     const account = resolveAccountOption(options);
     const accountBase = resolveBaseUrlOption(options);
     const context = await loadOpenPondAccountContext(account, accountBase);
-    if ((account || accountBase) && (!context.account || !context.token || !account))
+    if ((account || accountBase) && (!context.account || !context.token))
       throw new Error("Select a signed-in account with --account for the requested API origin.");
     const matchingToken = context.account && new URL(context.apiBaseUrl).origin === new URL(baseUrl).origin
       ? context.token : null;

@@ -145,3 +145,4 @@ export * from "./weight-space-model-save-recovery.js";
 
 export * from "./weight-space-cancel-recovery.js";
 export * from "./desktop-corrections.js";
+export * from "./antigravity.js";

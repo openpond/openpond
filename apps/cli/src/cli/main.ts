@@ -119,7 +119,8 @@ void runOpenPondCli().catch(async (error) => {
   }
   const message = error instanceof Error ? error.message : String(error);
   const issue = (error as { issue?: unknown }).issue;
-  const trainingError = (await import("./common/training-error")).trainingCliError(error);
+  const trainingError = (await import("./common/training-error")).trainingCliError(error)
+    ?? (await import("./common/dataset-error")).datasetCliError(error);
   if (process.argv.includes("--json") && !(error instanceof Error && error.name === "OpenPondChildProcessExitError")) console.log(JSON.stringify({ error: issue ?? trainingError ?? { code: "CLI_ERROR", message } }));
   else if (issue && typeof issue === "object") {
     const detail = issue as { code: string; path: string; message: string; action: string };
