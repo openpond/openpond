@@ -1,6 +1,10 @@
 import {z} from "zod";
 const Hash=z.string().regex(/^[a-f0-9]{64}$/);
-export const ClaudeCodeRuntimeSchema=z.object({providerId:z.literal("claude-code"),configurationHash:Hash,executableHash:Hash,version:z.string().regex(/^2\.\d+\.\d+$/),capabilityHash:Hash,maximumRequestCostUsd:z.number().finite().positive().max(10000),requestTimeoutMs:z.number().int().min(1000).max(300000),maximumTurns:z.number().int().min(1).max(100),holdOpen:z.boolean()}).strict();
+export const ClaudeExperimentAuthenticationSchema=z.discriminatedUnion("kind",[
+ z.object({kind:z.literal("api_key")}).strict(),
+ z.object({kind:z.literal("subscription"),accountHash:Hash,namespaceHash:Hash}).strict(),
+]);
+export const ClaudeCodeRuntimeSchema=z.object({providerId:z.literal("claude-code"),configurationHash:Hash,executableHash:Hash,version:z.string().regex(/^2\.\d+\.\d+$/),capabilityHash:Hash,authentication:ClaudeExperimentAuthenticationSchema.optional(),reasoningEffort:z.enum(["low","medium","high","max"]).optional(),outputSchema:z.record(z.string(),z.unknown()).optional(),maximumRequestCostUsd:z.number().finite().positive().max(10000),requestTimeoutMs:z.number().int().min(1000).max(300000),maximumTurns:z.number().int().min(1).max(100),holdOpen:z.boolean()}).strict();
 export type ClaudeCodeRuntime=z.infer<typeof ClaudeCodeRuntimeSchema>;
 export const ClaudeCodeControlSchema=z.object({id:z.string().min(1).max(200),receiptId:z.string().min(1).max(200),sessionId:z.uuid(),operationId:z.string().min(1).max(200),action:z.enum(["message","seal"]),text:z.string().max(262144).optional()}).strict().superRefine((value,context)=>{if(value.action==="message"&&!value.text?.trim())context.addIssue({code:"custom",message:"A human intervention requires a message."});if(value.action==="seal"&&value.text!==undefined)context.addIssue({code:"custom",message:"Sealing does not add a prompt."});});
 export const ClaudeProcessEvidenceSchema=z.object({

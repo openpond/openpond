@@ -11,6 +11,7 @@ import { isNativeAgentId, NATIVE_AGENTS, nativeAgentLaunch, type NativeAgentId }
 import { createNativeCapabilityProbe } from "./capability-probes.js";
 import { refreshLocalExecutablePath } from "@openpond/runtime/executable-search-path";
 import { readClaudeInstallationStatus } from "./claude-installation-status.js";
+import { isAntigravityConfig } from "./antigravity-profile.js";
 
 export type NativeAgentSetupResult = {
   provider: NativeAgentId;
@@ -47,8 +48,9 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
     const definition = isRegisteredAcpProvider(provider) ? { installUrl: config?.acp?.installUrl ?? "", login: [] } : NATIVE_AGENTS[provider];
     const result: NativeAgentSetupResult = { provider, status: "unavailable", instanceId: launch.instanceId, version: null, error: null, installUrl: definition.installUrl, loginCommand: definition.login, authMethods: [], capabilities: null, session: null };
     const Client = provider === "claude-code" ? ClaudeCliClient : AcpClient;
-    const client = new Client({ ...launch, cwd: homedir(), requestTimeoutMs: options.authMethodId ? 180_000 : 15_000 });
-    const deadline = AbortSignal.timeout(options.authMethodId ? 180_000 : 40_000);
+    const antigravity = isAntigravityConfig(config);
+    const client = new Client({ ...launch, cwd: antigravity ? launch.sourceHome : homedir(), requestTimeoutMs: antigravity || options.authMethodId ? 180_000 : 15_000 });
+    const deadline = AbortSignal.timeout(antigravity || options.authMethodId ? 180_000 : 40_000);
     const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
     let stopping: Promise<void> | undefined;
     const stop = () => stopping ??= client.stop();
@@ -86,13 +88,17 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
       if (authMethodId) await client.authenticate(authMethodId);
       else if (provider === "grok-build" && info.authMethods?.some((method) => method.id === "cached_token")) await client.authenticate("cached_token");
       signal.throwIfAborted();
-      result.session = acpSessionCatalog(await createNativeCapabilityProbe(provider, launch.sourceHome, () => client.createSession(homedir())));
+      result.session = acpSessionCatalog(await createNativeCapabilityProbe(provider, launch.sourceHome, () => client.createSession(antigravity ? launch.sourceHome : homedir())));
       signal.throwIfAborted();
       result.status = "ready";
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? error.code : null;
       result.status = code === "ENOENT" ? "missing" : result.status === "needs_login" || (code === -32000 && error instanceof Error && error.message === "Authentication required") ? "needs_login" : "unavailable";
       result.error = error instanceof Error ? error.message : "Native agent connection failed.";
+      if (antigravity && (code === -32000 || (code === -32603 && result.error.startsWith("No browser is available here")))) {
+        result.status = "needs_login";
+        result.error = "Sign in with Google in Antigravity provider settings.";
+      }
     } finally { signal.removeEventListener("abort", abort); await Promise.all([stop(), installation]); }
     if (signal.aborted) throw signal.reason;
     cache.set(launch.instanceId, { result, executableFingerprint, expires: Date.now() + (result.status === "ready" ? 300_000 : 30_000) });

@@ -109,10 +109,7 @@ import { createCodexRuntimeManager } from "./runtime/codex-runtime.js";
 import { createServerPayloads } from "./api/server-payloads.js";
 import { createProjectActionRunPayload } from "./project-actions/project-action-payload.js";
 import { findLocalProject, listLocalProjects } from "./workspace/local-projects.js";
-import {
-  runtimeEventPageRequestFromUrl,
-  runtimeEventsPagePayloadFromEntries,
-} from "./api/event-page.js";
+import { createRuntimeEventPagePayload } from "./api/event-page.js";
 import {
   usageRecordsPayload,
   usageSummaryPayload,
@@ -373,6 +370,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     providerSettingsPayload,
     providerPlanUsagePayload,
     acpRegistryPayload,
+    antigravityPayload,
+    closeAntigravity,
     nativeAgentSetupPayload,
     nativeHistoryPayload,
     updateProviderSettingsPayload,
@@ -484,6 +483,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     isClosing: () => closing,
     changeAccountAuthority: mutation => changeAccountAuthority(mutation),
   });
+  onStartupFailure(closeAntigravity);
   const projectActionRunPayload = createProjectActionRunPayload({
     appendRuntimeEvent,
     resolveProjectRoot: async (projectId) =>
@@ -1495,14 +1495,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     return checkWorkspaceGitAvailability(storeDir);
   }
 
-  async function eventPagePayload(requestUrl: URL): Promise<unknown> {
-    const request = runtimeEventPageRequestFromUrl(requestUrl);
-    const rows = await store.runtimeEventPageRows(request);
-    return runtimeEventsPagePayloadFromEntries({
-      ...rows,
-      request,
-    });
-  }
+  const eventPagePayload = createRuntimeEventPagePayload(request => store.runtimeEventPageRows(request));
 
   async function listWorkOutputsPayload(): Promise<unknown> {
     return workOutputService.listWorkOutputs(await store.sessionShells());
@@ -1789,6 +1782,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       providerSettingsPayload,
       providerPlanUsagePayload,
       acpRegistryPayload,
+      antigravityPayload,
       nativeAgentSetupPayload,
       nativeHistoryPayload,
       updateProviderSettingsPayload,
@@ -1923,6 +1917,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     closeEventSubscribers,
     terminalWebSockets,
     runtimeClosers: [
+      closeAntigravity,
       sessionTitleService.close,
       chatResources.close,
       ()=>closeCoordinatedEvaluations({schedules,localExperiments,benchmarks:harnessRefinerBenchmarks,improvements,advancedBoundary,drainWork:async()=>{await hostedPonder.close();await turnRunner.close();}}),

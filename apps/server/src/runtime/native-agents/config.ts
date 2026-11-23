@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { isRegisteredAcpProvider, type ProviderConfig } from "@openpond/contracts";
 import { executableSearchPath, findLocalExecutable } from "@openpond/runtime/executable-search-path";
+import { antigravityLaunch, isAntigravityConfig } from "./antigravity-profile.js";
 
 export const NATIVE_AGENT_IDS = ["claude-code", "grok-build", "opencode"] as const;
 export type BuiltinNativeAgentId = typeof NATIVE_AGENT_IDS[number];
@@ -19,6 +20,7 @@ export const NATIVE_AGENTS = {
 export function nativeAgentLaunch(provider: NativeAgentId, config?: Partial<ProviderConfig>) {
   if (isRegisteredAcpProvider(provider)) {
     if (!config?.acp) throw new Error("ACP agent registration is missing. Configure it in Providers.");
+    if (isAntigravityConfig(config)) return antigravityLaunch(provider, config);
     if (config.sourceHome && !isAbsolute(config.sourceHome)) throw new Error("A configured agent home must be an absolute path.");
     let command = config.binaryPath || config.acp.command;
     if (config.binaryPath && !isAbsolute(config.binaryPath)) throw new Error("A configured agent executable must be an absolute path.");

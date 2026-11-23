@@ -28,6 +28,15 @@ export type RuntimeEventPageRequest = {
 const DEFAULT_EVENT_PAGE_LIMIT = 100;
 const MAX_EVENT_PAGE_LIMIT = 500;
 
+export function createRuntimeEventPagePayload(
+  readRows: (request: RuntimeEventPageRequest) => Promise<Omit<Parameters<typeof runtimeEventsPagePayloadFromEntries>[0], "request">>,
+) {
+  return async (requestUrl: URL): Promise<RuntimeEventPagePayload> => {
+    const request = runtimeEventPageRequestFromUrl(requestUrl);
+    return runtimeEventsPagePayloadFromEntries({ ...await readRows(request), request });
+  };
+}
+
 export function runtimeEventsPagePayload(
   events: RuntimeEvent[],
   requestUrl: URL,

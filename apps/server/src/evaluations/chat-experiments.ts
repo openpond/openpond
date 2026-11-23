@@ -14,6 +14,7 @@ import type { createLocalDatasetService } from "../training/local-dataset-servic
 import { loadOpenPondHostedModels,streamOpenPondHostedChatTurn } from "@openpond/runtime";
 import { prepareLocalExperimentModel } from "./local-experiment-model.js";
 import {readCachedTasksetPackage} from "../training/taskset-package-files.js";
+import {ClaudeCodeRuntimeSchema,CodexExperimentRuntimeSchema} from "openpond-sdk/experiments";
 
 export function chatExperimentSummary(record:LocalExperimentRecord,result?:LocalExperimentResult):ChatResourceSummary {
   const scored = result?.cases.filter(c => c.status==="completed" && c.grade?.gradingStatus==="scored" && c.grade.score !== null) ?? [];
@@ -25,14 +26,15 @@ export function chatExperimentSummary(record:LocalExperimentRecord,result?:Local
     taskCount:record.configuration.request.population.length,evaluatedCount:scored.length,
     failedCount:qualityFailureCount+executionFailureCount,qualityFailureCount,executionFailureCount,ungradedCount:record.configuration.request.population.length-scored.length,
     score:record.status === "completed" && scored.length === record.configuration.request.population.length ? scored.reduce((sum,c) => sum+c.grade!.score!,0)/scored.length : null,
-    costUsd:record.model.providerId === "codex" ? null : record.usage.costUsd,
+    costUsd:record.model.providerId === "codex" || record.configuration.request.policy.kind==="hosted_chat" && record.configuration.request.policy.localRuntime?.providerId==="claude-code" && record.configuration.request.policy.localRuntime.authentication?.kind==="subscription" ? null : record.usage.costUsd,
     rows:(result?.cases ?? []).slice(0,3).map(c => ({id:c.receiptId,label:c.taskId,detail:c.error ?? c.grade?.failureClass ?? c.status,score:c.grade?.score ?? null}))};
 }
 
 export const ChatExperimentRun = z.object({datasetId:z.string().min(1),revision:z.number().int().positive(),operationId:z.string().min(1).max(120),
   maximumCostUsd:z.number().positive().max(10000),taskLimit:z.number().int().min(1).max(100).default(10),seed:z.number().int().min(0).max(2147483647).default(0),
   maxOutputTokens:z.number().int().positive().max(262144).default(1024),
-  models:z.array(z.object({providerId:z.enum(["openpond","custom-openai-compatible","claude-code","codex"]),modelId:z.string().min(1)}).strict()).min(1).max(8),
+  requestTimeoutMs:z.number().int().min(1000).max(300000).default(120000),
+  models:z.array(z.object({providerId:z.enum(["openpond","custom-openai-compatible","claude-code","codex"]),modelId:z.string().min(1),reasoningEffort:z.enum(["low","medium","high","xhigh","max"]).optional()}).strict()).min(1).max(8),
 }).strict();
 const ChatLocalExperimentRun=ChatExperimentRun.extend({maximumCostUsd:ChatExperimentRun.shape.maximumCostUsd.optional()});
 export function localExperimentView(evidence:LocalExperimentResult):ChatExperimentView {
@@ -122,13 +124,14 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     }});
   async function run(raw:unknown) {
     const parsed = ChatLocalExperimentRun.parse(raw);
+    if(parsed.models.some(model=>!["codex","claude-code"].includes(model.providerId) && model.reasoningEffort!==undefined))throw new Error("Explicit reasoning effort is supported only for native Codex and Claude experiment models.");
     const {record,package:value} = await deps.datasets.packageDataset(parsed.datasetId,parsed.revision);
     const subscriptionOnly=parsed.models.every(model=>model.providerId==="codex") && !record.workspace.draft.graders.some(grader=>grader.kind==="model_judge");
     if(parsed.maximumCostUsd===undefined && !subscriptionOnly)throw new Error("Select a positive total budget for metered model calls or model-judge grading.");
     // The shared durable owner reserves uncertain provider requests. Its
     // internal ceiling is not a subscription price or a measured dollar cost.
     const input={...parsed,maximumCostUsd:parsed.maximumCostUsd ?? 10000};
-    if (new Set(input.models.map(m => `${m.providerId}/${m.modelId}`)).size !== input.models.length) throw new Error("Select each evaluated model once.");
+    if (new Set(input.models.map(m => `${m.providerId}/${m.modelId}/${m.reasoningEffort??"low"}`)).size !== input.models.length) throw new Error("Select each evaluated model and reasoning setting once.");
     const perRunBudget = Math.floor(input.maximumCostUsd*1_000_000/input.models.length)/1_000_000;
     if (perRunBudget < 0.000001) throw new Error("The total budget is too small for the selected models.");
     const requestHash = contentHash({scope,input});
@@ -136,20 +139,21 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     if (!retained) {
       const catalog = await choices();
       const hosted=input.models.some(model=>model.providerId==="openpond") || record.workspace.draft.graders.some(grader=>grader.kind==="model_judge") ? await hostedPin() : null;
-      const configurations = input.models.map((selected,index) => {
-        const model = catalog.models.find(m => m.providerId === selected.providerId && m.id === selected.modelId);
+      const configurations = await Promise.all(input.models.map(async(selected,index) => {
+        const model = selected.providerId==="codex" ? await codex.choice(selected.modelId,selected.reasoningEffort===undefined?undefined:CodexExperimentRuntimeSchema.shape.reasoningEffort.parse(selected.reasoningEffort)) : selected.providerId==="claude-code" ? await claude.choice(selected.modelId,selected.reasoningEffort===undefined?undefined:ClaudeCodeRuntimeSchema.shape.reasoningEffort.parse(selected.reasoningEffort)) : catalog.models.find(m => m.providerId === selected.providerId && m.id === selected.modelId);
         if (!model) throw new Error("The selected evaluated model is unavailable: "+selected.providerId+"/"+selected.modelId+".");
         const operationId = input.operationId+":"+index;
         const population = value.taskset.tasks.slice(0,input.taskLimit).map(task => ({receiptId:"case-"+contentHash([operationId,task.id,input.seed]).slice(0,40),taskId:task.id,seed:String(input.seed),fixtureId:null}));
         if (!population.length) throw new Error("This saved Dataset has no runnable tasks.");
         const requestBudget = Math.floor(perRunBudget*1_000_000/population.length)/1_000_000;
         if (requestBudget < 0.000001) throw new Error("The total budget cannot cover a positive allocation for every selected task.");
-        const common = {configurationHash:model.configurationHash,maximumRequestCostUsd:requestBudget,requestTimeoutMs:120_000};
-        const localRuntime = selected.providerId === "codex" && "accountHash" in model ? {providerId:"codex",...common,accountHash:model.accountHash,reasoningEffort:model.reasoningEffort} : selected.providerId === "claude-code" && "executableHash" in model ? {providerId:"claude-code",...common,executableHash:model.executableHash,capabilityHash:model.capabilityHash,version:model.version,maximumTurns:1,holdOpen:false} : {providerId:"custom-openai-compatible",...common};
+        const outputSchema=record.workspace.draft.output.mode==="structured_json"?record.workspace.draft.output.jsonSchema:undefined;
+        const common = {...(outputSchema && ["codex","claude-code"].includes(selected.providerId)?{outputSchema}:{}),configurationHash:model.configurationHash,maximumRequestCostUsd:requestBudget,requestTimeoutMs:input.requestTimeoutMs};
+        const localRuntime = selected.providerId === "codex" && "accountHash" in model ? {providerId:"codex",...common,accountHash:model.accountHash,reasoningEffort:model.reasoningEffort} : selected.providerId === "claude-code" && "executableHash" in model ? {providerId:"claude-code",...common,executableHash:model.executableHash,capabilityHash:model.capabilityHash,version:model.version,authentication:model.authentication,...("reasoningEffort" in model && model.reasoningEffort?{reasoningEffort:model.reasoningEffort}:{}),maximumTurns:outputSchema?3:1,holdOpen:false} : {providerId:"custom-openai-compatible",...common};
         return LocalExperimentRunSchema.shape.configuration.parse({operationId,maximumCostUsd:perRunBudget,request:{schemaVersion:"openpond.modelTasksetRunRequest.v1",operationId,teamId:scope,modelProjectId:null,
           name:record.workspace.draft.name+" · "+selected.modelId,taskset:{id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash},population,
           policy:{kind:"hosted_chat",modelId:selected.modelId,maxOutputTokens:Math.min(input.maxOutputTokens,model.outputLimit!),temperature:0,topP:1,...selected.providerId==="openpond" ? {} : {localRuntime}}}});
-      });
+      }));
       retained = await deps.store.prepareChatExperimentGroup(input.operationId,requestHash,{packageHash:value.contentHash,hosted,configurations});
     }
     const group = Group.parse(retained);

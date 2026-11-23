@@ -3,6 +3,7 @@ import { resolveNativeWorkerParents } from "../native-worker-sessions.js";
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { z } from "zod";
 import { createAcpRegistrationService } from "../runtime/native-agents/acp-registrations.js";
+import { createAntigravityService } from "../runtime/native-agents/antigravity-service.js";
 import { withUrlModels } from "../enclave/provider.js";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -1840,6 +1841,7 @@ export function createServerPayloads(deps: {
     resolveExternalDataset:profileDatasets.resolveExternalDataset,prepareLocalDatasetBinding:profileDatasets.prepareBinding,
   });
 
+  const antigravity = createAntigravityService(providersFilePath, providerSettingsPayload);
   let enclaveService: ReturnType<typeof import("../enclave/connection.js").createEnclaveConnection> | undefined;
   async function enclavePayload(action: import("../enclave/connection.js").EnclaveAction, payload?: unknown, signal?: AbortSignal) {
     const module = await import("../enclave/connection.js");
@@ -1860,6 +1862,8 @@ export function createServerPayloads(deps: {
     nativeHistoryPayload,
     providerPlanUsagePayload,
     acpRegistryPayload: createAcpRegistrationService(providersFilePath, providerSettingsPayload),
+    antigravityPayload: antigravity.request,
+    closeAntigravity: antigravity.close,
     nativeAgentSetupPayload: async (provider: string, payload: unknown, signal?: AbortSignal) => {
       const input = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
       if (provider === "codex") {

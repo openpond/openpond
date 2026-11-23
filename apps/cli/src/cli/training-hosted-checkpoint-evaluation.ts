@@ -2,6 +2,10 @@ import { z } from "zod";
 
 const RequestSchema = z.object({
   mode: z.enum(["frozen_evaluation", "training_diagnostic"]),
+  promptComparison: z.object({systemPrompt:z.string().trim().min(1).max(50000),expectedSourcePromptSha256:z.string().regex(/^[a-f0-9]{64}$/),
+    decodingComparison:z.object({taskId:z.string().min(1).max(191),outputSchema:z.record(z.string(),z.unknown())
+      .refine(value=>Buffer.byteLength(JSON.stringify(value),'utf8')<=100000,'Diagnostic schema exceeds its byte boundary')}).strict().optional(),
+  }).strict().optional(),
   evaluationPanel: z.object({
     sourceManifest: z.object({ id: z.string().trim().min(1).max(2000), contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
     populationSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -19,6 +23,7 @@ const RequestSchema = z.object({
   maximumSpendUsd: z.number().positive().max(10),
   maxGpuSeconds: z.number().int().positive().max(7200),
 }).strict().superRefine((value, ctx) => {
+  if(value.promptComparison&&(value.mode!=="frozen_evaluation"||value.evaluationPanel))ctx.addIssue({code:"custom",message:"Prompt comparisons require the original held-out population and read-only checkpoint execution."});
   if (value.mode === "training_diagnostic" && (!value.artifact || value.retainedCheckpoint || value.evaluationPanel || value.representation === "merged_backbone"))
     ctx.addIssue({ code: "custom", message: "Training fit uses a published supervised adapter and the server-derived original training population only." });
   if (Boolean(value.artifact) === Boolean(value.retainedCheckpoint))

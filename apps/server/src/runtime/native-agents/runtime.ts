@@ -15,6 +15,7 @@ import { findLocalProject } from "../../workspace/local-projects.js";
 import { isNativeAgentId, nativeAgentLaunch } from "./config.js";
 import { nativeAgentEvent } from "./events.js";
 import { invalidateNativeAgent } from "./setup.js";
+import { registerNativeProviderClient } from "./provider-lifecycle.js";
 import { createNativeHistoryWorkspace } from "./history-workspace.js";
 import { createNativeAgentApprovals } from "./approvals.js";
 import { createTaskCoordinationMcp, type TaskCoordinationBridge } from "../task-inbox/codex-mcp.js";
@@ -64,7 +65,8 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
     let runtime: RunningSession | null = null;
     const bridge = coordination ? await createTaskCoordinationMcp(coordination) : null;
     let bridgeClosing: Promise<void> | null = null;
-    const closeBridge = () => bridgeClosing ??= bridge ? bridge.close() : Promise.resolve();
+    let unregister: (() => void) | undefined;
+    const closeBridge = () => { unregister?.(); return bridgeClosing ??= bridge ? bridge.close() : Promise.resolve(); };
     const Client = session.provider === "claude-code" ? ClaudeCliClient : AcpClient;
     const client = new Client({ ...launch, cwd, additionalDirectories, reportingOnly,
       onUpdate: async (_nativeSessionId, update) => {
@@ -91,6 +93,7 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
       onExit: (error) => { if (runtimes.get(session.id)?.client === client) { runtimes.delete(session.id); invalidateNativeAgent(launch.instanceId, error); } void closeBridge().catch(() => undefined); },
     });
     try {
+      unregister = registerNativeProviderClient(session.provider, async () => { await client.stop(); await closeBridge(); });
       const info = await client.initialize();
       const taskTools = Boolean(bridge && info.agentCapabilities?.mcpCapabilities?.http);
       if (bridge && !taskTools) {
@@ -103,6 +106,8 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
       const native = session.nativeAgent
         ? await client.loadSession(session.nativeAgent.sessionId, cwd, servers)
         : await client.createSession(cwd, servers);
+      const latestConfig = (await readProvidersFile(join(deps.storageHome, "providers.json"))).providers[session.provider];
+      if (!latestConfig?.enabled || nativeAgentLaunch(session.provider, latestConfig).instanceId !== launch.instanceId) throw new Error("The provider account changed while starting this conversation. Reconnect in Providers.");
       const updated = await deps.updateSession(session.id, { cwd, nativeAgent: { provider: session.provider, instanceId: launch.instanceId, sessionId: native.sessionId, cwd }, metadata: { ...session.metadata, nativeHistoryProjection: false, ...(config.acp ? { acpAgentName: config.acp.displayName } : {}) } });
       runtime = { reportingOnly, requestId: "", requestOrdinal: 0, turn: null, startedAt: "", firstTokenMs: null, visibleUpdates: 0, imageInput: info.agentCapabilities?.promptCapabilities?.image === true, client, native, instanceId: launch.instanceId, cwd, additionalDirectories, turnId: null, replaying: false, session: updated, coordinated: JSON.stringify(coordination?.tools ?? []), taskTools, close: async () => { await client.stop(); await closeBridge(); } };
       runtimes.set(session.id, runtime);

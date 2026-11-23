@@ -1,6 +1,7 @@
 import { modelsLocation, navigateModelsRoute } from "../labs/lab-primary-tab-state";
 import { ErrorToast } from "../common/ErrorToast";
 import { AcpAgentBrowser } from "./AcpAgentBrowser";
+import { AntigravityProviderCard } from "./AntigravityProviderCard";
 import { apiFetch } from "../../api/api-client";
 import { UrlModelConnections } from "./UrlModelConnections";
 import { api } from "../../api";
@@ -27,7 +28,7 @@ import type {
   ProviderSettings,
   ProviderStatus,
 } from "@openpond/contracts";
-import { isRegisteredAcpProvider, PROVIDER_IDS } from "@openpond/contracts";
+import { ANTIGRAVITY_PROVIDER_ID, isRegisteredAcpProvider, PROVIDER_IDS } from "@openpond/contracts";
 import { DropdownSelect } from "../DropdownSelect";
 import type { CheckNativeProvider } from "./native-provider-check";
 import { DESKTOP_AGENT_PROVIDERS, isAcpProvider, NativeAgentProviderDetails } from "./NativeAgentProviderDetails";
@@ -205,7 +206,7 @@ export function ProviderSettingsSection({
   const [removing, setRemoving] = useState<string | null>(null);
   const [removalError, setRemovalError] = useState<string | null>(null);
   const [detailsProviderId, setDetailsProviderId] = useState<ChatProvider | null>(null);
-  const providerRows = ["openpond" as const, ...DESKTOP_AGENT_PROVIDERS, ...(Object.keys(providers?.statuses ?? {}).filter(isRegisteredAcpProvider))].filter(id => providers?.statuses[id]);
+  const providerRows = ["openpond" as const, ...DESKTOP_AGENT_PROVIDERS, ...(Object.keys(providers?.statuses ?? {}).filter(isRegisteredAcpProvider))].filter(id => id !== ANTIGRAVITY_PROVIDER_ID && providers?.statuses[id]);
   const detailsStatus = detailsProviderId ? providers?.statuses[detailsProviderId] ?? null : null;
   function openProviderDetails(providerId: ChatProvider, loadModels: boolean) {
     setDetailsProviderId(providerId);
@@ -221,6 +222,7 @@ export function ProviderSettingsSection({
         <div className="provider-connections-panel">
           {providerRows.length > 0 ? (
             <div className="provider-connections-grid" role="list">
+              <AntigravityProviderCard connection={connection} providers={providers} onChanged={onProvidersChanged} />
               {providerRows.map((providerId) => {
                 const status = providers.statuses[providerId]!;
                 const cache = providers.modelCaches[providerId];

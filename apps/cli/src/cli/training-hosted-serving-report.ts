@@ -31,6 +31,7 @@ const Inspection = z.object({ job: z.object({
 }) });
 const ServingSource = z.object({
   mode: z.enum(["load_test", "frozen_evaluation", "training_diagnostic"]),
+  promptComparison: z.object({schemaVersion:z.literal("openpond.evaluationPromptComparison.v1"),evidenceKind:z.literal("prompt_comparison"),qualifiesFrozenEvaluation:z.literal(false),expectedSourcePromptSha256:z.string().regex(/^[a-f0-9]{64}$/),sourceEnvironmentSha256:z.string().regex(/^[a-f0-9]{64}$/),systemPromptSha256:z.string().regex(/^[a-f0-9]{64}$/),decodingComparison:z.object({taskId:z.string(),outputSchema:z.record(z.string(),z.unknown())}).optional()}).optional(),
   target: z.enum(["base_model", "checkpoint"]),
   sourceJobId: z.string().min(1), checkpointId: z.string().min(1),
   policyVersion: z.number().int().nonnegative(),
@@ -79,6 +80,7 @@ export function parseHostedServingReportEvidence(value: unknown, expected: Pick<
   }
   const resource = resources.find(row => row.kind === "worker_command" && row.externalId === "serving-soak-source");
   const source = ServingSource.parse(resource?.metadata);
+  if(source.promptComparison&&(source.mode!=="frozen_evaluation"||evaluations.some(e=>e.metrics.evidenceKind!=="prompt_comparison"||e.metrics.qualifiesFrozenEvaluation!==false||e.metrics.systemPromptSha256!==source.promptComparison!.systemPromptSha256)))throw new Error("Hosted prompt comparison classification mismatch.");
   if (source.mode === "training_diagnostic" && (!source.trainingDiagnostic || source.trainingDiagnostic.sourceJobId !== source.sourceJobId ||
       !source.artifact || source.evaluationPanel || source.retainedCheckpoint || source.derivedBackbone))
     throw new Error("Hosted training diagnostic source classification mismatch.");

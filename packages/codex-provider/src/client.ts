@@ -186,6 +186,7 @@ export class CodexAppServerClient {
     approvalPolicy?: "untrusted" | "on-failure" | "on-request" | "never";
     sandbox?: "read-only" | "workspace-write" | "danger-full-access";
     sandboxPolicy?: unknown;
+    outputSchema?: Record<string,unknown>;
   }): Promise<{ turnId: string; response: unknown }> {
     const response = (await this.request("turn/start", {
       threadId: params.threadId,
@@ -194,6 +195,7 @@ export class CodexAppServerClient {
       model: params.model ?? null,
       approvalPolicy: params.approvalPolicy ?? "on-request",
       sandboxPolicy: params.sandboxPolicy ?? sandboxPolicyForMode(params.sandbox),
+      ...(params.outputSchema ? {outputSchema:params.outputSchema} : {}),
     })) as { turn?: { id?: string } };
     const turnId = response.turn?.id;
     if (!turnId) throw new Error("codex turn/start response did not include a turn id");
