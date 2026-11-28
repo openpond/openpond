@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
+import { ModelProjectRecipeDocumentSchema } from "openpond-sdk/model-projects";
 
 const fieldText = z.string().max(2_000).optional();
 const positiveInteger = z.number().int().positive().optional();
@@ -58,6 +59,10 @@ export const ResourceSetupDraftSchema = z.object({
   localBaseline: localModelRef.optional(),
   datasetExamples: datasetExample.array().max(50).optional(),
   datasetInputsDirty: z.boolean().optional(),
+  trainingRecipes: z.object({
+    sft: ModelProjectRecipeDocumentSchema.extend({ method: z.literal("sft") }).optional(),
+    grpo: ModelProjectRecipeDocumentSchema.extend({ method: z.literal("grpo") }).optional(),
+  }).strict().optional(),
   graderExamples: z.object({
     id: z.uuid(),
     taskId: fieldText,

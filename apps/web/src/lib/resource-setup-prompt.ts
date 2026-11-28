@@ -6,6 +6,12 @@ export type ResourceSetupField = keyof ResourceSetupDraft["values"];
 export type ResourceSetupMethod = ResourceSetupDraft["values"]["method"];
 export type ResourceSetupCandidate = NonNullable<ResourceSetupDraft["candidateRef"]> & { label: string };
 
+export function resourceSetupTrainingMethod(draft: ResourceSetupDraft): "sft" | "grpo" | null {
+  return draft.kind !== "model" || draft.values.adapter === "Full fine-tuning" ? null
+    : draft.values.method === "SFT" ? "sft"
+      : draft.values.method === "GRPO" ? "grpo" : null;
+}
+
 export function newResourceSetup(
   kind: ResourceSetupDraft["kind"],
   options: { method?: ResourceSetupMethod; comparison?: boolean } = {},
@@ -97,6 +103,8 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const prompt = parts.slice(0, destinationStart).map(stringify).join("");
   const execution = parts.slice(destinationStart).map(stringify).join("").trim();
   const { split, epochs, learningRate, budget, samples, seed } = draft.values;
+  const method = resourceSetupTrainingMethod(draft);
+  const recipe = method ? draft.trainingRecipes?.[method] : undefined;
   const settings = [
     !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
     draft.candidateRef && `Model project ${draft.candidateRef.projectId}, version ${draft.candidateRef.versionId}, artifact ${draft.candidateRef.artifactId}, bundle hash ${draft.candidateRef.bundleHash}`,
@@ -116,7 +124,8 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     grader: "Check passing and failing fixtures. Review any fixture-check cost before running it, and ask before saving or publishing. Keep earlier dataset revisions and run inputs intact.",
     chat: "",
   }[draft.kind];
-  return [prompt, settings.length ? `Use ${settings.join(", ")}.` : "", review, execution].filter(Boolean).join(" ");
+  const recipeText = recipe ? `Use these training settings ${JSON.stringify(recipe)}.` : "";
+  return [prompt, settings.length ? `Use ${settings.join(", ")}.` : "", recipeText, review, execution].filter(Boolean).join(" ");
 }
 
 export function snapshotResourceSetup(
@@ -126,9 +135,12 @@ export function snapshotResourceSetup(
 ) {
   const benchmarkDefinition = draft.kind === "benchmark" && selection?.localDraft && selection.draft && selection.draftRevision
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
-  const { datasetExamples: _localExamples, graderExamples: _localFixtures, datasetInputsDirty, ...setup } = draft;
+  const { datasetExamples: _localExamples, graderExamples: _localFixtures, datasetInputsDirty, trainingRecipes, ...setup } = draft;
+  const method = resourceSetupTrainingMethod(draft);
+  const selectedRecipe = method && trainingRecipes?.[method];
   return {
     prompt: [resourceSetupText(draft), instructions].filter(Boolean).join("\n\n"),
-    draft: { ...setup, ...(datasetInputsDirty ? { datasetRef: undefined } : {}), ...(benchmarkDefinition ? { benchmarkDefinition } : {}) },
+    draft: { ...setup, ...(method && selectedRecipe ? { trainingRecipes: { [method]: selectedRecipe } } : {}),
+      ...(datasetInputsDirty ? { datasetRef: undefined } : {}), ...(benchmarkDefinition ? { benchmarkDefinition } : {}) },
   };
 }

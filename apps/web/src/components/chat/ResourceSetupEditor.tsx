@@ -9,6 +9,7 @@ import {
   resourceSetupGroups,
   resourceSetupLabel,
   resourceSetupParts,
+  resourceSetupTrainingMethod,
   ResourceSetupDraftSchema,
   type ResourceSetupDraft,
   type ResourceSetupField,
@@ -21,6 +22,7 @@ import { ChevronDown, SlidersHorizontal } from "../icons";
 import { DesktopNewContext } from "./DesktopNewMenu";
 import { DatasetSetupReview } from "./DatasetSetupReview";
 import { GraderSetupReview } from "./GraderSetupReview";
+import { ModelSetupTrainingFields } from "./ModelSetupTrainingFields";
 import "./resource-setup-editor.css";
 
 type PromptField = Exclude<ResourceSetupPart, string>["field"];
@@ -97,6 +99,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
         ...(leavingLocal && draft.localCandidate ? { candidate: undefined } : {}),
         ...(leavingLocal && draft.localBaseline ? { baseline: undefined } : {}),
         ...(sourceChanged ? { dataset: undefined, datasetRevision: undefined, fields: undefined } : {}),
+        ...(key === "method" && (raw === "SFT" || raw === "GRPO") ? { adapter: "LoRA" } : {}),
         [key]: raw === "" ? undefined : decimalFields.has(key) || integerFields.has(key) ? Number(raw) : raw,
       },
     });
@@ -114,6 +117,11 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     });
   }
   function fieldOptions(key: ResourceSetupField): DropdownOption[] | null {
+    if (key === "adapter" && ["SFT", "GRPO"].includes(draft.values.method ?? "")) return [
+      { value: "", label: "Choose later" },
+      { value: "LoRA", label: "LoRA" },
+      { value: "Full fine-tuning", label: "Full fine-tuning", disabled: true, description: "The current SFT and GRPO runners use LoRA." },
+    ];
     if (key === "destination") {
       const device = compute.data?.devices[0];
       const modelReason = device ? `${device.name} detected. A local training runner is required.`
@@ -139,7 +147,9 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     </button>)}
   </div>;
   const activePart = parts.find(part => typeof part !== "string" && part.field === field);
-  const activeFields = resourceSetupGroups[field] ?? [field as ResourceSetupField];
+  const trainingMethod = field === "trainingSettings" ? resourceSetupTrainingMethod(draft) : null;
+  const activeFields: readonly ResourceSetupField[] = trainingMethod
+    ? ["budget"] : resourceSetupGroups[field] ?? [field as ResourceSetupField];
   const benchmarkPresets = draft.kind === "benchmark" ? <div className="resource-setup-presets" role="group" aria-label="Benchmark presets">
     {[{ compare: false, label: "Evaluate one model" }, { compare: true, label: "Compare models" }].map(({ compare, label }) =>
       <button type="button" className="training-button secondary" key={label} disabled={busy}
@@ -160,6 +170,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       <h2>Configure prompt</h2>
       {sentence()}
       {benchmarkPresets}
+      {trainingMethod && <ModelSetupTrainingFields key={trainingMethod} draft={draft} method={trainingMethod} disabled={busy} onChange={onChange} />}
       {activePart ? <div className="resource-setup-fields" key={field}>
         {activeFields.map((key, index) => {
           const options = fieldOptions(key);
