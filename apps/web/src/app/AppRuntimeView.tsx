@@ -3,6 +3,7 @@ import { useToastPresentation } from "../hooks/useToastPresentation";
 import { useThreadNotifications } from "../hooks/useThreadNotifications";
 import { useThreadNotificationReveal } from "../hooks/useThreadNotificationReveal";
 import { connectionQueryScope } from "../lib/query-scope";
+import { hostedModelScope } from "../lib/hosted-model-scope";
 import { sidebarActivityTimes, sidebarEventsBySession } from "../lib/sidebar-inbox";
 import { usePonderActivity } from "../components/ponder/usePonderActivity";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -475,6 +476,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     }
   }, [activeModel, activeProvider, beginContextualNewChat, bootstrap, composerDraftStore, connection, openSessionInChat, requestMainComposerFocus, showToast]);
   const managedResourcesAvailable = bootstrap?.account.state === "signed_in";
+  const hostedModels = hostedModelScope(bootstrap?.account, appDefaults.defaultTeamId);
   const desktopNewAction = useMemo(() => ({
     busy: newResourceBusy, create: createDesktopResource, managedAvailable: managedResourcesAvailable,
   }), [newResourceBusy, createDesktopResource, managedResourcesAvailable]);
@@ -1057,7 +1059,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           },
           productArea,
           modelProjects: (trainingNavigation.data?.projects ?? []).filter((project) =>
-            project.teamId === null || project.teamId === (appDefaults.defaultTeamId?.trim() ?? null),
+            project.teamId === null || (hostedModels && project.teamId === hostedModels.teamId && project.apiOrigin === hostedModels.apiOrigin),
           ),
           modelTrainingActivityByProjectId: trainingNavigation.data?.activityByProjectId ?? {},
           onProductAreaChange: changeProductArea,

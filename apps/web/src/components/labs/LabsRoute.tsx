@@ -17,6 +17,7 @@ import { chatResourceRequest } from "../../api/chat-resource-api";
 import { parseModelNativeRunPage } from "openpond-sdk/model-projects";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
 import { useErrorToast } from "../../app/AppToastContext";
+import { hostedModelScope } from "../../lib/hosted-model-scope";
 import { buildHostedTrainingModelChatHandoff, buildTrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import { HostedTrainingPolicyRoute } from "./HostedTrainingPolicyRoute";
 import { AppDialog } from "../dialogs/AppDialog";
@@ -108,10 +109,11 @@ export function LabsRoute(props: LabsRouteProps) {
   useErrorToast(training.training.error);
   const workproducts = useMemo(() => labWorkproductProjection({ profile, training: state, runs: createImprove.runs }), [profile, state, createImprove.runs]);
   const models = useMemo(() => {
-    const team = training.settingsPreferences.defaultTeamId?.trim() ?? null;
-    const ids = new Set((state?.modelProjects ?? []).filter((project) => project.profileId === profileId && (project.hosted === null || project.hosted.teamId === team && project.hosted.apiOrigin === props.account?.apiBaseUrl)).map((project) => project.id));
+    const workspace = hostedModelScope(props.account, training.settingsPreferences.defaultTeamId);
+    const ids = new Set((state?.modelProjects ?? []).filter((project) => project.profileId === profileId &&
+      (project.hosted === null || (workspace && project.hosted.teamId === workspace.teamId && project.hosted.apiOrigin === workspace.apiOrigin))).map(project => project.id));
     return workproducts.filter((item) => item.kind === "model" && ids.has(item.id));
-  }, [state, profileId, training.settingsPreferences.defaultTeamId, props.account?.apiBaseUrl, workproducts]);
+  }, [state, profileId, training.settingsPreferences.defaultTeamId, props.account, workproducts]);
   const selected = models.find((model) => model.id === route?.modelId) ?? null;
   const refreshModel = route?.resourceId
     ? models.find(model => model.id === modelResourceOwner(route, state)) ?? null

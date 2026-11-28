@@ -7,6 +7,7 @@ import { DesktopNewMenu } from "../chat/DesktopNewMenu";
 import { SidebarModelResource } from "./SidebarModelResource";
 import { SidebarResourceRow } from "./SidebarResourceRow";
 import { sidebarResourceThreads } from "./sidebar-resource-threads";
+import { hostedModelScope } from "../../lib/hosted-model-scope";
 import { SidebarTeamAvatars } from "./SidebarTeamAvatars";
 import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
@@ -343,11 +344,8 @@ export function SidebarSectionList({
     [chatRowsVisibleCount, ordinaryFilteredTaskRows],
   );
   const { modelsById: modelChatsById, benchmarks, grouped: libraryChatIds } = useMemo(() => {
-    const origin = account?.state === "signed_in" && account.apiBaseUrl && URL.canParse(account.apiBaseUrl)
-      ? new URL(account.apiBaseUrl).origin : null;
-    return sidebarResourceThreads(activeSessions, visibleTaskRows, modelProjects,
-      origin && selectedTeamId ? { apiOrigin: origin, teamId: selectedTeamId } : null);
-  }, [account?.apiBaseUrl, account?.state, activeSessions, visibleTaskRows, modelProjects, selectedTeamId]);
+    return sidebarResourceThreads(activeSessions, visibleTaskRows, modelProjects, hostedModelScope(account, selectedTeamId));
+  }, [account, activeSessions, visibleTaskRows, modelProjects, selectedTeamId]);
   const sidebarModels = modelProjects.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount));
   const visibleModelIds = new Set(sidebarModels.map(model => model.id));
   function openResourcePage(route: ModelsRoute) {
