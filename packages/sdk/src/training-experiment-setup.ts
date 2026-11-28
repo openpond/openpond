@@ -14,7 +14,7 @@ import {
 } from "./training-preparations.js";
 import { TrainingGpuSelectionSchema } from "./training-compute-selection.js";
 import { canonicalJson, canonicalSha256, OpenPondProtocolError } from "./protocol.js";
-import { EvaluationExperimentDraftSchema } from "./evaluation-experiment-draft.js";
+import { BenchmarkBaselineSchema, EvaluationExperimentDraftSchema } from "./evaluation-experiment-draft.js";
 import { HostedEvaluationExperimentFormDraftSchema } from "./hosted-evaluation-experiment-draft.js";
 import { ActivationExperimentFormDraftSchema } from "./activation-experiment-draft.js";
 import { EngramExperimentFormDraftSchema } from "./engram-experiment-draft.js";
@@ -304,6 +304,7 @@ export const ExperimentDraftSchema = z
     name: z.string().trim().min(1).max(500),
     modelSetup: ModelSetupDraftSchema.optional(),
     startingModel: ExperimentStartingModelSchema.optional(),
+    benchmarkBaseline: BenchmarkBaselineSchema.optional(),
     evaluationForm: EvaluationExperimentDraftSchema.optional(),
     localAdapterBenchmark: LocalAdapterBenchmarkSetupSchema.optional(),
     hostedEvaluationForm: HostedEvaluationExperimentFormDraftSchema.optional(),
@@ -327,6 +328,11 @@ export const ExperimentDraftSchema = z
   .strict()
   .superRefine((draft, context) => {
     const source = draft.startingModel;
+    if (draft.benchmarkBaseline && (draft.operationType !== "evaluate" || source?.source !== "trained" ||
+      draft.evaluationForm?.executionLocation !== "hosted" || draft.evaluationForm.form.mode !== "model" ||
+      draft.benchmarkBaseline.jobId === source.trainedVersion.jobId ||
+      draft.benchmarkBaseline.versionHash === source.trainedVersion.contentHash))
+      context.addIssue({ code: "custom", path: ["benchmarkBaseline"], message: "Retain a distinct baseline for an exact managed Model Benchmark." });
     if (draft.localAdapterBenchmark && (draft.operationType !== "evaluate" || source || draft.evaluationForm || draft.hostedEvaluationForm))
       context.addIssue({ code: "custom", path: ["localAdapterBenchmark"], message: "The local adapter Benchmark owns its reviewed execution settings." });
     if (draft.alphaEditForm && draft.operationType !== "alphaedit")

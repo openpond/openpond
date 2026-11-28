@@ -255,6 +255,8 @@ export function createChatExperimentScopes(store: SqliteStore) {
         (canonicalJson(draft.startingModel ?? null) !== canonicalJson(scope.draft.startingModel) ||
           draft.evaluationForm?.executionLocation !== "hosted" || draft.evaluationForm.form.mode !== "model"))
         throw new Error("Keep the exact saved Model version and managed runtime when editing this Benchmark.");
+      if (draft.benchmarkBaseline)
+        throw new Error("Edit the local Benchmark comparison from its Model version picker.");
       if (scope.modelSetupOwner && scope.draft.operationType === "grpo" &&
         (scope.draft.startingModel?.source === "trained" || draft.startingModel?.source === "trained" || draft.trainingForm?.parent) &&
         (scope.draft.startingModel?.source !== "trained" || !draft.trainingForm?.parent ||

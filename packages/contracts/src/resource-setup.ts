@@ -3,7 +3,7 @@ import { ExperimentGraderSelectionSchema } from "openpond-sdk/experiments";
 import { TasksetCatalogReleaseRefSchema } from "openpond-sdk/taskset-catalog";
 import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
 import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelProjectVersionedRefSchema, RegisteredAdapterVersionSchema } from "openpond-sdk/model-projects";
-import { DecisionTrainingFormDraftSchema, SftRecipeSchema, WeightSpaceLimitsSchema, WeightSpacePanelSchema, WeightSpacePromptSchema, WeightSpaceRequestSchema } from "openpond-sdk/training";
+import { DecisionTrainingFormDraftSchema, SftRecipeSchema, WeightSpaceLimitsSchema, WeightSpacePanelSchema, WeightSpacePromptSchema, WeightSpaceRequestSchema, type ExperimentDraft } from "openpond-sdk/training";
 
 const fieldText = z.string().max(2_000).optional();
 const positiveInteger = z.number().int().positive().optional();
@@ -49,6 +49,15 @@ export const ManagedBenchmarkVersionsSchema = z.object({
   candidate.versionHash !== baseline.versionHash
 ), "Choose two distinct saved versions from the same workspace.");
 export type ManagedBenchmarkVersions = z.infer<typeof ManagedBenchmarkVersionsSchema>;
+export function managedBenchmarkVersionsFromDraft(draft: ExperimentDraft, owner: { actorId: string; apiOrigin: string }) {
+  if (!draft.benchmarkBaseline || draft.startingModel?.source !== "trained") return undefined;
+  const version = draft.startingModel.trainedVersion;
+  const scope = { location: "cloud" as const, teamId: version.teamId, owner };
+  return ManagedBenchmarkVersionsSchema.parse({
+    candidate: { ...scope, modelProjectId: version.modelProjectId, jobId: version.jobId, versionHash: version.contentHash },
+    baseline: { ...scope, ...draft.benchmarkBaseline },
+  });
+}
 export const ManagedBenchmarkDatasetSchema = z.object({
   teamId: resourceId,
   owner: HostedBenchmarkOwnerSchema,

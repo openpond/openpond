@@ -31,6 +31,13 @@ export const EvaluationExperimentDraftSchema = z.object({
   source: EvaluationExperimentSourceSchema.nullable(),
   executionLocation: z.enum(["local", "hosted"]),
 }).strict();
+/** Portable pointer to the frozen comparison version. Workspace authority is
+ * established by the owning draft record and exact version read. */
+export const BenchmarkBaselineSchema = z.object({
+  modelProjectId: z.string().trim().min(1).max(240),
+  jobId: z.string().trim().min(1).max(240),
+  versionHash: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
 export type EvaluationExperimentFormDraft = z.infer<typeof EvaluationExperimentFormDraftSchema>;
 export type EvaluationExperimentSelection = z.infer<typeof EvaluationExperimentSelectionSchema>;
 export type EvaluationExperimentSource = z.infer<typeof EvaluationExperimentSourceSchema>;

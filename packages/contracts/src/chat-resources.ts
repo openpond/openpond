@@ -166,6 +166,7 @@ export const ChatExperimentScopeSchema = z
       actorId: Id,
       sourceRevision: z.number().int().positive(),
       hostedRevision: z.number().int().positive(),
+      baselineVersionHash: Hash.optional(),
     }).optional(),
     managedBenchmarkVersions: ManagedBenchmarkVersionsSchema.optional(),
     draftRevision: z.number().int().positive().optional(),

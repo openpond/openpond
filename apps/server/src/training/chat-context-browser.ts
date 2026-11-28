@@ -20,7 +20,7 @@ import { readChatDecisionResult } from "./chat-decision-result.js";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import { createHash } from "node:crypto";
 import { ownsHostedBenchmarkVersion } from "@openpond/contracts/resource-setup";
-import { authorizeHostedBenchmarkVersion } from "./hosted-benchmark-access.js";
+import { authorizeHostedBenchmarkVersion, readManagedBenchmarkVersions } from "./hosted-benchmark-access.js";
 import { createHostedTrainingRunDetail } from "./hosted-training-run-detail.js";
 
 type Access = { apiBaseUrl: string; token: string; teamId: string; actorId: string };
@@ -511,15 +511,25 @@ export function createChatContextBrowser(deps: {
     const scope = chatExperimentContext((await deps.store.getSession(sessionId))?.metadata).scopes.find(item => item.id === scopeId);
     if (!selection.localDraft || scope?.draft?.operationType !== "evaluate" || scope.draftRevision !== expectedRevision)
       throw new Error("The local Benchmark changed. Reopen it before syncing.");
-    const draft = scope.draft;
+    const { benchmarkBaseline: _portableBaseline, ...draft } = scope.draft;
     const access = await deps.access();
     const apiOrigin = new URL(access.apiBaseUrl).origin;
     const linked = scope.syncedDraft;
     if (linked && (linked.actorId !== access.actorId || linked.teamId !== access.teamId || linked.apiOrigin !== apiOrigin))
       throw new Error("Select the workspace linked to this Benchmark before syncing.");
-    if (linked?.sourceRevision === expectedRevision) return linked;
+    const baseline = scope.managedBenchmarkVersions?.baseline;
+    if (linked?.sourceRevision === expectedRevision && linked.baselineVersionHash === baseline?.versionHash) return linked;
+    if (baseline && scope.managedBenchmarkVersions) {
+      const verified = await readManagedBenchmarkVersions(scope.managedBenchmarkVersions, deps.access);
+      if (draft.startingModel?.source !== "trained" || draft.evaluationForm?.executionLocation !== "hosted" ||
+        canonicalJson(draft.startingModel.trainedVersion) !== canonicalJson(verified.candidate.version) ||
+        verified.baseline?.pin.versionHash !== baseline.versionHash)
+        throw new Error("Reopen the exact candidate and baseline before syncing this Benchmark.");
+    }
+    const benchmarkBaseline = baseline ? { modelProjectId: baseline.modelProjectId, jobId: baseline.jobId, versionHash: baseline.versionHash } : undefined;
     const operationId = `sync-benchmark-${createHash("sha256").update(canonicalJson([
       apiOrigin, access.teamId, access.actorId, draft.id, expectedRevision, linked?.hostedRevision ?? 0,
+      ...(benchmarkBaseline ? [benchmarkBaseline] : []),
     ])).digest("hex")}`;
     const { receipt, reference } = await drafts.save({
       schemaVersion: "openpond.experimentDraftSave.v1",
@@ -527,11 +537,12 @@ export function createChatContextBrowser(deps: {
       projectId: null,
       operationId,
       expectedRevision: linked?.hostedRevision ?? 0,
-      draft,
+      draft: benchmarkBaseline ? { ...draft, benchmarkBaseline } : draft,
     }, { actorId: access.actorId, teamId: access.teamId, apiOrigin });
     if (reference.apiOrigin !== apiOrigin || receipt.record.ownerUserId !== access.actorId)
       throw new Error("The active workspace changed while syncing the Benchmark.");
-    const synced = { ...reference, actorId: access.actorId, sourceRevision: expectedRevision, hostedRevision: receipt.record.revision };
+    const synced = { ...reference, actorId: access.actorId, sourceRevision: expectedRevision, hostedRevision: receipt.record.revision,
+      ...(benchmarkBaseline ? { baselineVersionHash: benchmarkBaseline.versionHash } : {}) };
     await deps.store.updateSession(sessionId, session => {
       const metadata = { ...session.metadata };
       const state = chatExperimentContext(metadata);

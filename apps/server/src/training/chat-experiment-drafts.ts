@@ -1,13 +1,16 @@
 import { chatCatalogFetch } from "./chat-catalog-fetch.js";
 import { createTrainingClient, ExperimentDraftSaveSchema, type ExperimentDraftRecord } from "openpond-sdk/training";
 import type { ChatContextSelection, StoredExperimentDraftReference } from "@openpond/contracts";
+import { managedBenchmarkVersionsFromDraft } from "@openpond/contracts/resource-setup";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 
 export type ChatDraftAccess = { apiBaseUrl: string; token: string; teamId: string; actorId: string };
 export function storedDraftSelection(record: ExperimentDraftRecord, reference: StoredExperimentDraftReference): ChatContextSelection {
+  const versions = managedBenchmarkVersionsFromDraft(record.draft, { actorId: record.ownerUserId, apiOrigin: reference.apiOrigin });
   return { target: { kind: "experiment", id: reference.id, location: "cloud", storedDraft: true,
     teamId: reference.teamId, apiOrigin: reference.apiOrigin }, draft: record.draft, storedDraft: record,
-    draftRevision: record.revision, label: record.draft.name, detail: "Saved experiment draft" };
+    draftRevision: record.revision, label: record.draft.name, detail: "Saved experiment draft",
+    ...(versions ? { managedBenchmarkVersions: versions, benchmarkVersion: versions.candidate } : {}) };
 }
 export function createChatExperimentDraftStorage(access: () => Promise<ChatDraftAccess>) {
   async function client() {

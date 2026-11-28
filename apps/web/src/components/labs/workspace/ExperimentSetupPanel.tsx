@@ -33,6 +33,7 @@ export type ExperimentSetupPanelProps = {
   bindBenchmark?: (preparationId: string, revision: number, versionHash: string) => Promise<void>;
   recoverBenchmark?: (revision: number, versionHash: string) => Promise<string | null>;
   retainedBenchmark?: { draft: ExperimentDraft; revision: number; versions?: ManagedBenchmarkVersions };
+  savedBenchmarkVersions?: ManagedBenchmarkVersions;
 };
 export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {
   const setup = useEvaluationSetup();

@@ -4,11 +4,12 @@ import type { hostedModelScope } from "../../../lib/hosted-model-scope";
 import { sessionBenchmarkDraft } from "../../../lib/session-benchmark";
 import { EvaluationTime } from "./EvaluationPresentation";
 
-export function LocalBenchmarkDrafts({ sessions, search, workspace, onOpen, onSync }: {
+export function LocalBenchmarkDrafts({ sessions, search, workspace, onOpen, onOpenHosted, onSync }: {
   sessions: readonly Session[];
   search: string;
   workspace: ReturnType<typeof hostedModelScope>;
   onOpen(id: string): void;
+  onOpenHosted(id: string): void;
   onSync?: (sessionId: string, scopeId: string, revision: number) => Promise<void>;
 }) {
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -26,9 +27,11 @@ export function LocalBenchmarkDrafts({ sessions, search, workspace, onOpen, onSy
       <tbody>
         {drafts.map(({ sessionId, scope }) => {
           const revision = scope.draftRevision ?? 1;
-          const sync = scope.syncedDraft;
-          const synced = Boolean(sync && workspace && sync.actorId === workspace.actorId &&
-            sync.teamId === workspace.teamId && sync.apiOrigin === workspace.apiOrigin && sync.sourceRevision === revision);
+          const link = scope.syncedDraft;
+          const sync = link && workspace && link.actorId === workspace.actorId &&
+            link.teamId === workspace.teamId && link.apiOrigin === workspace.apiOrigin ? link : null;
+          const synced = sync && sync.sourceRevision === revision &&
+            sync.baselineVersionHash === scope.managedBenchmarkVersions?.baseline?.versionHash;
           return <tr key={sessionId}>
             <td>{scope.name}</td><td>{revision}</td><td><EvaluationTime value={scope.updatedAt} /></td>
             <td><div className="model-build-actions">
@@ -39,6 +42,7 @@ export function LocalBenchmarkDrafts({ sessions, search, workspace, onOpen, onSy
                   try { await onSync(sessionId, scope.id, revision); } finally { setSyncing(null); }
                 }}>{syncing === sessionId ? "Syncing…" : "Sync privately"}</button> : null}
               {synced ? <span>Synced</span> : null}
+              {sync ? <button className="training-text-button" type="button" onClick={() => onOpenHosted(sync.id)}>Open hosted draft</button> : null}
             </div></td>
           </tr>;
         })}

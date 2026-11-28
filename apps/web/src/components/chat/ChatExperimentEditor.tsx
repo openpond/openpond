@@ -59,12 +59,13 @@ function EditorBody({ api, context, localTrainingDraft, onClose }: { api: Worksp
   // Polling can discover a remote edit while this form is open. Keep the revision
   // that populated this editor; only its own successful save advances that base.
   const base = useRef(context.selection?.storedDraft ?? null);
+  const savedBenchmarkVersions = useRef(base.current ? context.selection?.managedBenchmarkVersions : undefined);
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const inventory = useQuery({ queryKey: ["evaluation-workspace", api.key, "chat-inventory"],
     queryFn: ({ signal }) => api.request<Inventory>("inventory", {}, signal) });
   const navigate = (route: Parameters<typeof navigateModelsRoute>[0]) => { void navigateModelsRoute({ ...route, area: "console" }); };
   const sessionId = context.selection?.target.sessionId;
-  const hostedBenchmark = context.selection?.benchmarkVersion?.location === "cloud" && sessionId;
+  const hostedBenchmark = context.selection?.localDraft && context.selection.benchmarkVersion?.location === "cloud" && sessionId;
   return <WorkspacePanelHost.Provider value={host}>
     <div ref={setHost} className="evaluation-workspace-panel chat-experiment-editor" />
     {inventory.error ? <ErrorToast error={inventory.error}><button type="button" className="training-text-button" onClick={() => void inventory.refetch()}>Retry workspace</button></ErrorToast> : null}
@@ -80,6 +81,7 @@ function EditorBody({ api, context, localTrainingDraft, onClose }: { api: Worksp
       } : undefined}
       retainedBenchmark={context.selection?.localDraft && context.selection.draft && context.selection.draftRevision
         ? { draft: context.selection.draft, revision: context.selection.draftRevision, versions: context.selection.managedBenchmarkVersions } : undefined}
+      savedBenchmarkVersions={savedBenchmarkVersions.current}
       route={modelsLocation("experiments", null, { projectId: api.projectId, executionLocation: api.location })}
       navigate={navigate} onClose={onClose}
       onTrainingStarted={async id => {

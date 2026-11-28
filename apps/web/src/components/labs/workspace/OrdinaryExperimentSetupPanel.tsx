@@ -10,6 +10,7 @@ import { useRef, useState } from "react";
 import { canonicalJson, ExperimentDraftSchema } from "openpond-sdk/training";
 import { ExperimentTypeControl } from "./ExperimentTypeControl";
 import { ChatContextSelectionSchema, LocalExperimentRecordSchema, LocalExperimentRunFromReleaseSchema } from "@openpond/contracts";
+import { managedBenchmarkVersionsFromDraft } from "@openpond/contracts/resource-setup";
 import { useQuery } from "@tanstack/react-query";
 import { contentHash } from "@openpond/harness";
 import { RunExperimentSchema, groupDatasetGraders, canonicalDatasetGraderSelection, type ExperimentRunDetails, type RunExperiment, type PreparedHarnessExperimentSchema } from "openpond-sdk/experiments";
@@ -44,6 +45,7 @@ export function OrdinaryExperimentSetupPanel({
   bindBenchmark,
   recoverBenchmark,
   retainedBenchmark,
+  savedBenchmarkVersions,
 }: ExperimentSetupPanelProps) {
   const setup = useEvaluationSetup();
   const draft = setup.draft!;
@@ -54,6 +56,12 @@ export function OrdinaryExperimentSetupPanel({
   const [selectedVersion, setSelectedVersion] = useState<BenchmarkVersionChoiceValue | null>(null);
   const runTarget = originalVersion ? selectedVersion ?? originalVersion : null;
   const trainedVersion = runTarget?.version;
+  const benchmarkBaseline = setup.initialExperiment?.benchmarkBaseline;
+  const savedComparison = Boolean(benchmarkBaseline && !bindBenchmark);
+  const comparisonVersions = retainedBenchmark?.versions ?? savedBenchmarkVersions ??
+    (savedComparison && setup.initialExperiment && inventory?.teamId === api.teamId && api.actorId &&
+      setup.storedRecord?.ownerUserId === api.actorId && setup.storedRecord.teamId === api.teamId
+      ? managedBenchmarkVersionsFromDraft(setup.initialExperiment, { actorId: api.actorId, apiOrigin: inventory.apiOrigin }) : undefined);
   const modelId = trainedVersion?.request.baseModel.modelId ?? draft.modelId;
   const budget = draft.budget ?? Number.NaN,
     outputTokens = draft.outputTokens ?? Number.NaN;
@@ -527,6 +535,7 @@ export function OrdinaryExperimentSetupPanel({
       operationType: "evaluate",
       name: name.trim() || "Evaluation",
       ...(setup.startingModel ? { startingModel: setup.startingModel } : {}),
+      ...(benchmarkBaseline ? { benchmarkBaseline } : {}),
       evaluationForm: {
         form: { ...draft, ...(release ? { graderChoices: { ...draft.graderChoices, [release.contentHash]: graders } } : {}) },
         selection,
@@ -587,6 +596,7 @@ export function OrdinaryExperimentSetupPanel({
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
+          if (savedComparison) return;
           if (reviewIssue) {
             setError(reviewIssue);
             return;
@@ -596,8 +606,9 @@ export function OrdinaryExperimentSetupPanel({
         }}
       >
         <EvaluationCard title="Model and budget">
-          {runTarget && originalVersion ? <BenchmarkVersionChoice api={api} original={originalVersion} selected={runTarget}
-            disabled={busy} onSelect={setSelectedVersion} versions={retainedBenchmark?.versions} /> : <label>
+          {runTarget && originalVersion ? savedComparison && !comparisonVersions ? <span>{originalVersion.label}</span>
+            : <BenchmarkVersionChoice api={api} original={originalVersion} selected={runTarget}
+            disabled={busy} onSelect={setSelectedVersion} versions={comparisonVersions} /> : <label>
             Model
             <DropdownSelect
               label="Model"
@@ -895,7 +906,8 @@ export function OrdinaryExperimentSetupPanel({
             reviewConfiguration?.key === reviewKey ? reviewConfiguration.configuration : null
           }
         />}
-        {trainedVersion && api.actorId && !dispatch && (
+        {savedComparison && <p>Open the local Benchmark to prepare runs for these versions.</p>}
+        {trainedVersion && api.actorId && !dispatch && !savedComparison && (
           <TrainedVersionExperimentControl
             connection={api.connection} teamId={api.teamId} actorId={api.actorId} projectId={api.projectId}
             configuration={reviewConfiguration?.key === reviewKey ? reviewConfiguration.configuration : null}
@@ -917,7 +929,7 @@ export function OrdinaryExperimentSetupPanel({
             {savingDraft ? "Saving draft…" : "Save draft"}
           </button>
         ) : null}
-        <button className="training-button" type="submit" disabled={busy || Boolean(trainedVersion && reviewed === reviewKey)}>
+        {!savedComparison && <button className="training-button" type="submit" disabled={busy || Boolean(trainedVersion && reviewed === reviewKey)}>
           {busy && !savingDraft
             ? reviewed === reviewKey
               ? "Starting Experiment…"
@@ -925,7 +937,7 @@ export function OrdinaryExperimentSetupPanel({
             : trainedVersion ? "Review Benchmark" : reviewed === reviewKey
               ? "Start experiment"
               : "Review experiment"}
-        </button>
+        </button>}
       </form>
       {guard.dialog}
     </WorkspacePanel>

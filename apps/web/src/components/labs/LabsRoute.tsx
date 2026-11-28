@@ -8,6 +8,7 @@ import { HostedEvaluationWorkspace } from "./workspace/HostedEvaluationWorkspace
 import { LocalBenchmarkDrafts } from "./workspace/LocalBenchmarkDrafts";
 import { LabComparisonSeriesCreateDialog } from "./LabComparisonSeriesCreateDialog";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { LearnedPreferenceRewardBinding, TasksetDraft } from "@openpond/contracts";
 import { appendTaskIntake, taskIntakeSourceFiles } from "openpond-sdk/taskset-drafts";
 import { learningRef, type TaskBatch } from "openpond-sdk/learning";
@@ -61,6 +62,7 @@ import type { ModelStarterPreview } from "../../hooks/useTraining";
 export type { LabsRouteProps } from "./labs-route-types";
 
 export function LabsRoute(props: LabsRouteProps) {
+  const queries = useQueryClient();
   const { profileView, training } = props;
   const [comparisonCreateOpen, setComparisonCreateOpen] = useState(false);
   const profile = profileView.payload?.profile ?? null;
@@ -274,10 +276,13 @@ export function LabsRoute(props: LabsRouteProps) {
     const syncConnection = props.account?.state === "signed_in" ? profileView.connection : null;
     const localDrafts = showLocalDrafts ? <LocalBenchmarkDrafts sessions={props.resourceSessions}
       search={route.query} workspace={hostedModelScope(props.account, workspace)} onOpen={props.onOpenResourceChat}
+      onOpenHosted={id => open(modelsLocation("experiments", null, { area: route.area, collection: "drafts",
+        resourceId: id, executionLocation: "hosted", projectId: null }))}
       onSync={syncConnection ? async (sessionId, scopeId, revision) => {
         try {
           await chatResourceRequest(syncConnection, "dataset", { action: "context_sync_draft",
             payload: { sessionId, scopeId, expectedRevision: revision } });
+          void queries.invalidateQueries({ predicate: query => query.queryKey[0] === "unified-experiments" && query.queryKey[2] === "drafts" });
           profileView.onPayload(await api.bootstrap(syncConnection));
           toast("Benchmark synced as a private workspace draft.", "success");
         } catch (error) { toast(error instanceof Error ? error.message : String(error), "error"); }
