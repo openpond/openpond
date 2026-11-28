@@ -11,12 +11,23 @@ const resourceId = z.string().min(1).max(240);
 const LocalBenchmarkModelVersionSchema = z.object({
   location: z.literal("local"), projectId: resourceId, versionId: resourceId, artifactId: resourceId, bundleHash: artifactHash,
 }).strict();
+const HostedBenchmarkOwnerSchema = z.object({ actorId: resourceId, apiOrigin: z.url() }).strict();
+const HostedBenchmarkVersionSchema = z.object({
+  location: z.literal("cloud"), modelProjectId: resourceId, jobId: resourceId,
+  teamId: resourceId, versionHash: artifactHash, owner: HostedBenchmarkOwnerSchema.optional(),
+}).strict();
 export const BenchmarkModelVersionSchema = z.discriminatedUnion("location", [
-  LocalBenchmarkModelVersionSchema,
-  z.object({ location: z.literal("cloud"), modelProjectId: resourceId, jobId: resourceId,
-    teamId: resourceId, versionHash: artifactHash,
-    owner: z.object({ actorId: resourceId, apiOrigin: z.url() }).strict().optional() }).strict(),
+  LocalBenchmarkModelVersionSchema, HostedBenchmarkVersionSchema,
 ]);
+const OwnedBenchmarkVersionSchema = HostedBenchmarkVersionSchema.extend({ owner: HostedBenchmarkOwnerSchema });
+export const ManagedBenchmarkVersionsSchema = z.object({
+  candidate: OwnedBenchmarkVersionSchema, baseline: OwnedBenchmarkVersionSchema.optional(),
+}).strict().refine(({ candidate, baseline }) => !baseline || (
+  candidate.teamId === baseline.teamId && candidate.owner.actorId === baseline.owner.actorId &&
+  candidate.owner.apiOrigin === baseline.owner.apiOrigin && candidate.jobId !== baseline.jobId &&
+  candidate.versionHash !== baseline.versionHash
+), "Choose two distinct saved versions from the same workspace.");
+export type ManagedBenchmarkVersions = z.infer<typeof ManagedBenchmarkVersionsSchema>;
 export type BenchmarkModelVersion = z.infer<typeof BenchmarkModelVersionSchema>;
 type HostedBenchmarkVersion = Extract<BenchmarkModelVersion, { location: "cloud" }>;
 export function ownsHostedBenchmarkVersion(
@@ -195,6 +206,7 @@ export const ResourceSetupDraftSchema = z.object({
     revision: z.number().int().positive(),
   }).optional(),
   benchmarkModelVersion: BenchmarkModelVersionSchema.optional(),
+  managedBenchmarkVersions: ManagedBenchmarkVersionsSchema.optional(),
   localBenchmarkInference: z.object({
     device: z.enum(["cpu", "cuda"]),
     maxOutputTokens: z.number().int().min(1).max(2048),

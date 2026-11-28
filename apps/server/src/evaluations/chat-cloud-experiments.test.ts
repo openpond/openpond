@@ -205,7 +205,11 @@ test("binds a hosted candidate Benchmark to its original saved revision and immu
     expect(await cloud.request("status",{id:experimentId})).toMatchObject({summary:{benchmark:bound.benchmark}});
     const otherBinding={sessionId,revision,preparationId:secondPrep,versionHash:secondVersion.contentHash};
     await expect(cloud.bindBenchmark({...otherBinding,draft,versionHash:version.contentHash})).rejects.toThrow("saved Benchmark revision");
-    const second=await cloud.bindBenchmark({...otherBinding,draft});
+    const pin = (saved: typeof version) => ({ location: "cloud" as const, modelProjectId: saved.modelProjectId,
+      teamId, jobId: saved.jobId, versionHash: saved.contentHash, owner: { actorId, apiOrigin: "https://example.test" } });
+    const candidate = pin(version);
+    await expect(cloud.bindBenchmark({...otherBinding,draft,versions:{candidate}})).rejects.toThrow("pinned to this Benchmark revision");
+    const second=await cloud.bindBenchmark({...otherBinding,draft,versions:{candidate,baseline:pin(secondVersion)}});
     expect(second.summary).toMatchObject({id:secondId,score:0.75,benchmark:{id:draft.id,revision,draftHash:bound.benchmark.draftHash,
       modelVersion:{versionHash:secondVersion.contentHash,artifact:secondArtifact}}});
     expect(await cloud.benchmarkPin(secondId)).toMatchObject({sessionId,benchmark:second.benchmark});

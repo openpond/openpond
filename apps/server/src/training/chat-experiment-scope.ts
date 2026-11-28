@@ -13,6 +13,8 @@ import {
   type ChatResourceSummary,
   type StoredExperimentDraftReference,
 } from "@openpond/contracts";
+import type { ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
+import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import type { SqliteStore } from "../store/store.js";
 import { canonicalJson, parseAndVerifyExperimentDraft, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
 
@@ -160,6 +162,56 @@ export function createChatExperimentScopes(store: SqliteStore) {
       metadata.chatContextSelectionVersion = state.selectionVersion;
       // Force current() to derive fresh focus rather than retaining an older key.
       delete metadata.chatContextFocusKey;
+    });
+  }
+
+  async function setManagedBenchmarkVersions(sessionId: string, scopeId: string, input: {
+    versions: ManagedBenchmarkVersions;
+    model: Extract<NonNullable<ExperimentDraft["startingModel"]>, { source: "trained" }>;
+    expectedRevision: number;
+    name?: string;
+    budget?: number;
+    seed?: number;
+  }): Promise<ChatExperimentContext> {
+    return change(sessionId, (state, metadata) => {
+      const resource = SessionResourceDraftSchema.safeParse(metadata.resourceDraft).data;
+      const scope = state.scopes.find(item => item.id === scopeId);
+      if (resource?.kind !== "benchmark" || !scope?.draft || scope.draft.id !== resource.id ||
+        scope.storedDraft || scope.draft.operationType !== "evaluate" || resource.benchmarkVersion?.location === "local")
+        throw new Error("Open your Benchmark chat to choose saved Model versions.");
+      const previous = scope.managedBenchmarkVersions?.candidate ?? resource.benchmarkVersion;
+      if (previous?.location === "cloud" && (previous.teamId !== input.versions.candidate.teamId ||
+        previous.owner && canonicalJson(previous.owner) !== canonicalJson(input.versions.candidate.owner)))
+        throw new Error("Choose the OpenPond account and workspace that owns this Benchmark.");
+      const name = input.name ?? scope.draft.name;
+      const previousForm = scope.draft.evaluationForm;
+      const compatible = previousForm?.executionLocation === "hosted" && previousForm.form.mode === "model" ? previousForm : null;
+      const { localRuntime: _localRuntime, ...previousSettings } = compatible?.form ?? {};
+      const evaluationForm: ExperimentDraft["evaluationForm"] = {
+        executionLocation: "hosted", selection: compatible?.selection ?? null, source: compatible?.source ?? null,
+        form: {
+          mode: "model", sourceId: "", profileChoiceId: "", release: null, modelId: "", outputTokens: 1024,
+          prompt: "", targetId: "", graderChoices: {}, budget: null, seed: "0",
+          ...previousSettings, name,
+          ...(input.budget !== undefined ? { budget: input.budget } : {}),
+          ...(input.seed !== undefined ? { seed: String(input.seed) } : {}),
+        },
+      };
+      const sameVersion = scope.draft.startingModel?.source === "trained" &&
+        scope.draft.startingModel.trainedVersion.contentHash === input.model.trainedVersion.contentHash;
+      const prepared = { ...scope.draft, name, startingModel: sameVersion ? scope.draft.startingModel : input.model, evaluationForm };
+      if (canonicalJson(scope.managedBenchmarkVersions ?? null) === canonicalJson(input.versions) &&
+        canonicalJson(scope.draft) === canonicalJson(prepared)) return;
+      if ((scope.draftRevision ?? 1) !== input.expectedRevision)
+        throw new Error("The Benchmark changed. Reopen it before saving these settings.");
+      if (resource.benchmarkVersion?.location === "cloud" && resource.benchmarkVersion.versionHash !== input.versions.candidate.versionHash)
+        throw new Error("Keep the Model version this Benchmark was created from.");
+      scope.draft = prepared;
+      scope.name = name;
+      scope.managedBenchmarkVersions = input.versions;
+      scope.draftRevision = (scope.draftRevision ?? 1) + 1;
+      delete scope.draftSave;
+      scope.updatedAt = new Date().toISOString();
     });
   }
 
@@ -477,5 +529,5 @@ export function createChatExperimentScopes(store: SqliteStore) {
       scope.updatedAt = new Date().toISOString();
     });
   }
-  return { ensure, create, createForDataset, createDraft, saveLocalDraft, recordLocalAdapterBenchmarkRuns, linkStoredDraft, select, attach, attachModel, attachTraining, attachWeightSpace, associateDraftTraining };
+  return { ensure, create, createForDataset, createDraft, setManagedBenchmarkVersions, saveLocalDraft, recordLocalAdapterBenchmarkRuns, linkStoredDraft, select, attach, attachModel, attachTraining, attachWeightSpace, associateDraftTraining };
 }

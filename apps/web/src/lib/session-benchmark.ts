@@ -8,9 +8,9 @@ export function sessionBenchmarkDraft(session: Session, workspace: ReturnType<ty
   if (session.archived || !session.metadata?.resourceDraft) return null;
   const resource = SessionResourceDraftSchema.safeParse(session.metadata.resourceDraft);
   if (!resource.success || resource.data.kind !== "benchmark") return null;
-  const version = resource.data.benchmarkVersion;
-  if (version?.location === "cloud" && !ownsHostedBenchmarkVersion(version, workspace)) return null;
   const context = ChatExperimentContextSchema.safeParse(session.metadata?.chatExperimentContext);
-  if (!context.success) return null;
-  return context.data.scopes.find(scope => scope.draft?.id === resource.data.id) ?? null;
+  const scope = context.data?.scopes.find(item => item.draft?.id === resource.data.id);
+  const version = scope?.managedBenchmarkVersions?.candidate ?? resource.data.benchmarkVersion;
+  if (version?.location === "cloud" && !ownsHostedBenchmarkVersion(version, workspace)) return null;
+  return scope ?? null;
 }

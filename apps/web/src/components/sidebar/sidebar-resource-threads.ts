@@ -40,7 +40,7 @@ export function sidebarResourceThreads(
     const attached = target?.kind === "experiment" && target.location === "local" && target.sessionId && target.id === target.scopeId
       ? drafts.get(target.sessionId) : undefined;
     const benchmarkOwners = new Map<string, { owner: Session; name: string }>();
-    if (draft?.kind === "benchmark" && (draft.benchmarkVersion?.location !== "cloud" || drafts.has(session.id))) benchmarkOwners.set(session.id, { owner: session, name: drafts.get(session.id)?.scope.name ?? session.title });
+    if (draft?.kind === "benchmark" && drafts.has(session.id)) benchmarkOwners.set(session.id, { owner: session, name: drafts.get(session.id)?.scope.name ?? session.title });
     if (attached && attached.scope.id === target?.scopeId)
       benchmarkOwners.set(attached.owner.id, { owner: attached.owner, name: attached.scope.name });
     for (const [ownerId, owner] of benchmarkOwners) {

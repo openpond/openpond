@@ -7,6 +7,7 @@ import type { ClientConnection } from "../api";
 import { connectionQueryScope } from "../lib/query-scope";
 import { ChatExperimentWorkspaceContext } from "../components/chat/ChatExperimentWorkspaceContext";
 import { requestDesktopViewChange } from "../components/labs/lab-primary-tab-state";
+import type { ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
 import type { ModelSetupScope } from "../lib/resource-setup-prompt";
 
 export const ChatContextAccountScope = createContext("default");
@@ -30,7 +31,7 @@ type PagedContextQuery<T> = {
   fetchNextPage: () => Promise<unknown>;
   refetch: () => Promise<unknown>;
 };
-type ContextSelectionOptions = { newExperiment?: boolean; configureDraft?: boolean; modelTrainingReview?: boolean };
+type ContextSelectionOptions = { newExperiment?: boolean; configureDraft?: boolean; modelTrainingReview?: boolean; benchmark?: { versions: ManagedBenchmarkVersions; expectedRevision: number; name?: string; budget?: number; seed?: number } };
 type ChatContextSelectionState = {
   associateTraining: (jobId: string, apiOrigin: string, draftId: string) => Promise<void>;
   selection: ChatContextSelection | null;
@@ -142,7 +143,9 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
     try {
       // A read started before the user changed selection must never overwrite that selection.
       await queries.cancelQueries({ queryKey: ["chat-context-selection", key] });
-      const result = await chatResourceRequest<{ selection: unknown }>(connection, "dataset", { action: "context_select", payload: {
+      const result = await chatResourceRequest<{ selection: unknown }>(connection, "dataset", options?.benchmark ? {
+        action: "context_prepare_benchmark", payload: { target, sessionId, ...options.benchmark },
+      } : { action: "context_select", payload: {
         target, ...(options?.newExperiment ? { newExperiment: true } : {}),
         ...(options?.modelTrainingReview ? { modelTrainingReview: true } : {}), ...(sessionId ? { sessionId } : {}),
       } });
@@ -153,7 +156,7 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
       await queries.cancelQueries({ queryKey: ["chat-context-selection", key] });
       publish(key, value);
       if (sessionId) queries.setQueryData(["chat-context-selection", key], value);
-      if (options?.newExperiment) {
+      if (options?.newExperiment || options?.benchmark) {
         void queries.invalidateQueries({ queryKey: ["chat-context-catalog", "local", scope, sessionId] });
         void queries.invalidateQueries({ queryKey: ["chat-context-catalog", "pages", scope, sessionId] });
       }

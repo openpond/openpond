@@ -14,7 +14,7 @@ import {
 import { z } from "zod";
 import { ChatResourceSummarySchema } from "./chat-resources.js";
 import { ChatTrainingAttachmentSchema } from "./chat-training-resources.js";
-import { BenchmarkModelVersionSchema } from "./resource-setup.js";
+import { BenchmarkModelVersionSchema, ManagedBenchmarkVersionsSchema } from "./resource-setup.js";
 
 const ContextResultReferenceSchema = StoredExperimentResultReferenceSchema;
 const resultKinds = new Set(["training_result", "managed_modification_result", "engram_result",
@@ -115,6 +115,7 @@ export const ChatContextSelectionSchema = ChatContextOptionSchema.extend({
   draftRevision: z.number().int().positive().optional(),
   localDraft: z.literal(true).optional(),
   benchmarkVersion: BenchmarkModelVersionSchema.optional(),
+  managedBenchmarkVersions: ManagedBenchmarkVersionsSchema.optional(),
   storedDraft: ExperimentDraftRecordSchema.optional(),
   resource: ChatResourceSummarySchema.optional(),
   dataset: ChatResourceSummarySchema.optional(),

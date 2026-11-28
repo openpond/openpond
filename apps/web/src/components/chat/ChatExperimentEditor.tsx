@@ -46,7 +46,7 @@ export function ChatExperimentEditor({ connection, context, onClose }: {
   if (trained && api.teamId !== trained.teamId)
     return <p>Choose the workspace that owns this saved Model version to review the Benchmark.</p>;
   const localTrainingDraft = Boolean(context.selection?.localDraft && draft.trainingForm);
-  return <EvaluationSetupProvider key={`${api.key}:${draft.id}`} initialExperiment={draft} initialRecord={record}
+  return <EvaluationSetupProvider key={`${api.key}:${draft.id}:${trained?.contentHash ?? ""}`} initialExperiment={draft} initialRecord={record}
     allowedOperationTypes={localTrainingDraft || trained ? [draft.operationType] : undefined} onNewDraft={async next => {
     const selected = await context.select({kind: "experiment", id: next.id, location: "local", draft: next}, {newExperiment: true});
     if (!selected) throw new Error("The new experiment could not be selected. Your original editor remains available.");
@@ -79,7 +79,7 @@ function EditorBody({ api, context, localTrainingDraft, onClose }: { api: Worksp
         return value.preparationId;
       } : undefined}
       retainedBenchmark={context.selection?.localDraft && context.selection.draft && context.selection.draftRevision
-        ? { draft: context.selection.draft, revision: context.selection.draftRevision } : undefined}
+        ? { draft: context.selection.draft, revision: context.selection.draftRevision, versions: context.selection.managedBenchmarkVersions } : undefined}
       route={modelsLocation("experiments", null, { projectId: api.projectId, executionLocation: api.location })}
       navigate={navigate} onClose={onClose}
       onTrainingStarted={async id => {

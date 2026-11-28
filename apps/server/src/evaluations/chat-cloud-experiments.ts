@@ -4,7 +4,7 @@ import {OpenPondDatasetWorkspaceClient} from "openpond-sdk/dataset-workspaces";
 import {OpenPondExperimentsClient,RunExperimentSchema,ExperimentRunDetailsSchema,type ExperimentRunDetails} from "openpond-sdk/experiments";
 import {createCandidateEvaluationClient} from "openpond-sdk/candidate-evaluations";
 import {createTrainingClient, canonicalJson, type ExperimentDraft} from "openpond-sdk/training";
-import {BenchmarkRunPinSchema, type BenchmarkRunPin} from "@openpond/contracts/resource-setup";
+import {BenchmarkRunPinSchema, type BenchmarkRunPin, type ManagedBenchmarkVersions} from "@openpond/contracts/resource-setup";
 import {hostedApiAuthHeaders} from "../openpond/hosted-api-access.js";
 import type {ExperimentResult} from "@openpond/evals/experiments";
 import type {ChatResourceSummary,LocalDatasetRecord,ChatExperimentView} from "@openpond/contracts";
@@ -51,7 +51,7 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
   async function retain(pin:z.infer<typeof Pin>,datasetId:string,datasetRevision:number,details:ExperimentRunDetails, benchmark?:BenchmarkRunPin) {
     const record=Hosted.parse({pin,datasetId,datasetRevision,details,...(benchmark ? { benchmark } : {})});await deps.store.retainChatHostedExperiment(details.summary.id,contentHash(pin),details.configuration.configurationHash,record);return record;
   }
-  async function bindBenchmark(input:{sessionId:string;preparationId:string;revision:number;versionHash?:string;draft?:ExperimentDraft;owner?:z.infer<typeof Pin>}) {
+  async function bindBenchmark(input:{sessionId:string;preparationId:string;revision:number;versionHash?:string;draft?:ExperimentDraft;owner?:z.infer<typeof Pin>;versions?:ManagedBenchmarkVersions}) {
     const operation=`benchmark-candidate:${input.preparationId}`;
     const previous=await deps.store.readChatExperimentGroup(operation);
     let recorded=previous ? CandidateBenchmark.parse(previous) : null;
@@ -76,13 +76,16 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
       if(!original || original.teamId!==current.teamId)
         throw new Error("Open the saved Benchmark in its original workspace.");
       const versionHash=input.versionHash ?? original.contentHash;
+      const pinned = input.versions && [input.versions.candidate, input.versions.baseline].find(item => item?.versionHash === versionHash);
+      if (input.versions && (!pinned || pinned.jobId !== prepared.trainingJobId))
+        throw new Error("Choose a Model version pinned to this Benchmark revision.");
       const result=await createTrainingClient({baseUrl:current.apiBaseUrl,headers,fetch:transport}).result(prepared.trainingJobId,{teamId:current.teamId});
       const version=versionHash===original.contentHash ? original : result.savedVersion;
       const {form,selection}=draft?.evaluationForm ?? {};
       const {policy,population}=configuration.request;
       const seeds=new Set(form?.seed.split(/[\s,]+/).filter(Boolean));
       const tasks=new Set(selection?.ids);
-      if(!draft || !version || !form?.release || draft.evaluationForm?.executionLocation!=="hosted" ||
+      if(!draft || !version || pinned && pinned.modelProjectId !== version.modelProjectId || !form?.release || draft.evaluationForm?.executionLocation!=="hosted" ||
         version.contentHash!==versionHash || version.teamId!==current.teamId || prepared.trainingJobId!==version.jobId ||
         policy.kind!=="hosted_chat" || policy.localRuntime || policy.harness || policy.candidate ||
         policy.modelId!==version.request.baseModel.modelId || policy.maxOutputTokens!==form.outputTokens ||

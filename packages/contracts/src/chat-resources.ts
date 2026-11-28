@@ -3,7 +3,7 @@ import {
   StoredExperimentDraftReferenceSchema,
   StoredExperimentResultReferenceSchema,
 } from "openpond-sdk/training";
-import { BenchmarkRunPinSchema } from "./resource-setup.js";
+import { BenchmarkRunPinSchema, ManagedBenchmarkVersionsSchema } from "./resource-setup.js";
 export {
   StoredExperimentDraftReferenceSchema,
   type StoredExperimentDraftReference,
@@ -167,6 +167,7 @@ export const ChatExperimentScopeSchema = z
       sourceRevision: z.number().int().positive(),
       hostedRevision: z.number().int().positive(),
     }).optional(),
+    managedBenchmarkVersions: ManagedBenchmarkVersionsSchema.optional(),
     draftRevision: z.number().int().positive().optional(),
     draftSave: z.object({ operationId: Id, requestHash: Hash }).strict().optional(),
     creationHash: Hash.optional(),

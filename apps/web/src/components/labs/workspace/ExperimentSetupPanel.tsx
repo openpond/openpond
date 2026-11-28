@@ -9,6 +9,7 @@ import { Activity, useMemo } from "react";
 import { TrainingExperimentSetupPanel } from "./TrainingExperimentSetupPanel";
 import { ActivationExperimentSetupPanel } from "./ActivationExperimentSetupPanel";
 import { useStoredExperimentDraft } from "./useStoredExperimentDraft";
+import type { ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
 import type { ExperimentDraft } from "openpond-sdk/training";
 import { type RunExperiment } from "openpond-sdk/experiments";
 import { type ModelsRoute } from "../models-route";
@@ -31,7 +32,7 @@ export type ExperimentSetupPanelProps = {
   localTrainingDraft?: boolean;
   bindBenchmark?: (preparationId: string, revision: number, versionHash: string) => Promise<void>;
   recoverBenchmark?: (revision: number, versionHash: string) => Promise<string | null>;
-  retainedBenchmark?: { draft: ExperimentDraft; revision: number };
+  retainedBenchmark?: { draft: ExperimentDraft; revision: number; versions?: ManagedBenchmarkVersions };
 };
 export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {
   const setup = useEvaluationSetup();

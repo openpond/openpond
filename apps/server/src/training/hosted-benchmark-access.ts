@@ -15,8 +15,15 @@ export async function requireHostedBenchmarkAccess(version: HostedVersion, loadA
 export async function authorizeHostedBenchmarkVersion(version: HostedVersion, loadAccess: HostedBenchmarkAccess): Promise<HostedVersion & { owner: NonNullable<HostedVersion["owner"]> }> {
   const access = await requireHostedBenchmarkAccess(version, loadAccess);
   if (version.owner) return { ...version, owner: version.owner };
-  // Older drafts have no recorded owner. Open them only after an authorized
-  // read verifies the exact saved training version in the active workspace.
+  return (await readExactHostedBenchmarkVersion(version, loadAccess, access)).pin;
+}
+
+// Older drafts and new composer selections both prove the exact immutable
+// version through the existing saved-version route before retaining a pin.
+export async function readExactHostedBenchmarkVersion(
+  version: HostedVersion, loadAccess: HostedBenchmarkAccess, captured?: Awaited<ReturnType<typeof requireHostedBenchmarkAccess>>,
+) {
+  const access = captured ?? await requireHostedBenchmarkAccess(version, loadAccess);
   const detail = createHostedTrainingRunDetail({
     ...access,
     access,
@@ -28,5 +35,5 @@ export async function authorizeHostedBenchmarkVersion(version: HostedVersion, lo
   const saved = await detail.savedVersion(version.modelProjectId, version.versionHash);
   if (saved.version?.schemaVersion !== "openpond.trainingModelVersion.v1" || saved.version.jobId !== version.jobId)
     throw new Error("This exact saved Model version is unavailable.");
-  return { ...version, owner: access.owner };
+  return { model: saved.model, version: saved.version, pin: { ...version, owner: access.owner } };
 }

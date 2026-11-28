@@ -30,8 +30,10 @@ export function canSubmitBenchmarkSetup(
   draft: ResourceSetupDraft, workspace: ModelSetupScope | null,
   selection: ChatContextSelection | null, sessionId: string | null,
 ) {
-  return draft.benchmarkModelVersion?.location !== "cloud" ||
-    Boolean(scopedBenchmarkVersion(draft.benchmarkModelVersion, workspace, selection, sessionId));
+  if (draft.managedBenchmarkVersions && !ownsHostedBenchmarkVersion(draft.managedBenchmarkVersions.candidate, workspace))
+    return false;
+  const version = draft.benchmarkModelVersion;
+  return version?.location !== "cloud" || Boolean(scopedBenchmarkVersion(version, workspace, selection, sessionId));
 }
 
 export function scopeManagedSetup(
@@ -42,6 +44,8 @@ export function scopeManagedSetup(
     grader.actorId !== scope?.actorId || grader.method !== draft.values.graderType)) {
     draft = { ...draft, managedGrader: undefined };
   }
+  if (draft.managedBenchmarkVersions && !ownsHostedBenchmarkVersion(draft.managedBenchmarkVersions.candidate, scope))
+    draft = { ...draft, managedBenchmarkVersions: undefined, values: { ...draft.values, candidate: undefined, baseline: undefined } };
   const version = scopedBenchmarkVersion(draft.benchmarkModelVersion, scope, selection, sessionId);
   if (draft.benchmarkModelVersion && !version)
     return { ...draft, benchmarkModelVersion: undefined, values: { ...draft.values, candidate: undefined } };
@@ -228,8 +232,11 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const recipe = selectedTrainingRecipe(draft, method);
   const managed = draft.values.destination === "OpenPond Managed" ? draft.managedTrainingInputs : undefined;
   const localBase = localTrainingBase(draft)?.preference;
-  const version = draft.benchmarkModelVersion;
+  const version = draft.managedBenchmarkVersions?.candidate ?? draft.benchmarkModelVersion;
+  const baseline = draft.comparison ? draft.managedBenchmarkVersions?.baseline : undefined;
   const settings = [
+    version?.location === "cloud" && `Managed Model ${version.modelProjectId}, training run ${version.jobId}, version hash ${version.versionHash}`,
+    baseline && `Managed baseline ${baseline.modelProjectId}, training run ${baseline.jobId}, version hash ${baseline.versionHash}`,
     !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
     managed?.base && `Starting model ${managed.base.preference.modelId}, revision ${managed.base.preference.revision}, tokenizer revision ${managed.base.preference.tokenizerRevision}, chat template hash ${managed.base.preference.chatTemplateHash}`,
     localBase && `Local starting model ${localBase.modelId}, revision ${localBase.revision}, tokenizer revision ${localBase.tokenizerRevision}, chat template hash ${localBase.chatTemplateHash}`,
@@ -273,6 +280,7 @@ export function snapshotResourceSetup(
   const draft = { ...scoped, localSftApproval: retainedLocalSftApproval(original, sessionId),
     ...(scoped.kind === "benchmark" && !scoped.comparison ? {
       localBaseline: undefined,
+      managedBenchmarkVersions: scoped.managedBenchmarkVersions && { candidate: scoped.managedBenchmarkVersions.candidate },
       localBenchmarkInference: scoped.localBenchmarkInference && { ...scoped.localBenchmarkInference, baseline: undefined },
       values: { ...scoped.values, baseline: undefined },
     } : {}),

@@ -1,7 +1,7 @@
 import { readChatWeightSpace } from "./chat-weight-space.js";
 import { createChatNextStepService } from "./chat-next-step.js";
 import { createChatContextBrowser, hasModelSetupAccess } from "./chat-context-browser.js";
-import { authorizeHostedBenchmarkVersion } from "./hosted-benchmark-access.js";
+import { authorizeHostedBenchmarkVersion, readExactHostedBenchmarkVersion } from "./hosted-benchmark-access.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
 import { readChatTrainingAttachment } from "./chat-training-attachment.js";
 import type { createChatProfileExperiments } from "../evaluations/chat-profile-experiments.js";
@@ -9,8 +9,8 @@ import { createChatTeamExperiments } from "../evaluations/chat-team-experiments.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
-import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
-import { ResourceSetupDraftSchema, type BenchmarkRunPin } from "@openpond/contracts/resource-setup";
+import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
+import { ManagedBenchmarkVersionsSchema, ResourceSetupDraftSchema, type BenchmarkRunPin } from "@openpond/contracts/resource-setup";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import type { SqliteStore } from "../store/store.js";
 import type { LocalInferenceState } from "../evaluations/local-experiment-local-inference.js";
@@ -93,10 +93,10 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         throw new Error("Review the Benchmark setup and ask the user before starting a run.");
       const owner = turn ? await deps.store.getSession(turn.sessionId) : null;
       const resource = SessionResourceDraftSchema.safeParse(owner?.metadata?.resourceDraft);
-      if (resource.success && resource.data.benchmarkVersion)
-        throw new Error("Run this exact Model version from its Benchmark review.");
       const draft = resource.success && resource.data.kind === "benchmark"
         ? chatExperimentContext(owner?.metadata).scopes.find(scope => scope.draft?.id === resource.data.id) : undefined;
+      if ((resource.success && resource.data.benchmarkVersion) || draft?.managedBenchmarkVersions)
+        throw new Error("Run this exact Model version from its Benchmark review.");
       if (turn && !setup.success) {
         if (draft) {
           const recent = await deps.store.turnsForSession(turn.sessionId);
@@ -107,7 +107,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
           }
         }
       }
-      if (setup.success && setup.data.kind === "benchmark" && (setup.data.candidateRef || setup.data.benchmarkModelVersion))
+      if (setup.success && setup.data.kind === "benchmark" && (setup.data.candidateRef || setup.data.benchmarkModelVersion || setup.data.managedBenchmarkVersions))
         throw new Error("Run this exact Model version from its Benchmark review.");
       if (setup.success && setup.data.kind === "benchmark" && setup.data.values.destination === "This device") {
         if (envelope.action !== "run") throw new Error("This Benchmark setup selects a local device.");
@@ -191,6 +191,17 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const session = await deps.store.getSession(sessionId);
     if (session) await deps.append(event({ sessionId, name: "session.updated", source: "server", data: { session } }));
   }
+  async function benchmarkOrigin(sessionId: string) {
+    const session = await deps.store.getSession(sessionId);
+    const resource = SessionResourceDraftSchema.safeParse(session?.metadata?.resourceDraft).data;
+    const scope = resource?.kind === "benchmark"
+      ? chatExperimentContext(session?.metadata).scopes.find(item => item.draft?.id === resource.id) : undefined;
+    const version = scope?.managedBenchmarkVersions?.candidate ?? resource?.benchmarkVersion;
+    if (!scope || version?.location !== "cloud")
+      throw new Error("Open the originating Benchmark for this saved Model version.");
+    const { teamId, owner } = await authorizeHostedBenchmarkVersion(version, deps.access);
+    return { scope, owner: { teamId, ...owner } };
+  }
   async function request(kind:"dataset"|"experiment",raw:unknown) {
     const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
     const {context:requestedContext,invocationToken,...input} = envelope;
@@ -212,23 +223,39 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if (context) throw new Error("Open the Benchmark editor to recover the prepared version.");
       const query = z.object({ sessionId:z.string().min(1),revision:z.number().int().positive(),
         versionHash:z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(input.payload);
-      const session = await deps.store.getSession(query.sessionId);
-      const version = SessionResourceDraftSchema.safeParse(session?.metadata?.resourceDraft).data?.benchmarkVersion;
-      if (version?.location !== "cloud") throw new Error("Open the originating Benchmark for this saved Model version.");
-      const { teamId, owner } = await authorizeHostedBenchmarkVersion(version, deps.access);
-      return cloud.recoverBenchmark({ ...query, owner: { teamId, ...owner } });
+      const { owner } = await benchmarkOrigin(query.sessionId);
+      return cloud.recoverBenchmark({ ...query, owner });
     }
     if (kind === "dataset" && input.action === "context_bind_benchmark") {
       if (context) throw new Error("Bind the reviewed candidate from the Benchmark editor.");
       const query = z.object({ sessionId: z.string().min(1), preparationId: z.string().min(1).max(200),
         revision: z.number().int().positive(), versionHash:z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict().parse(input.payload);
-      const session = await deps.store.getSession(query.sessionId);
-      const resource = SessionResourceDraftSchema.safeParse(session?.metadata?.resourceDraft);
-      if (!resource.success || resource.data.kind !== "benchmark" || resource.data.benchmarkVersion?.location !== "cloud")
-        throw new Error("Open the originating Benchmark for this saved Model version.");
-      const { teamId, owner } = await authorizeHostedBenchmarkVersion(resource.data.benchmarkVersion, deps.access);
-      const scope = chatExperimentContext(session?.metadata).scopes.find(item => item.draft?.id === resource.data.id);
-      return cloud.bindBenchmark({ ...query, owner: { teamId, ...owner }, draft: scope?.draftRevision === query.revision ? scope.draft : undefined });
+      const { scope, owner } = await benchmarkOrigin(query.sessionId);
+      const exactRevision = scope.draftRevision === query.revision;
+      return cloud.bindBenchmark({ ...query, owner, draft: exactRevision ? scope.draft : undefined,
+        versions: exactRevision ? scope.managedBenchmarkVersions : undefined });
+    }
+    if (kind === "dataset" && input.action === "context_prepare_benchmark") {
+      if (context) throw new Error("Choose saved Model versions from the Benchmark prompt.");
+      const query = z.object({ sessionId: z.string().min(1), target: ChatContextTargetSchema,
+        expectedRevision: z.number().int().positive(), versions: ManagedBenchmarkVersionsSchema,
+        name: z.string().trim().min(1).max(191).optional(), budget: z.number().min(0).max(10_000).optional(),
+        seed: z.number().int().min(0).max(2_147_483_647).optional() }).strict().parse(input.payload);
+      if (query.target.sessionId !== query.sessionId || !query.target.scopeId)
+        throw new Error("The Benchmark belongs to another conversation.");
+      const selected = await browser.resolve(query.target);
+      if (!selected.localDraft || selected.draft?.operationType !== "evaluate" || selected.benchmarkVersion?.location === "local")
+        throw new Error("Open the originating Benchmark to choose saved Model versions.");
+      const candidate = await readExactHostedBenchmarkVersion(query.versions.candidate, deps.access);
+      const baseline = query.versions.baseline && await readExactHostedBenchmarkVersion(query.versions.baseline, deps.access);
+      await scopes.setManagedBenchmarkVersions(query.sessionId, query.target.scopeId, {
+        expectedRevision: query.expectedRevision, name: query.name, budget: query.budget, seed: query.seed,
+        versions: ManagedBenchmarkVersionsSchema.parse({ candidate: candidate.pin, ...(baseline ? { baseline: baseline.pin } : {}) }),
+        model: { source: "trained", label: candidate.model.name, baseModel: candidate.version.request.baseModel,
+          inferenceModelId: null, trainedVersion: candidate.version },
+      });
+      await publishResourceSession(query.sessionId);
+      return { selection: await browser.resolve(query.target) };
     }
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_inputs", "context_runs", "context_select", "context_selection", "context_save_draft"].includes(String(input.action))) {
       const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), modelTrainingReview: z.boolean().optional(), update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
@@ -315,11 +342,11 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       }
       let scopeContext = chatExperimentContext(session.metadata);
       const resourceDraft = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft).data;
-      const hostedVersion = resourceDraft?.benchmarkVersion?.location === "cloud" ? resourceDraft.benchmarkVersion : undefined;
-      if (hostedVersion) {
-        const draftScope = scopeContext.scopes.find(scope => scope.draft?.id === resourceDraft?.id);
+      const draftScope = resourceDraft?.kind === "benchmark" ? scopeContext.scopes.find(scope => scope.draft?.id === resourceDraft.id) : undefined;
+      const version = draftScope?.managedBenchmarkVersions?.candidate ?? resourceDraft?.benchmarkVersion;
+      if (version?.location === "cloud") {
         if (draftScope && (input.action === "context" || query.scopeId === draftScope.id || scopeContext.activeScopeId === draftScope.id)) {
-          const visible = await authorizeHostedBenchmarkVersion(hostedVersion, deps.access).then(() => true).catch(() => false);
+          const visible = await authorizeHostedBenchmarkVersion(version, deps.access).then(() => true).catch(() => false);
           if (!visible) {
             if (input.action !== "context") throw new Error("Choose the OpenPond account and workspace that owns this Benchmark.");
             scopeContext.scopes = scopeContext.scopes.filter(scope => scope.id !== draftScope.id);

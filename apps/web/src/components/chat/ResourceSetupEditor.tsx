@@ -34,6 +34,9 @@ import { ModelSetupTrainingFields } from "./ModelSetupTrainingFields";
 import { ModelSetupManagedReview } from "./ModelSetupManagedReview";
 import { ModelSetupLocalBase } from "./ModelSetupLocalBase";
 import { ModelSetupLocalSftReview } from "./ModelSetupLocalSftReview";
+import { SavedBenchmarkVersionPicker, type BenchmarkVersionChoiceValue } from "../labs/workspace/BenchmarkVersionChoice";
+import { createWorkspaceApi } from "../labs/workspace/workspace-api";
+import type { ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
 import { LocalAdapterBenchmarkReview } from "./LocalAdapterBenchmarkReview";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
 import "./resource-setup-editor.css";
@@ -96,7 +99,14 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   const workspace = useContext(ChatExperimentWorkspaceContext);
   const visibleDraft = scopeManagedSetup(draft, workspace, context.selection, sessionId);
   const version = visibleDraft.benchmarkModelVersion;
-  const benchmarkUnavailable = draft.benchmarkModelVersion?.location === "cloud" && !version;
+  const benchmarkUnavailable = draft.benchmarkModelVersion?.location === "cloud" && !version ||
+    Boolean(draft.managedBenchmarkVersions && !visibleDraft.managedBenchmarkVersions);
+  const benchmarkApi = draft.kind === "benchmark" && connection && workspace?.teamId && workspace.actorId && workspace.apiOrigin &&
+    draft.values.destination === "OpenPond Managed" ? createWorkspaceApi(connection, {
+      ...workspace, teamId: workspace.teamId, actorId: workspace.actorId, projectId: null, executionLocation: "hosted",
+    }) : null;
+  const pinnedCandidate = version?.location === "cloud" && version.owner ? { ...version, owner: version.owner } : undefined;
+  const managedVersions = visibleDraft.managedBenchmarkVersions ?? (pinnedCandidate ? { candidate: pinnedCandidate } : undefined);
   const selectedVersion = context.selection?.benchmarkVersion;
   const openableVersion = version?.location === "cloud" && selectedVersion?.location === "cloud" &&
     version.versionHash === selectedVersion.versionHash && context.selection?.target.sessionId === sessionId;
@@ -157,6 +167,8 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     const invalidatesLocalTraining = draft.kind === "model" && draft.values.destination === "This device" &&
       (key === "adapter" && raw !== "LoRA" ||
         key === "learning" && raw === "Configure continual learning");
+    const leavingManagedBenchmark = draft.kind === "benchmark" && key === "destination" &&
+      draft.values.destination === "OpenPond Managed" && raw !== "OpenPond Managed";
     const sourceChanged = draft.kind === "dataset" && key === "source" && raw !== draft.values.source;
     const datasetEdited = draft.kind === "dataset" && ["name", "objective", "split"].includes(key);
     const parsed = ResourceSetupDraftSchema.safeParse({
@@ -165,18 +177,37 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       ...(key === "candidate" ? { candidateRef: undefined } : {}),
       ...(key === "baseModel" && draft.values.destination !== "OpenPond Managed" ? { localTrainingBase: undefined } : {}),
       ...(leavingLocal ? { localCandidate: undefined, localBaseline: undefined } : {}),
+      ...(leavingManagedBenchmark ? { managedBenchmarkVersions: undefined } : {}),
       ...(sourceChanged ? { datasetRef: undefined, datasetExamples: undefined } : {}),
       ...(datasetEdited ? { datasetInputsDirty: true } : {}),
       values: {
         ...draft.values,
         ...(leavingLocal && draft.localCandidate ? { candidate: undefined } : {}),
         ...(leavingLocal && draft.localBaseline ? { baseline: undefined } : {}),
+        ...(leavingManagedBenchmark ? { candidate: undefined, baseline: undefined } : {}),
         ...(sourceChanged ? { dataset: undefined, datasetRevision: undefined, fields: undefined } : {}),
         ...(invalidatesLocalTraining ? { destination: undefined } : {}),
         [key]: raw === "" ? undefined : decimalFields.has(key) || integerFields.has(key) ? Number(raw) : raw,
       },
     });
     if (parsed.success) onChange(draft, parsed.data);
+  }
+  function chooseManagedVersion(key: "candidate" | "baseline", choice: BenchmarkVersionChoiceValue | null) {
+    if (!workspace?.apiOrigin || !workspace.actorId || !workspace.teamId) return;
+    if (choice && choice.version.teamId !== workspace.teamId) return;
+    const pin = choice ? {
+      location: "cloud" as const, modelProjectId: choice.version.modelProjectId, jobId: choice.version.jobId,
+      teamId: choice.version.teamId, versionHash: choice.version.contentHash,
+      owner: { actorId: workspace.actorId, apiOrigin: workspace.apiOrigin },
+    } : undefined;
+    const selectedCandidate = key === "candidate" ? pin : managedVersions?.candidate;
+    const selectedBaseline = key === "baseline" ? pin : managedVersions?.baseline;
+    const baseline = selectedCandidate && selectedBaseline?.jobId !== selectedCandidate.jobId ? selectedBaseline : undefined;
+    onChange(draft, {
+      ...draft, revision: draft.revision + 1,
+      managedBenchmarkVersions: selectedCandidate ? { candidate: selectedCandidate, baseline } : undefined,
+      values: { ...draft.values, [key]: choice?.label, ...(!baseline ? { baseline: undefined } : {}) },
+    });
   }
   function chooseDataset(value: string) {
     const reference = localDatasets.find(dataset => datasetValue(dataset) === value);
@@ -202,8 +233,10 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       const localReason = draft.kind === "model"
         ? supportsLocalTraining ? describeLocalTrainingCompute(compute.data, compute.isFetching)
           : "Choose SFT with LoRA and one-time training to use this device."
-        : draft.kind === "benchmark" && version?.location !== "local" && !localModels.length
-          ? "Configure a compatible loopback model in provider settings." : null;
+        : draft.kind === "benchmark" && context.selection?.managedBenchmarkVersions
+          ? "Create a local Benchmark to run on this device."
+          : draft.kind === "benchmark" && version?.location !== "local" && !localModels.length
+            ? "Configure a compatible loopback model in provider settings." : null;
       return [
         { value: "", label: "Choose a destination" },
         { value: "This device", label: "This device", disabled: Boolean(localReason),
@@ -255,7 +288,17 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           if (version?.location === "local") return null;
           const options = fieldOptions(key);
           const label = field === "saveDestination" ? "Save to" : labels[key];
-          if (version && ["candidate", "baseline", "dataset", "datasetRevision", "grader", "destination"].includes(key)) return null;
+          if (version && ["candidate", "dataset", "datasetRevision", "grader", "destination"].includes(key)) return null;
+          if (draft.kind === "benchmark" && (key === "candidate" || key === "baseline") &&
+            draft.values.destination !== "This device") {
+            if (!benchmarkApi) return <p key={key}>Choose a workspace and execution destination to browse saved Model versions.</p>;
+            if (key === "baseline" && !managedVersions?.candidate) return <p key={key}>Choose a candidate version first.</p>;
+            const pin = managedVersions?.[key];
+            return <SavedBenchmarkVersionPicker key={key} api={benchmarkApi} label={label} autoFocus={index === 0}
+              selected={pin && { jobId: pin.jobId, versionHash: pin.versionHash, label: draft.values[key] ?? label }}
+              excludedJobId={key === "baseline" ? managedVersions?.candidate.jobId : undefined}
+              disabled={busy} onSelect={choice => chooseManagedVersion(key, choice)} />;
+          }
           if (draft.kind === "grader" && draft.values.graderType === "Exact answer" && key === "cases") return null;
           if (managedReview && key === "baseModel") return null;
           if (localBase && key === "baseModel") return null;
@@ -315,7 +358,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
               type={decimalFields.has(key) || integerFields.has(key) ? "number" : "text"}
               step={decimalFields.has(key) ? "any" : undefined}
               min={["datasetRevision", "epochs", "samples"].includes(key) ? 1 : 0}
-              maxLength={draft.kind === "model" && key === "name" ? 191 : 2_000}
+              maxLength={(draft.kind === "model" || draft.kind === "benchmark") && key === "name" ? 191 : 2_000}
               disabled={busy}
               value={visibleDraft.values[key] ?? ""}
               onChange={event => change(key, event.target.value)}
@@ -354,13 +397,20 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
             samples: setup.samples, seed: setup.seed, dataset: localDatasets.find(item => item.id === setup.dataset.id)?.name,
             datasetRevision: setup.dataset.revision },
         })} />}
-      {version?.location === "cloud" && <button type="button" className="training-button secondary"
-        disabled={busy || context.selecting || workspace?.teamId !== version.teamId || !openableVersion}
+      {(version?.location === "cloud" || benchmarkApi) && <button type="button" className="training-button secondary"
+        disabled={busy || context.selecting || !sessionId || !context.selection?.draftRevision ||
+          (!managedVersions && !openableVersion) || Boolean(draft.comparison && !managedVersions?.baseline)}
         onClick={async () => {
           setBenchmarkError(null);
           try {
-            if (context.selection && await context.select(context.selection.target, { configureDraft: true }))
-              setConfigureOpen(false);
+            const selected = context.selection;
+            if (!selected || selected.target.sessionId !== sessionId || !selected.draftRevision) return;
+            const versions: ManagedBenchmarkVersions | undefined = visibleDraft.managedBenchmarkVersions &&
+              (draft.comparison ? visibleDraft.managedBenchmarkVersions : { candidate: visibleDraft.managedBenchmarkVersions.candidate });
+            if (await context.select(selected.target, { configureDraft: true, ...(versions ? {
+              benchmark: { versions, expectedRevision: selected.draftRevision, name: draft.values.name?.trim() || undefined,
+                budget: draft.values.budget, seed: draft.values.seed },
+            } : {}) })) setConfigureOpen(false);
           } catch (cause) { setBenchmarkError(cause); }
         }}>Open Benchmark review</button>}
       {draft.kind === "dataset" && <DatasetSetupReview draft={draft} connection={connection}

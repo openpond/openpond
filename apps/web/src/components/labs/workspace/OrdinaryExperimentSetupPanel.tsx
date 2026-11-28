@@ -597,7 +597,7 @@ export function OrdinaryExperimentSetupPanel({
       >
         <EvaluationCard title="Model and budget">
           {runTarget && originalVersion ? <BenchmarkVersionChoice api={api} original={originalVersion} selected={runTarget}
-            disabled={busy} onSelect={setSelectedVersion} /> : <label>
+            disabled={busy} onSelect={setSelectedVersion} versions={retainedBenchmark?.versions} /> : <label>
             Model
             <DropdownSelect
               label="Model"
