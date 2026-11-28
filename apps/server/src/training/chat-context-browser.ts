@@ -66,6 +66,18 @@ export function createChatContextBrowser(deps: {
         label: scope.name, detail: scope.draft ? `Draft, ${experimentOperationLabel(scope.draft.operationType)}` : `Draft, ${scope.dataset!.name}, revision ${scope.dataset!.revision}`,
       });
     }
+    if (source === "all" || source === "local") {
+      for (const owner of await deps.store.sessionShells()) {
+        if (owner.id === sessionId || owner.archived || owner.systemKind) continue;
+        const resource = SessionResourceDraftSchema.safeParse(owner.metadata?.resourceDraft);
+        if (!resource.success || resource.data.kind !== "benchmark") continue;
+        const scope = chatExperimentContext(owner.metadata).scopes.find(item => item.draft?.id === resource.data.id);
+        if (scope) options.push({
+          target: { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId: owner.id, location: "local" },
+          label: scope.name, detail: `Benchmark draft, revision ${scope.draftRevision ?? 1}`,
+        });
+      }
+    }
     if ((source === "all" || source === "local") && scopes.some(scope=>scope.weightSpace)) {
       const access = await deps.access().catch(() => null);
       for (const scope of scopes) if (scope.weightSpace && access && scope.weightSpace.teamId === access.teamId && scope.weightSpace.actorId === access.actorId && scope.weightSpace.apiOrigin === new URL(access.apiBaseUrl).origin)
@@ -273,8 +285,9 @@ export function createChatContextBrowser(deps: {
       }
       if (newExperiment && selection) await deps.createExperiment(sessionId, selection.target);
       else if (selection?.target.scopeId) {
-        if (selection.target.sessionId !== sessionId) throw new Error("This draft belongs to another chat.");
-        await deps.selectResource(sessionId, selection.target);
+        const isExternal = selection.target.sessionId !== sessionId;
+        if (isExternal && !selection.localDraft) throw new Error("This draft belongs to another chat.");
+        await deps.selectResource(sessionId, isExternal ? null : selection.target);
       } else if (selection?.resource || !selection) await deps.selectResource(sessionId, selection?.target ?? null);
       const focused = await deps.store.getSession(sessionId);
       const state = chatExperimentContext(focused?.metadata);
@@ -302,6 +315,12 @@ export function createChatContextBrowser(deps: {
       : !run && scope?.ordinal && (scope.dataset || scope.draft || scope.storedDraft) ? { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" }
       : resource ? { kind: resource.kind as "dataset" | "experiment", id: resource.id, revision: resource.revision, location: resource.location ?? "local" } : null;
     const sameFocus = session.metadata?.chatContextFocusKey === undefined || session.metadata.chatContextFocusKey === focusKey(state);
+    if (saved?.scopeId && saved.sessionId !== sessionId) {
+      if (!sameFocus || version !== undefined && version !== state.selectionVersion) return focused ? resolve(focused) : null;
+      const external = await resolve(saved);
+      if (!external.localDraft) throw new Error("This Benchmark belongs to another chat.");
+      return external;
+    }
     // A draft staged before the first message is materialized in the newly
     // created chat, only while its exact staged target still owns selection.
     if (saved?.storedDraft) {

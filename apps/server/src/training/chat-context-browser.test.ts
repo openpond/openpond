@@ -272,7 +272,7 @@ test("local picker discovery remains available without hosted account access", a
   const access = vi.fn(async () => { throw new Error("hosted account offline"); });
   const dataset = { kind: "dataset" as const, id: "local-data", revision: 3, name: "Local examples", state: "Ready", rows: [] };
   const browser = createChatContextBrowser({
-    store: { listModelProjects: async () => [] } as unknown as SqliteStore,
+    store: { listModelProjects: async () => [], sessionShells: async () => [] } as unknown as SqliteStore,
     access, resources: async () => [dataset], resource: async () => dataset,
     selectResource: async () => {}, createExperiment: async () => {},
   });

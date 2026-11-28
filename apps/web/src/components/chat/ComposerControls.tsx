@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatProvider, CodexReasoningEffort, ProviderSettings } from "@openpond/contracts";
 import {
   ArrowLeft,
+  Boxes,
   Check,
   ChevronDown,
   ChevronRight,
   Cloud,
   Folder,
   Plus,
+  Target,
   UploadCloud,
 } from "../icons";
 import {
@@ -16,6 +18,9 @@ import {
 } from "../../lib/app-models";
 import { modelDisplayLabel } from "../../lib/model-display";
 import { modelSelectionForGroup, type ComposerModelGroup } from "./composer-model-options";
+import { ChatContextPicker, selectedResourceContextType, type ResourceContextType } from "./ChatContextPicker";
+import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
+import { DropdownSelect } from "../DropdownSelect";
 import type {
   WorkspaceTargetOptionState,
   WorkspaceTargetState,
@@ -151,18 +156,25 @@ export function ComposerProjectTargetControl({
   placement,
   state,
   onChange,
+  resourceContext,
 }: {
   busy: boolean;
   placement: "bottom" | "top";
   state: ComposerProjectTargetState;
   onChange: (value: string) => void;
+  resourceContext?: ReturnType<typeof useChatContextSelection>;
 }) {
   const [open, setOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [contextType, setContextType] = useState<"projects" | ResourceContextType>("projects");
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const noProjectSelected = state.value === "none";
-  const triggerLabel = noProjectSelected ? "Project" : state.label;
+  const controlLabel = resourceContext ? "Context" : "Project";
+  const resource = resourceContext?.selection;
+  const selectedContextType = selectedResourceContextType(resource);
+  const triggerLabel = resource?.label ?? (noProjectSelected ? controlLabel : state.label);
   const selectedIconKind =
     state.options.find((option) => option.value === state.value)?.kind ?? "local";
   const visibleOptions = useMemo(() => {
@@ -192,7 +204,7 @@ export function ComposerProjectTargetControl({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       if (newMenuOpen) setNewMenuOpen(false);
-      else setOpen(false);
+      else { setOpen(false); triggerRef.current?.focus(); }
     }
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -236,23 +248,43 @@ export function ComposerProjectTargetControl({
       ref={menuRef}
     >
       <button
+        ref={triggerRef}
         type="button"
         className={`composer-project-trigger ${open ? "active" : ""} ${selectedIconKind}`}
         disabled={busy}
-        aria-label="Project"
+        aria-label={controlLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => {
+          if (!open && resourceContext) {
+            setContextType(selectedContextType ?? "projects");
+            void resourceContext.refreshLocalCatalog().catch(() => undefined);
+          }
           setOpen((current) => !current);
           setNewMenuOpen(false);
         }}
       >
-        <ProjectTargetIcon kind={selectedIconKind} size={14} />
+        {selectedContextType === "model" ? <Boxes size={14} /> : selectedContextType === "experiment" ? <Target size={14} />
+          : <ProjectTargetIcon kind={selectedIconKind} size={14} />}
         <span>{triggerLabel}</span>
         <ChevronDown size={14} />
       </button>
       {open && (
-        <div className="composer-project-menu" role="menu" aria-label="Project">
+        <div className="composer-project-menu" role="menu" aria-label={controlLabel}>
+          {resourceContext ? <div className="composer-menu-search composer-context-types">
+            <DropdownSelect compact floating label="Context type" value={contextType}
+              options={[
+                { value: "projects", label: "Projects" },
+                { value: "model", label: "Models" },
+                { value: "experiment", label: "Benchmarks" },
+              ]}
+              onChange={value => {
+                setNewMenuOpen(false);
+                setContextType(value as typeof contextType);
+              }} />
+          </div> : null}
+          {resourceContext && contextType !== "projects" ? <ChatContextPicker context={resourceContext}
+            type={contextType} disabled={busy} onClose={() => { setOpen(false); triggerRef.current?.focus(); }} /> : <>
           <div className="composer-menu-search">
             <input
               autoFocus
@@ -292,6 +324,7 @@ export function ComposerProjectTargetControl({
               {visibleNoProjectOptions.map(renderOption)}
             </div>
           ) : null}
+          </>}
         </div>
       )}
       {open && newMenuOpen ? (

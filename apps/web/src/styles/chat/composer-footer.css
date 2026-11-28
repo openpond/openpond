@@ -542,6 +542,21 @@
   padding: 2px;
 }
 
+.composer-context-types {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.composer-context-resources {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+.composer-context-types .dropdown-select,
+.composer-context-resources .dropdown-select {
+  width: 100%;
+}
+
 .composer-menu-search input {
   width: 100%;
   height: 30px;

@@ -6,7 +6,6 @@ import { composerResourceMetadata, mergeComposerResourceContexts, composerSubmis
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
-import { ChatContextPicker } from "./ChatContextPicker";
 import { ComposerResourceContext } from "./ComposerResourceContext";
 import { CHAT_CONTEXT_SELECTED, ChatContextAccountScope, useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { useComposerResourceRequests } from "./useComposerResourceRequests";
@@ -1674,6 +1673,7 @@ export function Composer({
               placement={dropdownPlacement}
               state={projectTarget}
               onChange={onProjectTargetChange}
+              resourceContext={surface === "chat" && enableResourceContext ? contextSelection : undefined}
             />
           ) : null}
           {profileTarget && onProfileTargetChange ? (
@@ -1925,7 +1925,9 @@ export function Composer({
         <ComposerPrimaryControls
           issueAction={surface === "chat" ? <DesktopLogIssueAction key={conversationId ?? "new-chat"}
             conversationId={conversationId} inbox={taskInbox} running={running} onSubmit={onSubmit} showToast={showToast} /> : null}
-          trainingControl={surface === "chat" && enableResourceContext ? <ChatContextPicker context={contextSelection} disabled={busy} placement={dropdownPlacement} /> : null}
+          trainingControl={surface === "chat" && enableResourceContext && (mode !== "start" || !showProjectFooter) ? <ComposerProjectTargetControl
+            busy={busy || projectTarget.busy} placement={dropdownPlacement} state={projectTarget} onChange={onProjectTargetChange}
+            resourceContext={contextSelection} /> : null}
           surface={surface}
           teamUseModel={teamUseModel}
           teamUseModelLocked={teamUseModelLocked}
