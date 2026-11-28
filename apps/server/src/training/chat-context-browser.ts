@@ -3,7 +3,7 @@ import { chatCatalogFetch, catalogFailure } from "./chat-catalog-fetch.js";
 import { readChatRetainedResult } from "./chat-retained-result.js";
 import { readChatAlphaEditResult } from "./chat-alphaedit-result.js";
 import { readChatNeuronTrainingResult } from "./chat-neuron-training-result.js";
-import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, type ChatContextOption, type ChatContextSelection, type ChatContextTarget, type ChatResourceSummary, type StoredExperimentDraftReference } from "@openpond/contracts";
+import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, ChatExperimentContextSchema, type ChatContextOption, type ChatContextSelection, type ChatContextTarget, type ChatResourceSummary, type StoredExperimentDraftReference } from "@openpond/contracts";
 import { createTrainingClient, canonicalJson, experimentOperationLabel, ExperimentDraftSaveSchema, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
 import { createModelProjectsClient } from "openpond-sdk/model-projects";
 import type { SqliteStore } from "../store/store.js";
@@ -17,6 +17,7 @@ import { chatSteeringExperiment } from "./chat-steering-experiment.js";
 import { chatExperimentContext, chatResourceFocusKey as focusKey } from "./chat-experiment-scope.js";
 import { readChatDecisionResult } from "./chat-decision-result.js";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
+import { createHash } from "node:crypto";
 
 type Access = { apiBaseUrl: string; token: string; teamId: string; actorId: string };
 
@@ -34,6 +35,7 @@ export function createChatContextBrowser(deps: {
 
 }) {
   const drafts = createChatExperimentDraftStorage(deps.access);
+  const syncing = new Set<string>();
   async function catalog(refresh = true, sessionId?: string, draftCursor?: string, source: "all" | "local" | "models" | "drafts" = "all") {
     const session = sessionId ? await deps.store.getSession(sessionId) : null;
     if (sessionId && (!session || session.systemKind)) throw new Error("Chat is unavailable.");
@@ -365,5 +367,52 @@ export function createChatContextBrowser(deps: {
     const currentSaved = await resolve(saved.target);
     return { saved, currentSaved, selection: sessionId ? await current(sessionId) : currentSaved };
   }
-  return { catalog, resolve, inputs, runs, select, current, updateDraft };
+  async function syncLocalDraft(sessionId: string, scopeId: string, expectedRevision: number) {
+    const key = `${sessionId}:${scopeId}`;
+    if (syncing.has(key)) throw new Error("This Benchmark is already syncing.");
+    syncing.add(key);
+    try {
+      return await syncBenchmark(sessionId, scopeId, expectedRevision);
+    } finally {
+      syncing.delete(key);
+    }
+  }
+  async function syncBenchmark(sessionId: string, scopeId: string, expectedRevision: number) {
+    const target = { kind: "experiment", location: "local", id: scopeId, scopeId, sessionId } as const;
+    const selection = await resolve(target);
+    const scope = chatExperimentContext((await deps.store.getSession(sessionId))?.metadata).scopes.find(item => item.id === scopeId);
+    if (!selection.localDraft || !scope?.draft || scope.draftRevision !== expectedRevision)
+      throw new Error("The local Benchmark changed. Reopen it before syncing.");
+    const draft = scope.draft;
+    const access = await deps.access();
+    const apiOrigin = new URL(access.apiBaseUrl).origin;
+    const linked = scope.syncedDraft;
+    if (linked && (linked.actorId !== access.actorId || linked.teamId !== access.teamId || linked.apiOrigin !== apiOrigin))
+      throw new Error("Select the workspace linked to this Benchmark before syncing.");
+    if (linked?.sourceRevision === expectedRevision) return linked;
+    const operationId = `sync-benchmark-${createHash("sha256").update(canonicalJson([
+      apiOrigin, access.teamId, access.actorId, draft.id, expectedRevision, linked?.hostedRevision ?? 0,
+    ])).digest("hex")}`;
+    const { receipt, reference } = await drafts.save({
+      schemaVersion: "openpond.experimentDraftSave.v1",
+      teamId: access.teamId,
+      projectId: null,
+      operationId,
+      expectedRevision: linked?.hostedRevision ?? 0,
+      draft,
+    }, { actorId: access.actorId, teamId: access.teamId, apiOrigin });
+    if (reference.apiOrigin !== apiOrigin || receipt.record.ownerUserId !== access.actorId)
+      throw new Error("The active workspace changed while syncing the Benchmark.");
+    const synced = { ...reference, actorId: access.actorId, sourceRevision: expectedRevision, hostedRevision: receipt.record.revision };
+    await deps.store.updateSession(sessionId, session => {
+      const metadata = { ...session.metadata };
+      const state = chatExperimentContext(metadata);
+      const current = state.scopes.find(item => item.id === scopeId && item.draft?.id === draft.id);
+      if (!current) throw new Error("The local Benchmark is unavailable.");
+      if (!current.syncedDraft || current.syncedDraft.hostedRevision < synced.hostedRevision) current.syncedDraft = synced;
+      return { ...session, metadata: { ...metadata, chatExperimentContext: ChatExperimentContextSchema.parse(state) } };
+    });
+    return synced;
+  }
+  return { catalog, resolve, inputs, runs, select, current, updateDraft, syncLocalDraft };
 }

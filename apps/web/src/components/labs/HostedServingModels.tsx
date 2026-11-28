@@ -5,7 +5,7 @@ import type { useTraining } from "../../hooks/useTraining";
 import { type ClientConnection } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
 import { ErrorToast } from "../common/ErrorToast";
-import { HostedModelServingSetup } from "./HostedModelServingSetup";
+import { HostedModelServeAction } from "./HostedModelServingSetup";
 import { createWorkspaceApi } from "./workspace/workspace-api";
 
 const PAGE_SIZE = 20;
@@ -61,13 +61,10 @@ function HostedServingModelRow({ project, api }: {
   project: HostedModelProjectCatalog["projects"][number]["project"];
   api: ReturnType<typeof createWorkspaceApi>;
 }) {
-  const [opened, setOpened] = useState(false);
   return <tr>
     <td><strong>{project.name}</strong>{project.objective ? <div className="training-muted">{project.objective}</div> : null}</td>
     <td>{project.trainingSetup.baseModel?.modelId ?? project.defaultBaseModel?.modelId ?? "—"}</td>
     <td>{new Date(project.updatedAt).toLocaleString()}</td>
-    <td><button type="button" className="training-button" onClick={() => setOpened(true)}>Serve</button>
-      {opened ? <HostedModelServingSetup key={`${api.key}:${project.id}`} api={api} modelId={project.id} name={project.name} onClose={() => setOpened(false)} /> : null}
-    </td>
+    <td><HostedModelServeAction api={api} modelId={project.id} name={project.name} /></td>
   </tr>;
 }

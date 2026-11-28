@@ -1,0 +1,37 @@
+.sidebar-model-row {
+  display: flex;
+  min-width: 0;
+  min-height: 30px;
+  gap: 4px;
+  align-items: center;
+}
+
+.sidebar-model-title {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  padding: 4px 5px;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sidebar-model-title:hover {
+  background: var(--state-hover);
+}
+
+.sidebar-model-activity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline: 5px;
+}
+
+.sidebar-model-threads {
+  padding-inline-start: 14px;
+}

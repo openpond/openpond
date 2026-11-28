@@ -13,6 +13,7 @@ import { appendTaskIntake, taskIntakeSourceFiles } from "openpond-sdk/taskset-dr
 import { learningRef, type TaskBatch } from "openpond-sdk/learning";
 import { api } from "../../api";
 import { apiFetch } from "../../api/api-client";
+import { chatResourceRequest } from "../../api/chat-resource-api";
 import { parseModelNativeRunPage } from "openpond-sdk/model-projects";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
 import { useErrorToast } from "../../app/AppToastContext";
@@ -268,8 +269,17 @@ export function LabsRoute(props: LabsRouteProps) {
     const showLocalDrafts = route.page === "experiments" && !route.resourceId && !route.projectId && route.collection === "default";
     const workspace = training.settingsPreferences.defaultTeamId;
     const actorId = props.account?.profile?.id ?? null;
+    const syncConnection = props.account?.state === "signed_in" ? profileView.connection : null;
     const localDrafts = showLocalDrafts ? <LocalBenchmarkDrafts sessions={props.resourceSessions}
-      search={route.query} onOpen={props.onOpenResourceChat} /> : null;
+      search={route.query} actorId={actorId} onOpen={props.onOpenResourceChat}
+      onSync={syncConnection ? async (sessionId, scopeId, revision) => {
+        try {
+          await chatResourceRequest(syncConnection, "dataset", { action: "context_sync_draft",
+            payload: { sessionId, scopeId, expectedRevision: revision } });
+          profileView.onPayload(await api.bootstrap(syncConnection));
+          toast("Benchmark synced as a private workspace draft.", "success");
+        } catch (error) { toast(error instanceof Error ? error.message : String(error), "error"); }
+      } : undefined} /> : null;
     page = showLocalDrafts && (!workspace || !actorId) ? <main className="evaluation-workspace">
       <ModelProjectPageHeader title="Benchmarks" actions={<DesktopNewResourceButton kind="benchmark" />} />
       {localDrafts}
@@ -353,6 +363,7 @@ export function LabsRoute(props: LabsRouteProps) {
     </>;
   } else if (route.page === "models" && !route.modelId) {
     page = <LabModelsPage activeProfileId={profileId} hostedScope={props.account?.state === "signed_in" ? `${props.account.apiBaseUrl}:${props.account.activeProfile?.handle}:${workspaceKey}` : null} hostedApiOrigin={props.account?.apiBaseUrl ?? null} items={models} loading={training.training.loading && !models.length} runs={createImprove.runs} state={state} training={training.training}
+      connection={profileView.connection} actorId={props.account?.profile?.id ?? null}
       onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={(_id, name, runCount) => toast(`${name} pulled with ${runCount} runs.`, "success")}
       onOpened={(id) => open(modelsLocation("runs", id, { area: "console" }))}
       onOpenRun={(id, runKey) => open(modelsLocation("runs", id, { area: "console", resourceId: runKey }))}

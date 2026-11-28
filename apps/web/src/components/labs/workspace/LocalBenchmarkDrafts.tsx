@@ -1,12 +1,16 @@
 import { ChatExperimentContextSchema, type Session } from "@openpond/contracts";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
+import { useState } from "react";
 import { EvaluationTime } from "./EvaluationPresentation";
 
-export function LocalBenchmarkDrafts({ sessions, search, onOpen }: {
+export function LocalBenchmarkDrafts({ sessions, search, actorId, onOpen, onSync }: {
   sessions: readonly Session[];
   search: string;
+  actorId: string | null;
   onOpen(id: string): void;
+  onSync?: (sessionId: string, scopeId: string, revision: number) => Promise<void>;
 }) {
+  const [syncing, setSyncing] = useState<string | null>(null);
   const query = search.trim().toLowerCase();
   const drafts = sessions.flatMap(session => {
     if (session.archived) return [];
@@ -24,10 +28,22 @@ export function LocalBenchmarkDrafts({ sessions, search, onOpen }: {
     <div className="training-table-wrap"><table className="training-data-table" aria-label="Local Benchmark drafts">
       <thead><tr><th>Benchmark</th><th>Revision</th><th>Updated</th><th>Actions</th></tr></thead>
       <tbody>
-        {drafts.map(({ sessionId, scope }) => <tr key={sessionId}>
-          <td>{scope.name}</td><td>{scope.draftRevision ?? 1}</td><td><EvaluationTime value={scope.updatedAt} /></td>
-          <td><button className="training-text-button" type="button" onClick={() => onOpen(sessionId)}>Open setup</button></td>
-        </tr>)}
+        {drafts.map(({ sessionId, scope }) => {
+          const revision = scope.draftRevision ?? 1;
+          const synced = scope.syncedDraft?.actorId === actorId && scope.syncedDraft.sourceRevision === revision;
+          return <tr key={sessionId}>
+            <td>{scope.name}</td><td>{revision}</td><td><EvaluationTime value={scope.updatedAt} /></td>
+            <td><div className="model-build-actions">
+              <button className="training-text-button" type="button" onClick={() => onOpen(sessionId)}>Open setup</button>
+              {onSync && !synced ? <button className="training-button secondary" type="button" disabled={syncing !== null}
+                onClick={async () => {
+                  setSyncing(sessionId);
+                  try { await onSync(sessionId, scope.id, revision); } finally { setSyncing(null); }
+                }}>{syncing === sessionId ? "Syncing…" : "Sync privately"}</button> : null}
+              {synced ? <span>Synced</span> : null}
+            </div></td>
+          </tr>;
+        })}
         {!drafts.length ? <tr><td colSpan={4}>No matching local Benchmark drafts.</td></tr> : null}
       </tbody>
     </table></div>

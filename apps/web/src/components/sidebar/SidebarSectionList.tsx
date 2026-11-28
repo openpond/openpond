@@ -4,6 +4,7 @@ import { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "..
 export { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
 import { SidebarNewThreadButton } from "./SidebarNavigation";
 import { DesktopNewMenu } from "../chat/DesktopNewMenu";
+import { SidebarModelResource } from "./SidebarModelResource";
 import { SidebarTeamAvatars } from "./SidebarTeamAvatars";
 import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
@@ -60,7 +61,7 @@ import {
   SidebarTaskProjectGroup,
   type SidebarTaskGroupKind,
 } from "./SidebarTaskProjectGroup";
-import { modelsLocation, navigateDesktopRoute, navigateModelsRoute } from "../labs/lab-primary-tab-state";
+import { modelsLocation, navigateDesktopRoute, navigateModelsRoute, type ModelsRoute } from "../labs/lab-primary-tab-state";
 import { isDesktopShell } from "../app-shell/WindowControls";
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
@@ -104,6 +105,9 @@ export function SidebarSectionList({
   activeSessions,
   beginNewChat,
   account,
+  connection,
+  modelProjects,
+  modelTrainingActivityByProjectId,
   teamChatEnabled,
   teamChatOrganization,
   selectedTeamId,
@@ -346,6 +350,18 @@ export function SidebarSectionList({
     return groups;
   }, [visibleTaskRows]);
   const libraryChatIds = new Set([...libraryChats.model, ...libraryChats.benchmark].map(session => session.id));
+  const modelChatsById = new Map<string, Session[]>();
+  for (const session of libraryChats.model) {
+    const resource = SessionResourceDraftSchema.parse(session.metadata?.resourceDraft);
+    const chats = modelChatsById.get(resource.id) ?? [];
+    chats.push(session);
+    modelChatsById.set(resource.id, chats);
+  }
+  const sidebarModels = modelProjects.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount));
+  const visibleModelIds = new Set(sidebarModels.map(model => model.id));
+  function openResourcePage(route: ModelsRoute) {
+    void navigateModelsRoute(route).then(opened => { if (opened) setView("labs"); });
+  }
   const groupedTaskRows = useMemo(
     () => {
       const groups = groupSidebarTaskRows(visibleTaskRows, (session) => {
@@ -870,13 +886,28 @@ export function SidebarSectionList({
       {renderWorkflowGroups(workflowRows.filter(row => !row.pinned))}
       {groupedTaskRows.filter(group => group.key === "training").map(renderTaskGroup)}
       {(["model", "benchmark"] as const).map(kind => {
-        const model = kind === "model";
-        const page = model ? modelsLocation("models") : modelsLocation("experiments", null, { area: "console" });
-        return <SidebarSection key={kind} label={model ? "Models" : "Benchmarks"}
+        const isModels = kind === "model";
+        const page = isModels ? modelsLocation("models") : modelsLocation("experiments", null, { area: "console" });
+        return <SidebarSection key={kind} label={isModels ? "Models" : "Benchmarks"}
           collapsed={libraryCollapsed[kind]}
-          onTitleClick={() => { void navigateModelsRoute(page).then(opened => { if (opened) setView("labs"); }); }}
+          onTitleClick={() => openResourcePage(page)}
           onToggleCollapsed={() => setLibraryCollapsed(current => ({ ...current, [kind]: !current[kind] }))}>
-          {libraryChats[kind].map(session => renderTaskSession(session))}
+          {isModels ? <>
+            {sidebarModels.map(model => {
+              const chats = modelChatsById.get(model.id);
+              return <SidebarModelResource key={model.id} model={model}
+                activity={modelTrainingActivityByProjectId[model.id]} connection={connection}
+                actorId={account?.state === "signed_in" ? account.profile?.id ?? null : null}
+                apiBaseUrl={account?.apiBaseUrl ?? null} activeTeamId={selectedTeamId}
+                onOpen={() => openResourcePage(modelsLocation("models", model.id))}
+                onOpenLearning={() => openResourcePage(modelsLocation("models", model.id, { detailTab: "learning" }))}
+                onOpenRuns={resourceId => openResourcePage(modelsLocation("runs", model.id, { area: "console", resourceId }))}>
+                {chats?.map(session => renderTaskSession(session))}
+              </SidebarModelResource>;
+            })}
+            {[...modelChatsById].filter(([id]) => !visibleModelIds.has(id))
+              .flatMap(([, chats]) => chats.map(session => renderTaskSession(session)))}
+          </> : libraryChats.benchmark.map(session => renderTaskSession(session))}
         </SidebarSection>;
       })}
       <SidebarSection

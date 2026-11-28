@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   parseAndVerifySavedModelVersionRead,
   parseAndVerifySavedModelServing,
@@ -12,6 +13,22 @@ import { ModelServingControlDialog } from "./ModelServingControlDialog";
 import type { WorkspaceApi } from "./workspace/workspace-api";
 
 type Props = { api: WorkspaceApi; modelId: string; name: string; onClose(): void };
+
+export function HostedModelServeAction({ api, modelId, name, active = false, compact = false }: Omit<Props, "onClose"> & {
+  active?: boolean;
+  compact?: boolean;
+}) {
+  const [reviewing, setReviewing] = useState(false);
+  const label = active ? "Manage" : "Serve";
+  return <div className="labs-serve-action" onClick={event => event.stopPropagation()}>
+    <button type="button" className={`training-button${compact ? " secondary labs-compact-button" : ""}`}
+      aria-label={`${label} ${name}`} onClick={() => setReviewing(true)}>
+      {label}
+    </button>
+    {reviewing ? <HostedModelServingSetup key={`${api.key}:${modelId}`} api={api} modelId={modelId} name={name}
+      onClose={() => setReviewing(false)} /> : null}
+  </div>;
+}
 
 /** Open only on Serve. Closed table rows perform no per-model state reads. */
 export function HostedModelServingSetup(props: Props) {

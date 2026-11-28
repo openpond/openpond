@@ -17,13 +17,16 @@ import {
   ChartColumnStacked,
   CheckCircle2,
   ChevronRight,
+  Cloud,
   CircleDashed,
-  DownloadCloud,
   Loader2,
   XCircle,
 } from "../icons";
 import { workproductKey, type LabWorkproductSummary } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { HostedModelServeAction } from "./HostedModelServingSetup";
+import { DropdownSelect } from "../DropdownSelect";
+import type { WorkspaceApi } from "./workspace/workspace-api";
 import { benchmarkTaskEfficiency } from "./benchmark-attempt-usage";
 import {
   labLifecycleModelRuns,
@@ -222,8 +225,11 @@ export function ModelsTable({
   busyAction,
   runs,
   state,
+  servingApi,
   emptyMessage = "No Models yet.",
   onPull,
+  onOpenHosted,
+  onSyncModel,
   onSelect,
   onOpenRun,
   onUseModel,
@@ -234,8 +240,11 @@ export function ModelsTable({
   busyAction: string | null;
   runs: CreateImproveRun[];
   state: TrainingStateResponse | null;
+  servingApi: WorkspaceApi | null;
   emptyMessage?: string;
   onPull: (item: HostedModelProjectCatalog["projects"][number]) => void;
+  onOpenHosted: (item: HostedModelProjectCatalog["projects"][number]) => void;
+  onSyncModel: (modelId: string) => void;
   onSelect: (key: string) => void;
   onOpenRun: (modelId: string, runKey: string) => void;
   onUseModel: (modelId: string) => void;
@@ -273,6 +282,11 @@ export function ModelsTable({
             const setup = project?.trainingSetup;
             const versions = item ? labModelVersions(item, runs, state) : [];
             const current = versions.find((version) => version.current) ?? null;
+            const configured = Boolean((setup?.baseModel ?? project?.defaultBaseModel) && setup?.method);
+            const serving = current?.lineage.managedServing;
+            const activeServing = serving?.teamId === servingApi?.teamId && Boolean(
+              serving?.canonicalDeploymentId && ["requested", "deploying", "ready", "degraded"].includes(serving.canonicalDeploymentState ?? ""),
+            );
             const runEntries = item
               ? modelRunEntries(
                   labModelJobs(item, runs, state),
@@ -323,7 +337,7 @@ export function ModelsTable({
                 <td>{setup?.recipe?.parameterization === "lora" ? "LoRA" : setup?.recipe?.parameterization === "full" ? "Full weights" : "Unspecified"}</td>
                 <td>
                   <div className="labs-model-table-summary">
-                    <LabStatusBadge label={recentRun ? statusLabel(recentRunStatus) : current ? "Version ready" : "Configured"}
+                    <LabStatusBadge label={recentRun ? statusLabel(recentRunStatus) : current ? "Version ready" : configured ? "Configured" : "Draft"}
                       value={recentRun ? recentRunStatus : current ? "ready" : "prepared"} />
                     {recentRun?.lifecycleRun?.kind === "evaluation" ? <span>{recentModelRunLabel(recentRun.lifecycleRun, runEntries.length)}</span> : null}
                   </div>
@@ -340,29 +354,24 @@ export function ModelsTable({
                 <td className="labs-models-updated">{compactUpdatedAt(row.updatedAt)}</td>
                 <td>
                   <div className="labs-workproduct-actions">
-                    {hosted && pullable ? (
-                      <button
-                        className="training-button secondary labs-compact-button"
-                        disabled={pulling}
-                        title={hostedPullTitle(hosted.localState)}
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onPull(hosted);
-                        }}
-                      >
-                        {pulling ? (
-                          <Loader2 className="spin" size={13} />
-                        ) : (
-                          <DownloadCloud size={13} />
-                        )}
-                        {pulling
-                          ? "Importing…"
-                          : hosted.localState === "remote_ahead"
-                            ? "Update"
-                            : "Pull"}
-                      </button>
-                    ) : null}
+                    {servingApi && hosted && hosted.project.teamId === servingApi.teamId ? <HostedModelServeAction
+                      compact api={servingApi} modelId={hosted.project.id} name={hosted.project.name} active={activeServing} /> : null}
+                    {servingApi && (hosted || item) ? <div onClick={event => event.stopPropagation()}>
+                      <DropdownSelect compact floating floatingMenuWidth={226}
+                        label={`Cloud actions for ${name ?? "Model"}`} value="" icon={<Cloud size={13} />}
+                        disabled={pulling || opening || busyAction === "sync-model-project"}
+                        options={[
+                          { value: "", label: pulling ? "Pulling…" : busyAction === "sync-model-project" ? "Syncing…" : "Cloud", disabled: true },
+                          ...(hosted ? [{ value: "open", label: "Open hosted Model" }] : []),
+                          ...(hosted && pullable ? [{ value: "pull", label: "Pull local copy", description: hostedPullTitle(hosted.localState) }] : []),
+                          ...(item ? [{ value: "sync", label: "Sync to workspace" }] : []),
+                        ]}
+                        onChange={value => {
+                          if (value === "open" && hosted) onOpenHosted(hosted);
+                          if (value === "pull" && hosted) onPull(hosted);
+                          if (value === "sync" && item) onSyncModel(item.id);
+                        }} />
+                    </div> : null}
                     {item && (current || !pullable) ? (
                       <button
                         className="training-button secondary labs-compact-button labs-workproduct-use"

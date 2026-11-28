@@ -6,6 +6,8 @@ import type {
 
 import { Search } from "../icons";
 import { DesktopNewResourceButton } from "../chat/DesktopNewMenu";
+import type { ClientConnection } from "../../api";
+import { createWorkspaceApi } from "./workspace/workspace-api";
 import { DropdownSelect } from "../DropdownSelect";
 import type { useTraining } from "../../hooks/useTraining";
 import type { HostedModelProjectCatalog } from "../../hooks/hosted-model-project-types";
@@ -23,6 +25,8 @@ export function LabModelsPage({
   activeProfileId,
   hostedScope,
   hostedApiOrigin,
+  connection,
+  actorId,
   items,
   loading,
   runs,
@@ -39,6 +43,8 @@ export function LabModelsPage({
   activeProfileId: string;
   hostedScope: string | null;
   hostedApiOrigin: string | null;
+  connection: ClientConnection | null;
+  actorId: string | null;
   items: LabWorkproductSummary[];
   loading: boolean;
   runs: CreateImproveRun[];
@@ -70,6 +76,10 @@ export function LabModelsPage({
   const [page, setPage] = useState(1);
   const [hostedResult, setHostedResult] = useState<{ scope: string; catalog: HostedModelProjectCatalog } | null>(null);
   const hostedCatalog = hostedResult?.scope === hostedScope ? hostedResult.catalog : null;
+  const hostedTeamId = hostedCatalog?.teamId;
+  const servingApi = useMemo(() => connection && actorId && hostedTeamId && hostedScope
+    ? createWorkspaceApi(connection, { teamId: hostedTeamId, actorId, accountKey: hostedScope, projectId: null })
+    : null, [connection, actorId, hostedTeamId, hostedScope]);
   const comparableRunCount = state?.modelRuns.filter(
     (run) => run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1",
   ).length ?? 0;
@@ -193,12 +203,22 @@ export function LabModelsPage({
   async function selectModel(key: string) {
     const row = rows.find(item => item.key === key);
     if (row?.local) { onSelect(key); return; }
-    if (!row?.hosted || !hostedCatalog || !hostedApiOrigin || opening.current) return;
+    if (row?.hosted) await openHostedModel(row.hosted);
+  }
+
+  async function openHostedModel(item: HostedModelProjectCatalog["projects"][number]) {
+    if (!hostedCatalog || !hostedApiOrigin || opening.current || item.project.teamId !== hostedCatalog.teamId) return;
     opening.current = true;
     try {
-      const result = await training.actions.openHostedModelProject(row.hosted.project.id, hostedCatalog.teamId, hostedApiOrigin);
+      const result = await training.actions.openHostedModelProject(item.project.id, hostedCatalog.teamId, hostedApiOrigin);
       if (result && liveScope.current === hostedScope) onOpened(result.project.id);
     } finally { opening.current = false; }
+  }
+
+  async function syncModel(id: string) {
+    if (!hostedScope || !hostedCatalog || liveScope.current !== hostedScope) return;
+    const saved = await training.actions.syncModelProject(id);
+    if (saved && liveScope.current === hostedScope) await retryHosted();
   }
 
   return (
@@ -258,7 +278,10 @@ export function LabModelsPage({
         loading={loading || (loadingHosted && !hostedCatalog && !items.length)}
         runs={runs}
         state={state}
+        servingApi={servingApi}
         onPull={(item) => void pullHostedProject(item)}
+        onOpenHosted={(item) => void openHostedModel(item)}
+        onSyncModel={(id) => void syncModel(id)}
         onSelect={(key) => { void selectModel(key); }}
         onOpenRun={onOpenRun}
         onUseModel={onUseModel}

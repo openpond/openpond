@@ -160,6 +160,11 @@ export const ChatExperimentScopeSchema = z
     name: z.string().trim().min(1).max(500),
     draft: ExperimentDraftSchema.optional(),
     storedDraft: StoredExperimentDraftReferenceSchema.optional(),
+    syncedDraft: StoredExperimentDraftReferenceSchema.extend({
+      actorId: Id,
+      sourceRevision: z.number().int().positive(),
+      hostedRevision: z.number().int().positive(),
+    }).optional(),
     draftRevision: z.number().int().positive().optional(),
     draftSave: z.object({ operationId: Id, requestHash: Hash }).strict().optional(),
     creationHash: Hash.optional(),

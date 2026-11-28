@@ -10,6 +10,7 @@ import {
 } from "../../../api/model-learning-api";
 import { LearningActions, LearningError, LearningPager } from "./LearningFields";
 import { DropdownSelect } from "../../DropdownSelect";
+import { RefreshCw } from "../../icons";
 
 const Settings = lazy(() =>
   import("./HostedModelLearningSettings").then((module) => ({
@@ -26,10 +27,12 @@ export function HostedModelLearning({
   connection,
   model,
   readOnly,
+  openSettings = false,
 }: {
   connection: ClientConnection;
   model: ModelProject;
   readOnly: boolean;
+  openSettings?: boolean;
 }) {
   const client = useMemo(
     () => createHostedModelLearningApi(connection, model.id, model.profileId),
@@ -54,6 +57,7 @@ export function HostedModelLearning({
   const [busy, setBusy] = useState(false);
   const pending = useRef<LearningCommand | null>(null);
   const active = useRef(false);
+  const openedSettings = useRef(false);
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -63,6 +67,10 @@ export function HostedModelLearning({
         if (!stopped) {
           setState({ client, key, value });
           setError(null);
+          if (openSettings && !openedSettings.current && !readOnly) {
+            openedSettings.current = true;
+            setEditing({ project: value.project, policy: value.policy });
+          }
         }
       } catch (failure) {
         if (!stopped)
@@ -78,7 +86,7 @@ export function HostedModelLearning({
       stopped = true;
       clearTimeout(timer);
     };
-  }, [client, policyId, afterId, key, revision]);
+  }, [client, policyId, afterId, key, revision, openSettings, readOnly]);
   const value = state?.client === client && state.key === key ? state.value : null;
   const policy = value?.policy;
   const waiting =
@@ -139,7 +147,10 @@ export function HostedModelLearning({
   return (
     <section className="training-detail-section" aria-label="Hosted continual learning">
       <ConversationServingOwner connection={connection} model={model} readOnly={readOnly} />
-      <h2>Continual learning</h2>
+      <h2 className="labs-run-title-row">
+        {policy ? <RefreshCw size={18} aria-label={policy.enabled ? "Continual learning on" : "Continual learning paused"} /> : null}
+        Continual learning
+      </h2>
       <p>
         Enabled hosted policies keep checking while Desktop is closed. Training waits for admitted,
         unused evidence and authorized budget and capacity.

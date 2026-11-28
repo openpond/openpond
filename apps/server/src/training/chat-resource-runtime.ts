@@ -147,6 +147,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const {context:requestedContext,invocationToken,...input} = envelope;
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
     if (kind === "dataset" && input.action === "next_step") return nextSteps.request(input.payload, context);
+    if (kind === "dataset" && input.action === "context_sync_draft") {
+      const query = z.object({ sessionId: z.string().min(1), scopeId: z.string().min(1),
+        expectedRevision: z.number().int().positive() }).strict().parse(input.payload);
+      if (context && context.sessionId !== query.sessionId) throw new Error("The Benchmark belongs to another conversation.");
+      return browser.syncLocalDraft(query.sessionId, query.scopeId, query.expectedRevision);
+    }
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_inputs", "context_runs", "context_select", "context_selection", "context_save_draft"].includes(String(input.action))) {
       const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
       if (input.action === "context_save_draft") return browser.updateDraft(query.sessionId, query.target, query.update);

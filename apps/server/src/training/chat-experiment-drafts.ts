@@ -35,9 +35,11 @@ export function createChatExperimentDraftStorage(access: () => Promise<ChatDraft
       if (record.status !== "draft") throw new Error("This experiment draft is archived. Reopen it in Experiments to restore it.");
       return record;
     },
-    async save(raw: unknown) {
+    async save(raw: unknown, expected?: { actorId: string; teamId: string; apiOrigin: string }) {
       const input = ExperimentDraftSaveSchema.parse(raw), owner = await client();
-      if (input.teamId !== owner.current.teamId) throw new Error("The experiment workspace changed.");
+      if (input.teamId !== owner.current.teamId || expected &&
+        (expected.actorId !== owner.current.actorId || expected.teamId !== owner.current.teamId || expected.apiOrigin !== owner.referenceScope.apiOrigin))
+        throw new Error("The experiment workspace changed.");
       const receipt = await owner.training.saveExperimentDraft(input);
       await owner.fence(receipt.record);
       return { receipt, reference: { id: receipt.record.id, ...owner.referenceScope } };

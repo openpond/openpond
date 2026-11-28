@@ -116,6 +116,7 @@ export function ModelServingControlDialog({
               ? version.baseModel.modelId
               : version.request.baseModel.modelId}
         </p>
+        <p className="training-muted">Version <code>{version.contentHash}</code></p>
         {actual === "activate" &&
         (retained
           ? retained.schemaVersion === "openpond.steeringModelServingControlRequest.v1" ||
@@ -258,7 +259,7 @@ export function ModelServingControlDialog({
               : retained
                 ? "Retry request"
                 : actual === "activate"
-                  ? "Serve"
+                  ? "Deploy to OpenPond Managed"
                   : "Stop serving"}
           </button>
         </div>

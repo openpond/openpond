@@ -646,7 +646,8 @@ export function LabWorkproductDetail({
                 versions={modelVersions}
               />
             ) : null}
-            {modelSection === "overview" && connection && modelProject?.hosted ? <HostedModelLearning key={`${connection.serverUrl}:${modelProject.profileId}:${modelProject.id}:${modelProject.hosted.teamId}:${modelProject.hosted.apiOrigin}`} connection={connection} model={modelProject} readOnly={readOnlyModel} /> : null}
+            {modelSection === "overview" && connection && modelProject?.hosted ? <HostedModelLearning key={`${connection.serverUrl}:${modelProject.profileId}:${modelProject.id}:${modelProject.hosted.teamId}:${modelProject.hosted.apiOrigin}:${modelDetailTab ?? ""}`}
+              connection={connection} model={modelProject} readOnly={readOnlyModel} openSettings={modelDetailTab === "learning"} /> : null}
             {modelSection === "training" || modelSection === "evals" ? (
               <LabModelRunsPage
                 runs={runs}
