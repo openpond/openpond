@@ -10,6 +10,7 @@ import { resolveManagedAdapterUserAccess } from "../openpond/hosted-api-access.j
 import { createManagedAdapterSyncService } from "./managed-adapter-sync-service.js";
 import { createManagedAdapterChatRuntime } from "./managed-adapter-chat-runtime.js";
 import { createManagedAdapterHostedChatStream } from "./managed-adapter-chat-stream.js";
+import { createLocalAdapterPublicationService } from "./local-adapter-publication.js";
 
 type TrainingDependencies = Parameters<typeof createTrainingService>[0];
 type CompositionDependencies = Pick<TrainingDependencies,
@@ -50,6 +51,13 @@ export function createManagedTrainingComposition(deps: CompositionDependencies) 
     store, resolveAccess: resolveManagedTrainingAccess, resolveActorId: actorId,
     resolveReleasedHarness: deps.resolveReleasedHarness, env: process.env,
   });
+  const localAdapterPublication = createLocalAdapterPublicationService({ store, home: storeDir, resolveAccess: async () => {
+    const [actor, teamId] = await Promise.all([actorId(), deps.defaultTeam()]);
+    const access = await resolveManagedAdapterUserAccess({ teamId });
+    const [currentActor, currentTeam] = await Promise.all([actorId(), deps.defaultTeam()]);
+    if (currentActor !== actor || currentTeam !== access.teamId) throw new Error("The selected workspace or account changed.");
+    return { ...access, actorId: actor };
+  } });
   const trainingService = createTrainingService({
     ...deps,
     ...createPortableTrainingServerDependencies({ storeDir, environment: process.env }),
@@ -83,7 +91,7 @@ export function createManagedTrainingComposition(deps: CompositionDependencies) 
   conversationServingOwner.start();
   deps.onStartupFailure(() => conversationServingOwner.close());
   managedAdapterSyncService.start();
-  return {datasetStorageService, datasetStoragePayload, modelProjectHosting,
+  return {datasetStorageService, datasetStoragePayload, modelProjectHosting, localAdapterPublication,
     trainingService, conversationServingOwner, managedAdapterSyncService, managedAdapterChatRuntime,
     streamSelectedOpenPondChatTurn};
 }

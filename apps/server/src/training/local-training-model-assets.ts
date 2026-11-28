@@ -219,7 +219,7 @@ export function localTrainingModelAssets(storeDir: string) {
           throw new LocalTrainingModelError("The saved checkpoint failed its checksum.", 409);
         }
       }
-      return { base: summarize(id, record), modelDirectory };
+      return { base: summarize(id, record), modelDirectory, manifestFiles: record.manifest.files };
     } catch (error) {
       if (error instanceof LocalTrainingModelError) throw error;
       throw new LocalTrainingModelError("The saved checkpoint could not be verified.", 409);

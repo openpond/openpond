@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { availableMemory } from "node:process";
@@ -7,7 +5,7 @@ import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import type { BenchmarkModelVersion } from "@openpond/contracts/resource-setup";
 import type { SqliteStore } from "../store/store.js";
-import { localTrainingModelAssets } from "../training/local-training-model-assets.js";
+import { createLocalSftVersionReader } from "../training/local-sft-model-version.js";
 import { inspectLocalTrainingRuntime, localTrainingPythonCommand, runLocalTrainingPython } from "../training/local-training-runtime.js";
 import type { LocalModelAdmission } from "./local-experiment-model.js";
 import { LocalExperimentError, type LocalExperimentDefinition } from "./local-experiment-contract.js";
@@ -36,67 +34,14 @@ function fail(message: string): never {
   throw new LocalExperimentError("saved_local_model_unavailable", message, 422);
 }
 
-async function verifyFile(file: string, expected: { sha256: string; sizeBytes: number }, signal?: AbortSignal) {
-  const hash = createHash("sha256");
-  let size = 0;
-  try {
-    for await (const chunk of createReadStream(file, { signal })) {
-      size += chunk.length;
-      if (size > expected.sizeBytes) fail(explanations.artifact_changed);
-      hash.update(chunk);
-    }
-  } catch (error) {
-    signal?.throwIfAborted();
-    if (error instanceof LocalExperimentError) throw error;
-    fail("The saved adapter file is unavailable.");
-  }
-  if (size !== expected.sizeBytes || hash.digest("hex") !== expected.sha256) fail(explanations.artifact_changed);
-}
-
 export function createLocalSftBenchmarkInference(store: SqliteStore, home: string) {
-  async function resolve(source: LocalVersion, device: Device, profileId?: string) {
-    const [project, lineage] = await Promise.all([store.getModelProject(source.projectId), store.getModelArtifactLineage(source.versionId)]);
-    if (!project || profileId && profileId !== project.profileId || !lineage || lineage.modelId !== project.id ||
-      lineage.status !== "imported" || lineage.artifactId !== source.artifactId || lineage.bundleHash !== source.bundleHash)
-      fail("The selected local Model Version is unavailable in this library.");
-    const run = await store.getModelRun(lineage.jobId);
-    const receipt = run?.receipt;
-    if (run?.modelId !== project.id || run.profileId !== project.profileId || run.status !== "succeeded" ||
-      run.adapterArtifactLineageId !== lineage.id || !run.localSft || receipt?.schemaVersion !== "openpond.localSftModelRunReceipt.v1" ||
-      receipt.contentHash !== lineage.bundleHash || receipt.planHash !== run.localSft.planHash || !run.modelVersionId)
-      fail("This Version needs a retained local SFT run and its verified adapter.");
-    const version = await store.getModelVersion(run.modelVersionId);
-    if (version?.localSft?.modelRunId !== run.id || version.profileId !== project.profileId ||
-      version.modelId !== project.id || version.artifactLineageId !== lineage.id || version.status !== "available" ||
-      version.localSft.planHash !== run.localSft.planHash || version.localSft.attemptId !== run.localSft.attemptId ||
-      version.localSft.sessionId !== run.localSft.sessionId || !version.baseModel.modelAssetId)
-      fail("The saved Version no longer matches its original Model Run.");
-    const { contentHash: versionHash, ...versionContent } = version;
-    const { contentHash: receiptHash, ...receiptContent } = receipt;
-    if (contentHash(versionContent) !== versionHash || contentHash(receiptContent) !== receiptHash)
-      fail("The saved Version or Model Run receipt failed integrity verification.");
-    const configurationHash = contentHash(["openpond-local-sft-benchmark-v1", version.contentHash, receipt.contentHash, device]);
-    return { project, version, run, receipt, configurationHash };
-  }
+  const reader = createLocalSftVersionReader(store, home, fail);
+  const { artifacts } = reader;
 
-  async function artifacts(source: LocalVersion, selected: Awaited<ReturnType<typeof resolve>>, signal?: AbortSignal) {
-    const files = await store.listTrainingArtifacts(selected.run.id);
-    const weights = files.find(file => file.id === source.artifactId && file.metadata.providerFilename === "adapter_model.safetensors");
-    const config = files.find(file => file.metadata.providerFilename === "adapter_config.json" && file.metadata.provider === "local_cuda");
-    const reference = selected.version.localSft!;
-    const directory = path.resolve(home, "training", "local-sft", "runs", reference.planHash, reference.attemptId, "adapter");
-    if (!weights || !config || weights.sha256 !== selected.receipt.adapterHash ||
-      config.sha256 !== selected.receipt.adapterConfigHash || weights.metadata.provider !== "local_cuda" ||
-      weights.path !== path.join(directory, "adapter_model.safetensors") || config.path !== path.join(directory, "adapter_config.json"))
-      fail("The stored adapter files do not match the saved Version.");
-    await Promise.all([verifyFile(weights.path, weights, signal), verifyFile(config.path, config, signal)]);
-    const { base, modelDirectory } = await localTrainingModelAssets(home).verify(selected.version.baseModel.modelAssetId!, signal);
-    const expected = selected.version.baseModel;
-    if (base.preference.modelId !== expected.modelId || base.preference.revision !== expected.revision ||
-      base.preference.tokenizerRevision !== expected.tokenizerRevision || base.preference.chatTemplateHash !== expected.chatTemplateHash)
-      fail(explanations.checkpoint_mismatch);
-    return { adapterDirectory: directory, modelDirectory, baseSizeBytes: base.sizeBytes, chatTemplateHash: expected.chatTemplateHash,
-      files: { "adapter_model.safetensors": weights.sha256, "adapter_config.json": config.sha256 } };
+  async function resolve(source: LocalVersion, device: Device, profileId?: string) {
+    const selected = await reader.resolve(source, profileId);
+    const configurationHash = contentHash(["openpond-local-sft-benchmark-v1", selected.version.contentHash, selected.receipt.contentHash, device]);
+    return { ...selected, configurationHash };
   }
 
   return {
@@ -131,7 +76,9 @@ export function createLocalSftBenchmarkInference(store: SqliteStore, home: strin
         const root = path.resolve(home, "training", "local-sft", "runs");
         await mkdir(root, { recursive: true, mode: 0o700 });
         const result = await runLocalTrainingPython(home, localSftBenchmarkWorker, {
-          timeout: requestTimeoutMs, signal: request.signal, input: { ...files, messages: messages.data, device,
+          timeout: requestTimeoutMs, signal: request.signal, input: {
+            adapterDirectory: files.adapterDirectory, modelDirectory: files.modelDirectory, files: files.files,
+            chatTemplateHash: files.chatTemplateHash, messages: messages.data, device,
             deviceLock: path.join(root, device === "cuda" ? "device.lock" : "cpu-inference.lock"), maxOutputTokens: request.maxTokens },
         }).then(value => resultSchema.parse(value)).catch(error => {
           request.signal?.throwIfAborted();

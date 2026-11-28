@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
-import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
+import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelProjectVersionedRefSchema, RegisteredAdapterVersionSchema } from "openpond-sdk/model-projects";
 import { SftRecipeSchema } from "openpond-sdk/training";
 
 const fieldText = z.string().max(2_000).optional();
@@ -17,6 +17,18 @@ export const BenchmarkModelVersionSchema = z.discriminatedUnion("location", [
     teamId: resourceId, versionHash: artifactHash }).strict(),
 ]);
 export type BenchmarkModelVersion = z.infer<typeof BenchmarkModelVersionSchema>;
+export const LocalAdapterPublicationRequestSchema = z.object({
+  profileId: resourceId, teamId: resourceId, actorId: resourceId, version: LocalBenchmarkModelVersionSchema,
+}).strict();
+export const LocalAdapterPublicationScheduleSchema = LocalAdapterPublicationRequestSchema.extend({ reviewHash: artifactHash });
+export const LocalAdapterPublicationStateSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("review"), reviewHash: artifactHash, modelName: resourceId,
+    hostedModelId: resourceId, baseRepository: resourceId, baseRevision: z.string(),
+    bytes: z.number().int().positive(), localVersionHash: artifactHash, adapterSha256: artifactHash }).strict(),
+  z.object({ state: z.literal("registered"), version: RegisteredAdapterVersionSchema }).strict(),
+]);
+export type LocalAdapterPublicationRequest = z.infer<typeof LocalAdapterPublicationRequestSchema>;
+export type LocalAdapterPublicationState = z.infer<typeof LocalAdapterPublicationStateSchema>;
 const localModelRef = z.object({
   modelId: z.string().min(1).max(500),
   configurationHash: z.string().regex(/^[a-f0-9]{64}$/),

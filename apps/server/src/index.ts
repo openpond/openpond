@@ -734,7 +734,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       datasetArtifactService.task(tasksetId, taskId, split),
     modelJudge: taskEvaluationModelJudge,
   });
-  const { datasetStorageService, datasetStoragePayload, modelProjectHosting,
+  const { datasetStorageService, datasetStoragePayload, modelProjectHosting, localAdapterPublication,
     trainingService, conversationServingOwner, managedAdapterSyncService, managedAdapterChatRuntime,
     streamSelectedOpenPondChatTurn } = createManagedTrainingComposition({
       store, storeDir, resolveAccess: resolveHostedApiAccess,
@@ -804,6 +804,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     harnessRefinerBenchmarks,
     preferenceComparisons: preferenceComparisonService,
     modelProjectHosting,
+    localAdapterPublication,
     modelStarters: createModelStarterRuntime({ store, home: storeDir, resolveAccess: async () => {
       const teamId = (await loadAppPreferences()).defaultTeamId?.trim();
       if (!teamId) throw new Error("Select an OpenPond workspace to browse model starters.");

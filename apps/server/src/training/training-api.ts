@@ -1,6 +1,6 @@
 import type { TrainingApiDependencies } from "./training-api-dependencies.js";
 import { refreshLocalSftModelLibrary } from "./refresh-local-sft-model-library.js";
-import { LocalSftPreflightRequestSchema, LocalSftReviewRequestSchema, LocalSftRunRequestSchema } from "@openpond/contracts/resource-setup";
+import { LocalAdapterPublicationRequestSchema, LocalAdapterPublicationScheduleSchema, LocalSftPreflightRequestSchema, LocalSftReviewRequestSchema, LocalSftRunRequestSchema } from "@openpond/contracts/resource-setup";
 import { handleManagedCandidateReviewAction, isManagedCandidateReviewAction } from "./training-api-candidate-review.js";
 import { createTaskInventoryService, taskInventoryRequest } from "./task-inventory-service.js";
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
@@ -189,6 +189,12 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
       return (await import("./local-sft-preflight.js")).preflightLocalSft({
         ...LocalSftPreflightRequestSchema.parse(input), store: deps.store, storeDir: deps.storeDir, signal,
       });
+    }
+    if (action === "preview_local_adapter_publication" || action === "publish_local_adapter") {
+      if (!deps.localAdapterPublication) throw new Error("The local adapter upload service is unavailable.");
+      if (action === "preview_local_adapter_publication") return deps.localAdapterPublication.preview(LocalAdapterPublicationRequestSchema.parse(input), signal);
+      const { reviewHash, ...selection } = LocalAdapterPublicationScheduleSchema.parse(input);
+      return deps.localAdapterPublication.publish(selection, reviewHash, signal);
     }
     if (action === "start_local_sft" || action === "status_local_sft" || action === "cancel_local_sft") {
       const operation = action === "start_local_sft" ? "start" : action === "cancel_local_sft" ? "cancel" : "status";

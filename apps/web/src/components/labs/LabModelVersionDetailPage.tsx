@@ -52,6 +52,8 @@ import {
   resolveRunStatus,
 } from "./LabRunStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
+import { LocalAdapterPublicationAction } from "./LocalAdapterPublicationAction";
+import type { WorkspaceApi } from "./workspace/workspace-api";
 import {
   eventSummary,
   formatBytes,
@@ -98,8 +100,12 @@ export function LabModelVersionDetailPage({
   onOpenDataset,
   onOpenConversation,
   detailKind,
+  servingApi,
+  hostedWebBaseUrl,
 }: ModelWorkspaceProps & {
   connection: ClientConnection | null;
+  servingApi?: WorkspaceApi;
+  hostedWebBaseUrl: string | null;
   detailKind: "run" | "version";
   detailTab: string | null;
   onDetailTabChange: (tab: string) => void;
@@ -397,7 +403,8 @@ export function LabModelVersionDetailPage({
           >
             {training.busyAction === "retry-model-run-collection" ? "Collecting…" : "Retry collection"}
           </button>
-        ) : selectedVersion && newResource ? <button className="training-button secondary" type="button"
+        ) : selectedVersion ? <>
+          {newResource ? <button className="training-button secondary" type="button"
           disabled={newResource.busy} onClick={() => newResource.create("benchmark", {
             label: `${workproduct.name} Version ${selectedVersion.number}`,
             location: "local",
@@ -405,7 +412,13 @@ export function LabModelVersionDetailPage({
             versionId: selectedVersion.lineage.id,
             artifactId: selectedVersion.lineage.artifactId,
             bundleHash: selectedVersion.lineage.bundleHash,
-          })}>Benchmark this version</button> : undefined}
+          })}>Benchmark this version</button> : null}
+          {detailKind === "version" && localReceipt && servingApi?.actorId && selectedLifecycleRun ? <LocalAdapterPublicationAction
+            key={`${servingApi.key}:${selectedVersion.lineage.id}`} api={servingApi} profileId={selectedLifecycleRun.profileId}
+            name={`${workproduct.name} Version ${selectedVersion.number}`} hostedWebBaseUrl={hostedWebBaseUrl}
+            version={{ location: "local", projectId: workproduct.id, versionId: selectedVersion.lineage.id,
+              artifactId: selectedVersion.lineage.artifactId, bundleHash: selectedVersion.lineage.bundleHash }} /> : null}
+        </> : undefined}
         metrics={[
           {
             label: isGrpo && rolloutProgress ? "Training groups" : "Training steps",

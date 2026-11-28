@@ -582,6 +582,8 @@ export function LabWorkproductDetail({
           >
             <LabModelVersionDetailPage
               connection={connection}
+              servingApi={readOnlyModel ? undefined : servingApi}
+              hostedWebBaseUrl={hostedWebBaseUrl ?? null}
               detailKind={modelSection === "versions" ? "version" : "run"}
               detailTab={modelDetailTab}
               runs={runs}
