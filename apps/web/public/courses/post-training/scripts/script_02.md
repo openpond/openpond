@@ -1,6 +1,6 @@
 # Definitions
 
-Post-training from first principles · Lesson 2 of 10 · 6:14
+Post-training from first principles (lesson 2 of 10, 6:14)
 
 ## Learning objective
 
