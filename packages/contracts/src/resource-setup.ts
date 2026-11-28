@@ -3,7 +3,7 @@ import { ExperimentGraderSelectionSchema } from "openpond-sdk/experiments";
 import { TasksetCatalogReleaseRefSchema } from "openpond-sdk/taskset-catalog";
 import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
 import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelProjectVersionedRefSchema, RegisteredAdapterVersionSchema } from "openpond-sdk/model-projects";
-import { DecisionTrainingFormDraftSchema, SftRecipeSchema } from "openpond-sdk/training";
+import { DecisionTrainingFormDraftSchema, SftRecipeSchema, WeightSpaceLimitsSchema, WeightSpacePanelSchema, WeightSpacePromptSchema, WeightSpaceRequestSchema } from "openpond-sdk/training";
 
 const fieldText = z.string().max(2_000).optional();
 const positiveInteger = z.number().int().positive().optional();
@@ -14,6 +14,21 @@ const LocalBenchmarkModelVersionSchema = z.object({
   location: z.literal("local"), projectId: resourceId, versionId: resourceId, artifactId: resourceId, bundleHash: artifactHash,
 }).strict();
 const HostedBenchmarkOwnerSchema = z.object({ actorId: resourceId, apiOrigin: z.url() }).strict();
+const WeightSpaceSetupDraftSchema = z.object({
+  panels: z.array(z.object({ id: WeightSpacePanelSchema.shape.id, role: WeightSpacePanelSchema.shape.role,
+    prompts: z.array(WeightSpacePromptSchema.extend({ text: z.string().max(32_768) })).max(64),
+  }).strict()).max(4).optional(),
+  generation: WeightSpaceRequestSchema.shape.generation.partial().optional(),
+  limits: z.object(WeightSpaceLimitsSchema.shape).partial().strict().optional(),
+  maximumSpendUsd: z.string().max(48).optional(),
+  managed: z.object({
+    owner: HostedBenchmarkOwnerSchema,
+    teamId: resourceId,
+    checkpoint: z.object({ modelId: resourceId, revision: resourceId,
+      tokenizerRevision: resourceId, chatTemplateHash: artifactHash }).strict().optional(),
+    frozenEvaluation: TasksetCatalogReleaseRefSchema.optional(),
+  }).strict().optional(),
+}).strict();
 const HostedBenchmarkVersionSchema = z.object({
   location: z.literal("cloud"), modelProjectId: resourceId, jobId: resourceId,
   teamId: resourceId, versionHash: artifactHash, owner: HostedBenchmarkOwnerSchema.optional(),
@@ -272,6 +287,7 @@ export const ResourceSetupDraftSchema = z.object({
     grpo: ModelProjectRecipeDocumentSchema.extend({ method: z.literal("grpo") }).optional(),
   }).strict().optional(),
   decisionTraining: DecisionTrainingFormDraftSchema.optional(),
+  weightSpace: WeightSpaceSetupDraftSchema.optional(),
   managedTrainingInputs: z.object({
     accountKey: z.string().min(1).max(4_000),
     teamId: z.string().min(1).max(500),

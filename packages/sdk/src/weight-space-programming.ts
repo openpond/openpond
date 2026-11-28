@@ -7,10 +7,14 @@ export const WeightSpaceHashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const WeightSpaceIdSchema = z.string().trim().min(1).max(240);
 const Id = WeightSpaceIdSchema, Hash = WeightSpaceHashSchema;
 export const WEIGHT_SPACE_MAX_PATCH_BYTES = 16_777_216;
+export const WEIGHT_SPACE_CHECKPOINT = {
+  modelId: "Qwen/Qwen3-8B",
+  revision: "b968826d9c46dd6066d109eabc6255188de91218",
+} as const;
 
 /** One exact dense implementation. Catalog membership alone cannot enable it. */
 export const WeightSpaceModelSchema = NeuronSteeringModelSchema.refine(model =>
-  model.modelId === "Qwen/Qwen3-8B" && model.revision === "b968826d9c46dd6066d109eabc6255188de91218"
+  model.modelId === WEIGHT_SPACE_CHECKPOINT.modelId && model.revision === WEIGHT_SPACE_CHECKPOINT.revision
   && model.dtype === "bfloat16" && model.hiddenSize === 4096 && model.intermediateSizes.length === 36
   && model.intermediateSizes.every(size => size === 12288),
 { message: "Weight-space programming requires the exact supported dense BF16 Qwen3-8B checkpoint." });

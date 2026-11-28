@@ -2,7 +2,7 @@ import type { BenchmarkModelVersion, ResourceSetupDraft } from "@openpond/contra
 import { LocalSftReviewRequestSchema, ownsHostedBenchmarkVersion } from "@openpond/contracts/resource-setup";
 import type { ChatContextSelection, ModelProject } from "@openpond/contracts";
 import { createModelTrainingRecipeDefaults } from "openpond-sdk/model-starters";
-import { canonicalJson, decisionSourcePreference } from "openpond-sdk/training";
+import { canonicalJson, decisionSourcePreference, WEIGHT_SPACE_CHECKPOINT } from "openpond-sdk/training";
 export { ResourceSetupDraftSchema, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 
 export type ResourceSetupField = keyof ResourceSetupDraft["values"];
@@ -10,6 +10,11 @@ export type ResourceSetupMethod = ResourceSetupDraft["values"]["method"];
 export type ResourceSetupCandidate = BenchmarkModelVersion & { label: string };
 export type ModelSetupScope = { accountKey: string; teamId: string | null; actorId: string | null; apiOrigin?: string | null };
 export const benchmarkAccountMessage = "Choose the OpenPond account and workspace that owns this Benchmark.";
+export const weightSpaceGeneration = { maxOutputTokens: 128, seed: 0, sampling: "greedy_v1" } as const;
+
+export function isWeightSpaceSetup(draft: ResourceSetupDraft) {
+  return draft.kind === "model" && draft.values.method === "Weight-space programming";
+}
 
 function scopedBenchmarkVersion(
   version: BenchmarkModelVersion | undefined,
@@ -40,6 +45,11 @@ export function canSubmitBenchmarkSetup(
 export function scopeManagedSetup(
   draft: ResourceSetupDraft, scope: ModelSetupScope | null, selection?: ChatContextSelection | null, sessionId?: string | null,
 ) {
+  const weightSpace = draft.weightSpace;
+  if (weightSpace?.managed && (draft.values.destination !== "OpenPond Managed" || !ownsHostedBenchmarkVersion(weightSpace.managed, scope)))
+    draft = { ...draft, weightSpace: { ...weightSpace, managed: undefined } };
+  if (isWeightSpaceSetup(draft) && draft.values.destination === "OpenPond Managed" && (!scope?.actorId || !scope.teamId || !scope.apiOrigin))
+    draft = { ...draft, values: { ...draft.values, destination: undefined } };
   const grader = draft.managedGrader;
   if (grader && (grader.accountKey !== scope?.accountKey || grader.teamId !== scope?.teamId ||
     grader.actorId !== scope?.actorId || grader.method !== draft.values.graderType)) {
@@ -153,7 +163,8 @@ export function selectModelSetupMethod(draft: ResourceSetupDraft, method: Resour
   return { ...draft, revision: draft.revision + 1, values: { ...draft.values, method, adapter, destination } };
 }
 
-type PromptField = ResourceSetupField | "trainingSettings" | "evaluationSettings" | "saveDestination" | "preview";
+type PromptField = ResourceSetupField | "trainingSettings" | "evaluationSettings" | "saveDestination" | "preview"
+  | "weightSpacePanels" | "weightSpaceFrozen" | "weightSpaceSettings";
 export type ResourceSetupPart = string | { field: PromptField; placeholder: string };
 
 const field = (key: PromptField, placeholder: string): ResourceSetupPart => ({ field: key, placeholder });
@@ -169,7 +180,13 @@ export function resourceSetupParts(draft: ResourceSetupDraft): ResourceSetupPart
       return ["Help me ", objective, " in ", field("project", "Choose a project"), "."];
     case "model": {
       const method = draft.values.method;
-      const adapter = method !== "Decision" && method !== "Weight-space programming";
+      if (isWeightSpaceSetup(draft)) return [
+        "Set up ", name, " for ", objective, " using ", field("baseModel", "Choose an exact editing checkpoint"),
+        " with ", field("method", "Choose a training method"), ". Review ", field("weightSpacePanels", "Development and preservation prompts"),
+        " and ", field("weightSpaceFrozen", "Optional frozen Dataset"), ". Use ", field("weightSpaceSettings", "Generation, limits, and budget"),
+        ".", " Run on ", destination, ".",
+      ];
+      const adapter = method !== "Decision";
       return [
         "Set up ", name, " for ", objective, " using ", field("baseModel", "Choose a starting model or checkpoint"),
         " with ", field("method", "Choose a training method"),
@@ -213,6 +230,17 @@ export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetup
   if (field === "preview" && draft.datasetExamples?.length)
     return `Preview ${draft.datasetExamples.length} ${draft.datasetExamples.length === 1 ? "row" : "rows"}`;
   if (field === "trainingSettings" || field === "evaluationSettings" || field === "preview") return placeholder;
+  if (field === "weightSpacePanels") {
+    const rows = draft.weightSpace?.panels?.reduce((count, panel) => count + panel.prompts.filter(row => row.text.trim()).length, 0);
+    return rows ? `${rows} ${rows === 1 ? "editing prompt" : "editing prompts"}` : placeholder;
+  }
+  if (field === "weightSpaceFrozen") {
+    const frozen = draft.weightSpace?.managed?.frozenEvaluation;
+    return frozen ? `Frozen Dataset revision ${frozen.revision}` : placeholder;
+  }
+  if (field === "weightSpaceSettings") return placeholder;
+  if (field === "baseModel" && isWeightSpaceSetup(draft))
+    return draft.weightSpace?.managed?.checkpoint?.modelId ?? WEIGHT_SPACE_CHECKPOINT.modelId;
   if (field === "baseModel" && resourceSetupManagedTrainingMethod(draft) === "decision_model" && draft.values.destination === "OpenPond Managed")
     return decisionSourcePreference().modelId;
   const localBase = localTrainingBase(draft);
@@ -249,6 +277,24 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   };
   const prompt = parts.slice(0, destinationStart).map(stringify).join("");
   const execution = parts.slice(destinationStart).map(stringify).join("").trim();
+  if (isWeightSpaceSetup(draft)) {
+    const setup = draft.weightSpace;
+    const managed = draft.values.destination === "OpenPond Managed" ? setup?.managed : undefined;
+    const details = {
+      checkpoint: managed?.checkpoint ? { source: "managed", ...managed.checkpoint } : WEIGHT_SPACE_CHECKPOINT,
+      panels: setup?.panels?.map(panel => ({ ...panel, source: null })),
+      frozenEvaluation: managed?.frozenEvaluation ?? null,
+      generation: { ...weightSpaceGeneration,
+        maxOutputTokens: setup?.generation?.maxOutputTokens ?? weightSpaceGeneration.maxOutputTokens,
+        seed: setup?.generation?.seed ?? weightSpaceGeneration.seed },
+      limits: setup?.limits,
+      maximumSpendUsd: setup?.maximumSpendUsd || undefined,
+    };
+    const review = managed?.checkpoint
+      ? "Use the existing OpenPond Weight-space workflow in the selected workspace. Check the exact checkpoint capability, show me the proposed editing plan and cost, and keep the preparation receipt in this chat. Ask for approval before starting the editing session."
+      : "Help me review the proposed editing plan. Resolve any missing inputs with me before preparing a managed session and ask for approval before starting it.";
+    return [prompt, `Editing setup ${JSON.stringify(details)}.`, review, execution].filter(Boolean).join(" ");
+  }
   const { split, epochs, learningRate, budget, samples, seed } = draft.values;
   const method = resourceSetupTrainingMethod(draft);
   const managedMethod = resourceSetupManagedTrainingMethod(draft);
@@ -324,12 +370,13 @@ export function snapshotResourceSetup(
     selection.draft && selection.draftRevision &&
     (selection.benchmarkVersion?.location !== "cloud" || ownsHostedBenchmarkVersion(selection.benchmarkVersion, workspace))
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
-  const { datasetExamples: _localExamples, graderExamples: _localFixtures, managedGrader, datasetInputsDirty, trainingRecipes: _recipes, ...setup } = draft;
+  const { datasetExamples: _localExamples, graderExamples: _localFixtures, managedGrader, datasetInputsDirty, trainingRecipes: _recipes, weightSpace, ...setup } = draft;
   const method = resourceSetupTrainingMethod(draft);
   const selectedRecipe = selectedTrainingRecipe(draft, method);
   return {
     prompt: [resourceSetupText(draft), instructions].filter(Boolean).join("\n\n"),
     draft: { ...setup, localTrainingBase: localTrainingBase(draft),
+      ...(isWeightSpaceSetup(draft) && weightSpace ? { weightSpace } : {}),
       ...(managedGrader?.release ? { managedGrader: { ...managedGrader, draft: undefined } } : {}),
       ...(method && selectedRecipe ? { trainingRecipes: { [method]: selectedRecipe } } : {}),
       ...(datasetInputsDirty ? { datasetRef: undefined } : {}), ...(benchmarkDefinition ? { benchmarkDefinition } : {}) },

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { ActivationExperimentAccountSchema } from "@openpond/contracts";
-import { parseAndVerifyWeightSpaceExecution, parseAndVerifyWeightSpaceCommandPage, WeightSpaceCommandListQuerySchema, WeightSpaceExecutionListQuerySchema, parseAndVerifyWeightSpaceExecutionPage } from "openpond-sdk/training";
+import { parseAndVerifyWeightSpaceExecution, parseAndVerifyWeightSpaceCommandPage, WeightSpaceCommandListQuerySchema, WeightSpaceExecutionListQuerySchema, parseAndVerifyWeightSpaceExecutionPage, parseAndVerifyWeightSpaceCapability, type ModelModificationCapabilitiesQuery } from "openpond-sdk/training";
 import { verifyExperimentScoringPass, type ExperimentScoringPass } from "openpond-sdk/experiments";
 import { verifyExperimentEvidence } from "@openpond/evals/experiments";
 import { apiFetch } from "../../../api/api-client";
@@ -17,6 +17,11 @@ export function managedWeightSpaceApi(api:WorkspaceApi,apiOrigin:string){
       throw new Error("The grading pass belongs to another editing session.");return pass;
   }
   return {account,cacheKey:JSON.stringify([api.key,account.apiOrigin]),
+    async capability(query:ModelModificationCapabilitiesQuery,signal?:AbortSignal){
+      return parseAndVerifyWeightSpaceCapability(await apiFetch(api.connection,`${root}/capability`,{
+        method:"POST",body:JSON.stringify({...account,projectId:api.projectId,query}),signal,
+      }),query,account.actorId);
+    },
     async scoringPasses(id:string,afterId?:string,signal?:AbortSignal){
       const path=gradingPath(id)+(afterId?`&${new URLSearchParams({afterId})}`:"");
       const page=z.object({items:z.array(z.unknown()).max(30),nextCursor:z.string().min(1).max(200).nullable()}).strict().parse(await apiFetch(api.connection,path,{signal}));

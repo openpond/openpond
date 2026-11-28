@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { ActivationExperimentAccountSchema } from "@openpond/contracts";
-import { createTrainingClient, WeightSpaceCommandListQuerySchema, WeightSpaceExecutionListQuerySchema } from "openpond-sdk/training";
+import { createTrainingClient, ModelModificationCapabilitiesQuerySchema, WeightSpaceCommandListQuerySchema, WeightSpaceExecutionListQuerySchema } from "openpond-sdk/training";
 import { OpenPondExperimentsClient } from "openpond-sdk/experiments";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 
 const Envelope = ActivationExperimentAccountSchema.extend({id:z.string().min(1).max(240).optional(),projectId:z.string().min(1).max(240).nullable(),
-  action:z.enum(["get","history","list","passes","pass","passResult","cancelPass"]),
+  action:z.enum(["get","history","list","capability","passes","pass","passResult","cancelPass"]),
   passId:z.string().min(1).max(200).optional(),query:z.unknown().optional()}).strict();
 type Access = {apiBaseUrl:string;token:string;teamId:string;actorId:string};
 /** Account-fenced observations only. Mutations keep their reviewed operation owners. */
@@ -23,6 +23,15 @@ export async function readHostedWeightSpace(raw:unknown, resolve:()=>Promise<Acc
     await fence();const response=await requestFetch(url,{...init,redirect:"error",signal:AbortSignal.any([AbortSignal.timeout(15_000),...(init?.signal?[init.signal]:[])])});await fence();return response;
   };
   const client=createTrainingClient({baseUrl:access.apiBaseUrl,headers,fetch:scopedFetch});
+  if (input.action === "capability") {
+    const query = ModelModificationCapabilitiesQuerySchema.parse(input.query);
+    if (input.id || input.passId || query.teamId !== input.teamId)
+      throw new Error("Check the editing runtime in its original workspace.");
+    const capability = await client.weightSpaceCapability(query);
+    await fence();
+    if (capability.actorId !== input.actorId) throw new Error("The capability belongs to another account.");
+    return capability;
+  }
   if(input.action==="list"){
     if(input.id)throw new Error("List editing sessions through bounded filters.");
     const query=WeightSpaceExecutionListQuerySchema.parse(input.query??{});

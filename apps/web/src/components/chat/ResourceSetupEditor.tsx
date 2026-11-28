@@ -1,4 +1,5 @@
 import { lazy, Suspense, useContext, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import type { ChatResourceSummary } from "@openpond/contracts";
@@ -16,6 +17,7 @@ import {
   resourceSetupParts,
   resourceSetupTrainingMethod,
   resourceSetupManagedTrainingMethod,
+  isWeightSpaceSetup,
   scopeManagedSetup,
   benchmarkAccountMessage,
   selectModelSetupMethod,
@@ -43,6 +45,7 @@ import { LocalAdapterBenchmarkReview } from "./LocalAdapterBenchmarkReview";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
 import { DecisionTrainingFields } from "../labs/workspace/DecisionFields";
 import { initialDecisionTraining } from "../labs/workspace/decision-form-defaults";
+import { WeightSpacePromptFields } from "./WeightSpacePromptFields";
 import "./resource-setup-editor.css";
 
 const GraderSetupWorkspaceReview = lazy(() => import("./GraderSetupWorkspaceReview"));
@@ -280,10 +283,12 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   const activePart = parts.find(part => typeof part !== "string" && part.field === field);
   const trainingMethod = field === "trainingSettings" ? resourceSetupTrainingMethod(draft) : null;
   const decisionSettings = field === "trainingSettings" && resourceSetupManagedTrainingMethod(draft) === "decision_model";
+  const weightSpaceField = isWeightSpaceSetup(draft) && (field === "baseModel" || field === "weightSpacePanels" ||
+    field === "weightSpaceFrozen" || field === "weightSpaceSettings") ? field : null;
   const localSft = draft.values.destination !== "OpenPond Managed" && resourceSetupTrainingMethod(draft) === "sft";
   const reviewInputs = localSft && (field === "dataset" || field === "trainingSettings");
   const reviewRequest = reviewInputs ? localSftReviewRequest(draft, sessionId) : null;
-  const activeFields: readonly ResourceSetupField[] = trainingMethod || decisionSettings ? ["budget"]
+  const activeFields: readonly ResourceSetupField[] = weightSpaceField ? [] : trainingMethod || decisionSettings ? ["budget"]
     : resourceSetupGroups[field] ?? [field as ResourceSetupField];
   const benchmarkPresets = draft.kind === "benchmark" && !benchmarkUnavailable && version?.location !== "local" ? <div className="resource-setup-presets" role="group" aria-label="Benchmark presets">
     {[{ compare: false, label: "Evaluate one model" }, { compare: true, label: "Compare models" }].map(({ compare, label }) =>
@@ -300,9 +305,10 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     }}>
       <SlidersHorizontal size={13} aria-hidden="true" /> Configure
     </button>
-    {configureOpen && !benchmarkUnavailable ? <AppDialog ariaLabel="Configure prompt" className="training-dialog resource-setup-dialog" initialFocusKey={field}
+    {configureOpen && !benchmarkUnavailable ? createPortal(<AppDialog ariaLabel="Configure prompt" className="training-dialog resource-setup-dialog" initialFocusKey={field}
       dismissDisabled={authoringBusy} onClose={() => setConfigureOpen(false)}>
       <h2>Configure prompt</h2>
+      <div className="training-dialog-scroll-body resource-setup-dialog-body">
       {sentence()}
       {benchmarkPresets}
       {trainingMethod && <ModelSetupTrainingFields key={trainingMethod} draft={draft} method={trainingMethod}
@@ -312,7 +318,9 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
         <DecisionTrainingFields training={draft.decisionTraining ?? initialDecisionTraining()} onChange={decisionTraining =>
           onChange(draft, { ...draft, revision: draft.revision + 1, decisionTraining })} />
       </fieldset>}
-      {activePart ? <div className="resource-setup-fields" key={field}>
+      {weightSpaceField && <WeightSpacePromptFields field={weightSpaceField} draft={draft} visible={visibleDraft}
+        connection={connection} disabled={busy} onChange={onChange} />}
+      {activePart && activeFields.length ? <div className="resource-setup-fields" key={field}>
         {activeFields.map((key, index) => {
           if (version?.location === "local") return null;
           const options = fieldOptions(key);
@@ -498,11 +506,12 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           onClick={() => { setConfigureOpen(false); setOpenGraderScope(graderScopeKey); }}>Open workspace Grader review</button>
         {!graderScope ? <p>Sign in and select a workspace to review and publish this Grader.</p> : null}
       </div> : null}
+      </div>
       <footer className="training-dialog-actions">
         <button type="button" className="training-button secondary" disabled={busy} onClick={onRemove}>Remove setup</button>
         <button type="button" className="training-button" disabled={authoringBusy} onClick={() => setConfigureOpen(false)}>Done</button>
       </footer>
-    </AppDialog> : null}
+    </AppDialog>, document.body) : null}
     {workspaceGraderMethod && graderScope && graderScopeKey === openGraderScope && connection ? <Suspense fallback={null}>
       <GraderSetupWorkspaceReview key={graderScopeKey} connection={connection}
         scope={graderScope} method={workspaceGraderMethod} selection={visibleDraft.managedGrader}

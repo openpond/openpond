@@ -38,8 +38,14 @@
   margin-top: 4px;
 }
 
-.resource-setup-dialog {
+.training-dialog.resource-setup-dialog {
   width: min(730px, calc(100vw - 36px));
+  max-height: min(820px, calc(100dvh - 36px));
+}
+
+.resource-setup-dialog-body {
+  margin-top: 8px;
+  overscroll-behavior: contain;
 }
 
 .resource-setup-fields {
