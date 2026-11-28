@@ -416,6 +416,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [newResourceBusy, setNewResourceBusy] = useState(false);
   const newResourceInFlight = useRef(false);
   const newResourceRequests = useRef(new Map<string, CreateSessionResourceDraftRequest>());
+  const refreshTrainingNavigation = trainingNavigation.refetch;
   const openHomeChat = useCallback(() => {
     setPonderMode(null);
     composerDraftStore.setResourceSetup("new-chat", () => null);
@@ -472,6 +473,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       newResourceRequests.current.set(operationKey, request);
       try { window.localStorage.setItem(storageKey, JSON.stringify(request)); } catch { /* In-flight requests remain available in this renderer. */ }
       const session = await api.createSessionResourceDraft(connection, request);
+      if (kind === "model") void refreshTrainingNavigation();
       const retainedSource = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft).data?.benchmarkVersion;
       composerDraftStore.setResourceSetup(`session:${session.id}`, current => {
         if (current) return current;
@@ -491,7 +493,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       newResourceInFlight.current = false;
       setNewResourceBusy(false);
     }
-  }, [activeModel, activeProvider, appDefaults.defaultTeamId, bootstrap, composerDraftStore, connection, openHomeChat, openSessionInChat, requestMainComposerFocus, showToast]);
+  }, [activeModel, activeProvider, appDefaults.defaultTeamId, bootstrap, composerDraftStore, connection, openHomeChat, openSessionInChat, refreshTrainingNavigation, requestMainComposerFocus, showToast]);
   const managedResourcesAvailable = bootstrap?.account.state === "signed_in";
   const hostedModels = hostedModelScope(bootstrap?.account, appDefaults.defaultTeamId);
   const desktopNewAction = useMemo(() => ({
