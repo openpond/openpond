@@ -256,7 +256,7 @@ test("training overview reads compact metadata with the same revision scope as f
     expect(projectTrainingActivity({ profileId: "selected", state: { ...metadata, jobs: [] } }).revision).toBe(expected.revision);
     expect(JSON.stringify(metadata).length).toBeLessThan(2000);
     expect(await store.readTrainingNavigation("selected")).toEqual({
-      projects: [{ id: model.id, name: model.name, teamId: null }],
+      projects: [{ id: model.id, name: model.name, profileId: "other", teamId: null, hostedProjectId: null, apiOrigin: null }],
       activityByProjectId: {}, creationSessionIds: ["chat-source"],
     });
     expect((await store.readTrainingNavigation("other")).creationSessionIds).toEqual([]);
