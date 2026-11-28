@@ -42,11 +42,12 @@ export function createHostedTrainingSetup(input: {
   teamId: string;
   actorId: string;
   access: { apiBaseUrl: string; token: string };
-  currentIdentity: () => Promise<{ teamId: string; actorId: string } | null>;
+  currentIdentity: () => Promise<{ teamId: string; actorId: string; apiOrigin: string } | null>;
 }) {
   async function fence() {
     const current = await input.currentIdentity();
-    if (current?.teamId !== input.teamId || current.actorId !== input.actorId)
+    if (current?.teamId !== input.teamId || current.actorId !== input.actorId ||
+      new URL(current.apiOrigin).origin !== new URL(input.access.apiBaseUrl).origin)
       throw new Error("The active account changed. Reopen training setup.");
   }
   const headers = () => {

@@ -4,27 +4,33 @@ import { ModelTrainingSettings } from "../labs/ModelTrainingSettings";
 import { ResourceSetupDraftSchema, type ResourceSetupDraft } from "../../lib/resource-setup-prompt";
 
 type Recipe = ModelProject["trainingSetup"]["recipe"];
+type BaseModel = ModelProject["trainingSetup"]["baseModel"];
 
 function settingsSection(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown> : {};
 }
 
-export function ModelSetupTrainingFields({ draft, method, disabled, onChange }: {
-  draft: ResourceSetupDraft;
-  method: "sft" | "grpo";
-  disabled: boolean;
-  onChange(current: ResourceSetupDraft, next: ResourceSetupDraft): void;
-}) {
+export function modelSetupTrainingRecipe(draft: ResourceSetupDraft, method: "sft" | "grpo", baseModel?: BaseModel): NonNullable<Recipe> {
   const saved = draft.trainingRecipes?.[method];
-  const defaults = saved ?? createModelTrainingRecipeDefaults(null, method);
-  const optimizer = settingsSection(defaults.optimizer);
+  if (saved) return saved;
+  const defaults = createModelTrainingRecipeDefaults(null, method, baseModel);
   const { epochs, learningRate } = draft.values;
-  const recipe: NonNullable<Recipe> = saved ?? { ...defaults, optimizer: {
-    ...optimizer,
+  return { ...defaults, optimizer: {
+    ...settingsSection(defaults.optimizer),
     ...(epochs !== undefined && method === "sft" ? { epochs } : {}),
     ...(learningRate !== undefined ? { learningRate } : {}),
   } };
+}
+
+export function ModelSetupTrainingFields({ draft, method, baseModel, disabled, onChange }: {
+  draft: ResourceSetupDraft;
+  method: "sft" | "grpo";
+  baseModel?: BaseModel;
+  disabled: boolean;
+  onChange(current: ResourceSetupDraft, next: ResourceSetupDraft): void;
+}) {
+  const recipe = modelSetupTrainingRecipe(draft, method, baseModel);
   const dataset = settingsSection(recipe.dataset);
   const maxExamples = dataset.maxExamples;
 

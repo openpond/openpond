@@ -781,6 +781,7 @@ export function createReviewAndActivityTransport(deps: {
         currentIdentity: async () => ({
           teamId: await deps.teamId(),
           actorId: await deps.actorId(),
+          apiOrigin: (await deps.resolveAccess()).apiBaseUrl,
         }),
       });
       if (body.command !== undefined) {

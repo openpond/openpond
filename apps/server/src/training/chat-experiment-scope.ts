@@ -128,25 +128,31 @@ export function createChatExperimentScopes(store: SqliteStore) {
     });
   }
 
-  async function createDraft(sessionId: string, raw: ExperimentDraft, expected?: { version: number; target: ChatContextTarget | null }) {
+  async function createDraft(sessionId: string, raw: ExperimentDraft, expected?: {
+    version: number; target: ChatContextTarget | null; modelSetupOwner?: ChatExperimentScope["modelSetupOwner"];
+  }) {
     const draft = await parseAndVerifyExperimentDraft(raw);
     const hash = createHash("sha256").update(canonicalJson(draft)).digest("hex");
     return change(sessionId, (state, metadata) => {
       const prior = state.scopes.find(scope => scope.operationId === draft.id);
       if (prior) {
-        if (prior.creationHash !== hash) throw new Error("This draft identity was already used for different settings.");
-        // Reconcile a lost reply without taking focus from a newer selection.
-        return;
+        if (prior.creationHash !== hash || canonicalJson(prior.modelSetupOwner ?? null) !== canonicalJson(expected?.modelSetupOwner ?? null))
+          throw new Error("This draft identity was already used for different settings or a different workspace.");
+        // Only the explicit Model review action can refocus an existing draft.
+        if (!expected?.modelSetupOwner || state.activeScopeId === prior.id && expected.target?.scopeId === prior.id) return;
       }
       const target = ChatContextTargetSchema.nullable().optional().parse(metadata.chatContextSelection);
       if (expected && (state.selectionVersion !== expected.version || canonicalJson(target ?? null) !== canonicalJson(expected.target)))
         throw new Error("The chat context changed before the experiment was prepared.");
       const now = new Date().toISOString();
       const scope = make(state, draft.id, now);
-      scope.draft = draft;
-      scope.draftRevision = 1;
-      scope.creationHash = hash;
-      scope.name = draft.name;
+      if (!prior) {
+        scope.draft = draft;
+        scope.draftRevision = 1;
+        scope.creationHash = hash;
+        scope.name = draft.name;
+        if (expected?.modelSetupOwner) scope.modelSetupOwner = expected.modelSetupOwner;
+      }
       state.activeScopeId = scope.id;
       state.selectionVersion++;
       state.selectedAt = now;
@@ -166,7 +172,8 @@ export function createChatExperimentScopes(store: SqliteStore) {
     const requestHash = createHash("sha256").update(canonicalJson({ draft, expectedRevision: input.expectedRevision })).digest("hex");
     return change(sessionId, state => {
       const scope = state.scopes.find(candidate => candidate.id === scopeId);
-      if (!scope?.draft || scope.storedDraft || scope.draft.id !== draft.id || draft.operationType !== "evaluate")
+      if (!scope?.draft || scope.storedDraft || scope.draft.id !== draft.id ||
+        (scope.modelSetupOwner ? draft.operationType !== scope.draft.operationType : draft.operationType !== "evaluate"))
         throw new Error("Reopen this local Benchmark before saving its definition.");
       if (scope.draftSave?.operationId === input.operationId) {
         if (scope.draftSave.requestHash !== requestHash) throw new Error("This save operation was used for different Benchmark settings.");

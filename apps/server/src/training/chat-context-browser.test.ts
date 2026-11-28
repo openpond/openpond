@@ -6,13 +6,79 @@ import { SqliteStore } from "../store/store.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { SessionSchema, TurnSchema } from "@openpond/contracts";
+import { ModelProjectTrainingSetupSchema, SessionSchema, TurnSchema } from "@openpond/contracts";
 import { createChatExperimentScopes, chatExperimentContext } from "./chat-experiment-scope.js";
 vi.mock("./hosted-model-project-catalog.js", () => ({
   listHostedModelProjectCatalog: async () => ({ projects: [{ project: { id: "model", portableProjectId: "portable", name: "Test model", defaultBaseModel: null, trainingSetup: { tasksetRef: null, evaluationTasksetRef: null } } }] }),
 }));
 import { createChatContextBrowser } from "./chat-context-browser.js";
 import { createModelTrainingRecipeDefaults } from "openpond-sdk/model-starters";
+
+test("opens and reopens a Model's exact local training review only in its originating workspace", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "openpond-model-setup-review-"));
+  const store = new SqliteStore(home);
+  const scopes = createChatExperimentScopes(store);
+  let apiBaseUrl = "https://api.example.test";
+  let actorId = "actor";
+  const access = async () => ({ apiBaseUrl, actorId, teamId: "team", token: "unused-fixture" });
+  const time = "2026-10-14T00:00:00.000Z";
+  const model = { kind: "model" as const, id: "66223215-e5c5-40f2-be95-cf7980a86629", location: "local" as const };
+  try {
+    await store.insertSessionAtFront(SessionSchema.parse({
+      id: "chat", provider: "codex", title: "Model", appId: null, appName: null,
+      cwd: home, codexThreadId: null, pinned: false, archived: false, order: 0, createdAt: time, updatedAt: time, status: "idle",
+      metadata: { resourceDraft: { kind: "model", id: model.id, profileId: "default" }, chatContextSelection: model },
+    }));
+    await store.saveModelProjectConfiguration({
+      schemaVersion: "openpond.modelProjectSave.v1", operationId: "fixture-model", expectedRevision: 0,
+      project: {
+        id: model.id, profileId: "default", name: "Model", objective: null, defaultBaseModel: null,
+        defaultDestinationId: null, trainingSetup: ModelProjectTrainingSetupSchema.parse({}),
+      },
+    });
+    const browser = createChatContextBrowser({
+      store, access, resources: async () => [], resource: async () => { throw new Error("unexpected resource read"); },
+      createExperiment: async () => { throw new Error("unexpected Benchmark create"); },
+      selectResource: async (id, target) => { if (target?.scopeId) await scopes.select(id, { scopeId: target.scopeId }); },
+      createDraft: async (id, draft, expected) => { await scopes.createDraft(id, draft, expected); },
+      saveLocalDraft: async (id, scope, input) => { await scopes.saveLocalDraft(id, scope, input); },
+    });
+    const baseModel = { schemaVersion: "openpond.baseModelPreference.v1" as const, modelId: "managed-model", source: "managed" as const,
+      revision: "model-revision", tokenizerRevision: "tokenizer-revision", chatTemplateHash: "a".repeat(64), modelAssetId: null };
+    const recipe = createModelTrainingRecipeDefaults(null, "sft", baseModel);
+    const batch = { id: "reviewed-batch", revision: 2, contentHash: "b".repeat(64) };
+    const draft = {
+      schemaVersion: "openpond.experimentDraft.v1" as const, operationType: "sft" as const, id: "model-setup-fixture", name: "Reviewed SFT",
+      trainingForm: { baseModel, recipe, batch, evaluation: null, validationSplit: "validation" as const, name: "Reviewed SFT", budget: "0.15" },
+    };
+    const target = { kind: "experiment" as const, location: "local" as const, id: draft.id, draft };
+    const selected = await browser.select(target, "chat", false, undefined, true);
+    expect(selected).toMatchObject({ localDraft: true, draftRevision: 1, draft });
+    expect((await browser.catalog(false, "chat", undefined, "local")).options.map(item => item.target.kind)).toEqual(["model"]);
+    const updated = { ...draft, trainingForm: { ...draft.trainingForm, budget: "0.2" } };
+    await browser.updateDraft("chat", selected!.target, {
+      schemaVersion: "openpond.experimentDraftSave.v1", teamId: "local", projectId: null,
+      operationId: "save-review-edit", expectedRevision: 1, draft: updated,
+    });
+    apiBaseUrl = "https://other.example.test";
+    expect((await browser.current("chat"))?.target).toEqual(model);
+    await expect(browser.resolve(selected!.target)).rejects.toThrow("owns this Model training review");
+    await expect(browser.select(target, "chat", false, undefined, true)).rejects.toThrow("different workspace");
+    apiBaseUrl = "https://api.example.test";
+    actorId = "another-actor";
+    await expect(browser.resolve(selected!.target)).rejects.toThrow("owns this Model training review");
+    actorId = "actor";
+    await browser.select(model, "chat");
+    const reopened = await browser.select(target, "chat", false, undefined, true);
+    expect(reopened).toMatchObject({ target: selected!.target, localDraft: true, draftRevision: 2, draft: updated });
+    const session = (await store.getSession("chat"))!;
+    expect(session.cwd).toBe(home);
+    expect(chatExperimentContext(session.metadata).scopes).toHaveLength(1);
+  } finally {
+    await store.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
 
 // A selection carries identity into a new chat; its saved display snapshot must
 // never become status authority or bypass the account that owns the job.

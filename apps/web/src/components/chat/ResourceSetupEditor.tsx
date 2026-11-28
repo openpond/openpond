@@ -1,5 +1,6 @@
 import { useContext, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import type { ChatResourceSummary } from "@openpond/contracts";
 import { LocalTrainingComputeSchema } from "@openpond/contracts/resource-setup";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
@@ -10,6 +11,7 @@ import {
   resourceSetupLabel,
   resourceSetupParts,
   resourceSetupTrainingMethod,
+  scopeManagedSetup,
   ResourceSetupDraftSchema,
   type ResourceSetupDraft,
   type ResourceSetupField,
@@ -23,6 +25,8 @@ import { DesktopNewContext } from "./DesktopNewMenu";
 import { DatasetSetupReview } from "./DatasetSetupReview";
 import { GraderSetupReview } from "./GraderSetupReview";
 import { ModelSetupTrainingFields } from "./ModelSetupTrainingFields";
+import { ModelSetupManagedReview } from "./ModelSetupManagedReview";
+import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
 import "./resource-setup-editor.css";
 
 type PromptField = Exclude<ResourceSetupPart, string>["field"];
@@ -47,18 +51,23 @@ const choices: Partial<Record<ResourceSetupField, readonly string[]>> = {
 const decimalFields = new Set<ResourceSetupField>(["budget", "learningRate"]);
 const integerFields = new Set<ResourceSetupField>(["datasetRevision", "epochs", "samples", "seed"]);
 
-export function ResourceSetupEditor({ draft, busy: composerBusy, connection, datasets, evaluationModels, datasetSessionId, onAttachDataset, onChange, onRemove }: {
+export function ResourceSetupEditor({ draft, busy: composerBusy, connection, datasets, evaluationModels, sessionId, context, onAttachDataset, onChange, onRemove }: {
   draft: ResourceSetupDraft;
   busy: boolean;
   connection: ClientConnection | null;
   datasets: readonly ChatResourceSummary[];
   evaluationModels: readonly EvaluationModel[];
-  datasetSessionId: string | null;
+  sessionId: string | null;
+  context: Pick<ReturnType<typeof useChatContextSelection>, "select" | "selection" | "selecting">;
   onAttachDataset(reference: NonNullable<ResourceSetupDraft["datasetRef"]>): Promise<boolean>;
   onChange(current: ResourceSetupDraft, next: ResourceSetupDraft): void;
   onRemove(): void;
 }) {
   const managedAvailable = useContext(DesktopNewContext)?.managedAvailable ?? false;
+  const workspace = useContext(ChatExperimentWorkspaceContext);
+  const visibleDraft = scopeManagedSetup(draft, workspace);
+  const managedReview = Boolean(workspace?.teamId && workspace.actorId && connection && sessionId &&
+    resourceSetupTrainingMethod(draft) && draft.values.destination === "OpenPond Managed");
   const [configureOpen, setConfigureOpen] = useState(false);
   const [field, setField] = useState<PromptField>("name");
   const [authoringBusy, setAuthoringBusy] = useState(false);
@@ -112,6 +121,9 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       revision: draft.revision + 1,
       datasetRef: reference && { id: reference.id, revision: reference.revision, contentHash: reference.evaluationHash ?? reference.contentHash },
       ...(draft.kind === "grader" && reference?.id !== draft.datasetRef?.id ? { graderExamples: undefined } : {}),
+      ...(draft.kind === "model" && draft.managedTrainingInputs ? {
+        managedTrainingInputs: { ...draft.managedTrainingInputs, batch: undefined },
+      } : {}),
       ...(draft.kind === "dataset" ? { datasetInputsDirty: false } : {}),
       values: { ...draft.values, dataset: reference?.name, datasetRevision: reference?.revision, grader: undefined },
     });
@@ -143,7 +155,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     {parts.map((part, index) => typeof part === "string" ? part : <button key={index}
       className="resource-setup-pill" type="button" disabled={busy} aria-label={`Edit ${part.placeholder}`}
       data-active={configureOpen && part.field === field || undefined} onClick={() => showField(part.field)}>
-      {resourceSetupLabel(part, draft)} <ChevronDown aria-hidden="true" size={12} />
+      {resourceSetupLabel(part, visibleDraft)} <ChevronDown aria-hidden="true" size={12} />
     </button>)}
   </div>;
   const activePart = parts.find(part => typeof part !== "string" && part.field === field);
@@ -170,12 +182,14 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       <h2>Configure prompt</h2>
       {sentence()}
       {benchmarkPresets}
-      {trainingMethod && <ModelSetupTrainingFields key={trainingMethod} draft={draft} method={trainingMethod} disabled={busy} onChange={onChange} />}
+      {trainingMethod && <ModelSetupTrainingFields key={trainingMethod} draft={draft} method={trainingMethod}
+        baseModel={visibleDraft.managedTrainingInputs?.base?.preference} disabled={busy} onChange={onChange} />}
       {activePart ? <div className="resource-setup-fields" key={field}>
         {activeFields.map((key, index) => {
           const options = fieldOptions(key);
           const label = field === "saveDestination" ? "Save to" : labels[key];
           if (draft.kind === "grader" && draft.values.graderType === "Exact answer" && key === "cases") return null;
+          if (managedReview && key === "baseModel") return null;
           if (draft.kind === "dataset" && (key === "fields" && draft.values.source === "Import a local file"
             || field === "preview" && draft.values.source === "Use an existing dataset")) return null;
           if (key === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") {
@@ -208,11 +222,11 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
             const value = draft.datasetRef ? datasetValue(draft.datasetRef) : "";
             const options = localDatasets.map(dataset => ({ value: datasetValue(dataset), label: `${dataset.name} revision ${dataset.revision}` }));
             const retained = value && !options.some(option => option.value === value)
-              ? [{ value, label: draft.values.dataset ?? "Selected dataset revision" }] : [];
+              ? [{ value, label: visibleDraft.values.dataset ?? "Selected dataset revision" }] : [];
             return <div className="resource-setup-input" key={key}>
               <span>{label}</span>
               <DropdownSelect label={label} value={value} searchable
-                options={[{ value: "", label: draft.values.dataset && !value ? draft.values.dataset : "Choose a local dataset" }, ...retained, ...options]}
+                options={[{ value: "", label: visibleDraft.values.dataset && !value ? visibleDraft.values.dataset : "Choose a local dataset" }, ...retained, ...options]}
                 disabled={busy} onChange={chooseDataset} />
             </div>;
           }
@@ -228,9 +242,9 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
               type={decimalFields.has(key) || integerFields.has(key) ? "number" : "text"}
               step={decimalFields.has(key) ? "any" : undefined}
               min={["datasetRevision", "epochs", "samples"].includes(key) ? 1 : 0}
-              maxLength={2_000}
+              maxLength={draft.kind === "model" && key === "name" ? 191 : 2_000}
               disabled={busy}
-              value={draft.values[key] ?? ""}
+              value={visibleDraft.values[key] ?? ""}
               onChange={event => change(key, event.target.value)}
               onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }}
             />
@@ -238,8 +252,11 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
         })}
       </div> : null}
       {draft.kind === "dataset" && <DatasetSetupReview draft={draft} connection={connection}
-        sessionId={datasetSessionId} busy={busy} managedAvailable={managedAvailable} activeField={field}
+        sessionId={sessionId} busy={busy} managedAvailable={managedAvailable} activeField={field}
         onChange={onChange} onAttach={onAttachDataset} onBusy={setAuthoringBusy} />}
+      {managedReview && <ModelSetupManagedReview draft={draft} connection={connection} sessionId={sessionId}
+        context={context} field={field} busy={busy || context.selecting}
+        onChange={onChange} onBusy={setAuthoringBusy} onOpened={() => setConfigureOpen(false)} />}
       {draft.kind === "grader" && draft.values.graderType === "Exact answer" && <GraderSetupReview
         draft={draft} connection={connection} busy={busy} active={field === "cases"} managedAvailable={managedAvailable}
         onChange={onChange} onAttach={onAttachDataset} onBusy={setAuthoringBusy} />}

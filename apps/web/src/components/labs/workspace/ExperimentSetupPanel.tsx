@@ -28,6 +28,7 @@ export type ExperimentSetupPanelProps = {
   onAdvancedRun?: (id: string) => void;
   onTrainingStarted?: (id: string) => void | Promise<void>;
   onSaveDraft?: (draft: ExperimentDraft) => Promise<unknown>;
+  localTrainingDraft?: boolean;
 };
 export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {
   const setup = useEvaluationSetup();
@@ -89,6 +90,7 @@ export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {
             onStarted={props.onTrainingStarted}
             navigate={props.navigate}
             onSaveDraft={onSaveDraft}
+            localDraft={props.localTrainingDraft}
             onClose={() => {
               setup.close();
               props.onClose?.();

@@ -1,6 +1,6 @@
 import { readChatWeightSpace } from "./chat-weight-space.js";
 import { createChatNextStepService } from "./chat-next-step.js";
-import { createChatContextBrowser } from "./chat-context-browser.js";
+import { createChatContextBrowser, hasModelSetupAccess } from "./chat-context-browser.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
 import { readChatTrainingAttachment } from "./chat-training-attachment.js";
 import type { createChatProfileExperiments } from "../evaluations/chat-profile-experiments.js";
@@ -188,13 +188,13 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return browser.syncLocalDraft(query.sessionId, query.scopeId, query.expectedRevision);
     }
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_inputs", "context_runs", "context_select", "context_selection", "context_save_draft"].includes(String(input.action))) {
-      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
+      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), modelTrainingReview: z.boolean().optional(), update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
       if (input.action === "context_save_draft") return browser.updateDraft(query.sessionId, query.target, query.update);
       if (input.action === "context_catalog") return browser.catalog(true, query.sessionId, query.draftCursor, query.source);
       if (input.action === "context_runs") return browser.runs(query.target, query.cursor);
       if (input.action === "context_inputs") return browser.inputs(query.target);
       if (input.action === "context_resolve") return { selection: await browser.resolve(query.target) };
-      if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId) };
+      if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId, query.modelTrainingReview) };
       return { selection: query.sessionId ? await browser.current(query.sessionId) : null };
     }
     if (kind === "experiment" && input.action === "attach_weight_space") {
@@ -263,6 +263,13 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       experimentChoices.push(...localChoices,...ownedChoices,...profileChoices,...await cloud.list());
       }
       let scopeContext = chatExperimentContext(session.metadata);
+      if (input.action === "context" && scopeContext.scopes.some(scope => scope.modelSetupOwner)) {
+        const access = await deps.access().catch(() => null);
+        scopeContext.scopes = scopeContext.scopes.filter(scope =>
+          !scope.modelSetupOwner || hasModelSetupAccess(scope.modelSetupOwner, access));
+        if (!chatResourceWorkspaces(scopeContext).some(scope => scope.id === scopeContext.activeScopeId))
+          scopeContext.activeScopeId = null;
+      }
       // Rehydrate saved training references from their owner and hide records
       // admitted by a different account. Persisted scope snapshots are not
       // authorization and are not a live status source.

@@ -28,14 +28,16 @@ export function ChatExperimentEditor({ connection, context, onClose }: {
     <button type="button" className="training-button secondary" onClick={onClose}>Close editor</button>
   </div>;
   if (!api) return <div className="chat-experiment-tool-content"><p>Select an OpenPond workspace to configure this experiment.</p></div>;
-  return <EvaluationSetupProvider key={`${api.key}:${draft.id}`} initialExperiment={draft} initialRecord={record} onNewDraft={async next => {
+  const localTrainingDraft = Boolean(context.selection?.localDraft && draft.trainingForm);
+  return <EvaluationSetupProvider key={`${api.key}:${draft.id}`} initialExperiment={draft} initialRecord={record}
+    allowedOperationTypes={localTrainingDraft ? [draft.operationType] : undefined} onNewDraft={async next => {
     const selected = await context.select({kind: "experiment", id: next.id, location: "local", draft: next}, {newExperiment: true});
     if (!selected) throw new Error("The new experiment could not be selected. Your original editor remains available.");
   }}>
-    <EditorBody api={api} context={context} onClose={onClose} />
+    <EditorBody api={api} context={context} localTrainingDraft={localTrainingDraft} onClose={onClose} />
   </EvaluationSetupProvider>;
 }
-function EditorBody({ api, context, onClose }: { api: WorkspaceApi; context: Context; onClose: () => void }) {
+function EditorBody({ api, context, localTrainingDraft, onClose }: { api: WorkspaceApi; context: Context; localTrainingDraft: boolean; onClose: () => void }) {
   const setup = useEvaluationSetup();
   // Polling can discover a remote edit while this form is open. Keep the revision
   // that populated this editor; only its own successful save advances that base.
@@ -47,7 +49,7 @@ function EditorBody({ api, context, onClose }: { api: WorkspaceApi; context: Con
   return <WorkspacePanelHost.Provider value={host}>
     <div ref={setHost} className="evaluation-workspace-panel chat-experiment-editor" />
     {inventory.error ? <ErrorToast error={inventory.error}><button type="button" className="training-text-button" onClick={() => void inventory.refetch()}>Retry workspace</button></ErrorToast> : null}
-    <ExperimentSetupPanel key={setup.initialExperiment?.id} api={api} inventory={inventory.data ?? null}
+    <ExperimentSetupPanel key={setup.initialExperiment?.id} api={api} inventory={inventory.data ?? null} localTrainingDraft={localTrainingDraft}
       route={modelsLocation("experiments", null, { projectId: api.projectId, executionLocation: api.location })}
       navigate={navigate} onClose={onClose}
       onTrainingStarted={async id => {

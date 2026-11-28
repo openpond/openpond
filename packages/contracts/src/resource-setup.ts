@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
-import { ModelProjectRecipeDocumentSchema } from "openpond-sdk/model-projects";
+import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
 
 const fieldText = z.string().max(2_000).optional();
 const positiveInteger = z.number().int().positive().optional();
@@ -62,6 +62,22 @@ export const ResourceSetupDraftSchema = z.object({
   trainingRecipes: z.object({
     sft: ModelProjectRecipeDocumentSchema.extend({ method: z.literal("sft") }).optional(),
     grpo: ModelProjectRecipeDocumentSchema.extend({ method: z.literal("grpo") }).optional(),
+  }).strict().optional(),
+  managedTrainingInputs: z.object({
+    accountKey: z.string().min(1).max(4_000),
+    teamId: z.string().min(1).max(500),
+    actorId: z.string().min(1).max(500),
+    base: z.object({
+      label: z.string().min(1).max(500),
+      preference: ModelProjectBaseModelSchema,
+    }).strict().optional(),
+    batch: z.object({
+      label: z.string().min(1).max(500),
+      method: z.enum(["sft", "grpo"]),
+      reference: ModelProjectVersionedRefSchema,
+    }).strict().optional(),
+    validation: ModelProjectVersionedRefSchema.optional(),
+    validationSplit: z.enum(["validation", "frozen_eval"]).optional(),
   }).strict().optional(),
   graderExamples: z.object({
     id: z.uuid(),

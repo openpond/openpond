@@ -7,6 +7,7 @@ import type { ClientConnection } from "../api";
 import { connectionQueryScope } from "../lib/query-scope";
 import { ChatExperimentWorkspaceContext } from "../components/chat/ChatExperimentWorkspaceContext";
 import { requestDesktopViewChange } from "../components/labs/lab-primary-tab-state";
+import type { ModelSetupScope } from "../lib/resource-setup-prompt";
 
 export const ChatContextAccountScope = createContext("default");
 export const CHAT_CONTEXT_SELECTED = "openpond-chat-context-selected";
@@ -29,6 +30,7 @@ type PagedContextQuery<T> = {
   fetchNextPage: () => Promise<unknown>;
   refetch: () => Promise<unknown>;
 };
+type ContextSelectionOptions = { newExperiment?: boolean; configureDraft?: boolean; modelTrainingReview?: boolean };
 type ChatContextSelectionState = {
   associateTraining: (jobId: string, apiOrigin: string, draftId: string) => Promise<void>;
   selection: ChatContextSelection | null;
@@ -38,11 +40,12 @@ type ChatContextSelectionState = {
   catalog: PagedContextQuery<{ options: ChatContextOption[]; warning: string | null }>;
   refreshLocalCatalog: () => Promise<unknown>;
   runs: PagedContextQuery<{ runs: ChatContextOption[] }>;
-  select: (target: ChatContextTarget | null, options?: { newExperiment?: boolean }) => Promise<boolean>;
+  select: (target: ChatContextTarget | null, options?: ContextSelectionOptions) => Promise<boolean>;
   saveDraft: (draft: ExperimentDraft, base?: ExperimentDraftRecord | null) => Promise<ChatContextSelection>;
   selectionError: Error | null;
   moveToSession: (id: string) => void;
   scope: string;
+  workspace: ModelSetupScope | null;
 };
 function publish(key: string, value: ChatContextSelection | null) { selections.set(key, value); for (const listener of listeners) listener(); }
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
@@ -127,7 +130,7 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
   const runs = { ...runPages, data: runPages.data ? {
     runs: [...new Map(runPages.data.pages.flatMap(page => page.runs).map(run => [canonicalJson(run.target), run])).values()],
   } : undefined };
-  const select = useCallback(async (target: ChatContextTarget | null, options?: { newExperiment?: boolean }) => {
+  const select = useCallback(async (target: ChatContextTarget | null, options?: ContextSelectionOptions) => {
     if (!connection) throw new Error("Connect before selecting experiment context.");
     if (pending.has(key)) throw new Error("Wait for the current context selection to finish.");
     let approved = false;
@@ -138,10 +141,13 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
     try {
       // A read started before the user changed selection must never overwrite that selection.
       await queries.cancelQueries({ queryKey: ["chat-context-selection", key] });
-      const result = await chatResourceRequest<{ selection: unknown }>(connection, "dataset", { action: "context_select", payload: { target, ...(options?.newExperiment ? { newExperiment: true } : {}), ...(sessionId ? { sessionId } : {}) } });
+      const result = await chatResourceRequest<{ selection: unknown }>(connection, "dataset", { action: "context_select", payload: {
+        target, ...(options?.newExperiment ? { newExperiment: true } : {}),
+        ...(options?.modelTrainingReview ? { modelTrainingReview: true } : {}), ...(sessionId ? { sessionId } : {}),
+      } });
       const value = result.selection ? ChatContextSelectionSchema.parse(result.selection) : null;
       if (activeKey.current !== key) return false;
-      if (options?.newExperiment && value?.draft) configureDrafts.set(key, value.draft.id);
+      if ((options?.newExperiment || options?.configureDraft) && value?.draft) configureDrafts.set(key, value.draft.id);
       else configureDrafts.delete(key);
       await queries.cancelQueries({ queryKey: ["chat-context-selection", key] });
       publish(key, value);
@@ -219,7 +225,7 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
         ? result.saved.localDraft && result.currentSaved.draftRevision === result.saved.draftRevision
         : result.saved.storedDraft && result.currentSaved.storedDraft?.contentHash === result.saved.storedDraft.contentHash;
       if (!matchesSave || canonicalJson(result.saved.draft) !== canonicalJson(draft))
-        throw new Error("This Benchmark changed elsewhere. Your edits are still here. Reopen the saved draft to load its current settings.");
+        throw new Error(`This ${draft.operationType === "evaluate" ? "Benchmark" : "training review"} changed elsewhere. Reopen the saved draft to load its current settings.`);
       if (activeKey.current !== key) return result.saved;
       await queries.cancelQueries({ queryKey: ["chat-context-selection", key] });
       publish(key, result.focused);
@@ -232,5 +238,5 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
   }, [connection, selection, workspace?.teamId, key, queries, scope, sessionId]);
   const closeDraftEditor = useCallback(() => { configureDrafts.delete(key); for (const listener of listeners) listener(); }, [key]);
   const refreshLocalCatalog = () => connection ? Promise.all([queries.fetchQuery(sourceQuery("local")), queries.fetchQuery(sourceQuery("models"))]) : Promise.resolve();
-  return { associateTraining, selection, selecting, configureDraftId, closeDraftEditor, catalog, refreshLocalCatalog, runs, select, saveDraft, selectionError: retained.error, moveToSession, scope };
+  return { associateTraining, selection, selecting, configureDraftId, closeDraftEditor, catalog, refreshLocalCatalog, runs, select, saveDraft, selectionError: retained.error, moveToSession, scope, workspace };
 }

@@ -33,6 +33,7 @@ export function TrainingExperimentSetupPanel({
   navigate,
   onClose,
   onSaveDraft,
+  localDraft = false,
   onStarted,
 }: {
   api: WorkspaceApi;
@@ -41,6 +42,7 @@ export function TrainingExperimentSetupPanel({
   navigate: (route: ModelsRoute) => void;
   onClose: () => void;
   onSaveDraft?: (draft: ExperimentDraft) => Promise<unknown>;
+  localDraft?: boolean;
   onStarted?: (id: string) => void | Promise<void>;
 }) {
   const setup = useEvaluationSetup();
@@ -67,6 +69,7 @@ export function TrainingExperimentSetupPanel({
       );
     },
     onSaveDraft,
+    localDraft,
   );
   const { inputs, locked, receipt } = form;
   useExperimentSetupTransition(

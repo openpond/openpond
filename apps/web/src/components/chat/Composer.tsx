@@ -1395,7 +1395,7 @@ export function Composer({
     const submissionScope = submissionScopeKey;
     if (!beginSubmissionForScope(submissionScope)) return false;
     const setup = resourceSetup && !selectedAction && !selectedCommand ? snapshotResourceSetup(
-      resourceSetup, contextSelection.selection, options.promptOverride ?? inputRef.current?.getPrompt() ?? prompt,
+      resourceSetup, contextSelection.selection, options.promptOverride ?? inputRef.current?.getPrompt() ?? prompt, contextSelection.workspace,
     ) : null;
     setAddMenuOpen(false);
     setAttachmentError(null);
@@ -1446,7 +1446,8 @@ export function Composer({
       );
       if (sent && setup && originDraftScopeKey) {
         composerDraftStore?.setResourceSetup(originDraftScopeKey, current =>
-          current === resourceSetup && !current?.datasetInputsDirty && !current?.graderExamples ? null : current);
+          current === resourceSetup && !current?.datasetInputsDirty && !current?.graderExamples &&
+            (!current?.managedTrainingInputs || setup?.draft.managedTrainingInputs) ? null : current);
       }
       if (sent && resourceDrafts.current.get(submissionScope) === submissionContexts) resourceDrafts.current.delete(submissionScope);
       settleStagedAttachments(
@@ -1788,7 +1789,7 @@ export function Composer({
             connection={connection}
             datasets={chatResources.datasets}
             evaluationModels={chatResources.models}
-            datasetSessionId={taskSessionId ?? null}
+            sessionId={taskSessionId ?? null} context={contextSelection}
             onAttachDataset={reference => chatResources.select("dataset", reference.id, reference.revision)}
             onChange={(previous, next) => composerDraftStore.setResourceSetup(originDraftScopeKey, current => current === previous ? next : current)}
             onRemove={() => composerDraftStore.setResourceSetup(originDraftScopeKey, () => null)}
