@@ -75,3 +75,17 @@
   color: var(--text-primary);
   font: inherit;
 }
+
+.resource-setup-fields textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 8rem;
+  min-height: 3.25rem;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font: inherit;
+  resize: vertical;
+}

@@ -55,8 +55,8 @@ export function resourceSetupParts(draft: ResourceSetupDraft): ResourceSetupPart
         field("budget", "Choose a budget"), ".", " Run on ", destination, ".",
       ];
     case "dataset":
-      return ["Set up ", name, " from ", field("source", "Choose a source"), " with ",
-        field("fields", "Choose input and expected output fields"), ". Show me ",
+      return ["Set up ", name, " for ", objective, " from ", field("source", "Choose a source"), " with ",
+        draft.values.source === "Use an existing dataset" ? dataset : field("fields", "Choose input and expected output fields"), ". Show me ",
         field("preview", "Preview rows"), " before saving to ", field("saveDestination", "Choose where to save"), "."];
     case "grader":
       return ["Set up ", name, " as a ", field("graderType", "Choose a grader type"), " for ", dataset,
@@ -75,6 +75,8 @@ export const resourceSetupGroups: Partial<Record<PromptField, readonly ResourceS
 
 export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetupPart, string>, draft: ResourceSetupDraft): string {
   if (field === "saveDestination") return draft.values.destination ?? placeholder;
+  if (field === "preview" && draft.datasetExamples?.length)
+    return `Preview ${draft.datasetExamples.length} ${draft.datasetExamples.length === 1 ? "row" : "rows"}`;
   if (field === "trainingSettings" || field === "evaluationSettings" || field === "preview") return placeholder;
   if (field === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") return "the Dataset’s local graders";
   const value = draft.values[field];
@@ -96,7 +98,7 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const execution = parts.slice(destinationStart).map(stringify).join("").trim();
   const { split, epochs, learningRate, budget, samples, seed } = draft.values;
   const settings = [
-    draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
+    !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
     draft.candidateRef && `Model project ${draft.candidateRef.projectId}, version ${draft.candidateRef.versionId}, artifact ${draft.candidateRef.artifactId}, bundle hash ${draft.candidateRef.bundleHash}`,
     draft.values.destination === "This device" && draft.localCandidate && `Candidate local provider custom-openai-compatible, model ID ${draft.localCandidate.modelId}, configuration hash ${draft.localCandidate.configurationHash}`,
     draft.values.destination === "This device" && draft.comparison && draft.localBaseline && `Baseline local provider custom-openai-compatible, model ID ${draft.localBaseline.modelId}, configuration hash ${draft.localBaseline.configurationHash}`,
@@ -124,8 +126,9 @@ export function snapshotResourceSetup(
 ) {
   const benchmarkDefinition = draft.kind === "benchmark" && selection?.localDraft && selection.draft && selection.draftRevision
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
+  const { datasetExamples: _localExamples, datasetInputsDirty, ...setup } = draft;
   return {
     prompt: [resourceSetupText(draft), instructions].filter(Boolean).join("\n\n"),
-    draft: { ...draft, ...(benchmarkDefinition ? { benchmarkDefinition } : {}) },
+    draft: { ...setup, ...(datasetInputsDirty ? { datasetRef: undefined } : {}), ...(benchmarkDefinition ? { benchmarkDefinition } : {}) },
   };
 }

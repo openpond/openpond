@@ -1445,7 +1445,8 @@ export function Composer({
           : undefined,
       );
       if (sent && setup && originDraftScopeKey) {
-        composerDraftStore?.setResourceSetup(originDraftScopeKey, current => current === resourceSetup ? null : current);
+        composerDraftStore?.setResourceSetup(originDraftScopeKey, current =>
+          current === resourceSetup && !current?.datasetInputsDirty ? null : current);
       }
       if (sent && resourceDrafts.current.get(submissionScope) === submissionContexts) resourceDrafts.current.delete(submissionScope);
       settleStagedAttachments(
@@ -1787,6 +1788,8 @@ export function Composer({
             connection={connection}
             datasets={chatResources.datasets}
             evaluationModels={chatResources.models}
+            datasetSessionId={taskSessionId ?? null}
+            onAttachDataset={reference => chatResources.select("dataset", reference.id, reference.revision)}
             onChange={(previous, next) => composerDraftStore.setResourceSetup(originDraftScopeKey, current => current === previous ? next : current)}
             onRemove={() => composerDraftStore.setResourceSetup(originDraftScopeKey, () => null)}
           /> : null}

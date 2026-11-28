@@ -8,6 +8,11 @@ const localModelRef = z.object({
   modelId: z.string().min(1).max(500),
   configurationHash: z.string().regex(/^[a-f0-9]{64}$/),
 });
+const datasetExample = z.object({
+  id: z.uuid(),
+  prompt: z.string().max(2_000),
+  expected: z.string().max(2_000),
+}).strict();
 const valuesSchema = z.object({
   name: fieldText,
   objective: fieldText,
@@ -51,6 +56,8 @@ export const ResourceSetupDraftSchema = z.object({
   }).optional(),
   localCandidate: localModelRef.optional(),
   localBaseline: localModelRef.optional(),
+  datasetExamples: datasetExample.array().max(50).optional(),
+  datasetInputsDirty: z.boolean().optional(),
   datasetRef: z.object({
     id: z.string().min(1).max(240),
     revision: z.number().int().positive(),

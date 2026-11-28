@@ -35,7 +35,7 @@ export function ChatGraderRequestPanel({ dataset, busy, onDraft }: {
     const setup = newResourceSetup("grader");
     onDraft(type.request, {
       ...setup,
-      datasetRef: { id: dataset.id, revision: dataset.revision, contentHash: dataset.contentHash },
+      datasetRef: { id: dataset.id, revision: dataset.revision, contentHash: dataset.evaluationHash ?? dataset.contentHash },
       values: { ...setup.values, dataset: dataset.name, datasetRevision: dataset.revision, graderType: type.label },
     });
   }

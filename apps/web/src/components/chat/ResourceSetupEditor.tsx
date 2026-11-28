@@ -19,6 +19,7 @@ import { DropdownSelect } from "../DropdownSelect";
 import { AppDialog } from "../dialogs/AppDialog";
 import { ChevronDown, SlidersHorizontal } from "../icons";
 import { DesktopNewContext } from "./DesktopNewMenu";
+import { DatasetSetupReview } from "./DatasetSetupReview";
 import "./resource-setup-editor.css";
 
 type PromptField = Exclude<ResourceSetupPart, string>["field"];
@@ -43,18 +44,22 @@ const choices: Partial<Record<ResourceSetupField, readonly string[]>> = {
 const decimalFields = new Set<ResourceSetupField>(["budget", "learningRate"]);
 const integerFields = new Set<ResourceSetupField>(["datasetRevision", "epochs", "samples", "seed"]);
 
-export function ResourceSetupEditor({ draft, busy, connection, datasets, evaluationModels, onChange, onRemove }: {
+export function ResourceSetupEditor({ draft, busy: composerBusy, connection, datasets, evaluationModels, datasetSessionId, onAttachDataset, onChange, onRemove }: {
   draft: ResourceSetupDraft;
   busy: boolean;
   connection: ClientConnection | null;
   datasets: readonly ChatResourceSummary[];
   evaluationModels: readonly EvaluationModel[];
+  datasetSessionId: string | null;
+  onAttachDataset(reference: NonNullable<ResourceSetupDraft["datasetRef"]>): Promise<boolean>;
   onChange(current: ResourceSetupDraft, next: ResourceSetupDraft): void;
   onRemove(): void;
 }) {
   const managedAvailable = useContext(DesktopNewContext)?.managedAvailable ?? false;
   const [configureOpen, setConfigureOpen] = useState(false);
   const [field, setField] = useState<PromptField>("name");
+  const [authoringBusy, setAuthoringBusy] = useState(false);
+  const busy = composerBusy || authoringBusy;
   const compute = useQuery({
     queryKey: ["local-training-compute", connectionQueryScope(connection)],
     enabled: Boolean(connection && draft.kind === "model" && configureOpen && field === "destination"),
@@ -77,15 +82,20 @@ export function ResourceSetupEditor({ draft, busy, connection, datasets, evaluat
   }
   function change(key: ResourceSetupField, raw: string) {
     const leavingLocal = key === "destination" && draft.values.destination === "This device" && raw !== "This device";
+    const sourceChanged = draft.kind === "dataset" && key === "source" && raw !== draft.values.source;
+    const datasetEdited = draft.kind === "dataset" && ["name", "objective", "split"].includes(key);
     const parsed = ResourceSetupDraftSchema.safeParse({
       ...draft,
       revision: draft.revision + 1,
       ...(key === "candidate" ? { candidateRef: undefined } : {}),
       ...(leavingLocal ? { localCandidate: undefined, localBaseline: undefined } : {}),
+      ...(sourceChanged ? { datasetRef: undefined, datasetExamples: undefined } : {}),
+      ...(datasetEdited ? { datasetInputsDirty: true } : {}),
       values: {
         ...draft.values,
         ...(leavingLocal && draft.localCandidate ? { candidate: undefined } : {}),
         ...(leavingLocal && draft.localBaseline ? { baseline: undefined } : {}),
+        ...(sourceChanged ? { dataset: undefined, datasetRevision: undefined, fields: undefined } : {}),
         [key]: raw === "" ? undefined : decimalFields.has(key) || integerFields.has(key) ? Number(raw) : raw,
       },
     });
@@ -97,6 +107,7 @@ export function ResourceSetupEditor({ draft, busy, connection, datasets, evaluat
       ...draft,
       revision: draft.revision + 1,
       datasetRef: reference && { id: reference.id, revision: reference.revision, contentHash: reference.evaluationHash ?? reference.contentHash },
+      ...(draft.kind === "dataset" ? { datasetInputsDirty: false } : {}),
       values: { ...draft.values, dataset: reference?.name, datasetRevision: reference?.revision, grader: undefined },
     });
   }
@@ -143,7 +154,7 @@ export function ResourceSetupEditor({ draft, busy, connection, datasets, evaluat
       <SlidersHorizontal size={13} aria-hidden="true" /> Configure
     </button>
     {configureOpen ? <AppDialog ariaLabel="Configure prompt" className="training-dialog resource-setup-dialog" initialFocusKey={field}
-      onClose={() => setConfigureOpen(false)}>
+      dismissDisabled={authoringBusy} onClose={() => setConfigureOpen(false)}>
       <h2>Configure prompt</h2>
       {sentence()}
       {benchmarkPresets}
@@ -151,6 +162,8 @@ export function ResourceSetupEditor({ draft, busy, connection, datasets, evaluat
         {activeFields.map((key, index) => {
           const options = fieldOptions(key);
           const label = field === "saveDestination" ? "Save to" : labels[key];
+          if (draft.kind === "dataset" && (key === "fields" && draft.values.source === "Import a local file"
+            || field === "preview" && draft.values.source === "Use an existing dataset")) return null;
           if (key === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") {
             return <div className="resource-setup-input" key={key}>
               <span>{label}</span>
@@ -210,9 +223,12 @@ export function ResourceSetupEditor({ draft, busy, connection, datasets, evaluat
           </label>;
         })}
       </div> : null}
+      {draft.kind === "dataset" && <DatasetSetupReview draft={draft} connection={connection}
+        sessionId={datasetSessionId} busy={busy} managedAvailable={managedAvailable} activeField={field}
+        onChange={onChange} onAttach={onAttachDataset} onBusy={setAuthoringBusy} />}
       <footer className="training-dialog-actions">
         <button type="button" className="training-button secondary" disabled={busy} onClick={onRemove}>Remove setup</button>
-        <button type="button" className="training-button" onClick={() => setConfigureOpen(false)}>Done</button>
+        <button type="button" className="training-button" disabled={authoringBusy} onClick={() => setConfigureOpen(false)}>Done</button>
       </footer>
     </AppDialog> : null}
   </div>;
