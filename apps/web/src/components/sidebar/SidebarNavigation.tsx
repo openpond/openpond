@@ -1,52 +1,14 @@
-import { Home, Inbox } from "lucide-react";
-import { type Dispatch, type SetStateAction } from "react";
-import type {
-  Experience,
-  ModelProject,
-  OpenPondApp,
-  ProductArea,
-} from "@openpond/contracts";
-import {
-  Activity,
-  Boxes,
-  CalendarClock,
-  ChartColumnStacked,
-  Cloud,
-  CheckCircle2,
-  FileOutput,
-  FolderGit2,
-  GitBranch,
-  Shield,
-  Shapes,
-  SquarePen,
-} from "../icons";
-import type { SidebarSectionMenuId } from "../../app/app-state";
-import type { AppView } from "../../lib/app-models";
+import type { OpenPondApp } from "@openpond/contracts";
+import { SquarePen } from "../icons";
 import {
   modelsLocation,
-  MODELS_PAGES,
-  MODELS_PAGE_LABELS,
+  modelsPath,
+  hasResourceSidebar,
   navigateDesktopRoute,
   navigateModelsRoute,
   useModelsRoute,
-  type ModelsPage,
+  type ModelsRoute,
 } from "../labs/lab-primary-tab-state";
-
-type SidebarDestinationProps = {
-  experience?: Experience;
-  productArea?: ProductArea;
-  setSectionMenuOpen: Dispatch<SetStateAction<SidebarSectionMenuId | null>>;
-  setSelectedAppId: Dispatch<SetStateAction<string | null>>;
-  setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
-  setSelectedSessionId: Dispatch<SetStateAction<string | null>>;
-  setView: Dispatch<SetStateAction<AppView>>;
-  view: AppView;
-  modelProjects?: Pick<ModelProject, "id" | "name">[];
-  modelTrainingActivityByProjectId?: Record<
-    string,
-    { label: string; status: string }
-  >;
-};
 
 export function SidebarNewThreadButton({ beginNewChat }: {
   beginNewChat: (app?: OpenPondApp | null) => void;
@@ -62,113 +24,79 @@ export function SidebarNewThreadButton({ beginNewChat }: {
   );
 }
 
-export function SidebarNavigation({
-  productArea = "chat",
-  setSectionMenuOpen,
-  setSelectedAppId,
-  setSelectedProjectId,
-  setSelectedSessionId,
-  setView,
-  view,
-  modelTrainingActivityByProjectId = {},
-}: SidebarDestinationProps) {
-  const modelsRoute = useModelsRoute();
-  const selectedModelProjectId = modelsRoute?.modelId ?? null;
-  const activePage = modelsRoute?.page ?? "models";
+type Destination = { label: string; target: ModelsRoute; active: boolean };
+const benchmarkViews = [
+  ["tasks", "Cases"], ["graders", "Graders"], ["versions", "Versions"],
+  ["compare", "Compare"], ["configuration", "Configuration"], ["diagnostics", "Diagnostics"],
+] as const;
+const recordedBenchmarkViews = [
+  ["overview", "Overview"], ["cases", "Cases"], ["compare", "Compare"], ["configuration", "Configuration"],
+] as const;
+const datasetViews = [
+  ["tasks", "Tasks"], ["experiments", "Benchmarks"], ["graders", "Graders"], ["versions", "Versions"],
+] as const;
+const graderViews = [
+  ["overview", "Overview"], ["checks", "Checks"], ["usage", "Usage"], ["versions", "Versions"],
+] as const;
 
-  function clearWorkspaceSelection() {
-    setSelectedAppId(null);
-    setSelectedProjectId(null);
-    setSelectedSessionId(null);
-    setSectionMenuOpen(null);
+function resourceDestinations(route: ModelsRoute) {
+  if (route.page === "experiments" || route.page === "datasets" || route.page === "graders") {
+    const kind = { experiments: "Benchmarks", datasets: "Datasets", graders: "Graders" }[route.page];
+    const destinations: Destination[] = [{
+      label: `All ${kind.toLowerCase()}`,
+      target: modelsLocation(route.page, null, { area: route.area, projectId: route.projectId }),
+      active: !route.resourceId && !route.reviewSource,
+    }];
+    if (route.page === "datasets") {
+      destinations.push({ label: "Local datasets", target: modelsLocation("tasksets"), active: false });
+    }
+    if (route.resourceId && route.collection === "default") {
+      const recorded = route.executionKind === "recorded_evidence";
+      const tabs = route.page === "experiments" ? recorded ? recordedBenchmarkViews : benchmarkViews
+        : route.page === "graders" ? graderViews : route.datasetKind === "release" ? datasetViews.slice(0, 1) : datasetViews;
+      const selected = route.page === "experiments" && !recorded && route.detailTab === "cases"
+        ? "tasks" : route.detailTab ?? tabs[0][0];
+      destinations.push(...tabs.map(([detailTab, label]) => ({
+        label, target: { ...route, detailTab }, active: selected === detailTab,
+      })));
+    } else if (route.page === "experiments" && route.collection === "drafts") {
+      destinations.push({ label: "Draft setup", target: route, active: true });
+    }
+    return { kind, destinations };
   }
-
-  async function selectModelsPage(page: ModelsPage) {
-    if (!await navigateModelsRoute(modelsLocation(page, ["home", "inbox", "datasets", "graders", "experiments", "runs"].includes(page) ? null : selectedModelProjectId, { ...(productArea === "console" ? { area: "console" } : {}), ...(["home", "inbox", "datasets", "graders", "experiments"].includes(page) && modelsRoute?.projectId !== undefined ? { projectId: modelsRoute.projectId } : {}) }))) return;
-    clearWorkspaceSelection();
-    setView("labs");
+  if (route.page === "tasksets" && !route.modelId) {
+    return { kind: "Datasets", destinations: [
+      { label: "All datasets", target: modelsLocation("datasets", null, { area: "console" }), active: false },
+      { label: "Local datasets", target: modelsLocation("tasksets"), active: true },
+    ] };
   }
-
-  async function selectDesktopView(nextView: "apps" | "outputs" | "projects" | "scheduled") {
-    if (!await navigateDesktopRoute({ kind: "view", view: nextView })) return;
-    clearWorkspaceSelection();
-    setView(nextView);
+  const destinations: Destination[] = [
+    { label: "All models", target: modelsLocation(), active: route.page === "models" && !route.modelId },
+  ];
+  if (route.modelId) {
+    destinations.push(
+      { label: "Overview", target: modelsLocation("models", route.modelId), active: route.page === "models" },
+      { label: "Datasets", target: modelsLocation("tasksets", route.modelId), active: route.page === "tasksets" || route.page === "tasks" },
+    );
   }
-
-  const selectedTrainingActivity = selectedModelProjectId
-    ? modelTrainingActivityByProjectId[selectedModelProjectId] ?? null
-    : null;
-
-  return (
-    <nav className="sidebar-nav" aria-label="Primary">
-      {productArea !== "chat" ? (
-        <>
-          {MODELS_PAGES.filter(page => productArea === "console" ? page === "inbox" || page === "runs" : page !== "home" && page !== "tasksets" && page !== "evaluations").map((page) => {
-            const Icon = { "get-started": Boxes, home:Home, inbox: Inbox, models: Activity, datasets: Boxes, graders: Shield, experiments: CheckCircle2, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
-            return (
-              <button
-                className={`nav-command ${view === "labs" && (activePage === page || (page === "runs" && activePage === "evaluations")) ? "active" : ""}`}
-                aria-current={view === "labs" && (activePage === page || (page === "runs" && activePage === "evaluations")) ? "page" : undefined}
-                key={page}
-                type="button"
-                onClick={() => void selectModelsPage(page)}
-              >
-                <Icon size={16} />
-                <span>{MODELS_PAGE_LABELS[page]}</span>
-                {page === "runs" && selectedTrainingActivity ? <span className="sidebar-running-dot" aria-label={selectedTrainingActivity.label} /> : null}
-              </button>
-            );
-          })}
-        </>
-      ) : null}
-      {productArea === "chat" ? (
-        <>
-          <button
-            className={`nav-command nav-command-prominent ${view === "scheduled" ? "active" : ""}`}
-            aria-label="Workflows"
-            type="button"
-            onClick={() => {
-              selectDesktopView("scheduled");
-            }}
-          >
-            <CalendarClock size={18} />
-            <span>Workflows</span>
-          </button>
-          <button
-            className={`nav-command nav-command-prominent ${view === "outputs" ? "active" : ""}`}
-            aria-label="Outputs"
-            type="button"
-            onClick={() => {
-              selectDesktopView("outputs");
-            }}
-          >
-            <FileOutput size={18} />
-            <span>Outputs</span>
-          </button>
-          <button
-            className={`nav-command nav-command-prominent ${view === "apps" ? "active" : ""}`}
-            aria-label="Apps"
-            type="button"
-            onClick={() => {
-              selectDesktopView("apps");
-            }}
-          >
-            <Shapes size={18} />
-            <span>Apps</span>
-          </button>
-          <button
-            className={`nav-command nav-command-prominent ${view === "projects" ? "active" : ""}`}
-            aria-label="Projects"
-            type="button"
-            onClick={() => {
-              selectDesktopView("projects");
-            }}
-          >
-            <FolderGit2 size={18} />
-            <span>Projects</span>
-          </button>
-        </>
-      ) : null}
-    </nav>
+  destinations.push(
+    { label: "Runs", target: modelsLocation("runs", route.modelId), active: route.page === "runs" && route.collection !== "series" },
+    { label: "Versions", target: modelsLocation("versions", route.modelId), active: route.page === "versions" },
+    { label: "Comparisons", target: modelsLocation("runs", route.modelId, { collection: "series" }), active: route.collection === "series" || route.page === "evaluations" },
   );
+  return { kind: "Models", destinations };
+}
+
+export function SidebarNavigation({ modelProjects }: { modelProjects: { id: string; name: string }[] }) {
+  const route = useModelsRoute();
+  if (!route || !hasResourceSidebar(route.page)) return null;
+  const menu = resourceDestinations(route);
+  if (!menu) return null;
+  const title = modelProjects.find(model => model.id === route.modelId)?.name ?? menu.kind;
+  return <nav className="sidebar-nav sidebar-resource-nav" aria-label={`${menu.kind} navigation`}>
+    <div className="sidebar-nav-group-label" title={title}>{title}</div>
+    {menu.destinations.map(({ label, target, active }) => <button key={modelsPath(target)}
+      className={`nav-command${active ? " active" : ""}`} aria-current={active ? "page" : undefined}
+      type="button" onClick={() => void navigateModelsRoute(target)}>{label}</button>)}
+  </nav>;
 }

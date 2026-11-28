@@ -61,6 +61,7 @@ import {
 } from "../lib/product-area";
 import { useTaskDraftActions } from "../hooks/useTaskDraftActions";
 import {
+  hasResourceSidebar,
   navigateDesktopRoute,
   settingsReturnRoute,
   navigateModelsRoute,
@@ -415,12 +416,17 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [newResourceBusy, setNewResourceBusy] = useState(false);
   const newResourceInFlight = useRef(false);
   const newResourceRequests = useRef(new Map<string, CreateSessionResourceDraftRequest>());
+  const openHomeChat = useCallback(() => {
+    setPonderMode(null);
+    composerDraftStore.setResourceSetup("new-chat", () => null);
+    beginNewChat(null);
+  }, [beginNewChat, composerDraftStore]);
   const createDesktopResource = useCallback(async (kind: DesktopNewKind, candidate?: ResourceSetupCandidate) => {
     if (newResourceInFlight.current) return;
     if (kind === "chat") {
       if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
-      beginContextualNewChat();
-      composerDraftStore.setResourceSetup("new-chat", current => current ?? newResourceSetup("chat"));
+      openHomeChat();
+      composerDraftStore.setForScope("new-chat", () => "");
       return;
     }
     if (!connection || !bootstrap) {
@@ -474,7 +480,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         return { ...setup, benchmarkModelVersion: retainedSource, values: { ...setup.values, candidate: candidate?.label,
           ...(retainedSource.location === "cloud" ? { destination: "OpenPond Managed" as const } : {}) } };
       });
-      if (await openSessionInChat(session.id, undefined, () => window.location.href === startLocation || window.location.pathname === `/chat/${session.id}`)) {
+      if (await openSessionInChat(session.id, undefined, () => window.location.href === startLocation || window.location.pathname === `/chat/${session.id}`, session)) {
         newResourceRequests.current.delete(operationKey);
         try { window.localStorage.removeItem(storageKey); } catch { /* The retained operation remains idempotent. */ }
         requestMainComposerFocus();
@@ -485,7 +491,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       newResourceInFlight.current = false;
       setNewResourceBusy(false);
     }
-  }, [activeModel, activeProvider, appDefaults.defaultTeamId, beginContextualNewChat, bootstrap, composerDraftStore, connection, openSessionInChat, requestMainComposerFocus, showToast]);
+  }, [activeModel, activeProvider, appDefaults.defaultTeamId, bootstrap, composerDraftStore, connection, openHomeChat, openSessionInChat, requestMainComposerFocus, showToast]);
   const managedResourcesAvailable = bootstrap?.account.state === "signed_in";
   const hostedModels = hostedModelScope(bootstrap?.account, appDefaults.defaultTeamId);
   const desktopNewAction = useMemo(() => ({
@@ -1000,7 +1006,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   }
 
   const desktopShell = isDesktopShell();
-  const sidebarAvailable = productArea === "console" || view === "chat";
+  const sidebarAvailable = view === "chat" || (view === "labs" && desktopRoute?.kind === "models" && hasResourceSidebar(desktopRoute.route.page));
   const visibleSidebarOpen = sidebarAvailable && sidebarOpen;
   const platform = connection?.platform ?? navigator.platform;
   const isMac = desktopShell && isMacPlatform(platform);
@@ -1149,6 +1155,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setCloudProjectsExpanded,
           setChatRowsVisibleCount,
           beginNewChat: beginContextualNewChat,
+          openHomeChat,
           beginProjectChat,
           onAddProject: openExistingProjectPathDialog,
           dockSessionRight: openRightChatPanel,

@@ -195,6 +195,17 @@
   line-height: 1.2;
 }
 
+.sidebar-resource-nav .sidebar-nav-group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-resource-nav .nav-command {
+  display: flex;
+  font-size: 13px;
+}
+
 .nav-command {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);

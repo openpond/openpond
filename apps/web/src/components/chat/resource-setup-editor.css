@@ -8,7 +8,8 @@
   overflow-wrap: anywhere;
 }
 
-.resource-setup-pill {
+.resource-setup-pill,
+.resource-setup-inline-select > .dropdown-trigger {
   display: inline;
   padding: 2px 7px;
   border: 1px solid var(--border-strong);
@@ -21,21 +22,38 @@
   cursor: pointer;
 }
 
-.resource-setup-pill svg {
+.resource-setup-pill svg,
+.resource-setup-inline-select > .dropdown-trigger svg {
   vertical-align: middle;
 }
 
 .resource-setup-pill:hover,
-.resource-setup-pill[data-active] {
+.resource-setup-pill[data-active],
+.resource-setup-inline-select > .dropdown-trigger:hover,
+.resource-setup-inline-select > .dropdown-trigger.active {
   background: var(--state-selected);
   border-color: var(--accent-primary);
+}
+
+.resource-setup-inline-select {
+  display: inline-block;
+  max-inline-size: 100%;
+  vertical-align: baseline;
+}
+
+.resource-setup-inline-select > .dropdown-trigger {
+  min-height: 0;
+  max-inline-size: 100%;
+  text-align: start;
+  white-space: normal;
 }
 
 .resource-setup-configure {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  min-height: 28px;
+  white-space: nowrap;
 }
 
 .training-dialog.resource-setup-dialog {

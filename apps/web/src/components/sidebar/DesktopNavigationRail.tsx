@@ -74,13 +74,25 @@ export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: Si
     sidebar.setView("get-started");
   }
 
+  async function openHome() {
+    if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
+    setAccountOpen(false);
+    morePopover.current?.hidePopover();
+    sidebar.setSectionMenuOpen(null);
+    sidebar.openHomeChat();
+    sidebar.setSidebarOpen(true);
+  }
+
   return <nav className="desktop-navigation-rail" aria-label="Desktop destinations">
-    <button type="button" className="desktop-rail-button desktop-rail-brand" aria-label="OpenPond Overview"
-      onClick={() => void selectResource("home")}><img src={OPENPOND_ICON_URL} alt="" /></button>
+    <button type="button" className="desktop-rail-destination desktop-rail-brand" aria-label="Home" data-rail-tooltip="New chat"
+      aria-current={activeView === "chat" && !sidebar.selectedSessionId ? "page" : undefined}
+      onClick={() => void openHome()}><span className="desktop-rail-destination-icon"><img src={OPENPOND_ICON_URL} alt="" /></span><span>Home</span></button>
     <div className="desktop-rail-destinations">
       {resourceDestinations.map(({ page, label, icon }) => {
         const active = sidebar.view === "labs" && (modelsRoute?.page === page ||
-          page === "models" && Boolean(modelsRoute?.modelId) && modelsRoute?.page !== "serving");
+          page === "models" && (["runs", "versions", "evaluations", "tasks"].includes(modelsRoute?.page ?? "") ||
+            modelsRoute?.page === "tasksets" && Boolean(modelsRoute.modelId)) ||
+          page === "datasets" && modelsRoute?.page === "tasksets" && !modelsRoute.modelId);
         return <button key={page} type="button" className="desktop-rail-destination" aria-label={label}
           aria-current={active ? "page" : undefined} onClick={() => void selectResource(page)}>
           <span className="desktop-rail-destination-icon">

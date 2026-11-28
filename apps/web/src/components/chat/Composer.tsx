@@ -96,14 +96,14 @@ import {
   ComposerCommandMenu,
   filterComposerCommandMenuSections,
   type ComposerCommandMenuItem,
-  type ComposerCommandMenuSection,
+  buildComposerAddMenuSections,
 } from "./ComposerCommandMenu";
 import {
   ComposerMentionMenu,
   type ComposerMentionMenuItem,
 } from "./ComposerMentionMenu";
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
-import { DesktopLogIssueAction } from "./DesktopLogIssueAction";
+import { useDesktopLogIssueAction } from "./DesktopLogIssueAction";
 import { ResourceSetupEditor } from "./ResourceSetupEditor";
 import { benchmarkAccountMessage, canSubmitBenchmarkSetup, snapshotResourceSetup } from "../../lib/resource-setup-prompt";
 import {
@@ -244,6 +244,10 @@ export function Composer({
     if (!active) voiceSubmitMode.current = null;
   }, []);
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
+  const issueAction = useDesktopLogIssueAction({ conversationId, inbox: taskInbox, running, onSubmit, showToast, enabled: surface === "chat" });
+  const showIssueAction = Boolean(issueAction);
+  const showIssueRetry = Boolean(issueAction?.retry);
+  const [configureSlot, setConfigureSlot] = useState<HTMLSpanElement | null>(null);
   const contextSelection = useChatContextSelection(surface === "chat" && enableResourceContext ? connection : null, taskSessionId ?? null);
   const chatResources = useChatResourceFocus(surface === "chat" && enableResourceContext &&
     (Boolean(resourceSetup) || !contextSelection.selection?.model && !contextSelection.selection?.training) ? connection : null,
@@ -697,54 +701,15 @@ export function Composer({
       ),
     [availableProfileSkills]
   );
-  const addMenuSections = useMemo<ComposerCommandMenuSection[]>(() => {
-    const sections: ComposerCommandMenuSection[] = [
-      {
-        id: "add",
-        items:
-          experience === "work"
-            ? [{ kind: "files" }, { kind: "folder" }]
-            : [{ kind: "files" }],
-        label: "Add",
-      },
-    ];
-    if (addMenuSlashItems.length > 0) {
-      sections.push({
-        id: "slash",
-        items: addMenuSlashItems.map((item) => ({ kind: "slash", item })),
-        label: "Agents and actions",
-        queryScope: "slash",
-      });
-    }
-    if (addMenuSkillItems.length > 0) {
-      sections.push({
-        id: "skills",
-        items: addMenuSkillItems.map((item) => ({ kind: "slash", item })),
-        label: "Skills",
-        queryScopes: ["slash", "mentions"],
-      });
-    }
-    sections.push({
-      id: "openpond",
-      items: addMenuOpenPondItems.map((item) => ({ kind: "slash", item })),
-      label: "OpenPond",
-      grid: true,
-      queryScope: "slash",
-    });
-    sections.push({
-      emptyLabel: "No mentions available",
-      id: "mentions",
-      items: addMenuMentionItems.map((item) => ({ kind: "mention", item })),
-      label: "@",
-    });
-    return sections;
-  }, [
-    addMenuMentionItems,
-    addMenuOpenPondItems,
-    addMenuSkillItems,
-    addMenuSlashItems,
-    experience,
-  ]);
+  const addMenuSections = useMemo(() => buildComposerAddMenuSections({
+    work: experience === "work",
+    actions: addMenuSlashItems,
+    skills: addMenuSkillItems,
+    openpond: addMenuOpenPondItems,
+    mentions: addMenuMentionItems,
+    logIssue: showIssueAction,
+    retryIssueSettings: showIssueRetry,
+  }), [addMenuMentionItems, addMenuOpenPondItems, addMenuSkillItems, addMenuSlashItems, experience, showIssueAction, showIssueRetry]);
   const filteredAddMenuSections = useMemo(
     () => filterComposerCommandMenuSections(addMenuSections, addMenuQuery),
     [addMenuQuery, addMenuSections]
@@ -1234,6 +1199,11 @@ export function Composer({
     const range = addMenuSelectionRange();
     setAddMenuOpen(false);
     setAddMenuQuery("");
+    if (item.kind === "log-issue" || item.kind === "retry-issue-settings") {
+      if (item.kind === "log-issue") void issueAction?.logIssue();
+      else void issueAction?.retry?.();
+      return;
+    }
     if (item.kind === "files" || item.kind === "folder") {
       if (range.start !== range.end) {
         const nextPrompt = `${prompt.slice(0, range.start)}${prompt.slice(
@@ -1784,6 +1754,7 @@ export function Composer({
           {resourceSetup && originDraftScopeKey && composerDraftStore ? <ResourceSetupEditor
             key={originDraftScopeKey}
             draft={resourceSetup}
+            configureTarget={configureSlot}
             busy={busy || running}
             connection={connection}
             datasets={chatResources.datasets}
@@ -1923,8 +1894,7 @@ export function Composer({
           />
         </div>
         <ComposerPrimaryControls
-          issueAction={surface === "chat" ? <DesktopLogIssueAction key={conversationId ?? "new-chat"}
-            conversationId={conversationId} inbox={taskInbox} running={running} onSubmit={onSubmit} showToast={showToast} /> : null}
+          configureSlotRef={resourceSetup ? setConfigureSlot : undefined}
           trainingControl={surface === "chat" && enableResourceContext && (mode !== "start" || !showProjectFooter) ? projectContext : null}
           surface={surface}
           teamUseModel={teamUseModel}

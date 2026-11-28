@@ -11,6 +11,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-inline-size: 96px;
+  justify-content: space-between;
+  padding-inline: 12px;
 }
 
 .desktop-new-popover {

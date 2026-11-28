@@ -16,8 +16,8 @@ export function SidebarResourceRow({ name, onOpen, actions, status, children }: 
         aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
         {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
       </button> : null}
-      <button type="button" className="sidebar-model-title" onClick={onOpen}>{name}</button>
-      {actions}
+      <button type="button" className="sidebar-model-title" title={name} onClick={onOpen}>{name}</button>
+      {actions ? <div className="sidebar-model-actions">{actions}</div> : null}
     </div>
     {status}
     {expanded && children ? <div className="sidebar-model-threads">{children}</div> : null}

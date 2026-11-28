@@ -49,6 +49,10 @@ export function modelsLocation(page: ModelsPage = "models", modelId: string | nu
   return { page, modelId: ["get-started", "home", "inbox", "datasets", "graders", "experiments"].includes(page) ? null : modelId, collection: page === "evaluations" ? "results" : "default", resourceId: null, detailTab: null, query: "", after: null, ...detail };
 }
 
+export function hasResourceSidebar(page: ModelsPage) {
+  return ["models", "runs", "versions", "evaluations", "tasks", "tasksets", "experiments", "datasets", "graders"].includes(page);
+}
+
 export function modelsRouteFromLocation(input: { pathname: string; search?: string }): ModelsRoute | null {
   const encoded = input.pathname.split("/").filter(Boolean);
   if (encoded[0] !== "models" && encoded[0] !== "console") return null;

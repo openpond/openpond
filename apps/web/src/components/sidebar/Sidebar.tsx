@@ -29,7 +29,6 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
     setView,
     view,
     modelProjects,
-    modelTrainingActivityByProjectId,
   } = props;
   const setSidebarSectionMenuOpen = useCallback<
     Dispatch<SetStateAction<SidebarSectionMenuId | null>>
@@ -80,17 +79,7 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
       </div>
 
       <div className="sidebar-scroll">
-        {productArea !== "chat" ? <SidebarNavigation
-          productArea={productArea}
-          setSectionMenuOpen={setSidebarSectionMenuOpen}
-          setSelectedAppId={setSelectedAppId}
-          setSelectedProjectId={setSelectedProjectId}
-          setSelectedSessionId={setSelectedSessionId}
-          setView={setView}
-          view={view}
-          modelProjects={modelProjects}
-          modelTrainingActivityByProjectId={modelTrainingActivityByProjectId}
-        /> : null}
+        {view === "labs" ? <SidebarNavigation modelProjects={modelProjects ?? []} /> : null}
 
         {productArea !== "chat" || view !== "chat" ? null : (
           <SidebarSectionList

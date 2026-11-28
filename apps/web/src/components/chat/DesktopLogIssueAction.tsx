@@ -3,38 +3,37 @@ import type { ComposerProps } from "./composer-types";
 import type { TaskInboxController } from "../../hooks/useTaskInbox";
 import { useErrorToast } from "../../app/AppToastContext";
 import { useDesktopCorrections } from "./DesktopCorrectionsContext";
-import { Bug, LoaderCircle, RefreshCw } from "../icons";
 import { modelsLocation, modelsPath } from "../labs/lab-primary-tab-state";
-import "./desktop-log-issue.css";
 
-export function DesktopLogIssueAction({ conversationId, inbox, running, onSubmit, showToast }: {
+export function useDesktopLogIssueAction({ conversationId, inbox, running, onSubmit, showToast, enabled }: {
   conversationId: string | null;
   inbox: TaskInboxController;
   running: boolean;
+  enabled: boolean;
 } & Pick<ComposerProps, "onSubmit" | "showToast">) {
-  const corrections = useDesktopCorrections();
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const pending = useRef(false);
+  const context = useDesktopCorrections();
+  const corrections = enabled ? context : null;
+  const [error, setError] = useState<{ scope: string; cause: unknown } | null>(null);
+  const pending = useRef(new Set<string>());
   const scope = `${corrections?.data?.scopeKey ?? ""}:${conversationId}`;
   const latestScope = useRef(scope); latestScope.current = scope;
-  useErrorToast(error);
+  useErrorToast(error?.scope === scope ? error.cause : null);
   useErrorToast(corrections?.error);
   useErrorToast(corrections?.data?.destinationError);
   if (!corrections) return null;
   const active = running || Boolean(inbox.snapshot?.activeTurnId);
   const canSteer = inbox.snapshot?.acceptingInput && Boolean(inbox.snapshot.activeTurnId);
   async function logIssue() {
-    if (pending.current) { showToast("The issue logging request is already being sent.", "info"); return; }
+    if (pending.current.has(scope)) { showToast("The issue logging request is already being sent.", "info"); return; }
     if (!conversationId) { showToast("Start a conversation first, then log the issue.", "info"); return; }
     if (!corrections?.data?.dataset) {
-      if (corrections?.error) setError(corrections.error);
+      if (corrections?.error) setError({ scope, cause: corrections.error });
       else showToast(corrections?.unavailableReason ?? "Choose an available issue dataset in Settings.", "info");
       return;
     }
     if (inbox.busyId) { showToast("Another message is being sent. Try again in a moment.", "info"); return; }
     if (active && !canSteer) { showToast("This response is not accepting steering yet. Try again in a moment.", "info"); return; }
-    pending.current = true; setSending(true); setError(null);
+    pending.current.add(scope); setError(null);
     const origin = scope;
     try {
       const dataset = corrections.data.dataset;
@@ -47,18 +46,8 @@ export function DesktopLogIssueAction({ conversationId, inbox, running, onSubmit
       const accepted = active ? await inbox.steer(prompt) : await onSubmit([], null, null, { preservePrompt: true, promptOverride: prompt });
       if (accepted && latestScope.current === origin) showToast("Issue logging requested. The agent will confirm when the task is saved.", "info");
     } catch (cause) {
-      if (latestScope.current === origin) setError(cause);
-    } finally { pending.current = false; setSending(false); }
+      if (latestScope.current === origin) setError({ scope: origin, cause });
+    } finally { pending.current.delete(origin); }
   }
-  return <div className="desktop-log-issue">
-    <button type="button" className="composer-icon" aria-label="Log an issue" aria-busy={sending} onClick={() => void logIssue()}
-      title={sending ? "Sending issue request" : !conversationId ? "Start a conversation before logging an issue" : corrections.unavailableReason
-        ?? (!corrections.data?.dataset ? "Choose an available issue dataset in Settings" : active && !canSteer ? "Waiting for the conversation to accept steering" : `Add the latest issue to ${corrections.data.dataset.name}`)}>
-      {sending ? <LoaderCircle size={16} aria-hidden="true" /> : <Bug size={16} aria-hidden="true" />}
-    </button>
-    {corrections.error ? <button type="button" className="composer-icon" aria-label="Retry loading issue settings"
-      title="Retry loading issue settings" onClick={() => void corrections.refresh()}>
-      <RefreshCw size={16} aria-hidden="true" />
-    </button> : null}
-  </div>;
+  return { logIssue, retry: corrections.error ? corrections.refresh : null };
 }

@@ -91,8 +91,9 @@ const choices: Partial<Record<ResourceSetupField, readonly string[]>> = {
 const decimalFields = new Set<ResourceSetupField>(["budget", "learningRate"]);
 const integerFields = new Set<ResourceSetupField>(["datasetRevision", "epochs", "samples", "seed"]);
 
-export function ResourceSetupEditor({ draft, busy: composerBusy, connection, datasets, evaluationModels, sessionId, context, onAttachDataset, onChange, onRemove }: {
+export function ResourceSetupEditor({ draft, configureTarget, busy: composerBusy, connection, datasets, evaluationModels, sessionId, context, onAttachDataset, onChange, onRemove }: {
   draft: ResourceSetupDraft;
+  configureTarget: HTMLElement | null;
   busy: boolean;
   connection: ClientConnection | null;
   datasets: readonly ChatResourceSummary[];
@@ -274,12 +275,22 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     const options = choices[key];
     return options ? [{ value: "", label: "Choose later" }, ...options.map(value => ({ value, label: value }))] : null;
   }
-  const sentence = () => benchmarkUnavailable ? <p>{benchmarkAccountMessage}</p> : <div className="resource-setup-sentence">
-    {parts.map((part, index) => typeof part === "string" ? part : <button key={index}
-      className="resource-setup-pill" type="button" disabled={busy} aria-label={`Edit ${part.placeholder}`}
-      data-active={configureOpen && part.field === field || undefined} onClick={() => showField(part.field)}>
-      {resourceSetupLabel(part, visibleDraft)} <ChevronDown aria-hidden="true" size={12} />
-    </button>)}
+  const sentence = (inline = false) => benchmarkUnavailable ? <p>{benchmarkAccountMessage}</p> : <div className="resource-setup-sentence">
+    {parts.map((part, index) => {
+      if (typeof part === "string") return part;
+      if (inline && (part.field === "method" || part.field === "adapter" || part.field === "source" || part.field === "graderType")) {
+        const key = part.field;
+        const options = fieldOptions(key);
+        if (options) return <DropdownSelect key={index} className="resource-setup-inline-select" floating floatingMenuWidth={245}
+          label={`Edit ${part.placeholder}`} value={visibleDraft.values[key] ?? ""} options={options} disabled={busy}
+          triggerContent={<>{resourceSetupLabel(part, visibleDraft)} <ChevronDown aria-hidden="true" size={12} /></>}
+          onChange={value => change(key, value)} />;
+      }
+      return <button key={index} className="resource-setup-pill" type="button" disabled={busy} aria-label={`Edit ${part.placeholder}`}
+        data-active={configureOpen && part.field === field || undefined} onClick={() => showField(part.field)}>
+        {resourceSetupLabel(part, visibleDraft)} <ChevronDown aria-hidden="true" size={12} />
+      </button>;
+    })}
   </div>;
   const activePart = parts.find(part => typeof part !== "string" && part.field === field);
   const trainingMethod = field === "trainingSettings" ? resourceSetupTrainingMethod(draft) : null;
@@ -299,13 +310,13 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   </div> : null;
   return <div className="resource-setup-editor">
     {benchmarkPresets}
-    {sentence()}
-    <button type="button" className="training-text-button resource-setup-configure" disabled={busy || benchmarkUnavailable} onClick={() => {
+    {sentence(true)}
+    {configureTarget ? createPortal(<button type="button" className="training-text-button resource-setup-configure" disabled={busy || benchmarkUnavailable} onClick={() => {
       setField(parts.find((part): part is Exclude<ResourceSetupPart, string> => typeof part !== "string")?.field ?? "name");
       setConfigureOpen(true);
     }}>
       <SlidersHorizontal size={13} aria-hidden="true" /> Configure
-    </button>
+    </button>, configureTarget) : null}
     {configureOpen && !benchmarkUnavailable ? createPortal(<AppDialog ariaLabel="Configure prompt" className="training-dialog resource-setup-dialog" initialFocusKey={field}
       dismissDisabled={authoringBusy} onClose={() => setConfigureOpen(false)}>
       <h2>Configure prompt</h2>

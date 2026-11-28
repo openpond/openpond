@@ -372,9 +372,9 @@ export function LabsRoute(props: LabsRouteProps) {
     page = <LabModelsPage activeProfileId={profileId} hostedScope={props.account?.state === "signed_in" ? `${props.account.apiBaseUrl}:${props.account.activeProfile?.handle}:${workspaceKey}` : null} hostedApiOrigin={props.account?.apiBaseUrl ?? null} items={models} loading={training.training.loading && !models.length} runs={createImprove.runs} state={state} training={training.training}
       connection={profileView.connection} actorId={props.account?.profile?.id ?? null}
       onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={(_id, name, runCount) => toast(`${name} pulled with ${runCount} runs.`, "success")}
-      onOpened={(id) => open(modelsLocation("runs", id, { area: "console" }))}
+      onOpened={(id) => open(modelsLocation("models", id))}
       onOpenRun={(id, runKey) => open(modelsLocation("runs", id, { area: "console", resourceId: runKey }))}
-      onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("runs", model.id, { area: "console" })); }} onUseModel={useModel} onConfigure={(id) => { setStarterPreview(null); setEditingModelId(id); setModelCreateOpen(true); }}
+      onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={(id) => { setStarterPreview(null); setEditingModelId(id); setModelCreateOpen(true); }}
     />;
   } else if ((route.page === "runs" || (route.page === "versions" && !route.modelId)) && !route.resourceId) {
     const runs = <>

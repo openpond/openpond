@@ -114,6 +114,7 @@ export type SidebarProps = {
   setCloudProjectsExpanded: Dispatch<SetStateAction<boolean>>;
   setChatRowsVisibleCount: Dispatch<SetStateAction<number>>;
   beginNewChat: (app?: OpenPondApp | null) => void;
+  openHomeChat: () => void;
   beginProjectChat: (projectId: string) => void;
   onAddProject: () => void;
   dockSessionRight: (session: Session) => void;
