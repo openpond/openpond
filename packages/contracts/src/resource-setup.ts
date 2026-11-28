@@ -63,6 +63,44 @@ export const LocalSftApprovalSchema = LocalSftReviewPlanSchema.extend({
   approvedAt: z.string().datetime({ offset: true }),
 });
 
+const LocalSftTokenizerReportSchema = z.object({
+  rowCount: z.number().int().positive(),
+  maximumTokens: z.number().int().positive(),
+  completionTokens: z.number().int().positive(),
+  tokenizationHash: artifactHash,
+}).strict();
+export const LocalSftPreflightReportSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.enum([
+      "unsupported_platform", "python_missing", "dependencies_missing", "cuda_unavailable",
+      "checkpoint_mismatch", "tokenizer_incompatible", "example_too_long", "lora_incompatible",
+      "insufficient_memory", "nonfinite_loss", "probe_failed",
+    ]),
+    rowId: resourceId.optional(),
+    tokens: LocalSftTokenizerReportSchema.optional(),
+  }).strict(),
+  z.object({
+    status: z.literal("ready"),
+    tokens: LocalSftTokenizerReportSchema,
+    device: z.object({
+      ordinal: z.number().int().nonnegative(),
+      name: z.string().min(1).max(500),
+      capacityBytes: z.number().int().positive().safe(),
+      freeBytes: z.number().int().positive().safe(),
+      usedBytes: z.number().int().positive().safe(),
+      budgetBytes: z.number().int().positive().safe(),
+    }).strict(),
+  }).strict(),
+]);
+export const LocalSftPreflightRequestSchema = z.object({
+  sessionId: resourceId,
+  planHash: artifactHash,
+}).strict();
+export const LocalSftPreflightSchema = z.object({
+  planHash: artifactHash,
+  report: LocalSftPreflightReportSchema,
+}).strict();
+
 const valuesSchema = z.object({
   name: fieldText,
   objective: fieldText,

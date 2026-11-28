@@ -1,5 +1,5 @@
 import type { TrainingApiDependencies } from "./training-api-dependencies.js";
-import { LocalSftReviewRequestSchema } from "@openpond/contracts/resource-setup";
+import { LocalSftPreflightRequestSchema, LocalSftReviewRequestSchema } from "@openpond/contracts/resource-setup";
 import { handleManagedCandidateReviewAction, isManagedCandidateReviewAction } from "./training-api-candidate-review.js";
 import { createTaskInventoryService, taskInventoryRequest } from "./task-inventory-service.js";
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
@@ -181,6 +181,11 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
       profileId: requiredString(input.profileId, "profileId"), request: input.request });
     if (action === "navigation") return deps.store.readTrainingNavigation(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "local_compute") return (await import("./local-training-compute.js")).inspectLocalTrainingCompute(deps.storeDir);
+    if (action === "check_local_sft") {
+      return (await import("./local-sft-preflight.js")).preflightLocalSft({
+        ...LocalSftPreflightRequestSchema.parse(input), store: deps.store, storeDir: deps.storeDir, signal,
+      });
+    }
     if (action === "review_local_sft") {
       return (await import("./local-sft-review.js")).reviewLocalSft({
         store: deps.store, storeDir: deps.storeDir, request: LocalSftReviewRequestSchema.parse(input.request),

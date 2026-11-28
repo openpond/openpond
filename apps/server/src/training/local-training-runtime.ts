@@ -63,28 +63,40 @@ with redirect_stdout(sys.stderr):
 print(json.dumps(report))
 `;
 
+export async function runLocalTrainingPython(storeDir: string, source: string, options: {
+  timeout: number;
+  input?: unknown;
+  signal?: AbortSignal;
+}) {
+  const directory = path.resolve(storeDir, "training", "local-runtime");
+  const child = execFileAsync(path.join(directory, "bin", "python"), ["-I", "-B", "-c", source], {
+    cwd: directory,
+    env: {
+      PATH: process.env.PATH,
+      LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH,
+      CUDA_VISIBLE_DEVICES: process.env.CUDA_VISIBLE_DEVICES,
+      CUDA_DEVICE_ORDER: process.env.CUDA_DEVICE_ORDER,
+      HOME: directory,
+      HF_HUB_OFFLINE: "1",
+      HF_HUB_DISABLE_TELEMETRY: "1",
+      TRANSFORMERS_OFFLINE: "1",
+      WANDB_MODE: "disabled",
+    },
+    timeout: options.timeout,
+    signal: options.signal,
+    killSignal: "SIGKILL",
+    maxBuffer: 128_000,
+  });
+  const stdin = child.child.stdin;
+  stdin?.on("error", () => { /* The child exit reports failures even if stdin closes early. */ });
+  stdin?.end(options.input === undefined ? undefined : JSON.stringify(options.input));
+  return JSON.parse((await child).stdout) as unknown;
+}
+
 export async function inspectLocalTrainingRuntime(storeDir: string): Promise<NonNullable<LocalTrainingCompute["runtime"]>> {
   if (process.platform !== "linux") return { status: "unsupported_platform" };
-  const directory = path.resolve(storeDir, "training", "local-runtime");
   try {
-    const { stdout } = await execFileAsync(path.join(directory, "bin", "python"), ["-I", "-B", "-c", probe], {
-      cwd: directory,
-      env: {
-        PATH: process.env.PATH,
-        LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH,
-        CUDA_VISIBLE_DEVICES: process.env.CUDA_VISIBLE_DEVICES,
-        CUDA_DEVICE_ORDER: process.env.CUDA_DEVICE_ORDER,
-        HOME: directory,
-        HF_HUB_OFFLINE: "1",
-        HF_HUB_DISABLE_TELEMETRY: "1",
-        TRANSFORMERS_OFFLINE: "1",
-        WANDB_MODE: "disabled",
-      },
-      timeout: 12_000,
-      killSignal: "SIGKILL",
-      maxBuffer: 128_000,
-    });
-    return LocalTrainingRuntimeSchema.parse(JSON.parse(stdout));
+    return LocalTrainingRuntimeSchema.parse(await runLocalTrainingPython(storeDir, probe, { timeout: 12_000 }));
   } catch (error) {
     return { status: (error as NodeJS.ErrnoException).code === "ENOENT" ? "python_missing" : "probe_failed" };
   }

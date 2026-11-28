@@ -7,6 +7,7 @@ import {
 } from "@openpond/contracts/resource-setup";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { useErrorToast } from "../../app/AppToastContext";
+import { ModelSetupLocalSftPreflight } from "./ModelSetupLocalSftPreflight";
 
 type Approval = NonNullable<ResourceSetupDraft["localSftApproval"]>;
 type Review = ReturnType<typeof LocalSftReviewSchema.parse>;
@@ -56,6 +57,7 @@ export function ModelSetupLocalSftReview({ connection, request, approval, busy, 
       <strong>{approval.rowCount} {approval.rowCount === 1 ? "training example" : "training examples"} approved</strong>
       <span>{approval.datasetName} revision {approval.request.dataset.revision}</span>
       <small title={approval.planHash}>Review {approval.planHash.slice(0, 12)}</small>
+      <ModelSetupLocalSftPreflight key={approval.planHash} approval={approval} connection={connection} busy={busy} onBusy={onBusy} />
     </div> : null}
     <button type="button" className="training-button secondary" disabled={busy || Boolean(pending)} onClick={() => void previewOrApprove()}>
       {pending === "preview" ? "Preparing review" : "Preview training examples"}

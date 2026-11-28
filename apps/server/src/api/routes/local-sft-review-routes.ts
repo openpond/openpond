@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LocalSftReviewRequestSchema } from "@openpond/contracts/resource-setup";
+import { LocalSftPreflightRequestSchema, LocalSftReviewRequestSchema } from "@openpond/contracts/resource-setup";
 import { LocalSftReviewError } from "../../training/local-sft-review.js";
 import { LocalTrainingModelError } from "../../training/local-training-model-assets.js";
 import { readJson, sendJson } from "../http.js";
@@ -12,7 +12,7 @@ const approveRequest = z.object({
 }).strict();
 
 export async function handleLocalSftReviewRoutes({ deps, request, response, requestUrl }: HttpRouteContext) {
-  const operation = /^\/v1\/training\/local-sft\/(preview|approve)$/.exec(requestUrl.pathname)?.[1];
+  const operation = /^\/v1\/training\/local-sft\/(preview|approve|check)$/.exec(requestUrl.pathname)?.[1];
   if (!operation || request.method !== "POST") return false;
   if (!isDesktopLocalRequest(request)) {
     sendJson(response, 403, { code: "local_sft_requires_desktop", error: "Open the local desktop to review training inputs." });
@@ -24,8 +24,9 @@ export async function handleLocalSftReviewRoutes({ deps, request, response, requ
   response.setHeader("Cache-Control", "no-store");
   try {
     const body = await readJson(request, { maxBytes: 256 * 1024 });
-    const payload = operation === "preview" ? { request: LocalSftReviewRequestSchema.parse(body) } : approveRequest.parse(body);
-    const result = await deps.trainingPayload("review_local_sft", payload, requestUrl, abort.signal);
+    const payload = operation === "preview" ? { request: LocalSftReviewRequestSchema.parse(body) }
+      : operation === "approve" ? approveRequest.parse(body) : LocalSftPreflightRequestSchema.parse(body);
+    const result = await deps.trainingPayload(operation === "check" ? "check_local_sft" : "review_local_sft", payload, requestUrl, abort.signal);
     if (!abort.signal.aborted) sendJson(response, 200, result);
   } catch (error) {
     if (abort.signal.aborted) return true;
