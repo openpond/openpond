@@ -408,7 +408,7 @@ export function LabModelVersionsPage({
                   <td>
                     <VersionStatusBadge job={version.job} version={version} />
                   </td>
-                  <td>{trainingMethodLabel(version.plan?.recipe.method ?? hostedTrainingMethod(version.job))}</td>
+                  <td>{trainingMethodLabel(version.localRun?.method ?? version.plan?.recipe.method ?? hostedTrainingMethod(version.job))}</td>
                   <td>
                     {version.taskset ? (
                       <button
@@ -422,7 +422,7 @@ export function LabModelVersionsPage({
                         {version.taskset.name}
                       </button>
                     ) : (
-                      "Unavailable"
+                      version.localRun?.localSft?.datasetName ?? "Unavailable"
                     )}
                   </td>
                   <td>

@@ -24,8 +24,9 @@ export function modelAggregateRows(page: "runs" | "versions", state: TrainingSta
   if (page === "versions") {
     return models.flatMap((model) => labModelVersions(model, runs, state).map((version) => ({
       ref: `version:${version.lineage.id}`, modelId: model.id, modelName: model.name,
-      kind: "Model version", label: `Version ${version.number}`, status: version.current ? "current" : version.lineage.promotable ? "available" : "pending",
-      tasksetId: version.taskset?.id ?? "", updatedAt: version.lineage.importedAt,
+      kind: "Model version", label: `Version ${version.number}`, status: version.current ? "current"
+        : version.localRun?.status === "succeeded" || version.lineage.promotable ? "available" : "pending",
+      tasksetId: version.localRun?.localSft?.datasetName ?? version.taskset?.id ?? "", updatedAt: version.lineage.importedAt,
     }))).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
   const lifecycle = state.modelRuns.filter((run) => run.kind !== "evaluation" && modelNames.has(run.modelId));
@@ -33,7 +34,8 @@ export function modelAggregateRows(page: "runs" | "versions", state: TrainingSta
   const plans = new Map(state.plans.map((plan) => [plan.id, plan]));
   const rows: ModelsAggregateRow[] = lifecycle.map((run) => ({
     ref: `model-run:${run.id}`, modelId: run.modelId, modelName: modelNames.get(run.modelId)!, kind: run.kind === "rollout_smoke" ? "Rollout check" : "Training", label: run.id,
-    status: run.status, tasksetId: run.taskset.id, updatedAt: run.updatedAt,
+    status: run.localSft?.phase === "cancelling" ? "cancelling" : run.status,
+    tasksetId: run.localSft?.datasetName ?? run.taskset.id, updatedAt: run.updatedAt,
   }));
   for (const job of state.jobs) {
     if (lifecycleIds.has(job.id) || (typeof job.metadata.modelRunId === "string" && lifecycleIds.has(job.metadata.modelRunId))) continue;

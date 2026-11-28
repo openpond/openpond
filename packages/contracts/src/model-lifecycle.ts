@@ -50,6 +50,20 @@ export const RewardModelRuntimeSchema = z.object({
   }
 });
 
+export const PortableModelVersionReleaseGraphSchema = z.object({
+  resolvedBundleHash: ReleaseHashSchema,
+  profileRelease: VersionedReleaseRefSchema,
+  harnessRelease: ImmutableReleaseRefSchema,
+  agentRelease: ImmutableReleaseRefSchema.nullable(),
+  grader: ImmutableReleaseRefSchema,
+}).strict();
+
+const LocalSftRunReferenceSchema = z.object({
+  sessionId: ReleaseIdSchema,
+  attemptId: z.uuid(),
+  planHash: ReleaseHashSchema,
+}).strict();
+
 export const ModelVersionSchema = z
   .object({
     schemaVersion: z.literal("openpond.modelVersion.v1"),
@@ -63,20 +77,8 @@ export const ModelVersionSchema = z
     taskset: VersionedReleaseRefSchema,
     comparisonSeriesEntry: ModelComparisonEntryRefSchema.nullable().optional(),
     evaluationTasksetRef: VersionedReleaseRefSchema.nullable().optional(),
-    releaseGraph: z
-      .object({
-        resolvedBundleHash: ReleaseHashSchema,
-        profileRelease: VersionedReleaseRefSchema,
-        harnessRelease: ImmutableReleaseRefSchema,
-        agentRelease: ImmutableReleaseRefSchema.nullable(),
-        grader: z
-          .object({
-            id: ReleaseIdSchema,
-            contentHash: ReleaseHashSchema,
-          })
-          .strict(),
-      })
-      .strict(),
+    releaseGraph: PortableModelVersionReleaseGraphSchema.nullable(),
+    localSft: LocalSftRunReferenceSchema.extend({ modelRunId: ReleaseIdSchema }).optional(),
     artifactLineageId: ReleaseIdSchema.nullable(),
     adapterStatus: z.enum(["not_trained", "trained"]),
     createdAt: ReleaseTimestampSchema,
@@ -84,6 +86,11 @@ export const ModelVersionSchema = z
   })
   .strict()
   .superRefine((version, context) => {
+    if (version.localSft
+      ? version.releaseGraph !== null || version.kind !== "lora_adapter" || version.baseModel.source !== "local"
+      : version.releaseGraph === null) {
+      context.addIssue({ code: "custom", message: "A Model Version must retain its portable release graph or exact local SFT run." });
+    }
     if (
       version.kind === "base_reference"
       && (
@@ -267,6 +274,18 @@ export const ModelRunReceiptSchema = z
     contentHash: ReleaseHashSchema,
   })
   .strict();
+
+const LocalSftModelRunReceiptSchema = z.object({
+  schemaVersion: z.literal("openpond.localSftModelRunReceipt.v1"),
+  planHash: ReleaseHashSchema,
+  datasetPackageHash: ReleaseHashSchema,
+  trainingDataHash: ReleaseHashSchema,
+  taskIdsHash: ReleaseHashSchema,
+  tokenizationHash: ReleaseHashSchema,
+  adapterHash: ReleaseHashSchema,
+  adapterConfigHash: ReleaseHashSchema,
+  contentHash: ReleaseHashSchema,
+}).strict();
 
 const EvaluationUsageCategorySchema = z.object({
   inputTokens: z.number().int().nonnegative(),
@@ -699,6 +718,7 @@ export const ModelRunSchema = z
       .nullable(),
     receipt: z.union([
       ModelRunReceiptSchema,
+      LocalSftModelRunReceiptSchema,
       ModelEvaluationReceiptSchema,
       ModelEvaluationStopReceiptSchema,
       ModelComparisonBenchmarkReceiptSchema,
@@ -706,12 +726,28 @@ export const ModelRunSchema = z
     ]).nullable(),
     adapterArtifactLineageId: ReleaseIdSchema.nullable(),
     failure: z.string().trim().min(1).max(5_000).nullable(),
+    localSft: LocalSftRunReferenceSchema.extend({
+      datasetName: z.string().min(1).max(500),
+      phase: z.enum(["starting", "running", "cancelling", "completed", "cancelled", "failed"]),
+      progress: z.object({
+        step: z.number().int().nonnegative(),
+        steps: z.number().int().positive(),
+        gpuName: z.string().min(1).max(500),
+      }).strict().optional(),
+    }).optional(),
     startedAt: ReleaseTimestampSchema,
     completedAt: ReleaseTimestampSchema.nullable(),
     updatedAt: ReleaseTimestampSchema,
   })
   .strict()
   .superRefine((run, context) => {
+    const localReceipt = run.receipt?.schemaVersion === "openpond.localSftModelRunReceipt.v1" ? run.receipt : null;
+    if (run.localSft
+      ? run.kind !== "training" || run.method !== "sft" || run.destinationId !== "local_cuda" ||
+        (run.status === "succeeded" && (localReceipt?.planHash !== run.localSft.planHash || !run.adapterArtifactLineageId))
+      : localReceipt || run.destinationId === "local_cuda") {
+      context.addIssue({ code: "custom", message: "A local SFT Model Run must retain its exact approval and adapter receipt." });
+    }
     if (run.status === "succeeded" && !run.receipt) {
       context.addIssue({
         code: "custom",

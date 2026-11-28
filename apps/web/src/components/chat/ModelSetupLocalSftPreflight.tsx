@@ -77,7 +77,7 @@ export function ModelSetupLocalSftPreflight({ approval, connection, localSelecte
         : report.rowId ? <small>Training example {report.rowId}</small> : null}
       {report.tokens ? <span>{report.tokens.rowCount} examples checked. Longest sequence {report.tokens.maximumTokens.toLocaleString()} tokens.</span> : null}
     </div> : null}
-    <ModelSetupLocalSftRun approval={approval} connection={connection} busy={busy}
+    <ModelSetupLocalSftRun sessionId={approval.request.sessionId} planHash={approval.planHash} connection={connection} busy={busy}
       canStart={localSelected && report?.status === "ready"} />
   </div>;
 }

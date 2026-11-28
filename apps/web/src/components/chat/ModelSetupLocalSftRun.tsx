@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LocalSftRunSchema, type LocalSftRun, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
+import { LocalSftRunSchema, type LocalSftRun } from "@openpond/contracts/resource-setup";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { useErrorToast } from "../../app/AppToastContext";
 import { connectionQueryScope } from "../../lib/query-scope";
@@ -34,16 +34,18 @@ function isActive(status: string | undefined) {
   return status === "starting" || status === "running" || status === "cancelling";
 }
 
-export function ModelSetupLocalSftRun({ approval, connection, canStart, busy }: {
-  approval: NonNullable<ResourceSetupDraft["localSftApproval"]>;
+export function ModelSetupLocalSftRun({ sessionId, planHash, attemptId, connection, canStart, busy }: {
+  sessionId: string;
+  planHash: string;
+  attemptId?: string;
   connection: ClientConnection;
-  canStart: boolean;
-  busy: boolean;
+  canStart?: boolean;
+  busy?: boolean;
 }) {
   const queryClient = useQueryClient();
   const pendingStart = useRef<string | null>(null);
-  const { planHash, request: { sessionId } } = approval;
-  const key = ["local-sft-run", connectionQueryScope(connection), sessionId, planHash] as const;
+  const scope = connectionQueryScope(connection);
+  const key = ["local-sft-run", scope, sessionId, planHash, attemptId] as const;
   async function load(operation: "start" | "cancel" | "status", runId?: string, signal?: AbortSignal): Promise<LocalSftRun> {
     const result = LocalSftRunSchema.parse(await apiFetch(connection, `/v1/training/local-sft/${operation}`, {
       method: "POST", body: JSON.stringify({ sessionId, planHash, runId }), signal,
@@ -55,7 +57,7 @@ export function ModelSetupLocalSftRun({ approval, connection, canStart, busy }: 
   }
   const status = useQuery({
     queryKey: key,
-    queryFn: ({ signal }) => load("status", undefined, signal),
+    queryFn: ({ signal }) => load("status", attemptId, signal),
     refetchInterval: query => isActive(query.state.data?.run?.state.status) ? 1_000 : false,
     retry: false,
   });
@@ -67,6 +69,8 @@ export function ModelSetupLocalSftRun({ approval, connection, canStart, busy }: 
     onSuccess(result, { operation }) {
       if (operation === "start") pendingStart.current = null;
       queryClient.setQueryData(key, result);
+      void queryClient.invalidateQueries({ queryKey: ["training-navigation", scope] });
+      void queryClient.invalidateQueries({ queryKey: ["training", scope] });
     },
     onError: () => queryClient.invalidateQueries({ queryKey: key }),
   });

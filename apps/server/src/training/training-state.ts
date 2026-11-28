@@ -1,4 +1,5 @@
 import type { TrainingApiDependencies } from "./training-api-dependencies.js";
+import { refreshLocalSftModelLibrary } from "./refresh-local-sft-model-library.js";
 import { loadBenchmarkHistory } from "./training-benchmark-state.js";
 import { syncModelTrainingCreateImproveRuns } from "./model-create-improve-reconciliation.js";
 import { projectTrainingActivity } from "./training-activity.js";
@@ -16,6 +17,7 @@ export function createTrainingStateReader(
     return request;
   }
   async function readState(profileId: string) {
+    await refreshLocalSftModelLibrary(deps.store, deps.storeDir);
     await prepare(profileId);
     const [
       sources,
@@ -85,6 +87,7 @@ export function createTrainingStateReader(
         tasksetDrafts,
         tasksets,
         modelProjects,
+        localModelRuns: reconciledModelRuns.filter(run => run.localSft),
       },
     });
     return {
@@ -119,6 +122,7 @@ export function createTrainingStateReader(
   }
 
   async function activity(profileId: string) {
+    await refreshLocalSftModelLibrary(deps.store, deps.storeDir);
     const [metadata, execution] = await Promise.all([
       deps.store.readTrainingActivityState(profileId),
       deps.training.activity({ background: true }),

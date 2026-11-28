@@ -9,7 +9,7 @@ export class SqliteTrainingOverviewStore extends SqliteStoreDomain {
   async readTrainingActivityState(profileId: string): Promise<Omit<TrainingActivityState, "jobs">> {
     await this.ready;
     await this.writeQueue;
-    const [creations, minerRuns, datasetImports, tasksetDrafts, tasksets, modelProjects] =
+    const [creations, minerRuns, datasetImports, tasksetDrafts, tasksets, modelProjects, localModelRuns] =
       await Promise.all([
         this.all<TrainingActivityState["creations"][number]>(
           "SELECT id, state, updated_at AS updatedAt FROM task_creation_snapshots WHERE profile_id = ? AND COALESCE(json_extract(payload, '$.request.buildSpecification.kind'), '') != 'agent_benchmark'",
@@ -35,8 +35,11 @@ export class SqliteTrainingOverviewStore extends SqliteStoreDomain {
         this.all<TrainingActivityState["modelProjects"][number]>(
           "SELECT id, json_extract(payload, '$.revision') AS revision, updated_at AS updatedAt FROM model_projects",
         ),
+        this.all<NonNullable<TrainingActivityState["localModelRuns"]>[number]>(
+          "SELECT id, status, updated_at AS updatedAt FROM model_runs WHERE json_extract(payload, '$.destinationId') = 'local_cuda'",
+        ),
       ]);
-    return { creations, minerRuns, datasetImports, tasksetDrafts, tasksets, modelProjects };
+    return { creations, minerRuns, datasetImports, tasksetDrafts, tasksets, modelProjects, localModelRuns };
   }
 
   async readTrainingNavigation(profileId: string): Promise<TrainingNavigationResponse> {
@@ -55,10 +58,13 @@ export class SqliteTrainingOverviewStore extends SqliteStoreDomain {
         jobId: string | null;
         gpuType: string | null;
         gpuCount: number | null;
-      }>(`SELECT r.model_id AS modelId, COALESCE(j.status, CASE r.status WHEN 'prepared' THEN 'starting' ELSE 'running' END) AS status,
+      }>(`SELECT r.model_id AS modelId, COALESCE(j.status, json_extract(r.payload, '$.localSft.phase'),
+          CASE r.status WHEN 'prepared' THEN 'starting' ELSE 'running' END) AS status,
           'model-run:' || r.id AS runKey, j.id AS jobId,
-          json_extract(j.payload, '$.metadata.managedTrainingEvidence.resource.gpuType') AS gpuType,
-          json_extract(j.payload, '$.metadata.managedTrainingEvidence.resource.gpuCount') AS gpuCount
+          COALESCE(json_extract(j.payload, '$.metadata.managedTrainingEvidence.resource.gpuType'),
+            json_extract(r.payload, '$.localSft.progress.gpuName')) AS gpuType,
+          COALESCE(json_extract(j.payload, '$.metadata.managedTrainingEvidence.resource.gpuCount'),
+            CASE WHEN json_extract(r.payload, '$.localSft.progress.gpuName') IS NOT NULL THEN 1 END) AS gpuCount
         FROM model_runs r LEFT JOIN training_jobs j ON j.id = (
           SELECT id FROM training_jobs WHERE json_extract(payload, '$.metadata.modelRunId') = r.id AND destination_id = 'openpond_managed' ORDER BY updated_at DESC, id DESC LIMIT 1
         ) WHERE r.status IN ('prepared','running') AND json_extract(r.payload, '$.kind') != 'evaluation'

@@ -171,6 +171,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
   const hasActiveWork = payload
     ? [
         payload.jobs.some((job) => ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)),
+        payload.modelRuns.some(run => run.localSft && (run.status === "prepared" || run.status === "running")),
         payload.creations.some((creation) => ["planning", "materializing", "validating"].includes(creation.state)),
         payload.minerRuns.some((run) => ["queued", "running", "cancelling"].includes(run.status)),
         payload.datasetImports.some((job) => ["inspecting", "materializing", "validating", "cancelling"].includes(job.status)),

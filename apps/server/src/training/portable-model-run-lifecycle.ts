@@ -4,6 +4,7 @@ import {
   ModelArtifactLineageSchema,
   ModelRunSchema,
   ModelVersionSchema,
+  PortableModelVersionReleaseGraphSchema,
   TrainingJobSourceSnapshotSchema,
   TrainingJobSchema,
   type ModelRun,
@@ -19,6 +20,7 @@ import {
 import { contentHash } from "@openpond/taskset-sdk";
 
 import type { SqliteStore } from "../store/store.js";
+import { modelVersionId } from "../store/store-model-run-records.js";
 import { candidateEvaluationArtifact, importPortableModelRunArtifacts } from "./portable-model-run-artifacts.js";
 
 type PortableReleaseGraph = {
@@ -123,53 +125,31 @@ export async function preparePortableModelRunLifecycle(input: {
       }),
     );
   }
-  const modelRuns = await input.store.listModelRuns({
+  const { modelRun, targetVersion } = await input.store.reserveModelRunVersion({
+    schemaVersion: "openpond.modelRun.v1",
+    id: input.modelRunId,
     modelId: input.modelProject.id,
+    profileId: input.modelProject.profileId,
+    kind: "training",
+    status: "prepared",
+    method,
+    destinationId,
+    taskset: setup.tasksetRef,
+    comparisonSeriesEntry: input.comparisonSeriesEntry ?? null,
+    evaluationTasksetRef: setup.evaluationTasksetRef ?? null,
+    harnessRelease: input.releaseGraph.harnessRelease,
+    quote: {
+      maximumSpendUsd: input.maximumSpendUsd ?? 0,
+      hourlyCostUsd: null,
+    },
+    reward: null,
+    receipt: null,
+    adapterArtifactLineageId: null,
+    failure: null,
+    startedAt: input.startedAt,
+    completedAt: null,
+    updatedAt: input.startedAt,
   });
-  const reservedIds = new Set([
-    ...versions.map((version) => version.id),
-    ...modelRuns.map((run) => run.modelVersionId),
-  ]);
-  let targetVersionNumber = 1;
-  while (
-    reservedIds.has(
-      modelVersionId(input.modelProject.id, targetVersionNumber),
-    )
-  ) {
-    targetVersionNumber += 1;
-  }
-  const targetVersion = {
-    id: modelVersionId(input.modelProject.id, targetVersionNumber),
-    version: targetVersionNumber,
-  };
-  const modelRun = await input.store.saveModelRun(
-    ModelRunSchema.parse({
-      schemaVersion: "openpond.modelRun.v1",
-      id: input.modelRunId,
-      modelId: input.modelProject.id,
-      modelVersionId: targetVersion.id,
-      profileId: input.modelProject.profileId,
-      kind: "training",
-      status: "prepared",
-      method,
-      destinationId,
-      taskset: setup.tasksetRef,
-      comparisonSeriesEntry: input.comparisonSeriesEntry ?? null,
-      evaluationTasksetRef: setup.evaluationTasksetRef ?? null,
-      harnessRelease: input.releaseGraph.harnessRelease,
-      quote: {
-        maximumSpendUsd: input.maximumSpendUsd ?? 0,
-        hourlyCostUsd: null,
-      },
-      reward: null,
-      receipt: null,
-      adapterArtifactLineageId: null,
-      failure: null,
-      startedAt: input.startedAt,
-      completedAt: null,
-      updatedAt: input.startedAt,
-    }),
-  );
   const sourceSnapshot = TrainingJobSourceSnapshotSchema.parse({
     schemaVersion: "openpond.trainingJobSourceSnapshot.v1",
     evaluationTasksetRef: setup.evaluationTasksetRef ?? null,
@@ -570,10 +550,6 @@ export function portableModelVersionMetadata(
   return value;
 }
 
-function modelVersionId(modelId: string, version: number): string {
-  return `model_version_${contentHash({ modelId, version }).slice(0, 24)}`;
-}
-
 async function requiredModelRun(
   store: SqliteStore,
   id: string,
@@ -632,7 +608,7 @@ function modelVersionReservation(
 
 function portableReleaseGraph(job: TrainingJob): PortableReleaseGraph {
   const value = objectValue(job.metadata.portableReleaseGraph);
-  const parsed = ModelVersionSchema.shape.releaseGraph.safeParse(value);
+  const parsed = PortableModelVersionReleaseGraphSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(
       "Portable Model Run release graph is missing or invalid.",

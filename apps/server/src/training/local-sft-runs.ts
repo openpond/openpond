@@ -6,7 +6,8 @@ import path from "node:path";
 import { z } from "zod";
 import { LocalSftRunStateSchema, type LocalSftRun } from "@openpond/contracts/resource-setup";
 import { loadLocalSftSessionApproval, localSftWorkerInputs } from "./local-sft-preflight.js";
-import { LocalSftReviewError } from "./local-sft-review.js";
+import { localSftModelRunId, projectLocalSftRun } from "./local-sft-model-library.js";
+import { LocalSftReviewError, readLocalSftApproval } from "./local-sft-review.js";
 import { localSftRunSource } from "./local-sft-run-source.js";
 import { localTrainingPythonCommand } from "./local-training-runtime.js";
 
@@ -15,6 +16,7 @@ type Run = NonNullable<LocalSftRun["run"]>;
 type Receipt = Awaited<ReturnType<typeof loadLocalSftSessionApproval>>["approval"];
 const uuid = z.uuid();
 const processIdentity = z.object({ pid: z.number().int().positive(), boot: uuid, started: z.string().regex(/^\d+$/) }).strict();
+const planIdentity = /^[0-9a-f]{64}$/;
 
 function missing(error: unknown) { return (error as NodeJS.ErrnoException).code === "ENOENT"; }
 
@@ -26,6 +28,18 @@ async function readJson(file: string) {
 async function hasFile(file: string) {
   try { await stat(file); return true; }
   catch (error) { if (missing(error)) return false; throw error; }
+}
+
+function runsRoot(storeDir: string) {
+  return path.join(storeDir, "training", "local-sft", "runs");
+}
+
+async function runDirectories(directory: string, accepts: (name: string) => boolean) {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(error => {
+    if (missing(error)) return [];
+    throw error;
+  });
+  return entries.filter(entry => entry.isDirectory() && accepts(entry.name)).map(entry => entry.name);
 }
 
 async function workerAlive(identity: z.infer<typeof processIdentity>) {
@@ -96,18 +110,72 @@ async function readRun(directory: string, approval: Receipt, verifyCompleted = t
 }
 
 async function latestRun(directory: string, approval: Receipt) {
-  const entries = await readdir(directory, { withFileTypes: true }).catch(error => {
-    if (missing(error)) return [];
-    throw error;
-  });
-  const candidates = await Promise.all(entries.filter(entry => entry.isDirectory() && uuid.safeParse(entry.name).success)
-    .map(async entry => ({ id: entry.name, time: (await stat(path.join(directory, entry.name))).birthtimeMs })));
+  const attempts = await runDirectories(directory, name => uuid.safeParse(name).success);
+  const candidates = await Promise.all(attempts
+    .map(async id => ({ id, time: (await stat(path.join(directory, id))).birthtimeMs })));
   candidates.sort((first, second) => second.time - first.time || second.id.localeCompare(first.id));
   for (const candidate of candidates) {
     const state = await readRun(path.join(directory, candidate.id), approval, false);
     if (state.status === "starting" || state.status === "running" || state.status === "cancelling") return candidate.id;
   }
   return candidates[0]?.id;
+}
+
+async function projectRun(store: Request["store"], directory: string, attemptId: string, approval: Receipt, state: Run["state"], observedAt: string) {
+  const { birthtime } = await stat(directory);
+  await projectLocalSftRun({ store, approval, attemptId, directory, state,
+    startedAt: birthtime.toISOString(), observedAt });
+}
+
+const modelProjections = new WeakMap<Request["store"], { recovered: boolean; checkedAt: number; pending?: Promise<void> }>();
+
+export async function refreshLocalSftModelRuns(store: Request["store"], storeDir: string) {
+  let tracker = modelProjections.get(store);
+  if (!tracker) modelProjections.set(store, tracker = { recovered: false, checkedAt: 0 });
+  if (tracker.pending) return tracker.pending;
+  if (Date.now() - tracker.checkedAt < 1_000) return;
+  const refresh = tracker;
+  refresh.pending = (async () => {
+    const root = runsRoot(storeDir);
+    const activeRuns = await store.listActiveLocalSftModelRuns();
+    const pending = new Map<string, Set<string>>();
+    for (const run of activeRuns) {
+      if (!run.localSft) continue;
+      const { planHash, attemptId } = run.localSft;
+      if (!pending.has(planHash)) pending.set(planHash, new Set());
+      pending.get(planHash)!.add(attemptId);
+    }
+    // Earlier installations retained jobs on disk before the Models library
+    // recorded them. Reconcile those attempts once each time the server opens.
+    if (!refresh.recovered) {
+      for (const hash of await runDirectories(root, name => planIdentity.test(name))) {
+        const ids = await runDirectories(path.join(root, hash), name => uuid.safeParse(name).success);
+        for (const id of ids) {
+          if (await store.getModelRun(localSftModelRunId(hash, id))) continue;
+          if (!pending.has(hash)) pending.set(hash, new Set());
+          pending.get(hash)!.add(id);
+        }
+      }
+    }
+    const ownerId = pending.size ? await store.localResourceOwnerId() : null;
+    for (const [hash, attempts] of pending) {
+      const record = await readLocalSftApproval(storeDir, ownerId!, hash).catch(error => {
+        if (error instanceof LocalSftReviewError) return null;
+        throw error;
+      });
+      if (!record) continue;
+      for (const attemptId of attempts) {
+        const directory = path.join(root, hash, attemptId);
+        if (!await hasFile(directory)) continue;
+        const observedAt = new Date().toISOString();
+        const state = await readRun(directory, record.approval);
+        await projectRun(store, directory, attemptId, record.approval, state, observedAt);
+      }
+    }
+    refresh.recovered = true;
+    refresh.checkedAt = Date.now();
+  })().finally(() => { refresh.pending = undefined; });
+  return refresh.pending;
 }
 
 async function launch(directory: string, storeDir: string, input: Awaited<ReturnType<typeof localSftWorkerInputs>>) {
@@ -129,7 +197,7 @@ async function launch(directory: string, storeDir: string, input: Awaited<Return
 export async function localSftRun(request: Request & { operation: "start" | "status" | "cancel"; runId?: string }): Promise<LocalSftRun> {
   const { operation, planHash, storeDir } = request;
   const record = await loadLocalSftSessionApproval(request);
-  const root = path.join(storeDir, "training", "local-sft", "runs", planHash);
+  const root = path.join(runsRoot(storeDir), planHash);
   const id = request.runId ?? await latestRun(root, record.approval);
   if (!id) return { planHash, run: null };
   const directory = path.join(root, id);
@@ -152,10 +220,13 @@ export async function localSftRun(request: Request & { operation: "start" | "sta
     }
   }
   if (!await hasFile(directory)) return { planHash, run: null };
-  const state = await readRun(directory, record.approval);
+  let observedAt = new Date().toISOString();
+  let state = await readRun(directory, record.approval);
   if (operation === "cancel" && (state.status === "starting" || state.status === "running")) {
     await writeFile(path.join(directory, "cancel"), "", { mode: 0o600 });
-    return { planHash, run: { id, state: await readRun(directory, record.approval) } };
+    observedAt = new Date().toISOString();
+    state = await readRun(directory, record.approval);
   }
+  await projectRun(request.store, directory, id, record.approval, state, observedAt);
   return { planHash, run: { id, state } };
 }

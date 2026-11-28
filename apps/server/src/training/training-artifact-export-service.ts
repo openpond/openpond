@@ -45,8 +45,13 @@ export function createTrainingArtifactExportService(deps: {
     if (!model || model.status !== "imported") {
       throw new Error("Imported Model was not found.");
     }
+    const localRun = await deps.store.getModelRun(model.jobId);
+    const localReceipt = localRun?.receipt?.schemaVersion === "openpond.localSftModelRunReceipt.v1"
+      && localRun.status === "succeeded" && localRun.adapterArtifactLineageId === model.id
+      ? localRun.receipt : null;
     const artifacts = selectPortableModelArtifacts(
       await deps.store.listTrainingArtifacts(model.jobId),
+      localReceipt ? "local_cuda" : "openpond",
     );
     const singleFileWeights = artifacts.find(
       (entry) => entry.name === "adapter_model.safetensors",
@@ -69,6 +74,10 @@ export function createTrainingArtifactExportService(deps: {
       throw new Error(
         "The imported Model is missing its LoRA weights or adapter configuration.",
       );
+    }
+    if (localReceipt && (weights.id !== model.artifactId || weights.sha256 !== localReceipt.adapterHash ||
+      configuration.sha256 !== localReceipt.adapterConfigHash || artifacts.length !== 2)) {
+      throw new Error("The local Model Version does not match its training receipt.");
     }
     for (const { artifact } of artifacts) {
       const bytes = await readFile(artifact.path);
@@ -102,10 +111,10 @@ export function createTrainingArtifactExportService(deps: {
           tokenizerRevision: weights.tokenizerRevision,
           chatTemplateHash: weights.chatTemplateHash,
         },
-        provider: job?.metadata.provider ?? null,
+        provider: localReceipt ? "local_cuda" : job?.metadata.provider ?? null,
         providerJobId: job?.metadata.providerJobId ?? null,
         outputModelName: job?.metadata.outputModelName ?? null,
-        trainingMethod: plan?.recipe.method ?? null,
+        trainingMethod: localRun?.localSft ? "sft" : plan?.recipe.method ?? null,
         files: artifacts.map((entry) => ({
           name: entry.name,
           providerFilename: entry.providerFilename,
