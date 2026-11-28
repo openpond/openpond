@@ -50,7 +50,7 @@ import {
 import { composerActionCatalogLabel } from "../../lib/composer-action-catalog";
 import { shouldRetainOpenPondProfileActionAfterSubmit } from "../../lib/openpond-action-run";
 import {
-  COMPOSER_SLASH_COMMANDS,
+  SUBMIT_ISSUE_COMMAND,
   composerSlashCommandsForExperience,
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
@@ -156,10 +156,6 @@ export type {
   ComposerProps,
   ComposerSubmitOptions,
 } from "./composer-types";
-
-const SUBMIT_ISSUE_COMMAND = COMPOSER_SLASH_COMMANDS.find(
-  (command) => command.id === "submit-issue"
-) as ComposerSlashCommand;
 
 const EMPTY_STEER_DRAFTS: ComposerSteerDraft[] = [];
 const EMPTY_TASK_EVENTS: readonly RuntimeEvent[] = [];

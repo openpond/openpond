@@ -26,6 +26,13 @@ export type ParsedComposerDirectCommand = {
   command: string;
 };
 
+export const SUBMIT_ISSUE_COMMAND: ComposerSlashCommand = {
+  id: "submit-issue",
+  command: "/submit-issue",
+  label: "Submit issue",
+  description: "File a GitHub issue in openpond/openpond through the connected GitHub app.",
+};
+
 export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
   {
     id: "agent",
@@ -53,12 +60,7 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     label: "Schedule workflow",
     description: "Create a recurring prompt that posts each run back into this chat.",
   },
-  {
-    id: "submit-issue",
-    command: "/submit-issue",
-    label: "Submit issue",
-    description: "File a GitHub issue in openpond/openpond through the connected GitHub app.",
-  },
+  SUBMIT_ISSUE_COMMAND,
   {
     id: "train",
     command: "/train",

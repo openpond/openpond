@@ -1,7 +1,7 @@
 import { TaskResourceContextsSchema } from "@openpond/contracts";
 import type { StoredComposerDraft } from "./composer-draft-store";
 import { DecisionChatDraftsSchema } from "./decision-chat-draft";
-import { ResourceSetupDraftSchema } from "./resource-setup-prompt";
+import { ResourceSetupDraftSchema } from "@openpond/contracts/resource-setup";
 const KEY = "openpond.desktop-update-drafts.v1";
 const MAX_SNAPSHOT_CHARACTERS = 512 * 1024;
 

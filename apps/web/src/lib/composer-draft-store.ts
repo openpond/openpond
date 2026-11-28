@@ -2,7 +2,7 @@ import { TaskResourceContextsSchema, type TaskResourceContext } from "@openpond/
 import { useSyncExternalStore, type SetStateAction } from "react";
 import type { AppAction, AppState } from "../app/app-state";
 import { DecisionChatDraftSchema, DecisionChatDraftsSchema, type DecisionChatDraft } from "./decision-chat-draft";
-import { ResourceSetupDraftSchema, type ResourceSetupDraft } from "./resource-setup-prompt";
+import { ResourceSetupDraftSchema, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 
 export type StoredComposerDraft = string | {
   prompt: string;
