@@ -26,6 +26,20 @@ export function resourceSetupTrainingMethod(draft: ResourceSetupDraft): "sft" | 
       : draft.values.method === "GRPO" ? "grpo" : null;
 }
 
+function localTrainingBase(draft: ResourceSetupDraft) {
+  return draft.kind === "model" && draft.values.destination !== "OpenPond Managed" ? draft.localTrainingBase : undefined;
+}
+
+function selectedTrainingRecipe(draft: ResourceSetupDraft, method: ReturnType<typeof resourceSetupTrainingMethod>) {
+  if (!method) return undefined;
+  const recipe = draft.trainingRecipes?.[method];
+  const base = localTrainingBase(draft)?.preference;
+  if (!recipe || method !== "sft" || !base) return recipe;
+  return { ...recipe, baseModel: {
+    id: base.modelId, revision: base.revision, tokenizerRevision: base.tokenizerRevision, chatTemplateHash: base.chatTemplateHash,
+  } };
+}
+
 export function newResourceSetup(
   kind: ResourceSetupDraft["kind"],
   options: { method?: ResourceSetupMethod; comparison?: boolean } = {},
@@ -98,6 +112,8 @@ export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetup
   if (field === "preview" && draft.datasetExamples?.length)
     return `Preview ${draft.datasetExamples.length} ${draft.datasetExamples.length === 1 ? "row" : "rows"}`;
   if (field === "trainingSettings" || field === "evaluationSettings" || field === "preview") return placeholder;
+  const localBase = localTrainingBase(draft);
+  if (field === "baseModel" && localBase) return localBase.label;
   if (field === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") return "the Dataset’s local graders";
   const value = draft.values[field];
   if (field === "budget" && typeof value === "number") return `$${value}`;
@@ -118,12 +134,14 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const execution = parts.slice(destinationStart).map(stringify).join("").trim();
   const { split, epochs, learningRate, budget, samples, seed } = draft.values;
   const method = resourceSetupTrainingMethod(draft);
-  const recipe = method ? draft.trainingRecipes?.[method] : undefined;
+  const recipe = selectedTrainingRecipe(draft, method);
   const managed = draft.values.destination === "OpenPond Managed" ? draft.managedTrainingInputs : undefined;
+  const localBase = localTrainingBase(draft)?.preference;
   const version = draft.benchmarkModelVersion;
   const settings = [
     !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
     managed?.base && `Starting model ${managed.base.preference.modelId}, revision ${managed.base.preference.revision}, tokenizer revision ${managed.base.preference.tokenizerRevision}, chat template hash ${managed.base.preference.chatTemplateHash}`,
+    localBase && `Local starting model ${localBase.modelId}, revision ${localBase.revision}, tokenizer revision ${localBase.tokenizerRevision}, chat template hash ${localBase.chatTemplateHash}`,
     managed?.batch && method === managed.batch.method && `Reviewed training batch ${managed.batch.reference.id}, revision ${managed.batch.reference.revision}, content hash ${managed.batch.reference.contentHash}`,
     managed?.validation && `Validation Dataset ${managed.validation.id}, revision ${managed.validation.revision}, content hash ${managed.validation.contentHash}, split ${managed.validationSplit ?? "validation"}`,
     draft.candidateRef && `Model project ${draft.candidateRef.projectId}, version ${draft.candidateRef.versionId}, artifact ${draft.candidateRef.artifactId}, bundle hash ${draft.candidateRef.bundleHash}`,
@@ -158,12 +176,13 @@ export function snapshotResourceSetup(
   const draft = scopeManagedSetup(original, workspace);
   const benchmarkDefinition = draft.kind === "benchmark" && selection?.localDraft && selection.draft && selection.draftRevision
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
-  const { datasetExamples: _localExamples, graderExamples: _localFixtures, datasetInputsDirty, trainingRecipes, ...setup } = draft;
+  const { datasetExamples: _localExamples, graderExamples: _localFixtures, datasetInputsDirty, trainingRecipes: _recipes, ...setup } = draft;
   const method = resourceSetupTrainingMethod(draft);
-  const selectedRecipe = method && trainingRecipes?.[method];
+  const selectedRecipe = selectedTrainingRecipe(draft, method);
   return {
     prompt: [resourceSetupText(draft), instructions].filter(Boolean).join("\n\n"),
-    draft: { ...setup, ...(method && selectedRecipe ? { trainingRecipes: { [method]: selectedRecipe } } : {}),
+    draft: { ...setup, localTrainingBase: localTrainingBase(draft),
+      ...(method && selectedRecipe ? { trainingRecipes: { [method]: selectedRecipe } } : {}),
       ...(datasetInputsDirty ? { datasetRef: undefined } : {}), ...(benchmarkDefinition ? { benchmarkDefinition } : {}) },
   };
 }

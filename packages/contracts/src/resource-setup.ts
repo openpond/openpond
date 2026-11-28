@@ -23,6 +23,19 @@ const datasetExample = z.object({
   prompt: z.string().max(2_000),
   expected: z.string().max(2_000),
 }).strict();
+export const LocalTrainingModelBaseSchema = z.object({
+  label: z.string().trim().min(1).max(240),
+  sizeBytes: z.number().int().positive().safe(),
+  preference: ModelProjectBaseModelSchema.extend({
+    source: z.literal("local"),
+    modelAssetId: artifactHash,
+    revision: artifactHash,
+    tokenizerRevision: artifactHash,
+    chatTemplateHash: artifactHash,
+  }),
+}).strict();
+export type LocalTrainingModelBase = z.infer<typeof LocalTrainingModelBaseSchema>;
+
 const valuesSchema = z.object({
   name: fieldText,
   objective: fieldText,
@@ -67,6 +80,7 @@ export const ResourceSetupDraftSchema = z.object({
   }).optional(),
   localCandidate: localModelRef.optional(),
   localBaseline: localModelRef.optional(),
+  localTrainingBase: LocalTrainingModelBaseSchema.optional(),
   datasetExamples: datasetExample.array().max(50).optional(),
   datasetInputsDirty: z.boolean().optional(),
   trainingRecipes: z.object({

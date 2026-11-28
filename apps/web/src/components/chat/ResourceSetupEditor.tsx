@@ -27,6 +27,7 @@ import { DatasetSetupReview } from "./DatasetSetupReview";
 import { GraderSetupReview } from "./GraderSetupReview";
 import { ModelSetupTrainingFields } from "./ModelSetupTrainingFields";
 import { ModelSetupManagedReview } from "./ModelSetupManagedReview";
+import { ModelSetupLocalBase } from "./ModelSetupLocalBase";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
 import "./resource-setup-editor.css";
 
@@ -96,6 +97,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     version.versionHash === selectedVersion.versionHash && context.selection?.target.sessionId === sessionId;
   const managedReview = Boolean(workspace?.teamId && workspace.actorId && connection && sessionId &&
     resourceSetupTrainingMethod(draft) && draft.values.destination === "OpenPond Managed");
+  const localBase = draft.kind === "model" && draft.values.destination !== "OpenPond Managed" ? draft.localTrainingBase : undefined;
   const [configureOpen, setConfigureOpen] = useState(false);
   const [field, setField] = useState<PromptField>("name");
   const [authoringBusy, setAuthoringBusy] = useState(false);
@@ -130,6 +132,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       ...draft,
       revision: draft.revision + 1,
       ...(key === "candidate" ? { candidateRef: undefined } : {}),
+      ...(key === "baseModel" && draft.values.destination !== "OpenPond Managed" ? { localTrainingBase: undefined } : {}),
       ...(leavingLocal ? { localCandidate: undefined, localBaseline: undefined } : {}),
       ...(sourceChanged ? { datasetRef: undefined, datasetExamples: undefined } : {}),
       ...(datasetEdited ? { datasetInputsDirty: true } : {}),
@@ -208,7 +211,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       {sentence()}
       {benchmarkPresets}
       {trainingMethod && <ModelSetupTrainingFields key={trainingMethod} draft={draft} method={trainingMethod}
-        baseModel={visibleDraft.managedTrainingInputs?.base?.preference} disabled={busy} onChange={onChange} />}
+        baseModel={visibleDraft.managedTrainingInputs?.base?.preference ?? localBase?.preference} disabled={busy} onChange={onChange} />}
       {activePart ? <div className="resource-setup-fields" key={field}>
         {activeFields.map((key, index) => {
           const options = fieldOptions(key);
@@ -216,6 +219,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           if (version && ["candidate", "baseline", "dataset", "datasetRevision", "grader", "destination"].includes(key)) return null;
           if (draft.kind === "grader" && draft.values.graderType === "Exact answer" && key === "cases") return null;
           if (managedReview && key === "baseModel") return null;
+          if (localBase && key === "baseModel") return null;
           if (draft.kind === "dataset" && (key === "fields" && draft.values.source === "Import a local file"
             || field === "preview" && draft.values.source === "Use an existing dataset")) return null;
           if (key === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") {
@@ -277,6 +281,15 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           </label>;
         })}
       </div> : null}
+      {field === "baseModel" && draft.kind === "model" && draft.values.destination !== "OpenPond Managed" && connection ? (
+        <div className="resource-setup-fields">
+          <ModelSetupLocalBase connection={connection} selected={localBase} busy={busy} onBusy={setAuthoringBusy}
+            onSelect={base => onChange(draft, {
+              ...draft, revision: draft.revision + 1, localTrainingBase: base,
+              values: { ...draft.values, baseModel: base ? undefined : draft.values.baseModel },
+            })} />
+        </div>
+      ) : null}
       {version?.location === "local" && <p>This saved artifact needs an exact-version inference runtime. A generic local endpoint cannot verify which artifact is loaded.</p>}
       {version?.location === "cloud" && <button type="button" className="training-button secondary"
         disabled={busy || context.selecting || workspace?.teamId !== version.teamId || !openableVersion}

@@ -180,6 +180,12 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
       profileId: requiredString(input.profileId, "profileId"), request: input.request });
     if (action === "navigation") return deps.store.readTrainingNavigation(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "local_compute") return (await import("./local-training-compute.js")).inspectLocalTrainingCompute(deps.storeDir);
+    if (action === "list_local_training_models" || action === "import_local_training_model" || action === "verify_local_training_model") {
+      const assets = (await import("./local-training-model-assets.js")).localTrainingModelAssets(deps.storeDir);
+      if (action === "list_local_training_models") return assets.list();
+      if (action === "import_local_training_model") return assets.import(requiredString(input.directory, "directory"), signal);
+      return (await assets.verify(requiredString(input.assetId, "assetId"), signal)).base;
+    }
     if (action === "state") {
       const profileId = string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default";
       const projection = requestUrl?.searchParams.get("projection") ?? "full";
