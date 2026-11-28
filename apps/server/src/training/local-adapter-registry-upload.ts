@@ -49,7 +49,7 @@ export async function uploadLocalAdapterToRegistry(input: {
       const signed = new Set(url.searchParams.get("X-Amz-SignedHeaders")?.split(";"));
       if (url.protocol !== "https:" || url.username || url.password || url.hash ||
         url.searchParams.get("X-Amz-Algorithm") !== "AWS4-HMAC-SHA256" || !hash.safeParse(url.searchParams.get("X-Amz-Signature")).success ||
-        [...headers.keys()].length !== Object.keys(expected).length ||
+        Object.keys(capability.headers).length !== Object.keys(expected).length ||
         !signed.has("host") || !signed.has("content-length") ||
         !Object.entries(expected).every(([name, value]) => headers.get(name) === value && (name === "content-type" || signed.has(name))))
         throw new Error("The registry returned an upload capability that does not match the reviewed file.");

@@ -78,7 +78,7 @@ export function createLocalSftBenchmarkInference(store: SqliteStore, home: strin
         const result = await runLocalTrainingPython(home, localSftBenchmarkWorker, {
           timeout: requestTimeoutMs, signal: request.signal, input: {
             adapterDirectory: files.adapterDirectory, modelDirectory: files.modelDirectory, files: files.files,
-            chatTemplateHash: files.chatTemplateHash, messages: messages.data, device,
+            baseSizeBytes: files.baseSizeBytes, chatTemplateHash: files.chatTemplateHash, messages: messages.data, device,
             deviceLock: path.join(root, device === "cuda" ? "device.lock" : "cpu-inference.lock"), maxOutputTokens: request.maxTokens },
         }).then(value => resultSchema.parse(value)).catch(error => {
           request.signal?.throwIfAborted();
