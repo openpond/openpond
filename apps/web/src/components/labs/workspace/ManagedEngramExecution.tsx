@@ -62,12 +62,12 @@ export function ManagedEngramExecution({ owner, api, onOpenBilling = null, billi
       {retained && !("action" in retained.command) ? (
         <EvaluationCard title="Original preparation">
           <p>
-            {retained.command.name} · {retained.command.method} · {modificationSpendLabel(retained.command.maximumSpendUsd)}
+            {retained.command.name}, {retained.command.method}, {modificationSpendLabel(retained.command.maximumSpendUsd)}
           </p>
           <p>
-            {retained.command.request.training.maxSteps} training steps ·{" "}
-            batch {retained.command.request.data.batch.id} ·{" "}
-            {retained.command.request.model.modelId} · {retained.command.request.model.revision}
+            {retained.command.request.training.maxSteps} training steps,{" "}
+            batch {retained.command.request.data.batch.id},{" "}
+            {retained.command.request.model.modelId}, {retained.command.request.model.revision}
           </p>
         </EvaluationCard>
       ) : null}
@@ -168,12 +168,12 @@ export function ManagedEngramExecution({ owner, api, onOpenBilling = null, billi
             <dt>Training steps</dt>
             <dd>{review.value.request.training.maxSteps}</dd>
             <dt>Reviewed batch</dt>
-            <dd>{review.value.request.data.batch.id} · release {review.value.request.data.batch.revision}</dd>
+            <dd>{review.value.request.data.batch.id}, release {review.value.request.data.batch.revision}</dd>
             <dt>Maximum duration</dt>
             <dd>{review.value.request.training.maxDurationSeconds} seconds</dd>
             <dt>Model</dt>
             <dd>
-              {review.value.request.model.modelId} · {review.value.request.model.revision}
+              {review.value.request.model.modelId}, {review.value.request.model.revision}
             </dd>
             <dt>Plan</dt>
             <dd className="saved-model-version-reference">{review.value.plan.contentHash}</dd>

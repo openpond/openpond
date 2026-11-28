@@ -31,7 +31,7 @@ function ReviewExamples({ client, sourceId, onReview }: { client: OpenPondLearni
   return <div>
     <LearningError error={evidence.error} />
     {evidence.loading ? <p role="status">Loading examples…</p> : null}
-    <ul>{evidence.page?.items.map((entry) => <li key={entry.id}><button type="button" className="labs-version-row-button" onClick={() => onReview(entry.id)}>{entry.submission.exampleId} · {entry.submission.split}</button></li>)}</ul>
+    <ul>{evidence.page?.items.map((entry) => <li key={entry.id}><button type="button" className="labs-version-row-button" onClick={() => onReview(entry.id)}>{entry.submission.exampleId}, {entry.submission.split}</button></li>)}</ul>
     <LearningPager after={after} next={evidence.page?.nextCursor} onPage={setAfter} />
   </div>;
 }

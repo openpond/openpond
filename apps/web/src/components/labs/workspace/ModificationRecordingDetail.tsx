@@ -22,7 +22,7 @@ export function ModificationRecordingDetail({ api, id }: { api: WorkspaceApi; id
         <p>Retained on this device. Integrity and capture coverage are verified; measurements were supplied by an external runtime. This is ungraded evidence.</p>
         <dl className="evaluation-workspace-meta"><dt>Method</dt><dd>{experimentOperationLabel(value.recording.method)}</dd>
           <dt>Model</dt><dd>{request.model.modelId}</dd><dt>Revision</dt><dd>{request.model.revision}</dd>
-          <dt>Reported runtime</dt><dd>{result.runtime.implementation} · {result.runtime.device}</dd>
+          <dt>Reported runtime</dt><dd>{result.runtime.implementation}, {result.runtime.device}</dd>
           <dt>Captured values</dt><dd>{result.captures.length * 2}</dd><dt>Recorded</dt><dd>{value.recording.createdAt}</dd></dl>
       </EvaluationCard>
       <ActivationCaptureResult request={request} result={result} />

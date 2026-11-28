@@ -125,7 +125,7 @@ export function openPondOrganizationRoleLabel(role: OpenPondOrganizationRole | n
 
 export function openPondOrganizationContextLabel(organization: OpenPondOrganization | null | undefined): string | null {
   if (!organization) return null;
-  return `${organization.displayName} · ${openPondOrganizationRoleLabel(organization.role)}`;
+  return `${organization.displayName}, ${openPondOrganizationRoleLabel(organization.role)}`;
 }
 
 export function canManageOpenPondOrganization(organization: OpenPondOrganization | null | undefined): boolean {

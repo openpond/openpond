@@ -180,7 +180,7 @@ export function HostedModelLearning({
             }}
             options={value.policies.items.map((item) => ({
               value: item.id,
-              label: `${item.id} · ${item.enabled ? "Enabled" : "Paused"}`,
+              label: `${item.id}, ${item.enabled ? "Enabled" : "Paused"}`,
             }))}
           />
         </label>
@@ -188,7 +188,7 @@ export function HostedModelLearning({
       {policy ? (
         <>
           <p>
-            {policy.enabled ? "Enabled" : "Paused"} ·{" "}
+            {policy.enabled ? "Enabled" : "Paused"},{" "}
             {policy.admission.mode === "human"
               ? "Human review required"
               : "Qualified automatic admission"}
@@ -209,7 +209,7 @@ export function HostedModelLearning({
             {policy.trigger.kind === "schedule"
               ? `Checks every ${policy.trigger.intervalSeconds / 60} minutes`
               : policy.trigger.kind === "nightly"
-                ? `Checks at ${policy.trigger.localTime} · ${policy.trigger.timeZone}`
+                ? `Checks at ${policy.trigger.localTime}, ${policy.trigger.timeZone}`
                 : policy.trigger.kind === "approved_count"
                   ? "Checks as approved tasks arrive"
                   : "Manual training"}
@@ -226,13 +226,13 @@ export function HostedModelLearning({
                     : undefined,
                 )}
               </time>
-              {policy.trigger.kind === "nightly" ? ` · ${policy.trigger.timeZone}` : ""}
+              {policy.trigger.kind === "nightly" ? `, ${policy.trigger.timeZone}` : ""}
             </p>
           ) : !policy.enabled ? (
             <p>Future cycles paused.</p>
           ) : null}
           <p>
-            Policy revision {policy.revision} · {policy.training.method.toUpperCase()} · grader
+            Policy revision {policy.revision}, {policy.training.method.toUpperCase()}, grader
             binding {policy.rewardBinding.id}, revision {policy.rewardBinding.revision}.
           </p>
           <p>
@@ -259,7 +259,7 @@ export function HostedModelLearning({
           {value?.iteration ? (
             <p>
               Latest iteration:{" "}
-              {waiting ? "Waiting to train" : value.iteration.status.replaceAll("_", " ")} ·{" "}
+              {waiting ? "Waiting to train" : value.iteration.status.replaceAll("_", " ")},{" "}
               {value.iteration.id}
             </p>
           ) : null}
@@ -281,9 +281,9 @@ export function HostedModelLearning({
           ) : null}
           {value?.inspection ? (
             <p>
-              Reserved: ${value.inspection.budget.reservedSpendUsd.toFixed(4)} · Spent today: $
-              {value.inspection.budget.settledSpendUsd.toFixed(4)} · Per update limit: $
-              {policy.limits.maxIterationSpendUsd} · Daily limit: ${policy.limits.maxDailySpendUsd}
+              Reserved: ${value.inspection.budget.reservedSpendUsd.toFixed(4)}, Spent today: $
+              {value.inspection.budget.settledSpendUsd.toFixed(4)}, Per update limit: $
+              {policy.limits.maxIterationSpendUsd}, Daily limit: ${policy.limits.maxDailySpendUsd}
             </p>
           ) : null}
           {value?.inspection?.trainingParent ? (

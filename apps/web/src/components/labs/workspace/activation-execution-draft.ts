@@ -15,7 +15,7 @@ export function activationExecutionDraft(
     operationType: execution.method, name: execution.name,
     activationForm: form,
     startingModel: form.startingProfile
-      ? {source: "steering", label: `Saved steering Model · ${form.startingProfile.modelProjectId}`,
+      ? {source: "steering", label: `Saved steering Model, ${form.startingProfile.modelProjectId}`,
         inferenceModelId: null, baseModel: form.baseModel, steering: form.startingProfile}
       : {source: "managed", label: form.baseModel.modelId, inferenceModelId: null, baseModel: form.baseModel},
   });

@@ -121,7 +121,7 @@ export function DatasetWorkspace({
         <p>Choose an experiment, or create one from a dataset.</p>
       ) : (
         <>
-          <p className="dataset-workspace-context"><span>Dataset:</span> {dataset.name} · revision {dataset.revision}</p>
+          <p className="dataset-workspace-context"><span>Dataset:</span> {dataset.name}, revision {dataset.revision}</p>
           {currentRun ? (
             <DatasetRunProgress
               key={`progress:${resourceIdentity(currentRun)}`}

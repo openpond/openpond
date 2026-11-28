@@ -18,7 +18,7 @@ export function RewardBindingFields({ client, sources, onChange }: { client: Ope
     <details open={!sources.length}><summary>Add a published Reward</summary>
       <LearningError error={rewards.error} />
       <label>Published Reward<DropdownSelect label="Add published Reward" floating searchable value="" disabled={sources.length >= 100}
-        options={[{ value: "", label: "Choose a Reward" }, ...(rewards.page?.items ?? []).map(reward => ({ value: reward.contentHash, label: `${reward.name} · release ${reward.revision}` }))]}
+        options={[{ value: "", label: "Choose a Reward" }, ...(rewards.page?.items ?? []).map(reward => ({ value: reward.contentHash, label: `${reward.name}, release ${reward.revision}` }))]}
         onChange={value => { const reward = rewards.page?.items.find(item => item.contentHash === value); if (reward) onChange([...sources, rewardBindingSource(reward)]); }} /></label>
       {rewards.loading ? <p role="status">Loading Rewards…</p> : !rewards.page?.items.length ? <p>Publish a Reward in the Rewards library to add it here.</p> : null}
       <LearningPager after={after} next={rewards.page?.nextCursor} onPage={setAfter} />
@@ -33,7 +33,7 @@ function BoundSource({ client, source, onChange, onRemove }: { client: OpenPondL
   const reward = exact.resource;
   const patch = (change: Partial<RewardBindingSource>) => onChange({ ...source, ...change });
   return <fieldset className="learning-bound-source">
-    <legend>{reward?.name ?? source.reward.id} · release {source.reward.revision}</legend>
+    <legend>{reward?.name ?? source.reward.id}, release {source.reward.revision}</legend>
     <LearningError error={exact.error ?? mutation.error} />
     <div className="learning-binding-grid">
       <label>Role<DropdownSelect label="Reward role" floating value={source.role} onChange={value => patch({ role: value as RewardBindingSource["role"] })} options={[{ value: "training", label: "Training", disabled: reward?.implementation.kind === "human" }, { value: "evaluation", label: "Evaluation" }]} /></label>
@@ -46,6 +46,6 @@ function BoundSource({ client, source, onChange, onRemove }: { client: OpenPondL
       <label><input type="checkbox" checked={source.hardGate} onChange={(event) => patch({ hardGate: event.target.checked, ...(event.target.checked ? { required: true } : {}) })} /> Hard gate</label>
       <button type="button" className="training-button secondary" onClick={onRemove}>Remove source</button>
     </LearningActions>
-    <details><summary>Release identity</summary><small>{source.graderId} · {source.reward.contentHash}</small></details>
+    <details><summary>Release identity</summary><small>{source.graderId}, {source.reward.contentHash}</small></details>
   </fieldset>;
 }

@@ -135,7 +135,7 @@ export function ModelRunSetupContent({
                     },
                     ...tasksets.map((taskset) => ({
                       value: taskset.id,
-                      label: `${taskset.name} · r${taskset.revision} · ${
+                      label: `${taskset.name}, r${taskset.revision}, ${
                         taskset.readiness?.ready ? "ready" : "needs work"
                       }`,
                     })),

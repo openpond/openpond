@@ -75,7 +75,7 @@ export function AgentConnectionCard({
               ? native.available
                 ? native.enabled
                   ? "Ready to chat"
-                  : "Installed · chat disabled"
+                  : "Installed, chat disabled"
                 : (native.lastError ?? "Check installation")
               : "Conversation import"}
           </small>
@@ -96,7 +96,7 @@ export function AgentConnectionCard({
                     {projects.find(
                       (project) => project.id === item.projectId && item.teamId === teamId,
                     )?.content.name ?? item.projectId}{" "}
-                    · {item.admitted} tasks
+                   , {item.admitted} tasks
                   </small>
                   {item.teamId !== teamId ? <small>Team: {item.teamId}</small> : null}
                   {item.queued ? <small>{item.queued} updates queued</small> : null}
@@ -110,7 +110,7 @@ export function AgentConnectionCard({
               <small>
                 {inventory
                   ? readable
-                    ? "History available · sync not connected"
+                    ? "History available, sync not connected"
                     : "No local history found"
                   : "Reading local setup…"}
               </small>

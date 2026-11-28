@@ -86,7 +86,7 @@ export function SavedTrainingModel({
               <div>
                 <dt>Exact profile</dt>
                 <dd>
-                  {version.publication.id} · revision {version.publication.revision}
+                  {version.publication.id}, revision {version.publication.revision}
                 </dd>
               </div>
             </dl>

@@ -221,7 +221,7 @@ export function humanizeSelectedActionInput(prompt: string): string {
         ([key, value]) =>
           `${actionInputLabel(key)}: ${actionInputValue(key, value)}`,
       );
-    return parts.length ? parts.join(" · ") : prompt;
+    return parts.length ? parts.join(", ") : prompt;
   } catch {
     return prompt;
   }
@@ -247,10 +247,10 @@ function actionInputValue(key: string, value: unknown): string {
         ([nestedKey, nestedValue]) =>
           `${actionInputLabel(nestedKey)}: ${actionInputValue(nestedKey, nestedValue)}`,
       )
-      .join(" · ");
+      .join(", ");
   }
   const text = String(value);
-  if (/Id$/.test(key) && /^[a-z0-9_-]+$/i.test(text)) {
+  if (key.endsWith("Id") && /^[a-z0-9_-]+$/i.test(text)) {
     return text
       .split(/[-_]+/)
       .filter(Boolean)

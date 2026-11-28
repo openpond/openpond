@@ -23,15 +23,15 @@ export function filterAndSortChatWorkflows(
 export function recurrenceCadence(recurrence: SavedWorkRecurrence): string {
   const time = formatLocalTime(recurrence.localTime);
   if (recurrence.kind === "once") {
-    return `Once on ${recurrence.startDate} at ${time} · ${recurrence.timeZone}`;
+    return `Once on ${recurrence.startDate} at ${time}, ${recurrence.timeZone}`;
   }
-  if (recurrence.kind === "weekdays") return `Weekdays at ${time} · ${recurrence.timeZone}`;
+  if (recurrence.kind === "weekdays") return `Weekdays at ${time}, ${recurrence.timeZone}`;
   if (recurrence.kind === "weekly") {
     const days = recurrence.weekdays?.map(capitalize).join(", ") ?? "Weekly";
-    return `${days} at ${time} · ${recurrence.timeZone}`;
+    return `${days} at ${time}, ${recurrence.timeZone}`;
   }
   if (recurrence.kind === "monthly") {
-    return `Monthly on day ${recurrence.dayOfMonth ?? 1} at ${time} · ${recurrence.timeZone}`;
+    return `Monthly on day ${recurrence.dayOfMonth ?? 1} at ${time}, ${recurrence.timeZone}`;
   }
-  return `Daily at ${time} · ${recurrence.timeZone}`;
+  return `Daily at ${time}, ${recurrence.timeZone}`;
 }

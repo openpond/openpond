@@ -131,7 +131,7 @@ export function HtmlVisual({ visual, connection, expanded = false, snapshotRef }
   };
   return <div className="html-visual" ref={container} data-visual-id={visual.visualId} data-publication-id={visual.publicationId}>
     {!inlineResource ? <div className="html-visual-toolbar">
-      <span>{visual.output.title}{visual.output.revision > 1 ? ` · Revision ${visual.output.revision}` : ""}</span>
+      <span>{visual.output.title}{visual.output.revision > 1 ? `, Revision ${visual.output.revision}` : ""}</span>
       <button type="button" disabled={html === null} onClick={download} title="Download HTML" aria-label="Download HTML"><Download size={15} aria-hidden /></button>
       {!expanded && open ? <button type="button" onClick={() => open(visual)} title="Open in browser panel" aria-label="Expand visual"><Maximize2 size={15} aria-hidden /></button> : null}
     </div> : null}

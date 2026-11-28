@@ -166,8 +166,8 @@ export function LabScorerCreateDialog({
                 key={taskset.id}
                 value={taskset.id}
               >
-                {taskset.name} · revision {taskset.revision}
-                {kind === "model_judge" && !taskset.graderFixtures.length ? " · needs calibration fixtures" : ""}
+                {taskset.name}, revision {taskset.revision}
+                {kind === "model_judge" && !taskset.graderFixtures.length ? ", needs calibration fixtures" : ""}
               </option>
             ))}
           </select>

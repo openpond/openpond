@@ -341,13 +341,13 @@ export function DecisionExperimentSetupPanel({
   const batchOptions: Array<{ value: string; label: string; disabled?: boolean }> = batches.map(
     (batch) => ({
       value: canonicalJson(batch.reference),
-      label: `${batch.reference.id} · release ${batch.reference.revision} · ${batch.exampleCount} examples`,
+      label: `${batch.reference.id}, release ${batch.reference.revision}, ${batch.exampleCount} examples`,
     }),
   );
   if (batchValue && !batchOptions.some((item) => item.value === batchValue))
     batchOptions.unshift({
       value: batchValue,
-      label: `${batch!.id} · saved release ${batch!.revision}`,
+      label: `${batch!.id}, saved release ${batch!.revision}`,
       disabled: true,
     });
   const modelValue =
@@ -550,13 +550,13 @@ export function DecisionExperimentSetupPanel({
                 )}
                 {form.startingDecision ? (
                   <p>
-                    Saved Model {form.startingDecision.modelProjectId} · version{" "}
+                    Saved Model {form.startingDecision.modelProjectId}, version{" "}
                     {form.startingDecision.versionHash}
                   </p>
                 ) : null}
                 {form.parentArtifact ? (
                   <p>
-                    Continue adapter {form.parentArtifact.id} · {form.parentArtifact.contentHash}.
+                    Continue adapter {form.parentArtifact.id}, {form.parentArtifact.contentHash}.
                     Optimizer state starts fresh.
                   </p>
                 ) : null}

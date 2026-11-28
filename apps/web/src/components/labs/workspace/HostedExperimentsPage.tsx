@@ -71,7 +71,7 @@ export function HostedExperimentsPage({
       ? [
           {
             id: "experiment",
-            label: "Experiment",
+            label: "Benchmark",
             onSelect: () =>
               setup.open(
                 run
@@ -116,18 +116,18 @@ export function HostedExperimentsPage({
   return (
     <>
       <header className="evaluation-workspace-header">
-        <h1 className="sr-only">{run?.request.name ?? detail.recorded.data?.request.name ?? "Experiments"}</h1>
+        <h1 className="sr-only">{run?.request.name ?? detail.recorded.data?.request.name ?? "Benchmarks"}</h1>
         {!route.resourceId ? (
           <input
-            aria-label="Search experiments"
-            placeholder="Search experiments"
+            aria-label="Search benchmarks"
+            placeholder="Search benchmarks"
             value={route.query}
             onChange={(event) => navigate({ ...route, query: event.target.value, after: null })}
           />
         ) : null}
         {!route.resourceId || run ? (
           <button className="training-button" disabled={busy} onClick={() => select("experiment")}>
-            {run ? "Duplicate and edit" : "Run experiment"}
+            {run ? "Duplicate and edit" : "New benchmark"}
           </button>
         ) : null}
       </header>
@@ -162,7 +162,7 @@ export function HostedExperimentsPage({
           })} />
       ) : run ? (
         <>
-          <nav className="evaluation-workspace-tabs" aria-label="Experiment tabs">
+          <nav className="evaluation-workspace-tabs" aria-label="Benchmark tabs">
             {["tasks", "graders", "versions", "diagnostics", "configuration", "compare"].map((value) => (
               <button
                 key={value}
@@ -182,11 +182,10 @@ export function HostedExperimentsPage({
             />
             <EvaluationStatus status={run.summary.status} />
             <span className="evaluation-run-counts">
-              <b>{run.summary.counts.completed}</b> completed · <b>{run.summary.counts.failed}</b>{" "}
-              failed · <b>{run.summary.counts.running}</b> running ·{" "}
-              <b>{run.summary.counts.pending}</b> pending · <b>{run.summary.totalCount}</b> attempts
+              <b>{run.summary.counts.completed}</b> completed, <b>{run.summary.counts.failed}</b>{" "}
+              failed, <b>{run.summary.counts.running}</b> running,{" "}
+              <b>{run.summary.counts.pending}</b> pending, <b>{run.summary.totalCount}</b> attempts
             </span>
-            <span aria-hidden="true">·</span>
             <EvaluationTime value={run.summary.startedAt ?? run.summary.createdAt} />
             {["queued", "running", "cancelling"].includes(run.summary.status) ? (
               <button

@@ -68,7 +68,7 @@ export function PonderAgentsPanel({connection, accountScopeKey, agents, hostedAg
     <header>{selected || selectedHosted ? <button ref={backButton} type="button" aria-label="Back to agents" onClick={() => setSelection(null)}><ArrowLeft size={16}/></button> : null}
       <h2>{selectedHosted?.title ?? selected?.session.title ?? "Agents"}</h2></header>
     {selectedHosted ? <HostedAgentDetails connection={connection} accountScopeKey={accountScopeKey} assignment={selectedHosted}/> : selected ? <>
-      <div className="ponder-agent-assignment">{selected.session.metadata?.nativeWorkerCanResume === false ? <span>Controlled by its parent conversation · Read-only transcript</span> : null}{selected.owner ? <><span>{selected.owner === "user" ? "You are directing this agent" : "Pal is directing this agent"}</span>
+      <div className="ponder-agent-assignment">{selected.session.metadata?.nativeWorkerCanResume === false ? <span>Controlled by its parent conversation, Read-only transcript</span> : null}{selected.owner ? <><span>{selected.owner === "user" ? "You are directing this agent" : "Pal is directing this agent"}</span>
         <button type="button" disabled={busy} onClick={() => void control(selected, selected.owner === "ponder" ? "user" : "ponder")}>{selected.owner === "ponder" ? "Take control" : "Return to Pal"}</button></> : <button type="button" disabled={busy} onClick={() => void openChat(selected)}>{selected.session.metadata?.nativeWorkerCanResume === false ? "Open transcript" : "Open chat"}</button>}</div>
       <AgentConversation connection={connection} conversationId={selected.session.id} messages={history.messages} loading={history.loading}
         running={history.running} hasMore={history.hasMore} loadOlder={async () => (await history.loadOlder()) !== false}/>
@@ -79,7 +79,7 @@ export function PonderAgentsPanel({connection, accountScopeKey, agents, hostedAg
         <button ref={element => rememberRow(`local:${agent.session.id}`, element)} type="button" onClick={() => setSelection({kind: "local", id: agent.session.id})}><ConversationSourceIcon session={agent.session}/><span>{agent.session.title}{agent.latestActivity || agent.assignment !== agent.session.title ? <small>{agent.latestActivity ?? agent.assignment}</small> : null}</span></button>
         {agent.owner ? <button type="button" disabled={busy} onClick={() => void control(agent, agent.owner === "ponder" ? "user" : "ponder")}>{agent.owner === "ponder" ? "Take control" : "Return"}</button> : <button type="button" disabled={busy} onClick={() => void openChat(agent)}>{agent.session.metadata?.nativeWorkerCanResume === false ? "Open transcript" : "Open chat"}</button>}
       </div>)}{hostedRows.map(agent => <div className="ponder-agent-row" key={`hosted:${agent.id}`}>
-        <button ref={element => rememberRow(`hosted:${agent.id}`, element)} type="button" onClick={() => setSelection({kind: "hosted", id: agent.id})}><Cloud size={16}/><span>{agent.title}<small>{hostedLocation(agent)} · {hostedStateLabels[agent.state]}</small></span></button>
+        <button ref={element => rememberRow(`hosted:${agent.id}`, element)} type="button" onClick={() => setSelection({kind: "hosted", id: agent.id})}><Cloud size={16}/><span>{agent.title}<small>{hostedLocation(agent)}, {hostedStateLabels[agent.state]}</small></span></button>
         <button type="button" onClick={() => setSelection({kind: "hosted", id: agent.id})}>Open conversation</button>
       </div>)}</section> : null;
     }) : null}</div>}

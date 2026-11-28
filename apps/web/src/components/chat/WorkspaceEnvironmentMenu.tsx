@@ -115,9 +115,9 @@ function sandboxCostStateLabel(sandbox: SandboxRecord): string | null {
   const receipt = latestSandboxReceipt(sandbox);
   if (receipt) {
     const total = formatUsd(receipt.totalUsd);
-    if (receipt.reason === "idle_timeout") return total ? `stopped by idle timeout · charged ${total}` : "stopped by idle timeout";
-    if (receipt.reason === "budget_exhausted") return total ? `budget exhausted · charged ${total}` : "budget exhausted";
-    if (sandbox.state !== "running") return total ? `receipt ${receipt.status} · charged ${total}` : `receipt ${receipt.status}`;
+    if (receipt.reason === "idle_timeout") return total ? `stopped by idle timeout, charged ${total}` : "stopped by idle timeout";
+    if (receipt.reason === "budget_exhausted") return total ? `budget exhausted, charged ${total}` : "budget exhausted";
+    if (sandbox.state !== "running") return total ? `receipt ${receipt.status}, charged ${total}` : `receipt ${receipt.status}`;
   }
   if (sandbox.reservation.status === "reserved") {
     const reserved = formatUsd(sandbox.reservation.reservedUsd);
@@ -146,7 +146,7 @@ export function sandboxRuntimePolicyLabel(sandbox: SandboxRecord | null): string
   if (spendCap) parts.push(`cap ${spendCap}`);
   const costState = sandboxCostStateLabel(sandbox);
   if (costState) parts.push(costState);
-  return parts.join(" · ");
+  return parts.join(", ");
 }
 
 export function WorkspaceEnvironmentMenu({
@@ -1035,7 +1035,7 @@ export function WorkspaceEnvironmentMenu({
           error={agentSetupError}
           title="Sync Project"
           actionLabel="Sync Project"
-          summary={`${agentSetup.project.name} · ${agentSetup.project.sandboxManifestPath ?? OPENPOND_MANIFEST_FILE_NAME}`}
+          summary={`${agentSetup.project.name}, ${agentSetup.project.sandboxManifestPath ?? OPENPOND_MANIFEST_FILE_NAME}`}
           onClose={() => !agentSetupBusy && setAgentSetupDialog(null)}
           onSubmit={() => void submitSyncProject()}
         />

@@ -137,7 +137,7 @@ export function RightSidebarOverview({
                     <strong>{visual.output.title}</strong>
                   </button>
                   <span className="activity-artifact-actions">
-                    HTML{visual.output.revision > 1 ? ` · Revision ${visual.output.revision}` : ""}
+                    HTML{visual.output.revision > 1 ? `, Revision ${visual.output.revision}` : ""}
                   </span>
                 </div>
               ))}

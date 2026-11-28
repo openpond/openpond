@@ -56,12 +56,12 @@ export function ManagedActivationExecution({ owner, api }: { owner: Owner; api: 
       {retained && !("action" in retained.command) ? (
         <EvaluationCard title="Original preparation">
           <p>
-            {retained.command.name} · {retained.command.method} · {modificationSpendLabel(retained.command.maximumSpendUsd)}
+            {retained.command.name}, {retained.command.method}, {modificationSpendLabel(retained.command.maximumSpendUsd)}
           </p>
           <p>
-            {retained.command.request.prompts.length} prompts ·{" "}
-            {retained.command.request.variants.length} variants ·{" "}
-            {retained.command.request.model.modelId} · {retained.command.request.model.revision}
+            {retained.command.request.prompts.length} prompts,{" "}
+            {retained.command.request.variants.length} variants,{" "}
+            {retained.command.request.model.modelId}, {retained.command.request.model.revision}
           </p>
         </EvaluationCard>
       ) : null}
@@ -181,7 +181,7 @@ export function ManagedActivationExecution({ owner, api }: { owner: Owner; api: 
             <dd>{review.value.request.variants.length}</dd>
             <dt>Model</dt>
             <dd>
-              {review.value.request.model.modelId} · {review.value.request.model.revision}
+              {review.value.request.model.modelId}, {review.value.request.model.revision}
             </dd>
             <dt>Plan</dt>
             <dd className="saved-model-version-reference">{review.value.plan.contentHash}</dd>

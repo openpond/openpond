@@ -72,7 +72,7 @@ function TokenMixChart({ series }: { series: EvaluationComparisonSeries[] }) {
                 <span style={{ width: `${(item.outputTokens / total) * 100}%` }} />
               </div>
               <small>
-                {item.inputTokens.toLocaleString()} input · {item.outputTokens.toLocaleString()} output
+                {item.inputTokens.toLocaleString()} input, {item.outputTokens.toLocaleString()} output
               </small>
             </div>
           );

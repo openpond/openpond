@@ -80,7 +80,7 @@ export function LocalExperimentGrading({
           </header>
           <EvaluationCard title="Retained execution">
             <p>
-              {definition.configuration.request.name} · {execution.id}
+              {definition.configuration.request.name}, {execution.id}
             </p>
             <p>This pass grades retained output and makes no target call.</p>
           </EvaluationCard>

@@ -67,7 +67,7 @@ export function ConversationUploadPicker({ connection, connectionId, disabled, p
         options={[{ value: "all", label: "All dates" }, { value: "week", label: "Active last week" }, { value: "day", label: "Active last day" }]} />
     </div>
     <div className="conversation-upload-selection" role="status">
-      <span>{selected.size} selected{hidden ? ` · ${hidden} outside this view` : ""}{page ? ` · ${page.total} matching` : ""}</span>
+      <span>{selected.size} selected{hidden ? `, ${hidden} outside this view` : ""}{page ? `, ${page.total} matching` : ""}</span>
       <button type="button" className="settings-secondary" disabled={disabled || loading} onClick={() => setRevision(value => value + 1)}>Refresh</button>
       <button type="button" className="settings-secondary" disabled={disabled || !selected.size} onClick={() => setSelected(new Map())}>Clear selection</button>
     </div>

@@ -103,7 +103,7 @@ export function SidebarNavigation({
     <nav className="sidebar-nav" aria-label="Primary">
       {productArea !== "chat" ? (
         <>
-          {MODELS_PAGES.filter(page => productArea === "console" ? ["home", "inbox", "datasets", "graders", "experiments", "runs", "serving"].includes(page) : page !== "home" && page !== "tasksets" && page !== "evaluations").map((page) => {
+          {MODELS_PAGES.filter(page => productArea === "console" ? page === "inbox" || page === "runs" : page !== "home" && page !== "tasksets" && page !== "evaluations").map((page) => {
             const Icon = { "get-started": Boxes, home:Home, inbox: Inbox, models: Activity, datasets: Boxes, graders: Shield, experiments: CheckCircle2, tasks: Boxes, tasksets: Boxes, labeling: CheckCircle2, rewards: Shield, evaluations: CheckCircle2, runs: ChartColumnStacked, versions: GitBranch, serving: Cloud }[page];
             return (
               <button

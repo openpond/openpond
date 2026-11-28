@@ -1,36 +1,64 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { OPENPOND_ICON_URL } from "../../lib/public-assets";
-import { CircleAlert, Home, PanelsTopLeft } from "lucide-react";
+import { CircleAlert, Home, MessageCircle, type LucideIcon } from "lucide-react";
 import { useConnectionStatus } from "../../hooks/useConnectionStatus";
-import { CalendarClock, FileOutput, FolderGit2, Globe2, MessageSquare, Shapes } from "../icons";
+import { CalendarClock, FileOutput, FolderGit2, Globe2, MessageSquare, MoreHorizontal, Shapes } from "../icons";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
-import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
-import type { AppView } from "../../lib/app-models";
+import { modelsLocation, navigateDesktopRoute, navigateModelsRoute, useModelsRoute } from "../labs/lab-primary-tab-state";
 import type { ChatProvider } from "@openpond/contracts";
 import { PlanUsageControl } from "./PlanUsageControl";
 import "../../styles/sidebar/desktop-navigation.css";
 
+const resourceDestinations = [
+  { page: "home", label: "Overview", icon: null },
+  { page: "models", label: "Models", icon: "model-registry" },
+  { page: "experiments", label: "Benchmarks", icon: "evaluations" },
+  { page: "datasets", label: "Datasets", icon: "tasksets" },
+  { page: "graders", label: "Graders", icon: "graders" },
+  { page: "serving", label: "Serving", icon: "model-serving" },
+] as const;
+type ResourcePage = (typeof resourceDestinations)[number]["page"];
+type MoreDestination = { view: "scheduled" | "outputs" | "apps" | "projects" | "chat" | "community" | "team"; label: string; Icon: LucideIcon };
+const moreDestinations = [
+  { view: "scheduled", label: "Workflows", Icon: CalendarClock },
+  { view: "outputs", label: "Outputs", Icon: FileOutput },
+  { view: "apps", label: "Apps", Icon: Shapes },
+  { view: "projects", label: "Projects", Icon: FolderGit2 },
+  { view: "chat", label: "Chat", Icon: MessageCircle },
+  { view: "community", label: "Discover", Icon: Globe2 },
+] as const satisfies readonly MoreDestination[];
+const teamDestination = { view: "team", label: "Team chat", Icon: MessageSquare } as const satisfies MoreDestination;
+
 export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: SidebarProps; open: boolean; provider: ChatProvider }) {
   const [accountOpen, setAccountOpen] = useState(false);
   const connectionStatus = useConnectionStatus(sidebar.connection);
-  const destinations = [
-    { view: "chat", label: "Home", Icon: Home },
-    { view: "training", label: "Ponder", Icon: PanelsTopLeft },
-    { view: "scheduled", label: "Workflows", Icon: CalendarClock },
-    { view: "outputs", label: "Outputs", Icon: FileOutput },
-    { view: "apps", label: "Apps", Icon: Shapes },
-    { view: "projects", label: "Projects", Icon: FolderGit2 },
-  ] as const;
+  const modelsRoute = useModelsRoute();
+  const moreId = useId();
+  const morePopover = useRef<HTMLDivElement>(null);
+  const destinations = sidebar.teamChatEnabled ? [...moreDestinations, teamDestination] : moreDestinations;
+  const activeView = sidebar.productArea === "chat" ? sidebar.view : null;
 
-  async function select(view: AppView) {
+  async function selectResource(page: ResourcePage) {
     setAccountOpen(false);
-    if (sidebar.productArea === "chat" && sidebar.view === view) {
-      if (view === "chat") sidebar.setSidebarOpen(!open);
+    morePopover.current?.hidePopover();
+    const route = page === "models" ? modelsLocation() : modelsLocation(page, null, { area: "console" });
+    if (!await navigateModelsRoute(route)) return;
+    sidebar.setSectionMenuOpen(null);
+    sidebar.setView("labs");
+  }
+
+  async function selectMore(view: MoreDestination["view"]) {
+    setAccountOpen(false);
+    morePopover.current?.hidePopover();
+    if (view === "team") { sidebar.onOpenTeamChat(); return; }
+    if (view === "community") { sidebar.discoverCommunities(); return; }
+    if (activeView === view) {
+      if (view === "chat" && !open) sidebar.setSidebarOpen(true);
       return;
     }
     const route = view === "chat" ? { kind: "chat" as const, sessionId: sidebar.selectedSessionId }
-      : { kind: "view" as const, view: view as "apps" | "outputs" | "projects" | "scheduled" };
+      : { kind: "view" as const, view };
     if (!await navigateDesktopRoute(route)) return;
     sidebar.setSectionMenuOpen(null);
     sidebar.setView(view);
@@ -47,33 +75,32 @@ export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: Si
   }
 
   return <nav className="desktop-navigation-rail" aria-label="Desktop destinations">
+    <button type="button" className="desktop-rail-button desktop-rail-brand" aria-label="OpenPond Overview"
+      onClick={() => void selectResource("home")}><img src={OPENPOND_ICON_URL} alt="" /></button>
     <div className="desktop-rail-destinations">
-      <button type="button" className="desktop-rail-button desktop-rail-brand" aria-label="OpenPond" data-rail-tooltip="OpenPond"
-        onClick={() => void select("chat")}><img src={OPENPOND_ICON_URL} alt="" /></button>
-      {destinations.map(({ view, label, Icon }) => {
-        if (view === "training") return <button key={view} type="button" data-rail-tooltip={label} aria-label={label}
-          className={`desktop-rail-button desktop-training-entry${sidebar.productArea === "console" ? " active" : ""}`}
-          aria-current={sidebar.productArea === "console" ? "page" : undefined}
-          aria-expanded={sidebar.productArea === "console" && open} onClick={() => {
-            setAccountOpen(false);
-            if (sidebar.productArea === "console") sidebar.setSidebarOpen(!open);
-            else { sidebar.onProductAreaChange("console"); sidebar.setSidebarOpen(true); }
-          }}><Icon size={19} /></button>;
-        const active = sidebar.productArea === "chat" && sidebar.view === view;
-        return <button key={view} type="button" data-rail-tooltip={label} aria-label={label}
-          aria-current={active ? "page" : undefined} aria-expanded={view === "chat" ? active && open : undefined}
-          className={`desktop-rail-button${active ? " active" : ""}`}
-          onClick={() => void select(view)}><Icon size={19} /></button>;
+      {resourceDestinations.map(({ page, label, icon }) => {
+        const active = sidebar.view === "labs" && (modelsRoute?.page === page ||
+          page === "models" && Boolean(modelsRoute?.modelId) && modelsRoute?.page !== "serving");
+        return <button key={page} type="button" className="desktop-rail-destination"
+          aria-current={active ? "page" : undefined} onClick={() => void selectResource(page)}>
+          <span className="desktop-rail-destination-icon">
+            {icon ? <span aria-hidden className="desktop-rail-resource-icon" style={{ maskImage: `url("/console-icons/${icon}.svg")` }} /> : <Home size={21} aria-hidden />}
+          </span>
+          <span>{label}</span>
+        </button>;
       })}
-      {([{ view: "team", label: "Team chat", Icon: MessageSquare, onOpen: sidebar.onOpenTeamChat },
-        { view: "community", label: "Discover communities", Icon: Globe2, onOpen: sidebar.discoverCommunities }] as const).map(({ view, label, Icon, onOpen }) =>
-        <button key={view} type="button" data-rail-tooltip={label} aria-label={label}
-          className={`desktop-rail-button${sidebar.productArea === "chat" && sidebar.view === view ? " active" : ""}`}
-          aria-current={sidebar.productArea === "chat" && sidebar.view === view ? "page" : undefined}
-          onClick={() => {
-            setAccountOpen(false);
-            if (sidebar.productArea !== "chat" || sidebar.view !== view) onOpen();
-          }}><Icon size={19} /></button>)}
+      <button type="button" className="desktop-rail-destination desktop-rail-more-trigger"
+        data-active={destinations.some(({ view }) => view === activeView) || undefined}
+        popoverTarget={moreId} onClick={() => setAccountOpen(false)}>
+        <span className="desktop-rail-destination-icon"><MoreHorizontal size={21} aria-hidden /></span>
+        <span>More</span>
+      </button>
+    </div>
+    <div id={moreId} ref={morePopover} className="desktop-rail-more" popover="auto" role="group" aria-label="More destinations">
+      {destinations.map(({ view, label, Icon }) => <button type="button" key={view}
+        aria-current={activeView === view ? "page" : undefined} onClick={() => void selectMore(view)}>
+        <Icon size={16} aria-hidden /><span>{label}</span>
+      </button>)}
     </div>
     <div className="desktop-rail-account">
       {connectionStatus.error ? <button type="button" className="desktop-rail-button desktop-connection-error"

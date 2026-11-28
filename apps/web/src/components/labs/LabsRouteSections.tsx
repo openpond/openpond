@@ -1,3 +1,4 @@
+import { Fragment, useState } from "react";
 import type {
   CreateImproveRun,
   ModelRun,
@@ -224,6 +225,7 @@ export function ModelsTable({
   emptyMessage = "No Models yet.",
   onPull,
   onSelect,
+  onOpenRun,
   onUseModel,
   onConfigure,
 }: {
@@ -235,37 +237,40 @@ export function ModelsTable({
   emptyMessage?: string;
   onPull: (item: HostedModelProjectCatalog["projects"][number]) => void;
   onSelect: (key: string) => void;
+  onOpenRun: (modelId: string, runKey: string) => void;
   onUseModel: (modelId: string) => void;
   onConfigure: (modelId: string) => void;
 }) {
-  if (loading) {
-    return (
-      <div className="labs-table-empty">
-        <Loader2 className="spin" size={16} /> Loading Models…
-      </div>
-    );
-  }
-  if (!rows.length) {
-    return <div className="labs-table-empty">{emptyMessage}</div>;
-  }
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const localProjects = new Map(state?.modelProjects.map(project => [project.id, project]));
   return (
     <div className="training-table-wrap">
       <table className="training-data-table labs-models-table">
         <thead>
           <tr>
-            <th>Model</th>
-            <th>Availability</th>
-            <th>Recent run</th>
-            <th>Updated</th>
-            <th>
+            <th scope="col">Model</th>
+            <th scope="col">Starting model</th>
+            <th scope="col">Workflow</th>
+            <th scope="col">Adapter</th>
+            <th scope="col">Readiness</th>
+            <th scope="col">Runs</th>
+            <th scope="col">Updated</th>
+            <th scope="col">
               <span className="sr-only">Actions</span>
             </th>
           </tr>
         </thead>
         <tbody>
+          {!rows.length ? <tr>
+            <td colSpan={8} className="labs-table-empty">
+              {loading ? <span role="status">Loading Models…</span> : emptyMessage}
+            </td>
+          </tr> : null}
           {rows.map((row) => {
             const item = row.local;
             const hosted = row.hosted;
+            const project = (item ? localProjects.get(item.id) : null) ?? hosted?.project;
+            const setup = project?.trainingSetup;
             const versions = item ? labModelVersions(item, runs, state) : [];
             const current = versions.find((version) => version.current) ?? null;
             const runEntries = item
@@ -288,80 +293,51 @@ export function ModelsTable({
               ? hosted.localState === "not_pulled" ||
                 hosted.localState === "remote_ahead"
               : false;
-            const name = item?.name ?? hosted!.project.name;
-            const description =
-              item?.description ?? hosted!.project.objective ?? "No description";
+            const name = item?.name ?? hosted?.project.name;
+            const description = item?.description ?? hosted?.project.objective;
+            const isExpanded = expanded === row.key;
             return (
+              <Fragment key={row.key}>
               <tr
-                key={row.key}
                 onClick={() => { if (!opening) onSelect(row.key); }}
               >
                 <td>
-                  {item ? (
-                    <button
-                      className="labs-workproduct-link"
-                      type="button"
-                      onClick={(event) => { event.stopPropagation(); onSelect(item.key); }}
-                    >
-                      <strong>{name}</strong>
-                      <span>{description}</span>
-                    </button>
-                  ) : (
-                    <button type="button" disabled={opening} className="labs-workproduct-link labs-hosted-project-identity" onClick={(event) => { event.stopPropagation(); onSelect(row.key); }}>
-                      <strong>{name}</strong>
-                      <span>{description}</span>
-                      <small>{opening ? "Opening…" : hosted!.project.portableProjectId}</small>
-                    </button>
-                  )}
-                </td>
-                <td>
                   <div className="labs-model-table-summary">
+                    <button type="button" disabled={opening} className="labs-workproduct-link labs-hosted-project-identity"
+                      onClick={(event) => { event.stopPropagation(); onSelect(row.key); }}>
+                      <strong>{name}</strong>
+                      {opening || description ? <span>{opening ? "Opening…" : description}</span> : null}
+                    </button>
                     {hosted ? (
                       <LabStatusBadge
                         label={hostedLocalStateLabel(hosted.localState)}
                         value={hostedLocalStateTone(hosted.localState)}
                       />
                     ) : (
-                      <LabStatusBadge
-                        label={current ? "Hosted" : "Local only"}
-                        value={current ? "ready" : "not_run"}
-                      />
+                      <LabStatusBadge label="Local" />
                     )}
-                    <span>
-                      {hosted
-                        ? hosted.project.trainingSetup.baseModel?.modelId ??
-                          hosted.project.defaultBaseModel?.modelId ??
-                          "No base model"
-                        : current
-                        ? `Release ${current.number}`
-                        : "No active release"}
-                    </span>
+                  </div>
+                </td>
+                <td>{setup?.baseModel?.modelId ?? project?.defaultBaseModel?.modelId ?? "Unspecified"}</td>
+                <td>{setup?.method?.toUpperCase() ?? "Unspecified"}</td>
+                <td>{setup?.recipe?.parameterization === "lora" ? "LoRA" : setup?.recipe?.parameterization === "full" ? "Full weights" : "Unspecified"}</td>
+                <td>
+                  <div className="labs-model-table-summary">
+                    <LabStatusBadge label={recentRun ? statusLabel(recentRunStatus) : current ? "Version ready" : "Configured"}
+                      value={recentRun ? recentRunStatus : current ? "ready" : "prepared"} />
+                    {recentRun?.lifecycleRun?.kind === "evaluation" ? <span>{recentModelRunLabel(recentRun.lifecycleRun, runEntries.length)}</span> : null}
                   </div>
                 </td>
                 <td>
-                  <div className="labs-model-table-summary">
-                    {item ? (
-                      <LabStatusBadge
-                        label={statusLabel(recentRunStatus)}
-                        value={recentRunStatus}
-                      />
-                    ) : (
-                      <LabStatusBadge
-                        label={hosted!.project.trainingSetup.method?.toUpperCase() ?? "Configured"}
-                        value="prepared"
-                      />
-                    )}
-                    <span>
-                      {item
-                        ? recentModelRunLabel(
-                            recentRun?.lifecycleRun ?? null,
-                            runEntries.length,
-                          )
-                        : `Hosted source r${hosted!.project.sourceRevision}`}
-                    </span>
-                  </div>
+                  {runEntries.length ? (
+                    <button className="training-text-button" type="button" aria-expanded={isExpanded}
+                      aria-label={`Show recent runs for ${name}`}
+                      onClick={(event) => { event.stopPropagation(); setExpanded(isExpanded ? null : row.key); }}>
+                      {runEntries.length} {runEntries.length === 1 ? "run" : "runs"}
+                    </button>
+                  ) : hosted ? "View Model" : "0 runs"}
                 </td>
-                <td>{compactUpdatedAt(row.updatedAt)}</td>
+                <td className="labs-models-updated">{compactUpdatedAt(row.updatedAt)}</td>
                 <td>
                   <div className="labs-workproduct-actions">
                     {hosted && pullable ? (
@@ -411,6 +387,23 @@ export function ModelsTable({
                   </div>
                 </td>
               </tr>
+              {isExpanded && item ? <tr className="labs-model-run-history">
+                <td colSpan={8}>
+                  <ul aria-label={`Recent runs for ${name}`}>
+                    {runEntries.slice(0, 5).map(({ key, lifecycleRun, job }) => {
+                      const status = lifecycleRun?.status ?? job?.status ?? "not_run";
+                      const label = lifecycleRun?.kind === "evaluation" ? "Benchmark run" : "Training run";
+                      return <li key={key}>
+                        <button type="button" className="training-text-button" onClick={() => onOpenRun(item.id, key)}>
+                          {label} ({compactUpdatedAt(lifecycleRun?.updatedAt ?? job?.updatedAt ?? row.updatedAt)})
+                        </button>
+                        <LabStatusBadge label={statusLabel(status)} value={status} />
+                      </li>;
+                    })}
+                  </ul>
+                </td>
+              </tr> : null}
+              </Fragment>
             );
           })}
         </tbody>
@@ -460,7 +453,7 @@ function recentModelRunLabel(run: ModelRun | null, runCount: number): string {
       : run.evaluationProgress
         ? `${titleCase(run.evaluationProgress.stage)} ${run.evaluationProgress.completedAttempts}/${run.evaluationProgress.totalAttempts}`
         : statusLabel(run.status);
-    return `${benchmark} · ${outcome}`;
+    return `${benchmark} (${outcome})`;
   }
   return `${runCount} ${runCount === 1 ? "run" : "runs"}`;
 }

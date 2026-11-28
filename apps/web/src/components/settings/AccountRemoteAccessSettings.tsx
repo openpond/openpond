@@ -171,7 +171,7 @@ export function AccountRemoteAccessSettings({
       </p>
       {status?.account && (
         <p>
-          Account: {status.account.label} · {status.team
+          Account: {status.account.label}, {status.team
             ? `Workspace: ${teamName ?? status.team.id}`
             : "Personal account"}
         </p>
@@ -181,7 +181,7 @@ export function AccountRemoteAccessSettings({
           <div>
             <strong>
               This computer
-              {status?.device?.name ? ` · ${status.device.name}` : ""}
+              {status?.device?.name ? `, ${status.device.name}` : ""}
             </strong>
             <small role="status">
               {status ? labels[status.state] : loadError ? "Unable to load" : "Checking connection…"}

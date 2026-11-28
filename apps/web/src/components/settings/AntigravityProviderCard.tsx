@@ -292,7 +292,7 @@ export function AntigravityProviderCard({ connection, providers, onChanged }: Pr
               <div role="status">
                 <p>
                   {state?.runtime.phase === "downloading"
-                    ? `Downloading Antigravity${state.runtime.totalBytes ? ` · ${Math.floor((state.runtime.downloadedBytes / state.runtime.totalBytes) * 100)}%` : "…"}`
+                    ? `Downloading Antigravity${state.runtime.totalBytes ? `, ${Math.floor((state.runtime.downloadedBytes / state.runtime.totalBytes) * 100)}%` : "…"}`
                     : state?.runtime.phase === "checking"
                       ? "Checking Google's current release…"
                       : "Verifying and installing Antigravity…"}
@@ -302,7 +302,7 @@ export function AntigravityProviderCard({ connection, providers, onChanged }: Pr
             {state?.runtime.version ? (
               <small>
                 Antigravity {state.runtime.version}
-                {state.runtime.latestVersion === state.runtime.version ? " · Up to date" : ""}
+                {state.runtime.latestVersion === state.runtime.version ? ", Up to date" : ""}
               </small>
             ) : null}
             {!state?.runtime.version || !registered || updateAvailable ? (

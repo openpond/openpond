@@ -85,7 +85,7 @@ export function DatasetStorageSettingsSection({
             {selectedStorage ? (
               <small>
                 {storageKindLabel(selectedStorage.kind)}
-                {" · "}
+                {", "}
                 {selectedStorage.freeBytes == null
                   ? "Free space unknown"
                   : `${formatBytes(selectedStorage.freeBytes)} free`}
@@ -145,11 +145,11 @@ function DatasetStorageRow({ dataset }: { dataset: DatasetCatalogItem }) {
         <strong>{dataset.name}</strong>
         <small>
           {formatNumber(dataset.rowCount)} rows
-          {" · "}
+          {", "}
           {splitSummary(dataset)}
-          {" · "}
+          {", "}
           {storedAs}
-          {" · "}
+          {", "}
           {dataset.sizeBytes == null ? "Size unavailable" : formatBytes(dataset.sizeBytes)}
         </small>
         {!dataset.available && dataset.unavailableReason ? (
@@ -174,7 +174,7 @@ function splitSummary(dataset: DatasetCatalogItem): string {
   ]
     .filter(([, count]) => Number(count) > 0)
     .map(([label, count]) => `${formatNumber(Number(count))} ${label}`)
-    .join(" · ");
+    .join(", ");
   return summary || "No split rows";
 }
 

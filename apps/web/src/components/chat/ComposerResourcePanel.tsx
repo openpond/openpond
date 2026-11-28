@@ -42,7 +42,7 @@ function DatasetRows({ resources }: {resources: Resources}) {
   const tasks = record?.record.workspace.draft.tasks ?? [];
   const pages = Math.max(1, Math.ceil(tasks.length / 5));
   return <section className="composer-dataset-rows" aria-label="Dataset rows">
-    <div className="composer-experiment-setup-heading"><strong>Dataset rows</strong><span>{record ? `${tasks.length} examples · V${record.summary.revision}` : ""}</span>
+    <div className="composer-experiment-setup-heading"><strong>Dataset rows</strong><span>{record ? `${tasks.length} examples, V${record.summary.revision}` : ""}</span>
       {pages > 1 ? <div><button type="button" disabled={page === 0} onClick={() => setPage(value => value - 1)} aria-label="Previous rows">‹</button><span>{page + 1}/{pages}</span><button type="button" disabled={page + 1 >= pages} onClick={() => setPage(value => value + 1)} aria-label="Next rows">›</button></div> : null}
     </div>
     {error ? <ErrorToast error={error} /> : !record ? <p role="status">Loading rows…</p> : <div className="composer-dataset-rows-scroll"><table><thead><tr><th>Example</th><th>Input</th></tr></thead><tbody>

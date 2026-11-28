@@ -104,7 +104,7 @@ export function RefinerProfileSettings({
                 const operation = candidate ? "activate" : "rollback";
                 return (
                   <tr key={release.contentHash}>
-                    <td><strong>{release.profile.name}</strong><small>{release.profile.id}@{release.profile.version} · {release.profile.instructions.length} instructions</small></td>
+                    <td><strong>{release.profile.name}</strong><small>{release.profile.id}@{release.profile.version}, {release.profile.instructions.length} instructions</small></td>
                     <td><code>{shortHash(release.contentHash)}</code></td>
                     <td>{formatDate(release.createdAt)}</td>
                     <td><span className="harness-status">{current ? "active" : candidate ? "draft" : "immutable"}</span></td>
@@ -138,7 +138,7 @@ export function RefinerProfileSettings({
             <thead><tr><th>Operation</th><th>Change</th><th>Release transition</th><th>Validation</th><th>Created</th></tr></thead>
             <tbody>{history.transitions.map((transition) => (
               <tr key={transition.contentHash}>
-                <td><span className="harness-status">{transition.operation}{transition.bindingChanged ? " · active" : " · draft"}</span></td>
+                <td><span className="harness-status">{transition.operation}{transition.bindingChanged ? ", active" : ", draft"}</span></td>
                 <td><strong>{transition.reason}</strong><small>{transition.authoringSkillHash ? `Skill ${shortHash(transition.authoringSkillHash)}` : transition.actor}</small></td>
                 <td><code>{shortHash(transition.previousRelease?.contentHash)} → {shortHash(transition.nextRelease.contentHash)}</code></td>
                 <td>{transition.validation.valid ? "Passed" : transition.validation.messages.join("; ")}</td>

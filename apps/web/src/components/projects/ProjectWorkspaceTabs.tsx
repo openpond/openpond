@@ -126,11 +126,11 @@ function StatusText({ status, tone }: { status: string; tone?: "success" | "erro
 
 function DeploymentRow({ deployment }: { deployment: ProjectDeploymentSummary }) {
   const { build, release } = deployment;
-  return <tr><td><strong>v{release.version}</strong></td><td><StatusText status={release.status} tone={release.status === "failed" ? "error" : release.status === "active" || release.status === "ready" ? "success" : undefined} /></td><td><code>{release.sourceCommitSha ? shortCommit(release.sourceCommitSha) : "Not available"}</code></td><td>{build ? `${build.status.replaceAll("_", " ")} · ${build.currentStage.replaceAll("_", " ")}` : "Not started"}</td><td>{deployment.creatorName ?? "Unknown"}</td><td>{formatDate(release.createdAt)}</td></tr>;
+  return <tr><td><strong>v{release.version}</strong></td><td><StatusText status={release.status} tone={release.status === "failed" ? "error" : release.status === "active" || release.status === "ready" ? "success" : undefined} /></td><td><code>{release.sourceCommitSha ? shortCommit(release.sourceCommitSha) : "Not available"}</code></td><td>{build ? `${build.status.replaceAll("_", " ")}, ${build.currentStage.replaceAll("_", " ")}` : "Not started"}</td><td>{deployment.creatorName ?? "Unknown"}</td><td>{formatDate(release.createdAt)}</td></tr>;
 }
 
 function RequestStages({ trace }: { trace: ProjectRuntimeTrace }) {
-  return <tr className="project-request-detail"><td colSpan={5}><dl>{trace.stages.map((stage, index) => <div key={`${stage.name}:${index}`}><dt>{stage.name.replaceAll("_", " ")}{stage.errorCode ? ` · ${stage.errorCode}` : ""}</dt><dd>{formatMilliseconds(stage.durationMs)}</dd></div>)}</dl>{trace.errorCode ? <p>{trace.errorCode}</p> : null}</td></tr>;
+  return <tr className="project-request-detail"><td colSpan={5}><dl>{trace.stages.map((stage, index) => <div key={`${stage.name}:${index}`}><dt>{stage.name.replaceAll("_", " ")}{stage.errorCode ? `, ${stage.errorCode}` : ""}</dt><dd>{formatMilliseconds(stage.durationMs)}</dd></div>)}</dl>{trace.errorCode ? <p>{trace.errorCode}</p> : null}</td></tr>;
 }
 
 function preferredEnvironmentId(workspace: SandboxProjectWorkspaceResponse): string | null {
@@ -149,7 +149,7 @@ function environmentLabel(metadata: Record<string, unknown>, fallback: string): 
 function databaseSummary(workspace: SandboxProjectWorkspaceResponse | null): string {
   if (!workspace?.website) return "Set up the website first";
   if (workspace.errors.database) return "Unavailable";
-  if (workspace.database?.status === "ready") return `Connected · ${workspace.database.provider}`;
+  if (workspace.database?.status === "ready") return `Connected, ${workspace.database.provider}`;
   if (workspace.database?.status === "provisioning") return "Connecting…";
   return "Not connected";
 }

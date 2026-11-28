@@ -42,7 +42,7 @@ export function SidebarThreadGroupIndicator({
   let hash = 0;
   for (const character of group.id) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;
   const style = { color: `var(--sidebar-thread-group-${(hash % 8) + 1})` } as CSSProperties;
-  const label = `${group.role === "parent" ? "Parent conversation" : "Subagent conversation"} · ${group.title}`;
+  const label = `${group.role === "parent" ? "Parent conversation" : "Subagent conversation"}, ${group.title}`;
   const Icon = inbox && group.role === "parent" ? Workflow : Bot;
   return (
     <span

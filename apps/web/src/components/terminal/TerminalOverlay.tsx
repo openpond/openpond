@@ -258,7 +258,7 @@ export const TerminalOverlay = memo(function TerminalOverlay({
                 cwd: message.cwd,
                 status: "running",
                 shell: message.shell,
-                detail: `${labelForCwd(message.cwd)} · pid ${message.pid}`,
+                detail: `${labelForCwd(message.cwd)}, pid ${message.pid}`,
                 updatedAt: Date.now(),
               }
             : tab

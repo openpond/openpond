@@ -79,10 +79,10 @@ function ImportCard({ item, status, disabled, onAction, onSchedule }: {
       <div><dt>Next sync</dt><dd>{item.nextRunAt ? dateTime(item.nextRunAt, status.timezone) : item.schedule ? "Source paused or disconnected" : "Manual only"}</dd></div>
     </dl>
     {running && run ? <div role="status" className="conversation-import-progress">
-      <span>{run.phase === "uploading" ? "Uploading conversations" : run.phase === "discovering" ? "Finding conversations" : "Reading conversations"} · {run.processed} of {run.discovered} checked</span>
+      <span>{run.phase === "uploading" ? "Uploading conversations" : run.phase === "discovering" ? "Finding conversations" : "Reading conversations"}, {run.processed} of {run.discovered} checked</span>
       {run.discovered > 0 ? <progress value={run.processed} max={run.discovered} aria-label={`${source?.name ?? item.source} import progress`} /> : <progress aria-label="Finding conversations" />}
-      <small>{run.uploaded} turns uploaded · {item.queued} updates queued</small>
-    </div> : <p>{item.admitted} turns imported · {item.queued} updates queued{run?.state === "cancelled" ? " · Last run cancelled" : ""}</p>}
+      <small>{run.uploaded} turns uploaded, {item.queued} updates queued</small>
+    </div> : <p>{item.admitted} turns imported, {item.queued} updates queued{run?.state === "cancelled" ? ", Last run cancelled" : ""}</p>}
     {item.error || run?.state === "failed" ? <p role="alert">{item.error ?? run?.error}</p> : null}
     <ConversationImportSchedule schedule={item.schedule} name={source?.name ?? item.source} disabled={disabled}
       disconnected={item.state === "disconnected" || item.selectedConversations === 0} onSave={onSchedule} />

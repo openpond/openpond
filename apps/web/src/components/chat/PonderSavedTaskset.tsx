@@ -30,7 +30,7 @@ export function PonderSavedTaskset({ taskset, tab, connection }: { connection: C
       return value;
     } });
   return <>
-    <p>{taskset.name} · Local model dataset · revision {taskset.revision} · {taskset.tasks.length} tasks</p>
+    <p>{taskset.name}, Local model dataset, revision {taskset.revision}, {taskset.tasks.length} tasks</p>
     {tab === "dataset" ? <>
       <input className="training-input" aria-label="Search model dataset tasks" placeholder="Search tasks" value={search} onChange={event => { setSearch(event.target.value); setPage(0); }} />
       <div className="training-table-wrap"><table className="training-data-table evaluation-workspace-table ponder-task-table"><thead><tr><th>Task</th><th>Input</th><th>Split</th></tr></thead><tbody>
@@ -44,7 +44,7 @@ export function PonderSavedTaskset({ taskset, tab, connection }: { connection: C
         <MarkdownCodeBlock language="json" content={JSON.stringify(grader, null, 2)} />
         <ErrorToast error={source.error}>{source.error ? <button type="button" className="training-button secondary" onClick={() => void source.refetch()}>Retry grader source</button> : null}</ErrorToast>
         {source.isFetching ? <p role="status">Loading grader source…</p> : null}
-        {source.data?.sources.filter(item => item.graderId === grader.id).map(item => <section key={item.path}><h3>{item.path}</h3><MarkdownCodeBlock language={item.language} content={item.content.slice(0, 24_000)} /><small>{item.integrity} · SHA-256 {item.sha256}{item.content.length > 24_000 ? " · Preview truncated" : ""}</small></section>)}
+        {source.data?.sources.filter(item => item.graderId === grader.id).map(item => <section key={item.path}><h3>{item.path}</h3><MarkdownCodeBlock language={item.language} content={item.content.slice(0, 24_000)} /><small>{item.integrity}, SHA-256 {item.sha256}{item.content.length > 24_000 ? ", Preview truncated" : ""}</small></section>)}
         </> : <p>No graders attached.</p>}
     </>}
   </>;

@@ -188,7 +188,7 @@ function candidateChangeSummary(
   const fileCount = diff?.filesChanged ?? candidate.git?.changedPaths.length ?? 0;
   if (!fileCount) return "The drafted Agent update is ready, but no file summary is available yet.";
   if (!diff) return `${fileCountLabel(fileCount)} drafted for this Agent. Open Files to review the changes.`;
-  return `${fileCountLabel(fileCount)} drafted · +${diff.additions} −${diff.deletions}`;
+  return `${fileCountLabel(fileCount)} drafted, +${diff.additions} −${diff.deletions}`;
 }
 
 function evalSummary(receipts: CreateImproveRun["evaluationReceipts"]): string {

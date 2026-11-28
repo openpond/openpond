@@ -110,7 +110,7 @@ function PendingReviewCard({
         <div>
           <div className="harness-history-kicker">
             <span className="harness-status harness-status-retained">review required</span>
-            <span>{review.proposal.route} · {review.proposal.edits[0]?.operation ?? "change"}</span>
+            <span>{review.proposal.route}, {review.proposal.edits[0]?.operation ?? "change"}</span>
           </div>
           <h2>{review.proposal.expectedOutcome}</h2>
         </div>
@@ -122,7 +122,7 @@ function PendingReviewCard({
         <div className="harness-edit-list">
           {review.proposal.edits.map((edit) => (
             <section className="harness-edit" key={edit.id}>
-              <div><strong>{edit.operation} · {edit.target}</strong><span>{edit.summary}</span></div>
+              <div><strong>{edit.operation}, {edit.target}</strong><span>{edit.summary}</span></div>
               {edit.content !== null ? <pre>{edit.content}</pre> : <p>File deleted.</p>}
             </section>
           ))}
@@ -187,7 +187,7 @@ function RefinerChangeDetailsDialog({
             <div className="harness-edit-list">
               {proposal.edits.map((edit) => (
                 <article className="harness-edit" key={edit.id}>
-                  <div><strong>{edit.operation} · {edit.target}</strong><span>{edit.summary}</span></div>
+                  <div><strong>{edit.operation}, {edit.target}</strong><span>{edit.summary}</span></div>
                   {edit.content !== null ? <pre>{edit.content}</pre> : <p>File deleted.</p>}
                 </article>
               ))}
@@ -381,7 +381,7 @@ function ContentsPage({ history, onOpenCurrentRelease }: { history: HarnessHisto
           {history.memories.length ? history.memories.map((entry) => (
             <details className="harness-disclosure-row" key={`${entry.id}:${entry.revision}`}>
               <summary><span className="harness-status">Memory</span><strong>{entry.key}</strong><small>revision {entry.revision}</small><time>{formatDate(entry.updatedAt)}</time></summary>
-              <div className="harness-disclosure-body"><p>{entry.content}</p>{entry.tags.length ? <small>{entry.tags.join(" · ")}</small> : null}</div>
+              <div className="harness-disclosure-body"><p>{entry.content}</p>{entry.tags.length ? <small>{entry.tags.join(", ")}</small> : null}</div>
             </details>
           )) : <div className="harness-empty compact">No Harness memory has been saved.</div>}
         </div>

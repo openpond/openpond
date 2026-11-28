@@ -127,12 +127,12 @@ export function AgentConversationSetup({
               ? (projects.find((project) => project.id === item.projectId)
                   ?.content.name ?? item.projectId)
               : item.projectId}{" "}
-            · Team: {item.teamId}
+           , Team: {item.teamId}
           </span>
           <small>{item.accountBaseUrl ?? "Hosted destination"}</small>
           <small className="agent-source-path">{item.sourceRoot}</small>
           <span>
-            {item.admitted} tasks imported · {item.queued} updates queued
+            {item.admitted} tasks imported, {item.queued} updates queued
           </span>
           <small>{item.selectedConversations === null ? "All history approved for sync" : `${item.selectedConversations} conversations approved for sync`}</small>
           {item.backfill.total > 0 && item.backfill.stage !== "complete" ? (

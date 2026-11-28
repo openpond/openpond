@@ -217,7 +217,7 @@ export function TasksetDraftEditor({
           />
           <small>
             Draft revision {draft.revision}
-            {notice ? ` · ${notice}` : ""}
+            {notice ? `, ${notice}` : ""}
           </small>
           {workspace ? (
             <small className="taskset-draft-workspace" title={workspace.workspacePath}>

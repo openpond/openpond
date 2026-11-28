@@ -167,7 +167,7 @@ export function CreateAgentDialog({
         <span>Agent name</span>
         <input value={agentName} onChange={(event) => setAgentName(event.target.value)} disabled={busy} />
       </label>
-      <div className="agent-setup-summary">Entire manifest · Manual trigger · Package defaults</div>
+      <div className="agent-setup-summary">Entire manifest, Manual trigger, Package defaults</div>
       <label className="agent-setup-check">
         <input type="checkbox" checked={createTestRun} onChange={(event) => setCreateTestRun(event.target.checked)} disabled={busy} />
         <span>Create and test run</span>

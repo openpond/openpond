@@ -55,7 +55,7 @@ export function useLabAgentAuthoring(input: {
       modelRef,
       systemKind: "openpond.lab",
       hiddenFromDefaultSidebar: true,
-      title: `${request.operation === "create" ? "New" : "Improve"} Agent · ${request.objective.slice(0, 80)}`,
+      title: `${request.operation === "create" ? "New" : "Improve"} Agent, ${request.objective.slice(0, 80)}`,
       cwd: profile.repoPath,
       metadata: {
         source: request.operation === "create"

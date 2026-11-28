@@ -57,8 +57,8 @@ export function HarnessRefinerReceipt({
                 {activity.evidenceBasis.supportingEvidenceIds.length} supporting item
                 {activity.evidenceBasis.supportingEvidenceIds.length === 1 ? "" : "s"}
                 {activity.evidenceBasis.counterevidence.length
-                  ? ` · ${activity.evidenceBasis.counterevidence.length} counterexample${activity.evidenceBasis.counterevidence.length === 1 ? "" : "s"}`
-                  : " · no material counterevidence"}
+                  ? `, ${activity.evidenceBasis.counterevidence.length} counterexample${activity.evidenceBasis.counterevidence.length === 1 ? "" : "s"}`
+                  : ", no material counterevidence"}
               </small>
             </section>
           ) : null}
@@ -82,7 +82,7 @@ export function HarnessRefinerReceipt({
               </summary>
               {activity.edits.map((edit) => (
                 <section key={edit.id}>
-                  <strong>{edit.operation} · {edit.target}</strong>
+                  <strong>{edit.operation}, {edit.target}</strong>
                   <p>{edit.summary}</p>
                   {edit.content === null ? <small>File deleted.</small> : <pre>{edit.content}</pre>}
                 </section>

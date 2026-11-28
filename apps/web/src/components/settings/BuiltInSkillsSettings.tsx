@@ -83,7 +83,7 @@ export function BuiltInSkillsSettings({
                 <td>{skill.description}</td>
                 <td>
                   {skill.enabled && skill.validationStatus === "valid"
-                    ? "Ready · Built in"
+                    ? "Ready, Built in"
                     : "Needs repair"}
                 </td>
                 <td>

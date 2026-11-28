@@ -143,7 +143,6 @@ export function PostTrainingSeries({
           </div>
           <div className="get-started-course-meta">
             <span>Learning series</span>
-            <span aria-hidden="true">·</span>
             <span>{POST_TRAINING_SERIES_DURATION}</span>
           </div>
           <p>Rewards, GRPO, RLVR, distillation, experiments, and a technical appendix.</p>

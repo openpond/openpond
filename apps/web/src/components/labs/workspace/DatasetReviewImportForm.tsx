@@ -140,7 +140,7 @@ export function DatasetReviewImportForm({
       {mutation.receipt ? (
         <EvaluationCard title="Imported for review">
           <p role="status">
-            {mutation.receipt.evidence.length} examples copied · {mutation.receipt.proposals.length}{" "}
+            {mutation.receipt.evidence.length} examples copied, {mutation.receipt.proposals.length}{" "}
             target proposals.
           </p>
           <p>Grade and review the new evidence before sealing a training batch.</p>
@@ -162,12 +162,12 @@ export function DatasetReviewImportForm({
                 {
                   value: "dataset",
                   label: source.rewardBinding
-                    ? `${source.definition.name ?? "Dataset"} · Dataset format`
+                    ? `${source.definition.name ?? "Dataset"}, Dataset format`
                     : "Choose a task format",
                 },
                 ...choices.map((item) => ({
                   value: item.contentHash,
-                  label: `${item.name} · release ${item.revision}`,
+                  label: `${item.name}, release ${item.revision}`,
                 })),
               ]}
               onChange={chooseFormat}

@@ -74,7 +74,6 @@ export function LearningVideoCard({
           <Title id={titleId}>{video.title}</Title>
           <div className="get-started-course-meta" aria-label={`${video.title} details`}>
             <span>{video.eyebrow}</span>
-            <span aria-hidden="true">·</span>
             <span>{video.duration}</span>
           </div>
           {video.description ? <p>{video.description}</p> : null}
@@ -136,7 +135,7 @@ export function LearningVideoPlayer({
             {navigation
               ? `Lesson ${navigation.currentIndex + 1} of ${navigation.total}`
               : video.eyebrow}
-            {" · "}
+            {", "}
             {video.duration}
           </span>
         </div>

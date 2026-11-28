@@ -59,7 +59,7 @@ export function DatasetSetupGraders({
                     )
                   }
                 />{" "}
-                {grader.name ?? "Grader name unavailable"} · Version{" "}
+                {grader.name ?? "Grader name unavailable"}, Version{" "}
                 {grader.release?.revision ?? grader.version}
               </label>
               {grader.release && onOpenGrader ? (
@@ -80,7 +80,7 @@ export function DatasetSetupGraders({
             </p>
             <p>
               {grader.release
-                ? `${grader.release.id} · Revision ${grader.release.revision}`
+                ? `${grader.release.id}, Revision ${grader.release.revision}`
                 : "Dataset-owned grader"}
             </p>
             <code>{grader.release?.contentHash ?? grader.contentHash}</code>

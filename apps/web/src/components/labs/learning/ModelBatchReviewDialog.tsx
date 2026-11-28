@@ -68,12 +68,12 @@ export function ModelBatchReviewDialog({ model, value, client, onSave, onClose, 
       <label>Task name<input value={name} disabled={busy} onChange={event => setName(event.target.value)} /></label>
       <label>Instructions<textarea value={instructions} disabled={busy} onChange={event => setInstructions(event.target.value)} /></label>
       <label>Reward<select disabled={busy} value={binding?.contentHash ?? ""} onChange={event => setBinding(choices.find(item => item.contentHash === event.target.value) ?? null)}>
-        <option value="">Current batch Reward</option>{choices.map(item => <option key={item.contentHash} value={item.contentHash}>{item.name ?? item.id} · revision {item.revision}</option>)}
+        <option value="">Current batch Reward</option>{choices.map(item => <option key={item.contentHash} value={item.contentHash}>{item.name ?? item.id}, revision {item.revision}</option>)}
       </select></label>
       <LearningPager after={after} next={bindings.page?.nextCursor} onPage={setAfter} />
       <details><summary>Task format</summary><LearningJsonField label="Input schema" value={inputSchema} onChange={setInputSchema} disabled={busy} /><LearningJsonField label="Output schema" value={outputSchema} onChange={setOutputSchema} disabled={busy} /></details>
       <label>Example<select value={selected} disabled={busy} onChange={event => setSelected(event.target.value)}>{resources.evidence.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.submission.exampleId}</option>)}</select></label>
-      <p>{evidence.submission.split} · {evidence.submission.familyKey}. The recorded response remains in its original provenance.</p>
+      <p>{evidence.submission.split}, {evidence.submission.familyKey}. The recorded response remains in its original provenance.</p>
       <LearningJsonField label="Task input" value={fields.input} onChange={value => change("input", value)} disabled={busy} />
       <LearningJsonField label="Proposed target" hint="Use null for no supervised target. Every target requires a new grade and approval." value={fields.proposedTarget} onChange={value => change("proposedTarget", value)} disabled={busy} />
       <details><summary>Evaluator-only answers and context</summary><LearningJsonField label="Expected answer" value={fields.expected} onChange={value => change("expected", value)} disabled={busy} /><LearningJsonField label="Private context" value={fields.evaluatorContext} onChange={value => change("evaluatorContext", value)} disabled={busy} /></details>

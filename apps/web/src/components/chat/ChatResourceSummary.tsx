@@ -123,8 +123,8 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
     action("HTML charts",async()=>{await chatResourceRequest(connection!,"experiment",{action:"charts",context,payload:{ids:[current.id],operationId:chartOperationId}});},!context);
   }
   const metric=current.score == null ? "" : `${Number((current.score*100).toFixed(1))}%`;
-  const summary=current.kind === "dataset" ? `${current.taskCount ?? 0} example${current.taskCount === 1 ? "" : "s"} · ${current.graderCount ?? 0} grader${current.graderCount === 1 ? "" : "s"}`
-    : `${current.evaluatedCount ?? 0}/${current.taskCount ?? 0} graded${metric ? ` · ${metric}` : ""}`;
+  const summary=current.kind === "dataset" ? `${current.taskCount ?? 0} example${current.taskCount === 1 ? "" : "s"}, ${current.graderCount ?? 0} grader${current.graderCount === 1 ? "" : "s"}`
+    : `${current.evaluatedCount ?? 0}/${current.taskCount ?? 0} graded${metric ? `, ${metric}` : ""}`;
   return <section className={`chat-resource-summary ${expanded ? "" : "compact"}`} aria-label={`${current.kind}: ${current.name}`}>
     <ChatResourceToolbar name={current.name} version={current.revision} summary={summary} primary={primary} actions={actions}>
       <dl>

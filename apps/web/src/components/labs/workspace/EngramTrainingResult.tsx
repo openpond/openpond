@@ -27,7 +27,7 @@ export function EngramTrainingResult({result}: {result: Result}) {
         <dt>Artifact</dt><dd>{artifact.id}</dd>
         <dt>Manifest</dt><dd className="saved-model-version-reference">{artifact.contentHash}</dd>
         <dt>Runtime</dt><dd className="saved-model-version-reference">{manifest.pins.runtimeHash}</dd>
-        <dt>Reviewed batch</dt><dd>{manifest.pins.data.batch.id} · release {manifest.pins.data.batch.revision}</dd>
+        <dt>Reviewed batch</dt><dd>{manifest.pins.data.batch.id}, release {manifest.pins.data.batch.revision}</dd>
         <dt>Parent adapter</dt><dd className="saved-model-version-reference">{manifest.pins.parentArtifactHash ?? "Fresh adapter"}</dd>
       </dl>
       <details><summary>Committed module files</summary>

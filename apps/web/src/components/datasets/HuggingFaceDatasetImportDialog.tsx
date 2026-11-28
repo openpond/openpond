@@ -379,7 +379,7 @@ function DatasetInspectionSummary({
       <p>
         {inspection.splits.map((split) =>
           `${split.configuration}/${split.split}: ${split.rowCount?.toLocaleString() ?? "unknown"} rows`,
-        ).join(" · ")}
+        ).join(", ")}
       </p>
     </div>
   );

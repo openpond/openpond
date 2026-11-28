@@ -159,15 +159,15 @@ function localProfileAgentAction(
 
 function localProfileAgentDescription(profile: ProfileState): string {
   if (!profile.git?.head) {
-    return "My Agent · Commit the profile before publishing to this Team";
+    return "My Agent, Commit the profile before publishing to this Team";
   }
   if (profile.git.dirty) {
-    return "My Agent · Commit profile changes before publishing to this Team";
+    return "My Agent, Commit profile changes before publishing to this Team";
   }
   if (profile.setupGate.blockingCount > 0) {
-    return "My Agent · Complete required setup before publishing to this Team";
+    return "My Agent, Complete required setup before publishing to this Team";
   }
-  return "My Agent · Publishes to this Team on first use";
+  return "My Agent, Publishes to this Team on first use";
 }
 
 function normalizedAgentName(value: unknown): string {

@@ -38,7 +38,7 @@ export function LabTasksetGraders({ taskset, training }: {
               <td>{grader.kind.replaceAll("_", " ")}</td>
               <td>{grader.version}</td>
               <td>{grader.weight}</td>
-              <td>{[grader.rewardEligible ? "Reward" : null, grader.hardGate ? "Hard gate" : null, grader.privileged ? "Privileged" : null].filter(Boolean).join(" · ") || "Evaluation"}</td>
+              <td>{[grader.rewardEligible ? "Reward" : null, grader.hardGate ? "Hard gate" : null, grader.privileged ? "Privileged" : null].filter(Boolean).join(", ") || "Evaluation"}</td>
             </tr>
           ))}</tbody>
         </table>

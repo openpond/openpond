@@ -262,8 +262,8 @@ function EvaluationDetail({
           <ArrowLeft size={15} />
         </button>
         <div>
-          <h1>{isModelComparison ? `Model comparison · ${evaluationTargetLabel(run)}` : run.evaluation?.benchmarkId ?? "Evaluation"}</h1>
-          <p>{tasksetName} · {version ? `Version ${version.version}` : evaluationTargetLabel(run)}</p>
+          <h1>{isModelComparison ? `Model comparison, ${evaluationTargetLabel(run)}` : run.evaluation?.benchmarkId ?? "Evaluation"}</h1>
+          <p>{tasksetName}, {version ? `Version ${version.version}` : evaluationTargetLabel(run)}</p>
         </div>
         <LabStatusBadge label={statusLabel(run.status)} value={run.status} />
       </div>

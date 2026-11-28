@@ -35,7 +35,7 @@ export function UrlModelConnections({ connection, onChanged }: { connection: Cli
     <div className="provider-connections-intro"><div><h2>Models from URL</h2><p>Connect a model endpoint and select it in your chats. </p></div><button type="button" className="settings-primary" disabled={!connection} onClick={() => setOpen(true)}>Add model</button></div>
     {error ? <ErrorToast error={error}><button type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></ErrorToast> : null}
     <div className="provider-connections-grid">{models.map((model) => <div className="provider-connection-card" key={model.id}>
-      <strong>{model.name}</strong><p className="url-model-endpoint">{model.endpoint}</p><p>{model.providerName} · {model.model} · {model.hasToken ? "Key saved securely" : "No API key"}</p>
+      <strong>{model.name}</strong><p className="url-model-endpoint">{model.endpoint}</p><p>{model.providerName}, {model.model}, {model.hasToken ? "Key saved securely" : "No API key"}</p>
       <button type="button" className="settings-secondary" disabled={Boolean(removing)} onClick={() => void remove(model)}>{removing === model.id ? "Removing…" : "Remove model"}</button>
     </div>)}</div>
     {open && connection ? <AddUrlModelDialog providerNames={[...new Set(models.map((model) => model.providerName))]} connection={connection} onClose={() => setOpen(false)} onSaved={async (value) => { setModels(value.models); await onChanged(); setOpen(false); }} /> : null}

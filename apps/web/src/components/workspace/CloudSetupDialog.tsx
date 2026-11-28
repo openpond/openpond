@@ -246,7 +246,7 @@ function uploadSummaryDetails({
   const sourceRef = shortCommit(headCommit);
   if (sourceRef) details.push(`local ${sourceRef}`);
   details.push(targetProjectName);
-  return details.join(" · ");
+  return details.join(", ");
 }
 
 function shortCommit(value: string | null): string | null {

@@ -43,9 +43,9 @@ export function DatasetVisibility({ api, dataset, onClose }: { api: WorkspaceApi
     {state.isPending ? <p role="status">Loading released Dataset…</p> : null}
     {state.data ? <>
       <EvaluationCard title="Released Dataset">
-        <p>{dataset.workspace.draft.name} · Revision {publication.release.revision}</p>
+        <p>{dataset.workspace.draft.name}, Revision {publication.release.revision}</p>
         <p><EvaluationStatus status={state.data.visibility === "public" ? "Public" : "Private"} /></p>
-        <p>{state.data.taskCount} tasks · {state.data.fileCount} retained files · {state.data.sizeBytes.toLocaleString()} bytes</p>
+        <p>{state.data.taskCount} tasks, {state.data.fileCount} retained files, {state.data.sizeBytes.toLocaleString()} bytes</p>
       </EvaluationCard>
       {state.data.visibility === "public" ? <EvaluationCard title="Marketplace visibility">
         <p>Making this release private removes public discovery and future imports. Existing imports retain their pinned Dataset and graders.</p>

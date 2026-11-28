@@ -220,7 +220,7 @@ export function PreferenceComparisonReview({
       </p>
       {calibration ? (
         <p className="labs-detail-copy">
-          {calibration.humanCompleted} human review{calibration.humanCompleted === 1 ? "" : "s"} saved · target {calibration.minimumSamples ?? defaultMinimumSamples}
+          {calibration.humanCompleted} human review{calibration.humanCompleted === 1 ? "" : "s"} saved, target {calibration.minimumSamples ?? defaultMinimumSamples}
         </p>
       ) : null}
       {review === null ? (
@@ -379,8 +379,8 @@ export function PreferenceComparisonReview({
       </div>
       {calibration ? (
         <p className="labs-detail-copy" role="status">
-          Human {calibration.humanCompleted}/{calibration.minimumSamples ?? 0} · Model {calibration.canonicalModelCompleted}/{calibration.minimumSamples ?? 0} · Swapped {calibration.swappedModelCompleted}/{calibration.minimumSamples ?? 0}
-          {calibration.latestReport ? ` · ${calibration.latestReport.passed ? "Passed" : "Failed"} (${Math.round(calibration.latestReport.orderAgreement * 100)}% order, ${Math.round(calibration.latestReport.tieAgreement * 100)}% ties, ${Math.round(calibration.latestReport.orderSwapAgreement * 100)}% swap)` : ""}
+          Human {calibration.humanCompleted}/{calibration.minimumSamples ?? 0}, Model {calibration.canonicalModelCompleted}/{calibration.minimumSamples ?? 0}, Swapped {calibration.swappedModelCompleted}/{calibration.minimumSamples ?? 0}
+          {calibration.latestReport ? `, ${calibration.latestReport.passed ? "Passed" : "Failed"} (${Math.round(calibration.latestReport.orderAgreement * 100)}% order, ${Math.round(calibration.latestReport.tieAgreement * 100)}% ties, ${Math.round(calibration.latestReport.orderSwapAgreement * 100)}% swap)` : ""}
         </p>
       ) : null}
       {calibrationMessage ? <p className="labs-detail-copy" role="status">{calibrationMessage}</p> : null}

@@ -48,7 +48,7 @@ export function LocalExperimentsPage({
   const select = useWorkspaceActions([
     {
       id: "experiment",
-      label: "Experiment",
+      label: "Benchmark",
       onSelect: () =>
         setup.open(
           execution
@@ -105,9 +105,9 @@ export function LocalExperimentsPage({
   return (
     <>
       <header className="evaluation-workspace-header">
-        <h1 className="sr-only">{execution?.configuration.request.name ?? "Local Experiments"}</h1>
+        <h1 className="sr-only">{execution?.configuration.request.name ?? "Local benchmarks"}</h1>
         <button className="training-button" disabled={busy} onClick={() => select("experiment")}>
-          {execution ? "Duplicate and edit" : "Run experiment"}
+          {execution ? "Duplicate and edit" : "New benchmark"}
         </button>
       </header>
       <p className="evaluation-meta-line">Executed and retained on this Desktop server using its signed-in account.</p>
@@ -116,7 +116,7 @@ export function LocalExperimentsPage({
         <LocalExperimentCollection key={api.key} api={api} route={route} navigate={navigate} />
       ) : execution ? (
         <>
-          <nav className="evaluation-workspace-tabs" aria-label="Experiment tabs">
+          <nav className="evaluation-workspace-tabs" aria-label="Benchmark tabs">
             {["tasks", "graders", "versions", "diagnostics", "configuration", "compare"].map((value) => (
               <button
                 key={value}
@@ -134,11 +134,10 @@ export function LocalExperimentsPage({
             />
             <EvaluationStatus status={execution.status} />
             <span className="evaluation-run-counts">
-              <b>{execution.counts.completed}</b> completed · <b>{execution.counts.failed}</b> failed ·{" "}
-              <b>{execution.counts.running}</b> running · <b>{execution.counts.pending}</b> pending ·{" "}
+              <b>{execution.counts.completed}</b> completed, <b>{execution.counts.failed}</b> failed,{" "}
+              <b>{execution.counts.running}</b> running, <b>{execution.counts.pending}</b> pending,{" "}
               <b>{total}</b> attempts
             </span>
-            <span aria-hidden="true">·</span>
             <EvaluationTime value={execution.createdAt} />
             {!execution.completedAt ? (
               <button
@@ -232,7 +231,7 @@ export function LocalExperimentsPage({
                   <dd>{execution.model.modelId}</dd>
                   <dt>Dataset</dt>
                   <dd>
-                    Version {execution.configuration.request.taskset.revision} ·{" "}
+                    Version {execution.configuration.request.taskset.revision},{" "}
                     {execution.configuration.request.taskset.id}
                   </dd>
                   <dt>Whole-run spending cap</dt>

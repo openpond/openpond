@@ -201,7 +201,7 @@ function ScorerDetail({
         </button>
         <div>
           <h1>{grader.label}</h1>
-          <p>{graderKindLabel(grader.kind)} · {grader.id}</p>
+          <p>{graderKindLabel(grader.kind)}, {grader.id}</p>
         </div>
         <div className="labs-dataset-detail-actions">
           <LabStatusBadge
@@ -229,7 +229,7 @@ function ScorerDetail({
             {grader.kind === "model_judge" ? (
               <Fact
                 label="Judge model"
-                value={`${grader.judge.providerId} · ${grader.judge.modelId}`}
+                value={`${grader.judge.providerId}, ${grader.judge.modelId}`}
               />
             ) : null}
           </dl>
@@ -240,7 +240,7 @@ function ScorerDetail({
             <pre className="labs-resource-code">{JSON.stringify(grader.config, null, 2)}</pre>
           ) : null}
           {!grader.privileged && "module" in grader ? (
-            <p className="labs-detail-copy"><code>{grader.module}</code> · {grader.exportName}</p>
+            <p className="labs-detail-copy"><code>{grader.module}</code>, {grader.exportName}</p>
           ) : null}
         </section>
         <section className="training-detail-section training-detail-section-panel">
@@ -276,7 +276,7 @@ function ScorerDetail({
               {auditReports.map((report) => (
                 <article className="labs-resource-card" key={report.id}>
                   <strong>{report.passed ? "Audit passed" : "Audit failed"}</strong>
-                  <span>{report.fixtureRefs.length} fixtures · {report.createdAt}</span>
+                  <span>{report.fixtureRefs.length} fixtures, {report.createdAt}</span>
                 </article>
               ))}
             </div>
@@ -334,7 +334,7 @@ function graderKindLabel(kind: GraderSpec["kind"]): string {
 function graderCalibration(grader: GraderSpec): string {
   if (grader.kind !== "model_judge") return "Not applicable";
   const advisory = grader.metadata.calibrationIsAdvisory === true
-    ? " · advisory"
+    ? ", advisory"
     : "";
   return `${titleCase(grader.calibrationStatus)}${advisory}`;
 }

@@ -125,7 +125,7 @@ function FlowBox({
       <strong>{node.label}</strong>
       <span>
         {node.status}
-        {node.detail ? ` · ${node.detail}` : ""}
+        {node.detail ? `, ${node.detail}` : ""}
       </span>
       {snapshot || node.error ? <span>{snapshot || node.error?.slice(0, 240)}</span> : null}
       <small>Select to inspect retained evidence.</small>
@@ -335,7 +335,7 @@ export function ConsoleRunFlowDiagram({
             >
               {policyLabel}
               {continuation?.optimizerMode === "reset" ? (
-                <tspan aria-label="Optimizer reset for this run">{" · optimizer reset"}</tspan>
+                <tspan aria-label="Optimizer reset for this run">{", optimizer reset"}</tspan>
               ) : null}
             </text>
           </g>

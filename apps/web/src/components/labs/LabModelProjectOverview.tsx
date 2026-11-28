@@ -93,18 +93,18 @@ export function LabModelProjectOverview({
             value: trainingModel?.modelId ?? "Choose a model",
             hint: savedVersion
               ? savedVersion.schemaVersion === "openpond.steeringModelVersion.v1"
-                ? "Neuron steering · Saved profile"
+                ? "Neuron steering, Saved profile"
                 : savedVersion.schemaVersion === "openpond.engramModelVersion.v1"
-                  ? "Engram memory · Saved module"
+                  ? "Engram memory, Saved module"
                   : savedVersion.schemaVersion === "openpond.decisionModelVersion.v1"
-                    ? "Decision model · Saved adapter"
+                    ? "Decision model, Saved adapter"
                     : savedVersion.schemaVersion === "openpond.alphaEditModelVersion.v1"
-                      ? "AlphaEdit · Saved matrix patch"
+                      ? "AlphaEdit, Saved matrix patch"
                       : savedVersion.schemaVersion === "openpond.neuronTrainingModelVersion.v1"
-                        ? "Neuron training · Saved delta"
-                        : savedVersion.schemaVersion === "openpond.weightSpaceModelVersion.v1" ? "Weight-space programming · Saved parameter patch" : `${String(savedVersion.request.recipe.method).toUpperCase()} · Saved checkpoint`
+                        ? "Neuron training, Saved delta"
+                        : savedVersion.schemaVersion === "openpond.weightSpaceModelVersion.v1" ? "Weight-space programming, Saved parameter patch" : `${String(savedVersion.request.recipe.method).toUpperCase()}, Saved checkpoint`
               : modelProject?.trainingSetup.method
-                ? `${modelProject.trainingSetup.method.toUpperCase()} · ${trainingModel?.source ?? "unconfigured"}`
+                ? `${modelProject.trainingSetup.method.toUpperCase()}, ${trainingModel?.source ?? "unconfigured"}`
                 : "Training setup is not configured",
           },
           {
@@ -145,7 +145,7 @@ export function LabModelProjectOverview({
               "Not started"
             ),
             hint: currentRun
-              ? `${currentRun.label} · ${formatDateTime(currentRun.updatedAt)}`
+              ? `${currentRun.label}, ${formatDateTime(currentRun.updatedAt)}`
               : `${tasksetCount} attached Taskset release${tasksetCount === 1 ? "" : "s"}`,
             onSelect: currentRun ? () => onOpenRun(currentRun.key) : undefined,
             ariaLabel: currentRun
@@ -165,8 +165,8 @@ export function LabModelProjectOverview({
               ? evaluation.baseline === null
                 ? "Retained candidate score"
                 : evaluation.passRate
-                  ? `${signedPercent(evaluation.score - evaluation.baseline)} · retention ${evaluation.retentionPassed ? "passed" : "failed"}`
-                  : `Baseline ${evaluation.baseline.toFixed(3)} · retained evaluation`
+                  ? `${signedPercent(evaluation.score - evaluation.baseline)}, retention ${evaluation.retentionPassed ? "passed" : "failed"}`
+                  : `Baseline ${evaluation.baseline.toFixed(3)}, retained evaluation`
               : "No comparable evaluation result",
           },
         ]}

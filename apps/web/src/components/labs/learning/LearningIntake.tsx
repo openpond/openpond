@@ -48,7 +48,7 @@ export function LearningIntake({ client, definition: currentDefinition, onReview
   const guard = useDraftNavigation({ name: "examples", dirty: draft !== saved, busy: mutation.busy, save: async () => Boolean(await submit()) });
   return <section className="learning-intake">
     <h2>Submit examples</h2><p>Fill in the task input and stable record, attempt, and family IDs. Observed output, expected answer, and evaluator context stay separate. Saved examples enter review; importing does not approve them for training.</p>
-    <p>Import into {definition.name} · release {definition.revision}.</p>
+    <p>Import into {definition.name}, release {definition.revision}.</p>
     {!sameLearningRef(learningRef(definition), learningRef(currentDefinition)) ? <button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => void guard.requestLeave(() => {
       const next = exampleTemplate(currentDefinition);
       setDefinition(currentDefinition); setDraft(next); setSaved(next); setReceipts([]); setFileError(null);
@@ -62,7 +62,7 @@ export function LearningIntake({ client, definition: currentDefinition, onReview
     }} /></label>
     <LearningJsonField label="Example envelope or JSONL records" hint="Use a JSON object, an array, or one object per line. Retry a partial import with its original idempotency keys." value={draft} onChange={setDraft} disabled={mutation.busy} />
     <LearningActions><button className="training-button" type="button" disabled={mutation.busy || !draft.trim()} onClick={() => { void submit(); }}>{mutation.busy ? `Importing (${receipts.length} saved)…` : "Submit for review"}</button></LearningActions>
-    {receipts.length ? <div role="status"><p>{receipts.length} examples saved.</p><ul>{receipts.map((receipt) => <li key={receipt.row}><button type="button" className="labs-version-row-button" onClick={() => onReview(receipt.id)}>Review row {receipt.row} · evidence release {receipt.revision}</button></li>)}</ul></div> : null}
+    {receipts.length ? <div role="status"><p>{receipts.length} examples saved.</p><ul>{receipts.map((receipt) => <li key={receipt.row}><button type="button" className="labs-version-row-button" onClick={() => onReview(receipt.id)}>Review row {receipt.row}, evidence release {receipt.revision}</button></li>)}</ul></div> : null}
     <details><summary>Submit from your application</summary><p>Save the complete envelope above as example.json, install openpond-sdk, and run this TypeScript with Node. Preserve the record and its idempotency key on retries.</p><pre>{`import { readFile } from "node:fs/promises";
 import { OpenPondLearningClient, TaskExampleSubmissionSchema } from "openpond-sdk/learning";
 

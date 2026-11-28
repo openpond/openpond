@@ -1,7 +1,7 @@
 export function taskInputSummary(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value !== "object") return String(value).slice(0, 180);
-  return Object.values(value).map(taskInputSummary).filter(Boolean).join(" · ").slice(0, 180);
+  return Object.values(value).map(taskInputSummary).filter(Boolean).join(", ").slice(0, 180);
 }
 
 export function ReadableTaskValue({ value }: { value: unknown }) {

@@ -24,7 +24,7 @@ export interface ModelsRoute {
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
-  "get-started": "Get started", home: "Overview", inbox: "Inbox", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Experiments", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Training", versions: "Versions", serving: "Inference",
+  "get-started": "Get started", home: "Overview", inbox: "Inbox", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Benchmarks", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Training", versions: "Versions", serving: "Serving",
 };
 export function isNativeTrainingResource(id: string | null | undefined): boolean {
   return Boolean(id && ["managed-modification:", "managed-engram:", "managed-decision:", "managed-alphaedit:", "managed-neuron-training:", "managed-weight-space:"].some(prefix => id.startsWith(prefix)));

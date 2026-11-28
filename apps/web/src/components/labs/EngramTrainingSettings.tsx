@@ -87,11 +87,11 @@ export function EngramTrainingSettings({
               </dd>
               <dt>Memory tables</dt>
               <dd>
-                {configuration.numHashes} hashes · {configuration.tableSize.toLocaleString()} rows
-                · {configuration.perHashDim} dimensions per hash
+                {configuration.numHashes} hashes, {configuration.tableSize.toLocaleString()} rows
+               , {configuration.perHashDim} dimensions per hash
               </dd>
               <dt>Adapter</dt>
-              <dd>FP32 · alpha {configuration.alpha}</dd>
+              <dd>FP32, alpha {configuration.alpha}</dd>
             </dl>
           </details>
         ) : null}

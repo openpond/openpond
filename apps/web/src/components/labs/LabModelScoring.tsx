@@ -76,7 +76,7 @@ export function LabModelScoring({
   const authoredMetric = latestEvaluation?.authoredMetric;
   const authoredValue = authoredMetric?.value == null ? "—" : authoredMetric.value.toFixed(3);
   const authoredHint = authoredMetric && latestEvaluation
-    ? `Latest evaluation · ${authoredMetric.includedCount}/${authoredMetric.receiptRefs.length} included · ${latestEvaluation.model.model}`
+    ? `Latest evaluation, ${authoredMetric.includedCount}/${authoredMetric.receiptRefs.length} included, ${latestEvaluation.model.model}`
     : "No evaluation for this revision";
   const grades = metricOperations?.grades ?? [];
   const scoredGrades = grades.filter((grade) => grade.score !== null);
@@ -241,11 +241,11 @@ export function LabModelScoring({
                 <>
                   <Fact
                     label="Judge model"
-                    value={`${titleCase(primaryGrader.judge.providerId)} · ${primaryGrader.judge.modelId}`}
+                    value={`${titleCase(primaryGrader.judge.providerId)}, ${primaryGrader.judge.modelId}`}
                   />
                   <Fact
                     label="Calibration"
-                    value={`${titleCase(primaryGrader.calibrationStatus)}${primaryGrader.metadata.calibrationIsAdvisory === true ? " · advisory" : ""}`}
+                    value={`${titleCase(primaryGrader.calibrationStatus)}${primaryGrader.metadata.calibrationIsAdvisory === true ? ", advisory" : ""}`}
                   />
                 </>
               ) : null}
@@ -402,7 +402,7 @@ function GraderRow({ grader }: { grader: GraderSpec }) {
         </span>
         <span className="labs-scoring-grader-title">
           <strong>{grader.label}</strong>
-          <small>{titleCase(grader.kind)} · v{grader.version}</small>
+          <small>{titleCase(grader.kind)}, v{grader.version}</small>
         </span>
         <span className="labs-scoring-grader-badges">
           {grader.rewardEligible ? <span>Reward source</span> : null}
@@ -422,7 +422,7 @@ function GraderRow({ grader }: { grader: GraderSpec }) {
           <Fact label="Privileged" value={grader.privileged ? "Yes" : "No"} />
           {grader.kind === "model_judge" ? (
             <>
-              <Fact label="Judge model" value={`${titleCase(grader.judge.providerId)} · ${grader.judge.modelId}`} />
+              <Fact label="Judge model" value={`${titleCase(grader.judge.providerId)}, ${grader.judge.modelId}`} />
               <Fact label="Calibration" value={titleCase(grader.calibrationStatus)} />
             </>
           ) : null}
@@ -430,7 +430,7 @@ function GraderRow({ grader }: { grader: GraderSpec }) {
         {!grader.privileged && "rubric" in grader ? <pre>{grader.rubric}</pre> : null}
         {!grader.privileged && "config" in grader ? <pre>{JSON.stringify(grader.config, null, 2)}</pre> : null}
         {!grader.privileged && "module" in grader ? (
-          <p><code>{grader.module}</code> · {grader.exportName}</p>
+          <p><code>{grader.module}</code>, {grader.exportName}</p>
         ) : null}
       </div>
     </details>
@@ -503,7 +503,7 @@ function rewardCalculation(taskset: Taskset): string {
     return "Passed criteria ÷ total criteria";
   }
   if (taskset.metrics) {
-    return `${titleCase(taskset.metrics.primaryMetric)} · ${titleCase(taskset.metrics.aggregation)}`;
+    return `${titleCase(taskset.metrics.primaryMetric)}, ${titleCase(taskset.metrics.aggregation)}`;
   }
   return "Declared grader reward";
 }

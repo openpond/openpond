@@ -196,9 +196,9 @@ export function EngramExperimentSetupPanel({ api, visible, onClose, onSaveDraft 
   const batches = inputs.batches.filter(batch => batch.purpose === "supervised_training" && batch.sealedAt && batch.exampleCount > 0);
   const batchValue = form.batch ? canonicalJson(form.batch) : "";
   const selectedBatch = batches.find(batch => canonicalJson(batch.reference) === batchValue);
-  const batchOptions: Array<{value: string; label: string; disabled?: boolean}> = batches.map(batch => ({value: canonicalJson(batch.reference), label: `${batch.reference.id} · release ${batch.reference.revision} · ${batch.exampleCount} examples`}));
+  const batchOptions: Array<{value: string; label: string; disabled?: boolean}> = batches.map(batch => ({value: canonicalJson(batch.reference), label: `${batch.reference.id}, release ${batch.reference.revision}, ${batch.exampleCount} examples`}));
   if (batchValue && !batchOptions.some(item => item.value === batchValue))
-    batchOptions.unshift({value: batchValue, label: `${form.batch!.id} · saved release ${form.batch!.revision}`, disabled: true});
+    batchOptions.unshift({value: batchValue, label: `${form.batch!.id}, saved release ${form.batch!.revision}`, disabled: true});
   const modelValue = setup.startingModel?.source === "trained" ? `trained:${setup.startingModel.trainedVersion.contentHash}`
     : setup.startingModel?.source === "engram" ? `engram:${setup.startingModel.engram.versionHash}` : setup.startingModel?.source === "steering" ? `steering:${setup.startingModel.steering.versionHash}` : setup.startingModel?.source === "inference" ? `inference:${setup.startingModel.inferenceModelId}` : base ? canonicalJson(base) : "";
   const models: Array<{value: string; label: string; disabled?: boolean}> = inputs.models.filter(model => model.preference.source === "managed").map(model => ({value: canonicalJson(model.preference), label: model.name}));
@@ -237,8 +237,8 @@ export function EngramExperimentSetupPanel({ api, visible, onClose, onSaveDraft 
           <EvaluationCard title="Settings"><fieldset disabled={locked}>
             <label>Experiment name<input value={form.name} maxLength={500} onChange={event => patch({name: event.target.value})} /></label>
             <EngramTrainingSettings training={form.training} configuration={available?.state === "ready" ? available.config : null} disabled={locked} onChange={training => patch({training})} />
-            {form.startingModule ? <p>Saved Model {form.startingModule.modelProjectId} · version {form.startingModule.versionHash}</p> : null}
-            {form.parentArtifact ? <p>Continue adapter {form.parentArtifact.id} · {form.parentArtifact.contentHash}. Optimizer state starts fresh.</p> : null}
+            {form.startingModule ? <p>Saved Model {form.startingModule.modelProjectId}, version {form.startingModule.versionHash}</p> : null}
+            {form.parentArtifact ? <p>Continue adapter {form.parentArtifact.id}, {form.parentArtifact.contentHash}. Optimizer state starts fresh.</p> : null}
             <label>Spending limit (USD, optional)<input type="text" inputMode="decimal" maxLength={100} placeholder="Use available credits" value={form.maximumSpendUsd} onChange={event => patch({maximumSpendUsd: event.target.value})} /></label>
           </fieldset></EvaluationCard>
           <TrainingExperimentFundingSummary funding={funding} busy={busy} startAttempted={Boolean(owner.original)} billingReturnPending={billingReturnPending} onOpenBilling={onSaveDraft ? openBilling : null} onRefresh={refreshAfterBilling} />

@@ -14,7 +14,7 @@ export function LabServingPage({
   modelProjectId?: string | null;
 }) {
   return <div className="labs-flat-body labs-serving-page">
-    <ModelProjectPageHeader title="Inference" description="Serve your models." />
+    <ModelProjectPageHeader title="Serving" description="Serve your models." />
     {connection && teamId && actorId && training ? (
       <HostedServingModels key={`${accountKey}:${actorId}:${teamId}`} connection={connection}
         teamId={teamId} actorId={actorId} accountKey={accountKey} modelProjectId={modelProjectId} training={training} />

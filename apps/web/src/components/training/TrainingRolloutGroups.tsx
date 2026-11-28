@@ -59,8 +59,8 @@ export function TrainingRolloutGroups({ evidence }: { evidence: RunStageEvidence
                 }
               />
               <div>
-                {group.replay ? <span className="training-muted">{group.state === "consumed" ? "Replayed" : "Replay pending"} · prior output not restored</span> : null}
-                {inherited ? <span className="training-muted">Inherited · {inherited.optimizerDisposition === "applied" ? "Update applied" : "Skipped · no signal"}</span> : group.optimizerDisposition ? <span className="training-muted">{group.optimizerDisposition === "applied" ? "Update applied" : "Skipped · no signal"}</span> : null}
+                {group.replay ? <span className="training-muted">{group.state === "consumed" ? "Replayed" : "Replay pending"}, prior output not restored</span> : null}
+                {inherited ? <span className="training-muted">Inherited, {inherited.optimizerDisposition === "applied" ? "Update applied" : "Skipped, no signal"}</span> : group.optimizerDisposition ? <span className="training-muted">{group.optimizerDisposition === "applied" ? "Update applied" : "Skipped, no signal"}</span> : null}
                 {group.attempts.map((attempt) => {
                   const failed =
                     attempt.state.endsWith("failed") ||
@@ -136,7 +136,7 @@ function GroupLink({
     <>
       <strong>Group {group.index + 1}</strong>
       <span>
-        {group.inherited ? `Inherited source group · ${group.inherited.optimizerDisposition === "applied" ? "Update applied" : "Skipped · no signal"}. No attempts were rerun here.` : `${group.state} · ${group.attempts.length} retained attempts · reward ${group.meanReward ?? "not scored"}`}
+        {group.inherited ? `Inherited source group, ${group.inherited.optimizerDisposition === "applied" ? "Update applied" : "Skipped, no signal"}. No attempts were rerun here.` : `${group.state}, ${group.attempts.length} retained attempts, reward ${group.meanReward ?? "not scored"}`}
       </span>
       <small>Select this group context.</small>
     </>,
