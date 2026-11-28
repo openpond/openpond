@@ -8,6 +8,7 @@ import {
   type CandidateEvaluationOption,
 } from "openpond-sdk/candidate-evaluations";
 import type { RunExperiment } from "openpond-sdk/experiments";
+import { canonicalJson, parseAndVerifyTrainingResult, type TrainingModelVersion } from "openpond-sdk/training";
 
 export function TrainedVersionExperimentControl({
   connection,
@@ -15,6 +16,9 @@ export function TrainedVersionExperimentControl({
   actorId,
   projectId,
   configuration,
+  version,
+  benchmarkRevision,
+  bindBenchmark,
   retainOperation,
   onStarted,
   onBusyChange,
@@ -24,6 +28,9 @@ export function TrainedVersionExperimentControl({
   actorId: string;
   projectId: string | null;
   configuration: RunExperiment | null;
+  version?: TrainingModelVersion;
+  benchmarkRevision?: number;
+  bindBenchmark?: (preparationId: string, revision: number) => Promise<void>;
   retainOperation: (
     action: string,
     intent: unknown,
@@ -37,6 +44,7 @@ export function TrainedVersionExperimentControl({
     teamId,
     actorId,
     projectId,
+    version?.contentHash ?? null,
   ]);
   const client = useMemo(
     () =>
@@ -62,6 +70,7 @@ export function TrainedVersionExperimentControl({
     control: { operationId: string; expectedRevision: number; requestHash: string };
     acknowledge: () => Promise<void>;
   } | null>(null);
+  const retainedRevision = useRef<{ scope: string; revision: number } | null>(null);
   const [catalog, setCatalog] = useState<{
       scope: string;
       items: CandidateEvaluationOption[];
@@ -78,6 +87,13 @@ export function TrainedVersionExperimentControl({
     return () => onBusyChange?.(false);
   }, [busy, onBusyChange]);
   const value = retained?.scope === scope ? retained.value : null;
+  async function bind(value: CandidateEvaluationPreparation) {
+    if (!version) return;
+    const revision = retainedRevision.current;
+    if (!bindBenchmark || !revision || revision.scope !== scope)
+      throw new Error("Review and save the exact Benchmark before preparing this version.");
+    await bindBenchmark(value.id, revision.revision);
+  }
   useEffect(() => {
     let stopped = false;
     setError(null);
@@ -88,19 +104,37 @@ export function TrainedVersionExperimentControl({
     async function read() {
       try {
         const items: CandidateEvaluationOption[] = [];
+        let exactArtifactId: string | undefined;
+        if (version) {
+          const result = await parseAndVerifyTrainingResult(await apiFetch(connection,
+            `/v1/training/hosted-jobs/${encodeURIComponent(version.jobId)}/result?teamId=${encodeURIComponent(teamId)}`),
+            { teamId, jobId: version.jobId });
+          const candidate = result.candidate;
+          if (version.teamId !== teamId || result.job.modelProjectId !== version.modelProjectId ||
+            !candidate?.registryArtifactId || candidate.checkpointId !== version.candidate.checkpointId ||
+            canonicalJson(candidate.artifact) !== canonicalJson(version.candidate.artifact))
+            throw new Error("The exact saved Model version has no owned candidate artifact available for evaluation.");
+          exactArtifactId = candidate.registryArtifactId;
+        }
         let afterId: string | undefined;
         const seen = new Set<string>();
         for (let n = 0; ; n++) {
           if (n >= 100) throw new Error("Candidate catalog exceeds its bounded supported scope.");
           const page = await client.options(teamId, { projectId: projectId ?? undefined, afterId });
           if (page.ownerUserId !== actorId) throw new Error("The candidate owner changed.");
-          items.push(...page.items);
+          items.push(...(version ? page.items.filter(item => item.artifact.id === exactArtifactId &&
+            item.trainingJobId === version.jobId && item.configurationId === version.modelProjectId) : page.items));
+          if (version && items.length) break;
           if (!page.nextCursor) break;
           if (seen.has(page.nextCursor)) throw new Error("Candidate pagination did not advance.");
           seen.add(page.nextCursor);
           afterId = page.nextCursor;
         }
-        if (!stopped) setCatalog({ scope, items });
+        if (version && !items.length) throw new Error("This Model version is unavailable in the current candidate catalog.");
+        if (!stopped) {
+          setCatalog({ scope, items });
+          if (version) setSelected(items[0]!.artifact.id);
+        }
       } catch (reason) {
         if (!stopped)
           setError(reason instanceof Error ? reason.message : "Candidate catalog is unavailable.");
@@ -110,7 +144,7 @@ export function TrainedVersionExperimentControl({
     return () => {
       stopped = true;
     };
-  }, [client, teamId, actorId, projectId, scope]);
+  }, [client, connection, teamId, actorId, projectId, scope, version]);
   useEffect(() => {
     if (!value || !["preparing", "dispatching", "submitted", "cleaning"].includes(value.state))
       return;
@@ -155,26 +189,35 @@ export function TrainedVersionExperimentControl({
           throw new Error(
             "Choose a trained version and complete the exact evaluation cases, graders and budget.",
           );
+        if (version && (!benchmarkRevision || !bindBenchmark))
+          throw new Error("Review and save the exact Benchmark before preparing this version.");
         const operation = await retainOperation("candidate:save", {
           teamId,
           actorId,
           projectId,
           artifact: target.artifact,
           configuration,
+          ...(benchmarkRevision ? { benchmarkRevision } : {}),
         });
         fence();
-        current = await client.save({
+        const request = {
           teamId,
           operationId: operation.id,
           artifact: target.artifact,
           configuration,
-        });
+        };
+        current = await client.save(request);
         fence();
-        if (current.ownerUserId !== actorId) throw new Error("The candidate owner changed.");
+        if (current.ownerUserId !== actorId || canonicalJson(current.request) !== canonicalJson(request) ||
+          version && current.trainingJobId !== version.jobId)
+          throw new Error("The retained evaluation differs from the reviewed candidate or workspace.");
         setRetained({ scope, value: current });
+        if (benchmarkRevision) retainedRevision.current = { scope, revision: benchmarkRevision };
         await operation.acknowledge();
         fence();
       }
+      await bind(current);
+      fence();
       let command = pending.current?.scope === scope ? pending.current : null;
       if (command && command.action !== action)
         throw new Error("Resolve the retained uncertain action before choosing another action.");
@@ -210,7 +253,11 @@ export function TrainedVersionExperimentControl({
       await command.acknowledge();
       fence();
       pending.current = null;
-      if (next.experimentId) onStarted(next.experimentId);
+      if (next.experimentId) {
+        await bind(next);
+        fence();
+        onStarted(next.experimentId);
+      }
     } catch (reason) {
       if (activeScope.current === callScope)
         setError(
@@ -222,7 +269,10 @@ export function TrainedVersionExperimentControl({
   }
   return (
     <section>
-      <label>
+      {version ? <dl className="training-context-facts">
+        <dt>Exact version</dt><dd>{version.contentHash}</dd>
+        <dt>Training artifact</dt><dd>{version.candidate.artifact.contentHash}</dd>
+      </dl> : <label>
         Trained version
         <select
           disabled={busy || !!value}
@@ -239,7 +289,7 @@ export function TrainedVersionExperimentControl({
               ))
             : null}
         </select>
-      </label>
+      </label>}
       {error ? <ErrorToast error={error} /> : null}
       {value ? (
         <>
@@ -273,7 +323,7 @@ export function TrainedVersionExperimentControl({
         {!value || ["configured", "preparing"].includes(value.state) ? (
           <button
             type="button"
-            disabled={busy || !configuration || !selected}
+            disabled={busy || !configuration || !selected || Boolean(version && !benchmarkRevision)}
             onClick={() => void perform("prepare")}
           >
             Prepare exact version for evaluation
@@ -281,8 +331,18 @@ export function TrainedVersionExperimentControl({
         ) : null}
         {value && ["ready", "dispatching"].includes(value.state) ? (
           <button type="button" disabled={busy} onClick={() => void perform("run")}>
-            Run Experiment
+            {version ? "Run Benchmark" : "Run Experiment"}
           </button>
+        ) : null}
+        {version && value?.experimentId ? (
+          <button type="button" disabled={busy} onClick={() => {
+            setBusy(true);
+            void bind(value).then(() => {
+              if (activeScope.current === scope) onStarted(value.experimentId!);
+            }).catch(cause => {
+              if (activeScope.current === scope) setError(cause instanceof Error ? cause.message : "Benchmark unavailable.");
+            }).finally(() => { if (activeScope.current === scope) setBusy(false); });
+          }}>Open Benchmark run</button>
         ) : null}
         {value && !["completed", "failed", "cancelled"].includes(value.state) ? (
           <button type="button" disabled={busy} onClick={() => void perform("cancel")}>

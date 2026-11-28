@@ -6,6 +6,7 @@ import { LocalTrainingComputeSchema } from "@openpond/contracts/resource-setup";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
 import type { EvaluationModel } from "../../hooks/useChatResourceFocus";
+import { useErrorToast } from "../../app/AppToastContext";
 import {
   resourceSetupGroups,
   resourceSetupLabel,
@@ -66,11 +67,17 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   const managedAvailable = useContext(DesktopNewContext)?.managedAvailable ?? false;
   const workspace = useContext(ChatExperimentWorkspaceContext);
   const visibleDraft = scopeManagedSetup(draft, workspace);
+  const version = draft.benchmarkModelVersion;
+  const selectedVersion = context.selection?.benchmarkVersion;
+  const openableVersion = version?.location === "cloud" && selectedVersion?.location === "cloud" &&
+    version.versionHash === selectedVersion.versionHash && context.selection?.target.sessionId === sessionId;
   const managedReview = Boolean(workspace?.teamId && workspace.actorId && connection && sessionId &&
     resourceSetupTrainingMethod(draft) && draft.values.destination === "OpenPond Managed");
   const [configureOpen, setConfigureOpen] = useState(false);
   const [field, setField] = useState<PromptField>("name");
   const [authoringBusy, setAuthoringBusy] = useState(false);
+  const [benchmarkError, setBenchmarkError] = useState<unknown>(null);
+  useErrorToast(benchmarkError);
   const busy = composerBusy || authoringBusy;
   const compute = useQuery({
     queryKey: ["local-training-compute", connectionQueryScope(connection)],
@@ -188,6 +195,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
         {activeFields.map((key, index) => {
           const options = fieldOptions(key);
           const label = field === "saveDestination" ? "Save to" : labels[key];
+          if (version && ["candidate", "baseline", "dataset", "datasetRevision", "grader", "destination"].includes(key)) return null;
           if (draft.kind === "grader" && draft.values.graderType === "Exact answer" && key === "cases") return null;
           if (managedReview && key === "baseModel") return null;
           if (draft.kind === "dataset" && (key === "fields" && draft.values.source === "Import a local file"
@@ -251,6 +259,16 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           </label>;
         })}
       </div> : null}
+      {version?.location === "local" && <p>This saved artifact needs an exact-version inference runtime. A generic local endpoint cannot verify which artifact is loaded.</p>}
+      {version?.location === "cloud" && <button type="button" className="training-button secondary"
+        disabled={busy || context.selecting || workspace?.teamId !== version.teamId || !openableVersion}
+        onClick={async () => {
+          setBenchmarkError(null);
+          try {
+            if (context.selection && await context.select(context.selection.target, { configureDraft: true }))
+              setConfigureOpen(false);
+          } catch (cause) { setBenchmarkError(cause); }
+        }}>Open Benchmark review</button>}
       {draft.kind === "dataset" && <DatasetSetupReview draft={draft} connection={connection}
         sessionId={sessionId} busy={busy} managedAvailable={managedAvailable} activeField={field}
         onChange={onChange} onAttach={onAttachDataset} onBusy={setAuthoringBusy} />}

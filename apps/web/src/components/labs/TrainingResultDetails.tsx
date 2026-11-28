@@ -5,6 +5,7 @@ import { connectionQueryScope } from "../../lib/query-scope";
 import { ErrorToast } from "../common/ErrorToast";
 import { useState } from "react";
 import type { WorkspaceApi } from "./workspace/workspace-api";
+import { BenchmarkSavedVersionButton } from "./BenchmarkSavedVersionButton";
 
 const candidateLabels: Record<TrainingResult["candidateState"], string> = {
   not_finished: "Training has not produced a completed result yet.",
@@ -46,6 +47,7 @@ export function TrainingResultDetails({ connection, teamId, actorId, jobId, vers
     {result ? <>
       <p>{candidateLabels[result.candidateState]}</p>
       {result.savedVersion ? <div className="model-build-actions">
+        <BenchmarkSavedVersionButton version={result.savedVersion} name={result.model?.name ?? result.name} />
         {onOpenModel ? <button type="button" className="training-button secondary" disabled={opening} onClick={() => {
           const id = result.model?.id;
           if (!id || !onOpenModel) return;

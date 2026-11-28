@@ -8,6 +8,7 @@ import { modelsLocation, navigateModelsRoute } from "./lab-primary-tab-state";
 import "./hosted-training-run.css";
 import { SavedModelServing } from "./SavedModelServing";
 import type { WorkspaceApi } from "./workspace/workspace-api";
+import { BenchmarkSavedVersionButton } from "./BenchmarkSavedVersionButton";
 
 export function useSavedTrainingModel(
   connection: ClientConnection | null | undefined,
@@ -234,6 +235,7 @@ export function SavedTrainingModel({
               >
                 Open producing experiment
               </button>
+              <BenchmarkSavedVersionButton version={version} name={query.data?.model.name ?? "Saved Model version"} />
             </>
           )}
           <details>

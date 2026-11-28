@@ -79,6 +79,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal,originTurnId?:string):Promise<unknown> {
     if(kind==="dataset")return datasets.request(input,signal);
     const envelope=z.object({action:z.string(),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(input);
+    if(envelope.action==="benchmark_pin")return { benchmark:await cloud.benchmarkPin(z.string().min(1).parse(envelope.payload.id)) };
     let benchmark: BenchmarkRunPin | undefined;
     if (originTurnId && (envelope.action === "run" || envelope.action === "run_cloud")) {
       const turn = await deps.store.getTurn(originTurnId);
@@ -87,6 +88,8 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         throw new Error("Review the Benchmark setup and ask the user before starting a run.");
       const owner = turn ? await deps.store.getSession(turn.sessionId) : null;
       const resource = SessionResourceDraftSchema.safeParse(owner?.metadata?.resourceDraft);
+      if (resource.success && resource.data.benchmarkVersion)
+        throw new Error("Run this exact Model version from its Benchmark review.");
       const draft = resource.success && resource.data.kind === "benchmark"
         ? chatExperimentContext(owner?.metadata).scopes.find(scope => scope.draft?.id === resource.data.id) : undefined;
       if (turn && !setup.success) {
@@ -99,6 +102,8 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
           }
         }
       }
+      if (setup.success && setup.data.kind === "benchmark" && (setup.data.candidateRef || setup.data.benchmarkModelVersion))
+        throw new Error("Run this exact Model version from its Benchmark review.");
       if (setup.success && setup.data.kind === "benchmark" && setup.data.values.destination === "This device") {
         if (envelope.action !== "run") throw new Error("This Benchmark setup selects a local device.");
         const configured = setup.data.benchmarkDefinition;
@@ -186,6 +191,17 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         expectedRevision: z.number().int().positive() }).strict().parse(input.payload);
       if (context && context.sessionId !== query.sessionId) throw new Error("The Benchmark belongs to another conversation.");
       return browser.syncLocalDraft(query.sessionId, query.scopeId, query.expectedRevision);
+    }
+    if (kind === "dataset" && input.action === "context_bind_benchmark") {
+      if (context) throw new Error("Bind the reviewed candidate from the Benchmark editor.");
+      const query = z.object({ sessionId: z.string().min(1), preparationId: z.string().min(1).max(200),
+        revision: z.number().int().positive() }).strict().parse(input.payload);
+      const session = await deps.store.getSession(query.sessionId);
+      const resource = SessionResourceDraftSchema.safeParse(session?.metadata?.resourceDraft);
+      if (!resource.success || resource.data.kind !== "benchmark" || resource.data.benchmarkVersion?.location !== "cloud")
+        throw new Error("Open the originating Benchmark for this saved Model version.");
+      const scope = chatExperimentContext(session?.metadata).scopes.find(item => item.draft?.id === resource.data.id);
+      return cloud.bindBenchmark({ ...query, draft: scope?.draftRevision === query.revision ? scope.draft : undefined });
     }
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_inputs", "context_runs", "context_select", "context_selection", "context_save_draft"].includes(String(input.action))) {
       const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), modelTrainingReview: z.boolean().optional(), update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});

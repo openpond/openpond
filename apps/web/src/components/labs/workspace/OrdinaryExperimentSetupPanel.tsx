@@ -7,9 +7,9 @@ import { ClaudeCodeChoice } from "../../human-review/ClaudeCodeChoice";
 import { TrainedVersionExperimentControl } from "../TrainedVersionExperimentControl";
 import { LocalInferenceChoice } from "../../human-review/LocalInferenceChoice";
 import { useRef, useState } from "react";
-import { ExperimentDraftSchema } from "openpond-sdk/training";
+import { canonicalJson, ExperimentDraftSchema } from "openpond-sdk/training";
 import { ExperimentTypeControl } from "./ExperimentTypeControl";
-import { LocalExperimentRecordSchema, LocalExperimentRunFromReleaseSchema } from "@openpond/contracts";
+import { ChatContextSelectionSchema, LocalExperimentRecordSchema, LocalExperimentRunFromReleaseSchema } from "@openpond/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { contentHash } from "@openpond/harness";
 import { RunExperimentSchema, groupDatasetGraders, canonicalDatasetGraderSelection, type ExperimentRunDetails, type RunExperiment, type PreparedHarnessExperimentSchema } from "openpond-sdk/experiments";
@@ -40,10 +40,14 @@ export function OrdinaryExperimentSetupPanel({
   dispatch,
   onClose,
   onSaveDraft,
+  bindBenchmark,
+  retainedBenchmark,
 }: ExperimentSetupPanelProps) {
   const setup = useEvaluationSetup();
   const draft = setup.draft!;
-  const { name, release, modelId, prompt, seed } = draft;
+  const { name, release, prompt, seed } = draft;
+  const trainedVersion = setup.startingModel?.source === "trained" ? setup.startingModel.trainedVersion : undefined;
+  const modelId = trainedVersion?.request.baseModel.modelId ?? draft.modelId;
   const budget = draft.budget ?? Number.NaN,
     outputTokens = draft.outputTokens ?? Number.NaN;
   const existing = setup.existing;
@@ -59,6 +63,7 @@ export function OrdinaryExperimentSetupPanel({
   const [reviewConfiguration, setReviewConfiguration] = useState<{
     key: string;
     configuration: RunExperiment;
+    benchmarkRevision?: number;
   } | null>(null);
   const [reviewed, setReviewed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -119,7 +124,7 @@ export function OrdinaryExperimentSetupPanel({
   }
   const models = useQuery({
     queryKey: ["evaluation-workspace", api.key, "modelChoices", release?.contentHash],
-    enabled: Boolean(release) && !localDataset && sourceReady,
+    enabled: Boolean(release) && !localDataset && sourceReady && !trainedVersion,
     queryFn: ({ signal }) =>
       api.request<{
         available: boolean;
@@ -211,9 +216,9 @@ export function OrdinaryExperimentSetupPanel({
         throw new Error(
           "This evaluation owner cannot apply the saved steering profile. Choose another starting model or use neuron steering.",
         );
-      if (setup.startingModel?.source === "trained")
+      if (trainedVersion && (!bindBenchmark || !onSaveDraft || api.location !== "hosted" || trainedVersion.teamId !== api.teamId || draft.mode !== "model"))
         throw new Error(
-          "Evaluate this exact checkpoint through trained-version preparation. Its base model is not a substitute.",
+          "Open the saved version's workspace and choose managed model evaluation.",
         );
       if (!name.trim()) throw new Error("Name this Experiment.");
       if (reviewIssue) throw new Error(reviewIssue);
@@ -316,7 +321,7 @@ export function OrdinaryExperimentSetupPanel({
         });
         if (!canonicalGraders.length || canonicalGraders.length > 100)
           throw new Error("Select between one and 100 Dataset graders.");
-        if (!localRuntime && !availableModels?.some((model) => model.id === modelId))
+        if (!trainedVersion && !localRuntime && !availableModels?.some((model) => model.id === modelId))
           throw new Error(models.data?.unavailableReason ?? "Choose a supported hosted model.");
         request = {
           schemaVersion: "openpond.modelTasksetRunRequest.v1",
@@ -354,7 +359,9 @@ export function OrdinaryExperimentSetupPanel({
         graders: canonicalGraders,
         ...(existing ? { sourceExperimentId: existing.id } : {}),
       };
-      const operation = await operationForSetup("run", submission);
+      const operation = await operationForSetup("run", trainedVersion ? {
+        ...submission, benchmarkId: setup.initialExperiment?.id, versionHash: trainedVersion.contentHash,
+      } : submission);
       const configuration = RunExperimentSchema.parse({
         ...submission,
         operationId: operation.id,
@@ -374,14 +381,27 @@ export function OrdinaryExperimentSetupPanel({
     try {
       const key = reviewKey,
         configuration = await prepareConfiguration();
-      setReviewConfiguration({ key, configuration });
+      let benchmarkRevision: number | undefined;
+      if (trainedVersion && onSaveDraft) {
+        const release = configuration.request.taskset;
+        const taskIds = [...new Set(configuration.request.population.map(member => member.taskId))];
+        const draft = snapshotDraft(canonicalGraders, { release, mode: "subset", ids: taskIds });
+        if (retainedBenchmark && canonicalJson(retainedBenchmark.draft) === canonicalJson(draft)) {
+          benchmarkRevision = retainedBenchmark.revision;
+        } else {
+          const saved = ChatContextSelectionSchema.parse(await onSaveDraft(draft));
+          if (!saved.localDraft || !saved.draftRevision) throw new Error("Save the exact local Benchmark revision before review.");
+          benchmarkRevision = saved.draftRevision;
+        }
+      }
+      setReviewConfiguration({ key, configuration, benchmarkRevision });
       setReviewed(key);
-    } catch {
-      /* The preparation exposes its exact error above. */
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     }
   }
   async function run() {
-    if (active.current || reviewConfiguration?.key !== reviewKey) return;
+    if (trainedVersion || active.current || reviewConfiguration?.key !== reviewKey) return;
     active.current = true;
     setBusy(true);
     setError(null);
@@ -438,7 +458,9 @@ export function OrdinaryExperimentSetupPanel({
       throw new Error("Choose an exact Dataset version and wait for its complete task population.");
     if (!sourceReady || sourceUnavailable)
       throw new Error(sourceUnavailable ?? "Wait for the authorized source choices.");
-    if (!localRuntime && !availableModels?.some((model) => model.id === modelId))
+    if (trainedVersion && (!bindBenchmark || !onSaveDraft || api.location !== "hosted" || trainedVersion.teamId !== api.teamId || draft.mode !== "model"))
+      throw new Error("Open the saved version's workspace and choose managed model evaluation.");
+    if (!trainedVersion && !localRuntime && !availableModels?.some((model) => model.id === modelId))
       throw new Error("Choose a model from the authorized current catalog.");
     if (!Number.isFinite(budget) || budget <= 0 || budget > 10_000)
       throw new Error("Set a whole Experiment ceiling greater than zero and at most $10,000.");
@@ -490,6 +512,21 @@ export function OrdinaryExperimentSetupPanel({
   } catch (cause) {
     reviewIssue = cause instanceof Error ? cause.message : String(cause);
   }
+  function snapshotDraft(graders: typeof canonicalGraders, selection = setup.selection) {
+    return ExperimentDraftSchema.parse({
+      schemaVersion: "openpond.experimentDraft.v1",
+      id: setup.initialExperiment?.id,
+      operationType: "evaluate",
+      name: name.trim() || "Evaluation",
+      ...(setup.startingModel ? { startingModel: setup.startingModel } : {}),
+      evaluationForm: {
+        form: { ...draft, ...(release ? { graderChoices: { ...draft.graderChoices, [release.contentHash]: graders } } : {}) },
+        selection,
+        source: existing,
+        executionLocation: api.location,
+      },
+    });
+  }
   async function saveDraft() {
     if (!onSaveDraft || !setup.initialExperiment || active.current) return;
     active.current = true;
@@ -497,30 +534,11 @@ export function OrdinaryExperimentSetupPanel({
     setSavingDraft(true);
     setError(null);
     try {
-      const form = {
-        ...draft,
-        ...(release
-          ? { graderChoices: { ...draft.graderChoices, [release.contentHash]: graders } }
-          : {}),
-      };
+      const saved = snapshotDraft(trainedVersion ? canonicalGraders : graders);
       // Resolve implicit default graders into the saved authoring snapshot.
       // Later edits remain dirty even if this response arrives after them.
-      setup.setDraft((previous) => (previous === draft ? form : previous));
-      await onSaveDraft(
-        ExperimentDraftSchema.parse({
-          schemaVersion: "openpond.experimentDraft.v1",
-          id: setup.initialExperiment.id,
-          operationType: "evaluate",
-          name: name.trim() || "Evaluation",
-          ...(setup.startingModel ? { startingModel: setup.startingModel } : {}),
-          evaluationForm: {
-            form,
-            selection: setup.selection,
-            source: existing,
-            executionLocation: api.location,
-          },
-        }),
-      );
+      setup.setDraft((previous) => (previous === draft ? saved.evaluationForm!.form : previous));
+      await onSaveDraft(saved);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -541,7 +559,7 @@ export function OrdinaryExperimentSetupPanel({
       }
     >
       <header>
-        <h2>{existing ? "Run another Experiment" : "Run Experiment"}</h2>
+        <h2>{trainedVersion ? "Benchmark saved Model version" : existing ? "Run another Experiment" : "Run Experiment"}</h2>
         {onClose ? (
           <button
             type="button"
@@ -565,12 +583,12 @@ export function OrdinaryExperimentSetupPanel({
             setError(reviewIssue);
             return;
           }
-          if (reviewed === reviewKey) void run();
+          if (reviewed === reviewKey && !trainedVersion) void run();
           else void review();
         }}
       >
         <EvaluationCard title="Model and budget">
-          <label>
+          {trainedVersion ? <span>{setup.startingModel?.label}</span> : <label>
             Model
             <DropdownSelect
               label="Model"
@@ -599,12 +617,12 @@ export function OrdinaryExperimentSetupPanel({
               ]}
               onChange={(value) => patch({ modelId: value, localRuntime: undefined })}
             />
-          </label>
-          {!localRuntime && localDataset && sampling.isSuccess && !sampling.data.models.length ? (
+          </label>}
+          {!trainedVersion && !localRuntime && localDataset && sampling.isSuccess && !sampling.data.models.length ? (
             <p role="status">
               No models are available for this account. Choose a configured local provider below.
             </p>
-          ) : !localRuntime &&
+          ) : !trainedVersion && !localRuntime &&
             !localDataset &&
             models.isSuccess &&
             (!models.data.available || !models.data.models.length) ? (
@@ -770,7 +788,7 @@ export function OrdinaryExperimentSetupPanel({
               }}
             />
           ) : null}
-          {api.actorId && !dispatch && !localRuntime ? (
+          {api.actorId && !dispatch && !localRuntime && !trainedVersion ? (
             <TrainedVersionExperimentControl
               connection={api.connection}
               teamId={api.teamId}
@@ -801,7 +819,7 @@ export function OrdinaryExperimentSetupPanel({
               }}
             />
           ) : null}
-          <ExperimentSourceControls api={api} draft={draft} patch={patch} sources={sources} />
+          {!trainedVersion && <ExperimentSourceControls api={api} draft={draft} patch={patch} sources={sources} />}
           <EvaluationCard title="Experiment">
             <label>
               Name
@@ -837,10 +855,10 @@ export function OrdinaryExperimentSetupPanel({
                 )
                 .join(", ") || "No graders selected"}
             </p>
-            <p>
+            {!trainedVersion && <p>
               Start creates a new immutable Experiment after server admission. The original remains
               unchanged.
-            </p>
+            </p>}
           </EvaluationCard>
         ) : null}
         <p>
@@ -862,12 +880,21 @@ export function OrdinaryExperimentSetupPanel({
             }
           />
         ) : null}
-        <ReviewedExperimentScheduleControl
+        {!trainedVersion && <ReviewedExperimentScheduleControl
           api={api}
           configuration={
             reviewConfiguration?.key === reviewKey ? reviewConfiguration.configuration : null
           }
-        />
+        />}
+        {trainedVersion && api.actorId && !dispatch && (
+          <TrainedVersionExperimentControl
+            connection={api.connection} teamId={api.teamId} actorId={api.actorId} projectId={api.projectId}
+            configuration={reviewConfiguration?.key === reviewKey ? reviewConfiguration.configuration : null}
+            version={trainedVersion} retainOperation={api.operation} onBusyChange={setBusy}
+            benchmarkRevision={reviewConfiguration?.benchmarkRevision} bindBenchmark={bindBenchmark}
+            onStarted={(id) => { guard.allowNextNavigation(); setup.close(); onSaved({ id }); }}
+          />
+        )}
         {onSaveDraft ? (
           <button
             className="training-button secondary"
@@ -878,12 +905,12 @@ export function OrdinaryExperimentSetupPanel({
             {savingDraft ? "Saving draft…" : "Save draft"}
           </button>
         ) : null}
-        <button className="training-button" type="submit" disabled={busy}>
+        <button className="training-button" type="submit" disabled={busy || Boolean(trainedVersion && reviewed === reviewKey)}>
           {busy && !savingDraft
             ? reviewed === reviewKey
               ? "Starting Experiment…"
               : "Reviewing Experiment…"
-            : reviewed === reviewKey
+            : trainedVersion ? "Review Benchmark" : reviewed === reviewKey
               ? "Start experiment"
               : "Review experiment"}
         </button>

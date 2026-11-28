@@ -175,6 +175,10 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!scope?.draft || scope.storedDraft || scope.draft.id !== draft.id ||
         (scope.modelSetupOwner ? draft.operationType !== scope.draft.operationType : draft.operationType !== "evaluate"))
         throw new Error("Reopen this local Benchmark before saving its definition.");
+      if (scope.draft.operationType === "evaluate" && scope.draft.startingModel?.source === "trained" &&
+        (canonicalJson(draft.startingModel ?? null) !== canonicalJson(scope.draft.startingModel) ||
+          draft.evaluationForm?.executionLocation !== "hosted" || draft.evaluationForm.form.mode !== "model"))
+        throw new Error("Keep the exact saved Model version and managed runtime when editing this Benchmark.");
       if (scope.draftSave?.operationId === input.operationId) {
         if (scope.draftSave.requestHash !== requestHash) throw new Error("This save operation was used for different Benchmark settings.");
         return;

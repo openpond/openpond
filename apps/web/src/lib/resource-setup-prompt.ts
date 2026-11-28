@@ -1,13 +1,16 @@
-import type { ResourceSetupDraft } from "@openpond/contracts/resource-setup";
+import type { BenchmarkModelVersion, ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 import type { ChatContextSelection } from "@openpond/contracts";
 export { ResourceSetupDraftSchema, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 
 export type ResourceSetupField = keyof ResourceSetupDraft["values"];
 export type ResourceSetupMethod = ResourceSetupDraft["values"]["method"];
-export type ResourceSetupCandidate = NonNullable<ResourceSetupDraft["candidateRef"]> & { label: string };
+export type ResourceSetupCandidate = BenchmarkModelVersion & { label: string };
 export type ModelSetupScope = { accountKey: string; teamId: string | null; actorId: string | null };
 
 export function scopeManagedSetup(draft: ResourceSetupDraft, scope: ModelSetupScope | null) {
+  if (draft.benchmarkModelVersion?.location === "cloud" &&
+    (draft.benchmarkModelVersion.teamId !== scope?.teamId || !scope?.actorId))
+    return { ...draft, benchmarkModelVersion: undefined, values: { ...draft.values, candidate: undefined } };
   const managed = draft.managedTrainingInputs;
   if (!managed || draft.values.destination === "OpenPond Managed" && managed.accountKey === scope?.accountKey &&
     managed.teamId === scope?.teamId && managed.actorId === scope?.actorId) return draft;
@@ -117,12 +120,15 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const method = resourceSetupTrainingMethod(draft);
   const recipe = method ? draft.trainingRecipes?.[method] : undefined;
   const managed = draft.values.destination === "OpenPond Managed" ? draft.managedTrainingInputs : undefined;
+  const version = draft.benchmarkModelVersion;
   const settings = [
     !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
     managed?.base && `Starting model ${managed.base.preference.modelId}, revision ${managed.base.preference.revision}, tokenizer revision ${managed.base.preference.tokenizerRevision}, chat template hash ${managed.base.preference.chatTemplateHash}`,
     managed?.batch && method === managed.batch.method && `Reviewed training batch ${managed.batch.reference.id}, revision ${managed.batch.reference.revision}, content hash ${managed.batch.reference.contentHash}`,
     managed?.validation && `Validation Dataset ${managed.validation.id}, revision ${managed.validation.revision}, content hash ${managed.validation.contentHash}, split ${managed.validationSplit ?? "validation"}`,
     draft.candidateRef && `Model project ${draft.candidateRef.projectId}, version ${draft.candidateRef.versionId}, artifact ${draft.candidateRef.artifactId}, bundle hash ${draft.candidateRef.bundleHash}`,
+    version?.location === "local" && `Model project ${version.projectId}, version ${version.versionId}, artifact ${version.artifactId}, bundle hash ${version.bundleHash}`,
+    version?.location === "cloud" && `Saved Model ${version.modelProjectId}, exact version hash ${version.versionHash}`,
     draft.values.destination === "This device" && draft.localCandidate && `Candidate local provider custom-openai-compatible, model ID ${draft.localCandidate.modelId}, configuration hash ${draft.localCandidate.configurationHash}`,
     draft.values.destination === "This device" && draft.comparison && draft.localBaseline && `Baseline local provider custom-openai-compatible, model ID ${draft.localBaseline.modelId}, configuration hash ${draft.localBaseline.configurationHash}`,
     split && `Dataset split ${split}`,

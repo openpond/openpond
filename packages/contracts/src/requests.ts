@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BenchmarkModelVersionSchema } from "./resource-setup.js";
 import {
   CreateImproveRunActionSchema,
   CreateImproveRunSchema,
@@ -180,13 +181,16 @@ export const CreateSessionResourceDraftRequestSchema = z.object({
   provider: ChatProviderSchema,
   modelRef: ChatModelRefSchema.nullable(),
   profileId: z.string().trim().min(1).max(200),
-}).strict().refine(value => !value.modelRef || value.modelRef.providerId === value.provider, "The chat model must belong to the selected provider.");
+  benchmarkVersion: BenchmarkModelVersionSchema.optional(),
+}).strict().refine(value => !value.modelRef || value.modelRef.providerId === value.provider, "The chat model must belong to the selected provider.")
+  .refine(value => !value.benchmarkVersion || value.kind === "benchmark", "A Model version belongs to a Benchmark draft.");
 export type CreateSessionResourceDraftRequest = z.infer<typeof CreateSessionResourceDraftRequestSchema>;
 
 export const SessionResourceDraftSchema = z.object({
   kind: SessionResourceDraftKindSchema,
   id: z.string().uuid(),
   profileId: z.string().min(1).max(200),
+  benchmarkVersion: BenchmarkModelVersionSchema.optional(),
 }).strict();
 export type SessionResourceDraft = z.infer<typeof SessionResourceDraftSchema>;
 

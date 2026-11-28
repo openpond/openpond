@@ -427,7 +427,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     }
     const startLocation = window.location.href;
     const profileId = bootstrap.profile.activeProfile ?? "default";
-    const operationKey = JSON.stringify([profileId, kind, candidate?.projectId, candidate?.versionId]);
+    let source: CreateSessionResourceDraftRequest["benchmarkVersion"];
+    if (candidate) {
+      const { label: _label, ...version } = candidate;
+      source = version;
+    }
+    const operationKey = JSON.stringify(source ? [profileId, kind, source] : [profileId, kind, null, null]);
     const storageKey = `openpond.resource-draft-creation.v1:${operationKey}`;
     newResourceInFlight.current = true;
     setNewResourceBusy(true);
@@ -436,7 +441,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       let storedRequest: CreateSessionResourceDraftRequest | undefined;
       try {
         const saved = CreateSessionResourceDraftRequestSchema.safeParse(JSON.parse(window.localStorage.getItem(storageKey) ?? "null"));
-        if (saved.success && saved.data.kind === kind && saved.data.profileId === profileId) storedRequest = saved.data;
+        if (saved.success && saved.data.kind === kind && saved.data.profileId === profileId &&
+          JSON.stringify(saved.data.benchmarkVersion ?? null) === JSON.stringify(source ?? null)) storedRequest = saved.data;
       } catch { /* In-flight requests are also retained in this renderer. */ }
       const request = newResourceRequests.current.get(operationKey) ?? storedRequest ?? {
         kind,
@@ -444,6 +450,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         provider: activeProvider,
         modelRef: modelId ? { providerId: activeProvider, modelId } : null,
         profileId,
+        ...(source ? { benchmarkVersion: source } : {}),
       };
       newResourceRequests.current.set(operationKey, request);
       try { window.localStorage.setItem(storageKey, JSON.stringify(request)); } catch { /* In-flight requests remain available in this renderer. */ }
@@ -451,9 +458,9 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       composerDraftStore.setResourceSetup(`session:${session.id}`, current => {
         if (current) return current;
         const setup = newResourceSetup(kind);
-        if (kind !== "benchmark" || !candidate) return setup;
-        const { label, ...candidateRef } = candidate;
-        return { ...setup, candidateRef, values: { ...setup.values, candidate: label } };
+        if (kind !== "benchmark" || !source) return setup;
+        return { ...setup, benchmarkModelVersion: source, values: { ...setup.values, candidate: candidate?.label,
+          ...(source.location === "cloud" ? { destination: "OpenPond Managed" as const } : {}) } };
       });
       if (await openSessionInChat(session.id, undefined, () => window.location.href === startLocation || window.location.pathname === `/chat/${session.id}`)) {
         newResourceRequests.current.delete(operationKey);

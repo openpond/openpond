@@ -1,6 +1,7 @@
 import { useContext, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ClientConnection } from "../../api";
+import { chatResourceRequest } from "../../api/chat-resource-api";
 import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { EvaluationSetupProvider, useEvaluationSetup } from "../labs/workspace/EvaluationSetupState";
 import { WorkspacePanelHost } from "../labs/workspace/WorkspacePanel";
@@ -18,19 +19,27 @@ export function ChatExperimentEditor({ connection, context, onClose }: {
 }) {
   const scope = useContext(ChatExperimentWorkspaceContext);
   const draft = context.selection?.draft, record = context.selection?.storedDraft;
-  const location = draft?.evaluationForm?.executionLocation ?? (draft?.operationType === "evaluate" ? "local" : "hosted");
+  const trained = draft?.operationType === "evaluate" && draft.startingModel?.source === "trained" ? draft.startingModel.trainedVersion : null;
+  const location = trained ? "hosted" : draft?.evaluationForm?.executionLocation ?? (draft?.operationType === "evaluate" ? "local" : "hosted");
   const api = useMemo(() => scope?.teamId && scope.actorId ? createWorkspaceApi(connection, {
     ...scope, teamId: scope.teamId, actorId: scope.actorId, projectId: record?.projectId ?? null, executionLocation: location,
   }) : null, [connection, scope?.accountKey, scope?.teamId, scope?.actorId, record?.projectId, location]);
   if (!draft) return null;
+  if (context.selection?.benchmarkVersion?.location === "local")
+    return <div className="chat-experiment-tool-content">
+      <p>This saved artifact needs an exact-version inference runtime.</p>
+      <button type="button" className="training-button secondary" onClick={onClose}>Close editor</button>
+    </div>;
   if (draft.hostedEvaluationForm) return <div className="chat-experiment-tool-content">
     <ErrorToast error="Open this saved evaluation in its hosted editor to preserve its native settings." />
     <button type="button" className="training-button secondary" onClick={onClose}>Close editor</button>
   </div>;
   if (!api) return <div className="chat-experiment-tool-content"><p>Select an OpenPond workspace to configure this experiment.</p></div>;
+  if (trained && api.teamId !== trained.teamId)
+    return <p>Choose the workspace that owns this saved Model version to review the Benchmark.</p>;
   const localTrainingDraft = Boolean(context.selection?.localDraft && draft.trainingForm);
   return <EvaluationSetupProvider key={`${api.key}:${draft.id}`} initialExperiment={draft} initialRecord={record}
-    allowedOperationTypes={localTrainingDraft ? [draft.operationType] : undefined} onNewDraft={async next => {
+    allowedOperationTypes={localTrainingDraft || trained ? [draft.operationType] : undefined} onNewDraft={async next => {
     const selected = await context.select({kind: "experiment", id: next.id, location: "local", draft: next}, {newExperiment: true});
     if (!selected) throw new Error("The new experiment could not be selected. Your original editor remains available.");
   }}>
@@ -46,10 +55,16 @@ function EditorBody({ api, context, localTrainingDraft, onClose }: { api: Worksp
   const inventory = useQuery({ queryKey: ["evaluation-workspace", api.key, "chat-inventory"],
     queryFn: ({ signal }) => api.request<Inventory>("inventory", {}, signal) });
   const navigate = (route: Parameters<typeof navigateModelsRoute>[0]) => { void navigateModelsRoute({ ...route, area: "console" }); };
+  const sessionId = context.selection?.target.sessionId;
   return <WorkspacePanelHost.Provider value={host}>
     <div ref={setHost} className="evaluation-workspace-panel chat-experiment-editor" />
     {inventory.error ? <ErrorToast error={inventory.error}><button type="button" className="training-text-button" onClick={() => void inventory.refetch()}>Retry workspace</button></ErrorToast> : null}
     <ExperimentSetupPanel key={setup.initialExperiment?.id} api={api} inventory={inventory.data ?? null} localTrainingDraft={localTrainingDraft}
+      bindBenchmark={context.selection?.benchmarkVersion?.location === "cloud" && sessionId ? async (preparationId, revision) => {
+        await chatResourceRequest(api.connection, "dataset", { action: "context_bind_benchmark", payload: { sessionId, preparationId, revision } });
+      } : undefined}
+      retainedBenchmark={context.selection?.localDraft && context.selection.draft && context.selection.draftRevision
+        ? { draft: context.selection.draft, revision: context.selection.draftRevision } : undefined}
       route={modelsLocation("experiments", null, { projectId: api.projectId, executionLocation: api.location })}
       navigate={navigate} onClose={onClose}
       onTrainingStarted={async id => {

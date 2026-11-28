@@ -229,7 +229,8 @@ export function EvaluationSetupProvider({
   const [draft, setDraftState] = useState<ExperimentSetupDraft | null>(() => {
     const form =
       initialExperiment?.evaluationForm?.form ??
-      (initialExperiment ? initialDraft(null, null, "model") : null);
+      (initialExperiment ? { ...initialDraft(null, null, "model"),
+        ...(initialExperiment.startingModel?.source === "trained" ? { budget: null } : {}) } : null);
     const selected = initialExperimentStartingModel(initialExperiment);
     if (!form) return null;
     return definedEvaluationForm(selected

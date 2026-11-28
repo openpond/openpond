@@ -29,6 +29,8 @@ export type ExperimentSetupPanelProps = {
   onTrainingStarted?: (id: string) => void | Promise<void>;
   onSaveDraft?: (draft: ExperimentDraft) => Promise<unknown>;
   localTrainingDraft?: boolean;
+  bindBenchmark?: (preparationId: string, revision: number) => Promise<void>;
+  retainedBenchmark?: { draft: ExperimentDraft; revision: number };
 };
 export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {
   const setup = useEvaluationSetup();

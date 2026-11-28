@@ -5,6 +5,15 @@ import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelPro
 const fieldText = z.string().max(2_000).optional();
 const positiveInteger = z.number().int().positive().optional();
 const nonnegativeNumber = z.number().nonnegative().optional();
+const artifactHash = z.string().regex(/^[a-f0-9]{64}$/);
+const resourceId = z.string().min(1).max(240);
+export const BenchmarkModelVersionSchema = z.discriminatedUnion("location", [
+  z.object({ location: z.literal("local"), projectId: resourceId, versionId: resourceId,
+    artifactId: resourceId, bundleHash: artifactHash }).strict(),
+  z.object({ location: z.literal("cloud"), modelProjectId: resourceId, jobId: resourceId,
+    teamId: resourceId, versionHash: artifactHash }).strict(),
+]);
+export type BenchmarkModelVersion = z.infer<typeof BenchmarkModelVersionSchema>;
 const localModelRef = z.object({
   modelId: z.string().min(1).max(500),
   configurationHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -49,6 +58,7 @@ export const ResourceSetupDraftSchema = z.object({
     id: z.string().min(1).max(240),
     revision: z.number().int().positive(),
   }).optional(),
+  benchmarkModelVersion: BenchmarkModelVersionSchema.optional(),
   candidateRef: z.object({
     projectId: z.string().min(1).max(240),
     versionId: z.string().min(1).max(240),
@@ -100,6 +110,10 @@ export const BenchmarkRunPinSchema = z.object({
   revision: z.number().int().positive(),
   draftHash: z.string().regex(/^[a-f0-9]{64}$/),
   setupHash: z.string().regex(/^[a-f0-9]{64}$/),
+  modelVersion: z.object({
+    projectId: resourceId, jobId: resourceId, versionHash: artifactHash,
+    artifact: z.object({ id: resourceId, contentHash: artifactHash }).strict(),
+  }).strict().optional(),
 }).strict();
 export type BenchmarkRunPin = z.infer<typeof BenchmarkRunPinSchema>;
 

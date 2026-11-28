@@ -2,6 +2,10 @@ import {z} from "zod";
 import {contentHash} from "@openpond/harness";
 import {OpenPondDatasetWorkspaceClient} from "openpond-sdk/dataset-workspaces";
 import {OpenPondExperimentsClient,RunExperimentSchema,ExperimentRunDetailsSchema,type ExperimentRunDetails} from "openpond-sdk/experiments";
+import {createCandidateEvaluationClient} from "openpond-sdk/candidate-evaluations";
+import {createTrainingClient, canonicalJson, type ExperimentDraft} from "openpond-sdk/training";
+import {BenchmarkRunPinSchema, type BenchmarkRunPin} from "@openpond/contracts/resource-setup";
+import {hostedApiAuthHeaders} from "../openpond/hosted-api-access.js";
 import type {ExperimentResult} from "@openpond/evals/experiments";
 import type {ChatResourceSummary,LocalDatasetRecord,ChatExperimentView} from "@openpond/contracts";
 import type {SqliteStore} from "../store/store.js";
@@ -9,8 +13,11 @@ import type {createLocalDatasetService} from "../training/local-dataset-service.
 import {ChatExperimentRun} from "./chat-experiments.js";
 
 const Pin=z.object({actorId:z.string().min(1),teamId:z.string().min(1),apiOrigin:z.url()}).strict();
-const Hosted=z.object({pin:Pin,datasetId:z.string().min(1),datasetRevision:z.number().int().positive(),details:ExperimentRunDetailsSchema}).strict();
+const Hosted=z.object({pin:Pin,datasetId:z.string().min(1),datasetRevision:z.number().int().positive(),details:ExperimentRunDetailsSchema,
+  benchmark:BenchmarkRunPinSchema.optional()}).strict();
 const Group=z.object({location:z.literal("cloud"),pin:Pin,datasetId:z.string(),datasetRevision:z.number().int().positive(),configurations:z.array(RunExperimentSchema).min(1).max(8)}).strict();
+const CandidateBenchmark=z.object({pin:Pin, sessionId:z.string(), benchmark:BenchmarkRunPinSchema,
+  preparationHash:z.string(), artifact:z.object({id:z.string(),contentHash:z.string()}).strict()}).strict();
 export type {ChatExperimentView} from "@openpond/contracts";
 
 export function cloudExperimentSummary(record:z.infer<typeof Hosted>,result?:ExperimentResult):ChatResourceSummary {
@@ -20,6 +27,7 @@ export function cloudExperimentSummary(record:z.infer<typeof Hosted>,result?:Exp
   const execution=result?.cases.filter(row=>row.status==="failed" || row.status==="unavailable").length ?? summary.counts.failed;
   const costs=result?.cases.map(row=>row.usage.costUsd);
   return {kind:"experiment",id:summary.id,revision:1,location:"cloud",datasetId:record.datasetId,datasetRevision:record.datasetRevision,name:summary.name ?? summary.id,state:summary.status,
+    ...(record.benchmark ? { benchmark: record.benchmark } : {}),
     model:details.request.policy.kind==="fixture" ? "Fixture" : `openpond/${details.request.policy.modelId}`,taskCount:summary.totalCount,evaluatedCount:evaluated,
     score:summary.score,scoreLabel:summary.metricName,costUsd:costs?.length && costs.every(value=>value!==null) ? costs.reduce<number>((sum,value)=>sum+value!,0) : null,
     qualityFailureCount:quality,executionFailureCount:execution,failedCount:quality+execution,ungradedCount:summary.totalCount-evaluated,
@@ -40,8 +48,73 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
     return {...current,pin:actual};
   }
   const client=(current:Awaited<ReturnType<typeof access>>)=>new OpenPondExperimentsClient({baseUrl:current.apiBaseUrl,apiKey:current.token,teamId:current.teamId,fetch:transport});
-  async function retain(pin:z.infer<typeof Pin>,datasetId:string,datasetRevision:number,details:ExperimentRunDetails) {
-    const record=Hosted.parse({pin,datasetId,datasetRevision,details});await deps.store.retainChatHostedExperiment(details.summary.id,contentHash(pin),details.configuration.configurationHash,record);return record;
+  async function retain(pin:z.infer<typeof Pin>,datasetId:string,datasetRevision:number,details:ExperimentRunDetails, benchmark?:BenchmarkRunPin) {
+    const record=Hosted.parse({pin,datasetId,datasetRevision,details,...(benchmark ? { benchmark } : {})});await deps.store.retainChatHostedExperiment(details.summary.id,contentHash(pin),details.configuration.configurationHash,record);return record;
+  }
+  async function bindBenchmark(input:{sessionId:string;preparationId:string;revision:number;draft?:ExperimentDraft}) {
+    const operation=`benchmark-candidate:${input.preparationId}`;
+    const previous=await deps.store.readChatExperimentGroup(operation);
+    let recorded=previous ? CandidateBenchmark.parse(previous) : null;
+    if(recorded && (recorded.sessionId!==input.sessionId || recorded.benchmark.revision!==input.revision))
+      throw new Error("This candidate is already bound to another Benchmark revision.");
+    const current=await access(recorded?.pin);
+    const headers=hostedApiAuthHeaders(current.token);
+    headers.set("x-openpond-team-id",current.teamId);
+    const candidate=createCandidateEvaluationClient(async (path,init)=>{
+      const response=await transport(new URL(path,current.apiBaseUrl),{...init,headers,redirect:"error"});
+      if(!response.ok)throw new Error("Cannot read this workspace's retained candidate evaluation.");
+      return response.json();
+    });
+    const prepared=await candidate.get(current.teamId,input.preparationId);
+    if(prepared.ownerUserId!==current.actorId)throw new Error("The candidate evaluation owner changed.");
+    const configuration=prepared.request.configuration;
+    if(!recorded) {
+      const draft=input.draft, version=draft?.startingModel?.source==="trained" ? draft.startingModel.trainedVersion : null;
+      const {form,selection}=draft?.evaluationForm ?? {};
+      const {policy,population}=configuration.request;
+      const seeds=new Set(form?.seed.split(/[\s,]+/).filter(Boolean));
+      const tasks=new Set(selection?.ids);
+      if(!draft || !version || !form?.release || draft.evaluationForm?.executionLocation!=="hosted" ||
+        version.teamId!==current.teamId || prepared.trainingJobId!==version.jobId ||
+        policy.kind!=="hosted_chat" || policy.localRuntime || policy.harness || policy.candidate ||
+        policy.modelId!==version.request.baseModel.modelId || policy.maxOutputTokens!==form.outputTokens ||
+        policy.temperature!==(form.temperature??0) || policy.topP!==(form.topP??1) ||
+        canonicalJson(policy.messages??[])!==canonicalJson(form.prompt.trim() ? [{role:"system",content:form.prompt.trim()}] : []) ||
+        canonicalJson(form.release)!==canonicalJson(configuration.request.taskset) ||
+        selection?.mode!=="subset" || canonicalJson(selection.release)!==canonicalJson(form.release) ||
+        population.length!==tasks.size*seeds.size || new Set(population.map(member=>JSON.stringify([member.taskId,member.seed]))).size!==population.length ||
+        population.some(member=>!tasks.has(member.taskId)||!seeds.has(member.seed)||member.fixtureId!==null) ||
+        form.budget!==configuration.maximumCostUsd || form.name.trim()!==configuration.request.name ||
+        canonicalJson(form.graderChoices[form.release.contentHash]??[])!==canonicalJson(configuration.graders??[]))
+        throw new Error("The preparation differs from the saved Benchmark revision.");
+      const result=await createTrainingClient({baseUrl:current.apiBaseUrl,headers,fetch:transport}).result(version.jobId,{teamId:current.teamId});
+      if(result.teamId!==current.teamId || result.job.modelProjectId!==version.modelProjectId ||
+        result.candidate?.registryArtifactId!==prepared.request.artifact.id ||
+        result.candidate.checkpointId!==version.candidate.checkpointId ||
+        canonicalJson(result.candidate.artifact)!==canonicalJson(version.candidate.artifact))
+        throw new Error("The preparation does not use the exact saved Model artifact.");
+      await access(current.pin);
+      const value=CandidateBenchmark.parse({pin:current.pin,sessionId:input.sessionId,preparationHash:prepared.requestHash,
+        artifact:prepared.request.artifact,benchmark:{id:draft.id,revision:input.revision,draftHash:contentHash(draft),
+          setupHash:contentHash(configuration),modelVersion:{projectId:version.modelProjectId,jobId:version.jobId,
+            versionHash:version.contentHash,artifact:version.candidate.artifact}}});
+      recorded=CandidateBenchmark.parse(await deps.store.prepareChatExperimentGroup(operation,contentHash(value),value));
+    }
+    if(recorded.preparationHash!==prepared.requestHash || contentHash(configuration)!==recorded.benchmark.setupHash)
+      throw new Error("The bound candidate preparation changed.");
+    if(!prepared.experimentId)return { benchmark:recorded.benchmark };
+    const details=await client(await access(current.pin)).get(prepared.experimentId);
+    const policy=details.request.policy;
+    if(policy.kind!=="hosted_chat" || policy.candidate?.preparationId!==prepared.id || policy.candidate.dispatchId!==prepared.dispatchId ||
+      policy.candidate.artifactId!==recorded.artifact.id || policy.candidate.contentHash!==recorded.artifact.contentHash ||
+      canonicalJson(details.request.taskset)!==canonicalJson(configuration.request.taskset) ||
+      canonicalJson(details.request.population)!==canonicalJson(configuration.request.population) ||
+      details.configuration.maximumCostUsd!==configuration.maximumCostUsd)
+      throw new Error("The retained run differs from the exact Benchmark candidate or configuration.");
+    await access(current.pin);
+    const release=details.request.taskset;
+    const retained=await retain(current.pin,release.id,release.revision,details,recorded.benchmark);
+    return { benchmark:recorded.benchmark, summary:cloudExperimentSummary(retained) };
   }
   async function read(id:string) {const raw=await deps.store.readChatHostedExperiment(id);if(!raw)throw new Error("This cloud Experiment was not retained by this installation.");return Hosted.parse(raw);}
   async function run(raw:unknown) {
@@ -73,12 +146,19 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
     return {runs,summaries,errors,maximumCostUsd:input.maximumCostUsd};
   }
   async function list(){return (await deps.store.listChatHostedExperiments()).map(raw=>cloudExperimentSummary(Hosted.parse(raw)));}
+  async function benchmarkPin(id:string) {
+    const raw=await deps.store.readChatHostedExperiment(id);
+    if(!raw)return null;
+    const record=Hosted.parse(raw);
+    await access(record.pin);
+    return record.benchmark ?? null;
+  }
   async function compare(payload:Record<string,unknown>){const input=z.object({baselineId:z.string().min(1),candidateId:z.string().min(1)}).parse(payload);const [a,b]=await Promise.all([read(input.baselineId),read(input.candidateId)]);if(contentHash(a.pin)!==contentHash(b.pin))throw new Error("Cloud comparison requires the same pinned account and workspace.");return client(await access(a.pin)).compare(input.baselineId,input.candidateId);}
   async function request(action:string,payload:Record<string,unknown>) {
     if(typeof payload.id!=="string")throw new Error("Select a retained cloud Experiment.");
     let record=await read(payload.id);const current=await access(record.pin),api=client(current);
     const details=action==="cancel" ? await api.cancel(payload.id) : await api.get(payload.id);
-    record=await retain(record.pin,record.datasetId,record.datasetRevision,details);
+    record=await retain(record.pin,record.datasetId,record.datasetRevision,details,record.benchmark);
     if(action==="case") {
       const receipt=z.object({receiptId:z.string().min(1)}).parse(payload);
       const member=details.request.population.find(row=>row.receiptId===receipt.receiptId);if(!member)throw new Error("This case was not admitted by the cloud Experiment.");
@@ -94,5 +174,5 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
     }
     throw new Error("Cloud status observation stopped.");
   }
-  return {run,request,read,list,compare,wait,close:()=>shutdown.abort(new Error("Cloud Experiment observation stopped."))};
+  return {run,request,read,list,compare,wait,bindBenchmark,benchmarkPin,close:()=>shutdown.abort(new Error("Cloud Experiment observation stopped."))};
 }

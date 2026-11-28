@@ -14,6 +14,9 @@ import { ExperimentCompare } from "./ExperimentCompare";
 import { HostedExperimentCollection } from "./HostedExperimentCollection";
 import { useWorkspaceActions, useWorkspaceResourceName } from "./WorkspacePanel";
 import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { BenchmarkRunPinSchema } from "@openpond/contracts/resource-setup";
+import { chatResourceRequest } from "../../../api/chat-resource-api";
 import type { ModelsRoute } from "../models-route";
 import { useEvaluationSetup } from "./EvaluationSetupState";
 import type { ExperimentGraderPin } from "openpond-sdk/experiments";
@@ -47,6 +50,17 @@ export function HostedExperimentsPage({
     detail = useHostedExperimentDetail(api, route),
     run = detail.execution.data,
     tab = route.detailTab === "cases" ? "tasks" : route.detailTab ?? "tasks";
+  const benchmark = useQuery({
+    queryKey: ["benchmark-run-pin", api.key, run?.summary.id],
+    enabled: tab === "versions" && run?.request.policy.kind === "hosted_chat" && Boolean(run.request.policy.candidate),
+    queryFn: async ({ signal }) => {
+      const value = await chatResourceRequest<{ benchmark: unknown }>(api.connection, "experiment", {
+        action: "benchmark_pin", payload: { id: run!.summary.id },
+      }, signal);
+      return BenchmarkRunPinSchema.nullable().parse(value.benchmark);
+    },
+    staleTime: Infinity,
+  });
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     active = useRef(false);
@@ -273,7 +287,8 @@ export function HostedExperimentsPage({
             />
           ) : null}
           {tab === "diagnostics" ? <ExperimentDiagnostics key={api.key+run.summary.id} api={api} id={run.summary.id} manifestHash={run.summary.manifestHash}/> : null}
-          {tab === "graders" || tab === "versions" ? <ExperimentRunPins configuration={run.configuration} section={tab}/> : null}
+          {tab === "graders" || tab === "versions" ? <ExperimentRunPins configuration={run.configuration} section={tab} benchmark={benchmark.data}/> : null}
+          <ErrorToast error={benchmark.error} />
           {tab === "configuration" ? (
             <ExperimentConfiguration
               execution={run}

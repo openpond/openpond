@@ -1711,7 +1711,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       openEventSubscriber,
       refreshCodexStatus,
       bootstrapPayload,
-      createSessionResourceDraft: createSessionResourceDraft({ storeDir, store, createReservedSession }),
+      createSessionResourceDraft: createSessionResourceDraft({ storeDir, store, createReservedSession,
+        readHostedVersion: ({ teamId, modelProjectId, versionHash }) =>
+          trainingPayload("hosted_training_saved_version", { teamId, modelProjectId, versionHash }) }),
       localProjectActionCatalogPayload,
       skillSourceFilePayload,
       extensionCatalogPayload,

@@ -8,10 +8,12 @@ import {
   type CreateSessionRequest,
 } from "@openpond/contracts/requests";
 import { ModelProjectTrainingSetupSchema } from "openpond-sdk/model-projects";
+import { parseAndVerifySavedModelVersionRead, type ExperimentDraft } from "openpond-sdk/training";
+import type { BenchmarkModelVersion } from "@openpond/contracts/resource-setup";
 import type { Session } from "@openpond/contracts/sessions";
 import type { SqliteStore } from "../store/store.js";
 import type { ReservedSessionCreation } from "../store/session-store.js";
-import { createChatExperimentScopes } from "./chat-experiment-scope.js";
+import { chatExperimentContext, createChatExperimentScopes } from "./chat-experiment-scope.js";
 
 const titles = {
   model: "New model",
@@ -24,6 +26,7 @@ export function createSessionResourceDraft(input: {
   storeDir: string;
   store: SqliteStore;
   createReservedSession: (payload: unknown, reservation: ReservedSessionCreation) => Promise<Session>;
+  readHostedVersion?: (source: Extract<BenchmarkModelVersion, { location: "cloud" }>) => Promise<unknown>;
 }) {
   const benchmarkScopes = createChatExperimentScopes(input.store);
   return async (raw: unknown) => {
@@ -36,7 +39,30 @@ export function createSessionResourceDraft(input: {
       kind: request.kind,
       id: request.operationId,
       profileId: request.profileId,
+      benchmarkVersion: request.benchmarkVersion,
     });
+    const current = resource.kind === "benchmark" ? await input.store.getSession(sessionId) : null;
+    const initialized = current && chatExperimentContext(current.metadata).scopes.some(scope => scope.draft?.id === resource.id);
+    let startingModel: ExperimentDraft["startingModel"];
+    const source = resource.benchmarkVersion;
+    if (!initialized && source?.location === "local") {
+      const [lineage, project] = await Promise.all([
+        input.store.getModelArtifactLineage(source.versionId), input.store.getModelProject(source.projectId),
+      ]);
+      if (!project || project.profileId !== request.profileId || !lineage || lineage.modelId !== project.id ||
+        lineage.status !== "imported" || lineage.artifactId !== source.artifactId || lineage.bundleHash !== source.bundleHash)
+        throw new Error("This exact local Model version is unavailable.");
+    }
+    if (!initialized && source?.location === "cloud") {
+      if (!input.readHostedVersion) throw new Error("Saved Model versions are unavailable.");
+      const { model, version } = await parseAndVerifySavedModelVersionRead(
+        await input.readHostedVersion(source), source.teamId, source.modelProjectId, source.versionHash,
+      );
+      if (version?.schemaVersion !== "openpond.trainingModelVersion.v1" || version.jobId !== source.jobId)
+        throw new Error("Choose an exact saved training version for this Benchmark.");
+      startingModel = { source: "trained", label: model.name, baseModel: version.request.baseModel,
+        inferenceModelId: null, trainedVersion: version };
+    }
     const title = titles[resource.kind];
     const ownsFolder = resource.kind === "model" || resource.kind === "benchmark";
     const cwd = ownsFolder
@@ -76,11 +102,12 @@ export function createSessionResourceDraft(input: {
       });
     }
     if (resource.kind === "benchmark") {
-      await benchmarkScopes.createDraft(reserved.id, {
+      if (!initialized) await benchmarkScopes.createDraft(reserved.id, {
         schemaVersion: "openpond.experimentDraft.v1",
         id: resource.id,
         operationType: "evaluate",
         name: title,
+        ...(startingModel ? { startingModel } : {}),
       });
       return await input.store.getSession(reserved.id) ?? reserved;
     }

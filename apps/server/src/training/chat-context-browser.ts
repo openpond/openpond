@@ -192,7 +192,8 @@ export function createChatContextBrowser(deps: {
       }
       const library = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft);
       const localDraft = library.success && library.data.kind === "benchmark" && library.data.id === scope.draft?.id;
-      const draftState = scope.draft ? { draft: scope.draft, draftRevision: scope.draftRevision ?? 1, ...(localDraft ? { localDraft: true as const } : {}) } : {};
+      const draftState = scope.draft ? { draft: scope.draft, draftRevision: scope.draftRevision ?? 1,
+        ...(localDraft ? { localDraft: true as const, ...(library.data.benchmarkVersion ? { benchmarkVersion: library.data.benchmarkVersion } : {}) } : {}) } : {};
       if (!scope.dataset) return { target, ...draftState, label: scope.name, detail: "Benchmark draft" };
       const resource = await deps.resource({ kind: "dataset", id: scope.dataset.id, revision: scope.dataset.revision, location: scope.dataset.location ?? "local" });
       if (resource.kind !== "dataset" || resource.id !== scope.dataset.id || resource.revision !== scope.dataset.revision ||
