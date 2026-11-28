@@ -41,6 +41,7 @@ export const ChatExperimentRun = z.object({datasetId:z.string().min(1),revision:
 const ChatLocalExperimentRun=ChatExperimentRun.extend({
   maximumCostUsd:ChatExperimentRun.shape.maximumCostUsd.optional(),
   split:DatasetSplitSchema.optional(),
+  datasetWorkspaceHash:z.string().regex(/^[a-f0-9]{64}$/).optional(),
   models:ChatExperimentRun.shape.models.element.extend({configurationHash:z.string().regex(/^[a-f0-9]{64}$/).optional()}).array().min(1).max(8),
 });
 
@@ -61,6 +62,7 @@ export function pinLocalBenchmarkRequest(raw: unknown, setup: ResourceSetupDraft
     throw new Error("The requested run exceeds the Benchmark budget.");
   return {
     ...input,
+    datasetWorkspaceHash: dataset.contentHash,
     ...(setup.values.samples === undefined ? {} : { taskLimit: setup.values.samples }),
     ...(setup.values.seed === undefined ? {} : { seed: setup.values.seed }),
     ...(setup.values.split === undefined ? {} : { split: setup.values.split }),
@@ -161,7 +163,12 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     const parsed = ChatLocalExperimentRun.parse(raw);
     if(parsed.models.some(model=>!["codex","claude-code"].includes(model.providerId) && model.reasoningEffort!==undefined))throw new Error("Explicit reasoning effort is supported only for native Codex and Claude experiment models.");
     const {record,package:value} = await deps.datasets.packageDataset(parsed.datasetId,parsed.revision);
-    const subscriptionOnly=parsed.models.every(model=>model.providerId==="codex") && !record.workspace.draft.graders.some(grader=>grader.kind==="model_judge");
+    if (parsed.datasetWorkspaceHash && parsed.datasetWorkspaceHash !== record.workspace.contentHash)
+      throw new Error("The selected Dataset revision no longer matches the Benchmark setup.");
+    const needsHostedGrading = record.workspace.draft.graders.some(grader => grader.kind === "model_judge");
+    if (benchmark && needsHostedGrading)
+      throw new Error("This-device Benchmarks require local graders. Choose a Dataset revision with local graders.");
+    const subscriptionOnly=parsed.models.every(model=>model.providerId==="codex") && !needsHostedGrading;
     if(parsed.maximumCostUsd===undefined && !subscriptionOnly)throw new Error("Select a positive total budget for metered model calls or model-judge grading.");
     // The shared durable owner reserves uncertain provider requests. Its
     // internal ceiling is not a subscription price or a measured dollar cost.
@@ -179,7 +186,7 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
         hasHostedModel ? hostedChoices() : { models: [] },
       ]);
       const catalog = [...local, ...hostedChoicesResult.models];
-      const hosted=hasHostedModel || record.workspace.draft.graders.some(grader=>grader.kind==="model_judge") ? await hostedPin() : null;
+      const hosted=hasHostedModel || needsHostedGrading ? await hostedPin() : null;
       const configurations = await Promise.all(input.models.map(async(selected,index) => {
         const model = selected.providerId==="codex" ? await codex.choice(selected.modelId,selected.reasoningEffort===undefined?undefined:CodexExperimentRuntimeSchema.shape.reasoningEffort.parse(selected.reasoningEffort)) : selected.providerId==="claude-code" ? await claude.choice(selected.modelId,selected.reasoningEffort===undefined?undefined:ClaudeCodeRuntimeSchema.shape.reasoningEffort.parse(selected.reasoningEffort)) : catalog.find(m => m.providerId === selected.providerId && m.id === selected.modelId);
         if (!model) throw new Error("The selected evaluated model is unavailable: "+selected.providerId+"/"+selected.modelId+".");

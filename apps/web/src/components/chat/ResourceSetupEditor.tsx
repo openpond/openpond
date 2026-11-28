@@ -96,7 +96,7 @@ export function ResourceSetupEditor({ draft, busy, connection, datasets, evaluat
     onChange(draft, {
       ...draft,
       revision: draft.revision + 1,
-      datasetRef: reference && { id: reference.id, revision: reference.revision, contentHash: reference.contentHash },
+      datasetRef: reference && { id: reference.id, revision: reference.revision, contentHash: reference.evaluationHash ?? reference.contentHash },
       values: { ...draft.values, dataset: reference?.name, datasetRevision: reference?.revision, grader: undefined },
     });
   }
@@ -151,6 +151,12 @@ export function ResourceSetupEditor({ draft, busy, connection, datasets, evaluat
         {activeFields.map((key, index) => {
           const options = fieldOptions(key);
           const label = field === "saveDestination" ? "Save to" : labels[key];
+          if (key === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") {
+            return <div className="resource-setup-input" key={key}>
+              <span>{label}</span>
+              <p>This device runs the local graders saved with the selected Dataset revision.</p>
+            </div>;
+          }
           if ((key === "candidate" || key === "baseline") && draft.values.destination === "This device") {
             const pin = key === "candidate" ? "localCandidate" : "localBaseline";
             const selected = draft[pin];

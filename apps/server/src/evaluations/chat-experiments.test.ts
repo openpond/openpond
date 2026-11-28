@@ -104,10 +104,13 @@ test("account-independent configured loopback inference completes a saved local 
     const request = { datasetId, revision: 1, operationId: "no-account-run", maximumCostUsd: 0.01,
       taskLimit: 1, maxOutputTokens: 64, models: [{ providerId: "custom-openai-compatible", modelId: model.id }] };
     const setup = { kind: "benchmark", revision: 1, values: { destination: "This device", budget: 0.01, split: "validation" },
-      datasetRef: { id: datasetId, revision: 1 }, localCandidate: { modelId: model.id, configurationHash: model.configurationHash } } as const;
+      datasetRef: { id: datasetId, revision: 1, contentHash: created.record.workspace.contentHash }, localCandidate: { modelId: model.id, configurationHash: model.configurationHash } } as const;
     await expect(experiments.run(pinLocalBenchmarkRequest({ ...request, operationId: "stale-local-runtime" },
       { ...setup, localCandidate: { ...setup.localCandidate, configurationHash: "f".repeat(64) } })))
       .rejects.toThrow("selected model configuration changed");
+    await expect(experiments.run(pinLocalBenchmarkRequest({ ...request, operationId: "stale-local-dataset" },
+      { ...setup, datasetRef: { ...setup.datasetRef, contentHash: "f".repeat(64) } })))
+      .rejects.toThrow("selected Dataset revision no longer matches");
     const benchmark = { id: "local-benchmark", revision: 2, draftHash: contentHash("definition"), setupHash: contentHash(setup) };
     const run=await experiments.run(pinLocalBenchmarkRequest(request, setup), benchmark);
     expect(run.errors).toEqual([]);await experiments.service.wait(run.runs[0]!.id);

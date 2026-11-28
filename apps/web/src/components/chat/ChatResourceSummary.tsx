@@ -100,7 +100,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
     const operation = operationId ?? crypto.randomUUID(); setOperationId(operation);
     const datasetId = current.kind === "dataset" ? current.id : current.datasetId;
     const revision = current.kind === "dataset" ? current.revision : current.datasetRevision;
-    if (!datasetId || !revision) throw new Error("This Experiment does not have an installation-local Dataset pin.");
+    if (!datasetId || !revision) throw new Error("This Benchmark has no saved local Dataset revision.");
     const response = await chatResourceRequest<{summaries:Resource[]}>(connection!,"experiment",{action:location === "cloud" ? "run_cloud" : "run",context,payload:{datasetId,revision,operationId:operation,...subscriptionOnly ? {} : {maximumCostUsd},taskLimit:limit,models:selected.map(model=>({providerId:model!.providerId,modelId:model!.id}))}});
     if (!context) setLaunched(response.summaries);setSetup(false);setOperationId(null);
   }
@@ -109,7 +109,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
   const actions:ResourceAction[]=[];
   const action=(label:string,run:()=>Promise<void>,disabled=false)=>actions.push({label,run:()=>void perform(run),disabled:busy || !connection || disabled});
   if(current.kind === "dataset") {
-    action("Run experiment",prepareRun,unsaved);
+    action("Run benchmark",prepareRun,unsaved);
     action("Check graders",()=>datasetAction("check_graders"),unsaved);
     if(!unsaved && current.syncState !== "Synced" && current.syncState !== "Paused") action(current.syncState === "Local" ? "Upload to cloud" : "Retry sync",()=>datasetAction(current.syncState === "Local" ? "upload" : "sync"));
     if(expanded && !unsaved && current.syncState !== "Local") {
@@ -117,7 +117,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
       action("Disconnect cloud",()=>datasetAction("disconnect_sync"));
     }
   } else if(["queued","running","cancelling"].includes(current.state)) {
-    action("Cancel experiment",async()=>{const response=await chatResourceRequest<{summary:Resource}>(connection!,"experiment",{action:"cancel",payload:{id:current.id}});setCurrent(previous=>({...response.summary,datasetId:previous.datasetId,datasetRevision:previous.datasetRevision}));});
+    action("Cancel benchmark",async()=>{const response=await chatResourceRequest<{summary:Resource}>(connection!,"experiment",{action:"cancel",payload:{id:current.id}});setCurrent(previous=>({...response.summary,datasetId:previous.datasetId,datasetRevision:previous.datasetRevision}));});
   } else {
     if(!current.owner && !current.profileRef) action("Run again",prepareRun,!current.datasetId);
     action("HTML charts",async()=>{await chatResourceRequest(connection!,"experiment",{action:"charts",context,payload:{ids:[current.id],operationId:chartOperationId}});},!context);
@@ -125,12 +125,13 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
   const metric=current.score == null ? "" : `${Number((current.score*100).toFixed(1))}%`;
   const summary=current.kind === "dataset" ? `${current.taskCount ?? 0} example${current.taskCount === 1 ? "" : "s"}, ${current.graderCount ?? 0} grader${current.graderCount === 1 ? "" : "s"}`
     : `${current.evaluatedCount ?? 0}/${current.taskCount ?? 0} graded${metric ? `, ${metric}` : ""}`;
-  return <section className={`chat-resource-summary ${expanded ? "" : "compact"}`} aria-label={`${current.kind}: ${current.name}`}>
+  return <section className={`chat-resource-summary ${expanded ? "" : "compact"}`} aria-label={`${current.kind === "experiment" ? "Benchmark" : "Dataset"}: ${current.name}`}>
     <ChatResourceToolbar name={current.name} version={current.revision} summary={summary} primary={primary} actions={actions}>
       <dl>
         <dt>Status</dt><dd>{current.state}</dd>
         {current.kind === "dataset" ? <><dt>Storage</dt><dd>{current.syncState ?? "Local"}</dd><dt>Grader checks</dt><dd>{current.checkState ?? "Not checked"}</dd></> : <>
           <dt>Model</dt><dd>{current.model ?? "Unavailable"}</dd><dt>Location</dt><dd>{current.location ?? "local"}</dd>
+          {current.benchmark && <><dt>Benchmark revision</dt><dd>{current.benchmark.revision}</dd></>}
           <dt>{current.scoreLabel ?? "Mean task score"}</dt><dd>{metric || "Unavailable"}</dd>
           <dt>Cost</dt><dd>{current.costUsd == null ? "Unavailable" : `$${current.costUsd.toFixed(4)}`}</dd>
           <dt>Quality failures</dt><dd>{current.qualityFailureCount ?? "Unavailable"}</dd>
@@ -153,7 +154,7 @@ function ChatDatasetOrExperimentSummary({initial,connection,context}:{initial:Re
       {!models.length && <p>Sign in to Codex or configure a supported local inference endpoint, a priced OpenPond model, or Claude API provider in Settings before running.</p>}
       {subscriptionOnly ? <p>Uses your signed-in Codex account with Lite reasoning. No dollar budget is required. Token usage is retained; dollar cost is unavailable.</p> : <label>Total budget (USD)<input type="number" min="0.000001" step="any" value={budget} onChange={event=>{setBudget(event.target.value);setOperationId(null);}} disabled={busy} /></label>}
       <label>Maximum tasks<input type="number" min="1" max="100" value={taskLimit} onChange={event=>{setTaskLimit(event.target.value);setOperationId(null);}} disabled={busy} /></label>
-      <button type="button" className="training-button" disabled={busy || !selectedModels.length && !model || !subscriptionOnly && !budget} onClick={()=>void perform(run)}>{location === "cloud" ? "Run in cloud" : "Run experiment"}</button><button type="button" className="training-button secondary" disabled={busy} onClick={()=>setSetup(false)}>Close</button>
+      <button type="button" className="training-button" disabled={busy || !selectedModels.length && !model || !subscriptionOnly && !budget} onClick={()=>void perform(run)}>{location === "cloud" ? "Run in cloud" : "Run benchmark"}</button><button type="button" className="training-button secondary" disabled={busy} onClick={()=>setSetup(false)}>Close</button>
     </div>}
 
     {error && <ErrorToast error={error} />}

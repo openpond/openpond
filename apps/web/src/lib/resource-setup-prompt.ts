@@ -76,6 +76,7 @@ export const resourceSetupGroups: Partial<Record<PromptField, readonly ResourceS
 export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetupPart, string>, draft: ResourceSetupDraft): string {
   if (field === "saveDestination") return draft.values.destination ?? placeholder;
   if (field === "trainingSettings" || field === "evaluationSettings" || field === "preview") return placeholder;
+  if (field === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") return "the Dataset’s local graders";
   const value = draft.values[field];
   if (field === "budget" && typeof value === "number") return `$${value}`;
   if (field === "dataset" && value && draft.values.datasetRevision) return `${value} revision ${draft.values.datasetRevision}`;
