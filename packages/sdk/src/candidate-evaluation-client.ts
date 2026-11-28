@@ -18,10 +18,12 @@ export function createCandidateEvaluationClient(
   }
   return {
     async options(teamId: string, query: { afterId?: string; projectId?: string } = {}) {
-      const params = new URLSearchParams({ teamId, ...query }),
-        value = CandidateEvaluationOptionsSchema.parse(
-          await request(`/v1/training/candidates?${params}`),
-        );
+      const params = new URLSearchParams({ teamId });
+      if (query.afterId !== undefined) params.set("afterId", query.afterId);
+      if (query.projectId !== undefined) params.set("projectId", query.projectId);
+      const value = CandidateEvaluationOptionsSchema.parse(
+        await request(`/v1/training/candidates?${params}`),
+      );
       if (value.teamId !== teamId)
         throw new Error("The candidate catalog belongs to another workspace.");
       return value;

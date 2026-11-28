@@ -72,6 +72,8 @@ export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {
         onOpenRun={props.onAdvancedRun}
       />
     );
+  if (props.bindBenchmark)
+    return <OrdinaryExperimentSetupPanel {...props} onSaveDraft={onSaveDraft} />;
   return (
     <>
       <Activity mode={setup.operationType === "evaluate" ? "visible" : "hidden"}>
