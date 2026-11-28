@@ -10,16 +10,16 @@ import { connectionQueryScope } from "../../lib/query-scope";
 import { ErrorToast } from "../common/ErrorToast";
 import { AppDialog } from "../dialogs/AppDialog";
 import { ModelServingControlDialog } from "./ModelServingControlDialog";
+import { useHostedModelManaging } from "./HostedModelServingStatus";
 import type { WorkspaceApi } from "./workspace/workspace-api";
 
 type Props = { api: WorkspaceApi; modelId: string; name: string; versionHash?: string; onClose(): void };
 
-export function HostedModelServeAction({ api, modelId, name, active = false, compact = false }: Omit<Props, "onClose" | "versionHash"> & {
-  active?: boolean;
+export function HostedModelServeAction({ api, modelId, name, compact = false }: Omit<Props, "onClose" | "versionHash"> & {
   compact?: boolean;
 }) {
   const [reviewing, setReviewing] = useState(false);
-  const label = active ? "Manage" : "Serve";
+  const label = useHostedModelManaging(api, modelId) ? "Manage" : "Serve";
   return <div className="labs-serve-action" onClick={event => event.stopPropagation()}>
     <button type="button" className={`training-button${compact ? " secondary labs-compact-button" : ""}`}
       aria-label={`${label} ${name}`} onClick={() => setReviewing(true)}>

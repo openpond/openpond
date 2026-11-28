@@ -1,4 +1,5 @@
 import { WeightSpaceModelServingControlRequestSchema, parseAndVerifyWeightSpaceModelServingControl } from "openpond-sdk/training";
+import { HOSTED_MODEL_SERVING_STATUS_PATH, HostedModelServingStatusSchema } from "openpond-sdk/model-projects";
 import { z } from "zod";
 import {
   AlphaEditModelServingControlRequestSchema,
@@ -55,13 +56,14 @@ export function createHostedTrainingRunDetail(input: {
   teamId: string;
   actorId: string;
   access: { apiBaseUrl: string; token: string };
-  currentIdentity: () => Promise<{ teamId: string; actorId: string; apiOrigin: string } | null>;
+  currentIdentity: () => Promise<{ teamId: string; actorId: string; apiOrigin: string; token?: string } | null>;
 }) {
   async function fence() {
     const current = await input.currentIdentity();
     if (
       current?.teamId !== input.teamId ||
       current.actorId !== input.actorId ||
+      (current.token !== undefined && current.token !== input.access.token) ||
       new URL(current.apiOrigin).origin !== new URL(input.access.apiBaseUrl).origin
     )
       throw new Error("The active account changed. Reload this training run.");
@@ -134,6 +136,11 @@ export function createHostedTrainingRunDetail(input: {
     return flow;
   }
   return {
+    async modelServingStatus() {
+      const status = HostedModelServingStatusSchema.parse(await request(HOSTED_MODEL_SERVING_STATUS_PATH));
+      if (status.teamId !== input.teamId) throw new Error("Serving status belongs to a different workspace.");
+      return status;
+    },
     readFlow,
     async controlModelServing(modelProjectId: string, raw: unknown) {
       const id = Id.parse(modelProjectId),

@@ -280,6 +280,15 @@ export async function handleTrainingRoutes({
     );
     return true;
   }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/model-serving-status") {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(response, 200, await deps.trainingPayload("hosted_model_serving_status", {
+      teamId: requestUrl.searchParams.get("teamId"),
+      actorId: requestUrl.searchParams.get("actorId"),
+      apiOrigin: requestUrl.searchParams.get("apiOrigin"),
+    }, requestUrl));
+    return true;
+  }
   const modelServing = /^\/v1\/training\/saved-models\/([^/]+)\/serving$/.exec(requestUrl.pathname);
   if (modelServing && request.method === "POST") {
     response.setHeader("Cache-Control", "no-store");

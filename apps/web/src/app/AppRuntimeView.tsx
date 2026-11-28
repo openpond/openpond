@@ -20,6 +20,7 @@ import {
 import { api } from "../api";
 import { CreateSessionResourceDraftRequestSchema, type CreateSessionResourceDraftRequest } from "@openpond/contracts/requests";
 import { DesktopNewContext, type DesktopNewKind } from "../components/chat/DesktopNewMenu";
+import { HostedModelServingStatusProvider } from "../components/labs/HostedModelServingStatus";
 import { newResourceSetup, type ResourceSetupCandidate } from "../lib/resource-setup-prompt";
 import {
   AppSettingsController,
@@ -1045,6 +1046,9 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   return (
     <AppToastProvider showToast={showToast}>
       <DesktopNewContext.Provider value={desktopNewAction}>
+      <HostedModelServingStatusProvider connection={connection} scope={hostedModels}
+        actorId={bootstrap?.account.profile?.id ?? null} accountHandle={bootstrap?.account.activeProfile?.handle ?? null}
+        visible={view === "labs" || visibleSidebarOpen}>
       <AppShellController
         className={appShellClassName}
         style={appShellStyle}
@@ -1545,6 +1549,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           ...toastPresentation,
         }}
       />
+      </HostedModelServingStatusProvider>
       </DesktopNewContext.Provider>
     </AppToastProvider>
   );

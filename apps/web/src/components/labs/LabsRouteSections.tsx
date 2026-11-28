@@ -283,10 +283,6 @@ export function ModelsTable({
             const versions = item ? labModelVersions(item, runs, state) : [];
             const current = versions.find((version) => version.current) ?? null;
             const configured = Boolean((setup?.baseModel ?? project?.defaultBaseModel) && setup?.method);
-            const serving = current?.lineage.managedServing;
-            const activeServing = serving?.teamId === servingApi?.teamId && Boolean(
-              serving?.canonicalDeploymentId && ["requested", "deploying", "ready", "degraded"].includes(serving.canonicalDeploymentState ?? ""),
-            );
             const runEntries = item
               ? modelRunEntries(
                   labModelJobs(item, runs, state),
@@ -356,7 +352,7 @@ export function ModelsTable({
                 <td>
                   <div className="labs-workproduct-actions">
                     {servingApi && hosted && hosted.project.teamId === servingApi.teamId ? <HostedModelServeAction
-                      compact api={servingApi} modelId={hosted.project.id} name={hosted.project.name} active={activeServing} /> : null}
+                      compact api={servingApi} modelId={hosted.project.id} name={hosted.project.name} /> : null}
                     {servingApi && (hosted || item) ? <div onClick={event => event.stopPropagation()}>
                       <DropdownSelect compact floating floatingMenuWidth={226}
                         label={`Cloud actions for ${name ?? "Model"}`} value="" icon={<Cloud size={13} />}

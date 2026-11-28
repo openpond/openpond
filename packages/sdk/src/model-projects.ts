@@ -324,6 +324,12 @@ export const HostedModelProjectSummarySchema = z
   })
   .strict();
 
+export const HOSTED_MODEL_SERVING_STATUS_PATH = "/v1/model-projects/serving/status";
+export const HostedModelServingStatusSchema = z.object({
+  teamId: IdSchema,
+  managingModelProjectIds: z.array(IdSchema),
+}).strict();
+
 export const ModelProjectResourceSummarySchema = z
   .object({
     kind: z.enum([
@@ -485,6 +491,9 @@ export function createModelProjectsClient(input: {
       return z
         .array(HostedModelProjectSummarySchema)
         .parse(unwrapObject(body, "projects"));
+    },
+    async servingStatus() {
+      return HostedModelServingStatusSchema.parse(await request(HOSTED_MODEL_SERVING_STATUS_PATH));
     },
     async get(projectId: string) {
       const body = await request(
