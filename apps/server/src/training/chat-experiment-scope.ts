@@ -255,6 +255,11 @@ export function createChatExperimentScopes(store: SqliteStore) {
         (canonicalJson(draft.startingModel ?? null) !== canonicalJson(scope.draft.startingModel) ||
           draft.evaluationForm?.executionLocation !== "hosted" || draft.evaluationForm.form.mode !== "model"))
         throw new Error("Keep the exact saved Model version and managed runtime when editing this Benchmark.");
+      if (scope.modelSetupOwner && scope.draft.operationType === "grpo" &&
+        (scope.draft.startingModel?.source === "trained" || draft.startingModel?.source === "trained" || draft.trainingForm?.parent) &&
+        (scope.draft.startingModel?.source !== "trained" || !draft.trainingForm?.parent ||
+          canonicalJson(draft.startingModel ?? null) !== canonicalJson(scope.draft.startingModel)))
+        throw new Error("Choose the exact saved checkpoint in the Model prompt to open a new continuation review.");
       if (scope.draftSave?.operationId === input.operationId) {
         if (scope.draftSave.requestHash !== requestHash) throw new Error("This save operation was used for different Benchmark settings.");
         return;

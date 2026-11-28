@@ -14,6 +14,7 @@ import { ExperimentTypeControl } from "./ExperimentTypeControl";
 import { ReleasedDatasetPicker } from "./ReleasedDatasetPicker";
 import { useEvaluationSetup } from "./EvaluationSetupState";
 import { useTrainingExperimentForm } from "./useTrainingExperimentForm";
+import { loraContinuationOptions } from "./training-continuation";
 import { modelsLocation, type ModelsRoute } from "../models-route";
 import type { WorkspaceApi } from "./workspace-api";
 import { TrainingExperimentComputeCard } from "./TrainingExperimentComputeCard";
@@ -253,11 +254,7 @@ export function TrainingExperimentSetupPanel({
               {method === "grpo" ? <label>LoRA continuation
                 <DropdownSelect label="LoRA continuation" floating
                   value={setup.trainingParent.adapterMode}
-                  options={[
-                    { value: "shared", label: "Shared, update the existing adapter" },
-                    { value: "residual_append", label: "Stacked, freeze the parent and add an adapter" },
-                    { value: "sequential_merge", label: "Merged, merge the parent, then train a new adapter" },
-                  ]}
+                  options={loraContinuationOptions}
                   onChange={value => {
                     if (setup.trainingParent && (value === "shared" || value === "residual_append" || value === "sequential_merge"))
                       setup.setTrainingParent({ ...setup.trainingParent, adapterMode: value });

@@ -12,7 +12,7 @@ import type { WorkspaceApi } from "./workspace-api";
 export type BenchmarkVersionChoiceValue = { version: TrainingModelVersion; label: string };
 type DisplayVersion = { jobId: string; versionHash: string; label: string };
 
-export function SavedBenchmarkVersionPicker({ api, label, selected, onSelect, disabled, original, excludedJobId, versions, autoFocus }: {
+export function SavedTrainingVersionPicker({ api, label, selected, onSelect, disabled, original, excludedJobId, versions, autoFocus, validate }: {
   api: WorkspaceApi;
   label: string;
   selected?: DisplayVersion;
@@ -22,6 +22,7 @@ export function SavedBenchmarkVersionPicker({ api, label, selected, onSelect, di
   excludedJobId?: string;
   versions?: ManagedBenchmarkVersions;
   autoFocus?: boolean;
+  validate?(version: TrainingModelVersion): void;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -73,7 +74,8 @@ export function SavedBenchmarkVersionPicker({ api, label, selected, onSelect, di
       if (controller.signal.aborted) return;
       if (!result.savedVersion || pinned && (result.savedVersion.contentHash !== pinned.versionHash || result.job.modelProjectId !== pinned.modelProjectId) ||
         choice && (result.job.modelProjectId !== choice.configurationId || result.candidate?.registryArtifactId !== choice.artifact.id))
-        throw new Error("Save the exact version in its Model before choosing it for this Benchmark.");
+        throw new Error("Save the exact version in its Model before choosing it here.");
+      validate?.(result.savedVersion);
       onSelect({ version: result.savedVersion, label: result.model?.name ?? result.name });
     } catch (cause) {
       if (!controller.signal.aborted) setError(cause);
@@ -107,7 +109,7 @@ export function BenchmarkVersionChoice({ api, original, selected, onSelect, disa
 }) {
   const [open, setOpen] = useState(false);
   if (versions && !versions.baseline) return <span>{selected.label}</span>;
-  return open ? <SavedBenchmarkVersionPicker api={api} original={original} versions={versions}
+  return open ? <SavedTrainingVersionPicker api={api} original={original} versions={versions}
     label="Model version to run" selected={{ jobId: selected.version.jobId, versionHash: selected.version.contentHash, label: selected.label }}
     onSelect={value => { if (value) onSelect(value); }} disabled={disabled} />
     : <div className="resource-setup-input">

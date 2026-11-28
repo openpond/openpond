@@ -17,6 +17,7 @@ import {
   resourceSetupParts,
   resourceSetupTrainingMethod,
   resourceSetupManagedTrainingMethod,
+  resourceSetupSavedTrainingStart,
   isWeightSpaceSetup,
   scopeManagedSetup,
   benchmarkAccountMessage,
@@ -37,7 +38,7 @@ import { ModelSetupTrainingFields } from "./ModelSetupTrainingFields";
 import { ModelSetupManagedReview } from "./ModelSetupManagedReview";
 import { ModelSetupLocalBase } from "./ModelSetupLocalBase";
 import { ModelSetupLocalSftReview } from "./ModelSetupLocalSftReview";
-import { SavedBenchmarkVersionPicker, type BenchmarkVersionChoiceValue } from "../labs/workspace/BenchmarkVersionChoice";
+import { SavedTrainingVersionPicker, type BenchmarkVersionChoiceValue } from "../labs/workspace/BenchmarkVersionChoice";
 import { createWorkspaceApi } from "../labs/workspace/workspace-api";
 import { ManagedBenchmarkProtocolFields } from "./ManagedBenchmarkProtocolFields";
 import { ManagedBenchmarkDatasetFields } from "./ManagedBenchmarkDatasetFields";
@@ -312,7 +313,8 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       {sentence()}
       {benchmarkPresets}
       {trainingMethod && <ModelSetupTrainingFields key={trainingMethod} draft={draft} method={trainingMethod}
-        baseModel={visibleDraft.managedTrainingInputs?.base?.preference ?? localBase?.preference} disabled={busy} onChange={onChange} />}
+        baseModel={resourceSetupSavedTrainingStart(visibleDraft)?.base ?? visibleDraft.managedTrainingInputs?.base?.preference ?? localBase?.preference}
+        disabled={busy} onChange={onChange} />}
       {decisionSettings && <fieldset className="resource-setup-fields resource-setup-training-fields resource-setup-protocol-fields" disabled={busy}>
         <legend>Optimizer and limits</legend>
         <DecisionTrainingFields training={draft.decisionTraining ?? initialDecisionTraining()} onChange={decisionTraining =>
@@ -332,7 +334,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
             if (!benchmarkApi) return <p key={key}>Choose a workspace and execution destination to browse saved Model versions.</p>;
             if (key === "baseline" && !managedVersions?.candidate) return <p key={key}>Choose a candidate version first.</p>;
             const pin = managedVersions?.[key];
-            return <SavedBenchmarkVersionPicker key={key} api={benchmarkApi} label={label} autoFocus={index === 0}
+            return <SavedTrainingVersionPicker key={key} api={benchmarkApi} label={label} autoFocus={index === 0}
               selected={pin && { jobId: pin.jobId, versionHash: pin.versionHash, label: draft.values[key] ?? label }}
               excludedJobId={key === "baseline" ? managedVersions?.candidate.jobId : undefined}
               disabled={busy} onSelect={choice => chooseManagedVersion(key, choice)} />;

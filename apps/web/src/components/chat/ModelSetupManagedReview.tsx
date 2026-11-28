@@ -3,8 +3,11 @@ import {
   canonicalJson,
   canonicalSha256,
   decisionSourcePreference,
+  experimentStartingModelFromDecisionVersion,
   ExperimentDraftSchema,
+  type ExperimentStartingModel,
   type TrainingExperimentInputsPage,
+  type TrainingPreparationParent,
 } from "openpond-sdk/training";
 import type { ClientConnection } from "../../api/api-client";
 import { useErrorToast } from "../../app/AppToastContext";
@@ -20,6 +23,7 @@ import { ReleasedDatasetPicker } from "../labs/workspace/ReleasedDatasetPicker";
 import { createWorkspaceApi, type WorkspaceApi } from "../labs/workspace/workspace-api";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
 import { initialDecisionTraining } from "../labs/workspace/decision-form-defaults";
+import { ModelSetupDecisionParent, ModelSetupGrpoParent, readModelSetupSavedVersion } from "./ModelSetupSavedStartingVersion";
 
 type ManagedInputs = NonNullable<ResourceSetupDraft["managedTrainingInputs"]>;
 type ReviewContext = Pick<ReturnType<typeof useChatContextSelection>, "select" | "selection">;
@@ -94,11 +98,15 @@ function ManagedFields({
   const matchingScope =
     retained?.accountKey === api.accountKey &&
     retained?.teamId === api.teamId &&
-    retained?.actorId === api.actorId;
+    retained?.actorId === api.actorId && (!retained.apiOrigin || retained.apiOrigin === apiOrigin);
   const decision = method === "decision_model";
   const decisionSource = decision ? decisionSourcePreference() : null;
+  const owner = apiOrigin && api.actorId ? { apiOrigin, actorId: api.actorId, teamId: api.teamId } : undefined;
   const retainedBase = matchingScope ? retained.base : undefined;
-  const base = decisionSource ? { label: decisionSource.modelId, preference: decisionSource } : retainedBase;
+  const savedStarts = matchingScope && retained.apiOrigin ? retained.savedStarts : undefined;
+  const savedStart = method === "sft" ? undefined : savedStarts?.[method];
+  const base = savedStart ? { label: savedStart.label, preference: savedStart.base }
+    : decisionSource ? { label: decisionSource.modelId, preference: decisionSource } : retainedBase;
   const batch = matchingScope && retained.batch?.method === method ? retained.batch : undefined;
   const validation = matchingScope ? retained.validation : undefined;
   const validationSplit = matchingScope ? (retained.validationSplit ?? "validation") : "validation";
@@ -115,7 +123,7 @@ function ManagedFields({
   useErrorToast(error ?? (picking ? catalog.error : null));
 
   function saveInputs(
-    update: Pick<ManagedInputs, "base" | "batch" | "validation" | "validationSplit">,
+    update: Pick<ManagedInputs, "base" | "batch" | "validation" | "validationSplit" | "savedStarts">,
     values = draft.values,
     useBatch = false,
   ) {
@@ -128,6 +136,8 @@ function ManagedFields({
         accountKey: api.accountKey,
         teamId: api.teamId,
         actorId: api.actorId!,
+        apiOrigin: apiOrigin ?? undefined,
+        savedStarts,
         base: retainedBase,
         batch,
         validation,
@@ -144,13 +154,34 @@ function ManagedFields({
     try {
       const name = draft.values.name?.trim() || (decision ? "Decision Model" : method === "sft" ? "Supervised training" : "RL training");
       const budget = draft.values.budget === undefined ? "" : String(draft.values.budget);
+      const reviewOwner = decision || savedStart ? owner : undefined;
+      if ((decision || savedStart) && !reviewOwner) throw new Error("Choose the workspace that owns this training review.");
+      let startingModel: ExperimentStartingModel | undefined;
+      let parent: TrainingPreparationParent | undefined;
+      if (savedStart) {
+        const version = await readModelSetupSavedVersion(api, savedStart);
+        if (decision && version.schemaVersion === "openpond.decisionModelVersion.v1" &&
+          canonicalJson(base.preference) === canonicalJson(version.baseModel)) {
+          startingModel = await experimentStartingModelFromDecisionVersion(version, { ...reviewOwner, label: savedStart.label });
+        } else if (method === "grpo" && savedStart.method === "grpo" && version.schemaVersion === "openpond.trainingModelVersion.v1" &&
+          version.jobId === savedStart.jobId && version.request.recipe.method === "grpo" &&
+          canonicalJson(base.preference) === canonicalJson(version.request.baseModel)) {
+          parent = { jobId: version.jobId, checkpointId: version.candidate.checkpointId, artifact: version.candidate.artifact, adapterMode: savedStart.adapterMode };
+          startingModel = { source: "trained", label: savedStart.label, baseModel: version.request.baseModel, inferenceModelId: null, trainedVersion: version };
+        } else {
+          throw new Error("Choose the exact saved starting version for this training method.");
+        }
+      }
+      const savedDecision = startingModel?.source === "decision" ? startingModel.decision : undefined;
       const body = {
         schemaVersion: "openpond.experimentDraft.v1",
         operationType: method,
         name,
+        ...(startingModel ? { startingModel } : {}),
         ...(decision ? { decisionForm: {
           mode: "train", baseModel: base.preference, name, maximumSpendUsd: budget,
-          parentArtifact: null, batch: batch?.reference ?? null,
+          parentArtifact: savedDecision?.artifact ?? null, batch: batch?.reference ?? null,
+          ...(savedDecision ? { startingDecision: savedDecision } : {}),
           training: draft.decisionTraining ?? initialDecisionTraining(),
         }} : { trainingForm: {
           baseModel: base.preference,
@@ -161,11 +192,9 @@ function ManagedFields({
           name,
           budget,
           startingModelLabel: base.label,
+          ...(parent ? { parent } : {}),
         }}),
       };
-      const reviewOwner = decision && apiOrigin && api.actorId
-        ? { apiOrigin, actorId: api.actorId, teamId: api.teamId } : undefined;
-      if (decision && !reviewOwner) throw new Error("Choose the workspace that will own this Decision draft.");
       const id = `model-setup-${await canonicalSha256([sessionId, api.accountKey, ...(reviewOwner ? [reviewOwner] : []), body])}`;
       const review = ExperimentDraftSchema.parse({ ...body, id });
       const current = context.selection;
@@ -186,15 +215,19 @@ function ManagedFields({
   return (
     <div className="resource-setup-fields">
       {field === "baseModel" && (
-        decisionSource ? <p>{decisionSource.modelId}, revision {decisionSource.revision}</p> : <>
+        decisionSource ? <>
+          <p>{base?.preference.modelId}, revision {base?.preference.revision}</p>
+          {owner && <ModelSetupDecisionParent key={canonicalJson(owner)} api={api} owner={owner} value={savedStarts?.decision_model}
+            disabled={busy} onChange={decision_model => saveInputs({ savedStarts: { ...savedStarts, decision_model } })} />}
+        </> : <>
           <DropdownSelect
             label="Managed starting model"
-            value={selected?.id ?? (base ? "retained" : "")}
+            value={savedStart ? "" : selected?.id ?? (base ? "retained" : "")}
             searchable
             disabled={busy}
             options={[
               { value: "", label: "Choose an exact starting model" },
-              ...(base && !selected
+              ...(base && !savedStart && !selected
                 ? [{ value: "retained", label: base.label, disabled: true }]
                 : []),
               ...catalog.models.map((candidate) => ({
@@ -211,12 +244,15 @@ function ManagedFields({
                 (item) => item.id === id && exactManagedBase(item),
               );
               saveInputs(
-                { base: candidate && { label: candidate.name, preference: candidate.preference } },
+                { base: candidate && { label: candidate.name, preference: candidate.preference },
+                  ...(method === "grpo" ? { savedStarts: { ...savedStarts, grpo: undefined } } : {}) },
                 { ...draft.values, baseModel: candidate?.name },
               );
             }}
           />
           {catalog.isPending && <p role="status">Reading managed starting models…</p>}
+          {method === "grpo" && owner && <ModelSetupGrpoParent key={canonicalJson(owner)} api={api} value={savedStarts?.grpo}
+            disabled={busy} onChange={grpo => saveInputs({ savedStarts: { ...savedStarts, grpo } })} />}
         </>
       )}
       {field === "dataset" && (
@@ -298,7 +334,7 @@ function ManagedFields({
         <button
           type="button"
           className="training-button secondary"
-          disabled={busy || !base || (!decision && selected?.available === false) || (decision && !apiOrigin)}
+          disabled={busy || !base || (!decision && !savedStart && selected?.available === false) || (decision && !apiOrigin)}
           onClick={() => void openReview()}
         >
           {decision ? "Save managed draft and open Decision review" : "Open training review"}

@@ -14,6 +14,10 @@ const LocalBenchmarkModelVersionSchema = z.object({
   location: z.literal("local"), projectId: resourceId, versionId: resourceId, artifactId: resourceId, bundleHash: artifactHash,
 }).strict();
 const HostedBenchmarkOwnerSchema = z.object({ actorId: resourceId, apiOrigin: z.url() }).strict();
+const SavedTrainingStartSchema = z.object({
+  modelProjectId: resourceId, versionHash: artifactHash, label: z.string().min(1).max(500),
+  base: ModelProjectBaseModelSchema,
+}).strict();
 const WeightSpaceSetupDraftSchema = z.object({
   panels: z.array(z.object({ id: WeightSpacePanelSchema.shape.id, role: WeightSpacePanelSchema.shape.role,
     prompts: z.array(WeightSpacePromptSchema.extend({ text: z.string().max(32_768) })).max(64),
@@ -292,6 +296,12 @@ export const ResourceSetupDraftSchema = z.object({
     accountKey: z.string().min(1).max(4_000),
     teamId: z.string().min(1).max(500),
     actorId: z.string().min(1).max(500),
+    apiOrigin: z.url().optional(),
+    savedStarts: z.object({
+      grpo: SavedTrainingStartSchema.extend({ method: z.literal("grpo"), jobId: resourceId,
+        adapterMode: z.enum(["residual_append", "shared", "sequential_merge"]) }).optional(),
+      decision_model: SavedTrainingStartSchema.extend({ method: z.literal("decision_model") }).optional(),
+    }).strict().optional(),
     base: z.object({
       label: z.string().min(1).max(500),
       preference: ModelProjectBaseModelSchema,

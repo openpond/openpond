@@ -68,7 +68,7 @@ export function scopeManagedSetup(
   if (version && version !== draft.benchmarkModelVersion) draft = { ...draft, benchmarkModelVersion: version };
   const managed = draft.managedTrainingInputs;
   if (!managed || draft.values.destination === "OpenPond Managed" && managed.accountKey === scope?.accountKey &&
-    managed.teamId === scope?.teamId && managed.actorId === scope?.actorId) {
+    managed.teamId === scope?.teamId && managed.actorId === scope?.actorId && (!managed.apiOrigin || managed.apiOrigin === scope?.apiOrigin)) {
     if (managed?.batch && managed.batch.method !== resourceSetupManagedTrainingMethod(draft) &&
       !draft.datasetRef && draft.values.dataset === managed.batch.label)
       return { ...draft, values: { ...draft.values, dataset: undefined } };
@@ -89,6 +89,13 @@ export function resourceSetupTrainingMethod(draft: ResourceSetupDraft): "sft" | 
 export function resourceSetupManagedTrainingMethod(draft: ResourceSetupDraft) {
   return draft.kind === "model" && draft.values.method === "Decision"
     ? "decision_model" : resourceSetupTrainingMethod(draft);
+}
+
+export function resourceSetupSavedTrainingStart(draft: ResourceSetupDraft) {
+  const method = resourceSetupManagedTrainingMethod(draft);
+  const inputs = draft.managedTrainingInputs;
+  return draft.values.destination === "OpenPond Managed" && inputs?.apiOrigin && method && method !== "sft"
+    ? inputs.savedStarts?.[method] : undefined;
 }
 
 function localTrainingBase(draft: ResourceSetupDraft) {
@@ -241,8 +248,12 @@ export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetup
   if (field === "weightSpaceSettings") return placeholder;
   if (field === "baseModel" && isWeightSpaceSetup(draft))
     return draft.weightSpace?.managed?.checkpoint?.modelId ?? WEIGHT_SPACE_CHECKPOINT.modelId;
-  if (field === "baseModel" && resourceSetupManagedTrainingMethod(draft) === "decision_model" && draft.values.destination === "OpenPond Managed")
-    return decisionSourcePreference().modelId;
+  if (field === "baseModel") {
+    const savedStart = resourceSetupSavedTrainingStart(draft);
+    if (savedStart) return savedStart.label;
+    if (resourceSetupManagedTrainingMethod(draft) === "decision_model" && draft.values.destination === "OpenPond Managed")
+      return decisionSourcePreference().modelId;
+  }
   const localBase = localTrainingBase(draft);
   if (field === "baseModel" && localBase) return localBase.label;
   if (draft.benchmarkModelVersion?.location === "local") {
@@ -298,10 +309,11 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const { split, epochs, learningRate, budget, samples, seed } = draft.values;
   const method = resourceSetupTrainingMethod(draft);
   const managedMethod = resourceSetupManagedTrainingMethod(draft);
-  const recipe = selectedTrainingRecipe(draft, method);
   const managed = draft.values.destination === "OpenPond Managed" ? draft.managedTrainingInputs : undefined;
-  const managedBase = draft.values.destination === "OpenPond Managed" && managedMethod === "decision_model"
-    ? decisionSourcePreference() : managed?.base?.preference;
+  const savedStart = resourceSetupSavedTrainingStart(draft);
+  const recipe = selectedTrainingRecipe(draft, method);
+  const managedBase = savedStart?.base ?? (draft.values.destination === "OpenPond Managed" && managedMethod === "decision_model"
+    ? decisionSourcePreference() : managed?.base?.preference);
   const localBase = localTrainingBase(draft)?.preference;
   const version = draft.managedBenchmarkVersions?.candidate ?? draft.benchmarkModelVersion;
   const baseline = draft.comparison ? draft.managedBenchmarkVersions?.baseline : undefined;
@@ -317,6 +329,7 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     baseline && `Managed baseline ${baseline.modelProjectId}, training run ${baseline.jobId}, version hash ${baseline.versionHash}`,
     !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
     managedBase && `Starting model ${managedBase.modelId}, revision ${managedBase.revision}, tokenizer revision ${managedBase.tokenizerRevision}, chat template hash ${managedBase.chatTemplateHash}`,
+    savedStart && `Saved starting Model ${savedStart.modelProjectId}, exact version ${savedStart.versionHash}${savedStart.method === "grpo" ? `, training run ${savedStart.jobId}, LoRA continuation ${savedStart.adapterMode}` : ""}`,
     localBase && `Local starting model ${localBase.modelId}, revision ${localBase.revision}, tokenizer revision ${localBase.tokenizerRevision}, chat template hash ${localBase.chatTemplateHash}`,
     draft.localSftApproval && `Approved local SFT review ${draft.localSftApproval.planHash}, Dataset package ${draft.localSftApproval.datasetPackageHash}, training population ${draft.localSftApproval.taskIdsHash}, ${draft.localSftApproval.rowCount} examples`,
     managed?.batch && managedMethod === managed.batch.method && `Reviewed training batch ${managed.batch.reference.id}, revision ${managed.batch.reference.revision}, content hash ${managed.batch.reference.contentHash}`,
@@ -370,12 +383,17 @@ export function snapshotResourceSetup(
     selection.draft && selection.draftRevision &&
     (selection.benchmarkVersion?.location !== "cloud" || ownsHostedBenchmarkVersion(selection.benchmarkVersion, workspace))
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
-  const { datasetExamples: _localExamples, graderExamples: _localFixtures, managedGrader, datasetInputsDirty, trainingRecipes: _recipes, weightSpace, ...setup } = draft;
+  const { datasetExamples: _localExamples, graderExamples: _localFixtures, managedGrader, datasetInputsDirty, trainingRecipes: _recipes,
+    weightSpace, managedTrainingInputs, ...setup } = draft;
   const method = resourceSetupTrainingMethod(draft);
   const selectedRecipe = selectedTrainingRecipe(draft, method);
   return {
     prompt: [resourceSetupText(draft), instructions].filter(Boolean).join("\n\n"),
     draft: { ...setup, localTrainingBase: localTrainingBase(draft),
+      ...(managedTrainingInputs ? { managedTrainingInputs: { ...managedTrainingInputs,
+        savedStarts: draft.values.method === "GRPO" ? { grpo: managedTrainingInputs.savedStarts?.grpo }
+          : draft.values.method === "Decision" ? { decision_model: managedTrainingInputs.savedStarts?.decision_model } : undefined,
+      } } : {}),
       ...(isWeightSpaceSetup(draft) && weightSpace ? { weightSpace } : {}),
       ...(managedGrader?.release ? { managedGrader: { ...managedGrader, draft: undefined } } : {}),
       ...(method && selectedRecipe ? { trainingRecipes: { [method]: selectedRecipe } } : {}),

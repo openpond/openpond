@@ -4,7 +4,8 @@ import { readChatRetainedResult } from "./chat-retained-result.js";
 import { readChatAlphaEditResult } from "./chat-alphaedit-result.js";
 import { readChatNeuronTrainingResult } from "./chat-neuron-training-result.js";
 import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, ChatExperimentContextSchema, type ChatContextOption, type ChatContextSelection, type ChatContextTarget, type ChatExperimentScope, type ChatResourceSummary, type StoredExperimentDraftReference } from "@openpond/contracts";
-import { createTrainingClient, canonicalJson, decisionSourcePreference, experimentOperationLabel, ExperimentDraftSaveSchema, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
+import { createTrainingClient, canonicalJson, decisionSourcePreference, experimentOperationLabel, ExperimentDraftSaveSchema,
+  verifySavedDecisionExperimentSource, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
 import { createModelProjectsClient } from "openpond-sdk/model-projects";
 import type { SqliteStore } from "../store/store.js";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
@@ -20,11 +21,12 @@ import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import { createHash } from "node:crypto";
 import { ownsHostedBenchmarkVersion } from "@openpond/contracts/resource-setup";
 import { authorizeHostedBenchmarkVersion } from "./hosted-benchmark-access.js";
+import { createHostedTrainingRunDetail } from "./hosted-training-run-detail.js";
 
 type Access = { apiBaseUrl: string; token: string; teamId: string; actorId: string };
 type ModelSetupOwner = NonNullable<ChatExperimentScope["modelSetupOwner"]>;
 
-export function hasModelSetupAccess(owner: ModelSetupOwner, access: Access | null) {
+export function hasModelSetupAccess(owner: Omit<ModelSetupOwner, "modelId">, access: Access | null) {
   return Boolean(access && owner.teamId === access.teamId && owner.actorId === access.actorId &&
     owner.apiOrigin === new URL(access.apiBaseUrl).origin);
 }
@@ -44,6 +46,13 @@ export function createChatContextBrowser(deps: {
 }) {
   const drafts = createChatExperimentDraftStorage(deps.access);
   const syncing = new Set<string>();
+  async function readStartingVersion(access: Access, modelId: string, versionHash: string) {
+    const reader = createHostedTrainingRunDetail({ ...access, access, currentIdentity: async () => {
+      const current = await deps.access();
+      return { ...current, apiOrigin: new URL(current.apiBaseUrl).origin };
+    } });
+    return (await reader.savedVersion(modelId, versionHash)).version;
+  }
   async function catalog(refresh = true, sessionId?: string, draftCursor?: string, source: "all" | "local" | "models" | "drafts" = "all") {
     const session = sessionId ? await deps.store.getSession(sessionId) : null;
     if (sessionId && (!session || session.systemKind)) throw new Error("Chat is unavailable.");
@@ -275,8 +284,8 @@ export function createChatContextBrowser(deps: {
     let selection = raw === null ? null : await resolve(raw);
     if (modelTrainingReview && (!sessionId || !selection?.target.draft || newExperiment || sourceDraftId))
       throw new Error("Open Model training review from its originating chat.");
-    if (modelReviewOwner && (!modelTrainingReview || selection?.target.draft?.operationType !== "decision_model"))
-      throw new Error("Choose an exact hosted Decision review.");
+    if (modelReviewOwner && !modelTrainingReview)
+      throw new Error("Open the hosted review from its originating Model chat.");
     if (sourceDraftId) {
       if (!sessionId || !selection?.training || !deps.associateDraftTraining || newExperiment)
         throw new Error("A returned training Job requires its originating chat draft.");
@@ -324,11 +333,24 @@ export function createChatContextBrowser(deps: {
           const owner = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft);
           if (!owner.success || owner.data.kind !== "model" || !await deps.store.getModelProject(owner.data.id))
             throw new Error("Open this review from an installation-owned Model chat.");
+          const access = await deps.access();
+          if (modelReviewOwner && !hasModelSetupAccess(modelReviewOwner, access))
+            throw new Error("Choose the account and workspace that owns this Model review.");
+          const starting = draft.startingModel;
           if (draft.operationType === "decision_model") {
-            if (!deps.linkStoredDraft || !modelReviewOwner || draft.decisionForm?.mode !== "train" ||
-              draft.startingModel || draft.decisionForm.parentArtifact ||
-              canonicalJson(draft.decisionForm.baseModel) !== canonicalJson(decisionSourcePreference()))
+            if (!deps.linkStoredDraft || !modelReviewOwner || draft.decisionForm?.mode !== "train")
               throw new Error("Choose the supported Decision base and workspace before saving review.");
+            if (starting?.source === "decision") {
+              const saved = await readStartingVersion(access, starting.decision.modelProjectId, starting.decision.versionHash);
+              const verified = await verifySavedDecisionExperimentSource(starting.decision, saved, {
+                teamId: access.teamId, ownerUserId: access.actorId,
+              });
+              if (canonicalJson(starting.baseModel) !== canonicalJson(verified.baseModel))
+                throw new Error("Keep the saved Decision adapter and its exact original base.");
+            } else if (starting || draft.decisionForm.parentArtifact ||
+              canonicalJson(draft.decisionForm.baseModel) !== canonicalJson(decisionSourcePreference())) {
+              throw new Error("Choose the supported Decision base and workspace before saving review.");
+            }
             const operationId = `model-decision-${createHash("sha256").update(canonicalJson([
               sessionId, modelReviewOwner, draft,
             ])).digest("hex")}`;
@@ -346,11 +368,21 @@ export function createChatContextBrowser(deps: {
           }
           if (!draft.trainingForm || !["sft", "grpo"].includes(draft.operationType))
             throw new Error("Choose a supported managed training method.");
-          const { baseModel, recipe } = draft.trainingForm;
+          const { baseModel, recipe, parent } = draft.trainingForm;
           if (baseModel?.source !== "managed" || !baseModel.revision || !baseModel.tokenizerRevision ||
             !baseModel.chatTemplateHash || recipe.method !== draft.operationType || recipe.parameterization !== "lora")
             throw new Error("Choose an exact managed base Model and its matching LoRA recipe.");
-          const access = await deps.access();
+          if (starting?.source === "trained" || parent) {
+            if (draft.operationType !== "grpo" || starting?.source !== "trained" || !parent || !modelReviewOwner)
+              throw new Error("Continuation requires an exact saved GRPO checkpoint in its original workspace.");
+            const pin = starting.trainedVersion;
+            const saved = await readStartingVersion(access, pin.modelProjectId, pin.contentHash);
+            if (saved?.schemaVersion !== "openpond.trainingModelVersion.v1" || saved.request.recipe.method !== "grpo" ||
+              canonicalJson(saved) !== canonicalJson(pin))
+              throw new Error("Choose the exact saved GRPO checkpoint before opening continuation review.");
+          } else if (starting && starting.source !== "managed") {
+            throw new Error("Choose an exact managed base Model to open this review.");
+          }
           modelSetupOwner = { modelId: owner.data.id, actorId: access.actorId, teamId: access.teamId,
             apiOrigin: new URL(access.apiBaseUrl).origin };
         }

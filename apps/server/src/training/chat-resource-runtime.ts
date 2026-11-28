@@ -10,7 +10,7 @@ import { createChatTeamExperiments } from "../evaluations/chat-team-experiments.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
-import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
+import { ActivationExperimentAccountSchema, chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
 import { ManagedBenchmarkReviewSchema, ManagedBenchmarkVersionsSchema, ResourceSetupDraftSchema, type BenchmarkRunPin } from "@openpond/contracts/resource-setup";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import type { SqliteStore } from "../store/store.js";
@@ -28,6 +28,7 @@ import { chatExperimentReport } from "../evaluations/chat-experiment-report.js";
 import { chatExperimentContext, createChatExperimentScopes } from "./chat-experiment-scope.js";
 import { localGraderSummaries } from "./local-grader-resources.js";
 import { event } from "../utils.js";
+import { listManagedSavedModelVersions } from "./managed-saved-model-discovery.js";
 
 export async function createChatResourceRuntime(deps:{store:SqliteStore;home:string;ownerId:string;state:LocalInferenceState;
   codexStatus?:()=>Promise<import("@openpond/contracts").CodexStatus>;
@@ -272,6 +273,16 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       });
       await publishResourceSession(query.sessionId);
       return { selection: await browser.resolve(query.target) };
+    }
+    if (kind === "dataset" && input.action === "context_decision_sources") {
+      const owner = ActivationExperimentAccountSchema.parse(input.payload);
+      const access = await deps.access();
+      if (!hasModelSetupAccess(owner, access)) throw new Error("Choose the workspace that owns the saved Decision Models.");
+      const versions = await listManagedSavedModelVersions(deps.store, access);
+      if (!hasModelSetupAccess(owner, await deps.access())) throw new Error("The active Model workspace changed.");
+      return { owner, sources: versions.flatMap(({ project, version }) =>
+        version.schemaVersion === "openpond.decisionModelVersion.v1" && version.ownerUserId === owner.actorId
+          ? [{ modelProjectId: project.id, versionHash: version.contentHash, label: project.name }] : []) };
     }
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_inputs", "context_runs", "context_select", "context_selection", "context_save_draft"].includes(String(input.action))) {
       const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), modelTrainingReview: z.boolean().optional(),
