@@ -27,8 +27,6 @@ import { ChevronDown, SlidersHorizontal } from "../icons";
 import { DesktopNewContext } from "./DesktopNewMenu";
 import { DatasetSetupReview } from "./DatasetSetupReview";
 import { GraderSetupReview } from "./GraderSetupReview";
-
-const GraderSetupWorkspaceReview = lazy(() => import("./GraderSetupWorkspaceReview"));
 import { ModelSetupTrainingFields } from "./ModelSetupTrainingFields";
 import { ModelSetupManagedReview } from "./ModelSetupManagedReview";
 import { ModelSetupLocalBase } from "./ModelSetupLocalBase";
@@ -36,6 +34,8 @@ import { ModelSetupLocalSftReview } from "./ModelSetupLocalSftReview";
 import { LocalAdapterBenchmarkReview } from "./LocalAdapterBenchmarkReview";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
 import "./resource-setup-editor.css";
+
+const GraderSetupWorkspaceReview = lazy(() => import("./GraderSetupWorkspaceReview"));
 
 type PromptField = Exclude<ResourceSetupPart, string>["field"];
 
@@ -373,12 +373,11 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
         name={draft.values.name} criterion={draft.values.criterion}
         onChange={(pin, values) => {
           const current = latestDraft.current;
-          const next = {
+          const criterion = ResourceSetupDraftSchema.shape.values.shape.criterion.safeParse(values?.criterion ?? current.values.criterion);
+          onChange(current, {
             ...current, revision: current.revision + 1, managedGrader: pin,
-            values: { ...current.values, ...values, criterion: values?.criterion ?? current.values.criterion },
-          };
-          latestDraft.current = next;
-          onChange(current, next);
+            values: { ...current.values, ...values, criterion: criterion.success ? criterion.data : "Use the rubric saved in workspace Grader review." },
+          });
         }}
         onClose={() => { setOpenGraderScope(null); setConfigureOpen(true); }} />
     </Suspense> : null}

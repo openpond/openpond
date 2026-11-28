@@ -89,12 +89,13 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
   const patch = (update: Partial<typeof draft>) => setDraft(value => ({ ...value, ...update, ...(update.name !== undefined && automaticKey ? { feedbackKey: graderFeedbackKeyFromName(update.name, id) } : {}) }));
 
   async function save() {
+    let retainedDraft: AuthoringDraftFor<"reward"> | undefined;
     const result = await runAction("publish", async (api) => {
       if (draft.fixtures?.length) compileRewardFixtures(draft.fixtures);
       const { reward: release, assets } = compileRewardAuthoring({ id, fields: draft, base: reward });
       const { contentHash: _hash, ...content } = release;
       const storedDraft = await persistence.save(api, draftInput());
-      if (storedDraft.targetKind === "reward") onDraftSaved?.(storedDraft);
+      if (storedDraft.targetKind === "reward") retainedDraft = storedDraft;
       if (draft.kind !== "human" && draft.kind !== "learned_model" && (draft.fixtures?.length ?? 0) > 0) {
         const checks = await api.list("reward_check", { parentId: id, status: "completed", limit: 100 });
         const check = checks.items.find(check => check.matchesExpectations && check.draft.id === storedDraft.id
@@ -113,7 +114,10 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
       ] });
       return RewardReleaseSchema.parse(response.resources.find((resource) => resource.schemaVersion === "openpond.rewardRelease.v1"));
     });
-    if (!result) return null;
+    if (!result) {
+      if (retainedDraft) onDraftSaved?.(retainedDraft);
+      return null;
+    }
     setRevision(result.revision); setSaved(JSON.stringify(draft)); return result;
   }
   async function checkFixtures() {
