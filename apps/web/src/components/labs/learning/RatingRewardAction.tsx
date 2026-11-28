@@ -22,7 +22,7 @@ function RatingRewardChoices({ client, evidence, feedback }: { client: OpenPondL
     {binding.resource && !binding.resource.sources.length ? <button type="button" className="training-button secondary" onClick={() => setEditing("new")}>Create Reward from this label</button> : null}
     {notice ? <p role="status">{notice}</p> : null}
     {editing ? <AppDialog ariaLabel="Reward from label" className="labs-rename-dialog labs-model-taskset-dialog learning-editor-dialog" backdropClassName="labs-rename-backdrop" dismissDisabled onClose={() => undefined}>
-      <RatingRewardEditor client={client} evidence={evidence} feedback={feedback} rewardRef={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={(id, revision) => { setEditing(null); setNotice(`Saved Reward ${id} · revision ${revision} with this label as a fixture. Existing task bindings retain their selected release.`); }} />
+      <RatingRewardEditor client={client} evidence={evidence} feedback={feedback} rewardRef={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={(id, revision) => { setEditing(null); setNotice(`Saved Reward ${id}, revision ${revision} with this label as a fixture. Existing task bindings retain their selected release.`); }} />
     </AppDialog> : null}
   </div>;
 }

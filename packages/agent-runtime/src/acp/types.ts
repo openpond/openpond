@@ -28,6 +28,7 @@ export type AcpClientOptions = {
   requestTimeoutMs?: number;
   resumeMethod?: "session/load" | "session/resume";
   authRequiredPrefix?: string;
+  validateAgentInfo?: (info: AcpInitializeResult["agentInfo"]) => void;
   onUpdate?: (sessionId: string, update: AcpObject) => void | Promise<void>;
   onPermission?: (request: AcpPermissionRequest, signal: AbortSignal) => Promise<AcpPermissionResult>;
   onExit?: (error: Error) => void;

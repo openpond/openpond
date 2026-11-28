@@ -385,7 +385,6 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     recordClientDiagnosticPayload,
     updatePersonalizationPayload,
     bootstrapPayload,
-    currentAccountPayload,
     skillSourceFilePayload,
     codexHistoryThreadPayload,
     patchCodexHistorySessionPayload,
@@ -539,7 +538,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     storeDir,
     workspaceDiffPayload,
   });
-  const reviewIdentity=createCurrentWorkspaceIdentity({account:currentAccountPayload,defaultTeam:async()=>(await loadAppPreferences()).defaultTeamId});
+  const reviewIdentity = createCurrentWorkspaceIdentity({
+    defaultTeam: async () => (await loadAppPreferences()).defaultTeamId,
+  });
   let candidateWorkspaceTool: ReturnType<typeof createCoordinatedEvaluationRuntime>["executeCandidateWorkspaceTool"] | undefined;
   const {
     closeCloudWorkspaceReadiness,
@@ -834,7 +835,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   onStartupFailure(()=>schedules.stop());
   await localExperiments.recover();
   const chatResources = await createChatResourceRuntime({store,home:storeDir,ownerId:serverId,state:localByokRuntimeState,codexStatus:()=>refreshCodexStatus(true),imports:datasetImportService,visuals:htmlVisuals,improve:experimentImprovementPayload,append:appendRuntimeEvent,resolveInvocation:cliInvocations.resolve,teamExperiments:localExperiments,
-    access:async()=>({...await resolveHostedApiAccess(),actorId:await reviewIdentity.actorId(),teamId:await reviewIdentity.teamId()})});
+    access: reviewIdentity.access });
   onStartupFailure(()=>chatResources.close());
   trainingApi.learning.start();
   onStartupFailure(() => trainingApi.learning.close());

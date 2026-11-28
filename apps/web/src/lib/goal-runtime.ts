@@ -108,7 +108,7 @@ function goalRuntimeStatus(goal: ThreadGoalRecord): GoalRuntimeStatus {
       : goal.tokenBudget === null
         ? `${formatTokenCount(goal.tokensUsed)} tokens`
         : `${formatTokenCount(goal.tokensUsed)} / ${formatTokenCount(goal.tokenBudget)} tokens`;
-  const detail = tokens ? `${goal.statusLabel} · ${tokens}` : goal.statusLabel;
+  const detail = tokens ? `${goal.statusLabel}, ${tokens}` : goal.statusLabel;
   return {
     objective: goal.objective,
     status: goal.status,

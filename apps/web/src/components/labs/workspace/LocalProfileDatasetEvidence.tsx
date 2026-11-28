@@ -28,7 +28,7 @@ export function LocalProfileDatasetGraders({ population, loading, error, retry }
           </details>
         </td>
         <td>{grader.feedbackKey}</td><td>{grader.version}</td>
-        <td>{grader.release ? `${grader.release.id} · Revision ${grader.release.revision}` : "Dataset-owned"}</td>
+        <td>{grader.release ? `${grader.release.id}, Revision ${grader.release.revision}` : "Dataset-owned"}</td>
       </tr>)}
         <EvaluationTableState columns={4} loading={loading} error={error}
           empty={!population?.graders.length} retry={retry}>
@@ -60,7 +60,7 @@ export function LocalProfileDatasetVersions({ source, sources, population, route
         <td><button className="training-text-button" onClick={() => navigate({ ...route,
           resourceId: item.id, detailTab: "tasks", revision: item.taskset.revision,
           contentHash: item.taskset.contentHash, after: null })}>
-          Revision {item.taskset.revision}{item.id === source?.id ? " · Selected" : ""}
+          Revision {item.taskset.revision}{item.id === source?.id ? ", Selected" : ""}
         </button></td>
         <td>{item.taskset.contentHash}</td><td>{item.sourceRevision}</td>
       </tr>)}
@@ -72,13 +72,13 @@ export function LocalProfileDatasetVersions({ source, sources, population, route
     </table>
     {source && population ? <EvaluationCard title="Selected immutable source">
       <dl className="evaluation-workspace-meta">
-        <dt>Dataset release</dt><dd>{population.release.id} · Revision {population.release.revision}</dd>
+        <dt>Dataset release</dt><dd>{population.release.id}, Revision {population.release.revision}</dd>
         <dt>Dataset hash</dt><dd>{population.release.contentHash}</dd>
         <dt>Policy population receipt</dt><dd>{population.contentHash}</dd>
-        <dt>Profile</dt><dd>{source.profileRef.profileId} · {source.profileRef.repositoryId}</dd>
+        <dt>Profile</dt><dd>{source.profileRef.profileId}, {source.profileRef.repositoryId}</dd>
         <dt>Profile source revision</dt><dd>{source.sourceRevision}</dd>
-        <dt>Harness release</dt><dd>{source.harnessRelease.id} · {source.harnessRelease.contentHash}</dd>
-        <dt>Evaluation definition</dt><dd>{source.definitionId} · {source.definitionHash}</dd>
+        <dt>Harness release</dt><dd>{source.harnessRelease.id}, {source.harnessRelease.contentHash}</dd>
+        <dt>Evaluation definition</dt><dd>{source.definitionId}, {source.definitionHash}</dd>
         <dt>Declared seeds</dt><dd>{source.seeds.join(", ")}</dd>
       </dl>
     </EvaluationCard> : null}

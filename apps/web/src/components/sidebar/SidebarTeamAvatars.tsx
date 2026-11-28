@@ -44,7 +44,7 @@ export function SidebarTeamAvatars({
         label: member.userId === currentUserId ? `${member.name} (you)` : member.name,
         description: member.userId === currentUserId
           ? "You"
-          : member.handle ? `@${member.handle.replace(/^@/, "")} · Message` : "Message",
+          : member.handle ? `@${member.handle.replace(/^@/, "")}, Message` : "Message",
         disabled: member.userId === currentUserId,
       }))}
       onChange={(userId) => {

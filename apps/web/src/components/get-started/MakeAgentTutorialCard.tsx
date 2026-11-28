@@ -82,7 +82,6 @@ export function MakeAgentTutorialCard({
           <h1 id="make-agent-series-title">{MAKE_AGENT_PLAYLIST_TITLE}</h1>
           <div className="get-started-course-meta">
             <span>Walkthrough playlist</span>
-            <span aria-hidden="true">·</span>
             <span>{MAKE_AGENT_TUTORIAL_DURATION}</span>
           </div>
           <p>Create, use, and improve an Account Health Agent, or play the full walkthrough.</p>

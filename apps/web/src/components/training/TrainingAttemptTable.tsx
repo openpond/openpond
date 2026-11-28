@@ -13,7 +13,7 @@ export function TrainingAttemptTable({ groups }: { groups: RunStageEvidence["gro
   const attempts = open ? groups.flatMap((group) => group.attempts.map((attempt) => ({ group: group.index, ...attempt }))).slice(currentPage * 100, (currentPage + 1) * 100) : [];
   return (
     <details className="training-rollout-attempts" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>Recorded attempts · {count}</summary>
+      <summary>Recorded attempts, {count}</summary>
       {open ? <>
         <div className="training-table-wrap"><table className="training-data-table evaluation-workspace-table">
           <thead><tr><th>Group / slot</th><th>Attempt</th><th>State</th><th>Reward</th><th>Retained feedback</th></tr></thead>

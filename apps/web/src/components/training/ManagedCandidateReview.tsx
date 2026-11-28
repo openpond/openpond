@@ -70,7 +70,7 @@ export function ManagedCandidateReview({ connection, lineageId, jobId, onSaved }
       {decision ? <>
         <strong>{decision.request.decision === "accepted" ? "Accepted" : "Rejected"}</strong>
         <p>{decision.request.reason}</p>
-        <p className="training-muted">Review {decision.revision} · {new Date(decision.decidedAt).toLocaleString()}</p>
+        <p className="training-muted">Review {decision.revision}, {new Date(decision.decidedAt).toLocaleString()}</p>
       </> : <p className="training-muted">{loading ? "Loading candidate review…" : view ? "No candidate decision recorded." : "Candidate review unavailable."}</p>}
       {view ? <p className="training-muted">Last synced {new Date(view.syncedAt).toLocaleString()}. Acceptance keeps this candidate for later use; serving is activated separately.</p> : null}
       {error ? <ErrorToast error={error} /> : null}
@@ -79,7 +79,7 @@ export function ManagedCandidateReview({ connection, lineageId, jobId, onSaved }
         <button className="training-button" type="button" disabled={!ready || loading || saving || decision?.request.decision === "accepted"} onClick={() => begin("accepted")}>Accept candidate</button>
         <button className="training-button danger" type="button" disabled={!ready || loading || saving || decision?.request.decision === "rejected"} onClick={() => begin("rejected")}>Reject candidate</button>
       </div>
-      {history.map(value => <details key={value.id} className="training-evidence"><summary>Review {value.revision} · {value.request.decision}</summary><p>{value.request.reason}</p><p>{new Date(value.decidedAt).toLocaleString()}</p></details>)}
+      {history.map(value => <details key={value.id} className="training-evidence"><summary>Review {value.revision}, {value.request.decision}</summary><p>{value.request.reason}</p><p>{new Date(value.decidedAt).toLocaleString()}</p></details>)}
       {earlier ? <button className="training-button secondary" type="button" disabled={historyLoading || saving} onClick={() => void readEarlier()}>{historyLoading ? "Loading…" : "Earlier review"}</button> : null}
       {outcome ? <div className="training-dialog-backdrop" role="presentation" onMouseDown={() => !saving && setOutcome(null)}>
         <section className="training-dialog training-promotion-dialog" role="dialog" aria-modal="true" aria-label="Review candidate" onMouseDown={event => event.stopPropagation()}>

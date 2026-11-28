@@ -62,7 +62,7 @@ export function TrainingResultDetails({ connection, teamId, actorId, jobId, vers
         {receipt ? <div><dt>Cleanup</dt><dd>{receipt.cleanupComplete ? "Complete" : "Pending"}</dd></div> : null}
       </dl> : null}
       {candidate ? <p>Checkpoint <code>{candidate.checkpointId}</code>
-        {candidate.parent ? <> · Parent run <code>{candidate.parent.jobId}</code></> : null}
+        {candidate.parent ? <>, Parent run <code>{candidate.parent.jobId}</code></> : null}
       </p> : null}
       <details><summary>Exact settings and references</summary>
         <pre>{JSON.stringify({ request: source, candidate, executionReceipt: receipt

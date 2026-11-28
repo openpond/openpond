@@ -154,7 +154,7 @@ export function ExpertTrajectoryDialog({
                   <summary>
                     <span>
                       <strong>{titleCase(task.family)}</strong>
-                      <small>{task.toolCallCount} tool calls · exact reward {task.reward.toFixed(3)}</small>
+                      <small>{task.toolCallCount} tool calls, exact reward {task.reward.toFixed(3)}</small>
                     </span>
                     <span aria-hidden="true">›</span>
                   </summary>
@@ -187,7 +187,7 @@ export function ExpertTrajectoryDialog({
         </div>
         <div className="training-dialog-actions">
           <span className="labs-expert-approval-note">
-            Train split only · failed policy outputs excluded
+            Train split only, failed policy outputs excluded
           </span>
           <button className="training-button secondary" disabled={approving} type="button" onClick={onClose}>
             Close

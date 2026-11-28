@@ -187,9 +187,9 @@ export function LabModelBenchmarksSection({
           </>
         ) : stopReceipt ? (
           <div className="labs-model-benchmark-result-row">
-            <span>Inconclusive · candidate replay skipped</span>
+            <span>Inconclusive, candidate replay skipped</span>
             <strong>
-              {stopReceipt.attempts.length} attempts · ${stopReceipt.budget.observedSpendUsd.toFixed(4)}
+              {stopReceipt.attempts.length} attempts, ${stopReceipt.budget.observedSpendUsd.toFixed(4)}
             </strong>
             <button
               className="training-button secondary labs-compact-button"
@@ -208,7 +208,7 @@ export function LabModelBenchmarksSection({
             <span>
               {latest.failure
                 ?? (latest.evaluationProgress
-                  ? `${latest.evaluationProgress.stage.replaceAll("_", " ")} · ${latest.evaluationProgress.completedAttempts}/${latest.evaluationProgress.totalAttempts} attempts`
+                  ? `${latest.evaluationProgress.stage.replaceAll("_", " ")}, ${latest.evaluationProgress.completedAttempts}/${latest.evaluationProgress.totalAttempts} attempts`
                   : "The benchmark is running through its pinned stages.")}
             </span>
             <strong>{formatDateTime(latest.updatedAt)}</strong>
@@ -361,7 +361,7 @@ function tokenDelta(receipt: ModelEvaluationReceipt) {
   const direction = efficiency.tokenDelta > 0 ? "+" : "";
   const percent = efficiency.tokenDeltaPercent === null
     ? ""
-    : ` · ${direction}${efficiency.tokenDeltaPercent.toFixed(1)}%`;
+    : `, ${direction}${efficiency.tokenDeltaPercent.toFixed(1)}%`;
   return `${direction}${efficiency.tokenDelta.toLocaleString()} tokens${percent}`;
 }
 

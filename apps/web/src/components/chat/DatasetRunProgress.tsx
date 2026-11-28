@@ -90,7 +90,7 @@ export function DatasetRunProgress({
       status: live ? "Waiting for evidence" : failed ? "Failed" : run.state,
       error: failed ? failureEvidence(failures) ?? "The run ended with a failure. Inspect its retained cases and logs." : undefined,
       detail: (run.score == null ? "Score unavailable" : `Mean score ${run.score.toFixed(3)}`)
-        + (failed && cases.length ? ` · ${failures.length} execution failure${failures.length === 1 ? "" : "s"} · ${cancelled} cancelled` : ""),
+        + (failed && cases.length ? `, ${failures.length} execution failure${failures.length === 1 ? "" : "s"}, ${cancelled} cancelled` : ""),
     },
   ];
   return (

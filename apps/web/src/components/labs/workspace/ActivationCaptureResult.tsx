@@ -28,7 +28,7 @@ export function ActivationCaptureResult({
     request?.capture.flatMap((row) =>
       row.neurons.map((neuron) => ({
         value: `${row.layer}:${neuron}`,
-        label: `Layer ${row.layer} · Neuron ${neuron}`,
+        label: `Layer ${row.layer}, Neuron ${neuron}`,
       })),
     ) ?? [];
   const selectedCoordinate = coordinates.some((row) => row.value === coordinate)
@@ -69,7 +69,7 @@ export function ActivationCaptureResult({
             value={variantId ?? ""}
             options={request.variants.map((row) => ({
               value: row.id,
-              label: row.profile ? row.id : `${row.id} · Off`,
+              label: row.profile ? row.id : `${row.id}, Off`,
             }))}
             onChange={(value) => {
               setVariant(value);
@@ -93,7 +93,7 @@ export function ActivationCaptureResult({
       </EvaluationCard>
       {trainingAction}
       <p>
-        {outcome?.generatedTokenIds.length ?? 0} generated tokens · {outcome?.forwardTokenWork ?? 0}{" "}
+        {outcome?.generatedTokenIds.length ?? 0} generated tokens, {outcome?.forwardTokenWork ?? 0}{" "}
         forward-token work. Token IDs are retained against the exact tokenizer; no semantic feature
         labels are inferred.
       </p>
@@ -113,7 +113,7 @@ export function ActivationCaptureResult({
                 );
                 return (
                   <tr key={item.id}>
-                    <td>{item.profile ? item.id : `${item.id} · Off`}</td>
+                    <td>{item.profile ? item.id : `${item.id}, Off`}</td>
                     <td>
                       <code>{output?.generatedTokenIds.join(" ") || "—"}</code>
                     </td>

@@ -31,6 +31,7 @@ export function LabModelsPage({
   onPulled,
   onOpened,
   onSelect,
+  onOpenRun,
   onUseModel,
   onConfigure,
 }: {
@@ -50,6 +51,7 @@ export function LabModelsPage({
     importedMetricCount: number,
   ) => void;
   onSelect: (key: string) => void;
+  onOpenRun: (modelId: string, runKey: string) => void;
   onOpened: (id: string) => void;
   onUseModel: (modelId: string) => void;
   onConfigure: (modelId: string) => void;
@@ -84,22 +86,23 @@ export function LabModelsPage({
     [activeProfileId, items],
   );
   const rows = useMemo<ModelTableRow[]>(() => {
-    const hostedByPortableId = new Map(
-      (hostedCatalog?.projects ?? []).map(
-        (item) => [item.project.portableProjectId, item] as const,
-      ),
-    );
-    const localIds = new Set(items.map((item) => item.id));
+    const hostedProjects = hostedCatalog?.projects ?? [];
+    const linkedByLocalId = new Map(hostedProjects.flatMap((item) =>
+      item.localProjectId && item.localState !== "local_conflict" && item.localState !== "not_pulled"
+        ? [[item.localProjectId, item] as const] : [],
+    ));
+    const linkedHostedIds = new Set(items.flatMap((item) => {
+      const linked = linkedByLocalId.get(item.id);
+      return linked ? [linked.project.id] : [];
+    }));
     return [
-      ...items.map((item) => ({
-        key: item.key,
-        local: item,
-        hosted: hostedByPortableId.get(item.id) ?? null,
-        updatedAt:
-          hostedByPortableId.get(item.id)?.project.updatedAt ?? item.updatedAt,
-      })),
-      ...(hostedCatalog?.projects ?? [])
-        .filter((item) => !localIds.has(item.project.portableProjectId))
+      ...items.map((item) => {
+        const hosted = linkedByLocalId.get(item.id) ?? null;
+        const hostedUpdatedAt = hosted?.project.updatedAt ?? "";
+        return { key: item.key, local: item, hosted, updatedAt: hostedUpdatedAt > item.updatedAt ? hostedUpdatedAt : item.updatedAt };
+      }),
+      ...hostedProjects
+        .filter((item) => !linkedHostedIds.has(item.project.id))
         .map((hosted) => ({
           key: `hosted:${hosted.project.id}`,
           local: null,
@@ -132,22 +135,23 @@ export function LabModelsPage({
       })
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }, [profileId, query, rows]);
-  const visible = filtered.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE,
-  );
+  const visiblePage = Math.min(page, Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
+  const visible = filtered.slice((visiblePage - 1) * PAGE_SIZE, visiblePage * PAGE_SIZE);
   const emptyMessage = rows.length
     ? "No Models match this Profile or search."
     : "No local or hosted Model Projects were found.";
   const loadingHosted =
     training.busyAction === "list-hosted-model-projects";
+  const [hostedErrorScope, setHostedErrorScope] = useState<string | null>(null);
 
   useEffect(() => {
     if (!hostedScope) return;
     let cancelled = false;
     void (async () => {
       const cached = await listHostedModelProjects();
-      if (!cancelled && cached) setHostedResult({ scope: hostedScope, catalog: cached });
+      if (cancelled) return;
+      if (cached) setHostedResult({ scope: hostedScope, catalog: cached });
+      setHostedErrorScope(cached ? null : hostedScope);
       if (!cached?.cached) return;
       const refreshed = await listHostedModelProjects({
         refresh: true,
@@ -159,6 +163,14 @@ export function LabModelsPage({
       cancelled = true;
     };
   }, [listHostedModelProjects, hostedScope]);
+
+  async function retryHosted() {
+    if (!hostedScope || loadingHosted) return;
+    const catalog = await listHostedModelProjects({ refresh: true });
+    if (liveScope.current !== hostedScope) return;
+    setHostedErrorScope(catalog ? null : hostedScope);
+    if (catalog) setHostedResult({ scope: hostedScope, catalog });
+  }
 
   async function pullHostedProject(
     item: HostedModelProjectCatalog["projects"][number],
@@ -174,7 +186,7 @@ export function LabModelsPage({
       result.importedMetricCount,
     );
     const catalog = await listHostedModelProjects({ silent: true });
-    if (catalog && hostedScope) setHostedResult({ scope: hostedScope, catalog });
+    if (catalog && hostedScope && liveScope.current === hostedScope) setHostedResult({ scope: hostedScope, catalog });
   }
 
   async function selectModel(key: string) {
@@ -192,17 +204,6 @@ export function LabModelsPage({
     <div className="labs-flat-body labs-models-page">
       <ModelProjectPageHeader
         title="Models"
-        description="Compose Tasksets and scorers, run training and evaluations, and manage deployable Model Versions."
-        metrics={[
-          { label: "Projects", value: rows.length },
-          {
-            label: "Hosted",
-            value: hostedCatalog?.projects.length ?? "—",
-            hint: hostedCatalog ? `Team ${hostedCatalog.teamId}` : hostedScope ? "Loading active team" : "Sign in to load hosted models",
-          },
-          { label: "Evaluation receipts", value: comparableRunCount },
-          { label: "Profiles", value: profileIds.length },
-        ]}
       />
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">
@@ -218,6 +219,10 @@ export function LabModelsPage({
           />
         </label>
         <div className="labs-model-toolbar-actions">
+          {hostedScope && hostedErrorScope === hostedScope ? (
+            <button type="button" className="training-button secondary" disabled={loadingHosted}
+              onClick={() => void retryHosted()}>Retry hosted Models</button>
+          ) : null}
           <DropdownSelect
             className="labs-model-profile-filter"
             label="Filter Models by Profile"
@@ -253,10 +258,11 @@ export function LabModelsPage({
         state={state}
         onPull={(item) => void pullHostedProject(item)}
         onSelect={(key) => { void selectModel(key); }}
+        onOpenRun={onOpenRun}
         onUseModel={onUseModel}
         onConfigure={onConfigure}
       />
-      <Pagination page={page} total={filtered.length} onChange={setPage} />
+      <Pagination page={visiblePage} total={filtered.length} onChange={setPage} />
     </div>
   );
 }

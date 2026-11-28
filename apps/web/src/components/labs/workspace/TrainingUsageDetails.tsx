@@ -6,8 +6,8 @@ export function TrainingUsageDetails({ usage }: { usage: TrainingUsageSnapshot }
   return (
     <section>
       <h3>Usage</h3>
-      <p>Charged: ${usage.chargedUsd} · Committed: ${usage.committedUsd} · Pending: ${usage.outstandingUsd}</p>
-      <p>{usage.customerCapUsd === null ? "Use available credits" : `$${usage.customerCapUsd} spending limit · $${usage.remainingCapUsd} remaining`}</p>
+      <p>Charged: ${usage.chargedUsd}, Committed: ${usage.committedUsd}, Pending: ${usage.outstandingUsd}</p>
+      <p>{usage.customerCapUsd === null ? "Use available credits" : `$${usage.customerCapUsd} spending limit, $${usage.remainingCapUsd} remaining`}</p>
       <p>Current account credit available: ${usage.availableCreditUsd}.</p>
       <ul>
         {usage.components.map((component) => (

@@ -33,7 +33,7 @@ export function LearnedModificationResults({ result }: { result: Result }) {
           <>
             <dt>Selection</dt>
             <dd>
-              {result.selection.source} · {result.selection.entries.length} of{" "}
+              {result.selection.source}, {result.selection.entries.length} of{" "}
               {result.selection.eligibleCount.toLocaleString()} eligible neurons
             </dd>
             <dt>Optimizer steps</dt>

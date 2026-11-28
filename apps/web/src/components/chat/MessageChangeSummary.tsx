@@ -11,7 +11,7 @@ export function ChangeSummaryCard({
   onOpenFileInSidebar?: (path: string) => void;
 }) {
   const [openPath, setOpenPath] = useState<string | null>(null);
-  const title = `Workspace changes · ${summary.filesChanged} ${summary.filesChanged === 1 ? "file" : "files"}`;
+  const title = `Workspace changes, ${summary.filesChanged} ${summary.filesChanged === 1 ? "file" : "files"}`;
   const totals = summary.files.reduce(
     (counts, file) => {
       const fileCounts = displayFileCounts(file);

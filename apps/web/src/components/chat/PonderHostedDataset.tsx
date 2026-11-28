@@ -34,7 +34,7 @@ export function PonderHostedDataset({ api, release, tab, hostedEditor }: {
       return value;
     } });
   return <>
-    <p>Published dataset · revision {release.revision} · {page.data?.taskCount ?? "—"} tasks</p>
+    <p>Published dataset, revision {release.revision}, {page.data?.taskCount ?? "—"} tasks</p>
     <ErrorToast error={page.error ?? definition.error}>{page.error ? <button type="button" onClick={() => void page.refetch()}>Retry tasks</button> : definition.error ? <button type="button" onClick={() => void definition.refetch()}>Retry grader</button> : null}</ErrorToast>
     {page.isPending ? <p role="status">Loading published tasks…</p> : null}
     {tab === "dataset" ? <>

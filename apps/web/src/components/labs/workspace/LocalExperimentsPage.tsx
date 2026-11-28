@@ -134,11 +134,10 @@ export function LocalExperimentsPage({
             />
             <EvaluationStatus status={execution.status} />
             <span className="evaluation-run-counts">
-              <b>{execution.counts.completed}</b> completed · <b>{execution.counts.failed}</b> failed ·{" "}
-              <b>{execution.counts.running}</b> running · <b>{execution.counts.pending}</b> pending ·{" "}
+              <b>{execution.counts.completed}</b> completed, <b>{execution.counts.failed}</b> failed,{" "}
+              <b>{execution.counts.running}</b> running, <b>{execution.counts.pending}</b> pending,{" "}
               <b>{total}</b> attempts
             </span>
-            <span aria-hidden="true">·</span>
             <EvaluationTime value={execution.createdAt} />
             {!execution.completedAt ? (
               <button
@@ -232,7 +231,7 @@ export function LocalExperimentsPage({
                   <dd>{execution.model.modelId}</dd>
                   <dt>Dataset</dt>
                   <dd>
-                    Version {execution.configuration.request.taskset.revision} ·{" "}
+                    Version {execution.configuration.request.taskset.revision},{" "}
                     {execution.configuration.request.taskset.id}
                   </dd>
                   <dt>Whole-run spending cap</dt>

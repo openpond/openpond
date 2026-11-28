@@ -147,7 +147,7 @@ export function LabSkillSidebar({
           ) : source?.isBinary ? (
             <div className="lab-skill-source-state">
               <ImageIcon size={18} />
-              Binary asset · {formatByteSize(source.byteSize)}
+              Binary asset, {formatByteSize(source.byteSize)}
             </div>
           ) : (
             <pre className="native-skill-markdown-source" aria-label={`${fileName} source`}>

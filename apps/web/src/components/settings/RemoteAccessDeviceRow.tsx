@@ -35,10 +35,10 @@ export function RemoteAccessDeviceRow({
       <div className="remote-access-device-details">
         <strong>
           {device.name}
-          {self ? " · This computer" : ""}
+          {self ? ", This computer" : ""}
         </strong>
         <small>
-          {device.status.replaceAll("_", " ")} · {device.taskCount} tasks at
+          {device.status.replaceAll("_", " ")}, {device.taskCount} tasks at
           last sync
         </small>
         <small>
@@ -46,7 +46,7 @@ export function RemoteAccessDeviceRow({
           {device.lastSeenAt
             ? new Date(device.lastSeenAt).toLocaleString()
             : "never"}{" "}
-          · Catalog synced{" "}
+         , Catalog synced{" "}
           {device.lastCatalogSyncAt
             ? new Date(device.lastCatalogSyncAt).toLocaleString()
             : "never"}

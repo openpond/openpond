@@ -46,7 +46,7 @@ export function continuationConfiguration(
     return [
       {
         label: "Starting checkpoint",
-        value: `Frozen base · ${entry.parent.revision}`,
+        value: `Frozen base, ${entry.parent.revision}`,
       },
       { label: "Optimizer", value: "Fresh" },
     ];
@@ -62,7 +62,7 @@ export function continuationConfiguration(
   const checkpoint = [
     parentEntry?.label ?? null,
     parentVersion ? `Version ${parentVersion.version}` : entry.parent.id,
-  ].filter((value): value is string => Boolean(value)).join(" · ");
+  ].filter((value): value is string => Boolean(value)).join(", ");
   return [
     { label: "Starting checkpoint", value: checkpoint },
     { label: "Optimizer", value: "Fresh" },
@@ -85,7 +85,7 @@ export function comparisonParentLabel(
   return [
     parentEntry?.label ?? "Prior checkpoint",
     parentVersion ? `Version ${parentVersion.version}` : null,
-  ].filter((value): value is string => Boolean(value)).join(" · ");
+  ].filter((value): value is string => Boolean(value)).join(", ");
 }
 
 function scientificNumber(value: number): string {

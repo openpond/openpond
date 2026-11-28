@@ -184,7 +184,7 @@ export function LabComparisonSeriesDetail({
     <div className="labs-flat-body labs-resource-page labs-comparison-series-detail" data-profile-id={state.profileId}>
       <div className="labs-dataset-detail-heading">
         <button aria-label="Back to Comparison Series" className="labs-back-button" type="button" onClick={onBack}><ArrowLeft size={15} /></button>
-        <div><h1>{series.name}</h1><p>{project?.name ?? series.modelProjectId} · revision {series.revision}</p></div>
+        <div><h1>{series.name}</h1><p>{project?.name ?? series.modelProjectId}, revision {series.revision}</p></div>
         <LabStatusBadge label={series.status} value={series.status} />
       </div>
       <ModelProjectPageHeader
@@ -219,7 +219,7 @@ export function LabComparisonSeriesDetail({
                 <td>{entry ? parentLabel(entry, entries) : parentRuleLabel(scheduled.parentRule)}</td>
                 <td>{entry ? <button className="labs-version-row-button" type="button" onClick={() => onOpenTaskset(entry.taskset.id)}>{tasksetName(state, entry.taskset.id)}<small>{shortId(entry.taskset.contentHash)}</small></button> : scheduled.taskSource === "nightly_selection" ? "Learning queue" : "Derived on prepare"}</td>
                 <td>{entry?.trainableRank ?? scheduled.trainableRank}</td>
-                <td>{entry ? <><strong>{entry.enabledCumulativeRank}</strong><small>{candidateStackLabel(entry)}{entry.status === "rejected" || entry.status === "no_signal" ? " · inactive" : ""}</small></> : "—"}</td>
+                <td>{entry ? <><strong>{entry.enabledCumulativeRank}</strong><small>{candidateStackLabel(entry)}{entry.status === "rejected" || entry.status === "no_signal" ? ", inactive" : ""}</small></> : "—"}</td>
                 <td>{evidence ? <>{evidence.progress.committedOptimizerSteps} / {evidence.progress.targetOptimizerSteps}<small>{evidence.progress.skippedOptimizerSteps} skipped</small></> : "Unavailable"}</td>
                 <td>{evidence ? formatInteger(evidence.usage.inputTokens + evidence.usage.outputTokens) : "Unavailable"}</td>
                 <td>{evidence?.resource.gpuSeconds == null ? "Unavailable" : formatDuration(evidence.resource.gpuSeconds)}</td>
@@ -227,7 +227,7 @@ export function LabComparisonSeriesDetail({
                 <td><LabStatusBadge label={comparisonStatusLabel(entry?.status ?? "planned")} value={entry?.status ?? "prepared"} /></td>
                 <td>{entry ? <>{entry.modelRunId ? <button className="labs-version-row-button" type="button" onClick={() => onOpenRun(entry.modelProjectId, entry.modelRunId!)}>{shortId(entry.modelRunId)}</button> : "No Run"}{entry.modelVersionId ? <button className="labs-version-row-button" type="button" onClick={() => onOpenVersion(entry.modelProjectId, entry.modelVersionId!)}><small>{shortId(entry.modelVersionId)}</small></button> : <small>No Version</small>}</> : "—"}</td>
                 <td>{entry?.evaluations.length ? <button className="labs-version-row-button" type="button" onClick={() => onOpenEvaluation(entry.evaluations[0]!.evaluationRunId)}>{entry.evaluations.length} linked<small>{entry.evaluations.map((evaluation) => evaluation.cohortRole).join(", ")}</small></button> : entry ? "0 linked" : "—"}</td>
-                <td>{entry?.decision ? <>{comparisonDecisionLabel(entry.decision.disposition)}<small>{decisionActor(entry.decision.decidedBy)} · {formatDateTime(entry.decision.decidedAt)}</small></> : entry?.status === "no_signal" ? <>No signal<small>No operator decision recorded</small></> : "Awaiting review"}</td>
+                <td>{entry?.decision ? <>{comparisonDecisionLabel(entry.decision.disposition)}<small>{decisionActor(entry.decision.decidedBy)}, {formatDateTime(entry.decision.decidedAt)}</small></> : entry?.status === "no_signal" ? <>No signal<small>No operator decision recorded</small></> : "Awaiting review"}</td>
                 <td><div className="labs-comparison-actions">
                   {canPrepare ? <button className="training-button secondary" disabled={Boolean(training.busyAction)} type="button" onClick={() => void queueDerived(scheduled.id)}>Prepare</button> : null}
                   {entry?.status === "ready" ? <button className="training-button" disabled={Boolean(training.busyAction)} type="button" onClick={() => void start(entry)}>Start</button> : null}
@@ -263,7 +263,7 @@ function ComparisonReleaseDetail({ detail, entry, entries, masterEntry, onBack, 
   return <div className="labs-flat-body labs-resource-page labs-comparison-series-detail" data-profile-id={state.profileId}>
     <div className="labs-dataset-detail-heading">
       <button aria-label={`Back to ${series.name}`} className="labs-back-button" type="button" onClick={onBack}><ArrowLeft size={15} /></button>
-      <div><h1>{entry.label}</h1><p>{series.name} · {roleLabel(entry.role)}</p></div>
+      <div><h1>{entry.label}</h1><p>{series.name}, {roleLabel(entry.role)}</p></div>
       <LabStatusBadge label={comparisonStatusLabel(entry.status)} value={entry.status} />
     </div>
     <ModelProjectPageHeader
@@ -277,8 +277,8 @@ function ComparisonReleaseDetail({ detail, entry, entries, masterEntry, onBack, 
       metrics={[
         { label: "Based on", value: parentLabel(entry, entries), hint: entry.parent.kind === "base_model" ? entry.parent.id : shortId(entry.parent.id) },
         { label: "New rank", value: entry.trainableRank, hint: `block ${shortId(entry.trainableBlockId)}` },
-        { label: "Candidate stack", value: entry.enabledCumulativeRank, hint: `${candidateStackLabel(entry)}${entry.status === "rejected" || entry.status === "no_signal" ? " · inactive" : ""}` },
-        { label: "Operator decision", value: decision ? comparisonDecisionLabel(decision.disposition) : entry.status === "no_signal" ? "No signal" : "Awaiting review", hint: decision ? `${decisionActor(decision.decidedBy)} · ${formatDateTime(decision.decidedAt)}` : "No operator decision recorded" },
+        { label: "Candidate stack", value: entry.enabledCumulativeRank, hint: `${candidateStackLabel(entry)}${entry.status === "rejected" || entry.status === "no_signal" ? ", inactive" : ""}` },
+        { label: "Operator decision", value: decision ? comparisonDecisionLabel(decision.disposition) : entry.status === "no_signal" ? "No signal" : "Awaiting review", hint: decision ? `${decisionActor(decision.decidedBy)}, ${formatDateTime(decision.decidedAt)}` : "No operator decision recorded" },
         { label: "Master", value: masterEntry?.id === entry.id ? "Yes" : "No", hint: masterEntry?.id === entry.id ? "Active production binding" : "Promotion is separate from branch advancement" },
       ]}
     />
@@ -290,7 +290,7 @@ function ComparisonReleaseDetail({ detail, entry, entries, masterEntry, onBack, 
         <CompactDecisionFact label="Decided at" value={formatDateTime(decision.decidedAt)} />
         <CompactDecisionFact label="Policy" value={`${decision.policy.id} v${decision.policy.version}`} />
       </div>
-      <div className="labs-comparison-lineage"><strong>Recorded reasons</strong><span>{decision.reasonCodes.join(" · ")}</span></div>
+      <div className="labs-comparison-lineage"><strong>Recorded reasons</strong><span>{decision.reasonCodes.join(", ")}</span></div>
     </section> : null}
     <ComparisonEvidence entry={entry} detail={detail} state={state} onOpenEvaluation={onOpenEvaluation} onOpenTaskset={onOpenTaskset} onOpenVersion={onOpenVersion} />
   </div>;
@@ -308,7 +308,7 @@ function ComparisonEvidence({ entry, detail, onOpenEvaluation, onOpenTaskset, on
   const reward = detail?.managedEvidence?.reward ?? null;
   const cost = detail?.managedEvidence?.cost.totalUsd ?? metric?.costUsd ?? null;
   return <section className="training-detail-section labs-comparison-evidence">
-    <div className="labs-project-trends-heading"><div><h2>Comparison workspace · {entry.label}</h2><p>Missing evidence stays unavailable; it is never rendered as zero.</p></div><button className="training-button secondary" type="button" onClick={() => onOpenTaskset(entry.taskset.id)}>Inspect tasks</button></div>
+    <div className="labs-project-trends-heading"><div><h2>Comparison workspace, {entry.label}</h2><p>Missing evidence stays unavailable; it is never rendered as zero.</p></div><button className="training-button secondary" type="button" onClick={() => onOpenTaskset(entry.taskset.id)}>Inspect tasks</button></div>
     <div className="labs-comparison-evidence-grid">
       <EvidenceCard title="Outcome" rows={[
         ["Parent score", formatMetric(evaluation?.base.meanScore ?? null)],
@@ -349,7 +349,7 @@ function ComparisonEvidence({ entry, detail, onOpenEvaluation, onOpenTaskset, on
         return <tr key={example.taskId}><td>{example.taskId}</td><td>{formatMetric(parent)}</td><td>{formatMetric(candidate)}</td><td>{parent === null || candidate === null ? "Unavailable" : formatSigned(candidate - parent)}</td><td>{example.trainedGrade?.status ?? "Unavailable"}</td></tr>;
       }) : <tr><td colSpan={5}>Task-level comparison evidence is unavailable for this release.</td></tr>}
     </tbody></table></div>
-    {entry.evaluations.length ? <div className="labs-comparison-lineage"><strong>Canonical Evaluation history</strong>{entry.evaluations.map((evaluation) => <button className="labs-version-row-button" key={evaluation.evaluationRunId} type="button" onClick={() => onOpenEvaluation(evaluation.evaluationRunId)}>{evaluation.cohortRole}<small>{shortId(evaluation.evaluationRunId)} · {shortId(evaluation.taskset.contentHash)}</small></button>)}</div> : null}
+    {entry.evaluations.length ? <div className="labs-comparison-lineage"><strong>Canonical Evaluation history</strong>{entry.evaluations.map((evaluation) => <button className="labs-version-row-button" key={evaluation.evaluationRunId} type="button" onClick={() => onOpenEvaluation(evaluation.evaluationRunId)}>{evaluation.cohortRole}<small>{shortId(evaluation.evaluationRunId)}, {shortId(evaluation.taskset.contentHash)}</small></button>)}</div> : null}
     {entry.modelVersionId ? <div className="labs-comparison-lineage"><strong>Model Version</strong><button className="labs-version-row-button" type="button" onClick={() => onOpenVersion(entry.modelProjectId, entry.modelVersionId!)}>{shortId(entry.modelVersionId)}</button></div> : null}
     <div className="labs-comparison-lineage"><strong>Immutable lineage</strong><span>{entry.residualBlocks.map((block) => `${block.optimizationRole === "trainable" ? "train" : "frozen"} r${block.rank} [${block.offsetStart},${block.offsetEnd})`).join(" → ")}</span><small>{state.modelVersions.find((version) => version.id === entry.modelVersionId)?.artifactLineageId ?? "Artifact lineage unavailable"}</small></div>
   </section>;

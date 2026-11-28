@@ -182,11 +182,10 @@ export function HostedExperimentsPage({
             />
             <EvaluationStatus status={run.summary.status} />
             <span className="evaluation-run-counts">
-              <b>{run.summary.counts.completed}</b> completed · <b>{run.summary.counts.failed}</b>{" "}
-              failed · <b>{run.summary.counts.running}</b> running ·{" "}
-              <b>{run.summary.counts.pending}</b> pending · <b>{run.summary.totalCount}</b> attempts
+              <b>{run.summary.counts.completed}</b> completed, <b>{run.summary.counts.failed}</b>{" "}
+              failed, <b>{run.summary.counts.running}</b> running,{" "}
+              <b>{run.summary.counts.pending}</b> pending, <b>{run.summary.totalCount}</b> attempts
             </span>
-            <span aria-hidden="true">·</span>
             <EvaluationTime value={run.summary.startedAt ?? run.summary.createdAt} />
             {["queued", "running", "cancelling"].includes(run.summary.status) ? (
               <button

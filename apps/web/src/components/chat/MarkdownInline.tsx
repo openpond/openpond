@@ -113,7 +113,7 @@ export function renderInline(content: string, context: MarkdownContext): ReactNo
       if (closing > index + 1) {
         const codeContent = content.slice(index + 1, closing);
         const rangeBase: string | null = previousFile && previousFile.path.lastIndexOf("/") > 0 && /^(?:\s*(?:\.\.\.|…)\s*)$/.test(content.slice(previousFile.end, index))
-          && !/[\/]/.test(codeContent) ? previousFile.path.slice(0, previousFile.path.lastIndexOf("/")) : null;
+          && !codeContent.includes("/") ? previousFile.path.slice(0, previousFile.path.lastIndexOf("/")) : null;
         const imagePath: ReturnType<typeof normalizeChatFilePath> = context.onOpenFileInSidebar
           ? normalizeChatFilePath(codeContent, { workspaceRootPath: context.workspaceRootPath, fileBasePath: rangeBase || context.fileBasePath })
           : null;
@@ -512,7 +512,7 @@ function MarkdownFileImageReference({
         title={title}
         aria-label={failed ? `Retry preview for ${title}` : `Preview ${title}`}
       >
-        {failed ? <span>Preview unavailable · Retry</span> : src
+        {failed ? <span>Preview unavailable, Retry</span> : src
           ? <img alt={title} decoding="async" loading="lazy" src={src} onError={() => setFailedSrc(src)} />
           : <span>Loading preview…</span>}
       </button>

@@ -901,7 +901,7 @@ function ProfileRepoDialog({
         <div className="profile-dialog-summary">
           <strong>{profile.git?.isRepo ? "Git-backed" : "Git setup required"}</strong>
           <span>
-            {profile.git?.branch ?? "No branch"} · {shortSha(profile.git?.head)}
+            {profile.git?.branch ?? "No branch"}, {shortSha(profile.git?.head)}
           </span>
         </div>
         <div className="git-dialog-footer">

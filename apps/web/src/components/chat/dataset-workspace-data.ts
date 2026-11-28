@@ -17,7 +17,7 @@ export const sameDataset = (run: ChatResourceSummary, dataset: ChatResourceSumma
 export const activeRun = (state: string) =>
   /^(queued|running|pending|starting|cancelling)$/i.test(state);
 export function workspaceRunName(run: ChatResourceSummary) {
-  const suffix = run.model ? ` · ${run.model.split("/").at(-1)}` : "";
+  const suffix = run.model ? `, ${run.model.split("/").at(-1)}` : "";
   return suffix && run.name.endsWith(suffix) ? run.name.slice(0, -suffix.length) : run.name;
 }
 export function workspaceRunModel(run: ChatResourceSummary) {

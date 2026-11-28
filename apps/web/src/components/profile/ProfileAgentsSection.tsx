@@ -93,13 +93,13 @@ function ProfileBuiltInDatasetAgentRow() {
           <Bot size={18} />
           <div>
             <strong>Dataset Builder</strong>
-            <span>Built in · every Profile</span>
+            <span>Built in, every Profile</span>
           </div>
         </div>
       </td>
       <td>
         <div className="profile-agent-action">
-          <span>Design · Materialize · Test</span>
+          <span>Design, Materialize, Test</span>
         </div>
       </td>
       <td><ProfileStatusText status={{ state: "ready", label: "Ready" }} /></td>

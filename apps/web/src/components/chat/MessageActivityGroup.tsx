@@ -525,12 +525,12 @@ function workTraceSummaryText(
   }
   if (traceState === "failed") {
     return `${duration ? `Failed after ${duration}` : "Failed"}${
-      summary ? ` · ${summary}` : ""
+      summary ? `, ${summary}` : ""
     }`;
   }
   if (traceState === "interrupted") {
     return `${duration ? `Interrupted after ${duration}` : "Interrupted"}${
-      summary ? ` · ${summary}` : ""
+      summary ? `, ${summary}` : ""
     }`;
   }
   return summary;

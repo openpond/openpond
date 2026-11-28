@@ -352,7 +352,7 @@ function ActivityDayTooltip({
       <strong>{longDateFormatter.format(localDateFromKey(day.date))}</strong>
       <span>
         {day.totalTokens > 0
-          ? `${formatTokens(day.totalTokens)} tokens · ${formatInteger(day.requests)} ${day.requests === 1 ? "request" : "requests"}`
+          ? `${formatTokens(day.totalTokens)} tokens, ${formatInteger(day.requests)} ${day.requests === 1 ? "request" : "requests"}`
           : "No recorded usage"}
       </span>
       {day.models.length ? (
@@ -366,7 +366,7 @@ function ActivityDayTooltip({
                   color: colorByModel.get(usageModelKey(model.provider, model.model)),
                 }}
               />
-              <small title={`${providerLabel(model.provider)} · ${modelDisplayLabel(model.model)}`}>{modelDisplayLabel(model.model)}</small>
+              <small title={`${providerLabel(model.provider)}, ${modelDisplayLabel(model.model)}`}>{modelDisplayLabel(model.model)}</small>
               <em>{formatTokens(model.totalTokens)}</em>
             </div>
           ))}
@@ -380,7 +380,7 @@ function ModelLegend({ models }: { models: ModelColor[] }) {
   return (
     <div className="usage-model-legend" aria-label="Model colors">
       {models.map((model) => (
-        <span key={model.key} title={`${providerLabel(model.provider)} · ${modelDisplayLabel(model.model)}`}>
+        <span key={model.key} title={`${providerLabel(model.provider)}, ${modelDisplayLabel(model.model)}`}>
           <i aria-hidden="true" style={{ background: model.color }} />
           {modelDisplayLabel(model.model)}
         </span>
@@ -447,7 +447,7 @@ function ModelMix({
                 />
                 <div className="usage-model-mix-copy">
                   <strong title={modelDisplayLabel(model.model)}>{modelDisplayLabel(model.model)}</strong>
-                  <span>{providerLabel(model.provider, model.route)} · {formatInteger(model.requests)} requests</span>
+                  <span>{providerLabel(model.provider, model.route)}, {formatInteger(model.requests)} requests</span>
                   <i
                     style={{
                       "--usage-model-color": color,
@@ -688,10 +688,10 @@ function activityRangeLabel(
 ): string {
   if (range !== "all") {
     const label = range === "7d" ? "Last 7 days" : range === "30d" ? "Last 30 days" : "Last 90 days";
-    return `${label} · days outside this filter stay empty`;
+    return `${label}, days outside this filter stay empty`;
   }
   if (!summary || summary.totals.requests === 0) {
-    return "Last 12 months · days without recorded usage stay empty";
+    return "Last 12 months, days without recorded usage stay empty";
   }
   const firstDate = summary.daily[0]?.date;
   const lastDate = summary.daily.at(-1)?.date;
@@ -699,8 +699,8 @@ function activityRangeLabel(
   const from = longDateFormatter.format(localDateFromKey(firstDate));
   const to = longDateFormatter.format(localDateFromKey(lastDate));
   return firstDate === lastDate
-    ? `Last 12 months · stored activity on ${from}`
-    : `Last 12 months · stored activity ${from} – ${to}`;
+    ? `Last 12 months, stored activity on ${from}`
+    : `Last 12 months, stored activity ${from} – ${to}`;
 }
 
 function firstText(...values: Array<string | null | undefined>): string | null {

@@ -27,19 +27,19 @@ export function ProfileWorkflowsSection({ catalog, evaluations, onEvaluate, onOp
             <small>{workflow.description}</small></th>
           <td>{evaluations ? definitions.length : "—"}</td><td>{evaluations ? runs.length : "—"}</td>
           <td>{latest ? <button type="button" onClick={() => onOpenRun(latest)}>
-            {latest.passed ? "Passed" : "Did not pass"} · {displayScore(latest.metric.value)}
+            {latest.passed ? "Passed" : "Did not pass"}, {displayScore(latest.metric.value)}
             <small>{displayTimestamp(latest.completedAt)}</small></button> : "Not run"}</td>
           <td><button type="button" disabled={busy || !evaluations} onClick={() => onEvaluate(workflow.id)}>
             {definitions.length ? "Run Evaluation" : "View evaluations"}</button></td>
         </tr>{expandedId === workflow.id ? <tr><td colSpan={5}>
           <div className="profile-evaluations-detail">
             <strong>{workflow.label}</strong>
-            <p>Revision {binding.sourceRevision.slice(0, 12)} · Release {binding.harnessRelease.contentHash.slice(0, 12)}</p>
+            <p>Revision {binding.sourceRevision.slice(0, 12)}, Release {binding.harnessRelease.contentHash.slice(0, 12)}</p>
             {workflow.skillPaths.length ? <p>Skills: {workflow.skillPaths.join(", ")}</p> : null}
             <details><summary>{workflow.invocation.kind === "instructions" ? "Instructions" : "Action configuration"}</summary>
               <pre>{workflow.invocation.kind === "instructions" ? workflow.invocation.instructions : JSON.stringify(workflow.invocation, null, 2)}</pre></details>
             <strong>Linked evaluations</strong>
-            {definitions.length ? <ul>{definitions.map(item => <li key={item.id}>{item.label} · {item.taskIds.length} tasks · {item.seeds.length} seeds</li>)}</ul>
+            {definitions.length ? <ul>{definitions.map(item => <li key={item.id}>{item.label}, {item.taskIds.length} tasks, {item.seeds.length} seeds</li>)}</ul>
               : <p>{evaluations ? "No evaluation definition targets this workflow. Add one in the Profile’s evals catalog to run it." : "Evaluation catalog unavailable."}</p>}
             <button type="button" disabled={busy || !evaluations} onClick={() => onEvaluate(workflow.id)}>
               {definitions.length ? "Run Evaluation" : "View evaluation history"}</button>

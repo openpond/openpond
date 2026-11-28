@@ -123,7 +123,7 @@ function QualityChart({
       </g>)}
       {data.references.map((reference) => <g key={reference.id}>
         <line className={`labs-quality-reference ${reference.kind}`} x1={left} x2={width - right} y1={y(reference.value)} y2={y(reference.value)} />
-        <text className={`labs-quality-reference-label ${reference.kind}`} x={width - right} y={y(reference.value) - 6} textAnchor="end">{reference.label} · {reference.value.toFixed(1)}</text>
+        <text className={`labs-quality-reference-label ${reference.kind}`} x={width - right} y={y(reference.value) - 6} textAnchor="end">{reference.label}, {reference.value.toFixed(1)}</text>
       </g>)}
       {data.points.length > 1 ? <path className="labs-quality-series-line" d={path} fill="none" /> : null}
       {acceptedPath ? <path className="labs-quality-accepted-line" d={acceptedPath} fill="none" /> : null}
@@ -137,11 +137,11 @@ function QualityChart({
         <text className="labs-quality-date-label" x={x(index)} y={height - 9} textAnchor="middle">{shortDate(point.date)}</text>
       </g>)}
     </svg>
-    <div className="labs-quality-legend"><span><i className="candidate" />Candidate</span><span><i className="accepted" />Accepted head</span>{data.references.map((reference) => <button key={reference.id} type="button" onClick={() => onOpenEvaluation(reference.runId)}><i className={reference.kind} />{reference.label} · {reference.value.toFixed(1)}</button>)}</div>
+    <div className="labs-quality-legend"><span><i className="candidate" />Candidate</span><span><i className="accepted" />Accepted head</span>{data.references.map((reference) => <button key={reference.id} type="button" onClick={() => onOpenEvaluation(reference.runId)}><i className={reference.kind} />{reference.label}, {reference.value.toFixed(1)}</button>)}</div>
     {metric === "judge" && data.points.length ? <div className="labs-quality-judge-evidence">
       {data.points.map((point) => <button key={point.id} type="button" onClick={() => onOpenEvaluation(point.runId)}>
         <strong>{point.label}</strong>
-        <span>{point.wins}/{point.ties}/{point.losses} win/tie/loss · n={point.comparisonCount}</span>
+        <span>{point.wins}/{point.ties}/{point.losses} win/tie/loss, n={point.comparisonCount}</span>
       </button>)}
     </div> : null}
   </article>;

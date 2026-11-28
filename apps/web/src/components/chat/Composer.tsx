@@ -457,7 +457,7 @@ export function Composer({
   const sendTooltip = serializingAttachments
     ? "Preparing files"
     : running
-      ? "Steer (Enter) · Queue (Ctrl Enter)"
+      ? "Steer (Enter), Queue (Ctrl Enter)"
       : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments || contextSelection.selecting;

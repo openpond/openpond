@@ -50,7 +50,7 @@ export function ChatWorkflowDetail({
       </DetailSection>
       <DetailSection title="Profile source">
         {workflow.profileRef && workflow.profileWorkflowId ? (
-          <p>{workflow.profileRef.profileId} · workflows/{workflow.profileWorkflowId}/PROMPT.md</p>
+          <p>{workflow.profileRef.profileId}, workflows/{workflow.profileWorkflowId}/PROMPT.md</p>
         ) : (
           <p className="scheduled-detail-error">{workflow.profileMigrationError ?? "Profile package is unresolved."}</p>
         )}

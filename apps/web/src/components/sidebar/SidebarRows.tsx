@@ -421,7 +421,7 @@ export function SidebarFileRow({
   onDrop?: (event: DragEvent<HTMLDivElement>) => void;
 }) {
   const filename = file.path.split("/").at(-1) ?? file.path;
-  const location = `${file.workspaceName} · ${file.path}`;
+  const location = `${file.workspaceName}, ${file.path}`;
   return (
     <SidebarInteractiveRow
       selected={selected}

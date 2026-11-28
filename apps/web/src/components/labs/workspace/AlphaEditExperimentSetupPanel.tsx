@@ -330,13 +330,13 @@ export function AlphaEditExperimentSetupPanel({
   const batchOptions: Array<{ value: string; label: string; disabled?: boolean }> = batches.map(
     (batch) => ({
       value: canonicalJson(batch.reference),
-      label: `${batch.reference.id} · release ${batch.reference.revision} · ${batch.exampleCount} examples`,
+      label: `${batch.reference.id}, release ${batch.reference.revision}, ${batch.exampleCount} examples`,
     }),
   );
   if (batchValue && !batchOptions.some((item) => item.value === batchValue))
     batchOptions.unshift({
       value: batchValue,
-      label: `${form.editsBatch!.id} · saved release ${form.editsBatch!.revision}`,
+      label: `${form.editsBatch!.id}, saved release ${form.editsBatch!.revision}`,
       disabled: true,
     });
   const modelValue =
@@ -536,13 +536,13 @@ export function AlphaEditExperimentSetupPanel({
                 <AlphaEditFields form={form} onChange={setForm} />
                 {form.startingModule ? (
                   <p>
-                    Saved Model {form.startingModule.modelProjectId} · version{" "}
+                    Saved Model {form.startingModule.modelProjectId}, version{" "}
                     {form.startingModule.versionHash}
                   </p>
                 ) : null}
                 {form.parentArtifact ? (
                   <p>
-                    Continue exact matrices and sequential state {form.parentArtifact.id} ·{" "}
+                    Continue exact matrices and sequential state {form.parentArtifact.id},{" "}
                     {form.parentArtifact.contentHash}.
                   </p>
                 ) : null}

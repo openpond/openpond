@@ -251,9 +251,9 @@ export function TrainingExperimentSetupPanel({
                 <DropdownSelect label="LoRA continuation" floating
                   value={setup.trainingParent.adapterMode}
                   options={[
-                    { value: "shared", label: "Shared · update the existing adapter" },
-                    { value: "residual_append", label: "Stacked · freeze the parent and add an adapter" },
-                    { value: "sequential_merge", label: "Merged · merge the parent, then train a new adapter" },
+                    { value: "shared", label: "Shared, update the existing adapter" },
+                    { value: "residual_append", label: "Stacked, freeze the parent and add an adapter" },
+                    { value: "sequential_merge", label: "Merged, merge the parent, then train a new adapter" },
                   ]}
                   onChange={value => {
                     if (setup.trainingParent && (value === "shared" || value === "residual_append" || value === "sequential_merge"))
@@ -284,14 +284,14 @@ export function TrainingExperimentSetupPanel({
                     ? [
                         {
                           value: canonicalJson(form.batch),
-                          label: `${form.batch.id} · r${form.batch.revision}`,
+                          label: `${form.batch.id}, r${form.batch.revision}`,
                           disabled: true,
                         },
                       ]
                     : []),
                   ...batches.map((item) => ({
                     value: canonicalJson(item.reference),
-                    label: `${item.exampleCount} example${item.exampleCount === 1 ? "" : "s"} · ${item.reference.id} · r${item.reference.revision}`,
+                    label: `${item.exampleCount} example${item.exampleCount === 1 ? "" : "s"}, ${item.reference.id}, r${item.reference.revision}`,
                   })),
                 ]}
                 onChange={(value) => {
@@ -443,9 +443,9 @@ export function TrainingExperimentSetupPanel({
               {form.recovery.data?.review?.request.name}
               {form.recovery.data?.review?.request.usageFunding
                 ? form.recovery.data.review.request.usageFunding.customerCapUsd === null
-                  ? " · Use available credits"
-                  : ` · $${form.recovery.data.review.request.usageFunding.customerCapUsd} spending limit`
-                : ` · $${form.recovery.data?.review?.request.maximumSpendUsd} maximum spend`}
+                  ? ", Use available credits"
+                  : `, $${form.recovery.data.review.request.usageFunding.customerCapUsd} spending limit`
+                : `, $${form.recovery.data?.review?.request.maximumSpendUsd} maximum spend`}
             </p>
             <p>
               The original request is retained on this device. Restore it to
@@ -467,7 +467,7 @@ export function TrainingExperimentSetupPanel({
           <EvaluationCard title="Reviewed experiment">
             <p>
               {receipt.plan.request.name}
-              {!receipt.plan.usageQuote ? ` · $${receipt.plan.request.maximumSpendUsd} maximum spend` : null}
+              {!receipt.plan.usageQuote ? `, $${receipt.plan.request.maximumSpendUsd} maximum spend` : null}
             </p>
             {receipt.plan.usageQuote ? <TrainingUsageQuoteDetails quote={receipt.plan.usageQuote} /> : null}
             <p>

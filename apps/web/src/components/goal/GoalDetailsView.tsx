@@ -520,7 +520,7 @@ function subagentLatestUpdateLabel(runtime: SubagentRuntimeStatus): string {
 function subagentUsageLabel(totalTokens: number, requestCount: number): string {
   if (totalTokens <= 0 && requestCount <= 0) return "0 tokens";
   const requestLabel = `${requestCount} ${requestCount === 1 ? "request" : "requests"}`;
-  return `${formatTokenCount(totalTokens)} tokens · ${requestLabel}`;
+  return `${formatTokenCount(totalTokens)} tokens, ${requestLabel}`;
 }
 
 function subagentRoleLabel(roleId: string): string {
@@ -539,7 +539,7 @@ function subagentWorkspaceRetentionLabel(
   retention: NonNullable<SubagentFinalResultSummary["workspaceRetention"]>,
 ): string {
   const expiry = retention.expiresAt ? `until ${formatTimestamp(retention.expiresAt)}` : "for inspection";
-  const trigger = retention.trigger ? ` · ${createStateLabel(retention.trigger)}` : "";
+  const trigger = retention.trigger ? `, ${createStateLabel(retention.trigger)}` : "";
   return `retained ${expiry}${trigger}`;
 }
 

@@ -159,7 +159,7 @@ export function LabModelDataset({
         <section className="labs-dataset-method-readiness">
           <strong>Scoring</strong>
           <p className="labs-detail-copy">
-            {taskset.graders.length} versioned grader{taskset.graders.length === 1 ? "" : "s"} · {rewardGraders.length} reward source{rewardGraders.length === 1 ? "" : "s"} · {taskset.policy.privilegedFields.length ? "privileged criteria hidden from the policy" : "no privileged grading fields"}.
+            {taskset.graders.length} versioned grader{taskset.graders.length === 1 ? "" : "s"}, {rewardGraders.length} reward source{rewardGraders.length === 1 ? "" : "s"}, {taskset.policy.privilegedFields.length ? "privileged criteria hidden from the policy" : "no privileged grading fields"}.
           </p>
         </section>
         {taskset.purpose === "benchmark" && taskset.benchmark ? (
@@ -276,7 +276,7 @@ export function LabModelDataset({
               <span>
                 {rowsLoading
                   ? "Loading…"
-                  : `Page ${cursorHistory.length + 1} · ${artifactRows.length.toLocaleString()} rows`}
+                  : `Page ${cursorHistory.length + 1}, ${artifactRows.length.toLocaleString()} rows`}
               </span>
               <button
                 type="button"
@@ -386,7 +386,7 @@ function DatasetExample({
         <span className="labs-dataset-example-index">{String(index + 1).padStart(2, "0")}</span>
         <span className="labs-dataset-example-title">
           <strong>{prompt}</strong>
-          <small>{[family, difficulty, sourceLabel].filter(Boolean).join(" · ")}</small>
+          <small>{[family, difficulty, sourceLabel].filter(Boolean).join(", ")}</small>
         </span>
         <LabStatusBadge label={splitLabel(task.split)} value={task.split} />
       </summary>

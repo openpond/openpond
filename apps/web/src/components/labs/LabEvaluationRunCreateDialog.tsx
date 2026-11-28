@@ -85,15 +85,15 @@ export function LabEvaluationRunCreateDialog({
     <AppDialog ariaLabel="New evaluation run" backdropClassName="labs-rename-backdrop" className="labs-rename-dialog labs-evaluation-create-dialog" dismissDisabled={busy} onClose={onClose}>
       <header><div><h2>New evaluation run</h2><p>Launch one exact candidate × sealed panel measurement. This does not make an operator decision.</p></div><button aria-label="Close" disabled={busy} type="button" onClick={onClose}><X size={16} /></button></header>
       <form onSubmit={(event) => void submit(event)}>
-        <label><span>Comparison release</span><select required value={entryId} onChange={(event) => selectEntry(event.currentTarget.value)}><option value="">Select a trained release</option>{candidates.map(({ entry, series }) => <option key={entry.id} value={entry.id}>{series.name} · {entry.label}</option>)}</select></label>
+        <label><span>Comparison release</span><select required value={entryId} onChange={(event) => selectEntry(event.currentTarget.value)}><option value="">Select a trained release</option>{candidates.map(({ entry, series }) => <option key={entry.id} value={entry.id}>{series.name}, {entry.label}</option>)}</select></label>
         <label><span>Sealed panel</span><select required value={panel?.id ?? ""} onChange={(event) => setPanelId(event.currentTarget.value)}><option value="">Select an authorized panel</option>{panels.map((candidate) => <option key={candidate.id} value={candidate.id}>{panelLabel(candidate)}</option>)}</select></label>
         {selected?.series.benchmarkProtocol && panel ? <dl className="labs-inline-facts labs-evaluation-create-facts">
-          <Fact label="Protocol" value={`${selected.series.benchmarkProtocol.id} · r${selected.series.benchmarkProtocol.revision}`} />
+          <Fact label="Protocol" value={`${selected.series.benchmarkProtocol.id}, r${selected.series.benchmarkProtocol.revision}`} />
           <Fact label="Protocol hash" value={selected.series.benchmarkProtocol.contentHash} mono />
-          <Fact label="Taskset" value={`${panel.taskset.id} · r${panel.taskset.revision}`} />
+          <Fact label="Taskset" value={`${panel.taskset.id}, r${panel.taskset.revision}`} />
           <Fact label="Taskset hash" value={panel.taskset.contentHash} mono />
           <Fact label="Sampling" value={`${selected.series.benchmarkProtocol.evaluation.seeds.length} seeds × ${selected.series.benchmarkProtocol.evaluation.repetitions} repetitions`} />
-          <Fact label="Target" value={`${selected.entry.label} · ${selected.entry.modelVersionId}`} mono />
+          <Fact label="Target" value={`${selected.entry.label}, ${selected.entry.modelVersionId}`} mono />
         </dl> : <p className="labs-detail-copy">Only trained releases in a sealed Continual Support protocol can be evaluated here.</p>}
         <div className="labs-comparison-create-grid">
           <label><span>Maximum provider spend (USD)</span><input min="0.01" required step="0.01" type="number" value={maximumSpendUsd} onChange={(event) => setMaximumSpendUsd(Number(event.currentTarget.value))} /></label>
@@ -129,7 +129,7 @@ function authorizedPanels(series: ModelComparisonSeries, entry: ModelComparisonS
 }
 
 function panelLabel(panel: ContinualBenchPanelRelease): string {
-  return `${panel.passLabel ? `${panel.passLabel} · ` : ""}${panel.role.replaceAll("_", " ")} · ${panel.taskCount} task${panel.taskCount === 1 ? "" : "s"}`;
+  return `${panel.passLabel ? `${panel.passLabel}, ` : ""}${panel.role.replaceAll("_", " ")}, ${panel.taskCount} task${panel.taskCount === 1 ? "" : "s"}`;
 }
 
 function evaluationRole(panel: ContinualBenchPanelRelease): ModelComparisonEvaluationLink["cohortRole"] {

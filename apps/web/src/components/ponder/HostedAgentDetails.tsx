@@ -14,7 +14,7 @@ export const hostedStateLabels: Record<PonderHostedAssignment["state"], string> 
 };
 
 export function hostedLocation(assignment: PonderHostedAssignment): string {
-  try { return `Hosted sandbox · ${new URL(assignment.account.apiBaseUrl).host}`; }
+  try { return `Hosted sandbox, ${new URL(assignment.account.apiBaseUrl).host}`; }
   catch { return "Hosted sandbox"; }
 }
 
@@ -52,7 +52,7 @@ export function HostedAgentDetails({connection, accountScopeKey, assignment}: {c
   const running = ["preparing", "submitting", "running"].includes(current.state);
   return <>
     <div className="ponder-agent-assignment">
-      <span>{hostedLocation(current)} · {hostedStateLabels[current.state]}</span>
+      <span>{hostedLocation(current)}, {hostedStateLabels[current.state]}</span>
       {current.wait ? <div className="ponder-hosted-wait"><strong>{current.wait.title}</strong><span>This hosted assignment is waiting in its Work environment.</span>
         {current.wait.options.length ? <dl><dt>Recorded response options</dt>{current.wait.options.map((option, index) => <dd key={index}>{retainedWaitOption(option)}</dd>)}</dl> : null}
       </div> : null}

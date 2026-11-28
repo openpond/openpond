@@ -36,7 +36,7 @@ export function LabComparisonCurrencyWorkspace({
           <CurrencyMetric label="Behavioral retention" value={percent(latest.metrics.behavioralRetention)} hint="Prior behavior preserved" />
           <CurrencyMetric label="Frontier delta" value={points(latest.metrics.frontierStrictDelta)} hint="Strict success points" />
           <CurrencyMetric label="Matched attempts" value={formatInteger(latest.statistics.matchedAttemptCount)} hint={latest.statistics.exactPairedBinaryPValue === null ? "p unavailable" : `exact p ${latest.statistics.exactPairedBinaryPValue.toFixed(4)}`} />
-          <CurrencyMetric label="Evidence reasons" value={latest.evidenceReasons.length || "None"} hint={latest.evidenceReasons.join(" · ") || "All required evidence satisfied"} />
+          <CurrencyMetric label="Evidence reasons" value={latest.evidenceReasons.length || "None"} hint={latest.evidenceReasons.join(", ") || "All required evidence satisfied"} />
         </div>
         <div className="labs-currency-decision-separation">
           <div><small>Computed evidence state</small><strong>{evidenceStateLabel(latest.evidenceState)}</strong><span>{latest.projectedAt}</span></div>
@@ -91,7 +91,7 @@ function CohortHeatmap({ entries, onOpenEvaluation, series, snapshots }: { entri
     return <tr key={entry.id}><td><strong>{entry.label}</strong><small>{snapshot ? evidenceStateLabel(snapshot.evidenceState) : "No snapshot"}</small></td>{panels.map((panel) => {
       const metric = snapshot?.panels.find((candidate) => candidate.panelId === panel.id) ?? null;
       const link = [...entry.evaluations].reverse().find((candidate) => candidate.panelId === panel.id) ?? null;
-      return <td className={heatClass(metric?.strictSuccess ?? null)} key={panel.id}>{link ? <button className="labs-version-row-button" type="button" onClick={() => onOpenEvaluation(link.evaluationRunId)}><strong>{percent(metric?.strictSuccess ?? null)}</strong><small>{metric ? `${metric.passed}/${metric.available} · n=${metric.attempted}` : "Measuring"}</small></button> : <span>—</span>}</td>;
+      return <td className={heatClass(metric?.strictSuccess ?? null)} key={panel.id}>{link ? <button className="labs-version-row-button" type="button" onClick={() => onOpenEvaluation(link.evaluationRunId)}><strong>{percent(metric?.strictSuccess ?? null)}</strong><small>{metric ? `${metric.passed}/${metric.available}, n=${metric.attempted}` : "Measuring"}</small></button> : <span>—</span>}</td>;
     })}</tr>;
   })}{!entries.length ? <tr><td colSpan={panels.length + 1}>No releases are materialized yet.</td></tr> : null}</tbody></table></div></section>;
 }
@@ -113,7 +113,7 @@ function EfficiencyHistory({ entries, snapshots }: { entries: ModelComparisonSer
 }
 
 function TaskEvidence({ entry, match, onClose, onOpenEvaluation, snapshot }: { entry: ModelComparisonSeriesEntry | null; match: ModelCurrencySnapshot["matches"][number]; onClose: () => void; onOpenEvaluation: (id: string) => void; snapshot: ModelCurrencySnapshot }) {
-  return <section className="training-detail-section labs-task-evidence-page"><div className="labs-project-trends-heading"><div><h2>Matched task evidence · {match.taskId}</h2><p>{entry?.label ?? snapshot.passLabel} · {match.issueFamilyId} · seed {match.seed} · repetition {match.repetition + 1}</p></div><button className="training-button secondary" type="button" onClick={onClose}>Close task</button></div><div className="labs-currency-summary-grid"><CurrencyMetric label="Classification" value={title(match.classification)} hint={`Panel ${match.panelId}`} /><CurrencyMetric label="Parent outcome" value={outcome(match.parentPassed)} hint={snapshot.parent.kind === "base_model" ? snapshot.parent.id : snapshot.parent.id} /><CurrencyMetric label="Candidate outcome" value={outcome(match.candidatePassed)} hint={snapshot.candidate.id} /></div><div className="labs-matched-attempt-grid"><AttemptReference label="Parent attempt" onOpenEvaluation={onOpenEvaluation} value={match.parentAttempt} /><AttemptReference label="Candidate attempt" onOpenEvaluation={onOpenEvaluation} value={match.candidateAttempt} /></div></section>;
+  return <section className="training-detail-section labs-task-evidence-page"><div className="labs-project-trends-heading"><div><h2>Matched task evidence, {match.taskId}</h2><p>{entry?.label ?? snapshot.passLabel}, {match.issueFamilyId}, seed {match.seed}, repetition {match.repetition + 1}</p></div><button className="training-button secondary" type="button" onClick={onClose}>Close task</button></div><div className="labs-currency-summary-grid"><CurrencyMetric label="Classification" value={title(match.classification)} hint={`Panel ${match.panelId}`} /><CurrencyMetric label="Parent outcome" value={outcome(match.parentPassed)} hint={snapshot.parent.kind === "base_model" ? snapshot.parent.id : snapshot.parent.id} /><CurrencyMetric label="Candidate outcome" value={outcome(match.candidatePassed)} hint={snapshot.candidate.id} /></div><div className="labs-matched-attempt-grid"><AttemptReference label="Parent attempt" onOpenEvaluation={onOpenEvaluation} value={match.parentAttempt} /><AttemptReference label="Candidate attempt" onOpenEvaluation={onOpenEvaluation} value={match.candidateAttempt} /></div></section>;
 }
 
 function AttemptReference({ label, onOpenEvaluation, value }: { label: string; onOpenEvaluation: (id: string) => void; value: ModelCurrencySnapshot["matches"][number]["parentAttempt"] }) {
@@ -140,7 +140,7 @@ function decimal(value: number | null, digits: number) { return value === null ?
 function formatInteger(value: number) { return new Intl.NumberFormat().format(value); }
 function duration(value: number) { return value < 1_000 ? `${value}ms` : `${(value / 1_000).toFixed(1)}s`; }
 function yesNo(value: boolean) { return value ? "Yes" : "No"; }
-function ref(value: { id: string; contentHash: string }) { return `${value.id} · ${value.contentHash.slice(0, 12)}`; }
+function ref(value: { id: string; contentHash: string }) { return `${value.id}, ${value.contentHash.slice(0, 12)}`; }
 function outcome(value: boolean | null) { return value === null ? "Unavailable" : value ? "Passed" : "Failed"; }
 function title(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function heatClass(value: number | null) { return value === null ? "empty" : value >= 0.8 ? "high" : value >= 0.5 ? "medium" : "low"; }

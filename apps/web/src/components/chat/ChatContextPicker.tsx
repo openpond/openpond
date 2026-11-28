@@ -151,7 +151,7 @@ export function ChatContextPicker({
       >
         <span>
           {selected?.target.kind === "dataset"
-            ? `Experiment draft · ${selected.label}`
+            ? `Experiment draft, ${selected.label}`
             : (selected?.model?.name ?? selected?.label ?? "Ponder Training")}
         </span>
         <ChevronDown size={14} />
@@ -192,7 +192,7 @@ export function ChatContextPicker({
                 <span>{typeLabels[type]}</span>
                 <span className="chat-training-menu-value">
                   {(current?.target.kind === "dataset"
-                    ? `Draft · ${current.label}`
+                    ? `Draft, ${current.label}`
                     : current?.label) ?? (context.catalog.isPending ? "Loading…" : "None")}
                 </span>
                 <ChevronRight size={14} />
@@ -217,7 +217,7 @@ export function ChatContextPicker({
               ...choices.map((choice) => ({
                 value: JSON.stringify(choice.target),
                 label: choice.label,
-                description: `${choice.target.location === "cloud" ? "OpenPond Managed" : "Local"} · ${choice.detail}${choices.filter((item) => item.label === choice.label && item.target.location === choice.target.location).length > 1 ? ` · ${choice.target.id.slice(-8)}` : ""}`,
+                description: `${choice.target.location === "cloud" ? "OpenPond Managed" : "Local"}, ${choice.detail}${choices.filter((item) => item.label === choice.label && item.target.location === choice.target.location).length > 1 ? `, ${choice.target.id.slice(-8)}` : ""}`,
               })),
             ]}
             disabled={unavailable}

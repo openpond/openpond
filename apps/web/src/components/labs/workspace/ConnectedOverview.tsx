@@ -147,7 +147,7 @@ export function ConnectedOverview({
       <div className="connected-overview-content">
         <ModelProjectPageHeader
           title="Overview"
-          description="Models, experiments, datasets, and activity in your workspace."
+          description="Models, benchmarks, datasets, and activity in your workspace."
           actions={
             <div className="model-build-actions">
               <button className="training-button secondary" type="button" onClick={onCreateDataset}>
@@ -207,7 +207,7 @@ export function ConnectedOverview({
               </table>
             </div>
           </OverviewSection>
-          <OverviewSection title="Experiments" onViewAll={() => onNavigate(route("experiments"))}>
+          <OverviewSection title="Benchmarks" onViewAll={() => onNavigate(route("experiments"))}>
             <UnifiedExperimentCollection
               api={api}
               route={route("experiments")}

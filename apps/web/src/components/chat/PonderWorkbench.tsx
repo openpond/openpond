@@ -76,7 +76,7 @@ function PonderInputs({ context, connection, sessionId, resources, tab }: {
   const choices = (context.catalog.data?.options ?? []).filter(item => item.target.kind === "dataset");
   const contexts = modelTarget ? [] : datasetWorkspaceContext(resources);
   const value = dataset ? JSON.stringify({ kind: "dataset", id: dataset.id, revision: dataset.revision, location: dataset.location ?? "local" }) : "";
-  const options = choices.map(item => ({ value: JSON.stringify(item.target), label: item.label, description: `${item.target.location === "cloud" ? "Hosted" : "Local"} · ${item.detail}` }));
+  const options = choices.map(item => ({ value: JSON.stringify(item.target), label: item.label, description: `${item.target.location === "cloud" ? "Hosted" : "Local"}, ${item.detail}` }));
   if (dataset && !options.some(item => item.value === value)) options.unshift({ value, label: dataset.name, description: `Revision ${dataset.revision}` });
   let hostedEditor: string | undefined;
   if (scope?.webBaseUrl) {
@@ -94,7 +94,7 @@ function PonderInputs({ context, connection, sessionId, resources, tab }: {
       {modelInputs.error || details.error ? <button type="button" className="training-button secondary" onClick={() => void Promise.all([modelInputs.refetch(), details.refetch()])}>Retry inputs</button> : null}
     </ErrorToast>
     {modelTarget && modelInputs.data?.sources.length ? <DropdownSelect label="Model dataset" floating value={input!.role}
-      options={modelInputs.data.sources.map(item => ({ value: item.role, label: `${item.role === "training" ? "Training" : "Evaluation"} · ${item.name}` }))} onChange={value => void requestDesktopViewChange(() => setRole(value))} /> : null}
+      options={modelInputs.data.sources.map(item => ({ value: item.role, label: `${item.role === "training" ? "Training" : "Evaluation"}, ${item.name}` }))} onChange={value => void requestDesktopViewChange(() => setRole(value))} /> : null}
     {!modelTarget ? <DropdownSelect label="Experiment dataset" floating searchable disabled={context.selecting} value={value}
       options={[{ value: "", label: context.catalog.isPending ? "Loading datasets…" : "Choose dataset", disabled: true }, ...options]} onChange={raw => void choose(raw)} /> : null}
     {tab === "graders" && hostedEditor && !dataset && !input?.release ? <a className="training-text-button" href={hostedEditor} target="_blank" rel="noreferrer">Hosted grader editor</a> : null}

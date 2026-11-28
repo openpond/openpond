@@ -530,7 +530,7 @@ function runBasedOn(
       candidate.seriesId === entry.seriesId
       && candidate.modelVersionId === entry.parent.id,
   ) ?? null;
-  return parent ? `${parent.label} · Model Version` : "Prior Model Version";
+  return parent ? `${parent.label}, Model Version` : "Prior Model Version";
 }
 
 export function modelVersionEntries(

@@ -47,7 +47,7 @@ export function useCommunityController(input: {
     const community = communityItems.find((item) => item.id === notification.communityId);
     const channel = communityChannels.find((item) => item.id === notification.channelId);
     showToast(
-      `${community?.displayName ?? "Community"} · #${channel?.displayName ?? "channel"}: ${notification.message.body.slice(0, 120) || "New message"}`,
+      `${community?.displayName ?? "Community"}, #${channel?.displayName ?? "channel"}: ${notification.message.body.slice(0, 120) || "New message"}`,
       "info",
       {
         actionLabel: "View",

@@ -40,7 +40,7 @@ const TRAINING_GOALS = [
     description: "Define an executable check that scores sampled responses.",
     example:
       "Example: +1 query executes; +1 returns expected rows; 0 otherwise.",
-    category: "RLVR · verifiable rewards",
+    category: "RLVR, verifiable rewards",
     methods: ["GRPO recommended", "PPO compatible"],
     icon: CheckCircle2,
   },

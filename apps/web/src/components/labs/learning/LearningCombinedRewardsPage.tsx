@@ -23,7 +23,7 @@ export function LearningCombinedRewardsPage({ client, selectedId, after, onSelec
     <LearningError error={resources.error ?? selected.error} />
     {entry ? <>
       <LearningActions><button className="training-button secondary" type="button" onClick={() => onSelect(null)}>All combined Rewards</button><button className="training-button" type="button" onClick={() => setEditing(entry)}>Edit as next release</button></LearningActions>
-      <p>{entry.description} · Release {entry.revision}</p><RewardBindingSummary client={client} binding={entry} />
+      <p>{entry.description}, Release {entry.revision}</p><RewardBindingSummary client={client} binding={entry} />
     </> : selectedId ? <p role="status">{selected.error ? "This combined Reward is unavailable." : "Loading combined Reward…"}</p> : <>
       <AuthoringDraftList client={client} targetKind="binding" onResume={setResuming} />
       <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Combination</th><th>Sources</th><th>Release</th></tr></thead><tbody>{resources.page?.items.filter((binding) => binding.name).map((binding) => <tr key={binding.id}><td><button type="button" className="labs-version-row-button" onClick={() => onSelect(binding.id)}><strong>{binding.name}</strong><small>{binding.description}</small></button></td><td>{binding.sources.length}</td><td>{binding.revision}</td></tr>)}</tbody></table></div>

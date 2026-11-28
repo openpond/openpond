@@ -146,7 +146,7 @@ export function LabHostedTrainingRunDetail({
   return (
     <div className="labs-flat-body labs-resource-page">
       <ModelProjectPageHeader title="Training run" titleAside={<TrainingRunLineage continuation={flow?.continuation} recovery={flow?.recovery} compact />} description={jobId} metrics={summary ? [
-        { label: "Status", value: <>{summary.state}<small className="training-continual-status"><ContinualLearningStatus enabled={flow ? !!flow.continuation : undefined} />{flow?.recovery ? " · Checkpoint recovery" : null}</small></>, hint: summary.phase },
+        { label: "Status", value: <>{summary.state}<small className="training-continual-status"><ContinualLearningStatus enabled={flow ? !!flow.continuation : undefined} />{flow?.recovery ? ", Checkpoint recovery" : null}</small></>, hint: summary.phase },
         { label: "Phase", value: summary.phase },
         { label: "Rollout groups", value: `${summary.rolloutProgress.groupsCompleted} / ${summary.rolloutProgress.groupsTarget}` },
         { label: "Weight updates", value: summary.rolloutProgress.optimizerUpdatesApplied },

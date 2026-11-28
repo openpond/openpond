@@ -132,7 +132,7 @@ function modelTargetOptions(state: TrainingStateResponse, series: ModelCompariso
     .sort((left, right) => right.version - left.version)
     .map((version) => {
       const entry = entries.get(version.comparisonSeriesEntry!.entryId)!;
-      return { target: { kind: "model_version" as const, id: version.id, label: `Version ${version.version} · ${entry.label}` }, description: version.id };
+      return { target: { kind: "model_version" as const, id: version.id, label: `Version ${version.version}, ${entry.label}` }, description: version.id };
     });
   return [
     ...versions,

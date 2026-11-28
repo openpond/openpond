@@ -14,14 +14,14 @@ export function WeightSpaceEvaluationComparison({results}:{results:WeightSpaceCo
   const peers=baseline?evaluations.filter(row=>row.result.operationId!==baseline.result.operationId&&compatible(row.evaluation,baseline.evaluation)):[];
   const candidate=peers.find(row=>row.result.operationId===candidateId)??peers.at(-1);
   if(!baseline||!candidate)return null;
-  const option=(row:(typeof evaluations)[number])=>({value:row.result.operationId,label:`Revision ${row.result.revision} · ${row.evaluation.panelId}`,description:`Candidate ${row.result.candidateHash.slice(0,12)}`});
+  const option=(row:(typeof evaluations)[number])=>({value:row.result.operationId,label:`Revision ${row.result.revision}, ${row.evaluation.panelId}`,description:`Candidate ${row.result.candidateHash.slice(0,12)}`});
   return <section className="training-detail-section" aria-label="Evaluation comparison"><h3>Compare evaluation outputs</h3>
     <DropdownSelect label="Baseline evaluation" value={baseline.result.operationId} options={evaluations.map(option)} onChange={value=>{setBaselineId(value);setCandidateId("");}}/>
     <DropdownSelect label="Candidate evaluation" value={candidate.result.operationId} options={peers.map(option)} onChange={setCandidateId}/>
-    <p>{baseline.evaluation.role} · {baseline.evaluation.panelId} · identical prompts and greedy generation settings</p>
+    <p>{baseline.evaluation.role}, {baseline.evaluation.panelId}, identical prompts and greedy generation settings</p>
     {baseline.evaluation.rows.map((row,index)=><details key={row.id}><summary>{row.id}</summary>
-      <WeightSpaceEvaluationOutput label={`Baseline · ${baseline.result.candidateHash.slice(0,12)}`} output={row}/>
-      <WeightSpaceEvaluationOutput label={`Candidate · ${candidate.result.candidateHash.slice(0,12)}`} output={candidate.evaluation.rows[index]!}/>
+      <WeightSpaceEvaluationOutput label={`Baseline, ${baseline.result.candidateHash.slice(0,12)}`} output={row}/>
+      <WeightSpaceEvaluationOutput label={`Candidate, ${candidate.result.candidateHash.slice(0,12)}`} output={candidate.evaluation.rows[index]!}/>
     </details>)}
   </section>;
 }

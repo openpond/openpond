@@ -12,7 +12,7 @@ import type { TurnRunnerDependencies } from "../turns/ports.js";
 import { readProvidersFile } from "../../openpond/provider-settings.js";
 import { event } from "../../utils.js";
 import { findLocalProject } from "../../workspace/local-projects.js";
-import { isNativeAgentId, nativeAgentLaunch } from "./config.js";
+import { isNativeAgentId, nativeAgentAuthMethod, nativeAgentLaunch } from "./config.js";
 import { nativeAgentEvent } from "./events.js";
 import { invalidateNativeAgent } from "./setup.js";
 import { registerNativeProviderClient } from "./provider-lifecycle.js";
@@ -101,7 +101,8 @@ export function createNativeAgentRuntime(deps: Pick<TurnRunnerDependencies, "sto
         await deps.appendRuntimeEvent(event({ sessionId: session.id, name: "diagnostic", action: "native_capabilities", source: "provider", output: "This ACP agent does not support HTTP MCP. OpenPond task tools are unavailable for this connection." }));
       }
       const servers = taskTools && bridge ? [{ type: "http", name: "openpond_task", url: bridge.config.url, headers: Object.entries(bridge.config.http_headers).map(([name, value]) => ({ name, value })) }] : [];
-      if (config.acp?.authMethodId) await client.authenticate(config.acp.authMethodId);
+      const authMethodId = nativeAgentAuthMethod(config);
+      if (authMethodId) await client.authenticate(authMethodId);
       else if (session.provider === "grok-build" && info.authMethods?.some((method) => method.id === "cached_token")) await client.authenticate("cached_token");
       const native = session.nativeAgent
         ? await client.loadSession(session.nativeAgent.sessionId, cwd, servers)

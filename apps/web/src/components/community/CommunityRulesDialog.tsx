@@ -65,7 +65,7 @@ export function CommunityRulesDialog(props: {
       >
         <header>
           <div>
-            <small>Community rules · version {props.rules.version}</small>
+            <small>Community rules, version {props.rules.version}</small>
             <h2 id="community-rules-title">{props.rules.title}</h2>
           </div>
           <button type="button" aria-label="Close rules" onClick={props.onClose}><X size={16} /></button>

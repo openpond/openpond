@@ -38,7 +38,7 @@ export function CombinedRewardEditor({ client, binding, authoringDraft, onSaved,
   return <div className="labs-flat-body labs-resource-page learning-workspace">
     <ModelProjectPageHeader title={binding ? "Edit combined Reward" : "New combined Reward"} description="Publish a reusable combination. Task formats copy these defaults into their own binding; existing formats keep their selected releases." />
     <LearningError error={mutation.error} />
-    {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved · revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
+    {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved, revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
     <label>Name<input maxLength={500} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
     <label>Description<textarea maxLength={10_000} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
     <RewardBindingFields client={client} sources={draft.sources} onChange={(sources) => setDraft({ ...draft, sources })} />

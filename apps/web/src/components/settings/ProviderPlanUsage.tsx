@@ -45,7 +45,7 @@ export function ProviderPlanUsage({ connection, provider, sharedOnly = false }: 
       {(sharedOnly ? sharedWindows : usage.windows).map(window => {
         const usedPercent = Math.max(0, Math.min(100, 100 - window.remainingPercent));
         return <div className="plan-usage-window" key={window.id}>
-          <div><span>{window.label}</span><strong>{percent(usedPercent)} used{stale ? " · last known" : ""}</strong></div>
+          <div><span>{window.label}</span><strong>{percent(usedPercent)} used{stale ? ", last known" : ""}</strong></div>
           <meter min={0} max={100} low={75} high={90} optimum={0} value={usedPercent} aria-label={`${name} ${window.label} used`} />
           <small>{resetLabel(window)}</small>
         </div>;

@@ -28,7 +28,7 @@ export function LocalGraderPage({ api, route, navigate }: { api: WorkspaceApi; r
       resourceId: dataset.summary.id, detailTab: "graders", revision: undefined, contentHash: undefined, executionLocation: "local" })}>Open Dataset</button></header>
     <EvaluationCard title={grader.name}><dl className="evaluation-workspace-meta">
       <dt>Profile</dt><dd>{profileDisplayName(dataset.profileTarget?.profileId)}</dd><dt>Workflow</dt><dd>{dataset.profileTarget?.workflowId ?? "—"}</dd>
-      <dt>Dataset</dt><dd>{dataset.summary.name} · Revision {dataset.summary.revision}</dd><dt>Grader</dt><dd>{grader.graderId} · Version {grader.version}</dd>
+      <dt>Dataset</dt><dd>{dataset.summary.name}, Revision {dataset.summary.revision}</dd><dt>Grader</dt><dd>{grader.graderId}, Version {grader.version}</dd>
       <dt>Type</dt><dd>{grader.kind.replaceAll("_", " ")}</dd><dt>Checked examples</dt><dd>{grader.checkState}</dd>
       <dt>Weight</dt><dd>{grader.weight}</dd><dt>Hard gate</dt><dd>{grader.hardGate ? "Yes" : "No"}</dd>
       <dt>Training reward</dt><dd>{grader.rewardEligible ? "Eligible" : "Validation only"}</dd><dt>Expected answers</dt><dd>{grader.privileged ? "Evaluator-private" : "Policy-visible contract"}</dd>

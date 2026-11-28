@@ -47,7 +47,7 @@ export function TrainingSettingsSection({
     preferences.defaultChatProvider,
     preferences.defaultChatModel,
     providers,
-  ) ? ` · ${titleCase(preferences.codexReasoningEffort)} reasoning` : "";
+  ) ? `, ${titleCase(preferences.codexReasoningEffort)} reasoning` : "";
   const unchanged =
     modelRefsEqual(nextModelRef, training.defaultModelRef ?? null) &&
     creationMode === training.creationMode &&
@@ -102,7 +102,7 @@ export function TrainingSettingsSection({
               onChange={(event) => setAuthoringModel(event.target.value)}
             >
               <option value={DEFAULT_AUTHORING_MODEL}>
-                Use chat default — {chatProviderLabel(preferences.defaultChatProvider, providers)} · {chatModelLabel(preferences.defaultChatModel, providers, preferences.defaultChatProvider)}{defaultReasoning}
+                Use chat default — {chatProviderLabel(preferences.defaultChatProvider, providers)}, {chatModelLabel(preferences.defaultChatModel, providers, preferences.defaultChatProvider)}{defaultReasoning}
               </option>
               {authoringModelGroups.map((group) => (
                 <optgroup key={group.provider.value} label={group.provider.label}>

@@ -56,12 +56,12 @@ export function LabModelComparisonEvaluationDetails({
             <Fact label="Target type" value={titleCase(evaluation.target.kind)} />
             <Fact label="Model" value={evaluationTargetLabel(evaluation)} />
             <Fact label="Cohort" value={titleCase(evaluation.attemptPlan[0].split)} />
-            <Fact label="Panel" value={evaluation.panel ? `${evaluation.panel.id}${evaluation.panel.passLabel ? ` · ${evaluation.panel.passLabel}` : ""}` : "Legacy cohort"} />
-            <Fact label="Taskset release" value={`${run.taskset.id} · r${run.taskset.revision}`} />
+            <Fact label="Panel" value={evaluation.panel ? `${evaluation.panel.id}${evaluation.panel.passLabel ? `, ${evaluation.panel.passLabel}` : ""}` : "Legacy cohort"} />
+            <Fact label="Taskset release" value={`${run.taskset.id}, r${run.taskset.revision}`} />
             <Fact label="Taskset hash" value={run.taskset.contentHash} />
-            <Fact label="Grader" value={`${evaluation.grader.id} · ${evaluation.grader.contentHash}`} />
-            <Fact label="Harness" value={run.harnessRelease ? `${run.harnessRelease.id} · ${run.harnessRelease.contentHash}` : "Unavailable"} />
-            <Fact label="Protocol" value={evaluation.series ? `${evaluation.series.protocol.id} · r${evaluation.series.protocol.revision}` : "Legacy comparison"} />
+            <Fact label="Grader" value={`${evaluation.grader.id}, ${evaluation.grader.contentHash}`} />
+            <Fact label="Harness" value={run.harnessRelease ? `${run.harnessRelease.id}, ${run.harnessRelease.contentHash}` : "Unavailable"} />
+            <Fact label="Protocol" value={evaluation.series ? `${evaluation.series.protocol.id}, r${evaluation.series.protocol.revision}` : "Legacy comparison"} />
             <Fact label="Protocol hash" value={evaluation.series?.protocol.contentHash ?? "Unavailable"} />
             <Fact label="Sampling" value={`${evaluation.seeds.length} seed${evaluation.seeds.length === 1 ? "" : "s"} × ${evaluation.repetitions} repetition${evaluation.repetitions === 1 ? "" : "s"}`} />
             <Fact label="Maximum spend" value={`$${evaluation.maximumSpendUsd.toFixed(2)}`} />
@@ -76,7 +76,7 @@ export function LabModelComparisonEvaluationDetails({
             <Fact label="Observed spend" value={receipt.usage.observedSpendUsd === null ? "Unavailable" : `$${receipt.usage.observedSpendUsd.toFixed(3)}`} />
             <Fact label="Receipt sealed" value={formatDateTime(receipt.completedAt)} />
             <Fact label="Receipt hash" value={receipt.contentHash} />
-            <Fact label="Evidence snapshot" value={`${receipt.evidenceSnapshot.id} · ${receipt.evidenceSnapshot.contentHash}`} />
+            <Fact label="Evidence snapshot" value={`${receipt.evidenceSnapshot.id}, ${receipt.evidenceSnapshot.contentHash}`} />
             <Fact label="Evaluation GPU" value={receipt.usage.evaluationGpuSeconds === null ? "Unavailable" : `${receipt.usage.evaluationGpuSeconds.toFixed(1)}s`} />
           </dl> : null}
           {!receipt && run.status === "running" ? <p className="labs-detail-copy">Aggregate scores and immutable attempt evidence appear as soon as the terminal receipt seals. Progress above is live.</p> : null}

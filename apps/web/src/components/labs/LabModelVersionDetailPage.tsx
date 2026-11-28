@@ -397,7 +397,7 @@ export function LabModelVersionDetailPage({
             value: progressMetric.value,
           },
           ...(hostedRecovery && rolloutProgress ? [{ label: "Optimizer updates",
-            value: `${Math.max(0, rolloutProgress.optimizerUpdatesApplied - hostedRecovery.policyVersion)} new · ${hostedRecovery.policyVersion} reused`,
+            value: `${Math.max(0, rolloutProgress.optimizerUpdatesApplied - hostedRecovery.policyVersion)} new, ${hostedRecovery.policyVersion} reused`,
           }] : []),
           { label: runActive ? "Latest reward" : "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
           { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, terminalRunEnd(selectedLifecycleRun.status, selectedLifecycleRun.completedAt, selectedLifecycleRun.updatedAt)) : selectedJob ? formatDuration(selectedJob.startedAt, terminalRunEnd(selectedJob.status, selectedJob.completedAt, selectedJob.updatedAt)) : "Not recorded" },
@@ -485,7 +485,7 @@ export function LabModelVersionDetailPage({
             { label: "Starting checkpoint", value: [
               hostedParentVersion ? `Version ${hostedParentVersion.number}` : null,
               hostedContinuation.sourceArtifact.checkpointId,
-            ].filter(Boolean).join(" · ") },
+            ].filter(Boolean).join(", ") },
             { label: "Parent run", value: hostedContinuation.sourceArtifact.jobId },
             { label: "Parent artifact", value: hostedContinuation.sourceArtifact.artifactId },
             { label: "Optimizer", value: hostedContinuation.optimizerMode === "reset" ? "Reset" : "Continue" },
@@ -754,7 +754,7 @@ function LabModelEvaluationRunDetail({
     <div className="labs-model-version-detail labs-model-evaluation-detail">
       <ModelProjectPageHeader
         title={runNumber ? `Eval ${runNumber}` : "Evaluation run"}
-        description={`Harness Refiner benchmark · ${tasksetName}`}
+        description={`Harness Refiner benchmark, ${tasksetName}`}
         status={<LabStatusBadge
                 label={receipt
                   ? taskEfficiency?.comparedTaskCount

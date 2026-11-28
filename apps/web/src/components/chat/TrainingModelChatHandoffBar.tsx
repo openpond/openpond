@@ -22,7 +22,7 @@ export function TrainingModelChatHandoffBar({
         <span>{handoff.tasksetName}</span>
         <small>
           {task
-            ? `${splitLabel(task.split)} · ${position} of ${handoff.tasks.length} · New chat per question`
+            ? `${splitLabel(task.split)}, ${position} of ${handoff.tasks.length}, New chat per question`
             : "Ask the imported model directly"}
         </small>
       </div>

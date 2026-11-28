@@ -51,7 +51,7 @@ export function TrainingProviderApprovalDialog({
           <div>
             <h2>Review and run</h2>
             <p>
-              {destinationLabel(destinationId)} · {modelLabel(baseModelId)}
+              {destinationLabel(destinationId)}, {modelLabel(baseModelId)}
             </p>
           </div>
           <button
@@ -77,7 +77,7 @@ export function TrainingProviderApprovalDialog({
             <div>
               <dt>Prepared data</dt>
               <dd>
-                {formatBytes(prepared.bundle.totalSizeBytes)} · verified
+                {formatBytes(prepared.bundle.totalSizeBytes)}, verified
               </dd>
             </div>
           </dl>

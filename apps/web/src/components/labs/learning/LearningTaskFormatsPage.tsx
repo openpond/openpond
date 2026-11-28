@@ -26,7 +26,7 @@ export function LearningTaskFormatsPage({ client, selectedId, after, onSelect, o
     <LearningError error={definitions.error ?? selected.error} />
     {definition ? <>
       <LearningActions><button type="button" className="training-button secondary" onClick={() => onSelect(null)}>All task formats</button><button type="button" className="training-button" onClick={() => setEditing(definition)}>Edit as next release</button></LearningActions>
-      <p>{definition.instructions}</p><p>Release {definition.revision} · {definition.contentHash}</p>
+      <p>{definition.instructions}</p><p>Release {definition.revision}, {definition.contentHash}</p>
       <details><summary>Input and output contracts</summary><LearningValue label="Input schema" value={definition.inputSchema} /><LearningValue label="Output schema" value={definition.outputSchema} /></details>
       <LearningError error={binding.error} />{binding.resource ? <RewardBindingSummary client={client} binding={binding.resource} /> : null}
       {allowCredentials ? <details><summary>Connect an application</summary><LearningSourceCredentials key={`${definition.id}:${definition.revision}`} client={client} sourceId={definition.revision === 1 ? `${definition.id}-direct` : `${definition.id}-r${definition.revision}-direct`} /></details> : null}

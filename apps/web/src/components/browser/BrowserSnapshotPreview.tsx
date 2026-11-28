@@ -16,7 +16,7 @@ export function BrowserSnapshotPreview({ image, onClose }: { image: BrowserImage
     }
   }
   return <section className="browser-snapshot-preview" aria-label="Snapshot preview">
-    <div className="html-visual-toolbar"><span>{image.selector} · {image.width} × {image.height}</span>
+    <div className="html-visual-toolbar"><span>{image.selector}, {image.width} × {image.height}</span>
       {image.source ? <button type="button" aria-label={`Copy ${htmlLabel}`} title={`Copy ${htmlLabel}`} onClick={() => void copyToClipboard(image.source!)}><Copy size={15} /></button> : null}
       <button type="button" aria-label="Save snapshot PNG" title="Save snapshot PNG" onClick={() => void download()}><Download size={15} /></button>
       <button type="button" aria-label="Close snapshot" title="Close snapshot" onClick={onClose}><X size={15} /></button>

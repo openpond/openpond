@@ -30,10 +30,10 @@ export function PonderGraderInspector({ connection, dataset, graders, sessionId,
     });
   }
   return <>
-    <p>{dataset.name} · revision {dataset.revision}. Graders are attached to this exact revision.</p>
+    <p>{dataset.name}, revision {dataset.revision}. Graders are attached to this exact revision.</p>
     {hostedEditor ? <a className="training-text-button" href={hostedEditor} target="_blank" rel="noreferrer">Create or manage graders in OpenPond</a> : null}
     {graders.length ? <DropdownSelect label="Grader" floating searchable value={grader!.id}
-      options={graders.map(item => ({ value: item.id, label: item.name, description: `${item.graderType ?? "Grader"} · ${item.checkState ?? item.state}` }))}
+      options={graders.map(item => ({ value: item.id, label: item.name, description: `${item.graderType ?? "Grader"}, ${item.checkState ?? item.state}` }))}
       onChange={value => { setSelected(value); setOffset(0); }} /> : <p>No graders attached.</p>}
     <ErrorToast error={query.error}>{query.error ? <button type="button" onClick={() => void query.refetch()}>Retry grader</button> : null}</ErrorToast>
     {grader ? <div className="ponder-workbench-actions"><button type="button" className="training-button secondary" onClick={() => request("Edit grader")}>Edit in chat</button>

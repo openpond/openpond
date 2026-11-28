@@ -35,6 +35,6 @@ export function PonderTranscriptOutputs({message,work,onOpenOutput,onOpenLocalOu
     {message.metadata.ponderMessage?.outputFileIds.map(fileId=><button key={fileId} type="button" onClick={()=>onOpenOutput(fileId)}>
       {work.flatMap(task=>task.deliveries.flatMap(delivery=>delivery.outputs)).find(output=>output.id===fileId)?.title ?? "Saved file"}
     </button>)}
-    {local?.outputs.map(output=><button key={output.id} type="button" onClick={()=>onOpenLocalOutput(local,output.id)}>{output.title} · Download</button>)}
+    {local?.outputs.map(output=><button key={output.id} type="button" onClick={()=>onOpenLocalOutput(local,output.id)}>{output.title}, Download</button>)}
   </div>;
 }

@@ -18,12 +18,12 @@ type Fields = Parameters<typeof compileRewardAuthoring>[0]["fields"];
 type Kind = RewardRelease["implementation"]["kind"];
 export type GraderModelChoice = { id: string; name: string; supportsSampling: boolean };
 const KINDS: Array<{ value: Kind; label: string }> = [
-  { value: "custom_verifier", label: "Code verifier · JavaScript" },
-  { value: "state", label: "Code verifier · Exact fields" },
-  { value: "content", label: "Code verifier · Text answer" },
-  { value: "schema", label: "Code verifier · Output schema" },
-  { value: "artifact", label: "Code verifier · Artifact reference" },
-  { value: "runtime_event", label: "Code verifier · Runtime events" },
+  { value: "custom_verifier", label: "Code verifier, JavaScript" },
+  { value: "state", label: "Code verifier, Exact fields" },
+  { value: "content", label: "Code verifier, Text answer" },
+  { value: "schema", label: "Code verifier, Output schema" },
+  { value: "artifact", label: "Code verifier, Artifact reference" },
+  { value: "runtime_event", label: "Code verifier, Runtime events" },
   { value: "model_judge", label: "LLM judge" },
   { value: "learned_model", label: "Learned reward model" },
   { value: "human", label: "Human review rubric" },
@@ -135,8 +135,8 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
   return <div className="labs-flat-body labs-resource-page learning-workspace">
     {!embedded ? <ModelProjectPageHeader title={reward ? "Edit Reward" : "New Reward"} description="Save the grader and its source as an immutable release. Task formats keep the release they selected." /> : null}
     <LearningError error={mutation.error} />
-    {fromLabel ? <section><h2>Retained label</h2><p>Attempt {fromLabel.evidence.submission.exampleId} · revision {fromLabel.evidence.revision}. {fromLabel.feedback.submittedBy ? `Submitted by ${fromLabel.feedback.submittedBy.id} (${fromLabel.feedback.submittedBy.role}).` : "Submitter not recorded."}</p><TaskRatingDetails value={fromLabel.feedback.submission.value} /><p>The fixture is an editable copy. The original label remains unchanged.</p></section> : null}
-    {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved · revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
+    {fromLabel ? <section><h2>Retained label</h2><p>Attempt {fromLabel.evidence.submission.exampleId}, revision {fromLabel.evidence.revision}. {fromLabel.feedback.submittedBy ? `Submitted by ${fromLabel.feedback.submittedBy.id} (${fromLabel.feedback.submittedBy.role}).` : "Submitter not recorded."}</p><TaskRatingDetails value={fromLabel.feedback.submission.value} /><p>The fixture is an editable copy. The original label remains unchanged.</p></section> : null}
+    {persistence.record ? <p role="status">{saved === JSON.stringify(draft) ? `Draft saved, revision ${persistence.record.revision}` : "Unsaved changes"}</p> : null}
     <label>Name<input maxLength={500} value={draft.name} onChange={(event) => patch({ name: event.target.value })} /></label>
     <label>Description (optional)<textarea maxLength={10_000} value={draft.description} onChange={(event) => patch({ description: event.target.value })} /></label>
     <label>Reward type<select value={draft.kind} onChange={(event) => patch({ kind: event.target.value as Kind })}>{KINDS.filter(kind => !allowedKinds || allowedKinds.includes(kind.value) || kind.value === draft.kind).map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></label>

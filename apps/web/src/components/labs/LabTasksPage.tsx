@@ -34,12 +34,12 @@ export function LabTasksPage({ state, training, modelId, collectionId, query, af
     </div>
     {current?.error ? <ErrorToast error={current?.error} /> : !current ? <p role="status">Loading tasks…</p> : <div className="training-table-wrap"><table className="training-data-table"><thead><tr><th>Task</th><th>Collection</th><th>Split</th><th>How scored</th><th>Status</th></tr></thead><tbody>{current.page?.items.map(item => <tr key={`${item.draftId ? "draft" : "release"}:${item.tasksetId}:${item.taskId}`}>
       <td><button className="labs-version-row-button" type="button" onClick={() => setSelected(item)}>{item.title}</button></td>
-      <td><button className="labs-version-row-button" type="button" onClick={() => onCollection(item.tasksetId)}>{item.tasksetName || "Untitled tasks"}<small>{item.draftId ? "Draft" : "Published"} · revision {item.tasksetRevision}</small></button></td>
+      <td><button className="labs-version-row-button" type="button" onClick={() => onCollection(item.tasksetId)}>{item.tasksetName || "Untitled tasks"}<small>{item.draftId ? "Draft" : "Published"}, revision {item.tasksetRevision}</small></button></td>
       <td>{item.split.replaceAll("_", " ")}</td><td>{[...new Set(item.scoring.map(score => methods[score.method]))].join(", ") || "Not configured"}</td><td>{status[item.configuration]}</td>
     </tr>)}{!current.page?.items.length ? <tr><td colSpan={5}>No tasks match this view.</td></tr> : null}</tbody></table></div>}
     <div className="model-build-actions">{after ? <button className="training-button secondary" type="button" onClick={() => onPage(null)}>First page</button> : null}{current?.page?.nextCursor ? <button className="training-button secondary" type="button" onClick={() => onPage(current.page!.nextCursor)}>Next page</button> : null}</div>
     {selected ? <TaskDetail key={`${selected.tasksetId}:${selected.taskId}:${selected.tasksetHash}`} item={selected} modelId={modelId} state={state} training={training} onClose={() => setSelected(null)} onOpenDraft={onOpenDraft} /> : null}
-    {draftsOpen ? <AppDialog ariaLabel="Saved task drafts" className="labs-rename-dialog labs-model-create-dialog" backdropClassName="labs-rename-backdrop" onClose={() => setDraftsOpen(false)}><header><h2>Saved drafts</h2><button className="training-button secondary" type="button" onClick={() => setDraftsOpen(false)}>Close</button></header>{drafts.length ? <ul>{drafts.map(draft => <li key={draft.id}><button className="labs-version-row-button" type="button" onClick={() => onOpenDraft(draft.id)}>{draft.name || "Untitled tasks"} · {draft.tasks.length} tasks</button></li>)}</ul> : <p>No saved drafts in this view.</p>}</AppDialog> : null}
+    {draftsOpen ? <AppDialog ariaLabel="Saved task drafts" className="labs-rename-dialog labs-model-create-dialog" backdropClassName="labs-rename-backdrop" onClose={() => setDraftsOpen(false)}><header><h2>Saved drafts</h2><button className="training-button secondary" type="button" onClick={() => setDraftsOpen(false)}>Close</button></header>{drafts.length ? <ul>{drafts.map(draft => <li key={draft.id}><button className="labs-version-row-button" type="button" onClick={() => onOpenDraft(draft.id)}>{draft.name || "Untitled tasks"}, {draft.tasks.length} tasks</button></li>)}</ul> : <p>No saved drafts in this view.</p>}</AppDialog> : null}
   </div>;
 }
 
@@ -55,12 +55,12 @@ function TaskDetail({ item, modelId, state, training, onClose, onOpenDraft }: { 
   const error = result.error?.message ?? null;
   const model = state?.modelProjects.find(model => model.id === modelId);
   return <AppDialog ariaLabel="Task details" className="labs-rename-dialog labs-model-create-dialog" backdropClassName="labs-rename-backdrop" onClose={onClose}>
-    <header><div><h2>{item.title}</h2><p>{item.tasksetName} · revision {item.tasksetRevision}</p></div><button className="training-button secondary" type="button" onClick={onClose}>Close</button></header>
+    <header><div><h2>{item.title}</h2><p>{item.tasksetName}, revision {item.tasksetRevision}</p></div><button className="training-button secondary" type="button" onClick={onClose}>Close</button></header>
     {error ? <ErrorToast error={error} /> : !detail ? <p role="status">Loading task…</p> : <>
       <section><h3>Input</h3><ReadableTaskValue value={detail.task.input} /></section>
       {Object.keys(detail.task.policyVisibleContext ?? {}).length ? <section><h3>Context</h3><ReadableTaskValue value={detail.task.policyVisibleContext} /></section> : null}
       {detail.task.assets?.length ? <section><h3>Files</h3><ReadableTaskValue value={detail.task.assets} /></section> : null}
-      <section><h3>How scored</h3>{item.scoring.length ? <ul>{item.scoring.map(score => <li key={score.id}>{methods[score.method]} · {score.id}{score.required ? " · Required" : ""}</li>)}</ul> : <p>No reward configured.</p>}</section>
+      <section><h3>How scored</h3>{item.scoring.length ? <ul>{item.scoring.map(score => <li key={score.id}>{methods[score.method]}, {score.id}{score.required ? ", Required" : ""}</li>)}</ul> : <p>No reward configured.</p>}</section>
       {detail.task.expectedOutput ? <details><summary>Private reference answer</summary><ReadableTaskValue value={detail.task.expectedOutput} /></details> : null}
       {item.draftId ? <button className="training-button" type="button" onClick={() => onOpenDraft(item.draftId!)}>Edit tasks</button> : model?.trainingSetup.tasksetRef?.contentHash === item.tasksetHash ? <ModelTasksetDraftAction model={model} training={training} onOpen={onOpenDraft} /> : null}
       <details><summary>Release details</summary><ReadableTaskValue value={{ taskId: item.taskId, contentHash: item.tasksetHash, family: detail.task.clusterKey, sources: detail.task.sourceRefs }} /></details>

@@ -79,10 +79,10 @@ export function ManagedDecisionExecution({
       {retained && !("action" in retained.command) ? (
         <EvaluationCard title="Original preparation">
           <p>
-            {retained.command.name} · {retained.command.method} · {modificationSpendLabel(retained.command.maximumSpendUsd)}
+            {retained.command.name}, {retained.command.method}, {modificationSpendLabel(retained.command.maximumSpendUsd)}
           </p>
           <p>
-            {retained.command.mode} · {retained.command.request.model.source.modelId} ·{" "}
+            {retained.command.mode}, {retained.command.request.model.source.modelId},{" "}
             {retained.command.request.model.source.revision}
           </p>
         </EvaluationCard>
@@ -192,7 +192,7 @@ export function ManagedDecisionExecution({
                 <dd>{review.value.request.training.maxSteps}</dd>
                 <dt>Reviewed batch</dt>
                 <dd>
-                  {review.value.request.data.batch.id} · release{" "}
+                  {review.value.request.data.batch.id}, release{" "}
                   {review.value.request.data.batch.revision}
                 </dd>
               </>
@@ -204,7 +204,7 @@ export function ManagedDecisionExecution({
             )}
             <dt>Model</dt>
             <dd>
-              {review.value.request.model.source.modelId} ·{" "}
+              {review.value.request.model.source.modelId},{" "}
               {review.value.request.model.source.revision}
             </dd>
             <dt>Plan</dt>

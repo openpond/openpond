@@ -36,12 +36,12 @@ export function TrainingExperimentComputeCard({ compute, selection, onChange, lo
       <label>GPU
         <DropdownSelect label="GPU offering" floating searchable value={value}
           options={[
-            { value: "auto:balanced", label: "Automatic · Balanced" },
-            { value: "auto:economical", label: "Automatic · Lowest hourly cost" },
-            { value: "auto:fast", label: "Automatic · Performance" },
-            ...(selection.mode === "manual" && !selectedOffer ? [{ value, label: `${selection.gpuType} · Selected offering`, disabled: true }] : []),
+            { value: "auto:balanced", label: "Automatic, Balanced" },
+            { value: "auto:economical", label: "Automatic, Lowest hourly cost" },
+            { value: "auto:fast", label: "Automatic, Performance" },
+            ...(selection.mode === "manual" && !selectedOffer ? [{ value, label: `${selection.gpuType}, Selected offering`, disabled: true }] : []),
             ...offers.map(offer => ({ value: `offer:${offer.availabilityId}`,
-              label: `${offer.gpuType} · ${offer.hourlyUsd === null ? "Price unavailable" : `${usd(offer.hourlyUsd)}/hr`} · ${offer.dataCenterId ?? offer.region}`,
+              label: `${offer.gpuType}, ${offer.hourlyUsd === null ? "Price unavailable" : `${usd(offer.hourlyUsd)}/hr`}, ${offer.dataCenterId ?? offer.region}`,
               disabled: offer.hourlyUsd === null || compute.catalogExpired || compute.catalog.isError })),
           ]}
           onChange={choice => {
@@ -57,7 +57,7 @@ export function TrainingExperimentComputeCard({ compute, selection, onChange, lo
         <DropdownSelect label="Training billing" floating value={actualUsage ? "actual_usage" : "prepaid_only"}
           options={[
             { value: "prepaid_only", label: "Reserved budget" },
-            { value: "actual_usage", label: actualUsageAvailable ? "Actual usage" : "Actual usage · runtime qualification required", disabled: !actualUsageAvailable },
+            { value: "actual_usage", label: actualUsageAvailable ? "Actual usage" : "Actual usage, runtime qualification required", disabled: !actualUsageAvailable },
           ]}
           onChange={value => { if (value === "prepaid_only" || value === "actual_usage") onBillingModeChange(value); }} />
       </label>
@@ -97,7 +97,7 @@ export function TrainingExperimentComputeCard({ compute, selection, onChange, lo
           <p>Cost breakdown</p>
           <dl className="training-compute-summary">
             {estimate.cost.components.map(component => <Fragment key={`${component.phase}:${component.resource}`}>
-              <dt>{component.phase.replaceAll("_", " ")} · {component.resource === "gpu" || component.resource === "cpu" ? component.resource.toUpperCase() : component.resource}</dt>
+              <dt>{component.phase.replaceAll("_", " ")}, {component.resource === "gpu" || component.resource === "cpu" ? component.resource.toUpperCase() : component.resource}</dt>
               <dd>
                 {component.expectedUsd === null ? "Not yet estimated" : usd(component.expectedUsd)}
                 {component.planningRangeUsd ? ` (${usd(component.planningRangeUsd.low)}–${usd(component.planningRangeUsd.high)} planning range)` : ""}
