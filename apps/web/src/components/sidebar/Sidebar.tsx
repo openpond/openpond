@@ -1,5 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { PanelLeft } from "../icons";
+import { DesktopNewMenu } from "../chat/DesktopNewMenu";
 import { DesktopUpdateButton } from "./DesktopUpdateButton";
 import { useChatResourceIndex } from "../../hooks/useChatResourceIndex";
 import {
@@ -79,8 +80,11 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
       </div>
 
       <div className="sidebar-scroll">
-        {view === "labs" ? <SidebarNavigation modelProjects={modelProjects} connection={props.connection}
-          account={props.account} resourceWorkspaceId={props.resourceWorkspaceId} /> : null}
+        {view === "labs" ? <>
+          <div className="sidebar-resource-new"><DesktopNewMenu sidebar /></div>
+          <SidebarNavigation modelProjects={modelProjects} connection={props.connection}
+            account={props.account} resourceWorkspaceId={props.resourceWorkspaceId} />
+        </> : null}
 
         {productArea !== "chat" || view !== "chat" ? null : (
           <SidebarSectionList

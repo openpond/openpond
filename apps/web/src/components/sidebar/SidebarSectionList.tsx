@@ -180,6 +180,7 @@ export function SidebarSectionList({
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [ordinaryCollapsed, setOrdinaryCollapsed] = useState(false);
   const [libraryCollapsed, setLibraryCollapsed] = useState({ model: false, benchmark: false });
+  const [selectedModelGroup, setSelectedModelGroup] = useState<{ id: string; sessionId: string | null } | null>(null);
   const [taskVisibility, setTaskVisibility] = useState(
     readSidebarTaskVisibilityPreferences,
   );
@@ -348,6 +349,9 @@ export function SidebarSectionList({
     return sidebarResourceThreads(activeSessions, ordinaryFilteredTaskRows, modelProjects, hostedModelScope(account, resourceWorkspaceId));
   }, [account, activeSessions, ordinaryFilteredTaskRows, modelProjects, resourceWorkspaceId]);
   const sidebarModels = modelProjects.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount));
+  const selectedModelId = selectedModelGroup && selectedModelGroup.sessionId === selectedSessionId
+    ? selectedModelGroup?.id
+    : [...modelChatsById].find(([, chats]) => chats.some(session => session.id === selectedSessionId))?.[0];
   const visibleModelIds = new Set(sidebarModels.map(model => model.id));
   function openResourcePage(route: ModelsRoute) {
     void navigateModelsRoute(route).then(opened => { if (opened) setView("labs"); });
@@ -878,11 +882,15 @@ export function SidebarSectionList({
             {sidebarModels.map(model => {
               const chats = modelChatsById.get(model.id);
               return <SidebarModelResource key={model.id} model={model}
+                selected={selectedModelId === model.id}
+                onToggle={expanded => setSelectedModelGroup(current => expanded ? { id: model.id, sessionId: selectedSessionId }
+                  : current?.id === model.id ? null : current)}
                 activity={modelTrainingActivityByProjectId[model.id]} connection={connection}
                 actorId={account?.state === "signed_in" ? account.profile?.id ?? null : null}
                 apiBaseUrl={account?.apiBaseUrl ?? null} activeTeamId={resourceWorkspaceId}
                 onOpen={() => openResourcePage(modelsLocation("models", model.id))}
                 onOpenLearning={() => openResourcePage(modelsLocation("models", model.id, { detailTab: "learning" }))}
+                onOpenVersions={() => openResourcePage(modelsLocation("versions", model.id))}
                 onOpenRuns={resourceId => openResourcePage(modelsLocation("runs", model.id, { area: "console", resourceId }))}>
                 {chats?.slice(0, chatRowsVisibleCount).map(session => renderTaskSession(session))}
               </SidebarModelResource>;

@@ -96,7 +96,7 @@ const choices: Partial<Record<ResourceSetupField, readonly string[]>> = {
 const decimalFields = new Set<ResourceSetupField>(["budget", "learningRate"]);
 const integerFields = new Set<ResourceSetupField>(["datasetRevision", "epochs", "samples", "seed"]);
 
-export function ResourceSetupEditor({ draft, configureTarget, editorRef, instructions, onEditBody, onSubmit, onPasteFiles, busy: composerBusy, connection, datasets, evaluationModels, sessionId, context, onAttachDataset, onChange, onRemove }: {
+export function ResourceSetupEditor({ draft, configureTarget, editorRef, instructions, onEditBody, onSubmit, onPasteFiles, busy: composerBusy, connection, datasets, evaluationModels, sessionId, context, onAttachDataset, onChange }: {
   draft: ResourceSetupDraft;
   configureTarget: HTMLElement | null;
   editorRef: RefObject<HTMLDivElement | null>;
@@ -112,7 +112,6 @@ export function ResourceSetupEditor({ draft, configureTarget, editorRef, instruc
   context: Pick<ReturnType<typeof useChatContextSelection>, "select" | "selection" | "selecting">;
   onAttachDataset(reference: NonNullable<ResourceSetupDraft["datasetRef"]>): Promise<boolean>;
   onChange(current: ResourceSetupDraft, next: ResourceSetupDraft): void;
-  onRemove(): void;
 }) {
   const desktopNew = useContext(DesktopNewContext);
   const managedAvailable = desktopNew?.managedAvailable ?? false;
@@ -416,7 +415,7 @@ export function ResourceSetupEditor({ draft, configureTarget, editorRef, instruc
       <DropdownSelect className={inForm ? undefined : "resource-setup-inline-select"} floating floatingMenuWidth={260}
       searchable={options.length > 7} label={key in labels ? labels[key as ResourceSetupField] : part.placeholder}
       value={value} options={options} disabled={busy}
-      triggerContent={<>{label} <ChevronDown aria-hidden="true" size={12} /></>}
+      triggerContent={<><span>{label}</span><ChevronDown aria-hidden="true" size={12} /></>}
       onChange={select} /></span>;
   }
   function configurationFields(field: PromptField) {
@@ -677,7 +676,6 @@ export function ResourceSetupEditor({ draft, configureTarget, editorRef, instruc
       </div> : null}
       </div>
       <footer className="training-dialog-actions">
-        <button type="button" className="training-button secondary" disabled={busy} onClick={onRemove}>Remove setup</button>
         <button type="button" className="training-button" disabled={authoringBusy} onClick={() => setConfigureOpen(false)}>Done</button>
       </footer>
     </AppDialog>, document.body) : null}

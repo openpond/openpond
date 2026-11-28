@@ -3,6 +3,31 @@
   margin-block: 2px;
 }
 
+.sidebar-resource-new { padding: 4px 8px; }
+
+.sidebar-row.sidebar-model-project-row {
+  grid-template-columns: 18px minmax(0, 1fr) 0;
+  position: relative;
+}
+
+.sidebar-model-project-row .row-meta {
+  position: static;
+  width: 0;
+  min-width: 0;
+}
+
+.sidebar-model-icon { display: inline-flex; justify-content: center; align-items: center; }
+.sidebar-model-icon img { object-fit: contain; }
+
+.sidebar-model-hover-actions:has(.sidebar-model-menu:popover-open) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar-model-project-row.selected .sidebar-model-hover-actions {
+  background: linear-gradient(90deg, transparent 0, var(--state-selected) 12px);
+}
+
 .sidebar-model-row {
   display: flex;
   min-width: 0;

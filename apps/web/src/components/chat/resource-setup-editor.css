@@ -12,21 +12,26 @@
 .resource-setup-pill,
 .resource-setup-text-field,
 .resource-setup-inline-select > .dropdown-trigger {
-  display: inline;
-  padding: 1px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 6px;
   border: 0;
   border-radius: 999px;
   background: var(--accent-primary-fill);
   color: var(--text-on-accent);
   font: inherit;
   font-size: 0.91em;
-  line-height: 1.6;
+  line-height: 18px;
   cursor: pointer;
 }
 
 .resource-setup-pill svg,
 .resource-setup-inline-select > .dropdown-trigger svg {
   vertical-align: middle;
+  color: var(--text-on-accent);
 }
 
 .resource-setup-text-field:hover,
@@ -46,6 +51,7 @@
 
 .resource-setup-inline-select > .dropdown-trigger {
   min-height: 0;
+  width: auto;
   max-inline-size: 100%;
   text-align: start;
   white-space: normal;
@@ -64,6 +70,7 @@
 }
 
 .resource-setup-text-field {
+  display: inline-block;
   field-sizing: content;
   min-inline-size: 2ch;
   max-inline-size: 100%;

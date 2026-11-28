@@ -1776,7 +1776,6 @@ export function Composer({
             onAttachDataset={reference => chatResources.select("dataset", reference.id, reference.revision)}
             onChange={(previous, next) => composerDraftStore.setResourceSetup(originDraftScopeKey, current =>
               current === previous ? carryResourcePromptEdits(previous, next) : current)}
-            onRemove={() => composerDraftStore.setResourceSetup(originDraftScopeKey, () => null)}
           /> : <>
           <ComposerNextStep next={nextStep} />
           <ComposerInlineInput

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 const marks = {
   qwen: "/model-brands/qwen.png",
   inkling: "/model-brands/thinking-machines.webp",
@@ -10,13 +12,13 @@ const marks = {
   grok: "/agent-sources/grok-build.svg",
 };
 
-export function BaseModelIcon({ modelId }: { modelId?: string | null }) {
-  if (!modelId) return null;
+export function BaseModelIcon({ modelId, fallback = null }: { modelId?: string | null; fallback?: ReactNode }) {
+  if (!modelId) return fallback;
   const id = modelId.toLowerCase();
   const name = id.split("/").at(-1) ?? "";
   const brand = /^(?:gpt|chatgpt|o[134])[-_.]/.test(name) ? "openai"
     : /^(?:mixtral|ministral|codestral|pixtral)[-_.]/.test(name) ? "mistral"
     : Object.keys(marks).find(key => name.startsWith(key) && /^[\d._-]?$/.test(name.slice(key.length, key.length + 1)));
-  if (!brand) return null;
+  if (!brand) return fallback;
   return <img src={marks[brand as keyof typeof marks]} width={15} height={15} alt="" aria-hidden="true" />;
 }

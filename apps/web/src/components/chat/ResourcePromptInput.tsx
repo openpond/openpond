@@ -82,17 +82,32 @@ export function ResourcePromptInput({ parts, template, disabled, editorRef, rend
     const root = editorRef.current;
     if (!root) return;
     if (lastBody.current !== bodyKey) {
-      const fragment = document.createDocumentFragment();
+      // Keep retained badges mounted when a choice changes the sentence. Replacing
+      // the focused trigger sends the next keyboard event to the page body.
+      const retained = new Map(readBody(root, fields).slots.map(slot => [slot.field, slot.host]));
+      const focused = document.activeElement instanceof HTMLElement && root.contains(document.activeElement)
+        ? document.activeElement : null;
+      let cursor = root.firstChild;
       for (const part of desired) {
-        if (typeof part === "string") fragment.append(part);
-        else {
-          const host = document.createElement("span");
+        let node: Node;
+        if (typeof part === "string") {
+          node = cursor?.nodeType === Node.TEXT_NODE ? cursor : document.createTextNode(part);
+          if (node.textContent !== part) node.textContent = part;
+        } else {
+          const host = retained.get(part.field) ?? document.createElement("span");
           host.contentEditable = "false";
           host.dataset.resourceField = part.field;
-          fragment.append(host);
+          node = host;
         }
+        if (cursor === node) cursor = cursor.nextSibling;
+        else root.insertBefore(node, cursor);
       }
-      root.replaceChildren(fragment);
+      while (cursor) {
+        const next = cursor.nextSibling;
+        cursor.remove();
+        cursor = next;
+      }
+      if (focused?.isConnected && document.activeElement === document.body) focused.focus({ preventScroll: true });
       lastBody.current = bodyKey;
     }
     const current = readBody(root, fields).slots;
@@ -116,12 +131,13 @@ export function ResourcePromptInput({ parts, template, disabled, editorRef, rend
   function handleFieldKey(event: KeyboardEvent<HTMLDivElement>) {
     const root = editorRef.current;
     if (!root || disabled || event.nativeEvent.isComposing || event.metaKey || event.ctrlKey || event.altKey ||
-      !(event.target instanceof HTMLElement) || !root.contains(event.target) || event.target.closest('[role="menu"]')) return;
+      !(event.target instanceof HTMLElement) || !root.contains(event.target)) return;
     const remove = event.key === "Backspace" || event.key === "Delete";
     const arrow = event.key === "ArrowLeft" || event.key === "ArrowRight";
     if (!remove && !arrow) return;
     const backward = event.key === "Backspace" || event.key === "ArrowLeft";
     const target = event.target;
+    if (target.closest('[role="menu"]') && (!remove || target instanceof HTMLInputElement)) return;
     const focused = target.closest<HTMLElement>("[data-resource-field]");
     const host = focused ?? (remove && target === root ? adjacentField(root, backward) : null);
     if (!host || !host.parentNode || (arrow && event.shiftKey)) return;

@@ -37,8 +37,8 @@ export function HostedModelServingStatusProvider({ connection, scope, actorId, a
   return <HostedModelServingStatusContext.Provider value={value}>{children}</HostedModelServingStatusContext.Provider>;
 }
 
-export function useHostedModelManaging(api: WorkspaceApi, modelId: string) {
+export function useHostedModelManaging(api: WorkspaceApi | null, modelId: string) {
   const status = useContext(HostedModelServingStatusContext);
-  return status?.connection === api.connection && status.teamId === api.teamId && status.actorId === api.actorId
+  return api && status?.connection === api.connection && status.teamId === api.teamId && status.actorId === api.actorId
     && status.managingIds.has(modelId);
 }

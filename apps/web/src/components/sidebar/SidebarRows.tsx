@@ -1044,7 +1044,7 @@ function SidebarProjectMenuPopover({
   );
 }
 
-function SidebarInteractiveRow({
+export function SidebarInteractiveRow({
   children,
   className,
   dataSessionId,
