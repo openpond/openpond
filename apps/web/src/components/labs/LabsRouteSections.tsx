@@ -307,6 +307,7 @@ export function ModelsTable({
               ? hosted.localState === "not_pulled" ||
                 hosted.localState === "remote_ahead"
               : false;
+            const needsInputs = Boolean(item && hosted?.localState === "not_pulled");
             const name = item?.name ?? hosted?.project.name;
             const description = item?.description ?? hosted?.project.objective;
             const isExpanded = expanded === row.key;
@@ -324,7 +325,7 @@ export function ModelsTable({
                     </button>
                     {hosted ? (
                       <LabStatusBadge
-                        label={hostedLocalStateLabel(hosted.localState)}
+                        label={needsInputs ? "Local + hosted" : hostedLocalStateLabel(hosted.localState)}
                         value={hostedLocalStateTone(hosted.localState)}
                       />
                     ) : (
@@ -363,7 +364,11 @@ export function ModelsTable({
                         options={[
                           { value: "", label: pulling ? "Pulling…" : busyAction === "sync-model-project" ? "Syncing…" : "Cloud", disabled: true },
                           ...(hosted ? [{ value: "open", label: "Open hosted Model" }] : []),
-                          ...(hosted && pullable ? [{ value: "pull", label: "Pull local copy", description: hostedPullTitle(hosted.localState) }] : []),
+                          ...(hosted && pullable ? [{
+                            value: "pull",
+                            label: needsInputs ? "Pull missing inputs" : "Pull local copy",
+                            description: needsInputs ? "Download the hosted Dataset packages" : hostedPullTitle(hosted.localState),
+                          }] : []),
                           ...(item ? [{ value: "sync", label: "Sync to workspace" }] : []),
                         ]}
                         onChange={value => {

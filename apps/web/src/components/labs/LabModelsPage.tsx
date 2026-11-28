@@ -99,7 +99,7 @@ export function LabModelsPage({
   const rows = useMemo<ModelTableRow[]>(() => {
     const hostedProjects = hostedCatalog?.projects ?? [];
     const linkedByLocalId = new Map(hostedProjects.flatMap((item) =>
-      item.localProjectId && item.localState !== "local_conflict" && item.localState !== "not_pulled"
+      item.localProjectId && item.localState !== "local_conflict"
         ? [[item.localProjectId, item] as const] : [],
     ));
     const linkedHostedIds = new Set(items.flatMap((item) => {
@@ -150,7 +150,7 @@ export function LabModelsPage({
   const visible = filtered.slice((visiblePage - 1) * PAGE_SIZE, visiblePage * PAGE_SIZE);
   const emptyMessage = rows.length
     ? "No Models match this Profile or search."
-    : "No local or hosted Model Projects were found.";
+    : hostedCatalog ? "No local or hosted Model Projects were found." : "No local Models yet.";
   const loadingHosted =
     training.busyAction === "list-hosted-model-projects";
   const [hostedErrorScope, setHostedErrorScope] = useState<string | null>(null);
@@ -168,7 +168,9 @@ export function LabModelsPage({
         refresh: true,
         silent: true,
       });
-      if (!cancelled && refreshed) setHostedResult({ scope: hostedScope, catalog: refreshed });
+      if (cancelled) return;
+      if (refreshed) setHostedResult({ scope: hostedScope, catalog: refreshed });
+      setHostedErrorScope(refreshed ? null : hostedScope);
     })();
     return () => {
       cancelled = true;
