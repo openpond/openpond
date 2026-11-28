@@ -9,6 +9,7 @@ import { Activity, useMemo } from "react";
 import { TrainingExperimentSetupPanel } from "./TrainingExperimentSetupPanel";
 import { ActivationExperimentSetupPanel } from "./ActivationExperimentSetupPanel";
 import { useStoredExperimentDraft } from "./useStoredExperimentDraft";
+import type { ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
 import type { ExperimentDraft } from "openpond-sdk/training";
 import { type RunExperiment } from "openpond-sdk/experiments";
 import { type ModelsRoute } from "../models-route";
@@ -28,6 +29,11 @@ export type ExperimentSetupPanelProps = {
   onAdvancedRun?: (id: string) => void;
   onTrainingStarted?: (id: string) => void | Promise<void>;
   onSaveDraft?: (draft: ExperimentDraft) => Promise<unknown>;
+  localTrainingDraft?: boolean;
+  bindBenchmark?: (preparationId: string, revision: number, versionHash: string) => Promise<void>;
+  recoverBenchmark?: (revision: number, versionHash: string) => Promise<string | null>;
+  retainedBenchmark?: { draft: ExperimentDraft; revision: number; versions?: ManagedBenchmarkVersions };
+  savedBenchmarkVersions?: ManagedBenchmarkVersions;
 };
 export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {
   const setup = useEvaluationSetup();
@@ -69,6 +75,8 @@ export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {
         onOpenRun={props.onAdvancedRun}
       />
     );
+  if (props.bindBenchmark)
+    return <OrdinaryExperimentSetupPanel {...props} onSaveDraft={onSaveDraft} />;
   return (
     <>
       <Activity mode={setup.operationType === "evaluate" ? "visible" : "hidden"}>
@@ -89,6 +97,7 @@ export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {
             onStarted={props.onTrainingStarted}
             navigate={props.navigate}
             onSaveDraft={onSaveDraft}
+            localDraft={props.localTrainingDraft}
             onClose={() => {
               setup.close();
               props.onClose?.();

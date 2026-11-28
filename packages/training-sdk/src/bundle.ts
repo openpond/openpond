@@ -63,7 +63,7 @@ export async function buildTrainingBundle(input: {
         ...projection,
         sourcePath: projection.path,
       }
-    : inlineTrainingData(input.taskset, input.plan, approved);
+    : projectInlineTrainingData(input.taskset, input.plan.recipe, approved);
   if (taskData.exampleCount === 0) throw new Error("Training Bundle has no approved training examples.");
   await mkdir(input.directory, { recursive: true });
   const assets = [
@@ -152,18 +152,18 @@ function requireProjectedDataset(taskset: Taskset, plan: TrainingPlan, projectio
   }
 }
 
-function inlineTrainingData(
+export function projectInlineTrainingData(
   taskset: Taskset,
-  plan: TrainingPlan,
+  recipe: TrainingPlan["recipe"],
   approvedSources: Set<string>,
-): ResolvedTrainingData {
+): Extract<ResolvedTrainingData, { content: string }> {
   if (
-    plan.recipe.method !== "sft"
-    && plan.recipe.method !== "dpo"
-    && plan.recipe.method !== "grpo"
-    && plan.recipe.method !== "ppo"
+    recipe.method !== "sft"
+    && recipe.method !== "dpo"
+    && recipe.method !== "grpo"
+    && recipe.method !== "ppo"
   ) {
-    throw new Error(`Training method ${plan.recipe.method} cannot produce task data.`);
+    throw new Error(`Training method ${recipe.method} cannot produce task data.`);
   }
   const approvedDemonstrations = new Set(
     taskset.learningSignals.demonstrations.flatMap((signal) =>
@@ -173,12 +173,12 @@ function inlineTrainingData(
   const supervisedTarget = (task: Taskset["tasks"][number]) => learning
     ? learning.admissions.find((entry) => entry.taskId === task.id)?.supervisedTarget ?? null
     : task.expectedOutput;
-  const seed = plan.recipe.method === "grpo"
-    ? plan.recipe.rollout.seed
-    : plan.recipe.method === "ppo"
-      ? plan.recipe.policyOptimization.seed
-    : plan.recipe.optimizer.seed;
-  if (plan.recipe.method === "dpo") {
+  const seed = recipe.method === "grpo"
+    ? recipe.rollout.seed
+    : recipe.method === "ppo"
+      ? recipe.policyOptimization.seed
+    : recipe.optimizer.seed;
+  if (recipe.method === "dpo") {
     const selected = taskset.learningSignals.preferences
       .filter((signal) =>
         signal.approved
@@ -201,7 +201,7 @@ function inlineTrainingData(
       .sort((left, right) =>
         left.priority.localeCompare(right.priority)
         || left.record.id.localeCompare(right.record.id))
-      .slice(0, plan.recipe.dataset.maxPairs);
+      .slice(0, recipe.dataset.maxPairs);
     const content = selected.length
       ? `${selected.map((item) => JSON.stringify(item.record)).join("\n")}\n`
       : "";
@@ -213,20 +213,20 @@ function inlineTrainingData(
       exampleCount: selected.length,
       eligibleRows: selected.length,
       selectionSeed: seed,
-      selectionStrategy: plan.recipe.dataset.selectionStrategy,
+      selectionStrategy: recipe.dataset.selectionStrategy,
       taskIdsHash: contentHash(selected.map((item) => item.record.id)),
     };
   }
-  const limit = plan.recipe.method === "ppo"
-    ? plan.recipe.policyOptimization.dataset.maxExamples
-    : plan.recipe.dataset.maxExamples;
+  const limit = recipe.method === "ppo"
+    ? recipe.policyOptimization.dataset.maxExamples
+    : recipe.dataset.maxExamples;
   const selected = taskset.tasks
     .filter((task) =>
       task.split === "train"
       && task.sourceRefs.every((source) => approvedSources.has(source))
       && (
-        plan.recipe.method === "grpo"
-        || plan.recipe.method === "ppo"
+        recipe.method === "grpo"
+        || recipe.method === "ppo"
         || (
           supervisedTarget(task) !== null
           && approvedDemonstrations.has(task.id)
@@ -234,7 +234,7 @@ function inlineTrainingData(
       ))
     .map((task) => ({
       priority: contentHash([taskset.contentHash, seed, "train", task.id]),
-      record: plan.recipe.method === "grpo" || plan.recipe.method === "ppo"
+      record: recipe.method === "grpo" || recipe.method === "ppo"
         ? { id: task.id, input: task.input, policyVisibleContext: task.policyVisibleContext, tags: task.tags }
         : {
             id: task.id,
@@ -259,8 +259,8 @@ function inlineTrainingData(
     exampleCount: selected.length,
     eligibleRows: selected.length,
     selectionSeed: seed,
-    selectionStrategy: plan.recipe.method === "ppo"
-      ? plan.recipe.policyOptimization.dataset.selectionStrategy
+    selectionStrategy: recipe.method === "ppo"
+      ? recipe.policyOptimization.dataset.selectionStrategy
       : "stable_hash_top_n",
     taskIdsHash: contentHash(selected.map((item) => item.record.id)),
   };

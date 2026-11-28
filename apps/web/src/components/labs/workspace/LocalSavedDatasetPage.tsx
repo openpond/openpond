@@ -28,7 +28,7 @@ export function LocalSavedDatasetPage({ api, route, navigate }: { api: Workspace
   const graders = localMetadataGraders(record);
   return <>
     <header className="evaluation-workspace-header"><h1>{draft.name}</h1></header>
-    <p className="evaluation-meta-line">{profileDisplayName(dataset?.profileTarget?.profileId)} · {dataset?.profileTarget?.workflowId ?? "No workflow binding"} · Revision {draft.revision} · Desktop</p>
+    <p className="evaluation-meta-line">{profileDisplayName(dataset?.profileTarget?.profileId)}, {dataset?.profileTarget?.workflowId ?? "No workflow binding"}, Revision {draft.revision}, Desktop</p>
     <nav className="evaluation-workspace-tabs" aria-label="Dataset sections">{["tasks", "graders", "experiments", "versions"].map(value =>
       <button key={value} aria-selected={tab === value} onClick={() => { setTaskId(null); navigate({ ...route, detailTab: value }); }}>{value[0]!.toUpperCase() + value.slice(1)}</button>)}</nav>
     {tab === "tasks" ? <div className="evaluation-table-scroll evaluation-table-frame"><table className="training-data-table evaluation-workspace-table"><thead><tr><th>Task</th><th>Input</th><th>Split</th></tr></thead><tbody>

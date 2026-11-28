@@ -20,15 +20,16 @@ export function useHostedModelRefresh(model: ModelProject | null, teamId: string
         timer = setTimeout(() => { void read(); }, 30_000);
         return;
       }
-      const result = await refresh(hostedId!, teamId!, apiOrigin!, { silent: true });
+      const result = await refresh(hostedId!, teamId!, apiOrigin!, { silent: true, includeHistory: true });
       if (stopped) return;
-      setFailure(result ? null : { key, message: "Hosted runs could not be refreshed. Showing the last saved state." });
+      const message = result?.unavailableHistoryCount
+        ? `Could not refresh ${result.unavailableHistoryCount} hosted ${result.unavailableHistoryCount === 1 ? "run" : "runs"}. Showing available history.`
+        : result ? null : "Hosted runs could not be refreshed. Showing the last saved state.";
+      setFailure(message ? { key, message } : null);
       // Keep history current without reimporting a terminal project every 10s.
       timer = setTimeout(() => { void read(); }, active ? 15_000 : 60_000);
     }
-    // Opening already imports this Model's runs. Avoid immediately repeating
-    // that expensive synchronization as its destination mounts.
-    timer = setTimeout(() => { void read(); }, active ? 15_000 : 60_000);
+    void read();
     return () => { stopped = true; clearTimeout(timer); };
   }, [hostedId, teamId, apiOrigin, linkedTeam, linkedOrigin, refresh, key, active]);
   return failure?.key === key ? failure.message : null;

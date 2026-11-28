@@ -135,7 +135,7 @@ export function ActivationExperimentSetupPanel({ api, method, visible, onClose, 
           <label>Token positions<DropdownSelect label="Token positions" floating value={form.tokenScope.positions}
             options={[{ value: "all_non_padding", label: "All non-padding tokens" }, { value: "after_position_zero", label: "After the first token" }]}
             onChange={value => patch({ tokenScope: { ...form.tokenScope, positions: value as ActivationExperimentFormDraft["tokenScope"]["positions"] } })} /></label>
-          <p>{form.normalization.mode === "baseline_prompt_residual_median" ? "Normalization uses a separate unsteered prompt pass and its frozen FP32 midpoint residual median." : `Fixed calibration retained: ${form.normalization.calibration.id} · r${form.normalization.calibration.revision}`}</p>
+          <p>{form.normalization.mode === "baseline_prompt_residual_median" ? "Normalization uses a separate unsteered prompt pass and its frozen FP32 midpoint residual median." : `Fixed calibration retained: ${form.normalization.calibration.id}, r${form.normalization.calibration.revision}`}</p>
         </> : null}
         {([['maxNewTokens', 'Maximum generated tokens'], ['maximumCapturedValues', 'Maximum captured values'], ['maximumForwardTokenWork', 'Maximum forward-token work'], ['maximumDurationSeconds', 'Maximum seconds']] as const).map(([key, label]) => <label key={key}>{label}<input inputMode="numeric" value={form[key]} maxLength={100} onChange={event => patch({ [key]: event.target.value })} /></label>)}
       </fieldset></details></EvaluationCard>

@@ -15,7 +15,7 @@ export function ComposerResourceContext({ context, sessionId }: {
   if (!selected) return null;
   const state = selected.training
     ? selected.training.location === "cloud" ? selected.training.job.state : selected.training.executionState
-    : selected.model ? "Model" : selected.resource?.state ?? (selected.draft ? `Draft · ${experimentOperationLabel(selected.draft.operationType)}` : selected.detail);
+    : selected.model ? "Model" : selected.resource?.state ?? (selected.draft ? `Draft, ${experimentOperationLabel(selected.draft.operationType)}` : selected.detail);
   return <div className="composer-resource-area composer-resource-summary">
     <div className="composer-resource-bar" aria-label="Selected experiment or model run" aria-live="polite">
       <span className="composer-resource-dataset-name" title={selected.label}>{selected.label}</span>

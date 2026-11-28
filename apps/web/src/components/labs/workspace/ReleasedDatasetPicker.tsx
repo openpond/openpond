@@ -25,6 +25,8 @@ export function ReleasedDatasetPicker({
   disabled,
   localChoices = [],
   localLoading = false,
+  label = "Dataset version",
+  placeholder = "Choose a published dataset",
 }: {
   localChoices?: LocalChoice[];
   localLoading?: boolean;
@@ -32,6 +34,8 @@ export function ReleasedDatasetPicker({
   value: Release | null;
   onChange: (value: Release | null) => void;
   disabled: boolean;
+  label?: string;
+  placeholder?: string;
 }) {
   const [afterId, setAfter] = useState<string | undefined>();
   const page = useQuery({
@@ -68,15 +72,15 @@ export function ReleasedDatasetPicker({
   return (
     <section>
       <label>
-        Dataset version
+        {label}
         <DropdownSelect
-          label="Dataset version"
+          label={label}
           floating
           searchable
           disabled={disabled}
           value={value ? identity(value) : ""}
           options={[
-            { value: "", label: "Choose a published dataset" },
+            { value: "", label: placeholder },
             ...(value && !choices.some(item => identity(item.release) === identity(value))
               ? [{ value: identity(value), label: `${value.id} / Revision ${value.revision}`, disabled: true }]
               : []),

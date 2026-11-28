@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   MODEL_SERVING_IDLE_TIMEOUT_SECONDS,
   SERVERLESS_SERVING_IDLE_SECONDS,
@@ -7,7 +8,7 @@ import {
 } from "openpond-sdk/training";
 import { DropdownSelect } from "../DropdownSelect";
 import { ErrorToast } from "../common/ErrorToast";
-import { AppDialog } from "../dialogs/AppDialog";
+import { ModelServingDialog } from "./ModelServingDialog";
 import { useDraftNavigation } from "./useDraftNavigation";
 import { useModelServingControl } from "./useModelServingControl";
 import type { WorkspaceApi } from "./workspace/workspace-api";
@@ -28,13 +29,14 @@ export function ModelServingControlDialog({
   const saved = useModelServingControl(api, version.modelProjectId, value);
   const retained = saved.retained?.command.request;
   const serverless =
-    version.schemaVersion === "openpond.trainingModelVersion.v1" &&
+    (version.schemaVersion === "openpond.trainingModelVersion.v1" || version.schemaVersion === "openpond.registeredAdapterVersion.v1") &&
     (!retained || ("serverlessApproval" in retained && Boolean(retained.serverlessApproval)));
   const idle = serverless ? SERVERLESS_SERVING_IDLE_SECONDS : MODEL_SERVING_IDLE_TIMEOUT_SECONDS;
   const [spendingLimit, setSpendingLimit] = useState("");
   const [gpuTypeId, setGpuTypeId] = useState("");
-  const availableReview =
-    value?.schemaVersion === "openpond.trainingModelServing.v1" ? value.serverlessReview : null;
+  const checkpoint = value?.schemaVersion === "openpond.trainingModelServing.v1" || value?.schemaVersion === "openpond.registeredAdapterServing.v1"
+    ? value : null;
+  const availableReview = checkpoint?.serverlessReview;
   const [defaultProfile, setDefaultProfile] = useState(
     value?.schemaVersion === "openpond.engramModelServing.v1"
       ? value.defaultEnabled
@@ -43,10 +45,7 @@ export function ModelServingControlDialog({
         : true,
   );
   const actual = retained?.action ?? action;
-  const acceptedReview =
-    value?.schemaVersion === "openpond.trainingModelServing.v1"
-      ? value.control?.serverless?.review
-      : null;
+  const acceptedReview = checkpoint?.control?.serverless?.review;
   const retainedReviewHash =
     retained && "serverlessApproval" in retained ? retained.serverlessApproval?.reviewHash : null;
   const serverlessReview = retainedReviewHash
@@ -69,6 +68,8 @@ export function ModelServingControlDialog({
         value.control.versionHash === version.contentHash);
   const guard = useDraftNavigation({
     name: "Serving setup",
+    dialogClassName: "model-serving-dialog",
+    backdropClassName: "model-serving-backdrop",
     busy: saved.busy,
     dirty:
       Boolean(retained) ||
@@ -89,10 +90,8 @@ export function ModelServingControlDialog({
   });
   return (
     <>
-      <AppDialog
+      <ModelServingDialog
         ariaLabel={actual === "activate" ? "Serve model" : "Stop serving"}
-        className="labs-rename-dialog"
-        backdropClassName="labs-rename-backdrop"
         dismissDisabled={saved.busy}
         onClose={() => void guard.requestLeave(onClose)}
       >
@@ -108,6 +107,7 @@ export function ModelServingControlDialog({
         <p>
           {version.schemaVersion === "openpond.steeringModelVersion.v1"
             ? version.publication.baseModel.modelId
+            : version.schemaVersion === "openpond.registeredAdapterVersion.v1" ? version.baseModel.repository
             : version.schemaVersion === "openpond.engramModelVersion.v1" ||
                 version.schemaVersion === "openpond.decisionModelVersion.v1" ||
                 version.schemaVersion === "openpond.alphaEditModelVersion.v1" ||
@@ -116,6 +116,14 @@ export function ModelServingControlDialog({
               ? version.baseModel.modelId
               : version.request.baseModel.modelId}
         </p>
+        <p className="training-muted">Version <code>{version.contentHash}</code></p>
+        {value?.schemaVersion === "openpond.registeredAdapterServing.v1" && value.state === "starting"
+          ? <p role="status">Serving is starting.</p> : null}
+        {actual === "activate" && value?.schemaVersion === "openpond.registeredAdapterServing.v1" && !serverlessReview ? (
+          <p role="status">{value.registry.revoked || value.registry.deleted
+            ? "This adapter is no longer available for serving."
+            : "Managed serving pricing is unavailable for this version."}</p>
+        ) : null}
         {actual === "activate" &&
         (retained
           ? retained.schemaVersion === "openpond.steeringModelServingControlRequest.v1" ||
@@ -258,12 +266,12 @@ export function ModelServingControlDialog({
               : retained
                 ? "Retry request"
                 : actual === "activate"
-                  ? "Serve"
+                  ? "Deploy to OpenPond Managed"
                   : "Stop serving"}
           </button>
         </div>
-      </AppDialog>
-      {guard.dialog}
+      </ModelServingDialog>
+      {guard.dialog ? createPortal(guard.dialog, document.body) : null}
     </>
   );
 }

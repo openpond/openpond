@@ -136,7 +136,7 @@ export function PonderResultAttention({
                   : onOpenOutput(output.id)
               }
             >
-              {output.title} · Download
+              {output.title}, Download
             </button>
           ))}
           <button

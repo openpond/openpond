@@ -55,7 +55,7 @@ function ModelTrainingJourneyContent({
           groupCount: selectedGroup ? 1 : 0,
           nodes: flow.nodes.map((node) => {
             if (!node.inLoop)
-              return { ...node, detail: `Run-wide${node.detail ? ` · ${node.detail}` : ""}` };
+              return { ...node, detail: `Run-wide${node.detail ? `, ${node.detail}` : ""}` };
             return (
               selectedGroup?.nodes?.find((item) => item.label === node.label) ?? {
                 label: node.label,
@@ -150,10 +150,10 @@ function ModelTrainingJourneyContent({
                   label="Training group context"
                   value={groupIndex === undefined ? "all" : String(groupIndex)}
                   options={[
-                    { value: "all", label: "All groups · run overview" },
+                    { value: "all", label: "All groups, run overview" },
                     ...flow.groups.map((group) => ({
                       value: String(group.index),
-                      label: `Group ${group.index + 1} · ${group.replay ? `Replay · ${group.state}` : group.inherited ? `Inherited · ${group.inherited.optimizerDisposition === "applied" ? "Update applied" : "Skipped · no signal"}` : group.optimizerDisposition === "skipped_no_signal" ? "Skipped · no signal" : group.state}`,
+                      label: `Group ${group.index + 1}, ${group.replay ? `Replay, ${group.state}` : group.inherited ? `Inherited, ${group.inherited.optimizerDisposition === "applied" ? "Update applied" : "Skipped, no signal"}` : group.optimizerDisposition === "skipped_no_signal" ? "Skipped, no signal" : group.state}`,
                     })),
                   ]}
                   onChange={(value) => {
@@ -163,8 +163,8 @@ function ModelTrainingJourneyContent({
                 />
                 <p className="training-muted">
                   {groupIndex === undefined
-                    ? "Run overview · all retained groups"
-                    : "Group scope · preparation and evaluations remain run-wide"}
+                    ? "Run overview, all retained groups"
+                    : "Group scope, preparation and evaluations remain run-wide"}
                 </p>
                 <TrainingRecoveryLineage recovery={flow.recovery} />
                 <FlowDiagram

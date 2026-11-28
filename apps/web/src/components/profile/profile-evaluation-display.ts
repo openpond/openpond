@@ -6,9 +6,9 @@ export type EvaluationTarget = ProfileEvaluationDiscovery["definitions"][number]
 export function targetLabel(target: EvaluationTarget): string {
   switch (target.kind) {
     case "profile": return "Complete Profile";
-    case "workflow": return `Workflow · ${target.workflowId}`;
-    case "skill": return `Skill · ${target.skillPath}`;
-    case "agent_action": return `Agent action · ${target.actionId}`;
+    case "workflow": return `Workflow, ${target.workflowId}`;
+    case "skill": return `Skill, ${target.skillPath}`;
+    case "agent_action": return `Agent action, ${target.actionId}`;
   }
 }
 

@@ -344,13 +344,13 @@ export function NeuronTrainingExperimentSetupPanel({
   const batchOptions: Array<{ value: string; label: string; disabled?: boolean }> = batches.map(
     (batch) => ({
       value: canonicalJson(batch.reference),
-      label: `${batch.reference.id} · release ${batch.reference.revision} · ${batch.exampleCount} examples`,
+      label: `${batch.reference.id}, release ${batch.reference.revision}, ${batch.exampleCount} examples`,
     }),
   );
   if (batchValue && !batchOptions.some((item) => item.value === batchValue))
     batchOptions.unshift({
       value: batchValue,
-      label: `${form.targetBatch!.id} · saved release ${form.targetBatch!.revision}`,
+      label: `${form.targetBatch!.id}, saved release ${form.targetBatch!.revision}`,
       disabled: true,
     });
   const modelValue =

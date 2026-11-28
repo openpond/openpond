@@ -9,11 +9,17 @@ export async function handleWeightSpaceReadRoutes({deps,request,requestUrl,respo
   const grading=/^\/v1\/training\/weight-space-sessions\/([^/]+)\/scoring-passes(?:\/([^/]+)(?:\/(result|cancel))?)?$/.exec(requestUrl.pathname);
   if(!match&&!grading)return false;
   const cancelling=grading?grading[3]==="cancel":match![2]==="cancel";
+  const capability=match?.[1]==="capability"&&!match[2]&&request.method==="POST";
   response.setHeader("Cache-Control","no-store");
-  if(request.method!==(cancelling?"POST":"GET")){
+  if(request.method!==(cancelling||capability?"POST":"GET")){
     sendJson(response,405,{code:"method_not_allowed",error:"Use the canonical editing operation."});return true;
   }
   try{
+    if (capability) {
+      const body=z.record(z.string(),z.unknown()).parse(await readJson(request,{maxBytes:65_536}));
+      sendJson(response,200,await deps.trainingPayload("hosted_weight_space_read",{...body,action:"capability"},requestUrl));
+      return true;
+    }
     if(grading){
       if(new Set(requestUrl.searchParams.keys()).size!==requestUrl.searchParams.size)
         throw new z.ZodError([{code:"custom",path:[],message:"Duplicate grading query fields are not permitted."}]);
@@ -22,7 +28,7 @@ export async function handleWeightSpaceReadRoutes({deps,request,requestUrl,respo
       if(grading[2]&&afterId)throw new z.ZodError([{code:"custom",path:["afterId"],message:"Only a grading list accepts a cursor."}]);
       sendJson(response,200,await deps.trainingPayload("hosted_weight_space_read",{...account,projectId:projectId??null,
         id:decodeURIComponent(grading[1]!),action:!grading[2]?"passes":grading[3]==="result"?"passResult":cancelling?"cancelPass":"pass",
-        ...(grading[2]?{passId:decodeURIComponent(grading[2])}:{query:{...(afterId?{afterId}:{})}})},requestUrl));
+        ...(grading[2]?{passId:decodeURIComponent(grading[2])}:{query:afterId?{afterId}:{}})},requestUrl));
       return true;
     }
     const id=match![1]?decodeURIComponent(match![1]):undefined;

@@ -77,12 +77,6 @@
   white-space: nowrap;
 }
 
-.team-sidebar-workspace-meta span + span::before {
-  content: "·";
-  padding-right: 6px;
-  color: var(--text-disabled);
-}
-
 .team-sidebar-row:hover,
 .team-sidebar-row.selected {
   background: var(--state-hover);

@@ -5,5 +5,6 @@ export const ChatExperimentWorkspaceContext = createContext<{
   accountKey: string;
   teamId: string | null;
   actorId: string | null;
+  apiOrigin?: string | null;
   webBaseUrl?: string | null;
 } | null>(null);

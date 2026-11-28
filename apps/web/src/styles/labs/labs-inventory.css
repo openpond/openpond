@@ -1,24 +1,45 @@
 .labs-models-table {
-  min-width: 660px;
+  min-width: 860px;
 }
 
 .labs-models-table th:first-child {
-  width: 42%;
+  width: 24%;
 }
 
-.labs-models-table th:nth-child(2),
-.labs-models-table th:nth-child(3) {
-  width: 18%;
+.labs-models-table th:nth-child(2) {
+  width: 17%;
 }
 
-.labs-models-table th:nth-child(4) {
-  width: 12%;
+.labs-models-table td:first-child {
+  max-width: 260px;
 }
 
-.labs-models-table td:nth-child(4) {
+.labs-models-table .labs-models-updated {
   color: var(--text-secondary);
-  font-size: 11px;
+  white-space: nowrap;
 }
+
+.labs-model-run-history ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+}
+
+.labs-model-run-history li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.labs-base-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.labs-base-model img { flex: none; object-fit: contain; }
 
 .labs-model-table-summary {
   display: grid;
@@ -43,6 +64,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .labs-hosted-project-identity {

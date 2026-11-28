@@ -156,6 +156,9 @@ export function MainPane({
   onPonderModeChange,
   experience,
   view,
+  resourceWorkspaceId,
+  resourceDraftPreviewStatus,
+  modelContextRequest,
   teamChat,
   community,
   bootstrap,
@@ -371,13 +374,17 @@ export function MainPane({
     bootstrap?.profileLibrary?.lastUsed ??
     null;
   const accountTeamScopeKey = mainPaneAccountScopeKey(bootstrap);
-  const experimentTeamId = bootstrap?.preferences.defaultTeamId ?? null;
-  const experimentActorId = bootstrap?.account.profile?.id ?? null;
+  const experimentTeamId = resourceWorkspaceId;
+  const experimentAccount = bootstrap?.account;
+  const experimentActorId = experimentAccount?.state === "signed_in" ? experimentAccount.profile?.id ?? null : null;
+  const experimentApiUrl = experimentAccount?.apiBaseUrl;
+  const experimentApiOrigin = experimentActorId && experimentApiUrl && URL.canParse(experimentApiUrl) ? new URL(experimentApiUrl).origin : null;
   const experimentWebBaseUrl = bootstrap?.account.activeProfile?.baseUrl ?? bootstrap?.account.baseUrl ?? null;
   const experimentWorkspaceScope = useMemo(() => ({ accountKey: accountTeamScopeKey, teamId: experimentTeamId,
-    actorId: experimentActorId, webBaseUrl: experimentWebBaseUrl }), [accountTeamScopeKey, experimentTeamId, experimentActorId, experimentWebBaseUrl]);
+    actorId: experimentActorId, apiOrigin: experimentApiOrigin, webBaseUrl: experimentWebBaseUrl }),
+  [accountTeamScopeKey, experimentTeamId, experimentActorId, experimentApiOrigin, experimentWebBaseUrl]);
   const trainingLabel = useTrainingSidebarContext({ connection, sessionId: selectedSessionId, accountScope: accountTeamScopeKey,
-    active: view === "chat", onOpen: onShowExperimentsPanel });
+    active: view === "chat", onOpen: onShowExperimentsPanel, selectionRequest: modelContextRequest, showToast });
   const selectedProfileState =
     profileStateForRef(
       bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
@@ -909,6 +916,12 @@ export function MainPane({
       selectedCommand: ComposerSlashCommand | null = null,
       options: ComposerSubmitOptions = {}
     ) => {
+      if (!selectedSessionId && resourceDraftPreviewStatus) {
+        showToast(resourceDraftPreviewStatus === "saving"
+          ? "The draft is still saving. Try sending again in a moment."
+          : "Choose the same resource from New to retry saving this draft.", "info");
+        return false;
+      }
       const promptForSubmit =
         options.promptOverride ?? composerDraftStore.getSnapshot();
       const clearSubmittedDraft = captureSubmittedDraftClear(composerDraftStore);
@@ -1041,6 +1054,7 @@ export function MainPane({
       connectedAppMentions,
       composerDraftStore,
       experience,
+      resourceDraftPreviewStatus,
       sendPrompt,
       selectedSessionId,
       setMentionedAppId,
@@ -1615,6 +1629,8 @@ export function MainPane({
           <>
             <Suspense fallback={null}>
               <LabsRoute
+                resourceSessions={trainingSessions}
+                onOpenResourceChat={sessionId => { void onOpenSession(sessionId); }}
                 account={bootstrap?.account ?? null}
                 closeDetailRequestId={labCloseDetailRequestId}
                 closeDetailKind={labCloseDetailKind}
@@ -1696,7 +1712,7 @@ export function MainPane({
                     );
                   },
                   preferences: trainingPreferences,
-                  settingsPreferences: appPreferences,
+                  workspaceTeamId: resourceWorkspaceId,
                   providerSettings: bootstrap?.providers ?? null,
                   reasoningEffort: codexReasoningEffort,
                   selectedTasksetId: activeTrainingTasksetId,

@@ -298,6 +298,11 @@ database, provider, credential, Electron, or UI dependencies. See
 limits, compatibility rules, provider routes, receipts, and the published
 conformance fixtures.
 
+`modelProjects.servingStatus()` reads the managed serving status for the
+authenticated workspace. It returns the workspace ID and Model IDs with an
+active serving request, including requests that are starting. Open a Model's
+exact saved-version review to inspect its deployment and available controls.
+
 `training.evaluationTasks(jobId, { id, contentHash }, { cursor, limit })`
 reads retained per-task outputs for a completed evaluation. Supply the evaluation
 output's immutable reference from `training.outputs(jobId)`, and follow

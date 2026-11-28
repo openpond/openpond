@@ -836,7 +836,7 @@ function TasksetAttempts({
     <section className="training-detail-section">
       <h2>Attempt evidence</h2>
       <p className="labs-detail-copy">
-        {operations.attempts.length} Attempts · {distinctOutputs} distinct outputs · {operations.artifacts.length} artifacts
+        {operations.attempts.length} Attempts, {distinctOutputs} distinct outputs, {operations.artifacts.length} artifacts
       </p>
     </section>
     <div className="training-table-wrap">
@@ -912,7 +912,7 @@ function TasksetAttempts({
                           <ul>
                             {artifacts.map((artifact) => (
                               <li key={artifact.id}>
-                                <code>{artifact.path}</code> · {artifact.mediaType ?? artifact.kind} · {artifact.sizeBytes.toLocaleString()} bytes
+                                <code>{artifact.path}</code>, {artifact.mediaType ?? artifact.kind}, {artifact.sizeBytes.toLocaleString()} bytes
                               </li>
                             ))}
                           </ul>
@@ -940,7 +940,7 @@ function attemptEvidenceLabel(attempt: TasksetOperationalState["attempts"][numbe
     const group = typeof metadata.collectionGroupIndex === "number"
       ? `group ${metadata.collectionGroupIndex + 1}`
       : "fixture group";
-    return `Fixture · ${group} · ${label}`;
+    return `Fixture, ${group}, ${label}`;
   }
   return attempt.modelRef ? "Model attempt" : "Recorded attempt";
 }

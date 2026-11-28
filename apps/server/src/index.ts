@@ -139,6 +139,7 @@ import { createCodexStatusService } from "./codex-status-service.js";
 import { createSessionFileIndex } from "./workspace/session-file-index.js";
 import { createNativeHistoryWorkspace } from "./runtime/native-agents/history-workspace.js";
 import { createSessionStore } from "./store/session-store.js";
+import { createSessionResourceDraft } from "./training/session-resource-draft.js";
 import { createSessionTitleService } from "./session-title-service.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
@@ -385,7 +386,6 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     recordClientDiagnosticPayload,
     updatePersonalizationPayload,
     bootstrapPayload,
-    currentAccountPayload,
     skillSourceFilePayload,
     codexHistoryThreadPayload,
     patchCodexHistorySessionPayload,
@@ -539,7 +539,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     storeDir,
     workspaceDiffPayload,
   });
-  const reviewIdentity=createCurrentWorkspaceIdentity({account:currentAccountPayload,defaultTeam:async()=>(await loadAppPreferences()).defaultTeamId});
+  const reviewIdentity = createCurrentWorkspaceIdentity({
+    defaultTeam: async () => (await loadAppPreferences()).defaultTeamId,
+  });
   let candidateWorkspaceTool: ReturnType<typeof createCoordinatedEvaluationRuntime>["executeCandidateWorkspaceTool"] | undefined;
   const {
     closeCloudWorkspaceReadiness,
@@ -732,10 +734,12 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       datasetArtifactService.task(tasksetId, taskId, split),
     modelJudge: taskEvaluationModelJudge,
   });
-  const { datasetStorageService, datasetStoragePayload, modelProjectHosting,
+  const { datasetStorageService, datasetStoragePayload, modelProjectHosting, localAdapterPublication,
     trainingService, conversationServingOwner, managedAdapterSyncService, managedAdapterChatRuntime,
     streamSelectedOpenPondChatTurn } = createManagedTrainingComposition({
       store, storeDir, resolveAccess: resolveHostedApiAccess,
+      resolveWorkspaceAccess: reviewIdentity.access,
+      resolveWorkspaceActor: reviewIdentity.actorId,
       account: async () => (await bootstrapPayload()).account,
       defaultTeam: async () => (await loadAppPreferences()).defaultTeamId,
       resolveReleasedHarness,
@@ -802,11 +806,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     harnessRefinerBenchmarks,
     preferenceComparisons: preferenceComparisonService,
     modelProjectHosting,
-    modelStarters: createModelStarterRuntime({ store, home: storeDir, resolveAccess: async () => {
-      const teamId = (await loadAppPreferences()).defaultTeamId?.trim();
-      if (!teamId) throw new Error("Select an OpenPond workspace to browse model starters.");
-      return { ...await resolveHostedApiAccess(), teamId };
-    } }),
+    localAdapterPublication,
+    modelStarters: createModelStarterRuntime({ store, home: storeDir, resolveAccess: reviewIdentity.access }),
     modelStream: trainingModelStream,
     judgeProvider: createLearningHostedJudgeProvider({ stream: streamOpenPondHostedChatTurn }),
   });
@@ -834,7 +835,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
   onStartupFailure(()=>schedules.stop());
   await localExperiments.recover();
   const chatResources = await createChatResourceRuntime({store,home:storeDir,ownerId:serverId,state:localByokRuntimeState,codexStatus:()=>refreshCodexStatus(true),imports:datasetImportService,visuals:htmlVisuals,improve:experimentImprovementPayload,append:appendRuntimeEvent,resolveInvocation:cliInvocations.resolve,teamExperiments:localExperiments,
-    access:async()=>({...await resolveHostedApiAccess(),actorId:await reviewIdentity.actorId(),teamId:await reviewIdentity.teamId()})});
+    access: reviewIdentity.access });
   onStartupFailure(()=>chatResources.close());
   trainingApi.learning.start();
   onStartupFailure(() => trainingApi.learning.close());
@@ -1709,6 +1710,9 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       openEventSubscriber,
       refreshCodexStatus,
       bootstrapPayload,
+      createSessionResourceDraft: createSessionResourceDraft({ storeDir, store, createReservedSession, access: reviewIdentity.access,
+        readHostedVersion: ({ teamId, modelProjectId, versionHash }) =>
+          trainingPayload("hosted_training_saved_version", { teamId, modelProjectId, versionHash }) }),
       localProjectActionCatalogPayload,
       skillSourceFilePayload,
       extensionCatalogPayload,

@@ -182,10 +182,10 @@ export function OutputsPage({
                       <span className="output-card-copy">
                         <strong>{output.title}</strong>
                         <small>
-                          {presentation.label} · {formatBytes(output.sizeBytes)}
+                          {presentation.label}, {formatBytes(output.sizeBytes)}
                         </small>
                         <small>
-                          Revision {output.revision} ·{" "}
+                          Revision {output.revision},{" "}
                           <time dateTime={output.createdAt}>
                             {formatDateTime(output.createdAt)}
                           </time>
@@ -252,7 +252,7 @@ function OutputPreviewPanel({
         <div>
           <h2>{preview.output.title}</h2>
           <p>
-            {presentation.label} · Revision {preview.output.revision}
+            {presentation.label}, Revision {preview.output.revision}
           </p>
         </div>
         <button aria-label="Close output preview" onClick={onClose} type="button">

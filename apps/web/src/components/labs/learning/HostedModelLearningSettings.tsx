@@ -419,7 +419,7 @@ export function HostedModelLearningSettings({
                     />
                   </label>
                   <p>
-                    Checks daily at {localTime} · {timeZone}. Training waits for at least{" "}
+                    Checks daily at {localTime}, {timeZone}. Training waits for at least{" "}
                     {fields.minimum} approved, unused examples and available budget and capacity.
                   </p>
                 </>

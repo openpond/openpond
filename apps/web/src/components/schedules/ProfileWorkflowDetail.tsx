@@ -85,7 +85,7 @@ export function ProfileWorkflowDetail({
       <DetailSection title="Description"><p>{workflow.description}</p></DetailSection>
       <DetailSection title="Source">
         <p>workflows/{workflow.id}/{workflow.invocation.kind === "instructions" ? "PROMPT.md" : "ACTION.json"}</p>
-        <p>Revision {entry.binding.sourceRevision.slice(0, 12)} · Release {entry.binding.harnessRelease.contentHash.slice(0, 12)}</p>
+        <p>Revision {entry.binding.sourceRevision.slice(0, 12)}, Release {entry.binding.harnessRelease.contentHash.slice(0, 12)}</p>
       </DetailSection>
       {workflow.skillPaths.length > 0 ? (
         <DetailSection title="Skills"><p>{workflow.skillPaths.join(", ")}</p></DetailSection>

@@ -8,7 +8,7 @@ import { captureTasksetDraftWorkspace } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import { cacheTasksetPackage } from "./taskset-package-files.js";
 import { localLearningCatalog } from "./local-learning-catalog.js";
-import { localGraderSummaries } from "./local-grader-resources.js";
+import { prepareLocalGraderRevision, localGraderSummaries } from "./local-grader-resources.js";
 import { localGraderInspection } from "./local-grader-inspection.js";
 import { checkLocalDatasetGraders } from "./local-dataset-checks.js";
 import { checkCapturedDatasetSources } from "./chat-dataset-source-checks.js";
@@ -21,7 +21,7 @@ export function localDatasetSummary(record: LocalDatasetRecord | LocalDatasetLis
   return {kind:"dataset",id:draft.id,revision:draft.revision,name:draft.name || "Untitled dataset",state:record.packageHash ? "Runnable" : "Saved draft",
     evaluationHash:record.workspace.contentHash,
     taskCount:draft.datasetArtifact?.rowCount ?? draft.tasks.length,graderCount:draft.graders.length,
-    checkState:checks.length ? checks.map(c => `${c.kind}: ${c.status} (${c.checked}/${c.total})`).join(" · ") : record.checks.length ? "Checks stale" : "Not checked",
+    checkState:checks.length ? checks.map(c => `${c.kind}: ${c.status} (${c.checked}/${c.total})`).join(", ") : record.checks.length ? "Checks stale" : "Not checked",
     syncState:record.sync ? record.sync.paused ? "Paused" : record.sync.acknowledgedHash === record.workspace.contentHash && record.sync.status === "synced" ? "Synced" : record.sync.status === "synced" ? "Sync pending" : record.sync.status : "Local",
     rows:draft.tasks.slice(0,3).map(t => ({id:t.id,label:typeof t.input.prompt === "string" ? t.input.prompt : JSON.stringify(t.input),detail:draft.graders.map(g => g.label).join(", ")}))};
 }
@@ -44,6 +44,15 @@ export function createLocalDatasetService(deps: {store:SqliteStore;home:string;o
     return compileTasksetDraftWorkspace({workspace:taskIds ? projectLocalDatasetWorkspace(record.workspace,taskIds) : record.workspace,
       sourceWorkspaceHash, maximumBytes:Number.POSITIVE_INFINITY,
       preparation:null,adapterId:"openpond-desktop-taskset-authoring-v1",now:record.workspace.draft.updatedAt});
+  }
+  async function checkProposedGrader(current: LocalDatasetRecord, prepared: ReturnType<typeof prepareLocalGraderRevision>, signal?: AbortSignal) {
+    const candidate = { ...current, workspace: prepared.workspace, checks: [], packageHash: null };
+    const tasks = [...new Set(prepared.fixtures.map(fixture => fixture.taskId))];
+    const value = compile(candidate, tasks.length ? tasks : undefined);
+    signal?.throwIfAborted();
+    const check = await checkLocalDatasetGraders(candidate, value, signal, prepared.grader.id);
+    signal?.throwIfAborted();
+    return { check, grader: check.scopes?.find(scope => scope.graderId === prepared.grader.id) ?? null };
   }
   async function packageDataset(id:string,revision?:number,taskIds?:string[]) {
     if(taskIds) {
@@ -84,6 +93,17 @@ export function createLocalDatasetService(deps: {store:SqliteStore;home:string;o
       const unique=[...new Set(links.map(link=>link.sessionId))];
       return (await Promise.all(unique.map(id=>deps.store.getSession(id)))).filter(session=>session && !session.systemKind && session.workspaceKind!=="sandbox").map(session=>({id:session!.id,title:session!.title}));
     }
+    if (input.action === "preview_grader") {
+      if (!input.id || input.expectedRevision === undefined)
+        throw new Error("Grader preview requires a Dataset ID and its exact revision.");
+      const current = await read(input.id);
+      if (current.workspace.draft.revision !== input.expectedRevision)
+        throw new Error("The Dataset changed. Reopen its latest revision before checking the Grader.");
+      const prepared = prepareLocalGraderRevision(current, { ...input.payload, fixtureScope: "grader" },
+        input.expectedRevision, new Date().toISOString());
+      const { check, grader } = await checkProposedGrader(current, prepared, signal);
+      return { check, grader, previewHash: prepared.previewHash };
+    }
     const intentHash = contentHash(input);
     if (["create","save","file","import","save_grader","check_sources"].includes(input.action)) {
       if (!input.operationId) throw new Error("A stable operationId is required. Reuse it after an uncertain response.");
@@ -103,18 +123,23 @@ export function createLocalDatasetService(deps: {store:SqliteStore;home:string;o
           workspace = createTasksetDraftWorkspace({schemaVersion:"openpond.tasksetDraftWorkspace.v1",draft:{...draft,...input.payload.draft as object,id,profileId:ownerId,modelScope:null,revision:1,status:"draft",publishedTasksetRef:null,createdAt:timestamp,updatedAt:timestamp},files:Array.isArray(input.payload.files) ? input.payload.files : []},Number.POSITIVE_INFINITY);
         }
         record = LocalDatasetRecordSchema.parse({schemaVersion:"openpond.localDataset.v1",ownerId,projectId:typeof input.payload.projectId === "string" ? input.payload.projectId : null,workspace,checks:[],packageHash:null,sync:null});
+      } else if (input.action === "save_grader") {
+        if (!input.id || input.expectedRevision === undefined) throw new Error("Editing requires a Dataset ID and expectedRevision.");
+        const current = await read(input.id);
+        const prepared = prepareLocalGraderRevision(current, input.payload, input.expectedRevision, timestamp);
+        const needsReview = input.payload.verifierSource !== undefined || input.payload.previewHash !== undefined;
+        if (needsReview && input.payload.previewHash !== prepared.previewHash)
+          throw new Error("Check the current Grader source and fixtures before saving.");
+        const checked = needsReview ? await checkProposedGrader(current, prepared, signal) : null;
+        if (checked && checked.grader?.status !== "passed")
+          throw new Error("Both passing and failing fixtures must qualify before saving this Grader.");
+        record = { ...current, workspace: prepared.workspace, packageHash: null,
+          checks: checked ? [checked.check, ...current.checks.filter(check => check.kind !== "graders")] : current.checks };
       } else {
         if (!input.id || input.expectedRevision === undefined) throw new Error("Editing requires a Dataset ID and expectedRevision.");
         const current = await read(input.id);
         let patch=input.payload.draft as object;
         if(input.action==="check_sources")patch={sourceRefs:checkCapturedDatasetSources(current.workspace)};
-        if(input.action==="save_grader") {
-          const grader=TasksetDraftSchema.shape.graders.unwrap().element.parse(input.payload.grader);
-          const graders=current.workspace.draft.graders.filter(existing=>existing.id!==grader.id);
-          const index=current.workspace.draft.graders.findIndex(existing=>existing.id===grader.id);
-          graders.splice(index<0 ? graders.length : index,0,grader);
-          patch={graders,...Array.isArray(input.payload.fixtures) ? {graderFixtures:input.payload.fixtures} : {}};
-        }
         let workspace:TasksetDraftWorkspace;
         if(input.action==="save" && typeof input.payload.path==="string") {
           if(current.workspace.draft.modelScope)throw new Error("Folder replacement requires an ordinary local Dataset.");

@@ -15,7 +15,9 @@ import {
 } from "./WorkspacePanel";
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ClientConnection } from "../../../api/api-client";
+import { z } from "zod";
+import { apiFetch, type ClientConnection } from "../../../api/api-client";
+import { connectionQueryScope } from "../../../lib/query-scope";
 import { modelsLocation, type ModelsRoute } from "../models-route";
 import { createWorkspaceApi, workspaceApiForLocation, type Inventory } from "./workspace-api";
 import { HostedExperimentsPage } from "./HostedExperimentsPage";
@@ -31,10 +33,14 @@ import { EvaluationSetupProvider, useEvaluationSetup } from "./EvaluationSetupSt
 import { ExperimentSetupPanel } from "./ExperimentSetupPanel";
 import { StoredExperimentDraftEntry } from "./StoredExperimentDraftEntry";
 import "../../../styles/labs/evaluation-workspace.css";
+
+const deviceOwnerSchema = z.object({ teamId: z.string().nullable() });
+
 function HostedEvaluationWorkspaceContent({
   connection,
   teamId,
   accountKey,
+  apiBaseUrl,
   actorId,
   route,
   onNavigate,
@@ -46,6 +52,7 @@ function HostedEvaluationWorkspaceContent({
   connection: ClientConnection | null;
   teamId: string | null;
   accountKey: string;
+  apiBaseUrl?: string | null;
   actorId?: string | null;
   route: ModelsRoute;
   onNavigate: (route: ModelsRoute) => void;
@@ -61,6 +68,25 @@ function HostedEvaluationWorkspaceContent({
       ? [{ id: "experiment", label: "Experiment", onSelect: () => {} }]
       : [],
   );
+  const localResultId = route.page === "experiments" && route.collection === "default" &&
+    !route.projectId && route.resourceId &&
+    (route.executionLocation ?? (route.resourceId.startsWith("local-") ? "local" : "hosted")) === "local"
+    ? route.resourceId : null;
+  const deviceOwner = useQuery({
+    queryKey: ["device-benchmark-owner", connectionQueryScope(connection), localResultId],
+    enabled: Boolean(connection && localResultId),
+    queryFn: async ({ signal }) => deviceOwnerSchema.parse(await apiFetch(connection!, "/v1/local-experiments", {
+      method: "POST",
+      body: JSON.stringify({ action: "deviceOwner", payload: { id: localResultId } }),
+      signal,
+    })),
+  });
+  const deviceTeamId = deviceOwner.data?.teamId;
+  const deviceApi = useMemo(() => connection && deviceTeamId
+    ? createWorkspaceApi(connection, { teamId: deviceTeamId, accountKey: connectionQueryScope(connection),
+        projectId: null, executionLocation: "local" })
+    : null, [connection, deviceTeamId]);
+  const resolvingDevice = Boolean(connection && localResultId && !deviceOwner.isSuccess);
   const api = useMemo(
     () =>
       connection && teamId
@@ -106,36 +132,50 @@ function HostedEvaluationWorkspaceContent({
     [api, setup.reviewRoute?.executionLocation, setup.reviewRoute?.projectId],
   );
   useEffect(() => {
-    if (route.projectId !== undefined) return;
+    if (route.resourceId || route.projectId !== undefined) return;
     const scope = `${accountKey}:${teamId}`;
     const remembered = localStorage.getItem(`openpond:evaluation-project:${scope}`);
     if (remembered)
       onNavigate({ ...route, projectId: remembered, resourceId: null, detailTab: null });
   }, [accountKey, teamId, route, onNavigate]);
-  const inventory = useQuery({
-    queryKey: ["evaluation-workspace", api?.key, route.query, route.after, route.sort],
-    enabled: Boolean(api),
-    queryFn: ({ signal }) =>
-      api!.request<Inventory>(
-        "inventory",
-        {
-          ...(route.page === "datasets" ? { sort: route.sort ?? "name" } : {}),
-          ...(route.query ? { search: route.query } : {}),
-          ...(route.after
-            ? route.page === "datasets"
-              ? route.after.startsWith("catalog:")
-                ? { catalogCursor: route.after.slice(8) }
-                : {
-                    cursor: route.after.startsWith("workspace:")
-                      ? route.after.slice(10)
-                      : route.after,
-                  }
-              : { afterId: route.after }
-            : {}),
-        },
-        signal,
-      ),
+  const projects = useQuery({
+    queryKey: ["evaluation-workspace", hostedApi?.key, "projects"],
+    enabled: Boolean(hostedApi && !deviceApi && !resolvingDevice),
+    staleTime: 60_000,
+    retry: false,
+    queryFn: ({ signal }) => hostedApi!.request<Inventory["projects"]>("projects", {}, signal),
   });
+  const datasetCollection = route.page === "datasets" && !route.resourceId;
+  const catalogCursor = datasetCollection && route.after?.startsWith("catalog:") ? route.after.slice(8) : undefined;
+  const authoredCursor = datasetCollection && !catalogCursor ? route.after?.replace(/^workspace:/, "") : undefined;
+  const datasetSort = datasetCollection ? route.sort ?? "name" : "name";
+  const datasetSearch = datasetCollection ? route.query : "";
+  const datasets = useQuery({
+    queryKey: ["evaluation-workspace", hostedApi?.key, "datasets", authoredCursor, datasetSearch, datasetSort],
+    enabled: Boolean(hostedApi && datasetCollection),
+    retry: false,
+    queryFn: ({ signal }) => hostedApi!.request<Inventory["datasets"]>("datasets", {
+      cursor: authoredCursor, search: datasetSearch || undefined, sort: datasetSort,
+    }, signal),
+  });
+  const loadingSetup = Boolean(setup.draft || setup.advancedTarget);
+  const catalogApi = datasetCollection ? hostedApi : setupApi;
+  const releasedDatasets = useQuery({
+    queryKey: ["evaluation-workspace", catalogApi?.key, "catalogDatasets", catalogCursor, datasetSearch, datasetSort],
+    enabled: Boolean(catalogApi && (datasetCollection || loadingSetup)),
+    retry: false,
+    queryFn: ({ signal }) => catalogApi!.request<Inventory["releasedDatasets"]>("catalogDatasets", {
+      limit: 100, afterId: catalogCursor, search: datasetSearch || undefined, sort: datasetSort,
+    }, signal),
+  });
+  const inventory: Inventory | null = api ? {
+    teamId: api.teamId,
+    apiOrigin: apiBaseUrl && URL.canParse(apiBaseUrl) ? new URL(apiBaseUrl).origin : "",
+    projects: projects.data ?? { projects: [], nextCursor: null },
+    datasets: datasets.data ?? { teamId: api.teamId, datasets: [], nextCursor: null },
+    releasedDatasets: releasedDatasets.data ?? { items: [], nextCursor: null },
+    experiments: { items: [], nextCursor: null },
+  } : null;
   function changeProject(projectId: string | null) {
     localStorage.setItem(`openpond:evaluation-project:${accountKey}:${teamId}`, projectId ?? "");
     onNavigate({
@@ -151,11 +191,28 @@ function HostedEvaluationWorkspaceContent({
       after: null,
     });
   }
+  if (resolvingDevice) {
+    return deviceOwner.error ? (
+      <ErrorToast error={deviceOwner.error}>
+        <button className="training-button secondary" onClick={() => void deviceOwner.refetch()}>Retry Benchmark</button>
+      </ErrorToast>
+    ) : <p role="status">Loading Benchmark…</p>;
+  }
+  if (deviceApi) {
+    return (
+      <WorkspaceResourceName.Provider value={onResourceName}>
+        <ExperimentWorkspaceFrame>
+          <LocalExperimentsPage key={`${deviceApi.key}:${route.resourceId}`} api={deviceApi}
+            route={route} navigate={onNavigate} installationRead />
+        </ExperimentWorkspaceFrame>
+      </WorkspaceResourceName.Provider>
+    );
+  }
   if (!api)
     return (
       <div className="labs-table-empty" role="status">
         Connect an OpenPond account and choose a workspace to open datasets, graders and
-        experiments.
+        benchmarks.
       </div>
     );
   return (
@@ -165,15 +222,15 @@ function HostedEvaluationWorkspaceContent({
           <ProjectScopePicker
             key={api.key}
             api={api}
-            page={inventory.data?.projects}
+            page={projects.data}
             selectedId={route.projectId ?? null}
             onChange={changeProject}
           />
         </div>
-        {inventory.error ? (
-          <ErrorToast error={inventory.error}>
-            <button className="training-button secondary" onClick={() => void inventory.refetch()}>
-              Retry workspace
+        {projects.error && route.projectId ? (
+          <ErrorToast error={projects.error} prefix="Projects">
+            <button className="training-button secondary" onClick={() => void projects.refetch()}>
+              Retry projects
             </button>
             {route.projectId ? (
               <button className="training-button secondary" onClick={() => changeProject(null)}>
@@ -182,7 +239,6 @@ function HostedEvaluationWorkspaceContent({
             ) : null}
           </ErrorToast>
         ) : null}
-        {inventory.isPending ? <p role="status">Loading workspace…</p> : null}
         {route.page === "graders" ? (
           route.resourceId && api.location === "local" ? (
             <LocalGraderPage api={api} route={route} navigate={onNavigate} />
@@ -190,7 +246,7 @@ function HostedEvaluationWorkspaceContent({
             <HostedGradersPage
               key={`${api.key}:${route.resourceId ?? "collection"}`}
               api={hostedApi!}
-              inventory={inventory.data ?? null}
+              inventory={inventory}
               route={route}
               navigate={onNavigate}
             />
@@ -206,13 +262,19 @@ function HostedEvaluationWorkspaceContent({
             <HostedDatasetsPage
               key={`${hostedApi!.key}:${route.resourceId ?? "collection"}`}
               api={hostedApi!}
-              inventory={inventory.data ?? null}
-              inventoryLoading={inventory.isPending}
-              inventoryError={inventory.error?.message}
+              inventory={inventory}
+              inventoryLoading={datasetCollection && (datasets.isPending || releasedDatasets.isPending)}
+              inventoryError={datasets.error?.message}
               route={{ ...route, executionLocation: "hosted" }}
               navigate={onNavigate}
               onLocalDatasets={onLocalDatasets}
-              onRefresh={() => void inventory.refetch()}
+              onRefresh={() => {
+                if (!datasetCollection) return;
+                void datasets.refetch();
+                void releasedDatasets.refetch();
+              }}
+              releaseError={releasedDatasets.error?.message}
+              onRetryReleases={() => void releasedDatasets.refetch()}
             />
           )
         ) : route.resourceId?.startsWith("managed-alphaedit:") ? (
@@ -277,13 +339,11 @@ function HostedEvaluationWorkspaceContent({
           <HostedExperimentsPage
             key={`${api.key}:${route.resourceId}`}
             api={api}
-            inventory={inventory.data ?? null}
-            inventoryLoading={inventory.isPending}
-            inventoryError={inventory.error?.message}
+            inventory={inventory}
             route={route}
             navigate={onNavigate}
             onOpenWork={onOpenWork}
-            refresh={() => void inventory.refetch()}
+            refresh={() => void projects.refetch()}
           />
         )}
 
@@ -291,7 +351,7 @@ function HostedEvaluationWorkspaceContent({
           <ExperimentSetupPanel
             key={setup.initialExperiment?.id ?? "advanced"}
             api={setupApi!}
-            inventory={inventory.data ?? null}
+            inventory={inventory}
             route={route}
             navigate={onNavigate}
             onClose={() => {
@@ -312,7 +372,6 @@ function HostedEvaluationWorkspaceContent({
               );
             }}
             onSaved={(value) => {
-              void inventory.refetch();
               onNavigate({
                 ...route,
                 page: "experiments",

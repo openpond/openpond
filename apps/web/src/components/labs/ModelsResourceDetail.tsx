@@ -18,14 +18,14 @@ export function ModelsResourceDetail({ props, model, profile, runs, route, accou
   runs: CreateImproveRun[]; route: ModelsRoute;
 }) {
   const { training, profileView } = props;
-  const teamId = training.settingsPreferences.defaultTeamId, actorId = props.account?.profile?.id, connection = profileView.connection;
+  const teamId = training.workspaceTeamId, actorId = props.account?.profile?.id, connection = profileView.connection;
   const servingApi = useMemo(() => connection && teamId && actorId ? createWorkspaceApi(connection, {
     teamId, actorId, projectId: route.projectId ?? null, accountKey,
   }) : undefined, [connection, teamId, actorId, route.projectId, accountKey]);
   const [experiment, setExperiment] = useState<ExperimentDraft | null>(null);
   const starting = useRef<string | null>(null);
   const scope = JSON.stringify([model.id, profileView.connection ? connectionQueryScope(profileView.connection) : null,
-    training.settingsPreferences.defaultTeamId, props.account?.profile?.id]);
+    training.workspaceTeamId, props.account?.profile?.id]);
   const current = useRef(scope); current.current = scope;
   useEffect(() => { current.current = scope; return () => { current.current = "unmounted"; }; }, [scope]);
   async function newExperiment() {
@@ -34,7 +34,7 @@ export function ModelsResourceDetail({ props, model, profile, runs, route, accou
     try {
       const state = training.training.payload;
       const project = state?.modelProjects.find(value => value.id === model.id);
-      const teamId = training.settingsPreferences.defaultTeamId;
+      const teamId = training.workspaceTeamId;
       if (!state || !project || !teamId || !props.account?.profile?.id || !profileView.connection)
         throw new Error("Load this Model in the current account and workspace before starting an experiment.");
       const versions = labModelVersions(model, runs, state);
@@ -94,9 +94,9 @@ export function ModelsResourceDetail({ props, model, profile, runs, route, accou
     onStartAgentChange={() => undefined} onToast={training.onToast}
     benchmarkDefaultModel={training.defaultModel} benchmarkProviderSettings={training.providerSettings}
   />;
-  return experiment && profileView.connection && props.account?.profile?.id && training.settingsPreferences.defaultTeamId
+  return experiment && profileView.connection && props.account?.profile?.id && training.workspaceTeamId
     ? <ModelExperimentWorkspace key={experiment.id} draft={experiment} connection={profileView.connection}
-      teamId={training.settingsPreferences.defaultTeamId} actorId={props.account.profile.id}
+      teamId={training.workspaceTeamId} actorId={props.account.profile.id}
       accountKey={`${props.account.apiBaseUrl ?? ""}:${props.account.activeProfile?.handle ?? ""}`} route={route}
       onClose={() => setExperiment(null)} navigate={next => { void navigateModelsRoute(next); }}
       onSidebarControl={props.onEvaluationSidebarControl}>{detail}</ModelExperimentWorkspace>

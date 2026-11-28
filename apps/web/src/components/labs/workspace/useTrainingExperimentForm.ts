@@ -50,6 +50,7 @@ export function useTrainingExperimentForm(
   onClose: () => void,
   onStarted: (id: string) => void | Promise<void>,
   onSaveDraft?: (draft: ExperimentDraft) => Promise<unknown>,
+  localDraft = false,
 ) {
   const setup = useEvaluationSetup();
   const showToast = useAppToast();
@@ -246,8 +247,11 @@ export function useTrainingExperimentForm(
     const draft = currentDraft();
     await onSaveDraft(draft);
     fence();
-    // Both the ordinary page and chat save to this owner. Do not rely on their
-    // different callback return shapes or an old successful save receipt.
+    if (localDraft) {
+      initialSnapshot.current = snapshot;
+      return null;
+    }
+    // Hosted saves and Billing require the current immutable workspace revision.
     const record = await experimentDraftApi(api).get(draft.id);
     fence();
     if (
@@ -299,6 +303,7 @@ export function useTrainingExperimentForm(
         billingWindow.opener = null;
       }
       const record = await persistDraft();
+      if (!record) throw new Error("Open workspace Billing to add credits.");
       const usageCap = funding.allocationAdmission ? canonicalComputeSpendCap(customerCapUsd) : null;
       const handoff = await createTrainingFundingHandoff(api, {
         schemaVersion: "openpond.trainingFundingHandoffRequest.v1",
@@ -885,7 +890,7 @@ export function useTrainingExperimentForm(
     compute,
     funding,
     billingReturnPending,
-    openBilling: onSaveDraft ? openBilling : null,
+    openBilling: onSaveDraft && !localDraft ? openBilling : null,
     refreshCredits,
     startAttempted,
     pendingAction: pendingControl.current?.command.action ?? null,

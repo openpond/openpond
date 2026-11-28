@@ -37,7 +37,7 @@ export function CaseUsage({
             {usage.totalTokens === null
               ? "Tokens unknown"
               : `${usage.totalTokens.toLocaleString()} tokens`}{" "}
-            · {cost(usage.costUsd)}
+           , {cost(usage.costUsd)}
           </p>
         </>
       ) : null}

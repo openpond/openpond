@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ComposerDraftStore } from "../../lib/composer-draft-store";
+import type { ResourceSetupDraft } from "../../lib/resource-setup-prompt";
 import type {
   ChatAttachment,
   Session,
@@ -64,6 +65,7 @@ export type ComposerProps = {
   taskEvents?: readonly RuntimeEvent[];
   submissionScopeKey?: string;
   composerDraftStore?: ComposerDraftStore;
+  resourceSetup?: ResourceSetupDraft | null;
   getCurrentSubmissionScopeKey?: () => string;
   voiceInputChannelKey?: string;
   initialSteerDrafts?: ComposerSteerDraft[];

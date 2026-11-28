@@ -34,15 +34,15 @@ export async function readChatRetainedResult(target: ChatContextTarget,
       const page = await client.listExecutions(original.teamId, { projectId: pin.projectId, search: pin.jobId, limit: 100 });
       if (!page.items.some(item => item.job.id === pin.jobId)) throw new Error("The training result does not belong to this Project.");
     }
-    selection = { target, label: value.name, detail: `Retained training checkpoint · ${pin.jobId}`,
+    selection = { target, label: value.name, detail: `Retained training checkpoint, ${pin.jobId}`,
       results: [pin], trainingResult: value };
   } else if (pin.kind === "managed_modification_result") {
     const value = await client.getModificationExecution(original.teamId, pin.executionId);
-    selection = { target, label: value.name, detail: `Completed ${value.method} · ${value.id}`,
+    selection = { target, label: value.name, detail: `Completed ${value.method}, ${value.id}`,
       results: [pin], managedModificationResult: value };
   } else if (pin.kind === "engram_result") {
     const value = await client.getEngramExecution(original.teamId, pin.executionId, { ownerUserId: original.actorId });
-    selection = { target, label: value.name, detail: `Completed Engram · ${value.id}`, results: [pin], engramResult: value };
+    selection = { target, label: value.name, detail: `Completed Engram, ${value.id}`, results: [pin], engramResult: value };
   } else throw new Error("Use this result's canonical reader.");
   await fence();
   return ChatContextSelectionSchema.parse(selection);

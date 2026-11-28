@@ -1,10 +1,12 @@
 import type { TrainingStateResponse } from "@openpond/contracts";
 import type { TrainingApiDependencies } from "./training-api-dependencies.js";
+import { refreshLocalSftModelLibrary } from "./refresh-local-sft-model-library.js";
 import { projectTrainingActivity } from "./training-activity.js";
 
 /** A library projection, not hydrated Dataset or run evidence. Detail/editor
  * routes request their existing full state or exact run-detail owner on demand. */
 export async function readModelLibraryState(deps: TrainingApiDependencies, profileId: string): Promise<TrainingStateResponse> {
+  await refreshLocalSftModelLibrary(deps.store, deps.storeDir);
   const [modelProjects, modelVersions, modelRuns, comparisonSeries, plans, jobs, artifacts, models, modelBindings, minerConfig, activityMetadata, rewardModelRuns] = await Promise.all([
     deps.store.listModelProjects(), deps.store.listModelVersions(), deps.store.listModelRuns(), deps.store.listModelComparisonSeries(),
     deps.store.listTrainingPlans(), deps.store.listTrainingJobs(), deps.store.listTrainingArtifacts(), deps.store.listModelArtifactLineage(),

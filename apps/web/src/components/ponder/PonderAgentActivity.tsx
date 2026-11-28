@@ -42,7 +42,7 @@ export function PonderAgentActivity({ items, workflow, sessions, onOpenTask }: {
       {tasks.map(item => {
         const session = byId.get(item.sessionId!);
         return <button key={item.sessionId} type="button" className="assistant-source-pill"
-          title={`${item.title} · ${taskStatus(item)}`} aria-label={`Open ${item.title}`}
+          title={`${item.title}, ${taskStatus(item)}`} aria-label={`Open ${item.title}`}
           onClick={() => onOpenTask(item)}>
           {session ? <ConversationSourceIcon session={session} /> : <Bot size={14} aria-hidden="true" />}
           <span>{item.title}</span>

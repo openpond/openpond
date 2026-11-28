@@ -1,4 +1,6 @@
 import type { TrainingApiDependencies } from "./training-api-dependencies.js";
+import { refreshLocalSftModelLibrary } from "./refresh-local-sft-model-library.js";
+import { LocalAdapterPublicationRequestSchema, LocalAdapterPublicationScheduleSchema, LocalSftPreflightRequestSchema, LocalSftReviewRequestSchema, LocalSftRunRequestSchema } from "@openpond/contracts/resource-setup";
 import { handleManagedCandidateReviewAction, isManagedCandidateReviewAction } from "./training-api-candidate-review.js";
 import { createTaskInventoryService, taskInventoryRequest } from "./task-inventory-service.js";
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
@@ -178,7 +180,41 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
       profileId: requiredString(input.profileId, "profileId"), modelId: requiredString(input.modelId, "modelId") });
     if (action === "begin_model_batch_review") return beginLocalModelBatchReview({ store: deps.store, storeDir: deps.storeDir,
       profileId: requiredString(input.profileId, "profileId"), request: input.request });
-    if (action === "navigation") return deps.store.readTrainingNavigation(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
+    if (action === "navigation") {
+      await refreshLocalSftModelLibrary(deps.store, deps.storeDir);
+      return deps.store.readTrainingNavigation(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
+    }
+    if (action === "local_compute") return (await import("./local-training-compute.js")).inspectLocalTrainingCompute(deps.storeDir);
+    if (action === "check_local_sft") {
+      return (await import("./local-sft-preflight.js")).preflightLocalSft({
+        ...LocalSftPreflightRequestSchema.parse(input), store: deps.store, storeDir: deps.storeDir, signal,
+      });
+    }
+    if (action === "preview_local_adapter_publication" || action === "publish_local_adapter") {
+      if (!deps.localAdapterPublication) throw new Error("The local adapter upload service is unavailable.");
+      if (action === "preview_local_adapter_publication") return deps.localAdapterPublication.preview(LocalAdapterPublicationRequestSchema.parse(input), signal);
+      const { reviewHash, ...selection } = LocalAdapterPublicationScheduleSchema.parse(input);
+      return deps.localAdapterPublication.publish(selection, reviewHash, signal);
+    }
+    if (action === "start_local_sft" || action === "status_local_sft" || action === "cancel_local_sft") {
+      const operation = action === "start_local_sft" ? "start" : action === "cancel_local_sft" ? "cancel" : "status";
+      const schema = operation === "status" ? LocalSftRunRequestSchema.partial({ runId: true }) : LocalSftRunRequestSchema;
+      return (await import("./local-sft-runs.js")).localSftRun({
+        ...schema.parse(input), operation, store: deps.store, storeDir: deps.storeDir, signal,
+      });
+    }
+    if (action === "review_local_sft") {
+      return (await import("./local-sft-review.js")).reviewLocalSft({
+        store: deps.store, storeDir: deps.storeDir, request: LocalSftReviewRequestSchema.parse(input.request),
+        expectedPlanHash: string(input.expectedPlanHash) ?? undefined, signal,
+      });
+    }
+    if (action === "list_local_training_models" || action === "import_local_training_model" || action === "verify_local_training_model") {
+      const assets = (await import("./local-training-model-assets.js")).localTrainingModelAssets(deps.storeDir);
+      if (action === "list_local_training_models") return assets.list();
+      if (action === "import_local_training_model") return assets.import(requiredString(input.directory, "directory"), signal);
+      return (await assets.verify(requiredString(input.assetId, "assetId"), signal)).base;
+    }
     if (action === "state") {
       const profileId = string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default";
       const projection = requestUrl?.searchParams.get("projection") ?? "full";
@@ -352,7 +388,7 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
       if (policyTasks.length === 1) policyTasks.push({ ...policyTasks[0]! });
       const requestContent = {
         schemaVersion: "openpond.managedRlCalibrationBatchRequest.v1" as const,
-        name: `Calibration · ${taskset.name}`.slice(0, 191),
+        name: `Calibration for ${taskset.name}`.slice(0, 191),
         idempotencyKey: `openpond-calibration:${release.contentHash}:${contentHash([task.id, batchId])}`.slice(0, 191),
         taskId: task.id,
         tasks: policyTasks,
@@ -1075,7 +1111,7 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
         model: { providerId: "custom-openai-compatible", modelId: "synthetic-collection-fixture-v1" },
       });
       const assignments = [];
-      for (const groupIndex of [...new Set(collectionReceipt.attempts.map((item) => item.groupIndex))]) {
+      for (const groupIndex of new Set(collectionReceipt.attempts.map((item) => item.groupIndex))) {
         const groupAttempts = collectionReceipt.attempts.filter((item) => item.groupIndex === groupIndex);
         const candidates: ComparisonAssignmentCandidateInput[] = [];
         for (const item of groupAttempts) {

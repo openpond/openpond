@@ -3,6 +3,7 @@ import {
   StoredExperimentDraftReferenceSchema,
   StoredExperimentResultReferenceSchema,
 } from "openpond-sdk/training";
+import { BenchmarkRunPinSchema, ManagedBenchmarkVersionsSchema } from "./resource-setup.js";
 export {
   StoredExperimentDraftReferenceSchema,
   type StoredExperimentDraftReference,
@@ -122,6 +123,7 @@ export const ChatResourceSummarySchema = z
     syncState: z.string().optional(),
     model: z.string().optional(),
     evaluationHash: Hash.optional(),
+    benchmark: BenchmarkRunPinSchema.optional(),
     graderId: Id.optional(),
     graderType: z.string().optional(),
     description: z.string().optional(),
@@ -160,7 +162,15 @@ export const ChatExperimentScopeSchema = z
     name: z.string().trim().min(1).max(500),
     draft: ExperimentDraftSchema.optional(),
     storedDraft: StoredExperimentDraftReferenceSchema.optional(),
+    syncedDraft: StoredExperimentDraftReferenceSchema.extend({
+      actorId: Id,
+      sourceRevision: z.number().int().positive(),
+      hostedRevision: z.number().int().positive(),
+      baselineVersionHash: Hash.optional(),
+    }).optional(),
+    managedBenchmarkVersions: ManagedBenchmarkVersionsSchema.optional(),
     draftRevision: z.number().int().positive().optional(),
+    draftSave: z.object({ operationId: Id, requestHash: Hash }).strict().optional(),
     creationHash: Hash.optional(),
     dataset: ChatResourceSummarySchema.nullable(),
     evaluationModel: z.string().min(1).max(500).optional(),
@@ -173,6 +183,7 @@ export const ChatExperimentScopeSchema = z
     selectedTrainingKey: z.string().max(4000).nullable().optional(),
     selectedTrainingJobId: Id.nullable().optional(),
     model: z.object({id:Id,teamId:Id,actorId:Id,apiOrigin:z.url()}).strict().optional(),
+    modelSetupOwner: z.object({modelId:Id,teamId:Id,actorId:Id,apiOrigin:z.url()}).strict().optional(),
     weightSpace: z.object({id:Id,teamId:Id,actorId:Id,apiOrigin:z.url(),name:z.string().max(500)}).strict().optional(),
     results: z.array(StoredExperimentResultReferenceSchema).max(16).optional(),
     turnIds: z.array(Id),
@@ -235,6 +246,7 @@ export const LocalDatasetRequestSchema = z
       "related_chats",
       "list_graders",
       "read_grader",
+      "preview_grader",
       "save_grader",
       "test_grader",
       "publish",

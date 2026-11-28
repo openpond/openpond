@@ -6,6 +6,8 @@ Show user-facing errors through the existing app toast system (`useErrorToast` /
 
 For a list of selectable values, use the existing `DropdownSelect` (`apps/web/src/components/DropdownSelect.tsx`) or the relevant established picker. Show the selected value in the trigger and the choices in the dropdown; do not just render all the options as an inline list or invent a one-off native select. Collections of saved records still use tables: reuse the existing experiment table layout and shared page styles. Inspect a current rendered screen and match its spacing, typography, controls, and table geometry before calling UI work complete. Keep this guidance here; do not add a separate OpenPond design-system document.
 
+Use badges, pills, or plainly spaced text for authored desktop labels and metadata. Avoid middle-dot separators in UI copy. Preserve punctuation in user content and saved identifiers.
+
 UI colors belong in `apps/web/src/styles/theme.css`. Use semantic CSS variables in components; keep light and dark values together there. After changing the palette, run `pnpm theme:generate`; `pnpm theme:check` checks color ownership and generated data. Monaco and authored brand/media artwork are explicit exceptions.
 
 ## Development and validation

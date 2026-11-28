@@ -70,7 +70,7 @@ export function HarnessReleaseDiffSidebar({
     updatedAt: "",
   }) : null, [diff, selection.title, selection.workspaceId]);
 
-  const workspaceName = `${selection.title} · ${shortHash(selection.baseRelease?.contentHash)} → ${shortHash(selection.targetRelease.contentHash)}`;
+  const workspaceName = `${selection.title}, ${shortHash(selection.baseRelease?.contentHash)} → ${shortHash(selection.targetRelease.contentHash)}`;
 
   return (
     <WorkspaceDiffPanel

@@ -154,7 +154,7 @@ export function latestSubagentRuntimeFromEvents(
     failedRuns.length ? `${failedRuns.length} failed` : null,
     cancelledRuns.length ? `${cancelledRuns.length} cancelled` : null,
     needsResumeRuns.length ? `${needsResumeRuns.length} paused` : null,
-  ].filter(Boolean).join(" · ");
+  ].filter(Boolean).join(", ");
   const latest = latestMeaningfulUpdate
     ? `${roleLabel(latestMeaningfulUpdate.roleId)}: ${latestMeaningfulUpdate.message}`
     : "";

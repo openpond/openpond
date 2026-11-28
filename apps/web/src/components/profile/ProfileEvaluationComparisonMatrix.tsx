@@ -24,7 +24,7 @@ export function ProfileEvaluationComparisonMatrix({ comparison }: { comparison: 
             return <td key={model}>{members.length ? members.map((member) => (
               <div key={member.runManifest.id}>
                 <strong>{member.score === null ? "No score" : `${Math.round(member.score * 100)}%`}</strong>
-                <small> · Run {member.runManifest.id}</small>
+                <small>, Run {member.runManifest.id}</small>
               </div>
             )) : "—"}</td>;
           })}

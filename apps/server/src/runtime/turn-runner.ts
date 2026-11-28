@@ -323,9 +323,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     }
   }
 
-  async function getStoredTurn(turnId: string): Promise<Turn | null> {
-    return store.getTurn(turnId);
-  }
+  const getStoredTurn = (turnId: string) => store.getTurn(turnId);
 
   function nativeToolsEnabledForProvider(provider: ChatProvider): boolean {
     return nativeToolTransportEnabledForProvider(hostedToolFlags, provider);
@@ -534,6 +532,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     authorizeCandidateTool:deps.authorizeCandidateTool,
     taskInbox, inboxStore,
     resolveModelTools: deps.resolveModelTools,
+    executionHost: deps.executionHost,
     assertExecutionAllowed: (turnId) => assertTurnConfiguration(deps.storageHome, turnId),
     hostedToolFlags,
     nativeToolsEnabledForProvider,

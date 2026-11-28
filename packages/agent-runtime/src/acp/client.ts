@@ -48,6 +48,7 @@ export class AcpClient {
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false, auth: { terminal: false } },
       }) as AcpInitializeResult;
       if (result.protocolVersion !== 1) throw new Error(`Unsupported ACP protocol version: ${result.protocolVersion}`);
+      this.options.validateAgentInfo?.(result.agentInfo);
       return result;
     } catch (error) { await this.stop(); throw error; }
   }

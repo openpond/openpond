@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { localPathWorkspaceId } from "@openpond/contracts";
+import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import type {
   AccountState,
   BootstrapPayload,
@@ -323,24 +324,29 @@ export function useWorkspaceTargetState({
         : "none";
     const selectedOption =
       [...localOptions, ...cloudOptions].find((option) => option.value === value) ?? null;
+    const resource = SessionResourceDraftSchema.safeParse(selectedSession?.metadata?.resourceDraft);
+    const resourceFolder = selectedSession?.cwd && resource.success &&
+      (resource.data.kind === "model" || resource.data.kind === "benchmark")
+      ? { sessionId: selectedSession.id, path: selectedSession.cwd } : null;
     return {
       value,
       label: selectedOption?.label ?? "Select Project",
       detail: selectedOption?.detail ?? "Choose a project for local or cloud work",
       busy: workspaceBusy || busy,
+      resourceFolder,
       options: [
         ...localOptions,
         ...cloudOptions,
         ...COMPOSER_PROJECT_ACTION_OPTIONS,
         {
           value: "none",
-          label: "Don't work in a project",
+          label: "No project",
           detail: "General chat without project files",
           kind: "none" as const,
         },
       ],
     };
-  }, [bootstrap?.cloudProjects, bootstrap?.localProjects, busy, selectedCloudProject, selectedProject, workspaceBusy]);
+  }, [bootstrap?.cloudProjects, bootstrap?.localProjects, busy, selectedCloudProject, selectedProject, selectedSession, workspaceBusy]);
   const cloudSetupAvailable = Boolean(cloudLinked || selectedProject);
   const hybridLinked = Boolean(
     selectedCloudProject?.id ||

@@ -108,7 +108,7 @@ export function NeuronTrainingFields({
       ))}
       {form.inspectionSource ? (
         <p className="saved-model-version-reference">
-          Selection evidence: {form.inspectionSource.result.executionId} · model{" "}
+          Selection evidence: {form.inspectionSource.result.executionId}, model{" "}
           {form.inspectionSource.modelHash}. The compiler reauthorizes this original inspection.
         </p>
       ) : null}

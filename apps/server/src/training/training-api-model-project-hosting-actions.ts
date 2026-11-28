@@ -25,7 +25,13 @@ export async function runModelProjectHostingAction(
 ): Promise<unknown> {
   if (!service) throw new Error(`Hosted Model Project ${actionLabel(action)} is unavailable.`);
   if (action === "evaluation_workspace") return service.evaluationWorkspace.request(input);
-  if (action === "open_hosted_model_project") return service.openProject({ hostedProjectId: requiredString(input.hostedProjectId, "hostedProjectId"), profileId: requiredString(input.profileId, "profileId"), teamId: requiredString(input.teamId, "teamId"), apiOrigin: requiredString(input.apiOrigin, "apiOrigin") });
+  if (action === "open_hosted_model_project") return service.openProject({
+    hostedProjectId: requiredString(input.hostedProjectId, "hostedProjectId"),
+    profileId: requiredString(input.profileId, "profileId"),
+    teamId: requiredString(input.teamId, "teamId"),
+    apiOrigin: requiredString(input.apiOrigin, "apiOrigin"),
+    includeHistory: input.includeHistory !== false,
+  });
   if (action === "hosted_model_learning" || action === "hosted_model_learning_command" || action === "hosted_model_learning_sources" || action === "hosted_model_learning_review") {
     const scope = { modelId: requiredString(input.modelId, "modelId"), profileId: requiredString(input.profileId, "profileId") };
     if (action === "hosted_model_learning_review") return service.learning.review({ ...scope, request: input.command });
@@ -48,6 +54,7 @@ export async function runModelProjectHostingAction(
     return service.pullProject({
       hostedProjectId: requiredString(input.hostedProjectId, "hostedProjectId"),
       profileId: requiredString(input.profileId, "profileId"),
+      includeHistory: input.includeHistory !== false,
       ...(input.snapshot !== undefined ? { snapshot: input.snapshot } : {}),
     });
   }

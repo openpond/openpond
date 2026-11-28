@@ -13,6 +13,9 @@ import {
   type ChatResourceSummary,
   type StoredExperimentDraftReference,
 } from "@openpond/contracts";
+import { parseEvaluationEnvironmentSeeds, type ManagedBenchmarkProtocol, type ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
+import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
+import type { ReviewedBenchmarkDataset } from "./hosted-benchmark-dataset.js";
 import type { SqliteStore } from "../store/store.js";
 import { canonicalJson, parseAndVerifyExperimentDraft, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
 
@@ -35,7 +38,7 @@ export function chatResourceFocusKey(state: ChatExperimentContext) {
 }
 
 export function createChatExperimentScopes(store: SqliteStore) {
-  async function change(sessionId: string, apply: (state: ChatExperimentContext, metadata: Record<string, unknown>) => void) {
+  async function change(sessionId: string, apply: (state: ChatExperimentContext, metadata: Record<string, unknown>) => void): Promise<ChatExperimentContext> {
     // updateSession serializes this callback with all other session writes.
     // Read state inside the callback so concurrent selections cannot lose scopes.
     const session = await store.updateSession(sessionId, current => {
@@ -76,7 +79,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
     return scope;
   }
 
-  async function ensure(sessionId: string) {
+  async function ensure(sessionId: string): Promise<ChatExperimentContext> {
     return change(sessionId, state => {
       if (state.activeScopeId) return;
       const now = new Date().toISOString();
@@ -87,7 +90,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
     });
   }
 
-  async function create(sessionId: string, operationId: string, expectedSelectionVersion?:number, graderId?: string | null, graders?: ChatResourceSummary[]) {
+  async function create(sessionId: string, operationId: string, expectedSelectionVersion?:number, graderId?: string | null, graders?: ChatResourceSummary[]): Promise<ChatExperimentContext> {
     return change(sessionId, state => {
       if(expectedSelectionVersion!==undefined && expectedSelectionVersion!==state.selectionVersion)throw new Error("Resource selection changed. Refresh before creating another experiment.");
       if (state.scopes.some(scope => scope.operationId === operationId)) return;
@@ -106,7 +109,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
   async function createForDataset(sessionId: string, input: {
     dataset: ChatResourceSummary; graders: ChatResourceSummary[]; operationId: string;
     expected?: { version: number; target: ChatContextTarget };
-  }) {
+  }): Promise<ChatExperimentContext> {
     return change(sessionId, (state, metadata) => {
       if (input.expected) {
         const target = ChatContextTargetSchema.safeParse(metadata.chatContextSelection);
@@ -128,25 +131,31 @@ export function createChatExperimentScopes(store: SqliteStore) {
     });
   }
 
-  async function createDraft(sessionId: string, raw: ExperimentDraft, expected?: { version: number; target: ChatContextTarget | null }) {
+  async function createDraft(sessionId: string, raw: ExperimentDraft, expected?: {
+    version: number; target: ChatContextTarget | null; modelSetupOwner?: ChatExperimentScope["modelSetupOwner"];
+  }): Promise<ChatExperimentContext> {
     const draft = await parseAndVerifyExperimentDraft(raw);
     const hash = createHash("sha256").update(canonicalJson(draft)).digest("hex");
     return change(sessionId, (state, metadata) => {
       const prior = state.scopes.find(scope => scope.operationId === draft.id);
       if (prior) {
-        if (prior.creationHash !== hash) throw new Error("This draft identity was already used for different settings.");
-        // Reconcile a lost reply without taking focus from a newer selection.
-        return;
+        if (prior.creationHash !== hash || canonicalJson(prior.modelSetupOwner ?? null) !== canonicalJson(expected?.modelSetupOwner ?? null))
+          throw new Error("This draft identity was already used for different settings or a different workspace.");
+        // Only the explicit Model review action can refocus an existing draft.
+        if (!expected?.modelSetupOwner || state.activeScopeId === prior.id && expected.target?.scopeId === prior.id) return;
       }
       const target = ChatContextTargetSchema.nullable().optional().parse(metadata.chatContextSelection);
       if (expected && (state.selectionVersion !== expected.version || canonicalJson(target ?? null) !== canonicalJson(expected.target)))
         throw new Error("The chat context changed before the experiment was prepared.");
       const now = new Date().toISOString();
       const scope = make(state, draft.id, now);
-      scope.draft = draft;
-      scope.draftRevision = 1;
-      scope.creationHash = hash;
-      scope.name = draft.name;
+      if (!prior) {
+        scope.draft = draft;
+        scope.draftRevision = 1;
+        scope.creationHash = hash;
+        scope.name = draft.name;
+        if (expected?.modelSetupOwner) scope.modelSetupOwner = expected.modelSetupOwner;
+      }
       state.activeScopeId = scope.id;
       state.selectionVersion++;
       state.selectedAt = now;
@@ -157,17 +166,148 @@ export function createChatExperimentScopes(store: SqliteStore) {
     });
   }
 
+  async function setManagedBenchmarkVersions(sessionId: string, scopeId: string, input: {
+    versions: ManagedBenchmarkVersions;
+    model: Extract<NonNullable<ExperimentDraft["startingModel"]>, { source: "trained" }>;
+    expectedRevision: number;
+    name?: string;
+    budget?: number;
+    seed?: number;
+    outputTokens?: number;
+    protocol?: ManagedBenchmarkProtocol;
+    dataset?: ReviewedBenchmarkDataset | null;
+  }): Promise<ChatExperimentContext> {
+    return change(sessionId, (state, metadata) => {
+      const resource = SessionResourceDraftSchema.safeParse(metadata.resourceDraft).data;
+      const scope = state.scopes.find(item => item.id === scopeId);
+      if (resource?.kind !== "benchmark" || !scope?.draft || scope.draft.id !== resource.id ||
+        scope.storedDraft || scope.draft.operationType !== "evaluate" || resource.benchmarkVersion?.location === "local")
+        throw new Error("Open your Benchmark chat to choose saved Model versions.");
+      const previous = scope.managedBenchmarkVersions?.candidate ?? resource.benchmarkVersion;
+      if (previous?.location === "cloud" && (previous.teamId !== input.versions.candidate.teamId ||
+        previous.owner && canonicalJson(previous.owner) !== canonicalJson(input.versions.candidate.owner)))
+        throw new Error("Choose the OpenPond account and workspace that owns this Benchmark.");
+      const name = input.name ?? scope.draft.name;
+      const previousForm = scope.draft.evaluationForm;
+      const compatible = previousForm?.executionLocation === "hosted" && previousForm.form.mode === "model" ? previousForm : null;
+      const { localRuntime: _localRuntime, temperature, topP, ...previousSettings } = compatible?.form ?? {};
+      const protocol = input.protocol;
+      const selection = input.dataset === undefined ? compatible?.selection ?? null : input.dataset?.selection ?? null;
+      const authoredSeeds = input.seed !== undefined || protocol?.environmentSeeds !== undefined
+        ? parseEvaluationEnvironmentSeeds(protocol?.environmentSeeds?.trim() || String(input.seed ?? 0)) : undefined;
+      const seedText = authoredSeeds?.join(", ") ?? compatible?.form.seed ?? "0";
+      if ((authoredSeeds || input.dataset) && selection?.mode === "subset" &&
+        new Set(selection.ids).size * (authoredSeeds ?? parseEvaluationEnvironmentSeeds(seedText)).length > 10_000)
+        throw new Error("One Benchmark can contain at most 10,000 task and seed pairs.");
+      const sampling = protocol?.sampling === undefined ? {
+        ...(temperature !== undefined ? { temperature } : {}), ...(topP !== undefined ? { topP } : {}),
+      } : protocol.sampling ?? {};
+      const evaluationForm: ExperimentDraft["evaluationForm"] = {
+        executionLocation: "hosted",
+        selection,
+        source: input.dataset === undefined ? compatible?.source ?? null : null,
+        form: {
+          mode: "model", sourceId: "", profileChoiceId: "", release: null, modelId: "", outputTokens: 1024,
+          prompt: "", targetId: "", graderChoices: {}, budget: null,
+          ...previousSettings, name,
+          ...(input.dataset !== undefined && {
+            release: input.dataset?.selection.release ?? null,
+            graderChoices: input.dataset ? { [input.dataset.selection.release.contentHash]: input.dataset.graders } : {},
+          }),
+          ...(input.outputTokens !== undefined ? { outputTokens: input.outputTokens } : {}),
+          ...(input.budget !== undefined ? { budget: input.budget } : {}),
+          seed: seedText,
+          ...sampling,
+          ...(protocol?.systemInstructions !== undefined ? { prompt: protocol.systemInstructions } : {}),
+        },
+      };
+      const sameVersion = scope.draft.startingModel?.source === "trained" &&
+        scope.draft.startingModel.trainedVersion.contentHash === input.model.trainedVersion.contentHash;
+      const prepared = { ...scope.draft, name, startingModel: sameVersion ? scope.draft.startingModel : input.model, evaluationForm };
+      if (canonicalJson(scope.managedBenchmarkVersions ?? null) === canonicalJson(input.versions) &&
+        canonicalJson(scope.draft) === canonicalJson(prepared)) return;
+      if ((scope.draftRevision ?? 1) !== input.expectedRevision)
+        throw new Error("The Benchmark changed. Reopen it before saving these settings.");
+      if (resource.benchmarkVersion?.location === "cloud" && resource.benchmarkVersion.versionHash !== input.versions.candidate.versionHash)
+        throw new Error("Keep the Model version this Benchmark was created from.");
+      scope.draft = prepared;
+      scope.name = name;
+      scope.managedBenchmarkVersions = input.versions;
+      scope.draftRevision = (scope.draftRevision ?? 1) + 1;
+      delete scope.draftSave;
+      scope.updatedAt = new Date().toISOString();
+    });
+  }
+
+  async function saveLocalDraft(sessionId: string, scopeId: string, input: {
+    draft: ExperimentDraft;
+    operationId: string;
+    expectedRevision: number;
+  }): Promise<ChatExperimentContext> {
+    const draft = await parseAndVerifyExperimentDraft(input.draft);
+    const requestHash = createHash("sha256").update(canonicalJson({ draft, expectedRevision: input.expectedRevision })).digest("hex");
+    return change(sessionId, state => {
+      const scope = state.scopes.find(candidate => candidate.id === scopeId);
+      if (!scope?.draft || scope.storedDraft || scope.draft.id !== draft.id ||
+        (scope.modelSetupOwner ? draft.operationType !== scope.draft.operationType : draft.operationType !== "evaluate"))
+        throw new Error("Reopen this local Benchmark before saving its definition.");
+      if (scope.draft.operationType === "evaluate" && scope.draft.startingModel?.source === "trained" &&
+        (canonicalJson(draft.startingModel ?? null) !== canonicalJson(scope.draft.startingModel) ||
+          draft.evaluationForm?.executionLocation !== "hosted" || draft.evaluationForm.form.mode !== "model"))
+        throw new Error("Keep the exact saved Model version and managed runtime when editing this Benchmark.");
+      if (draft.benchmarkBaseline)
+        throw new Error("Edit the local Benchmark comparison from its Model version picker.");
+      if (scope.modelSetupOwner && scope.draft.operationType === "grpo" &&
+        (scope.draft.startingModel?.source === "trained" || draft.startingModel?.source === "trained" || draft.trainingForm?.parent) &&
+        (scope.draft.startingModel?.source !== "trained" || !draft.trainingForm?.parent ||
+          canonicalJson(draft.startingModel ?? null) !== canonicalJson(scope.draft.startingModel)))
+        throw new Error("Choose the exact saved checkpoint in the Model prompt to open a new continuation review.");
+      if (scope.draftSave?.operationId === input.operationId) {
+        if (scope.draftSave.requestHash !== requestHash) throw new Error("This save operation was used for different Benchmark settings.");
+        return;
+      }
+      if ((scope.draftRevision ?? 1) !== input.expectedRevision)
+        throw new Error("The Benchmark changed. Reopen it before saving these settings.");
+      scope.draft = draft;
+      scope.draftRevision = input.expectedRevision + 1;
+      scope.draftSave = { operationId: input.operationId, requestHash };
+      scope.name = draft.name;
+      scope.updatedAt = new Date().toISOString();
+    });
+  }
+
   async function linkStoredDraft(sessionId: string, record: ExperimentDraftRecord, reference: StoredExperimentDraftReference,
-    expected?: { version: number; target: ChatContextTarget | null }, scopeId?: string) {
+    expected?: { version: number; target: ChatContextTarget | null; modelSetupOwner?: ChatExperimentScope["modelSetupOwner"] }, scopeId?: string): Promise<ChatExperimentContext> {
     if (record.id !== reference.id || record.teamId !== reference.teamId)
       throw new Error("The stored experiment reference does not match its document.");
     const identity = createHash("sha256").update(canonicalJson(reference)).digest("hex");
     return change(sessionId, (state, metadata) => {
+      const target = ChatContextTargetSchema.nullable().optional().parse(metadata.chatContextSelection);
+      const checkSelection = () => {
+        if (expected && (state.selectionVersion !== expected.version || canonicalJson(target ?? null) !== canonicalJson(expected.target)))
+          throw new Error("The chat context changed before the experiment was attached.");
+      };
+      function focus(scope: ChatExperimentScope, now = new Date().toISOString()) {
+        state.activeScopeId = scope.id;
+        state.selectionVersion++;
+        state.selectedAt = now;
+        metadata.chatContextSelection = { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" };
+        metadata.chatContextSelectionVersion = state.selectionVersion;
+        delete metadata.chatContextFocusKey;
+      }
       const prior = scopeId ? state.scopes.find(scope => scope.id === scopeId)
         : state.scopes.find(scope => scope.operationId === `stored-draft:${identity}`);
       if (prior) {
         if (prior.storedDraft ? canonicalJson(prior.storedDraft) !== canonicalJson(reference) : prior.draft?.id !== record.id)
           throw new Error("This stored draft does not belong to the intended experiment scope.");
+        if (expected?.modelSetupOwner) {
+          if (canonicalJson(prior.modelSetupOwner ?? null) !== canonicalJson(expected.modelSetupOwner))
+            throw new Error("This Decision draft belongs to another Model or account.");
+          if (state.activeScopeId !== prior.id) {
+            checkSelection();
+            focus(prior);
+          }
+        }
         prior.storedDraft = reference;
         delete prior.draft;
         // Keep only display metadata and the canonical pointer. An old retry
@@ -179,22 +319,18 @@ export function createChatExperimentScopes(store: SqliteStore) {
         return;
       }
       if (scopeId) throw new Error("The experiment scope is unavailable.");
-      const target = ChatContextTargetSchema.nullable().optional().parse(metadata.chatContextSelection);
-      if (expected && (state.selectionVersion !== expected.version || canonicalJson(target ?? null) !== canonicalJson(expected.target)))
-        throw new Error("The chat context changed before the experiment was attached.");
+      checkSelection();
       const scope = make(state, `stored-draft:${identity}`, new Date().toISOString());
       scope.storedDraft = reference; scope.draftRevision = record.revision;
+      if (expected?.modelSetupOwner) scope.modelSetupOwner = expected.modelSetupOwner;
       scope.creationHash = identity;
       scope.name = record.draft.name;
-      state.activeScopeId = scope.id; state.selectionVersion++; state.selectedAt = scope.createdAt;
-      metadata.chatContextSelection = { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" };
-      metadata.chatContextSelectionVersion = state.selectionVersion;
-      delete metadata.chatContextFocusKey;
+      focus(scope, scope.createdAt);
     });
   }
 
   async function select(sessionId: string, input: { scopeId?: string; name?: string; evaluationModel?: string; executionLocation?: "local" | "cloud"; dataset?: ChatResourceSummary | null;
-    graders?: ChatResourceSummary[]; graderId?: string | null; run?: ChatResourceSummary; expectedSelectionVersion?: number;operationId?:string;visualPublicationId?:string }) {
+    graders?: ChatResourceSummary[]; graderId?: string | null; run?: ChatResourceSummary; expectedSelectionVersion?: number;operationId?:string;visualPublicationId?:string }): Promise<ChatExperimentContext> {
     return change(sessionId, state => {
       const hash=createHash("sha256").update(JSON.stringify({scopeId:input.scopeId,name:input.name,evaluationModel:input.evaluationModel,executionLocation:input.executionLocation,visualPublicationId:input.visualPublicationId,dataset:input.dataset ? [input.dataset.id,input.dataset.revision] : input.dataset,graderId:input.graderId,run:input.run?.id})).digest("hex");
       const prior=input.operationId && Object.hasOwn(state.selectionOperations,input.operationId) ? state.selectionOperations[input.operationId] : undefined;
@@ -259,7 +395,19 @@ export function createChatExperimentScopes(store: SqliteStore) {
     });
   }
 
-  async function attach(sessionId: string, turnId: string, summary: ChatResourceSummary) {
+  async function recordLocalAdapterBenchmarkRuns(sessionId: string, scopeId: string, runs: ChatResourceSummary[]): Promise<void> {
+    await change(sessionId, state => {
+      const scope = state.scopes.find(candidate => candidate.id === scopeId);
+      if (!scope?.draft || runs.some(run => run.location !== "local" || run.benchmark?.id !== scope.draft!.id))
+        throw new Error("These runs do not belong to the originating local Benchmark.");
+      const retained = new Map(scope.runs.map(run => [run.id, run]));
+      for (const run of runs) retained.set(run.id, run);
+      scope.runs = [...retained.values()].slice(-100);
+      scope.updatedAt = new Date().toISOString();
+    });
+  }
+
+  async function attach(sessionId: string, turnId: string, summary: ChatResourceSummary): Promise<ChatExperimentContext> {
     // Grader fixtures can contain privileged answers. Configuration context
     // retains identifiers and metadata, never grader example outputs.
     if (summary.kind === "grader") summary = { ...summary, rows: [] };
@@ -325,7 +473,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
-  async function attachModel(sessionId: string, turnId: string, model: NonNullable<ChatExperimentScope["model"]>, name: string) {
+  async function attachModel(sessionId: string, turnId: string, model: NonNullable<ChatExperimentScope["model"]>, name: string): Promise<ChatExperimentContext> {
     const turn = await store.getTurn(turnId);
     if (!turn || turn.sessionId !== sessionId) throw new Error("Model attachment requires its originating conversation.");
     return change(sessionId, (state, metadata) => {
@@ -354,7 +502,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
       }
     });
   }
-  async function attachTraining(sessionId: string, turnId: string, input: ChatTrainingAttachment) {
+  async function attachTraining(sessionId: string, turnId: string, input: ChatTrainingAttachment): Promise<ChatExperimentContext> {
     const training = ChatTrainingAttachmentSchema.parse(input);
     const turn = await store.getTurn(turnId);
     if (!turn || turn.sessionId !== sessionId) throw new Error("Resource turn does not belong to this conversation.");
@@ -394,7 +542,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
-  async function attachWeightSpace(sessionId: string, turnId: string, pin: NonNullable<ChatExperimentScope["weightSpace"]>) {
+  async function attachWeightSpace(sessionId: string, turnId: string, pin: NonNullable<ChatExperimentScope["weightSpace"]>): Promise<ChatExperimentContext> {
     const turn = await store.getTurn(turnId);
     if (!turn || turn.sessionId !== sessionId) throw new Error("The editing session requires its originating conversation.");
     return change(sessionId, state => {
@@ -413,7 +561,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
   }
   // GUI Start has no agent turn. Associate its canonical returned Job with the
   // originating draft, preserving newer focus rather than inventing a turn.
-  async function associateDraftTraining(sessionId: string, draftId: string, input: ChatTrainingAttachment) {
+  async function associateDraftTraining(sessionId: string, draftId: string, input: ChatTrainingAttachment): Promise<ChatExperimentContext> {
     const training = ChatTrainingAttachmentSchema.parse(input);
     return change(sessionId, state => {
       const scope = state.scopes.find(item => item.draft?.id === draftId || item.storedDraft?.id === draftId);
@@ -429,5 +577,5 @@ export function createChatExperimentScopes(store: SqliteStore) {
       scope.updatedAt = new Date().toISOString();
     });
   }
-  return { ensure, create, createForDataset, createDraft, linkStoredDraft, select, attach, attachModel, attachTraining, attachWeightSpace, associateDraftTraining };
+  return { ensure, create, createForDataset, createDraft, setManagedBenchmarkVersions, saveLocalDraft, recordLocalAdapterBenchmarkRuns, linkStoredDraft, select, attach, attachModel, attachTraining, attachWeightSpace, associateDraftTraining };
 }

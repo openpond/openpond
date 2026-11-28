@@ -34,7 +34,7 @@ export function WeightSpaceScoringResults({client,scopeKey,id,active}:{
     {selected?<><ScoringPassStatus pass={selected} busy={cancel.isPending} onCancel={()=>cancel.mutate(selected.id)}/>
       <details><summary>Original evaluation</summary><p className="saved-model-version-reference">{selected.request.weightSpaceOperationId}</p></details>
       {selected.resultAvailable&&evidence.isPending?<p role="status">Loading saved grading results…</p>:null}
-      {!evidence.error?evidence.data?.result.cases.map(row=><details key={JSON.stringify(row.identity)}><summary>{row.identity.caseId} · {row.status}</summary>
+      {!evidence.error?evidence.data?.result.cases.map(row=><details key={JSON.stringify(row.identity)}><summary>{row.identity.caseId}, {row.status}</summary>
         <pre className="saved-model-version-reference">{typeof row.output==="string"?row.output:JSON.stringify(row.output,null,2)}</pre>
         {row.feedback.map(feedback=><div key={feedback.feedbackKey}><h4>{selected.graders.find(grader=>grader.feedbackKey===feedback.feedbackKey)?.name??feedback.feedbackKey}</h4>
           <p>{feedback.status}: {feedback.value===null?"Unavailable":typeof feedback.value==="boolean"?feedback.value?"Passed":"Failed":String(feedback.value)}</p>

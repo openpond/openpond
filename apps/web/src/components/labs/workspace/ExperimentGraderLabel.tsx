@@ -13,7 +13,7 @@ export function ExperimentGraderLabel({
   onOpen?: (release: NonNullable<ExperimentGraderPin["release"]>) => void;
 }) {
   const label = grader.name || "Grader name unavailable";
-  const title = `${grader.feedbackKey} · Version ${grader.release?.revision ?? grader.version}`;
+  const title = `${grader.feedbackKey}, Version ${grader.release?.revision ?? grader.version}`;
   return grader.release && onOpen ? (
     <button
       type="button"

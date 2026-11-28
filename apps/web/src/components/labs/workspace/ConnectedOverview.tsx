@@ -47,8 +47,6 @@ export function ConnectedOverview({
   projectId,
   training,
   onNavigate,
-  onCreateModel,
-  onCreateDataset,
 }: {
   connection: ClientConnection;
   teamId: string;
@@ -59,8 +57,6 @@ export function ConnectedOverview({
   projectId: string | null;
   training: ReturnType<typeof useTraining>;
   onNavigate(route: ModelsRoute): void;
-  onCreateModel(): void;
-  onCreateDataset(): void;
 }) {
   const api = useMemo(
     () => createWorkspaceApi(connection, { teamId, actorId, accountKey, projectId }),
@@ -96,17 +92,22 @@ export function ConnectedOverview({
     refetchInterval: 30_000,
     retry: false,
   });
-  const inventory = useQuery({
-    queryKey: ["overview-resources", connectionQueryScope(connection), api.key],
-    queryFn: ({ signal }) => api.request<Inventory>("inventory", {}, signal),
+  const authoredDatasets = useQuery({
+    queryKey: ["overview-resources", connectionQueryScope(connection), api.key, "datasets"],
+    queryFn: ({ signal }) => api.request<Inventory["datasets"]>("datasets", { limit: 12, sort: "updated" }, signal),
     staleTime: 30_000,
-    refetchInterval: 30_000,
+    retry: false,
+  });
+  const releasedDatasets = useQuery({
+    queryKey: ["overview-resources", connectionQueryScope(connection), api.key, "catalogDatasets"],
+    queryFn: ({ signal }) => api.request<Inventory["releasedDatasets"]>("catalogDatasets", { limit: 12, sort: "updated" }, signal),
+    staleTime: 30_000,
     retry: false,
   });
   const modelRows = [...(models.data?.projects ?? [])].sort((a, b) =>
     b.project.updatedAt.localeCompare(a.project.updatedAt),
   );
-  const authored = inventory.data?.datasets.datasets ?? [];
+  const authored = authoredDatasets.data?.datasets ?? [];
   const publishedIds = new Set(
     authored.flatMap((row) => (row.publication ? [row.publication.tasksetId] : [])),
   );
@@ -119,7 +120,7 @@ export function ConnectedOverview({
       updatedAt: row.updatedAt,
       release: false,
     })),
-    ...(inventory.data?.releasedDatasets.items ?? [])
+    ...(releasedDatasets.data?.items ?? [])
       .filter((row) => !publishedIds.has(row.id))
       .map((row) => ({
         id: row.id,
@@ -137,7 +138,7 @@ export function ConnectedOverview({
     setOpening(id);
     try {
       const result = await training.actions.openHostedModelProject(id, teamId, apiOrigin);
-      if (result && live.current) onNavigate(modelsLocation("runs", result.project.id, { area: "console" }));
+      if (result && live.current) onNavigate(modelsLocation("models", result.project.id));
     } finally {
       setOpening(null);
     }
@@ -147,17 +148,7 @@ export function ConnectedOverview({
       <div className="connected-overview-content">
         <ModelProjectPageHeader
           title="Overview"
-          description="Models, experiments, datasets, and activity in your workspace."
-          actions={
-            <div className="model-build-actions">
-              <button className="training-button secondary" type="button" onClick={onCreateDataset}>
-                New dataset
-              </button>
-              <button className="training-button" type="button" onClick={onCreateModel}>
-                New model
-              </button>
-            </div>
-          }
+          description="Models, benchmarks, datasets, and activity in your workspace."
         />
         <div className="connected-overview-grid">
           <OverviewSection title="Models" onViewAll={() => onNavigate(modelsLocation("models"))}>
@@ -207,7 +198,7 @@ export function ConnectedOverview({
               </table>
             </div>
           </OverviewSection>
-          <OverviewSection title="Experiments" onViewAll={() => onNavigate(route("experiments"))}>
+          <OverviewSection title="Benchmarks" onViewAll={() => onNavigate(route("experiments"))}>
             <UnifiedExperimentCollection
               api={api}
               route={route("experiments")}
@@ -257,10 +248,13 @@ export function ConnectedOverview({
                 ))}
                 <EvaluationTableState
                   columns={4}
-                  loading={inventory.isPending}
+                  loading={!datasets.length && (authoredDatasets.isPending || releasedDatasets.isPending)}
                   empty={!datasets.length}
-                  error={inventory.error?.message}
-                  retry={() => void inventory.refetch()}
+                  error={(authoredDatasets.error ?? releasedDatasets.error)?.message}
+                  retry={() => {
+                    if (authoredDatasets.isError) void authoredDatasets.refetch();
+                    if (releasedDatasets.isError) void releasedDatasets.refetch();
+                  }}
                 >
                   Create or import a dataset.
                 </EvaluationTableState>

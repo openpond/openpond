@@ -1,5 +1,7 @@
 import { comparisonParentLabel, continuationConfiguration, runConfiguration } from "./model-run-configuration";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useContext, useMemo, useState } from "react";
+import { DesktopNewContext } from "../chat/DesktopNewMenu";
+import { ModelSetupLocalSftRun } from "../chat/ModelSetupLocalSftRun";
 import { ErrorToast } from "../common/ErrorToast";
 import {
   RftRecipeSchema,
@@ -50,6 +52,8 @@ import {
   resolveRunStatus,
 } from "./LabRunStatusBadge";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
+import { LocalAdapterPublicationAction } from "./LocalAdapterPublicationAction";
+import type { WorkspaceApi } from "./workspace/workspace-api";
 import {
   eventSummary,
   formatBytes,
@@ -96,14 +100,19 @@ export function LabModelVersionDetailPage({
   onOpenDataset,
   onOpenConversation,
   detailKind,
+  servingApi,
+  hostedWebBaseUrl,
 }: ModelWorkspaceProps & {
   connection: ClientConnection | null;
+  servingApi?: WorkspaceApi;
+  hostedWebBaseUrl: string | null;
   detailKind: "run" | "version";
   detailTab: string | null;
   onDetailTabChange: (tab: string) => void;
   selectedEntryKey: string;
   onOpenConversation: (conversationId: string) => void;
 }) {
+  const newResource = useContext(DesktopNewContext);
   const state = training.payload;
   const [runAction, setRunAction] = useState<{ runId: string; message: string } | null>(null);
   const jobs = useMemo(
@@ -141,7 +150,7 @@ export function LabModelVersionDetailPage({
     ? lifecycleRuns.find(
         (run) => run.id === selectedEntry.job?.metadata.modelRunId
       ) ?? null
-    : null;
+    : selectedEntry?.version?.localRun ?? null;
   const selectedJob =
     selectedEntry?.job ??
     (selectedLifecycleRun
@@ -225,6 +234,7 @@ export function LabModelVersionDetailPage({
     null;
   const selectedTasksetName =
     selectedTaskset?.name ??
+    selectedLifecycleRun?.localSft?.datasetName ??
     (typeof selectedJob?.metadata.tasksetId === "string"
       ? selectedJob.metadata.tasksetId
       : "Unavailable");
@@ -318,6 +328,9 @@ export function LabModelVersionDetailPage({
       : []),
   ];
   const requestedDetailTab = detailTab as RunDetailTab | null;
+  const localSft = selectedLifecycleRun?.localSft;
+  const localReceipt = selectedLifecycleRun?.receipt?.schemaVersion === "openpond.localSftModelRunReceipt.v1"
+    ? selectedLifecycleRun.receipt : null;
   const activeDetailTab = detailTabs.some(
     (tab) => tab.id === requestedDetailTab,
   )
@@ -352,12 +365,12 @@ export function LabModelVersionDetailPage({
   return (
     <div className="labs-model-version-detail">
       <ModelProjectPageHeader
-        title={selectedLifecycleRun || selectedJob
+        title={detailKind === "version" && selectedVersion ? `Version ${selectedVersion.number}` : selectedLifecycleRun || selectedJob
           ? selectedRunNumber ? `Run ${selectedRunNumber}` : "Run details"
           : selectedVersion ? `Version ${selectedVersion.number}` : "Run details"}
         description={`${trainingMethodLabel(selectedMethod)} on ${baseModelName(selectedPlan, selectedBaseModelId)}`}
         status={<LabRunStatusBadge status={currentRunStatus} />}
-        actions={runActive && (selectedLifecycleRun || selectedJob) ? (
+        actions={runActive && !localSft && (selectedLifecycleRun || selectedJob) ? (
           <button
             type="button"
             className="training-button secondary"
@@ -390,14 +403,29 @@ export function LabModelVersionDetailPage({
           >
             {training.busyAction === "retry-model-run-collection" ? "Collecting…" : "Retry collection"}
           </button>
-        ) : undefined}
+        ) : selectedVersion ? <>
+          {newResource ? <button className="training-button secondary" type="button"
+          onClick={() => newResource.create("benchmark", {
+            label: `${workproduct.name} Version ${selectedVersion.number}`,
+            location: "local",
+            projectId: workproduct.id,
+            versionId: selectedVersion.lineage.id,
+            artifactId: selectedVersion.lineage.artifactId,
+            bundleHash: selectedVersion.lineage.bundleHash,
+          })}>Benchmark this version</button> : null}
+          {detailKind === "version" && localReceipt && servingApi?.actorId && selectedLifecycleRun ? <LocalAdapterPublicationAction
+            key={`${servingApi.key}:${selectedVersion.lineage.id}`} api={servingApi} profileId={selectedLifecycleRun.profileId}
+            name={`${workproduct.name} Version ${selectedVersion.number}`} hostedWebBaseUrl={hostedWebBaseUrl}
+            version={{ location: "local", projectId: workproduct.id, versionId: selectedVersion.lineage.id,
+              artifactId: selectedVersion.lineage.artifactId, bundleHash: selectedVersion.lineage.bundleHash }} /> : null}
+        </> : undefined}
         metrics={[
           {
             label: isGrpo && rolloutProgress ? "Training groups" : "Training steps",
-            value: progressMetric.value,
+            value: localSft?.progress ? `${localSft.progress.step} of ${localSft.progress.steps}` : progressMetric.value,
           },
           ...(hostedRecovery && rolloutProgress ? [{ label: "Optimizer updates",
-            value: `${Math.max(0, rolloutProgress.optimizerUpdatesApplied - hostedRecovery.policyVersion)} new · ${hostedRecovery.policyVersion} reused`,
+            value: `${Math.max(0, rolloutProgress.optimizerUpdatesApplied - hostedRecovery.policyVersion)} new, ${hostedRecovery.policyVersion} reused`,
           }] : []),
           { label: runActive ? "Latest reward" : "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
           { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, terminalRunEnd(selectedLifecycleRun.status, selectedLifecycleRun.completedAt, selectedLifecycleRun.updatedAt)) : selectedJob ? formatDuration(selectedJob.startedAt, terminalRunEnd(selectedJob.status, selectedJob.completedAt, selectedJob.updatedAt)) : "Not recorded" },
@@ -416,6 +444,12 @@ export function LabModelVersionDetailPage({
         ]}
       />
       <TrainingRecoveryLineage recovery={hostedRecovery} />
+      {localSft && connection ? <>
+        <ModelSetupLocalSftRun connection={connection} sessionId={localSft.sessionId}
+          planHash={localSft.planHash} attemptId={localSft.attemptId} />
+        <button type="button" className="training-button secondary"
+          onClick={() => onOpenConversation(localSft.sessionId)}>Open setup chat</button>
+      </> : null}
       {hostedContinuation ? <TrainingRunLineage continuation={{ sourceJobId: hostedContinuation.sourceArtifact.jobId, checkpointId: hostedContinuation.sourceArtifact.checkpointId }} /> : null}
       {runAction && runAction.runId === (selectedLifecycleRun?.id ?? selectedJob?.id)
         ? <p role="status">{runAction.message}</p> : null}
@@ -485,7 +519,7 @@ export function LabModelVersionDetailPage({
             { label: "Starting checkpoint", value: [
               hostedParentVersion ? `Version ${hostedParentVersion.number}` : null,
               hostedContinuation.sourceArtifact.checkpointId,
-            ].filter(Boolean).join(" · ") },
+            ].filter(Boolean).join(", ") },
             { label: "Parent run", value: hostedContinuation.sourceArtifact.jobId },
             { label: "Parent artifact", value: hostedContinuation.sourceArtifact.artifactId },
             { label: "Optimizer", value: hostedContinuation.optimizerMode === "reset" ? "Reset" : "Continue" },
@@ -558,7 +592,7 @@ export function LabModelVersionDetailPage({
             <dl className="training-configuration-list">
               <Fact
                 label="Training attempt"
-                value={selectedJob?.id ?? "Provider import"}
+                value={localSft?.attemptId ?? selectedJob?.id ?? "Provider import"}
               />
               <Fact
                 label="Taskset"
@@ -566,8 +600,12 @@ export function LabModelVersionDetailPage({
               />
               <Fact
                 label="Prepared data"
-                value={selectedJob?.bundleHash ?? "Provider managed"}
+                value={localReceipt?.datasetPackageHash ?? selectedJob?.bundleHash ?? "Provider managed"}
               />
+              {localReceipt ? <>
+                <Fact label="Adapter hash" value={localReceipt.adapterHash} />
+                <Fact label="Adapter configuration hash" value={localReceipt.adapterConfigHash} />
+              </> : null}
               <Fact
                 label="Version ID"
                 value={
@@ -754,7 +792,7 @@ function LabModelEvaluationRunDetail({
     <div className="labs-model-version-detail labs-model-evaluation-detail">
       <ModelProjectPageHeader
         title={runNumber ? `Eval ${runNumber}` : "Evaluation run"}
-        description={`Harness Refiner benchmark · ${tasksetName}`}
+        description={`Harness Refiner benchmark, ${tasksetName}`}
         status={<LabStatusBadge
                 label={receipt
                   ? taskEfficiency?.comparedTaskCount

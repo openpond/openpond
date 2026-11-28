@@ -212,7 +212,7 @@ function Proof() {
       <div className="app-shell sidebar-closed">
         <div className="content-shell">
           <div className="topbar" style={{ padding: "0 24px" }}>
-            Queue and dictation · {scope}
+            Queue and dictation ({scope})
           </div>
           <main className="main-pane" style={{ display: "block", padding: 32 }}>
             <div style={{ maxWidth: 800, margin: "0 auto" }}>
@@ -282,7 +282,7 @@ function Proof() {
                   .filter((input) => input.kind === "steer")
                   .map(
                     (input) =>
-                      `Steered: ${input.body} · ${ChatAttachmentSchema.array()
+                      `Steered: ${input.body}. Attachments: ${ChatAttachmentSchema.array()
                         .parse(input.payload.attachments ?? [])
                         .map((file) => `${file.name}: ${file.text ?? "attached"}`)
                         .join(", ")}`,

@@ -53,14 +53,14 @@ export function TrainingRecoveryLineage({
           {recovery.replayCompleted ? "Replayed" : "Replaying"}{" "}
           {recovery.replayGroups.length === 1 ? "group" : "groups"}{" "}
           {recovery.replayGroups.map((group) => group.groupIndex + 1).join(", ")} after checkpoint
-          restore · Previous update was not saved
+          restore, Previous update was not saved
         </span>
       ) : null}
       <span>
         Checkpoint recovery
         {compact
           ? ""
-          : ` · policy v${recovery.policyVersion} · ${recovery.completedGroups} inherited groups · ${recovery.optimizerStateRestored ? "optimizer checkpoint restored" : "optimizer checkpoint not restored yet"}`}
+          : `, policy v${recovery.policyVersion}, ${recovery.completedGroups} inherited groups, ${recovery.optimizerStateRestored ? "optimizer checkpoint restored" : "optimizer checkpoint not restored yet"}`}
       </span>
     </span>
   );

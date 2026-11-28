@@ -250,7 +250,7 @@ export function GithubExtensionsSettings({
               </span>
               <span className="native-skill-provider">
                 <strong>{extension.skills.length} skill{extension.skills.length === 1 ? "" : "s"}</strong>
-                <span>{extension.requestedRef} · {extension.resolvedCommit.slice(0, 12)}</span>
+                <span>{extension.requestedRef}, {extension.resolvedCommit.slice(0, 12)}</span>
               </span>
               <span className={`native-skill-status ${extension.validationStatus === "valid" ? "" : "invalid"}`}>
                 {extension.validationStatus === "valid" ? "Ready" : "Needs attention"}

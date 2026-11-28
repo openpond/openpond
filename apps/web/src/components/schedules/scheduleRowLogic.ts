@@ -120,7 +120,7 @@ function scheduleRowName(item: CombinedScheduleRow): string {
 }
 
 export function localScheduleCadence(schedule: LocalAgentSchedule): string {
-  const timeZone = schedule.timezone ? ` · ${schedule.timezone}` : "";
+  const timeZone = schedule.timezone ? `, ${schedule.timezone}` : "";
   if (schedule.scheduleType === "rate") {
     return `Every ${schedule.scheduleExpression}${timeZone}`;
   }

@@ -26,6 +26,6 @@ export async function readChatDecisionResult(target: ChatContextTarget, access: 
     || execution.plan.inputHash !== reference.inputHash || result.modelHash !== reference.modelHash || result.runtimeHash !== reference.runtimeHash
     || result.contentHash !== reference.resultHash || canonicalJson(result.artifact === null ? null : {id: result.artifact.id, contentHash: result.artifact.contentHash}) !== canonicalJson(reference.artifact))
     throw new Error("The retained decision result differs from its exact mode, input, artifact or runtime.");
-  return {target, label: execution.name, detail: `Completed decision ${execution.mode} · ${execution.id}`,
+  return {target, label: execution.name, detail: `Completed decision ${execution.mode}, ${execution.id}`,
     results: [reference], decisionResult: execution};
 }

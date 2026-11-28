@@ -1062,7 +1062,22 @@ export type TasksetOperationalState = z.infer<typeof TasksetOperationalStateSche
 
 /** Small navigation read; full training history is loaded by its workspace. */
 export type TrainingNavigationResponse = {
-  projects: Array<{ id: string; name: string; teamId: string | null }>;
-  activityByProjectId: Record<string, { status: string; label: string }>;
+  projects: Array<{
+    id: string;
+    name: string;
+    baseModelId?: string | null;
+    profileId: string;
+    teamId: string | null;
+    hostedProjectId: string | null;
+    apiOrigin: string | null;
+  }>;
+  activityByProjectId: Record<string, {
+    status: string;
+    label: string;
+    runKey: string;
+    activeRuns: number;
+    gpuType: string | null;
+    gpuCount: number | null;
+  }>;
   creationSessionIds: string[];
 };

@@ -54,18 +54,18 @@ export function AlphaEditResultComparisons({ value }: { value: AlphaEditComparis
           </thead>
           <tbody>
             <tr>
-              <td>Preservation · KL(final edited || starting)</td>
+              <td>Preservation, KL(final edited || starting)</td>
               <td>
-                {preservation.examples.toLocaleString()} reviewed examples ·{" "}
+                {preservation.examples.toLocaleString()} reviewed examples,{" "}
                 {preservation.comparedPositions.toLocaleString()} final non-padding positions
               </td>
               <td>{preservation.meanNextTokenKl}</td>
               <td>{preservation.maximumNextTokenKl}</td>
             </tr>
             <tr>
-              <td>Reload · KL(reloaded patch || final edited)</td>
+              <td>Reload, KL(reloaded patch || final edited)</td>
               <td>
-                {reload.comparedTargetTokens.toLocaleString()} target tokens ·{" "}
+                {reload.comparedTargetTokens.toLocaleString()} target tokens,{" "}
                 {reload.comparedPreservationPositions.toLocaleString()} preservation positions
               </td>
               <td>{reload.meanNextTokenKl}</td>

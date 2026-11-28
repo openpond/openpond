@@ -220,10 +220,10 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   const navigationScopeRef = useRef(navigationScope);
   navigationScopeRef.current = navigationScope;
   const openSessionInChat = useCallback(
-    async (sessionId: string, target?: ThreadToastTarget, isOriginCurrent: () => boolean = () => true): Promise<boolean> => {
+    async (sessionId: string, target?: ThreadToastTarget, isOriginCurrent: () => boolean = () => true, created?: Session): Promise<boolean> => {
       const isCurrent = () => navigationScopeRef.current === navigationScope && isOriginCurrent();
       if (!connection || !isCurrent()) return false;
-      let session = sidebarSessions.find(item => item.id === sessionId);
+      let session = created?.id === sessionId ? created : sidebarSessions.find(item => item.id === sessionId);
       if (!session && sessionId.startsWith("codex_history_")) {
         const payload = await api.codexHistoryThread(connection, sessionId, { tail: true });
         if (!isCurrent()) return false;

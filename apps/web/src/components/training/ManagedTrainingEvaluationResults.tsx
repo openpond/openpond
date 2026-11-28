@@ -36,7 +36,7 @@ export function ManagedTrainingEvaluationResults({
               key={evaluation.reference!.id}
               value={evaluation.reference!.id}
             >
-              {evaluation.kind === "baseline" ? "Baseline" : "Candidate"} ·
+              {evaluation.kind === "baseline" ? "Baseline" : "Candidate"},
               policy {evaluation.policyVersion}
             </option>
           ))}
@@ -113,7 +113,7 @@ function EvaluationPage({
           </p>
           {page.tasks.map((task, index) => (
             <details key={task.taskId} className="training-evidence">
-              <summary>Example {page.offset + index + 1} · score {task.score.toFixed(3)}</summary>
+              <summary>Example {page.offset + index + 1}, score {task.score.toFixed(3)}</summary>
               <div className="training-evaluation-output">
                 <div>
                   <span>Instruction</span>

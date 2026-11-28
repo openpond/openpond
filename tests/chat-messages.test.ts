@@ -584,7 +584,7 @@ describe("chat message projection", () => {
           "I found the branch in `app-state.ts`.\n```ts\nconst prompt = String(nextValue);\n```\n" +
           `${"This is progress context. ".repeat(
             45
-          )}\nNow I need to find \`setPrompt(\"\")\`.`,
+          )}\nNow I need to find \`setPrompt("")\`.`,
       }),
       runtimeEvent({
         id: "turn_completed",
@@ -1061,7 +1061,7 @@ describe("chat message projection", () => {
     expect(messages[0]?.role).toBe("activity_group");
     expect(messages[0]?.activities?.[0]).toMatchObject({
       label: "Edited sandbox file",
-      meta: "1.3 s · Hybrid sandbox sandbo...7890 · checkpoint abcdef123456",
+      meta: "1.3 s, Hybrid sandbox sandbo...7890, checkpoint abcdef123456",
     });
   });
 

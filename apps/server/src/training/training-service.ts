@@ -338,7 +338,7 @@ export function createTrainingService(deps: {
           runId: prepared.id,
           recipeHash,
         }),
-        name: `OpenPond Managed Reward · ${input.rewardModelId}`.slice(0, 191),
+        name: `OpenPond Managed Reward (${input.rewardModelId})`.slice(0, 191),
         sourceRunRef: `openpond:reward-model-run:${prepared.id}`,
         taskset: prepared.taskset,
         tasksetRelease: input.tasksetRelease,
@@ -686,9 +686,7 @@ export function createTrainingService(deps: {
   }
 
   async function close(): Promise<void> {
-    await Promise.all([
-      portableAdapters.close(),
-    ]);
+    await portableAdapters.close();
   }
 
   async function managedEvaluationTasks(jobId: string, evaluationId: string, options: { cursor?: string; limit?: number } = {}) {

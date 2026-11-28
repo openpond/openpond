@@ -71,7 +71,7 @@ export async function readChatNeuronTrainingResult(
   return {
     target,
     label: execution.name,
-    detail: `Completed neuron training · ${execution.id}`,
+    detail: `Completed neuron training, ${execution.id}`,
     results: [reference],
     neuronTrainingResult: execution,
   };

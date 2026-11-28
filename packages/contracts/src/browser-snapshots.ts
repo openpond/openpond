@@ -111,7 +111,7 @@ function createInspector(deliver: (result: { capture?: BrowserDomCapture; cancel
     if (!selected || !overlay) return;
     const bounds = selected.getBoundingClientRect();
     Object.assign(overlay.style, { left: `${bounds.left}px`, top: `${bounds.top}px`, width: `${bounds.width}px`, height: `${bounds.height}px` });
-    overlay.textContent = `${selector(selected)} · ${Math.ceil(bounds.width)} × ${Math.ceil(bounds.height)}`;
+    overlay.textContent = `${selector(selected)}  ${Math.ceil(bounds.width)} × ${Math.ceil(bounds.height)}`;
   }
   function click(event: MouseEvent) {
     if (!active || !event.isTrusted) return;

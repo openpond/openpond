@@ -16,6 +16,10 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   // are adapters to the same runtime exposed canonically through JSON-RPC.
   const markTransitionalAgentAdapter = () =>
     response.setHeader("X-OpenPond-Agent-Transport", "transitional-http-adapter");
+  if (request.method === "POST" && requestUrl.pathname === "/v1/sessions/resource-draft" && deps.createSessionResourceDraft) {
+    sendJson(response, 201, await deps.createSessionResourceDraft(await readJson(request)));
+    return true;
+  }
   if (request.method === "POST" && requestUrl.pathname === "/v1/sessions") {
     markTransitionalAgentAdapter();
     const result = await agentRuntime.threadStart({ session: await readJson(request) }) as { thread: unknown };

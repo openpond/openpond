@@ -95,7 +95,7 @@ export function AppToast({ cards, onDismiss, onPause, onCapacity, isCurrent }: A
         const busy = busyIds.has(toast.id);
         const error = errors.get(toast.id);
         const title = toast.title ?? (toast.tone === "error" ? "Error" : toast.tone === "success" ? "Success" : "Notification");
-        const description = error ?? [toast.message, toast.detail].filter(Boolean).join(" · ");
+        const description = error ?? [toast.message, toast.detail].filter(Boolean).join(", ");
         const copy = <><span className="app-toast-title" title={title}>{title}</span>
           {description ? <span className={`app-toast-description${error ? " app-toast-action-error" : ""}`}
             title={description} role={error ? "alert" : undefined}>{description}</span> : null}</>;

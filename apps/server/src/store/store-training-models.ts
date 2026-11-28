@@ -4,11 +4,13 @@ import type {
   ModelComparisonSeriesEntry,
   ModelCurrencySnapshot,
   ModelBinding,
+  ModelArtifactLineage,
   ModelRun,
   ModelVersion,
   RewardModelRun,
   RewardModelVersion,
   RolloutTrajectoryReceipt,
+  TrainingArtifact,
 } from "@openpond/contracts";
 import {
   ModelComparisonSeriesEntrySchema,
@@ -26,6 +28,9 @@ import { isArtifactCollectionRecoveryTransition, isCheckpointResumeTransition } 
 export { isCheckpointResumeTransition } from "./model-run-recovery-transitions.js";
 import type { PayloadRow } from "../types.js";
 import { SqliteStoreDomain } from "./store-domain.js";
+import { contentHash } from "@openpond/taskset-sdk";
+import type { z } from "zod";
+import { modelRunParams, modelVersionParams, nextModelVersion, writeModelRunSql, writeModelVersionSql } from "./store-model-run-records.js";
 
 export class SqliteTrainingModelStore extends SqliteStoreDomain {
   async saveModelCurrencySnapshot(snapshotInput: ModelCurrencySnapshot): Promise<ModelCurrencySnapshot> {
@@ -456,21 +461,7 @@ export class SqliteTrainingModelStore extends SqliteStoreDomain {
         `Model ${version.modelId} already has version ${version.version}.`,
       );
     }
-    await this.upsertPayload(
-      `INSERT INTO model_versions
-        (id, model_id, profile_id, version_number, kind, payload, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET payload = excluded.payload`,
-      [
-        version.id,
-        version.modelId,
-        version.profileId,
-        version.version,
-        version.kind,
-        JSON.stringify(version),
-        version.createdAt,
-      ],
-    );
+    await this.upsertPayload(writeModelVersionSql, modelVersionParams(version));
     return version;
   }
 
@@ -543,27 +534,84 @@ export class SqliteTrainingModelStore extends SqliteStoreDomain {
     ) {
       throw new Error(`Terminal Model Run ${modelRun.id} is immutable.`);
     }
-    await this.upsertPayload(
-      `INSERT INTO model_runs
-        (id, model_id, model_version_id, profile_id, taskset_id, status, payload, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         status = excluded.status,
-         payload = excluded.payload,
-         updated_at = excluded.updated_at`,
-      [
-        modelRun.id,
-        modelRun.modelId,
-        modelRun.modelVersionId,
-        modelRun.profileId,
-        modelRun.taskset.id,
-        modelRun.status,
-        JSON.stringify(modelRun),
-        modelRun.startedAt,
-        modelRun.updatedAt,
-      ],
-    );
+    await this.upsertPayload(writeModelRunSql, modelRunParams(modelRun));
     return modelRun;
+  }
+
+  async reserveModelRunVersion(input: Omit<z.input<typeof ModelRunSchema>, "modelVersionId">) {
+    await this.ready;
+    const write = this.writeQueue.then(() => {
+      const db = this.database;
+      const targetVersion = nextModelVersion(db, input.modelId);
+      const modelRun = ModelRunSchema.parse({ ...input, modelVersionId: targetVersion.id });
+      if (db.get("SELECT id FROM model_runs WHERE id = ?", [modelRun.id]))
+        throw new Error("This Model Run already has a Version reservation.");
+      db.run(writeModelRunSql, modelRunParams(modelRun));
+      return { modelRun, targetVersion };
+    });
+    this.writeQueue = write.then(() => undefined, () => undefined);
+    return write;
+  }
+
+  async listActiveLocalSftModelRuns() {
+    return this.listParsedPayloads(
+      `SELECT payload FROM model_runs WHERE status IN ('prepared', 'running')
+        AND json_extract(payload, '$.destinationId') = 'local_cuda'`,
+      [],
+      ModelRunSchema.parse,
+    );
+  }
+
+  async projectLocalSftModelRun(runInput: ModelRun, output?: {
+    version: Omit<ModelVersion, "id" | "version" | "contentHash">;
+    lineage: ModelArtifactLineage;
+    artifacts: TrainingArtifact[];
+  }): Promise<ModelRun> {
+    const incoming = ModelRunSchema.parse(runInput);
+    if (!incoming.localSft || Boolean(output) !== (incoming.status === "succeeded"))
+      throw new Error("The local Model Run and its output must describe the same result.");
+    await this.ready;
+    const write = this.writeQueue.then(() => {
+      const db = this.database;
+      const row = db.get<PayloadRow>("SELECT payload FROM model_runs WHERE id = ?", [incoming.id]);
+      const current = row ? ModelRunSchema.parse(JSON.parse(row.payload)) : undefined;
+      if (current && (current.modelId !== incoming.modelId || current.profileId !== incoming.profileId ||
+        current.localSft?.planHash !== incoming.localSft?.planHash ||
+        current.localSft?.sessionId !== incoming.localSft?.sessionId ||
+        current.localSft?.attemptId !== incoming.localSft?.attemptId)) {
+        throw new Error("The local Model Run cannot change its original Model or approval.");
+      }
+      if (current && (["succeeded", "cancelled", "failed"].includes(current.status) ||
+        current.updatedAt > incoming.updatedAt ||
+        current.localSft?.phase === "cancelling" && ["starting", "running"].includes(incoming.localSft!.phase))) return current;
+      if (current && JSON.stringify(current) === JSON.stringify(incoming)) return current;
+      if (!output) {
+        db.run(writeModelRunSql, modelRunParams(incoming));
+        return incoming;
+      }
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const versionCore = { ...output.version, ...nextModelVersion(db, incoming.modelId) };
+        const version = ModelVersionSchema.parse({ ...versionCore, contentHash: contentHash(versionCore) });
+        const run = ModelRunSchema.parse({ ...incoming, modelVersionId: version.id });
+        for (const artifact of output.artifacts) db.run(
+          "INSERT INTO training_artifacts (id, job_id, kind, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+          [artifact.id, artifact.jobId, artifact.kind, JSON.stringify(artifact), artifact.createdAt],
+        );
+        const lineage = output.lineage;
+        db.run("INSERT INTO model_artifact_lineage (id, artifact_id, taskset_id, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+          [lineage.id, lineage.artifactId, lineage.tasksetId, JSON.stringify(lineage), lineage.importedAt]);
+        db.run(writeModelVersionSql, modelVersionParams(version));
+        db.run(writeModelRunSql, modelRunParams(run));
+        db.exec("COMMIT");
+        return run;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    });
+    this.writeQueue = write.then(() => undefined, () => undefined);
+    return write;
   }
 
   async getModelRun(id: string): Promise<ModelRun | null> {

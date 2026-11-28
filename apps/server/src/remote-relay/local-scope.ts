@@ -69,6 +69,8 @@ export function publicSessionMetadata(
     ponderDesktopReservation: _reservation,
     ponderWorkspaceRevision: _workspace,
     remoteStarterSourceSessionId: _remoteStarter,
+    resourceDraft: _resourceDraft,
+    chatExperimentContext: _chatExperimentContext,
     ...ordinary
   } = metadata ?? {};
   return ordinary;
@@ -80,6 +82,8 @@ export function preserveDeviceSessionIdentity(
 ) {
   return {
     ...publicSessionMetadata(metadata),
+    ...(existing?.resourceDraft !== undefined ? { resourceDraft: existing.resourceDraft } : {}),
+    ...(existing?.chatExperimentContext !== undefined ? { chatExperimentContext: existing.chatExperimentContext } : {}),
     ...(existing?.ponderLocalOwner !== undefined
       ? { ponderLocalOwner: existing.ponderLocalOwner }
       : {}),

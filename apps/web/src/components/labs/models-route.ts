@@ -24,7 +24,7 @@ export interface ModelsRoute {
 }
 
 export const MODELS_PAGE_LABELS: Record<ModelsPage, string> = {
-  "get-started": "Get started", home: "Overview", inbox: "Inbox", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Experiments", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Training", versions: "Versions", serving: "Inference",
+  "get-started": "Get started", home: "Overview", inbox: "Inbox", models: "Models", datasets: "Datasets", graders: "Graders", experiments: "Benchmarks", tasks: "Tasks", tasksets: "Tasksets", labeling: "Labeling", rewards: "Rewards", evaluations: "Runs", runs: "Training", versions: "Versions", serving: "Serving",
 };
 export function isNativeTrainingResource(id: string | null | undefined): boolean {
   return Boolean(id && ["managed-modification:", "managed-engram:", "managed-decision:", "managed-alphaedit:", "managed-neuron-training:", "managed-weight-space:"].some(prefix => id.startsWith(prefix)));
@@ -47,6 +47,10 @@ const detailTabs: Partial<Record<ModelsPage, readonly string[]>> = {
 export function modelsLocation(page: ModelsPage = "models", modelId: string | null = null, detail: Partial<Omit<ModelsRoute, "page" | "modelId">> = {}): ModelsRoute {
   if (page === "evaluations" && detail.collection === "review") return modelsLocation("labeling", modelId, { ...detail, collection: "default" });
   return { page, modelId: ["get-started", "home", "inbox", "datasets", "graders", "experiments"].includes(page) ? null : modelId, collection: page === "evaluations" ? "results" : "default", resourceId: null, detailTab: null, query: "", after: null, ...detail };
+}
+
+export function hasResourceSidebar(page: ModelsPage) {
+  return ["home", "models", "runs", "versions", "evaluations", "tasks", "tasksets", "experiments", "datasets", "graders", "serving"].includes(page);
 }
 
 export function modelsRouteFromLocation(input: { pathname: string; search?: string }): ModelsRoute | null {
@@ -79,7 +83,9 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   } else if (detailTab && !detailTabs[page]?.includes(detailTab)) return null;
   if (page === "serving" && detailTab) return null;
   const query = new URLSearchParams(input.search ?? "");
-  if ([...query.keys()].some((key) => !["model", "q", "after", "source", "project", "pass", "dataset", "revision", "hash", "sort", "location", "kind", "review_source", "review_snapshot", "review_boundary", "review_revision"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
+  if ([...query.keys()].some((key) => !["model", "q", "after", "source", "project", "pass", "dataset", "revision", "hash", "sort", "location", "kind", "setup", "review_source", "review_snapshot", "review_boundary", "review_revision"].includes(key)) || [...query.keys()].some((key) => query.getAll(key).length !== 1)) return null;
+  const setup = query.get("setup");
+  if (setup !== null && (setup !== "learning" || page !== "models" || !pathModelId)) return null;
   const reviewFields = ["review_source", "review_snapshot", "review_boundary", "review_revision"] as const;
   const hasReview = reviewFields.some(key => query.has(key));
   if (hasReview && (page !== "datasets" || resourceId || query.get("location") === "local" || reviewFields.some(key => !query.get(key))
@@ -115,7 +121,7 @@ export function modelsRouteFromLocation(input: { pathname: string; search?: stri
   const search = query.get("q") ?? "";
   const after = query.get("after");
   if ((modelId !== null && (!modelId.trim() || modelId.length > 500)) || search.length > 1_000 || (after !== null && (!after.trim() || after.length > 2_000))) return null;
-  return modelsLocation(page, modelId, { ...(reviewSource ? { reviewSource } : {}), collection, resourceId, detailTab, query: search, after, ...(executionKind?{executionKind:"recorded_evidence" as const}:{}), ...(executionLocation?{executionLocation:executionLocation as "local"|"hosted"}:{}), ...(sort ? { sort: sort as "id" | "name" | "updated" } : {}), ...(revision !== undefined ? { revision, contentHash } : {}), ...(query.get("dataset") === "release" ? { datasetKind: "release" } : {}), ...(encoded[0] === "console" ? { area: "console" } : {}), ...((hosted || hostedTraining) ? { ...(query.has("project") ? { projectId } : {}), ...(query.has("pass") ? { passId } : {}) } : {}), ...(sourceId !== null ? { sourceId } : {}) });
+  return modelsLocation(page, modelId, { ...(reviewSource ? { reviewSource } : {}), collection, resourceId, detailTab: setup ?? detailTab, query: search, after, ...(executionKind?{executionKind:"recorded_evidence" as const}:{}), ...(executionLocation?{executionLocation:executionLocation as "local"|"hosted"}:{}), ...(sort ? { sort: sort as "id" | "name" | "updated" } : {}), ...(revision !== undefined ? { revision, contentHash } : {}), ...(query.get("dataset") === "release" ? { datasetKind: "release" } : {}), ...(encoded[0] === "console" ? { area: "console" } : {}), ...((hosted || hostedTraining) ? { ...(query.has("project") ? { projectId } : {}), ...(query.has("pass") ? { passId } : {}) } : {}), ...(sourceId !== null ? { sourceId } : {}) });
 }
 
 export function modelsPath(route: ModelsRoute): string {
@@ -130,6 +136,7 @@ export function modelsPath(route: ModelsRoute): string {
   if (route.resourceId) parts.push(encodeURIComponent(route.resourceId));
   if (route.resourceId && route.detailTab) parts.push(encodeURIComponent(route.detailTab));
   const query = new URLSearchParams();
+  if (route.page === "models" && route.modelId && route.detailTab === "learning") query.set("setup", "learning");
   if (route.page === "datasets" && !route.resourceId && route.reviewSource) {
     query.set("review_source", route.reviewSource.id); query.set("review_snapshot", route.reviewSource.snapshotHash);
     query.set("review_boundary", route.reviewSource.boundaryId); query.set("review_revision", route.reviewSource.boundaryRevisionHash);

@@ -1,11 +1,13 @@
 import { useCallback, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { ChatProvider, CloudProject, LocalProject, Session } from "@openpond/contracts";
+import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import type { AppAction, NewProjectMode, ShowAppToast } from "../app/app-state";
 import { api, type ClientConnection } from "../api";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { sessionProjectAssignment } from "../lib/session-project-assignment";
 import { normalizeChatModel, projectSelectionKey } from "../lib/app-models";
+import { revealLocalFile } from "../lib/desktop-files";
 
 export function useProjectTargetActions({
   appDispatch,
@@ -77,6 +79,15 @@ export function useProjectTargetActions({
       const needsNativeFolderRepair = selectedSession?.nativeAgent && selectedSession.nativeAgent.cwd !== selectedSession.cwd;
       if ((target === projectTargetValue && !needsNativeFolderRepair) || busy || workspaceBusy) return;
       setError(null);
+
+      if (target === "action:open-resource-folder") {
+        const resource = SessionResourceDraftSchema.safeParse(selectedSession?.metadata?.resourceDraft);
+        if (!selectedSession?.cwd || !resource.success || !["model", "benchmark"].includes(resource.data.kind)) return;
+        const opened = await revealLocalFile(selectedSession.cwd);
+        if (!opened && assignmentScope.current.sessionId === selectedSession.id)
+          showToast("Could not open this chat's working folder.", "error");
+        return;
+      }
 
       if (target === "action:new-local-project") {
         onNewLocalProject();

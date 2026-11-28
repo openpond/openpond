@@ -67,7 +67,7 @@ export function ExperimentSourceControls({
                       ? [
                           {
                             value: draft.sourceId,
-                            label: `Retained Harness · ${sources.retainedHostedSource.harnessRelease.id}`,
+                            label: `Retained Harness, ${sources.retainedHostedSource.harnessRelease.id}`,
                           },
                         ]
                       : []),
@@ -124,12 +124,12 @@ export function ExperimentSourceControls({
         <dl>
           <dt>Harness release</dt>
           <dd>
-            {sources.harnessSource.harnessRelease.id} ·{" "}
+            {sources.harnessSource.harnessRelease.id},{" "}
             {sources.harnessSource.harnessRelease.contentHash}
           </dd>
           <dt>Agent snapshot</dt>
           <dd>
-            {sources.harnessSource.agentSnapshot.id} ·{" "}
+            {sources.harnessSource.agentSnapshot.id},{" "}
             {sources.harnessSource.agentSnapshot.contentHash}
           </dd>
           <dt>Source package</dt>
@@ -140,15 +140,15 @@ export function ExperimentSourceControls({
         <dl>
           <dt>Profile</dt>
           <dd>
-            {sources.profile.profileRef.profileId} · {sources.profile.sourceRevision}
+            {sources.profile.profileRef.profileId}, {sources.profile.sourceRevision}
           </dd>
           <dt>Harness release</dt>
           <dd>
-            {sources.profile.harnessRelease.id} · {sources.profile.harnessRelease.contentHash}
+            {sources.profile.harnessRelease.id}, {sources.profile.harnessRelease.contentHash}
           </dd>
           <dt>Evaluation definition</dt>
           <dd>
-            {sources.profile.definitionId} · {sources.profile.definitionHash}
+            {sources.profile.definitionId}, {sources.profile.definitionHash}
           </dd>
         </dl>
       ) : null}
@@ -156,31 +156,31 @@ export function ExperimentSourceControls({
         <dl>
           <dt>Profile</dt>
           <dd>
-            {sources.profileTarget.source.profileId} · {sources.profileTarget.source.sourceRevision}
+            {sources.profileTarget.source.profileId}, {sources.profileTarget.source.sourceRevision}
           </dd>
           <dt>Harness release</dt>
           <dd>
-            {sources.profileTarget.source.harnessRelease.id} ·{" "}
+            {sources.profileTarget.source.harnessRelease.id},{" "}
             {sources.profileTarget.source.harnessRelease.contentHash}
           </dd>
           <dt>Evaluation definition</dt>
           <dd>
-            {sources.profileTarget.source.definitionId} ·{" "}
+            {sources.profileTarget.source.definitionId},{" "}
             {sources.profileTarget.source.definitionHash}
           </dd>
         </dl>
       ) : null}
       {sources.unavailable && sources.saved?.kind === "hosted_chat" && sources.saved.harness ? (
         <p>
-          Retained Harness: {sources.saved.harness.harnessRelease.id} ·{" "}
+          Retained Harness: {sources.saved.harness.harnessRelease.id},{" "}
           {sources.saved.harness.harnessRelease.contentHash}. Source package:{" "}
           {sources.saved.harness.sourcePackageHash}.
         </p>
       ) : null}
       {sources.unavailable && sources.saved?.kind === "hosted_harness" ? (
         <p>
-          Retained Profile: {sources.saved.source.profileId} · {sources.saved.source.sourceRevision}
-          . Harness: {sources.saved.source.harnessRelease.id} ·{" "}
+          Retained Profile: {sources.saved.source.profileId}, {sources.saved.source.sourceRevision}
+          . Harness: {sources.saved.source.harnessRelease.id},{" "}
           {sources.saved.source.harnessRelease.contentHash}.
         </p>
       ) : null}

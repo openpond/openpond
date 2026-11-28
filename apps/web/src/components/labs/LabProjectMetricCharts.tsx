@@ -83,7 +83,7 @@ function ProjectMetricChart({ chart }: { chart: MetricChart }) {
               <path key={`${chart.points[index]!.label}:${index}`}
                 className="labs-project-chart-point"
                 d={`M${point.x},${point.y - 5} l5,5 l-5,5 l-5,-5 Z`}>
-                <title>{`${chart.points[index]!.label}: ${chart.format(chart.points[index]!.value)} · ${chart.points[index]!.continuation}`}</title>
+                <title>{`${chart.points[index]!.label}: ${chart.format(chart.points[index]!.value)}, ${chart.points[index]!.continuation}`}</title>
               </path>
             ) : (
               <circle
@@ -120,7 +120,7 @@ function projectMetricCharts(runs: ModelOverviewRun[]): MetricChart[] {
     .reverse();
   const point = (run: ModelOverviewRun, number: number, value: number): MetricPoint => ({
     label: `Run ${number}`, value,
-    ...(run.continuation ? { continuation: `Continual learning · checkpoint ${run.continuation.checkpointId} · optimizer ${run.continuation.optimizerMode}` } : {}),
+    ...(run.continuation ? { continuation: `Continual learning, checkpoint ${run.continuation.checkpointId}, optimizer ${run.continuation.optimizerMode}` } : {}),
   });
   const evaluationScorePoints = runs.filter(run => run.evaluation)
     .slice(0, MAX_POINTS).reverse().map((run, index) => ({ label: `Eval ${index + 1}`, value: run.evaluation!.score }));

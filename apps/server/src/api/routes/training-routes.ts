@@ -13,8 +13,13 @@ import { handleEngramPublicationRoutes } from "./engram-publication-routes.js";
 import { handleHostedEngramRoutes } from "./hosted-engram-routes.js";
 import { handleSteeringPublicationRoutes } from "./steering-publication-routes.js";
 import { handleHostedModificationRoutes } from "./hosted-modification-routes.js";
+import { handleLocalTrainingModelRoutes } from "./local-training-model-routes.js";
+import { handleLocalSftReviewRoutes } from "./local-sft-review-routes.js";
+import { handleLocalAdapterPublicationRoutes } from "./local-adapter-publication-routes.js";
 import { OpenPondExperimentError } from "openpond-sdk/experiments";
+import { DatasetWorkspaceRequestError } from "openpond-sdk/dataset-workspaces";
 import { OpenPondLearningError } from "openpond-sdk/learning";
+import { OpenPondTasksetCatalogError } from "openpond-sdk/taskset-catalog";
 import { OpenPondTrainingApiError } from "openpond-sdk/training";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -39,6 +44,9 @@ export async function handleTrainingRoutes({
   response,
 }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
+  if (await handleLocalTrainingModelRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleLocalSftReviewRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleLocalAdapterPublicationRoutes({ deps, request, requestUrl, response })) return true;
   if (await handleWeightSpacePublicationRoutes({ deps, request, requestUrl, response })) return true;
   if (await handleWeightSpaceReadRoutes({ deps, request, requestUrl, response })) return true;
   if (await handleAlphaEditPublicationRoutes({ deps, request, requestUrl, response })) return true;
@@ -274,6 +282,15 @@ export async function handleTrainingRoutes({
     );
     return true;
   }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/model-serving-status") {
+    response.setHeader("Cache-Control", "no-store");
+    sendJson(response, 200, await deps.trainingPayload("hosted_model_serving_status", {
+      teamId: requestUrl.searchParams.get("teamId"),
+      actorId: requestUrl.searchParams.get("actorId"),
+      apiOrigin: requestUrl.searchParams.get("apiOrigin"),
+    }, requestUrl));
+    return true;
+  }
   const modelServing = /^\/v1\/training\/saved-models\/([^/]+)\/serving$/.exec(requestUrl.pathname);
   if (modelServing && request.method === "POST") {
     response.setHeader("Cache-Control", "no-store");
@@ -473,7 +490,8 @@ export async function handleTrainingRoutes({
           code: "evaluation_workspace_request_invalid",
           error: "The evaluation request does not match its contract.",
         });
-      else if (error instanceof OpenPondExperimentError || error instanceof OpenPondLearningError)
+      else if (error instanceof OpenPondExperimentError || error instanceof OpenPondLearningError ||
+        error instanceof DatasetWorkspaceRequestError || error instanceof OpenPondTasksetCatalogError)
         sendJson(response, error.status, { code: error.code, error: error.message });
       else throw error;
     }
@@ -578,6 +596,10 @@ export async function handleTrainingRoutes({
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/training/navigation") {
     sendJson(response, 200, await deps.trainingPayload("navigation", {}, requestUrl));
+    return true;
+  }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/local-compute") {
+    sendJson(response, 200, await deps.trainingPayload("local_compute", {}, requestUrl));
     return true;
   }
   if (request.method === "GET" && requestUrl.pathname === "/v1/training/activity") {

@@ -32,7 +32,7 @@ function availableModels(settings: ProviderSettings): ModelChoice[] {
     ].filter((id): id is string => Boolean(id)));
     return [...ids].map((modelId) => ({
       key: JSON.stringify([status.id, modelId]), providerId: status.id, modelId,
-      label: `${status.displayName} · ${modelId}`,
+      label: `${status.displayName}, ${modelId}`,
     }));
   });
 }
@@ -260,7 +260,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
       {loading ? <p>Loading evaluations…</p> : null}
       {error ? <ErrorToast error={error} /> : null}
       {runNotice ? <p role="status">{runNotice}</p> : null}
-      {evaluationScope ? <div className="profile-evaluation-scope"><strong>{evaluationScope.kind === "workflow" ? `Workflow · ${evaluationScope.id}` : evaluationScope.kind === "skill" ? `Skill · ${evaluationScope.id}` : "Complete Profile"}</strong>
+      {evaluationScope ? <div className="profile-evaluation-scope"><strong>{evaluationScope.kind === "workflow" ? `Workflow, ${evaluationScope.id}` : evaluationScope.kind === "skill" ? `Skill, ${evaluationScope.id}` : "Complete Profile"}</strong>
         <button type="button" disabled={busy} onClick={() => { setEvaluationScope(null); setSelectedId(null); setPlan(null); setRunNotice(null); }}>Show all evaluations</button></div> : null}
       {discovery && !definitions.length ? <p>{evaluationScope ? "No evaluation definitions target this component. Add a definition in the Profile’s evals catalog to run it. Retained runs are shown below." : "No evaluations in this Profile yet."}</p> : null}
       {discovery?.suites.length ? (
@@ -273,14 +273,14 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
           {discovery.suites.map((suite) => (
             <div key={suite.id} className="profile-evaluations-suite">
               <strong>{suite.label}</strong>
-              <span>{suite.scope === "profile" ? "Profile suite" : "Component suite"} · {suite.definitionIds.length} checks</span>
+              <span>{suite.scope === "profile" ? "Profile suite" : "Component suite"}, {suite.definitionIds.length} checks</span>
               <button type="button" disabled={!selectedModelKey || busy} onClick={() => void runSuite(suite.id)}>
                 {runningSuiteId === suite.id ? "Running suite…" : "Run suite"}
               </button>
               {(retained?.suiteRuns ?? []).filter((run) => run.suiteId === suite.id).slice(0, 5).map((run) => (
                 <details key={run.id} className="profile-evaluations-suite-run">
-                  <summary>{displayTimestamp(run.completedAt)} · {run.passed ? "Passed" : "Did not pass"} · {run.members.length} checks</summary>
-                  <small>Profile source {run.sourceRevision.slice(0, 12)} · Suite run {run.id}</small>
+                  <summary>{displayTimestamp(run.completedAt)}, {run.passed ? "Passed" : "Did not pass"}, {run.members.length} checks</summary>
+                  <small>Profile source {run.sourceRevision.slice(0, 12)}, Suite run {run.id}</small>
                   <button type="button" disabled={Boolean(savingReportId)} onClick={() => void saveReport("suite", run.id)}>
                     {savingReportId === run.id ? "Saving report…" : "Save report to Profile"}
                   </button>
@@ -293,7 +293,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
                         const retainedRun = retained?.runs.find(run => run.manifest.id === member.runManifest.id);
                         if (retainedRun) setInspectedRun(retainedRun);
                       }} disabled={!retained?.runs.some(run => run.manifest.id === member.runManifest.id)}>View results</button>
-                      <span>{member.passed ? "Passed" : "Did not pass"} · {member.score === null ? "No score" : `${Math.round(member.score * 100)}%`} · Run {member.runManifest.id}</span>
+                      <span>{member.passed ? "Passed" : "Did not pass"}, {member.score === null ? "No score" : `${Math.round(member.score * 100)}%`}, Run {member.runManifest.id}</span>
                     </li>
                   ))}</ul>
                 </details>
@@ -309,7 +309,7 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
           return <tr key={definition.id}>
             <th scope="row"><strong>{definition.label}</strong><small>{definition.description}</small></th>
             <td>{targetLabel(definition.target)}</td><td>{definition.taskIds.length} / {definition.seeds.length}</td>
-            <td>{latest ? <button type="button" onClick={() => setInspectedRun(latest)}>{latest.passed ? "Passed" : "Did not pass"} · {displayScore(latest.metric.value)}<small>{displayTimestamp(latest.completedAt)}</small></button> : "Not run"}</td>
+            <td>{latest ? <button type="button" onClick={() => setInspectedRun(latest)}>{latest.passed ? "Passed" : "Did not pass"}, {displayScore(latest.metric.value)}<small>{displayTimestamp(latest.completedAt)}</small></button> : "Not run"}</td>
             <td><button type="button" disabled={busy} aria-expanded={selectedId === definition.id} onClick={() => {
               setSelectedId(current => current === definition.id ? null : definition.id);
               setCaseLimit(50); setPlan(null); setRunNotice(null);
@@ -319,8 +319,8 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
       {selected ? (
         <div className="profile-evaluations-detail">
           <h4>{selected.label}</h4>
-          <p>Taskset {selected.tasksetRelease.id} · {selected.tasksetRelease.contentHash.slice(0, 12)}</p>
-          <p>Frozen split: {selected.split} · Minimum pass rate: {Math.round(selected.criterion.minimumPassRate * 100)}% · {selected.criterion.requireComplete ? "All attempts required" : "Incomplete runs allowed"}</p>
+          <p>Taskset {selected.tasksetRelease.id}, {selected.tasksetRelease.contentHash.slice(0, 12)}</p>
+          <p>Frozen split: {selected.split}, Minimum pass rate: {Math.round(selected.criterion.minimumPassRate * 100)}%, {selected.criterion.requireComplete ? "All attempts required" : "Incomplete runs allowed"}</p>
           <p>This evaluation runs the selected component against its Taskset’s frozen cases and graders.</p>
           <details><summary>Evaluation definition</summary><pre>{JSON.stringify(selected, null, 2)}</pre></details>
           <div className="profile-evaluations-run-form">
@@ -338,8 +338,8 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
               {plan ? (
                 <div className="profile-evaluations-run-plan">
                   <strong>Run setup</strong>
-                  <small>Profile source {plan.prepared.manifest.profileEvaluation?.sourceRevision.slice(0, 12)} · Harness {plan.prepared.manifest.execution.kind === "harness" ? plan.prepared.manifest.execution.harnessRelease.id : ""}</small>
-                  <small>Taskset {plan.prepared.taskset.id} · {plan.prepared.manifest.population.length} attempts · {plan.prepared.manifest.limits.timeoutMs / 1_000}s per attempt</small>
+                  <small>Profile source {plan.prepared.manifest.profileEvaluation?.sourceRevision.slice(0, 12)}, Harness {plan.prepared.manifest.execution.kind === "harness" ? plan.prepared.manifest.execution.harnessRelease.id : ""}</small>
+                  <small>Taskset {plan.prepared.taskset.id}, {plan.prepared.manifest.population.length} attempts, {plan.prepared.manifest.limits.timeoutMs / 1_000}s per attempt</small>
                   <small>Connected app scopes: {plan.prepared.taskset.connectedAppScopes.join(", ") || "none declared"}</small>
                   <button type="button" disabled={running} onClick={() => void runPrepared()}>{running ? "Running evaluation…" : "Run evaluation"}</button>
                 </div>
@@ -365,8 +365,8 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
               <label key={run.manifest.id}>
                 <input type="checkbox" checked={selectedRunIds.includes(run.manifest.id)} onChange={() => toggleRun(run.manifest.id)} disabled={comparing} />
                 <span>
-                  <strong>{run.manifest.profileEvaluation?.definitionId ?? "Profile evaluation"} · {run.metric.value === null ? "No score" : `${Math.round(run.metric.value * 100)}%`}</strong>
-                  <small>{displayTimestamp(run.completedAt)} · {run.manifest.policy.kind === "model" ? `${run.manifest.policy.model.provider}/${run.manifest.policy.model.model}` : "fixture"} · Source {run.manifest.profileEvaluation?.sourceRevision.slice(0, 10)} · {run.manifest.id}</small>
+                  <strong>{run.manifest.profileEvaluation?.definitionId ?? "Profile evaluation"}, {run.metric.value === null ? "No score" : `${Math.round(run.metric.value * 100)}%`}</strong>
+                  <small>{displayTimestamp(run.completedAt)}, {run.manifest.policy.kind === "model" ? `${run.manifest.policy.model.provider}/${run.manifest.policy.model.model}` : "fixture"}, Source {run.manifest.profileEvaluation?.sourceRevision.slice(0, 10)}, {run.manifest.id}</small>
                 </span>
               </label>
             ))}
@@ -382,13 +382,13 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
           <h4>Saved comparisons</h4>
           <ul>{retained.comparisons.map((comparison) => (
             <li key={comparison.id}>
-              <strong>{displayTimestamp(comparison.createdAt)} · {comparison.members.length} runs</strong>
+              <strong>{displayTimestamp(comparison.createdAt)}, {comparison.members.length} runs</strong>
               <button type="button" disabled={Boolean(savingReportId)} onClick={() => void saveReport("comparison", comparison.id)}>
                 {savingReportId === comparison.id ? "Saving report…" : "Save report to Profile"}
               </button>
               <ul>{comparison.members.map((member) => (
                 <li key={member.runManifest.id}>
-                  {member.source.definitionId} · {member.policy.kind === "model" ? `${member.policy.model.provider}/${member.policy.model.model}` : "fixture"} · Source {member.source.sourceRevision.slice(0, 10)} · {member.score === null ? "No score" : `${Math.round(member.score * 100)}%`}
+                  {member.source.definitionId}, {member.policy.kind === "model" ? `${member.policy.model.provider}/${member.policy.model.model}` : "fixture"}, Source {member.source.sourceRevision.slice(0, 10)}, {member.score === null ? "No score" : `${Math.round(member.score * 100)}%`}
                 </li>
               ))}</ul>
               <ProfileEvaluationComparisonMatrix comparison={comparison} />
@@ -401,8 +401,8 @@ export function ProfileEvaluationsSection({ connection, selectedProfileKey, focu
           <h4>Reports saved in Profile source</h4>
           <ul>{retained.reports.map((report) => (
             <li key={report.id}>
-              <strong>{displayTimestamp(report.createdAt)} · {report.summary.passedChecks}/{report.summary.totalChecks} checks passed</strong>
-              <small>Tested source {report.testedSources.map((source) => source.sourceRevision.slice(0, 10)).join(", ")} · Evidence {report.evidence.map((ref) => ref.id).join(", ")}</small>
+              <strong>{displayTimestamp(report.createdAt)}, {report.summary.passedChecks}/{report.summary.totalChecks} checks passed</strong>
+              <small>Tested source {report.testedSources.map((source) => source.sourceRevision.slice(0, 10)).join(", ")}, Evidence {report.evidence.map((ref) => ref.id).join(", ")}</small>
             </li>
           ))}</ul>
         </div>

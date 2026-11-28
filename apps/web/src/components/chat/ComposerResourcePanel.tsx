@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { ChatGraderRequestPanel } from "./ChatGraderRequestPanel";
 import type { DatasetResponse } from "../../api/chat-resource-api";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
+import { newResourceSetup, type ResourceSetupDraft } from "../../lib/resource-setup-prompt";
 
 export type ResourcePanelKind = "experiment" | "action" | "dataset" | "grader" | "rows";
 type Resources = ReturnType<typeof useChatResourceFocus>;
 
 export function ComposerResourcePanel({ kind, resources, busy, onDraft }: {
-  kind: Exclude<ResourcePanelKind, "experiment" | "action">; resources: Resources; busy: boolean; onDraft: (text: string) => void;
+  kind: Exclude<ResourcePanelKind, "experiment" | "action">; resources: Resources; busy: boolean; onDraft: (text: string, setup?: ResourceSetupDraft) => void;
 }) {
   const [description, setDescription] = useState("");
   if (kind === "rows") return <DatasetRows resources={resources} />;
@@ -18,7 +19,7 @@ export function ComposerResourcePanel({ kind, resources, busy, onDraft }: {
   const labels = {title:"New dataset", placeholder:"What examples should it contain?", button:"Chat"};
   function submit() {
     const detail = description.trim();
-    onDraft(`Create a new dataset: ${detail}`);
+    onDraft(detail, newResourceSetup("dataset"));
   }
   const disabled = busy || resources.selecting || !description.trim();
   return <div className="composer-resource-request" onKeyDown={event => { if (!event.nativeEvent.isComposing && event.key === "Enter" && event.target instanceof HTMLInputElement) { event.preventDefault(); event.stopPropagation(); if (!disabled) submit(); } }}>
@@ -42,7 +43,7 @@ function DatasetRows({ resources }: {resources: Resources}) {
   const tasks = record?.record.workspace.draft.tasks ?? [];
   const pages = Math.max(1, Math.ceil(tasks.length / 5));
   return <section className="composer-dataset-rows" aria-label="Dataset rows">
-    <div className="composer-experiment-setup-heading"><strong>Dataset rows</strong><span>{record ? `${tasks.length} examples · V${record.summary.revision}` : ""}</span>
+    <div className="composer-experiment-setup-heading"><strong>Dataset rows</strong><span>{record ? `${tasks.length} examples, V${record.summary.revision}` : ""}</span>
       {pages > 1 ? <div><button type="button" disabled={page === 0} onClick={() => setPage(value => value - 1)} aria-label="Previous rows">‹</button><span>{page + 1}/{pages}</span><button type="button" disabled={page + 1 >= pages} onClick={() => setPage(value => value + 1)} aria-label="Next rows">›</button></div> : null}
     </div>
     {error ? <ErrorToast error={error} /> : !record ? <p role="status">Loading rows…</p> : <div className="composer-dataset-rows-scroll"><table><thead><tr><th>Example</th><th>Input</th></tr></thead><tbody>

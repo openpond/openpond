@@ -157,6 +157,8 @@ const HostedManagedJobDetailSchema = z.object({
 type HostedManagedJob = z.infer<typeof HostedManagedJobSchema>;
 type HostedManagedJobDetail = z.infer<typeof HostedManagedJobDetailSchema>["job"];
 
+class HostedRunDetailUnavailable extends Error {}
+
 export function createModelProjectHostingService(input: {
   store: SqliteStore;
   resolveAccess: () => Promise<HostedAccess>;
@@ -185,6 +187,7 @@ export function createModelProjectHostingService(input: {
     hostedProjectId: string;
     profileId: string;
     snapshot?: unknown;
+    includeHistory?: boolean;
   }): Promise<{
     project: ModelProject;
     hosted: HostedModelProjectDetail;
@@ -194,7 +197,8 @@ export function createModelProjectHostingService(input: {
     const access = await input.resolveAccess();
     const [hosted, hostedJobs] = await Promise.all([
       hostedClient(access).get(inputValue.hostedProjectId),
-      listHostedJobs(access, inputValue.hostedProjectId),
+      inputValue.includeHistory === false && inputValue.snapshot === undefined
+        ? [] : listHostedJobs(access, inputValue.hostedProjectId, false).then(result => result.jobs),
     ]);
     const summary = hosted.project;
     if (summary.id !== inputValue.hostedProjectId || summary.teamId !== access.teamId) throw new Error("The hosted Model identity differs from the selected Model.");
@@ -313,6 +317,7 @@ export function createModelProjectHostingService(input: {
     profileId: string;
     teamId: string;
     apiOrigin: string;
+    includeHistory?: boolean;
   }) {
     const access = await input.resolveAccess();
     if (access.teamId !== inputValue.teamId || new URL(access.apiBaseUrl).origin !== new URL(inputValue.apiOrigin).origin) {
@@ -337,19 +342,23 @@ export function createModelProjectHostingService(input: {
         syncedAt: new Date().toISOString(), tasksets: [] },
       tasksetSyncs: [], createdAt: summary.createdAt, updatedAt: summary.sourceUpdatedAt,
     }), true);
-    const jobs = await listHostedJobs(access, summary.id);
+    if (inputValue.includeHistory === false)
+      return { project, hosted, importedJobCount: 0, importedMetricCount: 0, unavailableHistoryCount: 0 };
+    const { jobs, unavailableHistoryCount } = await listHostedJobs(access, summary.id, true);
     const importedMetricCount = await importHostedJobs(project, jobs, access);
-    return { project, hosted, importedJobCount: jobs.length, importedMetricCount };
+    return { project, hosted, importedJobCount: jobs.length, importedMetricCount, unavailableHistoryCount };
   }
 
   async function listHostedJobs(
     access: HostedAccess,
     hostedProjectId: string,
-  ): Promise<HostedManagedJob[]> {
+    allowUnavailableHistory: boolean,
+  ): Promise<{ jobs: HostedManagedJob[]; unavailableHistoryCount: number }> {
     const headers = hostedApiAuthHeaders(access.token);
     headers.set("x-openpond-team-id", access.teamId);
     const client = createTrainingClient({ baseUrl: access.apiBaseUrl, headers, fetch: fetchImpl });
     const jobs: HostedManagedJob[] = [];
+    let unavailableHistoryCount = 0;
     let cursor: string | undefined;
     const seenCursors = new Set<string>();
     do {
@@ -365,9 +374,15 @@ export function createModelProjectHostingService(input: {
         const artifactsCurrent = summary.state !== "succeeded" || summary.executionMode === "qualification"
           || existing?.metadata.hostedServingArtifactsImportedForUpdatedAt === summary.updatedAt;
         if (metricsCurrent && artifactsCurrent) return null;
-        const detail = await getHostedJobDetail(access, summary);
-        loadedJobDetails.set(detail.job, detail);
-        return detail.job;
+        try {
+          const detail = await getHostedJobDetail(access, summary);
+          loadedJobDetails.set(detail.job, detail);
+          return detail.job;
+        } catch (error) {
+          if (!allowUnavailableHistory || !(error instanceof HostedRunDetailUnavailable)) throw error;
+          unavailableHistoryCount++;
+          return null;
+        }
       });
       jobs.push(...changed.filter((job): job is HostedManagedJob => job !== null));
       cursor = page.nextCursor ?? undefined;
@@ -376,7 +391,7 @@ export function createModelProjectHostingService(input: {
         seenCursors.add(cursor);
       }
     } while (cursor);
-    return jobs;
+    return { jobs, unavailableHistoryCount };
   }
 
   async function importHostedJobs(
@@ -449,9 +464,9 @@ export function createModelProjectHostingService(input: {
     const response = await fetchImpl(url, { headers });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(
-        `Hosted run ${summary.id} detail request failed (${response.status}).`,
-      );
+      const message = `Hosted run ${summary.id} detail request failed (${response.status}).`;
+      if (response.status >= 500) throw new HostedRunDetailUnavailable(message);
+      throw new Error(message);
     }
     const raw = z.object({ job: z.object({ job: z.object({ id: z.string(), teamId: z.string(),
       modelProjectId: z.string() }).passthrough(), commands: z.array(z.unknown()).default([]),

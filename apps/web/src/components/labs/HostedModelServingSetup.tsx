@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   parseAndVerifySavedModelVersionRead,
   parseAndVerifySavedModelServing,
@@ -7,22 +8,39 @@ import {
 import { apiFetch } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
 import { ErrorToast } from "../common/ErrorToast";
-import { AppDialog } from "../dialogs/AppDialog";
 import { ModelServingControlDialog } from "./ModelServingControlDialog";
+import { ModelServingDialog } from "./ModelServingDialog";
+import { useHostedModelManaging } from "./HostedModelServingStatus";
 import type { WorkspaceApi } from "./workspace/workspace-api";
 
-type Props = { api: WorkspaceApi; modelId: string; name: string; onClose(): void };
+type Props = { api: WorkspaceApi; modelId: string; name: string; versionHash?: string; onClose(): void };
+
+export function HostedModelServeAction({ api, modelId, name, compact = false }: Omit<Props, "onClose" | "versionHash"> & {
+  compact?: boolean;
+}) {
+  const [reviewing, setReviewing] = useState(false);
+  const label = useHostedModelManaging(api, modelId) ? "Manage" : "Serve";
+  return <div className="labs-serve-action" onClick={event => event.stopPropagation()}>
+    <button type="button" className={`training-button${compact ? " secondary labs-compact-button" : ""}`}
+      aria-label={`${label} ${name}`} onClick={() => setReviewing(true)}>
+      {label}
+    </button>
+    {reviewing ? <HostedModelServingSetup key={`${api.key}:${modelId}`} api={api} modelId={modelId} name={name}
+      onClose={() => setReviewing(false)} /> : null}
+  </div>;
+}
 
 /** Open only on Serve. Closed table rows perform no per-model state reads. */
 export function HostedModelServingSetup(props: Props) {
-  const { api, modelId } = props;
+  const { api, modelId, versionHash } = props;
   const query = useQuery({
-    queryKey: ["inference-model-preparation", api.key, connectionQueryScope(api.connection), modelId],
+    queryKey: ["inference-model-preparation", api.key, connectionQueryScope(api.connection), modelId, versionHash],
     queryFn: async ({ signal }) => {
-      const saved = await parseAndVerifySavedModelVersionRead(await apiFetch(api.connection,
-        `/v1/training/saved-models/${encodeURIComponent(modelId)}/version?${new URLSearchParams({ teamId: api.teamId, preferActiveServing: "true" })}`,
-        { signal }), api.teamId, modelId);
-      return saved;
+      const query = new URLSearchParams({ teamId: api.teamId });
+      if (versionHash) query.set("versionHash", versionHash);
+      else query.set("preferActiveServing", "true");
+      return parseAndVerifySavedModelVersionRead(await apiFetch(api.connection,
+        `/v1/training/saved-models/${encodeURIComponent(modelId)}/version?${query}`, { signal }), api.teamId, modelId, versionHash);
     },
     staleTime: 0,
     gcTime: 0,
@@ -32,7 +50,7 @@ export function HostedModelServingSetup(props: Props) {
   if (query.data?.version) return <PreparedServing {...props} version={query.data.version} />;
   return <PreparationDialog {...props}>
     <ErrorToast error={query.error} />
-    {query.isPending ? <p role="status">Preparing your model…</p> : query.isSuccess ? <p>Waiting for a completed training checkpoint.</p> : null}
+    {query.isPending ? <p role="status">Preparing your model…</p> : query.isSuccess ? <p>Save a Model version to review serving.</p> : null}
     {!query.isPending ? <button type="button" className="training-button secondary" onClick={() => void query.refetch()}>Refresh checkpoint</button> : null}
   </PreparationDialog>;
 }
@@ -57,9 +75,9 @@ function PreparedServing(props: Props & { version: SavedModelVersion }) {
 }
 
 function PreparationDialog({ name, onClose, busy = false, children }: Props & { busy?: boolean; children: React.ReactNode }) {
-  return <AppDialog ariaLabel={`Serve ${name}`} className="labs-rename-dialog labs-serving-dialog" dismissDisabled={busy} onClose={onClose}>
+  return <ModelServingDialog ariaLabel={`Serve ${name}`} dismissDisabled={busy} onClose={onClose}>
     <h2>Serve {name}</h2>
     {children}
     <button type="button" className="training-button secondary" disabled={busy} onClick={onClose}>Close</button>
-  </AppDialog>;
+  </ModelServingDialog>;
 }

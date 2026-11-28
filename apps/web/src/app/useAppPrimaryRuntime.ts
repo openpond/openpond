@@ -330,7 +330,7 @@ export function useAppPrimaryRuntime() {
   const trainingNavigation = useTrainingNavigation(bootstrap ? connection : null, trainingProfileId);
   const modelsRoute = useModelsRoute();
   const libraryProjection = view === "labs" && modelsRoute && (
-    ["home", "inbox", "datasets", "graders", "experiments"].includes(modelsRoute.page)
+    ["home", "inbox", "datasets", "graders", "experiments", "serving"].includes(modelsRoute.page)
     || modelsRoute.page === "models" && !modelsRoute.modelId
     || modelsRoute.page === "runs" && modelsRoute.collection === "default" && (!modelsRoute.resourceId || isNativeTrainingResource(modelsRoute.resourceId))
   );

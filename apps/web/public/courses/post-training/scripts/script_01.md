@@ -1,6 +1,6 @@
 # How post-training works
 
-Post-training from first principles · Lesson 1 of 10 · 1:05
+Post-training from first principles (lesson 1 of 10, 1:05)
 
 ## Learning objective
 

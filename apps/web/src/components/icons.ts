@@ -19,6 +19,7 @@ export { default as BookmarkX } from "lucide-react/dist/esm/icons/bookmark-x.js"
 export { default as BookOpenText } from "lucide-react/dist/esm/icons/book-open-text.js";
 export { default as Bot } from "lucide-react/dist/esm/icons/bot.js";
 export { default as Boxes } from "lucide-react/dist/esm/icons/boxes.js";
+export { default as Bug } from "lucide-react/dist/esm/icons/bug.js";
 export { default as CalendarClock } from "lucide-react/dist/esm/icons/calendar-clock.js";
 export { default as ChartColumnStacked } from "lucide-react/dist/esm/icons/chart-column-stacked.js";
 export { default as Check } from "lucide-react/dist/esm/icons/check.js";

@@ -67,7 +67,7 @@ export function inheritedRecoveryGroups(detail: HostedStageDetail): RunStageEvid
         fact("Source group", group.id),
         fact("Recovery checkpoint", recovery.checkpointId),
         fact("Retained state", group.state),
-        fact("Optimizer outcome", applied ? "Update applied" : "Skipped · no signal"),
+        fact("Optimizer outcome", applied ? "Update applied" : "Skipped, no signal"),
         ...optimizerReceiptFacts(group.optimizerEvidence),
       ].slice(0, 100);
       const nodes: RunStageEvidence["nodes"] = [
@@ -82,7 +82,7 @@ export function inheritedRecoveryGroups(detail: HostedStageDetail): RunStageEvid
         {
           label: "Update adapter",
           state: applied ? "done" : "missing",
-          status: applied ? "Inherited update" : "Skipped · no signal",
+          status: applied ? "Inherited update" : "Skipped, no signal",
           detail: transition,
           inLoop: true,
           diagnostics: facts,

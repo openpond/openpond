@@ -19,5 +19,5 @@ export function experimentTokenLabel(usage: ReportedUsage): string {
 }
 
 export function experimentTokenDetails(usage: ReportedUsage): string {
-  return `Reported tokens: ${usage.inputTokens?.toLocaleString("en-US") ?? "unknown"} input · ${usage.outputTokens?.toLocaleString("en-US") ?? "unknown"} output. Token counts are usage, not a billed dollar or credit amount.`;
+  return `Reported tokens: ${usage.inputTokens?.toLocaleString("en-US") ?? "unknown"} input, ${usage.outputTokens?.toLocaleString("en-US") ?? "unknown"} output. Token counts are usage, not a billed dollar or credit amount.`;
 }

@@ -1,11 +1,24 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import type { AcpInitializeResult } from "@openpond/agent-runtime/acp/types";
 import type { ProviderConfig } from "@openpond/contracts";
 
 export const ANTIGRAVITY_INTEGRATION = "google-antigravity-cli";
 export const isAntigravityConfig = (config?: Partial<ProviderConfig>) =>
   config?.acp?.registryId === ANTIGRAVITY_INTEGRATION;
+
+export function antigravityVersionSupported(version: string | undefined): boolean {
+  const parts = /^(?:v|agy_acp_server_)?(\d+)\.(\d+)\.(\d+)$/.exec(version ?? "");
+  if (!parts) return false;
+  const [major = 0, minor = 0, patch = 0] = parts.slice(1).map(Number);
+  return major > 1 || (major === 1 && (minor > 5 || (minor === 5 && patch >= 12)));
+}
+
+function validateAgentInfo(info: AcpInitializeResult["agentInfo"]) {
+  if (!antigravityVersionSupported(info?.version))
+    throw new Error("Antigravity 1.5.12 or newer is required. Update Antigravity in Providers.");
+}
 
 // A subscription connection must never inherit another provider's API billing or keyring context.
 const removedKeys = new Set([
@@ -55,7 +68,7 @@ export function antigravityLaunch(provider: string, config: Partial<ProviderConf
     if (!removedKeys.has(key.toUpperCase())) env[key] = value;
   Object.assign(env, {
     GEMINI_HOME: profile,
-    AGY_CLI_DISABLE_AUTO_UPDATE: "1",
+    AGY_CLI_DISABLE_AUTO_UPDATE: "true",
     AGY_ACP_FORCE_FILE_STORAGE: "1",
     // The native CLI's SSH flow stores the Google login in this profile instead of a shared OS keyring.
     SSH_CONNECTION: "127.0.0.1 0 127.0.0.1 0",
@@ -74,6 +87,7 @@ export function antigravityLaunch(provider: string, config: Partial<ProviderConf
     env,
     sourceHome: profile,
     instanceId,
+    validateAgentInfo,
     requestTimeoutMs: 120_000,
     resumeMethod: "session/resume" as const,
     authRequiredPrefix: "Open the following link to authenticate the ACP server: ",

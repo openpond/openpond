@@ -43,6 +43,8 @@ export async function modelExperimentDraft(input: {
     : null;
   if (saved && saved.portableProjectId !== project.id)
     throw new Error("The saved version belongs to another Model.");
+  if (saved?.schemaVersion === "openpond.registeredAdapterVersion.v1")
+    throw new Error("To start new training, select an exact managed base Model. This uploaded adapter supports serving.");
   if (saved?.schemaVersion === "openpond.alphaEditModelVersion.v1")
     return ExperimentDraftSchema.parse({
       schemaVersion: "openpond.experimentDraft.v1",

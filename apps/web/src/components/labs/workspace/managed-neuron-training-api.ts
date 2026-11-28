@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useHostedExecutionClient } from "./use-hosted-execution-client";
 import { ActivationExperimentAccountSchema } from "@openpond/contracts";
 import {
   parseAndVerifyNeuronTrainingExecutionCapability,
@@ -14,7 +14,7 @@ import {
   type ManagedNeuronTrainingExecutionListQuery,
 } from "openpond-sdk/training";
 import { apiFetch } from "../../../api/api-client";
-import type { WorkspaceApi, Inventory } from "./workspace-api";
+import type { WorkspaceApi } from "./workspace-api";
 
 export function managedNeuronTrainingApi(api: WorkspaceApi, apiOrigin: string) {
   const account = ActivationExperimentAccountSchema.parse({
@@ -101,14 +101,5 @@ export function managedNeuronTrainingApi(api: WorkspaceApi, apiOrigin: string) {
 }
 
 export function useManagedNeuronTrainingClient(api: WorkspaceApi, enabled = true) {
-  return useQuery({
-    queryKey: ["neuron-training-experiment-account", api.key, api.actorId],
-    enabled: enabled && api.location === "hosted" && Boolean(api.actorId),
-    retry: false,
-    queryFn: async ({ signal }) => {
-      const value = await api.request<Inventory>("inventory", {}, signal);
-      if (value.teamId !== api.teamId) throw new Error("The workspace account changed.");
-      return managedNeuronTrainingApi(api, value.apiOrigin);
-    },
-  });
+  return useHostedExecutionClient(api, enabled, managedNeuronTrainingApi);
 }

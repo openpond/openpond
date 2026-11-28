@@ -171,7 +171,7 @@ export function TrainingModelPromotion({
                 </h2>
                 <p>
                   {pending === "bind"
-                    ? `${ROLE_LABELS[role]} · ${roleTargetId.trim()}`
+                    ? `${ROLE_LABELS[role]}, ${roleTargetId.trim()}`
                     : "The artifact and evaluation evidence are retained."}
                 </p>
               </div>

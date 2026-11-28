@@ -306,44 +306,61 @@ async function verifyDesktopNavigation(cdp: CdpClient): Promise<{
   );
   // Exercise destination changes with real keyboard input. The rail replaced
   // the old product menu; successful navigation must still reveal usable views.
-  await selectDesktopDestination(cdp, "Apps");
+  await selectDesktopDestination(cdp, "Apps", { inMore: true });
   await waitFor(
     () => evaluateValue<boolean>(cdp,
       `Boolean(document.querySelector("[role='tablist'][aria-label='Apps pages']"))`),
     DEFAULT_TIMEOUT_MS,
     "Apps did not render after keyboard navigation."
   );
-  await selectDesktopDestination(cdp, "Ponder");
+  await selectDesktopDestination(cdp, "Models");
   await waitFor(
     () => evaluateValue<boolean>(cdp,
-      `Boolean(document.querySelector("[aria-label='Models']"))`),
+      `location.pathname === "/models" && [...document.querySelectorAll("h1, h2")].some(heading => heading.textContent?.trim() === "Models")`),
     DEFAULT_TIMEOUT_MS,
-    "Training controls did not render after keyboard navigation."
+    "The Models collection did not render after keyboard navigation."
   );
-  await selectDesktopDestination(cdp, "Home");
-  // Home opens the unified thread composer directly; there is no task-mode
-  // selection step. Wait for the lazy view before testing its keyboard input.
+  await selectDesktopDestination(cdp, "Chat", { inMore: true });
   await waitFor(
     () => evaluateValue<boolean>(cdp,
       `Boolean(document.querySelector(".composer-inline-input[role='textbox']"))`),
     DEFAULT_TIMEOUT_MS,
-    "Home did not render the thread composer after keyboard navigation."
+    "Chat did not render the thread composer after keyboard navigation."
   );
   return { gettingStartedDismissed: true, keyboardNavigationPassed: true, composerAvailable: true };
 }
 
-async function selectDesktopDestination(cdp: CdpClient, label: string): Promise<void> {
+const desktopNav = 'nav[aria-label="Desktop destinations"]';
+const desktopMore = `${desktopNav} [aria-label="More destinations"]`;
+
+async function selectDesktopDestination(cdp: CdpClient, label: string, { inMore = false } = {}): Promise<void> {
+  if (inMore) {
+    await pressDesktopDestination(cdp, `${desktopNav} button[aria-label="More"]`);
+    await waitFor(
+      () => evaluateValue<boolean>(cdp, `Boolean(document.querySelector(${JSON.stringify(`${desktopMore}:popover-open`)}))`),
+      5_000,
+      "The More destinations menu did not open."
+    );
+  }
+  const selector = `${inMore ? desktopMore : desktopNav} button[aria-label="${label}"]`;
+  await pressDesktopDestination(cdp, selector);
+  await waitFor(
+    () => evaluateValue<boolean>(cdp, `document.querySelector(${JSON.stringify(selector)})?.getAttribute("aria-current") === "page"`),
+    5_000,
+    `${label} did not become the active destination.`
+  );
+}
+
+async function pressDesktopDestination(cdp: CdpClient, selector: string): Promise<void> {
   await waitFor(
     () => evaluateValue<boolean>(cdp, `(() => {
-      const button = document.querySelector(
-        ${JSON.stringify(`nav[aria-label="Desktop destinations"] button[aria-label="${label}"]`)}
-      );
+      const button = document.querySelector(${JSON.stringify(selector)});
       if (!(button instanceof HTMLButtonElement)) return false;
       button.focus();
       return document.activeElement === button;
     })()`),
     5_000,
-    `Could not focus the ${label} destination.`
+    `Could not focus the destination matching ${selector}.`
   );
   await cdp.send("Input.dispatchKeyEvent", {
     type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13,
@@ -352,17 +369,6 @@ async function selectDesktopDestination(cdp: CdpClient, label: string): Promise<
   await cdp.send("Input.dispatchKeyEvent", {
     type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13,
   });
-  await waitFor(
-    () => evaluateValue<boolean>(cdp, `(() => {
-      const button = document.querySelector(
-        ${JSON.stringify(`nav[aria-label="Desktop destinations"] button[aria-label="${label}"]`)}
-      );
-      return button?.getAttribute(${JSON.stringify(label === "Ponder" ? "aria-expanded" : "aria-current")}) ===
-        ${JSON.stringify(label === "Ponder" ? "true" : "page")};
-    })()`),
-    5_000,
-    `${label} did not become the active destination.`
-  );
 }
 
 async function readRenderEvidence(cdp: CdpClient) {

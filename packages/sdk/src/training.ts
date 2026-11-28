@@ -467,6 +467,7 @@ function unwrapObject(value: unknown, key: string): unknown {
 export {
   ExperimentDraftSchema,
   ModelSetupDraftSchema,
+  LocalAdapterBenchmarkSetupSchema,
   assertModelSetupExecutionIntent,
   parseAndVerifyExperimentDraft,
   ExperimentOperationTypeSchema,
@@ -474,6 +475,7 @@ export {
   parseAndVerifyExperimentStartingModel,
   experimentOperationLabel,
   type ExperimentDraft,
+  type LocalAdapterBenchmarkSetup,
   type ModelSetupDraft,
   type ExperimentOperationType,
   type ExperimentStartingModel,

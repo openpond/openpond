@@ -13,6 +13,7 @@ export type TrainingActivityState = {
   tasksetDrafts: Fields<"tasksetDrafts", "id" | "revision" | "updatedAt">;
   tasksets: Fields<"tasksets", "id" | "revision" | "contentHash" | "updatedAt">;
   modelProjects: Fields<"modelProjects", "id" | "revision" | "updatedAt">;
+  localModelRuns?: Fields<"modelRuns", "id" | "status" | "updatedAt">;
 };
 
 const ACTIVE_JOB_STATUSES = new Set(["queued", "starting", "running", "cancelling", "reconciling"]);
@@ -25,8 +26,10 @@ export function projectTrainingActivity(input: {
   state: TrainingActivityState;
   generatedAt?: string;
 }): TrainingActivityResponse {
+  const localRuns = input.state.localModelRuns ?? [];
   const activeCounts = {
-    jobs: input.state.jobs.filter((item) => ACTIVE_JOB_STATUSES.has(item.status)).length,
+    jobs: input.state.jobs.filter((item) => ACTIVE_JOB_STATUSES.has(item.status)).length
+      + localRuns.filter(run => run.status === "prepared" || run.status === "running").length,
     creations: input.state.creations.filter((item) => ACTIVE_CREATION_STATES.has(item.state))
       .length,
     minerRuns: input.state.minerRuns.filter((item) => ACTIVE_MINER_STATUSES.has(item.status))
@@ -37,6 +40,7 @@ export function projectTrainingActivity(input: {
   };
   const revision = contentHash({
     jobs: revisions(input.state.jobs, (item) => [item.id, item.status, item.updatedAt]),
+    localRuns: revisions(localRuns, (item) => [item.id, item.status, item.updatedAt]),
     creations: revisions(input.state.creations, (item) => [item.id, item.state, item.updatedAt]),
     minerRuns: revisions(input.state.minerRuns, (item) => [item.id, item.status, item.updatedAt]),
     datasetImports: revisions(input.state.datasetImports, (item) => [

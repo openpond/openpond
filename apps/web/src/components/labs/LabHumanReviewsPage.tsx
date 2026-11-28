@@ -138,7 +138,7 @@ export function LabHumanReviewsPage({
           </button>
           <div>
             <h1>{selected.name}</h1>
-            <p>Blinded human preference review · Taskset revision {selected.revision}</p>
+            <p>Blinded human preference review, Taskset revision {selected.revision}</p>
           </div>
           <LabStatusBadge label="Review queue" value="ready" />
         </div>

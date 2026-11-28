@@ -7,7 +7,7 @@ import { useScopedDraftNavigation } from "./DraftNavigationBoundary";
 export interface DraftEditorHandle { requestClose: () => void }
 
 /** One draft-exit decision is shared by sidebar, scope picker, Settings and browser history. */
-export function useDraftNavigation(input: { dirty: boolean; busy?: boolean; name: string; discardDescription?: string; save?: () => Promise<boolean>; onLeave?: () => void; retainForDestination?: (destination: string) => boolean }) {
+export function useDraftNavigation(input: { dirty: boolean; busy?: boolean; name: string; discardDescription?: string; save?: () => Promise<boolean>; onLeave?: () => void; retainForDestination?: (destination: string) => boolean; dialogClassName?: string; backdropClassName?: string }) {
   const current = useRef(input);
   current.current = input;
   const pending = useRef<((allowed: boolean) => void) | null>(null);
@@ -44,7 +44,9 @@ export function useDraftNavigation(input: { dirty: boolean; busy?: boolean; name
     if (mounted.current) setOpen(false);
     callback?.(allowed);
   };
-  const dialog = open ? <AppDialog ariaLabel={input.save ? `Save ${input.name} before leaving` : `Discard ${input.name}`} className="labs-rename-dialog labs-draft-exit-dialog" backdropClassName="labs-rename-backdrop" dismissDisabled={saving} onClose={() => resolve(false)}>
+  const dialog = open ? <AppDialog ariaLabel={input.save ? `Save ${input.name} before leaving` : `Discard ${input.name}`}
+    className={input.dialogClassName ?? "labs-rename-dialog labs-draft-exit-dialog"}
+    backdropClassName={input.backdropClassName ?? "labs-rename-backdrop"} dismissDisabled={saving} onClose={() => resolve(false)}>
     <h2>{input.save ? `Save ${input.name} before leaving?` : `Discard ${input.name}?`}</h2>
     <p>{input.save ? "Your changes can be saved before opening the next page." : input.discardDescription ?? "This setup has not been saved. Keep editing or discard it to leave."}</p>
     {error ? <ErrorToast error={error} /> : null}

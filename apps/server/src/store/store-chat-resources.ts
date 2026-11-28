@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { contentHash } from "@openpond/harness";
 import { LocalDatasetRecordSchema, ChatResourceSummarySchema, type LocalDatasetRecord, type ChatResourceSummary } from "@openpond/contracts";
+import type { BenchmarkRunPin } from "@openpond/contracts/resource-setup";
 import { validateTasksetDraftWorkspace,TasksetDraftWorkspaceFileSchema } from "openpond-sdk/taskset-drafts";
 import { SqliteStoreDomain } from "./store-domain.js";
 import {localDatasetProjectionPaths,projectLocalDatasetWorkspace} from "../training/local-dataset-projection.js";
@@ -18,6 +19,38 @@ export class SqliteChatResourceStore extends SqliteStoreDomain {
   async readChatHostedExperiment(id:string):Promise<unknown|null> {
     await this.ready;await this.writeQueue;
     const row=this.database.get<{payload:string}>("SELECT payload FROM chat_hosted_experiments WHERE id=?",[id]);return row ? JSON.parse(row.payload) as unknown : null;
+  }
+  async listChatHostedBenchmarkPeers(id: string, ownerHash: string, benchmark: BenchmarkRunPin) {
+    await this.ready;
+    await this.writeQueue;
+    return this.database.all<{id:string;versionHash:string}>(`
+      SELECT id, json_extract(payload, '$.benchmark.modelVersion.versionHash') AS versionHash
+      FROM chat_hosted_experiments
+      WHERE id != ? AND owner_hash = ?
+        AND json_extract(payload, '$.benchmark.id') = ?
+        AND json_extract(payload, '$.benchmark.revision') = ?
+        AND json_extract(payload, '$.benchmark.draftHash') = ?
+        AND json_extract(payload, '$.benchmark.modelVersion.versionHash') != ?
+      ORDER BY json_extract(payload, '$.details.summary.createdAt') DESC, id
+    `,[id,ownerHash,benchmark.id,benchmark.revision,benchmark.draftHash,benchmark.modelVersion?.versionHash??null]);
+  }
+  async findChatBenchmarkPreparation(input:{sessionId:string;revision:number;versionHash:string;
+    pin:{actorId:string;teamId:string;apiOrigin:string}}) {
+    await this.ready;
+    await this.writeQueue;
+    const prefix="benchmark-candidate:";
+    const row=this.database.get<{operation_id:string;payload:string}>(`
+      SELECT operation_id, payload FROM chat_experiment_groups
+      WHERE operation_id LIKE 'benchmark-candidate:%'
+        AND json_extract(payload, '$.sessionId') = ?
+        AND json_extract(payload, '$.benchmark.revision') = ?
+        AND json_extract(payload, '$.benchmark.modelVersion.versionHash') = ?
+        AND json_extract(payload, '$.pin.actorId') = ?
+        AND json_extract(payload, '$.pin.teamId') = ?
+        AND json_extract(payload, '$.pin.apiOrigin') = ?
+      ORDER BY rowid DESC LIMIT 1
+    `,[input.sessionId,input.revision,input.versionHash,input.pin.actorId,input.pin.teamId,input.pin.apiOrigin]);
+    return row ? {preparationId:row.operation_id.slice(prefix.length),payload:JSON.parse(row.payload) as unknown} : null;
   }
   async retainChatHostedExperiment(id:string,ownerHash:string,configurationHash:string,payload:unknown):Promise<void> {
     await this.ready;

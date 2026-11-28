@@ -236,20 +236,12 @@ export function createAntigravityService(
       await verify(shutdown.signal);
     } else if (request.action === "refresh") {
       const stored = await config();
-      if (stored && isAntigravityConfig(stored)) {
-        const hasLogin =
-          stored.sourceHome &&
-          (await access(join(stored.sourceHome, "antigravity-acp", "acp_token.json")).then(
-            () => true,
-            () => false,
-          ));
-        if (hasLogin) {
-          const result = await probeNativeAgent(providerId, stored, {
-            force: true,
-            signal: shutdown.signal,
-          });
-          checked = { status: result.status, error: result.error };
-        } else checked = { status: "needs_login", error: null };
+      if (stored && isAntigravityConfig(stored) && !login.active) {
+        const result = await probeNativeAgent(providerId, stored, {
+          force: true,
+          signal: shutdown.signal,
+        });
+        checked = { status: result.status, error: result.status === "needs_login" ? null : result.error };
       }
     }
     return {

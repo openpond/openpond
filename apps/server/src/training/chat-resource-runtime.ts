@@ -1,6 +1,8 @@
 import { readChatWeightSpace } from "./chat-weight-space.js";
 import { createChatNextStepService } from "./chat-next-step.js";
-import { createChatContextBrowser } from "./chat-context-browser.js";
+import { createChatContextBrowser, hasModelSetupAccess } from "./chat-context-browser.js";
+import { readManagedBenchmarkDataset } from "./hosted-benchmark-dataset.js";
+import { authorizeHostedBenchmarkVersion, readManagedBenchmarkSampling, readManagedBenchmarkVersions } from "./hosted-benchmark-access.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
 import { readChatTrainingAttachment } from "./chat-training-attachment.js";
 import type { createChatProfileExperiments } from "../evaluations/chat-profile-experiments.js";
@@ -8,7 +10,9 @@ import { createChatTeamExperiments } from "../evaluations/chat-team-experiments.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
-import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
+import { ActivationExperimentAccountSchema, chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
+import { ManagedBenchmarkReviewSchema, ManagedBenchmarkVersionsSchema, ResourceSetupDraftSchema, type BenchmarkRunPin } from "@openpond/contracts/resource-setup";
+import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import type { SqliteStore } from "../store/store.js";
 import type { LocalInferenceState } from "../evaluations/local-experiment-local-inference.js";
 import type { ChatResourceAction } from "../openpond/chat-resource-action.js";
@@ -16,12 +20,15 @@ import {createChatDatasetSourceAction} from "./chat-dataset-sources.js";
 import { createLocalDatasetService, localDatasetSummary } from "./local-dataset-service.js";
 import { createLocalDatasetSync } from "./local-dataset-sync.js";
 import {createChatCloudExperiments,type ChatExperimentView} from "../evaluations/chat-cloud-experiments.js";
-import { createChatExperiments } from "../evaluations/chat-experiments.js";
+import { createChatExperiments, pinLocalBenchmarkRequest } from "../evaluations/chat-experiments.js";
+import { deviceExperimentReads } from "../evaluations/device-experiment-reads.js";
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
 import type { HtmlVisualService } from "../visuals/visual-service.js";
 import { chatExperimentReport } from "../evaluations/chat-experiment-report.js";
 import { chatExperimentContext, createChatExperimentScopes } from "./chat-experiment-scope.js";
 import { localGraderSummaries } from "./local-grader-resources.js";
+import { event } from "../utils.js";
+import { listManagedSavedModelVersions } from "./managed-saved-model-discovery.js";
 
 export async function createChatResourceRuntime(deps:{store:SqliteStore;home:string;ownerId:string;state:LocalInferenceState;
   codexStatus?:()=>Promise<import("@openpond/contracts").CodexStatus>;
@@ -59,6 +66,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     },
     associateDraftTraining: async (sessionId, draftId, training) => { await scopes.associateDraftTraining(sessionId, draftId, training); },
     createDraft: async (sessionId, draft, expected) => { await scopes.createDraft(sessionId, draft, expected); },
+    saveLocalDraft: async (sessionId, scopeId, input) => { await scopes.saveLocalDraft(sessionId, scopeId, input); },
     linkStoredDraft: async (sessionId, record, reference, expected, scopeId) => { await scopes.linkStoredDraft(sessionId, record, reference, expected, scopeId); },
     inspectResource: async resource => {
       if (resource.owner || resource.profileRef) {
@@ -73,9 +81,48 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     },
   });
   const nextSteps = createChatNextStepService({ store: deps.store, current: browser.current });
-  async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal):Promise<unknown> {
+  async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal,originTurnId?:string):Promise<unknown> {
     if(kind==="dataset")return datasets.request(input,signal);
     const envelope=z.object({action:z.string(),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(input);
+    if(envelope.action==="benchmark_pin")return cloud.benchmarkPin(z.string().min(1).parse(envelope.payload.id));
+    if(envelope.action==="benchmark_peers")return { peers:await cloud.benchmarkPeers(z.string().min(1).parse(envelope.payload.id)) };
+    if(envelope.action==="benchmark_compare")return cloud.compare(envelope.payload,true);
+    let benchmark: BenchmarkRunPin | undefined;
+    if (originTurnId && (envelope.action === "run" || envelope.action === "run_cloud")) {
+      const turn = await deps.store.getTurn(originTurnId);
+      let setup = ResourceSetupDraftSchema.safeParse(turn?.metadata.resourceSetup);
+      if (setup.success && setup.data.kind === "benchmark")
+        throw new Error("Review the Benchmark setup and ask the user before starting a run.");
+      const owner = turn ? await deps.store.getSession(turn.sessionId) : null;
+      const resource = SessionResourceDraftSchema.safeParse(owner?.metadata?.resourceDraft);
+      const draft = resource.success && resource.data.kind === "benchmark"
+        ? chatExperimentContext(owner?.metadata).scopes.find(scope => scope.draft?.id === resource.data.id) : undefined;
+      if ((resource.success && resource.data.benchmarkVersion) || draft?.managedBenchmarkVersions)
+        throw new Error("Run this exact Model version from its Benchmark review.");
+      if (turn && !setup.success) {
+        if (draft) {
+          const recent = await deps.store.turnsForSession(turn.sessionId);
+          const currentIndex = recent.findIndex(candidate => candidate.id === originTurnId);
+          for (const previous of currentIndex < 0 ? [] : recent.slice(currentIndex + 1)) {
+            const found = ResourceSetupDraftSchema.safeParse(previous.metadata.resourceSetup);
+            if (found.success) { setup = found; break; }
+          }
+        }
+      }
+      if (setup.success && setup.data.kind === "benchmark" && (setup.data.candidateRef || setup.data.benchmarkModelVersion || setup.data.managedBenchmarkVersions))
+        throw new Error("Run this exact Model version from its Benchmark review.");
+      if (setup.success && setup.data.kind === "benchmark" && setup.data.values.destination === "This device") {
+        if (envelope.action !== "run") throw new Error("This Benchmark setup selects a local device.");
+        const configured = setup.data.benchmarkDefinition;
+        if (configured && (configured.id !== draft?.draft?.id || configured.revision !== draft?.draftRevision))
+          throw new Error("The Benchmark definition changed. Review the current settings before running it.");
+        envelope.payload = pinLocalBenchmarkRequest(envelope.payload, setup.data);
+        if (draft?.draft) benchmark = {
+          id: draft.draft.id, revision: draft.draftRevision ?? 1,
+          draftHash: contentHash(draft.draft), setupHash: contentHash(setup.data),
+        };
+      }
+    }
     if (typeof envelope.payload.id === "string" && profile) {
       const linked=(await deps.store.chatResourceLinks({kind:"experiment",id:envelope.payload.id})).find(link=>link.summary.profileRef)?.summary;
       if(linked?.profileRef && ["read","status","result"].includes(envelope.action))return profile.inspect(linked.id,linked.profileRef);
@@ -97,7 +144,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if(a && b)return cloud.compare(envelope.payload);
     }
     if(typeof envelope.payload.id==="string" && await deps.store.readChatHostedExperiment(envelope.payload.id))return cloud.request(envelope.action,envelope.payload);
-    return experiments.request(envelope);
+    return experiments.request(envelope, benchmark);
   }
   async function wait(id:string){if(await deps.store.readChatHostedExperiment(id))return cloud.wait(id);await experiments.service.wait(id);return dispatch("experiment",{action:"result",payload:{id}});}
   async function emit(sessionId:string,turnId:string,summary:ChatResourceSummary, showCard = true) {
@@ -141,19 +188,120 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const preview=await deps.visuals.preview(execution,{html:chatExperimentReport(runs)});
     return {visual:await deps.visuals.render(execution,{previewId:preview.previewId,title:"Experiment results"})};
   }
+  async function publishResourceSession(sessionId?: string) {
+    if (!sessionId) return;
+    const session = await deps.store.getSession(sessionId);
+    if (session) await deps.append(event({ sessionId, name: "session.updated", source: "server", data: { session } }));
+  }
+  async function benchmarkOrigin(sessionId: string) {
+    const session = await deps.store.getSession(sessionId);
+    const resource = SessionResourceDraftSchema.safeParse(session?.metadata?.resourceDraft).data;
+    const scope = resource?.kind === "benchmark"
+      ? chatExperimentContext(session?.metadata).scopes.find(item => item.draft?.id === resource.id) : undefined;
+    const version = scope?.managedBenchmarkVersions?.candidate ?? resource?.benchmarkVersion;
+    if (!scope || version?.location !== "cloud")
+      throw new Error("Open the originating Benchmark for this saved Model version.");
+    const { teamId, owner } = await authorizeHostedBenchmarkVersion(version, deps.access);
+    return { scope, owner: { teamId, ...owner } };
+  }
   async function request(kind:"dataset"|"experiment",raw:unknown) {
     const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
     const {context:requestedContext,invocationToken,...input} = envelope;
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
+    if (kind === "experiment" && input.action === "local_adapter_benchmark") {
+      if (context) throw new Error("Open the desktop Benchmark review to use this local adapter.");
+      return (await import("../evaluations/chat-local-adapter-benchmark.js")).handleLocalAdapterBenchmark({
+        store: deps.store, home: deps.home, scopes, experiments, onReviewed: publishResourceSession,
+      }, input.payload);
+    }
     if (kind === "dataset" && input.action === "next_step") return nextSteps.request(input.payload, context);
+    if (kind === "dataset" && input.action === "context_sync_draft") {
+      const query = z.object({ sessionId: z.string().min(1), scopeId: z.string().min(1),
+        expectedRevision: z.number().int().positive() }).strict().parse(input.payload);
+      if (context && context.sessionId !== query.sessionId) throw new Error("The Benchmark belongs to another conversation.");
+      return browser.syncLocalDraft(query.sessionId, query.scopeId, query.expectedRevision);
+    }
+    if (kind === "dataset" && input.action === "context_recover_benchmark") {
+      if (context) throw new Error("Open the Benchmark editor to recover the prepared version.");
+      const query = z.object({ sessionId:z.string().min(1),revision:z.number().int().positive(),
+        versionHash:z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(input.payload);
+      const { owner } = await benchmarkOrigin(query.sessionId);
+      return cloud.recoverBenchmark({ ...query, owner });
+    }
+    if (kind === "dataset" && input.action === "context_bind_benchmark") {
+      if (context) throw new Error("Bind the reviewed candidate from the Benchmark editor.");
+      const query = z.object({ sessionId: z.string().min(1), preparationId: z.string().min(1).max(200),
+        revision: z.number().int().positive(), versionHash:z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict().parse(input.payload);
+      const { scope, owner } = await benchmarkOrigin(query.sessionId);
+      const exactRevision = scope.draftRevision === query.revision;
+      return cloud.bindBenchmark({ ...query, owner, draft: exactRevision ? scope.draft : undefined,
+        versions: exactRevision ? scope.managedBenchmarkVersions : undefined });
+    }
+    if (kind === "dataset" && input.action === "context_benchmark_sampling") {
+      if (context) throw new Error("Check sampling support from the Benchmark prompt.");
+      const versions = ManagedBenchmarkVersionsSchema.parse(input.payload);
+      const verified = await readManagedBenchmarkVersions(versions, deps.access);
+      return { supported: await readManagedBenchmarkSampling(verified, deps.access) };
+    }
+    if (kind === "dataset" && input.action === "context_prepare_benchmark") {
+      if (context) throw new Error("Choose saved Model versions from the Benchmark prompt.");
+      const query = ManagedBenchmarkReviewSchema.extend({
+        sessionId: z.string().min(1), target: ChatContextTargetSchema,
+      }).parse(input.payload);
+      if (query.target.sessionId !== query.sessionId || !query.target.scopeId)
+        throw new Error("The Benchmark belongs to another conversation.");
+      const selected = await browser.resolve(query.target);
+      if (!selected.localDraft || selected.draft?.operationType !== "evaluate" || selected.benchmarkVersion?.location === "local")
+        throw new Error("Open the originating Benchmark to choose saved Model versions.");
+      const versions = await readManagedBenchmarkVersions(query.versions, deps.access);
+      const { candidate, baseline } = versions;
+      const sampling = query.protocol?.sampling;
+      if (sampling && (sampling.temperature === null || sampling.topP === null))
+        throw new Error("Set both Temperature and Top P before opening review.");
+      const retained = selected.draft.evaluationForm;
+      const retainedOverride = sampling === undefined && retained?.executionLocation === "hosted" && retained.form.mode === "model" &&
+        ((retained.form.temperature ?? 0) !== 0 || (retained.form.topP ?? 1) !== 1);
+      if ((sampling || retainedOverride) && !await readManagedBenchmarkSampling(versions, deps.access))
+        throw new Error("Clear sampling overrides or choose saved Model versions that support them.");
+      const dataset = await readManagedBenchmarkDataset(query, deps.access);
+      await scopes.setManagedBenchmarkVersions(query.sessionId, query.target.scopeId, {
+        expectedRevision: query.expectedRevision, name: query.name, budget: query.budget, seed: query.seed,
+        dataset, outputTokens: query.outputTokens, protocol: query.protocol,
+        versions: ManagedBenchmarkVersionsSchema.parse({ candidate: candidate.pin, ...(baseline ? { baseline: baseline.pin } : {}) }),
+        model: { source: "trained", label: candidate.model.name, baseModel: candidate.version.request.baseModel,
+          inferenceModelId: null, trainedVersion: candidate.version },
+      });
+      await publishResourceSession(query.sessionId);
+      return { selection: await browser.resolve(query.target) };
+    }
+    if (kind === "dataset" && input.action === "context_decision_sources") {
+      const owner = ActivationExperimentAccountSchema.parse(input.payload);
+      const access = await deps.access();
+      if (!hasModelSetupAccess(owner, access)) throw new Error("Choose the workspace that owns the saved Decision Models.");
+      const versions = await listManagedSavedModelVersions(deps.store, access);
+      if (!hasModelSetupAccess(owner, await deps.access())) throw new Error("The active Model workspace changed.");
+      return { owner, sources: versions.flatMap(({ project, version }) =>
+        version.schemaVersion === "openpond.decisionModelVersion.v1" && version.ownerUserId === owner.actorId
+          ? [{ modelProjectId: project.id, versionHash: version.contentHash, label: project.name }] : []) };
+    }
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_inputs", "context_runs", "context_select", "context_selection", "context_save_draft"].includes(String(input.action))) {
-      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
-      if (input.action === "context_save_draft") return browser.updateDraft(query.sessionId, query.target, query.update);
+      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), modelTrainingReview: z.boolean().optional(),
+        modelReviewOwner: z.object({ actorId: z.string().min(1).max(240), teamId: z.string().min(1).max(240), apiOrigin: z.url().max(2000) }).strict().optional(),
+        update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
+      if (input.action === "context_save_draft") {
+        const saved = await browser.updateDraft(query.sessionId, query.target, query.update);
+        await publishResourceSession(query.sessionId);
+        return saved;
+      }
       if (input.action === "context_catalog") return browser.catalog(true, query.sessionId, query.draftCursor, query.source);
       if (input.action === "context_runs") return browser.runs(query.target, query.cursor);
       if (input.action === "context_inputs") return browser.inputs(query.target);
       if (input.action === "context_resolve") return { selection: await browser.resolve(query.target) };
-      if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId) };
+      if (input.action === "context_select") {
+        const selection = await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId, query.modelTrainingReview, query.modelReviewOwner);
+        await publishResourceSession(query.sessionId);
+        return { selection };
+      }
       return { selection: query.sessionId ? await browser.current(query.sessionId) : null };
     }
     if (kind === "experiment" && input.action === "attach_weight_space") {
@@ -222,6 +370,26 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       experimentChoices.push(...localChoices,...ownedChoices,...profileChoices,...await cloud.list());
       }
       let scopeContext = chatExperimentContext(session.metadata);
+      const resourceDraft = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft).data;
+      const draftScope = resourceDraft?.kind === "benchmark" ? scopeContext.scopes.find(scope => scope.draft?.id === resourceDraft.id) : undefined;
+      const version = draftScope?.managedBenchmarkVersions?.candidate ?? resourceDraft?.benchmarkVersion;
+      if (version?.location === "cloud") {
+        if (draftScope && (input.action === "context" || query.scopeId === draftScope.id || scopeContext.activeScopeId === draftScope.id)) {
+          const visible = await authorizeHostedBenchmarkVersion(version, deps.access).then(() => true).catch(() => false);
+          if (!visible) {
+            if (input.action !== "context") throw new Error("Choose the OpenPond account and workspace that owns this Benchmark.");
+            scopeContext.scopes = scopeContext.scopes.filter(scope => scope.id !== draftScope.id);
+            if (scopeContext.activeScopeId === draftScope.id) scopeContext.activeScopeId = null;
+          }
+        }
+      }
+      if (input.action === "context" && scopeContext.scopes.some(scope => scope.modelSetupOwner)) {
+        const access = await deps.access().catch(() => null);
+        scopeContext.scopes = scopeContext.scopes.filter(scope =>
+          !scope.modelSetupOwner || hasModelSetupAccess(scope.modelSetupOwner, access));
+        if (!chatResourceWorkspaces(scopeContext).some(scope => scope.id === scopeContext.activeScopeId))
+          scopeContext.activeScopeId = null;
+      }
       // Rehydrate saved training references from their owner and hide records
       // admitted by a different account. Persisted scope snapshots are not
       // authorization and are not a live status source.
@@ -304,6 +472,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if (input.action === "select_scope" || input.action === "rename_scope") {
         if (!query.scopeId) throw new Error("Select an experiment scope.");
         scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,...input.action === "rename_scope" ? {name:z.string().trim().min(1).max(500).parse(query.name)} : {},expectedSelectionVersion:query.expectedSelectionVersion});
+        if (input.action === "rename_scope") await publishResourceSession(session.id);
         return selectedFocus(scopeContext);
       }
       if (input.action === "context") {
@@ -358,7 +527,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if(!context)throw new Error("HTML charts require a conversation response; retained results remain available through result.");
       return charts(context,input.payload);
     }
-    const result = await dispatch(kind,input);
+    const result = await dispatch(kind,input,undefined,context?.turnId);
     // Discovery opens dataset browsing without allocating an experiment or selecting a record.
     if (context && input.action === "list") {
       const before = chatExperimentContext((await deps.store.getSession(context.sessionId))?.metadata);
@@ -402,7 +571,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       await emit(context.session.id,context.turnId,scaffold);
     }
     let result:unknown;
-    try { result = await dispatch(kind,payload,context.signal); }
+    try { result = await dispatch(kind,payload,context.signal,context.turnId); }
     catch (error) {
       if (kind === "dataset" && authorOperationId) {
         const ownerId = await deps.store.localResourceOwnerId();
@@ -426,5 +595,5 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   return {datasets,experiments,request,execute,
     setProfileOwner:(owner:ReturnType<typeof createChatProfileExperiments>)=>{if(profile)throw new Error("Profile owner is already registered.");profile=owner;},
     associate:async(context:{sessionId:string;turnId:string},resources:ChatResourceSummary[])=>{for(const summary of resources)await emit(context.sessionId,context.turnId,summary);},
-    teamRequest:team.request,close:async()=>{cloud.close();await sync.close();await experiments.service.close();}};
+    teamRequest:deviceExperimentReads(experiments,team.request),close:async()=>{cloud.close();await sync.close();await experiments.service.close();}};
 }

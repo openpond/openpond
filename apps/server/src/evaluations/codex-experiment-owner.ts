@@ -38,7 +38,7 @@ export function createCodexExperimentOwner(deps:{state:LocalInferenceState;statu
   }
   async function choice(modelId:string,reasoningEffort:CodexExperimentRuntime["reasoningEffort"]="low") {
     const selected=await resolve(modelId,reasoningEffort);
-    return {id:modelId,name:selected.model!.displayName+" · "+reasoningEffort,providerId:"codex" as const,configurationHash:selected.configurationHash!,accountHash:selected.accountHash,reasoningEffort,reasoningEfforts:selected.model!.capabilities.reasoningEfforts,outputLimit:16384};
+    return {id:modelId,name:selected.model!.displayName+", "+reasoningEffort,providerId:"codex" as const,configurationHash:selected.configurationHash!,accountHash:selected.accountHash,reasoningEffort,reasoningEfforts:selected.model!.capabilities.reasoningEfforts,outputLimit:16384};
   }
   return {
     choice,

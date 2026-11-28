@@ -33,6 +33,8 @@ describe("turn-runner lifecycle", () => {
     try {
       const input = { prompt: "Check local provider admission.", modelRef: { providerId: "openrouter" as const, modelId: "test/model" } };
       expect((await local.runner.sendTurn("session_test", input)).status).toBe("completed");
+      const loopback = { ...input, modelRef: { providerId: "custom-openai-compatible" as const, modelId: "test/local" } };
+      expect((await local.runner.sendTurn("session_test", loopback)).status).toBe("completed");
       await expect(embedded.runner.sendTurn("session_test", input)).rejects.toThrow("Embedded Work requires");
       expect(embedded.state.turns).toHaveLength(0);
     } finally { await Promise.all([local.runner.close(), embedded.runner.close()]); }

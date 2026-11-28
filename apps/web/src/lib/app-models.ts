@@ -537,7 +537,7 @@ function modelOptionFromProviderModel(model: ProviderModel): DropdownOption {
   return {
     value: model.id,
     label: modelDisplayLabel(model.displayName || model.id),
-    description: details.join(" · ") || undefined,
+    description: details.join(", ") || undefined,
   };
 }
 

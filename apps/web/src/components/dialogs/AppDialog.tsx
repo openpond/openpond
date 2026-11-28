@@ -69,6 +69,7 @@ export function AppDialog({
       if (dialogStack.at(-1) !== instance) return;
       if (inertExclusionSelector && event.target instanceof Element && event.target.closest(inertExclusionSelector)) return;
       if (event.key === "Escape") {
+        if (event.target instanceof Element && event.target.closest(".dropdown-select")?.querySelector('[role="menu"]')) return;
         event.preventDefault();
         event.stopPropagation();
         if (!dismissDisabledRef.current) onCloseRef.current();

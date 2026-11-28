@@ -46,14 +46,14 @@ export function refinerActivityFromEvent(
 }
 
 export function refinerActivityLabel(activity: HarnessRefinerActivity): string {
-  if (activity.state === "running") return "Refiner · Reviewing for a reusable improvement";
-  if (activity.state === "failed") return "Refiner · Review failed";
-  if (activity.result === "no_action") return "Refiner · No reusable change";
+  if (activity.state === "running") return "Refiner, Reviewing for a reusable improvement";
+  if (activity.state === "failed") return "Refiner, Review failed";
+  if (activity.result === "no_action") return "Refiner, No reusable change";
   if (activity.result === "routed") {
-    return `Refiner · ${titleCase(activity.route ?? "external")} issue routed`;
+    return `Refiner, ${titleCase(activity.route ?? "external")} issue routed`;
   }
   const result = activity.result === "applied" ? "Applied" : "Needs review";
-  return `Refiner · ${activity.summary} — ${result}`;
+  return `Refiner, ${activity.summary} — ${result}`;
 }
 
 function parseDisplayActivity(
@@ -228,7 +228,7 @@ function refLabel(value: unknown): string | null {
   const record = asRecord(value);
   const id = stringValue(record?.id);
   const contentHash = stringValue(record?.contentHash);
-  return id && contentHash ? `${id} · ${contentHash.slice(0, 12)}` : null;
+  return id && contentHash ? `${id}, ${contentHash.slice(0, 12)}` : null;
 }
 
 function stringArray(value: unknown): string[] {

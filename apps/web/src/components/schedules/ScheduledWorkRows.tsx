@@ -27,7 +27,7 @@ export function ProfileWorkflowRow({
       <span className="scheduled-list-copy">
         <span className="scheduled-list-title"><strong>{entry.workflow.label}</strong></span>
         <span>{entry.workflow.description}</span>
-        <small>On demand · Source {entry.binding.sourceRevision.slice(0, 10)}</small>
+        <small>On demand, Source {entry.binding.sourceRevision.slice(0, 10)}</small>
       </span>
     </button>
   );
@@ -62,8 +62,8 @@ export function LocalScheduleRow({
         <small>
           {cadence}
           {schedule.nextRunAt
-            ? ` · Next ${formatScheduledRunAt(schedule.nextRunAt, schedule.timezone)}`
-            : " · No next run"}
+            ? `, Next ${formatScheduledRunAt(schedule.nextRunAt, schedule.timezone)}`
+            : ", No next run"}
         </small>
       </span>
     </button>
@@ -102,8 +102,8 @@ export function HostedScheduleRow({
         <small>
           {cadence}
           {schedule.nextRunAt
-            ? ` · Next ${formatScheduledRunAt(schedule.nextRunAt, schedule.timeZone)}`
-            : " · No next run"}
+            ? `, Next ${formatScheduledRunAt(schedule.nextRunAt, schedule.timeZone)}`
+            : ", No next run"}
         </small>
       </span>
     </button>
@@ -136,10 +136,10 @@ export function ChatWorkflowRow({
         </span>
         <span>{workflow.prompt}</span>
         <small>
-          Runs in {workflow.sessionTitle} · {cadence}
+          Runs in {workflow.sessionTitle}, {cadence}
           {workflow.nextRunAt
-            ? ` · Next ${formatScheduledRunAt(workflow.nextRunAt, workflow.recurrence.timeZone)}`
-            : " · No next run"}
+            ? `, Next ${formatScheduledRunAt(workflow.nextRunAt, workflow.recurrence.timeZone)}`
+            : ", No next run"}
         </small>
       </span>
     </button>

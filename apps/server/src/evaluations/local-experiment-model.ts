@@ -70,7 +70,8 @@ export function createLocalBudgetedModelStream(input:{store:LocalExperimentStora
       throw error;
     } finally {
       const tokens=normalizeModelUsageTokens(usage);
-      const costUsd=input.admission.pricing&&finished&&tokens.promptTokens!==null&&tokens.completionTokens!==null?hostedUsageCostUsd(usage,input.admission.pricing):null;
+      const costUsd=model.providerId==="local-sft-adapter" ? 0
+        : input.admission.pricing&&finished&&tokens.promptTokens!==null&&tokens.completionTokens!==null?hostedUsageCostUsd(usage,input.admission.pricing):null;
       await input.store.settleLocalCharge({...base,costUsd,confirmedTransportNotInvoked,usage:usage===null?null:{promptTokens:tokens.promptTokens,completionTokens:tokens.completionTokens,
         cachedPromptTokens:tokens.cachedPromptTokens,uncachedPromptTokens:tokens.uncachedPromptTokens}});
     }

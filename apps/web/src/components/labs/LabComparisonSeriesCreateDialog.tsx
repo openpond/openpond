@@ -191,7 +191,7 @@ export function LabComparisonSeriesCreateDialog({
           <legend>Branch advancement</legend>
           <label><span>Minimum current-cohort gain</span><input step="0.01" type="number" value={acquisitionTolerance} onChange={(event) => setAcquisitionTolerance(Number(event.currentTarget.value))} /></label>
           <label><span>Maximum retained regression</span><input min={0} step="0.01" type="number" value={retentionTolerance} onChange={(event) => setRetentionTolerance(Number(event.currentTarget.value))} /></label>
-          <div className="labs-comparison-policy-summary"><strong>{dailyRanks.length + 3} releases · rank {maximumEnabledRank} maximum</strong><small>This rule only chooses the next daily parent. P7 consolidates the queued daily cohorts; P8 retrains on the full eligible pool. Master promotion stays separate.</small></div>
+          <div className="labs-comparison-policy-summary"><strong>{dailyRanks.length + 3} releases, rank {maximumEnabledRank} maximum</strong><small>This rule only chooses the next daily parent. P7 consolidates the queued daily cohorts; P8 retrains on the full eligible pool. Master promotion stays separate.</small></div>
         </fieldset>
         {error ? <ErrorToast error={error} /> : null}
         <footer><button disabled={busy} type="button" onClick={onClose}>Cancel</button><button disabled={busy || !name.trim() || !objective.trim()} type="submit">{busy ? "Saving…" : "Create draft"}</button></footer>
@@ -205,7 +205,7 @@ function hasSplit(taskset: Taskset, split: Taskset["tasks"][number]["split"]): b
 }
 
 function TasksetField({ label, onChange, tasksets, value }: { label: string; onChange: (value: string) => void; tasksets: Taskset[]; value: string }) {
-  return <label><span>{label}</span><select required value={value} onChange={(event) => onChange(event.currentTarget.value)}><option value="">Select an immutable release</option>{tasksets.map((taskset) => <option key={tasksetKey(taskset)} value={tasksetKey(taskset)}>{taskset.name} · r{taskset.revision} · {taskset.contentHash.slice(0, 8)}</option>)}</select></label>;
+  return <label><span>{label}</span><select required value={value} onChange={(event) => onChange(event.currentTarget.value)}><option value="">Select an immutable release</option>{tasksets.map((taskset) => <option key={tasksetKey(taskset)} value={tasksetKey(taskset)}>{taskset.name}, r{taskset.revision}, {taskset.contentHash.slice(0, 8)}</option>)}</select></label>;
 }
 
 function seriesReadyProject(project: ModelProject): boolean {

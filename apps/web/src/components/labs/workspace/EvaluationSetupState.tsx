@@ -82,6 +82,15 @@ export type { ExperimentOperationType } from "openpond-sdk/training";
 type ExperimentOperationType = ExperimentDraft["operationType"];
 type SetupTransitionGuard = (action: () => void) => Promise<void>;
 type TrainingParent = NonNullable<TrainingExperimentSetupRequest["parent"]>;
+function definedEvaluationForm(draft: ExperimentSetupDraft): ExperimentSetupDraft {
+  const { localRuntime, temperature, topP, ...required } = draft;
+  return {
+    ...required,
+    ...(localRuntime !== undefined ? { localRuntime } : {}),
+    ...(temperature !== undefined ? { temperature } : {}),
+    ...(topP !== undefined ? { topP } : {}),
+  };
+}
 type SetupState = {
   startingModel: ExperimentStartingModel | null;
   chooseInferenceModel: (
@@ -200,6 +209,7 @@ export function EvaluationSetupProvider({
   const startingModelRef = useRef(startingModel);
   startingModelRef.current = startingModel;
   function setOperationType(value: ExperimentOperationType) {
+    if (authoring?.benchmarkBaseline && value !== "evaluate") return;
     if (startingModelRef.current?.source === "alphaedit" && value !== "alphaedit") return;
     if (startingModelRef.current?.source === "neuron_training") return;
     if (startingModelRef.current?.source === "decision" && value !== "decision_model") return;
@@ -217,19 +227,27 @@ export function EvaluationSetupProvider({
     initialExperiment?.trainingForm?.parent ?? null,
   );
   const [advancedTarget, setAdvancedTarget] = useState<AdvancedExperimentTarget | null>(null);
-  const [draft, setDraft] = useState<ExperimentSetupDraft | null>(() => {
+  const [draft, setDraftState] = useState<ExperimentSetupDraft | null>(() => {
     const form =
       initialExperiment?.evaluationForm?.form ??
-      (initialExperiment ? initialDraft(null, null, "model") : null);
+      (initialExperiment ? { ...initialDraft(null, null, "model"),
+        ...(initialExperiment.startingModel?.source === "trained" ? { budget: null } : {}) } : null);
     const selected = initialExperimentStartingModel(initialExperiment);
-    return form && selected
+    if (!form) return null;
+    return definedEvaluationForm(selected
       ? {
           ...form,
           modelId: selected.source === "inference" ? selected.inferenceModelId! : "",
           localRuntime: selected.source !== "inference" ? undefined : form.localRuntime,
         }
-      : form;
+      : form);
   });
+  const setDraft = useCallback<SetupState["setDraft"]>((next) => {
+    setDraftState(previous => {
+      const form = typeof next === "function" ? next(previous) : next;
+      return !form || form === previous ? form : definedEvaluationForm(form);
+    });
+  }, []);
   function setTrainingBaseModel(
     value: TrainingExperimentSetupRequest["baseModel"] | null,
     label?: string,
@@ -326,7 +344,7 @@ export function EvaluationSetupProvider({
         );
       }
     },
-    [],
+    [setDraft],
   );
   const [existing, setExisting] = useState<ExperimentSetupDefinition | null>(
     initialExperiment?.evaluationForm?.source ?? null,
@@ -334,7 +352,7 @@ export function EvaluationSetupProvider({
   const [baseline, setBaseline] = useState(() =>
     initialExperiment
       ? canonicalJson({
-          draft: initialExperiment.evaluationForm?.form ?? initialDraft(null, null, "model"),
+          draft,
           selection: initialExperiment.evaluationForm?.selection ?? null,
         })
       : "",
@@ -393,7 +411,7 @@ export function EvaluationSetupProvider({
           }
         : null,
     );
-    setBaseline(canonicalJson({ draft: next, selection: nextSelection }));
+    setBaseline(canonicalJson({ draft: definedEvaluationForm(next), selection: nextSelection }));
     setReviewRoute(route);
   }
   function applyDraft(
@@ -422,7 +440,7 @@ export function EvaluationSetupProvider({
     setDraft(next);
     setExisting(evaluation?.source ?? null);
     setSelection(evaluation?.selection ?? null);
-    setBaseline(canonicalJson({ draft: next, selection: evaluation?.selection ?? null }));
+    setBaseline(canonicalJson({ draft: definedEvaluationForm(next), selection: evaluation?.selection ?? null }));
     setReviewRoute({ ...route, executionLocation: evaluation?.executionLocation ?? "hosted" });
   }
   function openStored(record: ExperimentDraftRecord, route: ModelsRoute) {
@@ -490,7 +508,7 @@ export function EvaluationSetupProvider({
     acceptSaved,
     evaluationDirty: canonicalJson({ draft, selection }) !== baseline,
     initialExperiment: authoring,
-    allowedOperationTypes,
+    allowedOperationTypes: authoring?.benchmarkBaseline ? ["evaluate"] : allowedOperationTypes,
     operationDraftDirty: Object.values(trainingDirty).some(Boolean),
     reportOperationDraftDirty,
     operationType,

@@ -51,9 +51,9 @@ export function ProfileEvaluationRunDialog({ connection, run, onClose }: {
     } }}>
     <div className="profile-evaluations-detail">
       <header className="profile-evaluation-dialog-header"><h2 id="profile-run-title">Evaluation results</h2><button type="button" autoFocus onClick={onClose}>Close</button></header>
-      <strong>{source?.definitionId ?? run.manifest.id} · {run.passed ? "Passed" : "Did not pass"} · {displayScore(run.metric.value)}</strong>
-      <p>{source ? targetLabel(source.target) : "Profile evaluation"} · {modelLabel(run)} · {displayTimestamp(run.completedAt)}</p>
-      <p>Pass rate {displayScore(run.passRate)} · Source {source?.sourceRevision} · Run {run.manifest.id}</p>
+      <strong>{source?.definitionId ?? run.manifest.id}, {run.passed ? "Passed" : "Did not pass"}, {displayScore(run.metric.value)}</strong>
+      <p>{source ? targetLabel(source.target) : "Profile evaluation"}, {modelLabel(run)}, {displayTimestamp(run.completedAt)}</p>
+      <p>Pass rate {displayScore(run.passRate)}, Source {source?.sourceRevision}, Run {run.manifest.id}</p>
       <details><summary>Frozen run configuration</summary><pre>{JSON.stringify(run.manifest, null, 2)}</pre></details>
       {loading ? <p role="status">Loading case results…</p> : null}
       {error ? <ErrorToast error={error}><button type="button" onClick={() => setRetry(current => current + 1)}>Retry</button></ErrorToast> : null}
@@ -64,25 +64,25 @@ export function ProfileEvaluationRunDialog({ connection, run, onClose }: {
           if (receiptId === item.receiptId && !cursor) return;
           setReceiptId(item.receiptId); setDetail(null); setCursor(null);
         }}>{item.taskId}</button></th><td>{item.seed}</td><td>{item.passed ? "Passed" : "Did not pass"}</td>
-        <td>{displayScore(item.score)}</td><td>{item.gradingStatus}{item.failureClass ? ` · ${item.failureClass}` : ""}</td>
+        <td>{displayScore(item.score)}</td><td>{item.gradingStatus}{item.failureClass ? `, ${item.failureClass}` : ""}</td>
         <td>{item.latencyMs.toLocaleString()} ms</td><td>{item.costUsd === null ? "Unknown" : `$${item.costUsd.toFixed(4)}`}</td>
       </tr>)}</tbody></table></div>
       {cases.length > caseLimit ? <button type="button" onClick={() => setCaseLimit(current => current + 50)}>Show more cases</button> : null}
       {detailLoading ? <p role="status">Loading case evidence…</p> : null}
       {detailError ? <ErrorToast error={detailError}><button type="button" onClick={() => setRetry(current => current + 1)}>Retry</button></ErrorToast> : null}
       {detail ? <div className="profile-evaluations-detail" aria-label="Case evidence">
-        <h3>{detail.taskId} · Seed {detail.seed}</h3>
+        <h3>{detail.taskId}, Seed {detail.seed}</h3>
         <h4>Grader feedback</h4>
         <p>Evaluations use the graders pinned by their Taskset. Each result below identifies the grader and version used for this case.</p>
         {detail.feedback.length ? detail.feedback.map(grader => <div key={`${grader.graderId}:${grader.graderVersion}`}>
-          <strong>{grader.graderId} · {grader.graderVersion} · {displayScore(grader.score)} · {grader.passed ? "Passed" : "Did not pass"}</strong>
+          <strong>{grader.graderId}, {grader.graderVersion}, {displayScore(grader.score)}, {grader.passed ? "Passed" : "Did not pass"}</strong>
           <ul>{grader.feedback.map((message, index) => <li key={index}>{message}</li>)}</ul>
         </div>) : <p>No grader feedback retained for this case.</p>}
         {detail.evidence ? <>
           <h4>Input</h4><pre>{detail.evidence.prompt}</pre>
           <h4>Output</h4><pre>{detail.evidence.output?.text ?? detail.evidence.partialOutput?.text ?? "No output retained."}</pre>
           {detail.evidence.error ? <p role="alert">{detail.evidence.error}</p> : null}
-          <details><summary>Trace · {detail.evidence.eventCount} events</summary>
+          <details><summary>Trace, {detail.evidence.eventCount} events</summary>
             <pre>{JSON.stringify(detail.evidence.events, null, 2)}</pre>
             {cursor ? <button type="button" disabled={detailLoading} onClick={() => setCursor(null)}>First trace page</button> : null}
             {detail.evidence.nextEventCursor ? <button type="button" disabled={detailLoading} onClick={() => setCursor(detail.evidence!.nextEventCursor)}>Next trace page</button> : null}

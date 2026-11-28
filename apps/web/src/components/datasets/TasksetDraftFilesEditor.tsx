@@ -93,7 +93,7 @@ export function TasksetDraftFilesEditor({ draft, initialFiles, training, onSaved
     {recovery ? <section aria-label="Resolve file changes">
       <p>{recovery.draft.status === "published" ? "This draft has been published and is now read only." : `Loaded draft revision ${recovery.draft.revision}. Choose which file content to keep; your edits remain in the editor below.`}</p>
       {recovery.file ? <details><summary>Current saved file</summary>{recovery.file.content.encoding === "utf8"
-        ? <pre className="taskset-draft-file-readonly">{recovery.file.content.data}</pre> : <p>Binary file · {recovery.file.sizeBytes.toLocaleString()} bytes</p>}</details> : <p>This file is absent from the saved draft.</p>}
+        ? <pre className="taskset-draft-file-readonly">{recovery.file.content.data}</pre> : <p>Binary file, {recovery.file.sizeBytes.toLocaleString()} bytes</p>}</details> : <p>This file is absent from the saved draft.</p>}
       <div className="taskset-draft-inline-actions">
         <button className="training-button secondary" type="button" disabled={busy} onClick={() => resolveRecovery(false)}>Use saved file</button>
         <button className="training-button" type="button" disabled={busy || !filePath || recovery.draft.status === "published" || recovery.file?.writable === false} onClick={() => resolveRecovery(true)}>Keep my edits</button>
@@ -103,7 +103,7 @@ export function TasksetDraftFilesEditor({ draft, initialFiles, training, onSaved
       <aside aria-label="Draft file list"><button className="training-button secondary" type="button" disabled={busy || needsReload || draft.status === "published"} onClick={() => { void guard.requestLeave(() => {
         setNewFile(true); setSelected(null); setFilePath(""); setContent({ encoding: "utf8", data: "" }); setDeleteConfirm(false); setError(null);
       }); }}>New file</button>
-        {files.map(file => <button key={file.path} className={file.path === selected?.path ? "active" : ""} type="button" disabled={busy || needsReload || file.sizeBytes > 6_000_000} title={`${file.path} · ${file.sizeBytes.toLocaleString()} bytes${file.sizeBytes > 6_000_000 ? " · exceeds the 6 MB editor limit" : ""}`} onClick={() => { void guard.requestLeave(() => { void open(file.path); }); }}>{file.path}{!file.writable ? " · read only" : ""}</button>)}
+        {files.map(file => <button key={file.path} className={file.path === selected?.path ? "active" : ""} type="button" disabled={busy || needsReload || file.sizeBytes > 6_000_000} title={`${file.path}, ${file.sizeBytes.toLocaleString()} bytes${file.sizeBytes > 6_000_000 ? ", exceeds the 6 MB editor limit" : ""}`} onClick={() => { void guard.requestLeave(() => { void open(file.path); }); }}>{file.path}{!file.writable ? ", read only" : ""}</button>)}
       </aside>
       <section aria-label="File editor">
         {selected || newFile ? <>

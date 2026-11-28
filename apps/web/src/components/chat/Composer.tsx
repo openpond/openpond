@@ -6,7 +6,6 @@ import { composerResourceMetadata, mergeComposerResourceContexts, composerSubmis
 import { useComposerResourceDrafts } from "./useComposerResourceDrafts";
 import { createComposerTaskSubmission } from "./composer-task-submission";
 import { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
-import { ChatContextPicker } from "./ChatContextPicker";
 import { ComposerResourceContext } from "./ComposerResourceContext";
 import { CHAT_CONTEXT_SELECTED, ChatContextAccountScope, useChatContextSelection } from "../../hooks/useChatContextSelection";
 import { useComposerResourceRequests } from "./useComposerResourceRequests";
@@ -51,7 +50,7 @@ import {
 import { composerActionCatalogLabel } from "../../lib/composer-action-catalog";
 import { shouldRetainOpenPondProfileActionAfterSubmit } from "../../lib/openpond-action-run";
 import {
-  COMPOSER_SLASH_COMMANDS,
+  SUBMIT_ISSUE_COMMAND,
   composerSlashCommandsForExperience,
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
@@ -97,14 +96,16 @@ import {
   ComposerCommandMenu,
   filterComposerCommandMenuSections,
   type ComposerCommandMenuItem,
-  type ComposerCommandMenuSection,
+  buildComposerAddMenuSections,
 } from "./ComposerCommandMenu";
 import {
   ComposerMentionMenu,
   type ComposerMentionMenuItem,
 } from "./ComposerMentionMenu";
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
-import { DesktopLogIssueAction } from "./DesktopLogIssueAction";
+import { useDesktopLogIssueAction } from "./DesktopLogIssueAction";
+import { ResourceSetupEditor } from "./ResourceSetupEditor";
+import { benchmarkAccountMessage, canSubmitBenchmarkSetup, carryResourcePromptEdits, snapshotResourceSetup } from "../../lib/resource-setup-prompt";
 import {
   ComposerSkillMenu,
   type ComposerSkillMenuItem,
@@ -156,10 +157,6 @@ export type {
   ComposerSubmitOptions,
 } from "./composer-types";
 
-const SUBMIT_ISSUE_COMMAND = COMPOSER_SLASH_COMMANDS.find(
-  (command) => command.id === "submit-issue"
-) as ComposerSlashCommand;
-
 const EMPTY_STEER_DRAFTS: ComposerSteerDraft[] = [];
 const EMPTY_TASK_EVENTS: readonly RuntimeEvent[] = [];
 
@@ -192,6 +189,7 @@ export function Composer({
   goalSessionId = taskSessionId,
   taskEvents = EMPTY_TASK_EVENTS,
   submissionScopeKey = "default", composerDraftStore,
+  resourceSetup = null,
   getCurrentSubmissionScopeKey,
   voiceInputChannelKey = submissionScopeKey,
   initialSteerDrafts = EMPTY_STEER_DRAFTS,
@@ -240,14 +238,21 @@ export function Composer({
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
+  const resourceEditorRef = useRef<HTMLDivElement | null>(null);
   const originDraftScopeKey = composerDraftStore?.getScopeKey();
   const voiceSubmitMode = useRef<{ channel: string; queue: boolean } | null>(null);
   const onVoiceInputActiveChange = useCallback((active: boolean) => {
     if (!active) voiceSubmitMode.current = null;
   }, []);
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
+  const issueAction = useDesktopLogIssueAction({ conversationId, inbox: taskInbox, running, onSubmit, showToast, enabled: surface === "chat" });
+  const showIssueAction = Boolean(issueAction);
+  const showIssueRetry = Boolean(issueAction?.retry);
+  const [configureSlot, setConfigureSlot] = useState<HTMLSpanElement | null>(null);
   const contextSelection = useChatContextSelection(surface === "chat" && enableResourceContext ? connection : null, taskSessionId ?? null);
-  const chatResources = useChatResourceFocus(surface === "chat" && enableResourceContext && !contextSelection.selection?.model && !contextSelection.selection?.training ? connection : null, taskSessionId ?? null);
+  const chatResources = useChatResourceFocus(surface === "chat" && enableResourceContext &&
+    (Boolean(resourceSetup) || !contextSelection.selection?.model && !contextSelection.selection?.training) ? connection : null,
+    taskSessionId ?? null, resourceSetup?.kind === "benchmark");
   const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources, composerDraftStore);
   useComposerResourceRequests({ surface, voiceInputChannelKey, taskSessionId, submissionScopeKey, prompt, onPromptChange, showToast, resourceDrafts, inputRef, composerDraftStore });
 
@@ -398,7 +403,10 @@ export function Composer({
     selectedActionMentionText,
     selectedInvocationPosition,
   });
-  const hasComposerInput = hasComposerSubmittableInput({
+  const editingResourceSetup = !running && !selectedAction && !selectedCommand && resourceSetup && originDraftScopeKey && composerDraftStore;
+  const hasSetupBody = resourceSetup && (!resourceSetup.promptBody || resourceSetup.promptBody.some(part =>
+    typeof part !== "string" || part.trim()));
+  const hasComposerInput = Boolean(editingResourceSetup && hasSetupBody) || hasComposerSubmittableInput({
     attachmentCount: attachments.length,
     prompt,
     selectedAction,
@@ -457,14 +465,14 @@ export function Composer({
   const sendTooltip = serializingAttachments
     ? "Preparing files"
     : running
-      ? "Steer (Enter) · Queue (Ctrl Enter)"
+      ? "Steer (Enter), Queue (Ctrl Enter)"
       : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments || contextSelection.selecting;
   const nextStep = useComposerNextStep({
     connection: surface === "chat" && enableResourceContext ? connection : null, sessionId: taskSessionId ?? null,
     events: taskEvents, prompt, selectionKey: JSON.stringify(contextSelection.selection?.target ?? null), inputRef,
-    blocked: busy || running || serializingAttachments || contextSelection.selecting || attachments.length > 0
+    blocked: Boolean(resourceSetup) || busy || running || serializingAttachments || contextSelection.selecting || attachments.length > 0
       || Boolean(selectedAction || selectedCommand) || composerSteerDraftsForScope(steerDraftsByScope, submissionScopeKey, initialSteerDrafts).length > 0
       || Boolean(taskInbox.enabled && !taskInbox.snapshot) || Boolean(taskInbox.snapshot?.activeTurnId || taskInbox.snapshot?.inputs.some(item => item.state === "pending")),
   });
@@ -697,54 +705,15 @@ export function Composer({
       ),
     [availableProfileSkills]
   );
-  const addMenuSections = useMemo<ComposerCommandMenuSection[]>(() => {
-    const sections: ComposerCommandMenuSection[] = [
-      {
-        id: "add",
-        items:
-          experience === "work"
-            ? [{ kind: "files" }, { kind: "folder" }]
-            : [{ kind: "files" }],
-        label: "Add",
-      },
-    ];
-    if (addMenuSlashItems.length > 0) {
-      sections.push({
-        id: "slash",
-        items: addMenuSlashItems.map((item) => ({ kind: "slash", item })),
-        label: "Agents and actions",
-        queryScope: "slash",
-      });
-    }
-    if (addMenuSkillItems.length > 0) {
-      sections.push({
-        id: "skills",
-        items: addMenuSkillItems.map((item) => ({ kind: "slash", item })),
-        label: "Skills",
-        queryScopes: ["slash", "mentions"],
-      });
-    }
-    sections.push({
-      id: "openpond",
-      items: addMenuOpenPondItems.map((item) => ({ kind: "slash", item })),
-      label: "OpenPond",
-      grid: true,
-      queryScope: "slash",
-    });
-    sections.push({
-      emptyLabel: "No mentions available",
-      id: "mentions",
-      items: addMenuMentionItems.map((item) => ({ kind: "mention", item })),
-      label: "@",
-    });
-    return sections;
-  }, [
-    addMenuMentionItems,
-    addMenuOpenPondItems,
-    addMenuSkillItems,
-    addMenuSlashItems,
-    experience,
-  ]);
+  const addMenuSections = useMemo(() => buildComposerAddMenuSections({
+    work: experience === "work",
+    actions: addMenuSlashItems,
+    skills: addMenuSkillItems,
+    openpond: addMenuOpenPondItems,
+    mentions: addMenuMentionItems,
+    logIssue: showIssueAction,
+    retryIssueSettings: showIssueRetry,
+  }), [addMenuMentionItems, addMenuOpenPondItems, addMenuSkillItems, addMenuSlashItems, experience, showIssueAction, showIssueRetry]);
   const filteredAddMenuSections = useMemo(
     () => filterComposerCommandMenuSections(addMenuSections, addMenuQuery),
     [addMenuQuery, addMenuSections]
@@ -810,7 +779,8 @@ export function Composer({
       autoFocusAppliedRef.current = true;
       const focused = document.activeElement;
       if (focused && focused !== document.body && focused !== document.documentElement) return;
-      inputRef.current?.focusAtPromptIndex(prompt.length);
+      if (resourceEditorRef.current) resourceEditorRef.current.focus();
+      else inputRef.current?.focusAtPromptIndex(prompt.length);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [autoFocus, inputDisabled, prompt.length]);
@@ -823,8 +793,9 @@ export function Composer({
     )
       return;
     const frame = window.requestAnimationFrame(() => {
-      if (!inputRef.current?.element?.isConnected) return;
-      inputRef.current.focusAtPromptIndex(prompt.length);
+      if (resourceEditorRef.current) resourceEditorRef.current.focus();
+      else if (inputRef.current?.element?.isConnected) inputRef.current.focusAtPromptIndex(prompt.length);
+      else return;
       focusRequestAppliedRef.current = focusRequestId;
     });
     return () => window.cancelAnimationFrame(frame);
@@ -1234,6 +1205,11 @@ export function Composer({
     const range = addMenuSelectionRange();
     setAddMenuOpen(false);
     setAddMenuQuery("");
+    if (item.kind === "log-issue" || item.kind === "retry-issue-settings") {
+      if (item.kind === "log-issue") void issueAction?.logIssue();
+      else void issueAction?.retry?.();
+      return;
+    }
     if (item.kind === "files" || item.kind === "folder") {
       if (range.start !== range.end) {
         const nextPrompt = `${prompt.slice(0, range.start)}${prompt.slice(
@@ -1383,13 +1359,19 @@ export function Composer({
     });
   }
 
-  async function submitComposerPayload(options: {
-    preservePrompt?: boolean;
-    promptOverride?: string;
-  } = {}): Promise<boolean> {
+  async function submitComposerPayload(options: { preservePrompt?: boolean; promptOverride?: string } = {}): Promise<boolean> {
     if (contextSelection.selecting) return false;
     const submissionScope = submissionScopeKey;
+    if (resourceSetup && !selectedAction && !selectedCommand &&
+      !canSubmitBenchmarkSetup(resourceSetup, contextSelection.workspace, contextSelection.selection, taskSessionId)) {
+      showToast(benchmarkAccountMessage, "info");
+      return false;
+    }
     if (!beginSubmissionForScope(submissionScope)) return false;
+    const setup = resourceSetup && !selectedAction && !selectedCommand ? snapshotResourceSetup(
+      resourceSetup, contextSelection.selection, options.promptOverride ?? inputRef.current?.getPrompt() ?? prompt, contextSelection.workspace,
+      taskSessionId,
+    ) : null;
     setAddMenuOpen(false);
     setAttachmentError(null);
     const { contexts: submissionContexts, focus: submissionFocus } = composerSubmissionResourceContext(
@@ -1412,8 +1394,7 @@ export function Composer({
         selectedAction && selectedDisplayPrompt && !prompt.trim()
           ? selectedDisplayPrompt
           : undefined;
-      const promptOverride =
-        options.promptOverride ?? selectedActionPromptOverride;
+      const promptOverride = setup?.prompt ?? options.promptOverride ?? selectedActionPromptOverride;
       if (contextSelection.selection) window.dispatchEvent(new CustomEvent(CHAT_CONTEXT_SELECTED, {
         detail: { sessionId: taskSessionId ?? null, scope: contextSelection.scope, targetKey: JSON.stringify(contextSelection.selection.target) },
       }));
@@ -1428,12 +1409,21 @@ export function Composer({
                 : {}),
               ...(promptOverride !== undefined ? { promptOverride } : {}),
               ...(options.preservePrompt ? { preservePrompt: true } : {}),
-              turnMetadata: { ...composerResourceMetadata(submissionContexts), ...(submissionFocus ? { chatResourceFocus: submissionFocus } : {}) },
+              turnMetadata: {
+                ...composerResourceMetadata(submissionContexts),
+                ...(submissionFocus ? { chatResourceFocus: submissionFocus } : {}),
+                ...(setup ? { resourceSetup: setup.draft } : {}),
+              },
               ...(contextSelection.selection ? { sessionMetadata: { chatContextSelection: contextSelection.selection.target } } : {}),
               onSessionCreated: session => contextSelection.moveToSession(session.id),
             }
           : undefined,
       );
+      if (sent && setup && originDraftScopeKey) {
+        composerDraftStore?.setResourceSetup(originDraftScopeKey, current =>
+          current === resourceSetup && !current?.datasetInputsDirty && !current?.graderExamples && !current?.managedBenchmarkVersions && !current?.managedBenchmarkDataset &&
+            (!current?.managedTrainingInputs || setup?.draft.managedTrainingInputs) ? null : current);
+      }
       if (sent && resourceDrafts.current.get(submissionScope) === submissionContexts) resourceDrafts.current.delete(submissionScope);
       settleStagedAttachments(
         stagedAttachments,
@@ -1585,6 +1575,10 @@ export function Composer({
     connection={connection} session={nativeAvailability.session} reason={nativeReadOnlyReason} onRechecked={nativeAvailability.acceptSession} onOpenParent={onOpenNativeParent}
   />;
 
+  const projectContext = <ComposerProjectTargetControl busy={busy || projectTarget.busy} placement={dropdownPlacement}
+    state={projectTarget} onChange={onProjectTargetChange} sessionId={taskSessionId}
+    resourceContext={surface === "chat" && enableResourceContext ? contextSelection : undefined} />;
+
   return (
     <form
       ref={composerRef}
@@ -1654,14 +1648,7 @@ export function Composer({
       />
       {mode === "start" && (showProjectFooter || surface === "chat") && (
         <div className="composer-footer">
-          {showProjectFooter ? (
-            <ComposerProjectTargetControl
-              busy={busy || projectTarget.busy}
-              placement={dropdownPlacement}
-              state={projectTarget}
-              onChange={onProjectTargetChange}
-            />
-          ) : null}
+          {showProjectFooter ? projectContext : null}
           {profileTarget && onProfileTargetChange ? (
             <ComposerProfileTargetControl
               busy={busy}
@@ -1766,10 +1753,30 @@ export function Composer({
           onCompositionStartCapture={nextStep.onCompositionStart}
           onCompositionEndCapture={nextStep.onCompositionEnd}
           onClick={(event) => {
-            if (event.target === event.currentTarget)
-              inputRef.current?.focusAtPromptIndex(cursorIndex);
+            if (event.target !== event.currentTarget) return;
+            if (resourceEditorRef.current) resourceEditorRef.current.focus();
+            else inputRef.current?.focusAtPromptIndex(cursorIndex);
           }}
         >
+          {editingResourceSetup ? <ResourceSetupEditor
+            key={originDraftScopeKey}
+            draft={resourceSetup}
+            configureTarget={configureSlot}
+            editorRef={resourceEditorRef}
+            instructions={prompt}
+            onEditBody={promptBody => composerDraftStore.setResourceSetup(originDraftScopeKey, current =>
+              current === resourceSetup ? { ...current, promptBody, revision: current.revision + 1 } : current, prompt)}
+            onSubmit={queue => { if (!serializingAttachments) void submitComposer(queue); }}
+            onPasteFiles={addFiles}
+            busy={busy || serializingAttachments}
+            connection={connection}
+            datasets={chatResources.datasets}
+            evaluationModels={chatResources.models}
+            sessionId={taskSessionId ?? null} context={contextSelection}
+            onAttachDataset={reference => chatResources.select("dataset", reference.id, reference.revision)}
+            onChange={(previous, next) => composerDraftStore.setResourceSetup(originDraftScopeKey, current =>
+              current === previous ? carryResourcePromptEdits(previous, next) : current)}
+          /> : <>
           <ComposerNextStep next={nextStep} />
           <ComposerInlineInput
             ref={inputRef}
@@ -1898,11 +1905,11 @@ export function Composer({
             prompt={prompt}
             token={selectedInvocationToken}
           />
+          </>}
         </div>
         <ComposerPrimaryControls
-          issueAction={surface === "chat" ? <DesktopLogIssueAction key={conversationId ?? "new-chat"}
-            conversationId={conversationId} inbox={taskInbox} running={running} onSubmit={onSubmit} showToast={showToast} /> : null}
-          trainingControl={surface === "chat" && enableResourceContext ? <ChatContextPicker context={contextSelection} disabled={busy} placement={dropdownPlacement} /> : null}
+          configureSlotRef={editingResourceSetup ? setConfigureSlot : undefined}
+          trainingControl={surface === "chat" && enableResourceContext && (mode !== "start" || !showProjectFooter) ? projectContext : null}
           surface={surface}
           teamUseModel={teamUseModel}
           teamUseModelLocked={teamUseModelLocked}

@@ -319,7 +319,7 @@ export function WorkSidebarPanel({
                   Outputs
                 </button>
                 <strong>
-                  {preview.output.title} · revision {preview.output.revision}
+                  {preview.output.title}, revision {preview.output.revision}
                 </strong>
               </header>
               {preview.text !== null ? (
@@ -693,7 +693,7 @@ function workContextItems(messages: ChatMessage[]) {
       items.set(`attachment:${attachment.id}`, {
         key: `attachment:${attachment.id}`,
         title: attachment.name,
-        detail: `${attachment.mediaType} · ${formatBytes(
+        detail: `${attachment.mediaType}, ${formatBytes(
           attachment.sizeBytes
         )}`,
       });

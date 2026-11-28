@@ -17,6 +17,12 @@ export const NATIVE_AGENTS = {
   opencode: { title: "OpenCode", command: "opencode", args: ["acp"], installUrl: "https://opencode.ai/docs", login: ["opencode", "auth", "login"], homeVariable: "XDG_DATA_HOME", defaultHome: () => process.env.XDG_DATA_HOME || join(homedir(), ".local", "share") },
 } satisfies Record<BuiltinNativeAgentId, { title: string; command: string; args: string[]; installUrl: string; login: string[]; homeVariable: string; defaultHome(): string }>;
 
+// Antigravity reuses its native terminal login when a session opens. An ACP
+// authenticate request would start another interactive Google sign-in.
+export function nativeAgentAuthMethod(config?: Partial<ProviderConfig>, requested?: string) {
+  return isAntigravityConfig(config) ? undefined : requested ?? config?.acp?.authMethodId;
+}
+
 export function nativeAgentLaunch(provider: NativeAgentId, config?: Partial<ProviderConfig>) {
   if (isRegisteredAcpProvider(provider)) {
     if (!config?.acp) throw new Error("ACP agent registration is missing. Configure it in Providers.");

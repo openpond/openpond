@@ -141,7 +141,7 @@ export function NativeAgentProviderDetails({ connection, providerId, config, sta
     {installation ? <div className="native-agent-installation">
       <small className="native-agent-version" title={installation.executablePath}>{installation.version}</small>
       {installation.latestVersion ? <small>{installation.updateAvailable ? `Claude Code ${installation.latestVersion} is available.` : "Claude Code is up to date."}</small> : null}
-      {installation.channel ? <small>{installation.channel === "stable" ? `Stable channel${installation.stableVersion ? ` · ${installation.stableVersion}` : ""}. New models may require the latest channel.` : "Latest channel"}</small> : null}
+      {installation.channel ? <small>{installation.channel === "stable" ? `Stable channel${installation.stableVersion ? `, ${installation.stableVersion}` : ""}. New models may require the latest channel.` : "Latest channel"}</small> : null}
       {installation.updateAvailable ? <a href="https://code.claude.com/docs/en/setup#configure-release-channel" target="_blank" rel="noreferrer">Update instructions</a> : null}
     </div> : result?.version ? <small className="native-agent-version">{result.version}</small> : null}
     {!registered && result?.status === "needs_login" ? <button type="button" className="settings-secondary" disabled={disabled || dirty || !connection} title={dirty ? "Save changes before signing in to a different installation" : undefined} onClick={() => providerId === "claude-code" && nativeLogin.active ? nativeLogin.resume() : void login()}>{providerId === "claude-code" && nativeLogin.active ? "Continue sign-in" : "Sign in"}</button> : null}

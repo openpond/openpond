@@ -22,8 +22,14 @@ import type {
 } from "@openpond/contracts";
 import { apiFetch, type ClientConnection } from "./api-client";
 import { CodexRecoveryResponseSchema, type CodexRecoveryRequest } from "@openpond/contracts";
+import type { CreateSessionResourceDraftRequest } from "@openpond/contracts/requests";
 
 export const sessionApi = {
+  createSessionResourceDraft: (connection: ClientConnection, input: CreateSessionResourceDraftRequest) =>
+    apiFetch<Session>(connection, "/v1/sessions/resource-draft", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   recoverCodex: async (connection: ClientConnection, sessionId: string, input: CodexRecoveryRequest) =>
     CodexRecoveryResponseSchema.parse(await apiFetch<unknown>(connection, `/v1/sessions/${encodeURIComponent(sessionId)}/codex-recovery`,
       { method: "POST", body: JSON.stringify(input) })),

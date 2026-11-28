@@ -16,15 +16,22 @@ export function useComposerResourceRequests({ surface, voiceInputChannelKey = ""
     if (surface !== "chat" || !voiceInputChannelKey.startsWith("main-composer:")) return;
     const receive = (event: Event) => {
       const request = (event as CustomEvent<ComposerResourceRequest>).detail;
-      if (request?.sessionId !== (taskSessionId ?? null) || !request.text.trim()) return;
+      if (request?.sessionId !== (taskSessionId ?? null) || (!request.text.trim() && !request.resourceSetup)) return;
       try {
         resourceDrafts.current.set(submissionScopeKey, mergeComposerResourceContexts(resourceDrafts.current.get(submissionScopeKey) ?? [], request.contexts));
       } catch {
         showToast("Send or clear the current resource actions before adding more.", "info");
         return;
       }
+      if (request.resourceSetup && composerDraftStore) {
+        const setup = request.resourceSetup;
+        composerDraftStore.setResourceSetup(composerDraftStore.getScopeKey(), current => ({
+          ...setup,
+          revision: (current?.revision ?? 0) + 1,
+        }));
+      }
       const existing = inputRef.current?.getPrompt() ?? prompt;
-      const next = existing.trim() ? `${existing}\n\n${request.text}` : request.text;
+      const next = [existing, request.text].filter(text => text.trim()).join("\n\n");
       onPromptChange(next);
       requestAnimationFrame(() => inputRef.current?.focusAtPromptIndex(next.length));
     };

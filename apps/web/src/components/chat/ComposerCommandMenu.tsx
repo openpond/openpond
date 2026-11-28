@@ -5,9 +5,11 @@ import {
   AtSign,
   BookOpenText,
   Bot,
+  Bug,
   Check,
   FileText,
   Paperclip,
+  RefreshCw,
   Workflow,
 } from "../icons";
 import {
@@ -46,6 +48,8 @@ export type ComposerMentionMenuItem =
 export type ComposerCommandMenuItem =
   | { kind: "files" }
   | { kind: "folder" }
+  | { kind: "log-issue" }
+  | { kind: "retry-issue-settings" }
   | { kind: "slash"; item: SlashMenuItem }
   | { kind: "mention"; item: ComposerMentionMenuItem };
 
@@ -58,6 +62,33 @@ export type ComposerCommandMenuSection = {
   queryScope?: "mentions" | "slash";
   queryScopes?: Array<"mentions" | "slash">;
 };
+
+export function buildComposerAddMenuSections({ work, actions, skills, openpond, mentions, logIssue, retryIssueSettings }: {
+  work: boolean;
+  actions: SlashMenuItem[];
+  skills: SlashMenuItem[];
+  openpond: SlashMenuItem[];
+  mentions: ComposerMentionMenuItem[];
+  logIssue: boolean;
+  retryIssueSettings: boolean;
+}): ComposerCommandMenuSection[] {
+  const items: ComposerCommandMenuItem[] = [{ kind: "files" }];
+  if (work) items.push({ kind: "folder" });
+  if (logIssue) items.push({ kind: "log-issue" });
+  if (retryIssueSettings) items.push({ kind: "retry-issue-settings" });
+  const sections: ComposerCommandMenuSection[] = [{ id: "add", items, label: "Add" }];
+  if (actions.length) sections.push({
+    id: "slash", items: actions.map(item => ({ kind: "slash", item })), label: "Agents and actions", queryScope: "slash",
+  });
+  if (skills.length) sections.push({
+    id: "skills", items: skills.map(item => ({ kind: "slash", item })), label: "Skills", queryScopes: ["slash", "mentions"],
+  });
+  sections.push(
+    { id: "openpond", items: openpond.map(item => ({ kind: "slash", item })), label: "OpenPond", grid: true, queryScope: "slash" },
+    { id: "mentions", items: mentions.map(item => ({ kind: "mention", item })), label: "@", emptyLabel: "No mentions available" },
+  );
+  return sections;
+}
 
 function isAgentAction(action: SandboxActionCatalogEntry): boolean {
   const implementationType = action.implementation?.type;
@@ -139,6 +170,7 @@ function mentionMenuItemDetail(item: ComposerMentionMenuItem): string {
 function menuItemKey(item: ComposerCommandMenuItem): string {
   if (item.kind === "files") return "files";
   if (item.kind === "folder") return "folder";
+  if (item.kind === "log-issue" || item.kind === "retry-issue-settings") return item.kind;
   if (item.kind === "slash") return `slash:${slashMenuItemKey(item.item)}`;
   return `mention:${mentionMenuItemKey(item.item)}`;
 }
@@ -146,6 +178,8 @@ function menuItemKey(item: ComposerCommandMenuItem): string {
 function menuItemLabel(item: ComposerCommandMenuItem): string {
   if (item.kind === "files") return "Files and folders";
   if (item.kind === "folder") return "Local folder";
+  if (item.kind === "log-issue") return "Log an issue";
+  if (item.kind === "retry-issue-settings") return "Retry loading issue settings";
   if (item.kind === "slash") return slashMenuItemLabel(item.item);
   return mentionMenuItemLabel(item.item);
 }
@@ -155,6 +189,8 @@ function menuItemDetail(item: ComposerCommandMenuItem): string {
   if (item.kind === "folder") {
     return "Share a bounded folder as Work input";
   }
+  if (item.kind === "log-issue") return "Ask the agent to record the latest issue";
+  if (item.kind === "retry-issue-settings") return "Reload the issue Dataset settings";
   if (item.kind === "slash") return slashMenuItemDetail(item.item);
   return mentionMenuItemDetail(item.item);
 }
@@ -220,6 +256,8 @@ export function filterComposerCommandMenuSections(
 function menuItemIcon(item: ComposerCommandMenuItem) {
   if (item.kind === "files") return <Paperclip size={14} />;
   if (item.kind === "folder") return <Paperclip size={14} />;
+  if (item.kind === "log-issue") return <Bug size={14} />;
+  if (item.kind === "retry-issue-settings") return <RefreshCw size={14} />;
   if (item.kind === "slash") {
     const slashItem = item.item;
     if (slashItem.kind === "command") {

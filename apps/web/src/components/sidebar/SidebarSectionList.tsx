@@ -2,9 +2,11 @@ import { SidebarInbox } from "./SidebarInbox";
 import { sidebarThreadGroups } from "./SidebarThreadGroupIndicator";
 import { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
 export { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
-import { SidebarNewThreadButton } from "./SidebarNavigation";
+import { SidebarModelResource } from "./SidebarModelResource";
+import { SidebarResourceRow } from "./SidebarResourceRow";
+import { sidebarResourceThreads } from "./sidebar-resource-threads";
+import { hostedModelScope } from "../../lib/hosted-model-scope";
 import { SidebarTeamAvatars } from "./SidebarTeamAvatars";
-import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
 import { Inbox, List } from "../icons";
 import { clientChoiceStorage } from "../../lib/client-choice-storage";
@@ -58,7 +60,7 @@ import {
   SidebarTaskProjectGroup,
   type SidebarTaskGroupKind,
 } from "./SidebarTaskProjectGroup";
-import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
+import { modelsLocation, navigateDesktopRoute, navigateModelsRoute, type ModelsRoute } from "../labs/lab-primary-tab-state";
 import { isDesktopShell } from "../app-shell/WindowControls";
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
@@ -100,15 +102,18 @@ export function groupSidebarTaskRows(
 
 export function SidebarSectionList({
   activeSessions,
-  beginNewChat,
   account,
+  connection,
+  modelProjects,
+  resourceWorkspaceId,
+  onSelectModelContext,
+  modelTrainingActivityByProjectId,
   teamChatEnabled,
   teamChatOrganization,
   selectedTeamId,
   teamMembers,
   currentUserId,
   openTeamDm,
-  onOpenPonder,
   workflowGroups: _workflowGroups = [],
   workflowSessions = [],
   trainingSessionIds = EMPTY_TRAINING_SESSION_IDS,
@@ -170,6 +175,8 @@ export function SidebarSectionList({
   const [groupByProject, setGroupByProject] = useState(true);
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [ordinaryCollapsed, setOrdinaryCollapsed] = useState(false);
+  const [libraryCollapsed, setLibraryCollapsed] = useState({ model: false, benchmark: false });
+  const [selectedModelGroup, setSelectedModelGroup] = useState<{ id: string; sessionId: string | null } | null>(null);
   const [taskVisibility, setTaskVisibility] = useState(
     readSidebarTaskVisibilityPreferences,
   );
@@ -334,6 +341,17 @@ export function SidebarSectionList({
       ordinaryFilteredTaskRows.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)),
     [chatRowsVisibleCount, ordinaryFilteredTaskRows],
   );
+  const { modelsById: modelChatsById, benchmarks, grouped: libraryChatIds } = useMemo(() => {
+    return sidebarResourceThreads(activeSessions, ordinaryFilteredTaskRows, modelProjects, hostedModelScope(account, resourceWorkspaceId));
+  }, [account, activeSessions, ordinaryFilteredTaskRows, modelProjects, resourceWorkspaceId]);
+  const sidebarModels = modelProjects.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount));
+  const selectedModelId = selectedModelGroup && selectedModelGroup.sessionId === selectedSessionId
+    ? selectedModelGroup?.id
+    : [...modelChatsById].find(([, chats]) => chats.some(session => session.id === selectedSessionId))?.[0];
+  const visibleModelIds = new Set(sidebarModels.map(model => model.id));
+  function openResourcePage(route: ModelsRoute) {
+    void navigateModelsRoute(route).then(opened => { if (opened) setView("labs"); });
+  }
   const groupedTaskRows = useMemo(
     () => {
       const groups = groupSidebarTaskRows(visibleTaskRows, (session) => {
@@ -833,21 +851,48 @@ export function SidebarSectionList({
             onClick={() => { const next = inboxView ? "grouped" : "inbox"; setPresentation(next); clientChoiceStorage.setItem("openpond.sidebar.presentation.v1", next); }}>
             {inboxView ? <List size={16} /> : <Inbox size={16} />}
           </button>
-          <SidebarNewThreadButton beginNewChat={beginNewChat} />
         </div>
       </div>
-      {onOpenPonder ? (
-        <button type="button" className="sidebar-row sidebar-task-row sidebar-ponder-entry" onClick={onOpenPonder}>
-          <span className="conversation-source-icon" aria-hidden="true"><img src={OPENPOND_ICON_URL} alt="" /></span>
-          <span>Pal</span>
-        </button>
-      ) : null}
       {visiblePinnedRows.length > 0 || pinnedWorkflowRows.length > 0 ? (
         <div className="sidebar-pinned-rows">
           {visiblePinnedRows.map(renderPinnedRow)}
           {renderWorkflowGroups(pinnedWorkflowRows)}
         </div>
       ) : null}
+      {(["model", "benchmark"] as const).map(kind => {
+        const isModels = kind === "model";
+        const page = isModels ? modelsLocation("models") : modelsLocation("experiments", null, { area: "console" });
+        return <SidebarSection key={kind} label={isModels ? "Models" : "Benchmarks"}
+          collapsed={libraryCollapsed[kind]}
+          onTitleClick={() => openResourcePage(page)}
+          onToggleCollapsed={() => setLibraryCollapsed(current => ({ ...current, [kind]: !current[kind] }))}>
+          {isModels ? <>
+            {sidebarModels.map(model => {
+              const chats = modelChatsById.get(model.id);
+              return <SidebarModelResource key={model.id} model={model}
+                selected={selectedModelId === model.id}
+                onActivate={() => {
+                  setSelectedModelGroup({ id: model.id, sessionId: null });
+                  onSelectModelContext(model.id);
+                }}
+                onToggle={expanded => setSelectedModelGroup(current => expanded ? { id: model.id, sessionId: selectedSessionId }
+                  : current?.id === model.id ? null : current)}
+                activity={modelTrainingActivityByProjectId[model.id]} connection={connection}
+                actorId={account?.state === "signed_in" ? account.profile?.id ?? null : null}
+                apiBaseUrl={account?.apiBaseUrl ?? null} activeTeamId={resourceWorkspaceId}
+                onOpen={() => openResourcePage(modelsLocation("models", model.id))}
+                onOpenLearning={() => openResourcePage(modelsLocation("models", model.id, { detailTab: "learning" }))}
+                onOpenVersions={() => openResourcePage(modelsLocation("versions", model.id))}
+                onOpenRuns={resourceId => openResourcePage(modelsLocation("runs", model.id, { area: "console", resourceId }))}>
+                {chats?.slice(0, chatRowsVisibleCount).map(session => renderTaskSession(session))}
+              </SidebarModelResource>;
+            })}
+            {[...modelChatsById].filter(([id]) => !visibleModelIds.has(id))
+              .flatMap(([, chats]) => chats.map(session => renderTaskSession(session)))}
+          </> : [...benchmarks.values()].slice(0, chatRowsVisibleCount).map(({ owner, name, chats }) => <SidebarResourceRow key={owner.id} name={name}
+            onOpen={() => selectSession(owner)}>{chats.slice(0, chatRowsVisibleCount).map(session => renderTaskSession(session))}</SidebarResourceRow>)}
+        </SidebarSection>;
+      })}
       {inboxView ? <SidebarInbox rows={inboxRows} count={chatRowsVisibleCount} setCount={setChatRowsVisibleCount}
         selectedSessionId={selectedSessionId}
         emptyLabel={visiblePinnedRows.length === 0 && pinnedWorkflowRows.length === 0 ? sidebarTaskEmptyLabel(taskFilter, taskNoun) : null}
@@ -893,7 +938,7 @@ export function SidebarSectionList({
         {(!groupByProject
           ? visibleTaskRows
           : visibleTaskRows.filter((session) => !sidebarProjectIdBySessionId[session.id])
-        ).filter(session => !trainingSessionIds.has(session.id)).map((session) => renderTaskSession(session))}
+        ).filter(session => !trainingSessionIds.has(session.id) && !libraryChatIds.has(session.id)).map((session) => renderTaskSession(session))}
         {ordinaryFilteredTaskRows.length === 0 && visiblePinnedRows.length === 0 ? (
           <div className="empty-row">
             {sidebarTaskEmptyLabel(taskFilter, taskNoun)}

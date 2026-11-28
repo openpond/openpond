@@ -50,7 +50,7 @@ export function TrainingEvidenceWorkspace({
       </nav>
       {stage === "Logs" ? (
         <section aria-label="Run-wide logs">
-          <p className="training-muted">Run-wide logs · entries retain their recorded context.</p>
+          <p className="training-muted">Run-wide logs, entries retain their recorded context.</p>
           <ErrorToast error={logsError} />
           {logsLoading ? <p role="status">Loading retained logs…</p> : null}
           {!logs.length && !logsLoading ? (

@@ -46,7 +46,6 @@ export default desktopScenario({
     }
     const inventory = await harness.renderer.evaluate<any[]>(`[...document.querySelectorAll('.model-training-starter')].map(b=>({text:b.textContent,disabled:b.disabled}))`);
     check("fourCardsPresent", inventory.length === 4);
-    check("weightSpaceTruthfullyUnavailable", inventory[3].disabled && /Not available yet/.test(inventory[3].text));
     evidence.push({ stage: "inventory", inventory });
     const workdir = await mkdtemp(path.join(os.tmpdir(), "openpond-starter-acceptance-"));
     const sentinel = await harness.api.createSession<any>({ provider: "codex", title: harness.uniqueTitle("Starter scope sentinel"), cwd: workdir });
@@ -75,22 +74,25 @@ export default desktopScenario({
       const initialModel = await harness.renderer.evaluate<string>(`document.querySelector('.codex-model-trigger')?.textContent ?? ''`);
       await harness.renderer.evaluate(`document.querySelectorAll('.model-training-starter')[${index}].click()`);
       const prompt = await harness.renderer.evaluate<string>(`document.querySelector('.composer-inline-input')?.innerText ?? ''`);
+      const readSetup = () => harness.renderer.evaluate<string>(`document.querySelector('.resource-setup-editor .resource-setup-sentence')?.textContent ?? ''`);
+      const setup = await readSetup();
       check(`${method}:existingDraftPreserved`, prompt.startsWith(prefix.trimEnd()));
-      check(`${method}:cardAddedPrompt`, prompt.length > prefix.length && /selected resources/.test(prompt));
+      check(`${method}:cardAddedSetup`, setup.toLowerCase().includes(method));
       await harness.renderer.evaluate(`document.querySelectorAll('.model-training-starter')[${index}].click()`);
-      check(`${method}:repeatClickDoesNotDuplicate`, prompt === await harness.renderer.evaluate(`document.querySelector('.composer-inline-input')?.innerText ?? ''`));
+      check(`${method}:repeatClickDoesNotDuplicate`, setup === await readSetup());
       check(`${method}:attachmentPreserved`, await harness.renderer.evaluate(`!!document.querySelector('.composer-attachment-card')?.textContent?.includes(${JSON.stringify(`${method}-examples.json`)})`));
       check(`${method}:answeringModelPreserved`, initialModel === await harness.renderer.evaluate(`document.querySelector('.codex-model-trigger')?.textContent ?? ''`));
       check(`${method}:clickDoesNotSend`, JSON.stringify(await startedTurns()) === JSON.stringify(baselineTurns));
-      const beforeDisabled = prompt;
       await harness.renderer.evaluate(`document.querySelectorAll('.model-training-starter')[3].click()`);
-      check(`${method}:disabledCardDoesNotChangeDraft`, beforeDisabled === await harness.renderer.evaluate(`document.querySelector('.composer-inline-input')?.innerText ?? ''`));
+      check(`${method}:switchUpdatesSetup`, (await readSetup()).includes("Weight-space programming"));
+      check(`${method}:switchPreservesTypedDraft`, prompt === await harness.renderer.evaluate(`document.querySelector('.composer-inline-input')?.innerText ?? ''`));
+      await harness.renderer.evaluate(`document.querySelectorAll('.model-training-starter')[${index}].click()`);
       if (index === 0) {
         await harness.renderer.selectSession(sentinel.id);
         check("otherChatDoesNotReceiveDraft", await harness.renderer.evaluate(`!document.querySelector('.composer-inline-input')?.textContent?.includes('starter acceptance')`));
         await harness.renderer.evaluate(`document.querySelector('button[aria-label="New thread"]')?.click()`);
         await waitForRendererCondition(harness, `!!document.querySelector('.model-training-starter')`, "return to start");
-        check("returnToScopeRestoresDraft", prompt === await harness.renderer.evaluate(`document.querySelector('.composer-inline-input')?.innerText ?? ''`));
+        check("returnToScopeRestoresDraft", setup === await readSetup() && prompt === await harness.renderer.evaluate(`document.querySelector('.composer-inline-input')?.innerText ?? ''`));
         check("returnToScopeRestoresAttachment", await harness.renderer.evaluate(`!!document.querySelector('.composer-attachment-card')?.textContent?.includes('sft-examples.json')`));
         // Keep collecting all actual agent outcomes on the released version even
         // if this regression is present; the failed assertion remains in report.
@@ -101,7 +103,7 @@ export default desktopScenario({
           input.files=data.files;input.dispatchEvent(new Event('change',{bubbles:true}));
         })()`);
       }
-      const entry: Record<string, unknown> = { method, prompt, attachedFixture: fixture, clickedButUnsent: true };
+      const entry: Record<string, unknown> = { method, prompt, setup, attachedFixture: fixture, clickedButUnsent: true };
       evidence.push(entry);
       await save();
       await harness.screenshot(`${method}-editable-draft`);

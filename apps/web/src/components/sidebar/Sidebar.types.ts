@@ -11,7 +11,7 @@ import type {
   CommunitySummary,
   Experience,
   ProductArea,
-  ModelProject,
+  TrainingNavigationResponse,
 } from "@openpond/contracts";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type {
@@ -40,11 +40,10 @@ export type SidebarProps = {
   onProductAreaChange: (productArea: ProductArea) => void;
   experience: Experience;
   view: AppView;
-  modelProjects: Pick<ModelProject, "id" | "name">[];
-  modelTrainingActivityByProjectId: Record<
-    string,
-    { label: string; status: string }
-  >;
+  modelProjects: TrainingNavigationResponse["projects"];
+  resourceWorkspaceId: string | null;
+  onSelectModelContext: (modelId: string) => void;
+  modelTrainingActivityByProjectId: TrainingNavigationResponse["activityByProjectId"];
   selectedAppId: string | null;
   selectedProjectId: string | null;
   selectedSessionId: string | null;
@@ -117,6 +116,7 @@ export type SidebarProps = {
   setCloudProjectsExpanded: Dispatch<SetStateAction<boolean>>;
   setChatRowsVisibleCount: Dispatch<SetStateAction<number>>;
   beginNewChat: (app?: OpenPondApp | null) => void;
+  openHomeChat: () => void;
   beginProjectChat: (projectId: string) => void;
   onAddProject: () => void;
   dockSessionRight: (session: Session) => void;

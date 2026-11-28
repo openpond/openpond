@@ -68,7 +68,7 @@ export function CommunityMessageRow(props: {
                 </button>
               ) : (
                 <div className="community-attachment-placeholder" key={attachment.id}>
-                  <span>{attachment.name}</span><small>Join to view · {formatBytes(attachment.sizeBytes)}</small>
+                  <span>{attachment.name}</span><small>Join to view, {formatBytes(attachment.sizeBytes)}</small>
                 </div>
               )
             ))}

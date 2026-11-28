@@ -21,5 +21,5 @@ export function TaskRatingDetails({ value }: { value: Record<string, unknown> })
   const parsed = TaskRatingSchema.safeParse(value);
   if (!parsed.success) return null;
   const rating = parsed.data;
-  return <dl><dt>Criteria</dt><dd>{rating.criteria}</dd><dt>Score</dt><dd>{rating.score} · Scale {rating.scale.minimum}–{rating.scale.maximum}</dd><dt>Evidence</dt><dd>{rating.evidence || "No supporting evidence supplied."}</dd><dt>Explanation</dt><dd>{rating.explanation || "No explanation supplied."}</dd></dl>;
+  return <dl><dt>Criteria</dt><dd>{rating.criteria}</dd><dt>Score</dt><dd>{rating.score}, Scale {rating.scale.minimum}–{rating.scale.maximum}</dd><dt>Evidence</dt><dd>{rating.evidence || "No supporting evidence supplied."}</dd><dt>Explanation</dt><dd>{rating.explanation || "No explanation supplied."}</dd></dl>;
 }

@@ -34,7 +34,8 @@ export function DecisionScoringFields({form, onChange, compact = false}: {form: 
     {compact ? <details className="decision-chat-limits"><summary>Scoring limits</summary>{limits}</details> : limits}
   </>;
 }
-export function DecisionTrainingFields({form, onChange}: {form: Extract<DecisionExperimentFormDraft, {mode: "train"}>; onChange: (form: Extract<DecisionExperimentFormDraft, {mode: "train"}>) => void}) {
-  const labels: Record<keyof typeof form.training, string> = {learningRate: "Learning rate", weightDecay: "Weight decay", maxSteps: "Maximum optimizer steps", gradientAccumulationSteps: "Gradient accumulation steps", maximumPromptTokens: "Maximum prompt tokens", seed: "Seed", maxDurationSeconds: "Maximum duration (seconds)", maxCheckpointBytes: "Maximum checkpoint bytes"};
-  return <>{(Object.keys(labels) as Array<keyof typeof form.training>).map(key => <label key={key}>{labels[key]}<input value={form.training[key]} inputMode="decimal" maxLength={100} onChange={event => onChange({...form, training: {...form.training, [key]: event.target.value}})} /></label>)}</>;
+type DecisionTraining = Extract<DecisionExperimentFormDraft, {mode: "train"}>["training"];
+export function DecisionTrainingFields({training, onChange}: {training: DecisionTraining; onChange: (training: DecisionTraining) => void}) {
+  const labels: Record<keyof DecisionTraining, string> = {learningRate: "Learning rate", weightDecay: "Weight decay", maxSteps: "Maximum optimizer steps", gradientAccumulationSteps: "Gradient accumulation steps", maximumPromptTokens: "Maximum prompt tokens", seed: "Seed", maxDurationSeconds: "Maximum duration (seconds)", maxCheckpointBytes: "Maximum checkpoint bytes"};
+  return <>{(Object.keys(labels) as Array<keyof DecisionTraining>).map(key => <label key={key}>{labels[key]}<input value={training[key]} inputMode="decimal" maxLength={100} onChange={event => onChange({...training, [key]: event.target.value})} /></label>)}</>;
 }

@@ -14,6 +14,10 @@ import { ExperimentCompare } from "./ExperimentCompare";
 import { HostedExperimentCollection } from "./HostedExperimentCollection";
 import { useWorkspaceActions, useWorkspaceResourceName } from "./WorkspacePanel";
 import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { BenchmarkRunPinSchema } from "@openpond/contracts/resource-setup";
+import { chatResourceRequest } from "../../../api/chat-resource-api";
+import { navigateDesktopRoute } from "../lab-primary-tab-state";
 import type { ModelsRoute } from "../models-route";
 import { useEvaluationSetup } from "./EvaluationSetupState";
 import type { ExperimentGraderPin } from "openpond-sdk/experiments";
@@ -47,6 +51,17 @@ export function HostedExperimentsPage({
     detail = useHostedExperimentDetail(api, route),
     run = detail.execution.data,
     tab = route.detailTab === "cases" ? "tasks" : route.detailTab ?? "tasks";
+  const benchmark = useQuery({
+    queryKey: ["benchmark-run-pin", api.key, run?.summary.id],
+    enabled: ["versions", "compare"].includes(tab) && run?.request.policy.kind === "hosted_chat" && Boolean(run.request.policy.candidate),
+    queryFn: async ({ signal }) => {
+      const value = await chatResourceRequest<{ benchmark: unknown; sessionId: string | null }>(api.connection, "experiment", {
+        action: "benchmark_pin", payload: { id: run!.summary.id },
+      }, signal);
+      return { pin: BenchmarkRunPinSchema.nullable().parse(value.benchmark), sessionId: value.sessionId };
+    },
+    staleTime: Infinity,
+  });
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     active = useRef(false);
@@ -71,7 +86,7 @@ export function HostedExperimentsPage({
       ? [
           {
             id: "experiment",
-            label: "Experiment",
+            label: "Benchmark",
             onSelect: () =>
               setup.open(
                 run
@@ -116,18 +131,18 @@ export function HostedExperimentsPage({
   return (
     <>
       <header className="evaluation-workspace-header">
-        <h1 className="sr-only">{run?.request.name ?? detail.recorded.data?.request.name ?? "Experiments"}</h1>
+        <h1 className="sr-only">{run?.request.name ?? detail.recorded.data?.request.name ?? "Benchmarks"}</h1>
         {!route.resourceId ? (
           <input
-            aria-label="Search experiments"
-            placeholder="Search experiments"
+            aria-label="Search benchmarks"
+            placeholder="Search benchmarks"
             value={route.query}
             onChange={(event) => navigate({ ...route, query: event.target.value, after: null })}
           />
         ) : null}
-        {!route.resourceId || run ? (
+        {run ? (
           <button className="training-button" disabled={busy} onClick={() => select("experiment")}>
-            {run ? "Duplicate and edit" : "Run experiment"}
+            Duplicate and edit
           </button>
         ) : null}
       </header>
@@ -162,7 +177,7 @@ export function HostedExperimentsPage({
           })} />
       ) : run ? (
         <>
-          <nav className="evaluation-workspace-tabs" aria-label="Experiment tabs">
+          <nav className="evaluation-workspace-tabs" aria-label="Benchmark tabs">
             {["tasks", "graders", "versions", "diagnostics", "configuration", "compare"].map((value) => (
               <button
                 key={value}
@@ -182,11 +197,10 @@ export function HostedExperimentsPage({
             />
             <EvaluationStatus status={run.summary.status} />
             <span className="evaluation-run-counts">
-              <b>{run.summary.counts.completed}</b> completed · <b>{run.summary.counts.failed}</b>{" "}
-              failed · <b>{run.summary.counts.running}</b> running ·{" "}
-              <b>{run.summary.counts.pending}</b> pending · <b>{run.summary.totalCount}</b> attempts
+              <b>{run.summary.counts.completed}</b> completed, <b>{run.summary.counts.failed}</b>{" "}
+              failed, <b>{run.summary.counts.running}</b> running,{" "}
+              <b>{run.summary.counts.pending}</b> pending, <b>{run.summary.totalCount}</b> attempts
             </span>
-            <span aria-hidden="true">·</span>
             <EvaluationTime value={run.summary.startedAt ?? run.summary.createdAt} />
             {["queued", "running", "cancelling"].includes(run.summary.status) ? (
               <button
@@ -274,7 +288,12 @@ export function HostedExperimentsPage({
             />
           ) : null}
           {tab === "diagnostics" ? <ExperimentDiagnostics key={api.key+run.summary.id} api={api} id={run.summary.id} manifestHash={run.summary.manifestHash}/> : null}
-          {tab === "graders" || tab === "versions" ? <ExperimentRunPins configuration={run.configuration} section={tab}/> : null}
+          {tab === "graders" || tab === "versions" ? <ExperimentRunPins configuration={run.configuration} section={tab} benchmark={benchmark.data?.pin}/> : null}
+          {tab === "compare" && benchmark.data?.sessionId && <button type="button" className="training-button secondary"
+            onClick={() => void navigateDesktopRoute({ kind: "chat", sessionId: benchmark.data!.sessionId })}>
+            Open Benchmark draft
+          </button>}
+          <ErrorToast error={benchmark.error} />
           {tab === "configuration" ? (
             <ExperimentConfiguration
               execution={run}
@@ -282,12 +301,14 @@ export function HostedExperimentsPage({
               onOpenGrader={openGrader}
             />
           ) : null}
-          {tab === "compare" ? (
+          {tab === "compare" && (run.request.policy.kind !== "hosted_chat" || !run.request.policy.candidate || benchmark.isSuccess) ? (
             <ExperimentCompare
               key={`${run.summary.id}:${route.passId ?? "original"}`}
               api={api}
               inventory={inventory}
               baselineId={route.passId ?? run.summary.id}
+              exactBenchmark={Boolean(!route.passId && benchmark.data?.pin?.modelVersion)}
+              baselineReady={run.summary.resultAvailable}
               graders={selectedGraders}
               onOpenGrader={openGrader}
             />

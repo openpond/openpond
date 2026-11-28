@@ -10,6 +10,7 @@ import {
 } from "../../../api/model-learning-api";
 import { LearningActions, LearningError, LearningPager } from "./LearningFields";
 import { DropdownSelect } from "../../DropdownSelect";
+import { RefreshCw } from "../../icons";
 
 const Settings = lazy(() =>
   import("./HostedModelLearningSettings").then((module) => ({
@@ -26,10 +27,12 @@ export function HostedModelLearning({
   connection,
   model,
   readOnly,
+  openSettings = false,
 }: {
   connection: ClientConnection;
   model: ModelProject;
   readOnly: boolean;
+  openSettings?: boolean;
 }) {
   const client = useMemo(
     () => createHostedModelLearningApi(connection, model.id, model.profileId),
@@ -54,6 +57,7 @@ export function HostedModelLearning({
   const [busy, setBusy] = useState(false);
   const pending = useRef<LearningCommand | null>(null);
   const active = useRef(false);
+  const openedSettings = useRef(false);
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -63,6 +67,10 @@ export function HostedModelLearning({
         if (!stopped) {
           setState({ client, key, value });
           setError(null);
+          if (openSettings && !openedSettings.current && !readOnly) {
+            openedSettings.current = true;
+            setEditing({ project: value.project, policy: value.policy });
+          }
         }
       } catch (failure) {
         if (!stopped)
@@ -78,7 +86,7 @@ export function HostedModelLearning({
       stopped = true;
       clearTimeout(timer);
     };
-  }, [client, policyId, afterId, key, revision]);
+  }, [client, policyId, afterId, key, revision, openSettings, readOnly]);
   const value = state?.client === client && state.key === key ? state.value : null;
   const policy = value?.policy;
   const waiting =
@@ -139,7 +147,10 @@ export function HostedModelLearning({
   return (
     <section className="training-detail-section" aria-label="Hosted continual learning">
       <ConversationServingOwner connection={connection} model={model} readOnly={readOnly} />
-      <h2>Continual learning</h2>
+      <h2 className="labs-run-title-row">
+        {policy ? <RefreshCw size={18} aria-label={policy.enabled ? "Continual learning on" : "Continual learning paused"} /> : null}
+        Continual learning
+      </h2>
       <p>
         Enabled hosted policies keep checking while Desktop is closed. Training waits for admitted,
         unused evidence and authorized budget and capacity.
@@ -180,7 +191,7 @@ export function HostedModelLearning({
             }}
             options={value.policies.items.map((item) => ({
               value: item.id,
-              label: `${item.id} · ${item.enabled ? "Enabled" : "Paused"}`,
+              label: `${item.id}, ${item.enabled ? "Enabled" : "Paused"}`,
             }))}
           />
         </label>
@@ -188,7 +199,7 @@ export function HostedModelLearning({
       {policy ? (
         <>
           <p>
-            {policy.enabled ? "Enabled" : "Paused"} ·{" "}
+            {policy.enabled ? "Enabled" : "Paused"},{" "}
             {policy.admission.mode === "human"
               ? "Human review required"
               : "Qualified automatic admission"}
@@ -209,7 +220,7 @@ export function HostedModelLearning({
             {policy.trigger.kind === "schedule"
               ? `Checks every ${policy.trigger.intervalSeconds / 60} minutes`
               : policy.trigger.kind === "nightly"
-                ? `Checks at ${policy.trigger.localTime} · ${policy.trigger.timeZone}`
+                ? `Checks at ${policy.trigger.localTime}, ${policy.trigger.timeZone}`
                 : policy.trigger.kind === "approved_count"
                   ? "Checks as approved tasks arrive"
                   : "Manual training"}
@@ -226,13 +237,13 @@ export function HostedModelLearning({
                     : undefined,
                 )}
               </time>
-              {policy.trigger.kind === "nightly" ? ` · ${policy.trigger.timeZone}` : ""}
+              {policy.trigger.kind === "nightly" ? `, ${policy.trigger.timeZone}` : ""}
             </p>
           ) : !policy.enabled ? (
             <p>Future cycles paused.</p>
           ) : null}
           <p>
-            Policy revision {policy.revision} · {policy.training.method.toUpperCase()} · grader
+            Policy revision {policy.revision}, {policy.training.method.toUpperCase()}, grader
             binding {policy.rewardBinding.id}, revision {policy.rewardBinding.revision}.
           </p>
           <p>
@@ -259,7 +270,7 @@ export function HostedModelLearning({
           {value?.iteration ? (
             <p>
               Latest iteration:{" "}
-              {waiting ? "Waiting to train" : value.iteration.status.replaceAll("_", " ")} ·{" "}
+              {waiting ? "Waiting to train" : value.iteration.status.replaceAll("_", " ")},{" "}
               {value.iteration.id}
             </p>
           ) : null}
@@ -281,9 +292,9 @@ export function HostedModelLearning({
           ) : null}
           {value?.inspection ? (
             <p>
-              Reserved: ${value.inspection.budget.reservedSpendUsd.toFixed(4)} · Spent today: $
-              {value.inspection.budget.settledSpendUsd.toFixed(4)} · Per update limit: $
-              {policy.limits.maxIterationSpendUsd} · Daily limit: ${policy.limits.maxDailySpendUsd}
+              Reserved: ${value.inspection.budget.reservedSpendUsd.toFixed(4)}, Spent today: $
+              {value.inspection.budget.settledSpendUsd.toFixed(4)}, Per update limit: $
+              {policy.limits.maxIterationSpendUsd}, Daily limit: ${policy.limits.maxDailySpendUsd}
             </p>
           ) : null}
           {value?.inspection?.trainingParent ? (

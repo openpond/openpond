@@ -83,6 +83,21 @@ This submits a paid request. The full-context retail reservation must fit `--max
 
 An explicitly approved request can warm a self-hosted model before evaluating an unchanged dataset whose case timeout cannot cover cold startup. Prepare the evaluation first, then start it promptly after warming. The command never retries. Cancellation or a deadline after dispatch leaves charges and provider cleanup unconfirmed until reconciled; a stable request ID is for correlation and does not make replay safe. Provider startup, idle time, storage and cleanup need separate budget and lifecycle controls.
 
+## Local inference and training
+
+To send setup prompts or benchmark a model from your own provider while signed out, configure a loopback OpenAI-compatible server in **Settings → Providers → Local / Custom OpenAI-compatible**. Use the server's provider key and choose one of its models. That server controls GPU acceleration for inference. You can create and edit local setup drafts without connecting a provider.
+
+**This device** supports one-time supervised fine-tuning with LoRA on a single NVIDIA GPU on Linux. Prepare the runtime in the active OpenPond home.
+
+1. Verify that `nvidia-smi` lists the GPU. Create a Python virtual environment at `<active OpenPond home>/training/local-runtime`.
+2. Activate that environment and install the CUDA build of PyTorch that matches your driver. Install `transformers`, `peft`, `accelerate`, and `safetensors` in the same environment. [PyTorch installation selector](https://docs.pytorch.org/get-started/locally/)
+3. In **New → Model**, select **SFT**, **LoRA**, and **This device**. Import a local Llama, Qwen2, or Qwen3 checkpoint folder with safetensors weights, a fast tokenizer, and a chat template. Select a local Dataset with text prompts and expected answers in its training split.
+4. **Preview training examples**, approve the exact rows, and select **Check this device**. After the check passes, use **Start local training**. The setup review shows the GPU and optimizer progress. Reopen the same review to find the run or cancel it.
+
+OpenPond retains the adapter and its hashes in the active home's `training/local-sft/runs/` directory. After installing dependencies and downloading the base model, training can run offline. The local runner loads the on-disk checkpoint and Dataset without OpenPond authentication.
+
+In **Models → Versions**, open a locally trained adapter and choose **Benchmark this version**. Select a local Dataset revision, an optional saved local baseline, and CPU or NVIDIA CUDA. Save the review before selecting **Run saved Benchmark**. OpenPond uses the saved base checkpoint and adapter bytes in the local Python environment. Both versions use the same cases and the Dataset's local graders. The results retain their Benchmark revision and request no hosted inference or grading.
+
 ## Local voice dictation
 
 Voice dictation uses whisper.cpp locally with `small.en-q5_1` by default, a quantized English model with an approximately 181 MiB download. OpenPond downloads it once on first transcription and reuses the file in `voice-models/` inside the active home. Each transcription loads the model into a separate process that exits afterward; working memory exceeds the download size.

@@ -276,11 +276,11 @@ export function eventSummary(event: TrainingJobEvent): string {
       typeof payload.errorCode === "string" ? payload.errorCode : null;
     const source =
       typeof payload.telemetrySource === "string"
-        ? ` · ${payload.telemetrySource}`
+        ? `, ${payload.telemetrySource}`
         : "";
     return `${message ?? payload.telemetryType.replaceAll("_", " ")}${
-      step == null ? "" : ` · step ${step}`
-    }${source}${errorCode ? ` · ${errorCode}` : ""}`;
+      step == null ? "" : `, step ${step}`
+    }${source}${errorCode ? `, ${errorCode}` : ""}`;
   }
   if (typeof payload.remoteEventType === "string") {
     const label = remoteEventLabel(payload.remoteEventType);
@@ -299,7 +299,7 @@ export function eventSummary(event: TrainingJobEvent): string {
       errorCode ? `error ${errorCode}` : null,
     ]
       .filter((value): value is string => Boolean(value))
-      .join(" · ");
+      .join(", ");
   }
   if (event.type === "start") {
     return typeof payload.device === "string"
@@ -332,12 +332,12 @@ export function eventSummary(event: TrainingJobEvent): string {
     const managedMetric =
       typeof payload.metricId === "string" &&
       typeof payload.value === "number"
-        ? ` · ${payload.metricId}: ${payload.value.toPrecision(4)}`
+        ? `, ${payload.metricId}: ${payload.value.toPrecision(4)}`
         : "";
-    return `${kind}${step == null ? "" : ` · step ${step}`}${managedMetric}${
-      failureClass ? ` · ${failureClass}` : ""
-    }${failureCode ? ` · ${failureCode}` : ""}${
-      values.length ? ` · ${values.join(" · ")}` : ""
+    return `${kind}${step == null ? "" : `, step ${step}`}${managedMetric}${
+      failureClass ? `, ${failureClass}` : ""
+    }${failureCode ? `, ${failureCode}` : ""}${
+      values.length ? `, ${values.join(", ")}` : ""
     }`;
   }
   if (event.type === "checkpoint") {
@@ -349,7 +349,7 @@ export function eventSummary(event: TrainingJobEvent): string {
       payload.final === true ? "final" : null,
     ].filter((value): value is string => Boolean(value));
     return details.length
-      ? `Checkpoint committed · ${details.join(" · ")}.`
+      ? `Checkpoint committed, ${details.join(", ")}.`
       : "Checkpoint committed.";
   }
   if (event.type === "complete") {

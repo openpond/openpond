@@ -97,6 +97,10 @@
       "types": "./dist/requests.d.ts",
       "import": "./dist/requests.js"
     },
+    "./resource-setup": {
+      "types": "./dist/resource-setup.d.ts",
+      "import": "./dist/resource-setup.js"
+    },
     "./runtime": {
       "types": "./dist/runtime.d.ts",
       "import": "./dist/runtime.js"

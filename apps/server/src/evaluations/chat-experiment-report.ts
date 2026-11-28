@@ -19,7 +19,7 @@ export function chatExperimentReport(runs:{summary:ChatResourceSummary;evidence?
     population:run.view.cases.map(row=>[row.taskId,row.seed]),graders:run.view.graders,scope:run.view.scope,metric:run.summary.scoreLabel ?? "Mean task score"}))).size === 1;
   // Reserve the text allowance for exact retained identifiers before shortening
   // model labels and representative output. Large cases must not hide the pins.
-  const pins = retained.map(({summary,view})=>'<li>'+display(summary.id,200)+' · Dataset '+display(summary.datasetId ?? "",200)+' version '+(summary.datasetRevision ?? "")+' · retained result '+display(view.contentHash,200)+'</li>').join("");
+  const pins = retained.map(({summary,view})=>'<li>'+display(summary.id,200)+', Dataset '+display(summary.datasetId ?? "",200)+' version '+(summary.datasetRevision ?? "")+', retained result '+display(view.contentHash,200)+'</li>').join("");
   const runLabel = (summary:ChatResourceSummary)=>'<span class="run-label">'+display(summary.name,160)+'</span>';
   const rows = retained.map(({summary})=>{
     const coverage = summary.evaluatedCount == null || summary.taskCount == null

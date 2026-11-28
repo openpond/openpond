@@ -14,6 +14,7 @@ import type { createPreferenceComparisonService } from "./preference-comparison-
 import type { createModelProjectHostingService } from "./model-project-hosting.js";
 import type { createModelStarterRuntime } from "./model-starter-runtime.js";
 import type { TasksetWorkModelStream } from "./taskset-work-attempt-runner.js";
+import type { createLocalAdapterPublicationService } from "./local-adapter-publication.js";
 
 export interface TrainingApiDependencies {
   store: SqliteStore;
@@ -30,6 +31,7 @@ export interface TrainingApiDependencies {
   preferenceComparisons?: ReturnType<typeof createPreferenceComparisonService>;
   conversationServingOwner?: ConversationServingOwner;
   modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
+  localAdapterPublication?: ReturnType<typeof createLocalAdapterPublicationService>;
   modelStarters?: ReturnType<typeof createModelStarterRuntime>;
   modelStream?: TasksetWorkModelStream;
   judgeProvider?: BoundJudgeProvider;

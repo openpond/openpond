@@ -18,6 +18,7 @@ export type LabModelVersion = {
   job: TrainingJob | null;
   plan: TrainingPlan | null;
   taskset: Taskset | null;
+  localRun?: ModelRun;
   current: boolean;
 };
 
@@ -158,13 +159,22 @@ export function labModelVersions(
         model.modelId === workproduct.id || associatedJobIds.has(model.jobId)
     )
     .sort((left, right) => left.importedAt.localeCompare(right.importedAt));
+  const canonical = new Map(state.modelVersions.filter(version => version.modelId === workproduct.id && version.artifactLineageId)
+    .map(version => [version.artifactLineageId, version] as const));
+  const usedNumbers = new Set([...canonical.values()].map(version => version.version));
+  const localRuns = new Map(state.modelRuns.filter(run => run.localSft && run.modelId === workproduct.id)
+    .map(run => [run.id, run]));
+  let next = 1;
   return ordered
-    .map((lineage, index) => {
+    .map(lineage => {
       const job = jobById.get(lineage.jobId) ?? null;
+      const saved = canonical.get(lineage.id);
+      while (usedNumbers.has(next)) next++;
       return {
         lineage,
-        number: index + 1,
+        number: saved?.version ?? next++,
         job,
+        localRun: saved?.localSft ? localRuns.get(saved.localSft.modelRunId) : undefined,
         plan: job ? planById.get(job.planId) ?? null : null,
         taskset:
           labModelTasksets(state).find(

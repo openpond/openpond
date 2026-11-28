@@ -47,7 +47,7 @@ export type TrainingWorkspaceProps = {
   launchRequest: TrainingLaunchRequest | null;
   onLaunchHandled: (id: number) => void;
   preferences: AppPreferences["training"];
-  settingsPreferences: AppPreferences;
+  workspaceTeamId: string | null;
   providerSettings: ProviderSettings | null;
   reasoningEffort: CodexReasoningEffort;
 };

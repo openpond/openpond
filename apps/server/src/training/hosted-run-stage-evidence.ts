@@ -231,7 +231,7 @@ export function hostedRunStageEvidence(
     },
     {
       label: "Save checkpoint",
-      detail: detail.checkpoints.some(item => item.state === "ready" && item.adapterSha256) ? "Durable checkpoint recorded" : !live && detail.checkpoints.length ? "Upload interrupted · 0 durable" : "Write to storage",
+      detail: detail.checkpoints.some(item => item.state === "ready" && item.adapterSha256) ? "Durable checkpoint recorded" : !live && detail.checkpoints.length ? "Upload interrupted, 0 durable" : "Write to storage",
       done: detail.checkpoints.some((item) => item.state === "ready" && item.adapterSha256),
       active: live && detail.checkpoints.some(item => item.state === "uploading"),
       inLoop: true,
@@ -399,6 +399,6 @@ function stageErrors(detail: z.infer<typeof Raw>): Record<string, string> {
   // A controller failure after worker success belongs to the run, not that command.
   if (detail.job.state === "failed") errors.Finish = [errors.Finish,
     detail.job.terminalReason ?? "Run failed; no terminal reason retained.",
-  ].filter(Boolean).join(" · ");
+  ].filter(Boolean).join(", ");
   return errors;
 }

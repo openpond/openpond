@@ -48,7 +48,7 @@ export function DatasetStoragePicker({
               title={storagePath(storage)}
               value={storagePath(storage)}
             >
-              {storage.label} · {storageKindLabel(storage.kind)} · {storageStatus(storage)}
+              {storage.label}, {storageKindLabel(storage.kind)}, {storageStatus(storage)}
             </option>
           ))}
         </select>

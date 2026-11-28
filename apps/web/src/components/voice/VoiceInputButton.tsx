@@ -100,7 +100,7 @@ export function VoiceInputButton({
     getSubmitRequestedSnapshot,
   );
   const transcriptionLabel = submitRequested
-    ? `Transcribing · ${submitLabel.toLowerCase()} when ready`
+    ? `Transcribing, ${submitLabel.toLowerCase()} when ready`
     : "Transcribing";
   const busy = transcribing;
   const starting = phase === "starting";

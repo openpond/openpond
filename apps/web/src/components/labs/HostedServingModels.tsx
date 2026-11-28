@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { HostedModelProjectCatalog } from "../../hooks/hosted-model-project-types";
 import type { useTraining } from "../../hooks/useTraining";
 import { type ClientConnection } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
 import { ErrorToast } from "../common/ErrorToast";
-import { HostedModelServingSetup } from "./HostedModelServingSetup";
+import { BaseModelIcon } from "./BaseModelIcon";
+import { HostedModelServeAction } from "./HostedModelServingSetup";
 import { createWorkspaceApi } from "./workspace/workspace-api";
 
 const PAGE_SIZE = 20;
@@ -20,18 +21,22 @@ export function HostedServingModels({ connection, teamId, actorId, accountKey, m
 }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  const refresh = useRef(false);
   const api = useMemo(() => createWorkspaceApi(connection, { teamId, actorId, accountKey, projectId: null }), [connection, teamId, actorId, accountKey]);
   const list = training.actions.listHostedModelProjects;
   const query = useQuery({
     queryKey: ["inference-models", connectionQueryScope(connection), accountKey, actorId, teamId],
     queryFn: async () => {
-      const catalog = await list({ refresh: true, silent: true });
+      const force = refresh.current;
+      refresh.current = false;
+      const catalog = await list({ refresh: force, silent: true });
       if (!catalog) throw new Error("Could not load serving models. Retry the model list.");
       if (catalog.teamId !== teamId) throw new Error("The workspace changed. Reload serving models.");
       return catalog;
     },
     staleTime: 30_000,
     retry: false,
+    refetchOnWindowFocus: false,
   });
   const rows = (query.data?.projects ?? []).filter(({ project }) =>
     project.teamId === teamId && (!modelProjectId || project.portableProjectId === modelProjectId)
@@ -42,7 +47,10 @@ export function HostedServingModels({ connection, teamId, actorId, accountKey, m
   return <section className="labs-operational-section" aria-label="Serving models">
     <ErrorToast error={query.error} />
     <header><div><h2>Your models</h2></div>
-      <button type="button" className="training-button secondary" disabled={query.isFetching} onClick={() => void query.refetch()}>{query.isError ? "Retry models" : "Refresh models"}</button>
+      <button type="button" className="training-button secondary" disabled={query.isFetching} onClick={() => {
+        refresh.current = true;
+        void query.refetch();
+      }}>{query.isError ? "Retry models" : "Refresh models"}</button>
     </header>
     <label className="labs-search"><span>Search models</span><input type="search" value={search} onChange={event => { setSearch(event.currentTarget.value); setPage(0); }} placeholder="Search serving models" /></label>
     <div className="training-table-wrap"><table className="training-data-table">
@@ -61,13 +69,11 @@ function HostedServingModelRow({ project, api }: {
   project: HostedModelProjectCatalog["projects"][number]["project"];
   api: ReturnType<typeof createWorkspaceApi>;
 }) {
-  const [opened, setOpened] = useState(false);
+  const baseModelId = project.trainingSetup.baseModel?.modelId ?? project.defaultBaseModel?.modelId;
   return <tr>
     <td><strong>{project.name}</strong>{project.objective ? <div className="training-muted">{project.objective}</div> : null}</td>
-    <td>{project.trainingSetup.baseModel?.modelId ?? project.defaultBaseModel?.modelId ?? "—"}</td>
+    <td><span className="labs-base-model"><BaseModelIcon modelId={baseModelId} />{baseModelId ?? "—"}</span></td>
     <td>{new Date(project.updatedAt).toLocaleString()}</td>
-    <td><button type="button" className="training-button" onClick={() => setOpened(true)}>Serve</button>
-      {opened ? <HostedModelServingSetup key={`${api.key}:${project.id}`} api={api} modelId={project.id} name={project.name} onClose={() => setOpened(false)} /> : null}
-    </td>
+    <td><HostedModelServeAction api={api} modelId={project.id} name={project.name} /></td>
   </tr>;
 }

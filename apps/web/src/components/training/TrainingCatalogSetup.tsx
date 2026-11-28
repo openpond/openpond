@@ -112,7 +112,7 @@ export function TrainingCatalogSetup({
                       key={candidate.selectionKey}
                       value={candidate.selectionKey}
                     >
-                      {candidate.label} · {candidate.sourceLabel}
+                      {candidate.label}, {candidate.sourceLabel}
                       {option?.available
                         ? ""
                         : ` — ${option?.unavailableReason ?? "Unsupported"}`}
@@ -154,7 +154,7 @@ export function TrainingCatalogSetup({
                     <span>
                       <strong>{model.label}</strong>
                       <small>
-                        {model.modelId} · {model.source}
+                        {model.modelId}, {model.source}
                       </small>
                     </span>
                     <span

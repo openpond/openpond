@@ -463,7 +463,7 @@ function activityLabel(item: RuntimeEvent): string {
     const action=stringValue(asRecord(item.args),["action"]);
     const labels:Record<string,string>={create:"Creating dataset",save:"Editing dataset",file:"Editing dataset file",import:"Importing dataset",inspect_source:"Inspecting dataset source",import_source:"Importing dataset sample",check_graders:"Checking graders",check_sources:"Checking dataset sources",test_grader:"Testing grader",save_grader:"Editing grader",validate:"Validating dataset",package:"Packaging dataset",upload:"Uploading dataset",publish:"Publishing dataset",sync:"Synchronizing dataset",run:"Running experiment",run_cloud:"Running cloud experiment",cancel:"Cancelling experiment",charts:"Publishing experiment charts",improve:"Improving experiment"};
     const label=labels[action ?? ""] ?? (item.action==="openpond_dataset" ? "Reading dataset resources" : "Reading experiment evidence");
-    return item.status==="failed" ? label+" · Failed" : label;
+    return item.status==="failed" ? label+", Failed" : label;
   }
   if (isCodexGoalContextEvent(item)) return "Goal context";
   if (item.name === "turn.interrupted") return "Turn aborted";
@@ -776,7 +776,7 @@ function activityMeta(item: RuntimeEvent): string | null {
     facts.push(`receipt ${shortId(receipt.id)}`);
     facts.push(`${formatUsd(receipt.totalUsd)} ${receipt.status}`);
   }
-  return facts.length > 0 ? facts.join(" · ") : null;
+  return facts.length > 0 ? facts.join(", ") : null;
 }
 
 function activityReceipt(item: RuntimeEvent): ActivityItem["receipt"] | undefined {

@@ -1,0 +1,88 @@
+.desktop-new {
+  display: inline-flex;
+}
+
+.sidebar-desktop-new {
+  display: flex;
+  margin-bottom: 3px;
+}
+
+.training-button.desktop-new-button {
+  border-color: transparent;
+  background: var(--accent-primary-fill);
+  color: var(--text-on-accent);
+  min-block-size: 38px;
+}
+
+.training-button.desktop-new-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-primary-fill) 88%, var(--surface-page));
+}
+
+.desktop-new-trigger {
+  anchor-name: --desktop-new-trigger;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 108px;
+  justify-content: space-between;
+  padding-inline: 12px;
+}
+
+.sidebar-desktop-new .desktop-new-trigger {
+  anchor-name: --desktop-sidebar-new-trigger;
+  position: relative;
+  inline-size: 100%;
+  min-block-size: 40px;
+  justify-content: center;
+}
+
+.desktop-new-caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-desktop-new .desktop-new-caret {
+  position: absolute;
+  inset-inline-end: 12px;
+}
+
+.desktop-new-popover {
+  position: fixed;
+  position-anchor: --desktop-new-trigger;
+  position-area: bottom span-right;
+  position-try-fallbacks: flip-block, flip-inline;
+  inset: auto;
+  margin: 4px 0;
+  min-width: 150px;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.sidebar-desktop-new .desktop-new-popover {
+  position-anchor: --desktop-sidebar-new-trigger;
+  min-inline-size: anchor-size(width, 150px);
+}
+
+.desktop-new-popover button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.desktop-new-popover button:hover,
+.desktop-new-popover button:focus-visible {
+  background: var(--state-hover);
+}

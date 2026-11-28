@@ -129,7 +129,7 @@ export function TrainingManagedAttempts({
               <Config label="Failure class" value={failureClass ?? "None"} />
               <Config label="Failure code" value={failureCode ?? "None"} />
               <Config label="Components" value={JSON.stringify(event.payload.rewardComponents ?? {})} />
-              <Config label="Tokens" value={`${number(event.payload.inputTokens) ?? 0} input · ${number(event.payload.outputTokens) ?? 0} output`} />
+              <Config label="Tokens" value={`${number(event.payload.inputTokens) ?? 0} input, ${number(event.payload.outputTokens) ?? 0} output`} />
             </dl>
           </details>
         );
@@ -178,7 +178,7 @@ export function TrainingRolloutReceipts({
             <Config label="Policy" value={receipt.policy.modelId} />
             <Config label="Checkpoint" value={receipt.policy.checkpointId ?? "Provider initial policy"} />
             <Config label="Environment" value={`${receipt.environment.id}@${receipt.environment.version}`} />
-            <Config label="World" value={`${receipt.environment.worldId} · ${receipt.environment.worldHash}`} />
+            <Config label="World" value={`${receipt.environment.worldId}, ${receipt.environment.worldHash}`} />
             <Config label="Raw reward" value={receipt.reward.raw == null ? "Not eligible" : String(receipt.reward.raw)} />
             <Config label="Components" value={JSON.stringify(receipt.reward.components)} />
             <Config label="Outcome" value={receipt.verifier?.outcome ?? receipt.failureClass ?? "Pending"} />

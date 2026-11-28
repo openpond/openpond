@@ -20,7 +20,7 @@ export function initialExperimentStartingModel(
   if (base && draft?.alphaEditForm?.startingModule)
     return {
       source: "alphaedit",
-      label: `Saved AlphaEdit matrices · ${draft.alphaEditForm.startingModule.modelProjectId}`,
+      label: `Saved AlphaEdit matrices, ${draft.alphaEditForm.startingModule.modelProjectId}`,
       inferenceModelId: null,
       baseModel: base,
       alphaedit: draft.alphaEditForm.startingModule,
@@ -28,7 +28,7 @@ export function initialExperimentStartingModel(
   if (base && draft?.decisionForm?.startingDecision)
     return {
       source: "decision",
-      label: `Saved Decision Model · ${draft.decisionForm.startingDecision.modelProjectId}`,
+      label: `Saved Decision Model, ${draft.decisionForm.startingDecision.modelProjectId}`,
       inferenceModelId: null,
       baseModel: base,
       decision: draft.decisionForm.startingDecision,
@@ -36,7 +36,7 @@ export function initialExperimentStartingModel(
   if (base && draft?.engramForm?.startingModule)
     return {
       source: "engram",
-      label: `Saved memory module · ${draft.engramForm.startingModule.modelProjectId}`,
+      label: `Saved memory module, ${draft.engramForm.startingModule.modelProjectId}`,
       inferenceModelId: null,
       baseModel: base,
       engram: draft.engramForm.startingModule,

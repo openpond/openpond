@@ -111,7 +111,7 @@ export function LabModelRunSummary({
                   telemetry?.usage.promptTokens ??
                     evidence?.usage.inputTokens ??
                     null
-                )} prompt · ${formatCount(
+                )} prompt, ${formatCount(
                   telemetry?.usage.generatedTokens ??
                     evidence?.usage.outputTokens ??
                     null
@@ -123,7 +123,7 @@ export function LabModelRunSummary({
                   telemetry?.usage.successfulTrajectories ??
                     evidence?.reward.eligibleTrajectoryCount ??
                     null
-                )} succeeded · ${formatCount(
+                )} succeeded, ${formatCount(
                   telemetry?.usage.failedTrajectories ??
                     (evidence
                       ? evidence.reward.trajectoryCount -
@@ -216,11 +216,11 @@ function trainingDescription(method: string): string {
 
 function humanizeResourceLabel(value: string): string {
   return value
-    .split(" · ")
+    .split(/\s*\u00b7\s*/u)
     .map((part) =>
       part
         .replaceAll("_", " ")
         .replace(/\b[a-z]/g, (character) => character.toUpperCase())
     )
-    .join(" · ");
+    .join(", ");
 }

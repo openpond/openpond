@@ -27,7 +27,7 @@ function FeedbackReader({ connection, teamId, jobId, targets }: { connection: Cl
   });
   return <section className="retained-run-feedback">
     <h3>Retained grader feedback</h3>
-    {targets.length > 1 ? <DropdownSelect label="Feedback record" value={JSON.stringify(target)} options={targets.map(item => ({ value: JSON.stringify(item), label: item.kind === "trajectory" ? `Trajectory ${item.id.slice(0, 6)}…` : `Task ${item.taskId?.slice(0, 6)}… · evaluation ${item.id.slice(0, 6)}…` }))} onChange={setSelection} /> : null}
+    {targets.length > 1 ? <DropdownSelect label="Feedback record" value={JSON.stringify(target)} options={targets.map(item => ({ value: JSON.stringify(item), label: item.kind === "trajectory" ? `Trajectory ${item.id.slice(0, 6)}…` : `Task ${item.taskId?.slice(0, 6)}…, evaluation ${item.id.slice(0, 6)}…` }))} onChange={setSelection} /> : null}
     <ErrorToast error={query.error} />
     {query.isPending ? <p role="status">Loading verified grader receipt…</p> : null}
     {query.isError ? <button className="training-button secondary" type="button" onClick={() => void query.refetch()}>Retry grader feedback</button> : null}
@@ -38,13 +38,13 @@ function FeedbackReader({ connection, teamId, jobId, targets }: { connection: Cl
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 function FeedbackDetails({ value }: { value: RunGraderFeedback }) {
   return <>
-    <p>Training reward: {value.training.status} · score {value.training.score ?? "not retained"}</p>
-    <p>Evaluation graders: {value.evaluation.status} · score {value.evaluation.score ?? "not retained"} · recorded aggregate acceptance {value.evaluation.passed === null ? "not retained" : String(value.evaluation.passed)}</p>
+    <p>Training reward: {value.training.status}, score {value.training.score ?? "not retained"}</p>
+    <p>Evaluation graders: {value.evaluation.status}, score {value.evaluation.score ?? "not retained"}, recorded aggregate acceptance {value.evaluation.passed === null ? "not retained" : String(value.evaluation.passed)}</p>
     <p className="training-muted">Verified composition {value.compositionSha256.slice(0, 12)}…</p>
     {!value.graders.length ? <p className="training-muted">No grader records retained in this receipt; quality is not established.</p> : null}
     {value.graders.map(grader => <article key={`${grader.role}:${grader.graderId}`}>
-      <h4>{grader.graderId} · {grader.role}</h4>
-      <p>{grader.status} · raw score {grader.rawScore ?? "not retained"} · normalized score {grader.normalizedScore ?? "not retained"} · grader verdict {grader.passed === true ? "Passed" : grader.passed === false ? "Failed" : "No verdict retained"}</p>
+      <h4>{grader.graderId}, {grader.role}</h4>
+      <p>{grader.status}, raw score {grader.rawScore ?? "not retained"}, normalized score {grader.normalizedScore ?? "not retained"}, grader verdict {grader.passed === true ? "Passed" : grader.passed === false ? "Failed" : "No verdict retained"}</p>
       {grader.message ? <p>{grader.message}</p> : null}
       {grader.failureClass ? <p>Recorded failure: {grader.failureClass}</p> : null}
       {grader.feedback.map((text, index) => <GraderMessage key={index} text={text} />)}
@@ -60,7 +60,7 @@ function GraderMessage({ text }: { text: string }) {
   if (!Array.isArray(differences)) return <pre>{text}</pre>;
   return <>
     <dl>{differences.slice(0, 80).map((value, index) => { const item = record(value); return <div key={index}>
-      <dt>{typeof item.kind === "string" ? item.kind.replaceAll("_", " ") : "Retained difference"} · {typeof item.path === "string" ? item.path : "Path not retained"}</dt>
+      <dt>{typeof item.kind === "string" ? item.kind.replaceAll("_", " ") : "Retained difference"}, {typeof item.path === "string" ? item.path : "Path not retained"}</dt>
       <dd><pre>Expected: {JSON.stringify(item.expected) ?? "Not retained"}{"\n"}Actual: {JSON.stringify(item.actual) ?? "Not retained"}</pre></dd>
     </div>; })}</dl>
     <details><summary>Full retained grader message</summary><pre>{text}</pre></details>

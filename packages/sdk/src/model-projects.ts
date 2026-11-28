@@ -2,6 +2,12 @@ import { DEFAULT_API_BASE_URL } from "./endpoints.js";
 import { z } from "zod";
 import { createModelNativeRunClient } from "./model-native-runs.js";
 export * from "./model-native-runs.js";
+import { createModelRegisteredAdaptersClient } from "./model-registered-adapters.js";
+export {
+  RegisteredAdapterAttachSchema, RegisteredAdapterVersionSchema, RegisteredAdapterAttachReceiptSchema, RegisteredAdapterBaseProofSchema,
+  parseAndVerifyRegisteredAdapterVersion,
+  type RegisteredAdapterAttach, type RegisteredAdapterVersion, type RegisteredAdapterAttachReceipt, type RegisteredAdapterBaseProof,
+} from "./model-registered-adapters.js";
 import { TrainingGpuSelectionSchema } from "./training-compute-selection.js";
 import { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
 export { ModelInitialLearningSchema, type ModelInitialLearning } from "./model-learning-intent.js";
@@ -318,6 +324,12 @@ export const HostedModelProjectSummarySchema = z
   })
   .strict();
 
+export const HOSTED_MODEL_SERVING_STATUS_PATH = "/v1/model-projects/serving/status";
+export const HostedModelServingStatusSchema = z.object({
+  teamId: IdSchema,
+  managingModelProjectIds: z.array(IdSchema),
+}).strict();
+
 export const ModelProjectResourceSummarySchema = z
   .object({
     kind: z.enum([
@@ -441,6 +453,7 @@ export function createModelProjectsClient(input: {
 
   return {
     ...createModelNativeRunClient(request),
+    ...createModelRegisteredAdaptersClient(request),
     async configurationCandidates() {
       return z.object({ candidates: z.array(ModelProjectBaseModelCandidateSchema).max(1000) }).strict().parse(
         await request("/v1/model-projects/configuration/candidates", { headers: { accept: "application/json" } }),
@@ -478,6 +491,9 @@ export function createModelProjectsClient(input: {
       return z
         .array(HostedModelProjectSummarySchema)
         .parse(unwrapObject(body, "projects"));
+    },
+    async servingStatus() {
+      return HostedModelServingStatusSchema.parse(await request(HOSTED_MODEL_SERVING_STATUS_PATH));
     },
     async get(projectId: string) {
       const body = await request(

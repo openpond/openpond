@@ -32,14 +32,14 @@ export function codexUsageWindows(payload: unknown): PlanUsageWindow[] {
       const percent = remaining(window.usedPercent);
       if (percent === null) return [];
       const duration = durationLabel(window.windowDurationMins, slot === "primary" ? "Current window" : "Additional window");
-      return [{ id: `${id}:${slot}`, label: id === "codex" ? duration : `${typeof bucket.limitName === "string" ? bucket.limitName : id} · ${duration}`, remainingPercent: percent, resetsAt: reset(window.resetsAt), shared: id === "codex" }];
+      return [{ id: `${id}:${slot}`, label: id === "codex" ? duration : `${typeof bucket.limitName === "string" ? bucket.limitName : id}, ${duration}`, remainingPercent: percent, resetsAt: reset(window.resetsAt), shared: id === "codex" }];
     });
   });
 }
 
 export function claudeUsageWindows(payload: unknown): PlanUsageWindow[] {
   const response = record(payload);
-  const labels: Record<string, string> = { five_hour: "5-hour", seven_day: "Weekly", seven_day_opus: "Weekly · Opus", seven_day_sonnet: "Weekly · Sonnet", seven_day_oauth_apps: "Weekly · OAuth apps", seven_day_cowork: "Weekly · Cowork" };
+  const labels: Record<string, string> = { five_hour: "5-hour", seven_day: "Weekly", seven_day_opus: "Weekly, Opus", seven_day_sonnet: "Weekly, Sonnet", seven_day_oauth_apps: "Weekly, OAuth apps", seven_day_cowork: "Weekly, Cowork" };
   return Object.entries(labels).flatMap(([id, label]): PlanUsageWindow[] => {
     const window = record(response[id]);
     const percent = remaining(window.utilization);

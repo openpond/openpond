@@ -24,6 +24,19 @@ export function createHostedTrainingDetailTransport(deps: {
   trainingRequest: ReturnType<typeof createTrainingApi>["request"];
 }): ReturnType<typeof createTrainingApi>["request"] {
   return async (action, payload, requestUrl, signal) => {
+    if (action === "hosted_model_serving_status") {
+      const body = z.object({ teamId: z.string().min(1), actorId: z.string().min(1), apiOrigin: z.url() }).strict().parse(payload);
+      const [teamId, actorId, access] = await Promise.all([deps.teamId(), deps.actorId(), deps.resolveAccess()]);
+      if (body.teamId !== teamId || body.actorId !== actorId || body.apiOrigin !== new URL(access.apiBaseUrl).origin)
+        throw new Error("The active workspace changed. Reload serving status.");
+      return createHostedTrainingRunDetail({
+        teamId, actorId, access,
+        currentIdentity: async () => {
+          const [currentTeamId, currentActorId, currentAccess] = await Promise.all([deps.teamId(), deps.actorId(), deps.resolveAccess()]);
+          return { teamId: currentTeamId, actorId: currentActorId, apiOrigin: currentAccess.apiBaseUrl, token: currentAccess.token };
+        },
+      }).modelServingStatus();
+    }
     if (action === "hosted_training_model_serving_control") {
       const body = z
         .object({

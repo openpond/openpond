@@ -1,6 +1,6 @@
 # OPSD, SDFT, and SDPO
 
-Post-training from first principles · Lesson 8 of 10 · 2:43
+Post-training from first principles (lesson 8 of 10, 2:43)
 
 ## Learning objective
 

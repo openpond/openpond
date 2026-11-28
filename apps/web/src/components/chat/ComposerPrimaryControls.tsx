@@ -1,7 +1,7 @@
 import { isRegisteredAcpProvider } from "@openpond/contracts/providers";
 import { ComposerSubmissionControls } from "./ComposerSubmissionControls";
 import { NativeAgentControls } from "./NativeAgentControls";
-import { useCallback, useMemo, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useCallback, useMemo, useState, type CSSProperties, type ReactNode, type RefCallback, type RefObject } from "react";
 import { Plus, Shield, SquareTerminal } from "../icons";
 import type {
   ChatProvider,
@@ -66,7 +66,7 @@ export function ComposerPrimaryControls({
   modelOptions = [],
   hideModelControls = false,
   trainingControl,
-  issueAction,
+  configureSlotRef,
   executionControl,
   allowedModelRefs,
   modelSelectionDisabled = false,
@@ -120,7 +120,7 @@ export function ComposerPrimaryControls({
   modelOptions?: DropdownOption[];
   hideModelControls?: boolean;
   trainingControl?: ReactNode;
-  issueAction?: ReactNode;
+  configureSlotRef?: RefCallback<HTMLSpanElement>;
   executionControl?: ReactNode;
   allowedModelRefs?: readonly {providerId: ChatProvider; modelId: string}[];
   modelSelectionDisabled?: boolean;
@@ -416,7 +416,7 @@ export function ComposerPrimaryControls({
         />
       ) : null}
       <div className="composer-spacer" />
-      {issueAction}
+      {configureSlotRef ? <span className="composer-configure-slot" ref={configureSlotRef} /> : null}
       {!hideModelControls && (
         <span
           className={`context-status-shell ${contextWindowStatus.tone}`}

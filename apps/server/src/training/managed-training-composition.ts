@@ -6,10 +6,10 @@ import { managedRlOperatorAccess } from "./managed-rl-operator-access.js";
 import { createDatasetStorageService } from "./dataset-storage-service.js";
 import { createPortableTrainingServerDependencies } from "./portable-training-server-dependencies.js";
 import { createManagedAdapterRegistryClient } from "./managed-adapter-registry-client.js";
-import { resolveManagedAdapterUserAccess } from "../openpond/hosted-api-access.js";
 import { createManagedAdapterSyncService } from "./managed-adapter-sync-service.js";
 import { createManagedAdapterChatRuntime } from "./managed-adapter-chat-runtime.js";
 import { createManagedAdapterHostedChatStream } from "./managed-adapter-chat-stream.js";
+import { createLocalAdapterPublicationService } from "./local-adapter-publication.js";
 
 type TrainingDependencies = Parameters<typeof createTrainingService>[0];
 type CompositionDependencies = Pick<TrainingDependencies,
@@ -17,6 +17,8 @@ type CompositionDependencies = Pick<TrainingDependencies,
   "gradeTaskAttempt" | "projectDatasetArtifact" | "resolveDatasetTask" | "tasksetWorkRuntime"
 > & {
   resolveAccess: Parameters<typeof createTrainingActivityAuthorityResolver>[0]["access"];
+  resolveWorkspaceAccess(): Promise<{ apiBaseUrl: string; token: string; teamId: string; actorId: string }>;
+  resolveWorkspaceActor(): Promise<string>;
   account(): Promise<{state: string; profile?: {id: string | null; handle?: string | null} | null}>;
   defaultTeam(): Promise<string | null | undefined>;
   streamHosted: Parameters<typeof createManagedAdapterHostedChatStream>[0]["hosted"];
@@ -38,28 +40,21 @@ export function createManagedTrainingComposition(deps: CompositionDependencies) 
   const resolveManagedTrainingAccess = async () => {
     const operatorAccess = await managedRlOperatorAccess(process.env);
     if (operatorAccess) return operatorAccess;
-    return resolveManagedAdapterUserAccess({ teamId: await deps.defaultTeam() });
-  };
-  const actorId = async () => {
-    const account = await deps.account();
-    if (account.state !== "signed_in" || !account.profile?.id)
-      throw new Error("Sign in to retain evaluation operation recovery.");
-    return account.profile.id;
+    return deps.resolveWorkspaceAccess();
   };
   const modelProjectHosting = createModelProjectHostingService({
-    store, resolveAccess: resolveManagedTrainingAccess, resolveActorId: actorId,
+    store, resolveAccess: deps.resolveWorkspaceAccess, resolveActorId: deps.resolveWorkspaceActor,
     resolveReleasedHarness: deps.resolveReleasedHarness, env: process.env,
   });
+  const localAdapterPublication = createLocalAdapterPublicationService({ store, home: storeDir, resolveAccess: deps.resolveWorkspaceAccess });
   const trainingService = createTrainingService({
     ...deps,
     ...createPortableTrainingServerDependencies({ storeDir, environment: process.env }),
     resolveActivityAuthority: createTrainingActivityAuthorityResolver({
       access: deps.resolveAccess,
       identity: async () => {
-        const account = await deps.account(), teamId = (await deps.defaultTeam())?.trim();
-        if (account.state !== "signed_in" || !account.profile?.id || !teamId)
-          throw new Error("Sign in and select a workspace before starting training.");
-        return {actorId: account.profile.id, teamId};
+        const { actorId, teamId } = await deps.resolveWorkspaceAccess();
+        return { actorId, teamId };
       },
     }),
     resolveManagedTrainingAccess,
@@ -76,14 +71,14 @@ export function createManagedTrainingComposition(deps: CompositionDependencies) 
   const streamSelectedOpenPondChatTurn = createManagedAdapterHostedChatStream({
     managed: managedAdapterChatRuntime, hosted: deps.streamHosted,
   });
-  const conversationServingOwner = createConversationServingOwner({ store, training: trainingService, hosting: modelProjectHosting, synchronization: managedAdapterSyncService, registry, resolveAccess: async () => {
-    await actorId();
-    return resolveManagedAdapterUserAccess({ teamId: await deps.defaultTeam() });
-  } });
+  const conversationServingOwner = createConversationServingOwner({
+    store, training: trainingService, hosting: modelProjectHosting, synchronization: managedAdapterSyncService, registry,
+    resolveAccess: deps.resolveWorkspaceAccess,
+  });
   conversationServingOwner.start();
   deps.onStartupFailure(() => conversationServingOwner.close());
   managedAdapterSyncService.start();
-  return {datasetStorageService, datasetStoragePayload, modelProjectHosting,
+  return {datasetStorageService, datasetStoragePayload, modelProjectHosting, localAdapterPublication,
     trainingService, conversationServingOwner, managedAdapterSyncService, managedAdapterChatRuntime,
     streamSelectedOpenPondChatTurn};
 }

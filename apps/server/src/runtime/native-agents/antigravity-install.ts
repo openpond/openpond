@@ -20,6 +20,7 @@ import { t, x } from "tar";
 import { z } from "zod";
 import { withFileLock } from "@openpond/persistence";
 import type { AntigravityRuntimeState } from "@openpond/contracts";
+import { antigravityVersionSupported } from "./antigravity-profile.js";
 import { readBoundedResponse } from "./acp-registry.js";
 
 const MANIFEST_BASE =
@@ -34,11 +35,6 @@ const releaseSchema = z.object({
 type Release = z.infer<typeof releaseSchema>;
 export type AntigravityInstallation = Release & { command: string };
 const root = (home: string) => join(home, "runtime", "antigravity");
-
-export function antigravityVersionSupported(version: string): boolean {
-  const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
-  return major > 1 || (major === 1 && (minor > 5 || (minor === 5 && patch >= 12)));
-}
 
 async function target() {
   if (
@@ -232,6 +228,7 @@ export async function installAntigravityRuntime(
       signal.throwIfAborted();
       try {
         const { stdout } = await promisify(execFile)(executable, ["--version"], {
+          env: { ...process.env, AGY_CLI_DISABLE_AUTO_UPDATE: "true" },
           timeout: 120_000,
           maxBuffer: 16 * 1024,
           signal,

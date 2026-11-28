@@ -74,6 +74,9 @@ export type MainPaneProps = {
   onPonderModeChange?: (mode: "clean" | "activity" | null) => void;
   experience: Experience;
   view: AppView;
+  resourceWorkspaceId: string | null;
+  resourceDraftPreviewStatus: "saving" | "failed" | null;
+  modelContextRequest: { id: string; target: import("@openpond/contracts").ChatContextTarget } | null;
   teamChat: TeamChatViewProps;
   community: CommunityViewProps;
   bootstrap: BootstrapPayload | null;

@@ -19,6 +19,7 @@ export function DropdownSelect({
   floatingMenuWidth,
   floatingMenuMaxHeight = 320,
   openOnHover = false,
+  dialogAutoFocus = false,
   onChange,
 }: {
   value: string;
@@ -36,6 +37,7 @@ export function DropdownSelect({
   floatingMenuWidth?: number;
   floatingMenuMaxHeight?: number;
   openOnHover?: boolean;
+  dialogAutoFocus?: boolean;
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -125,17 +127,20 @@ export function DropdownSelect({
     <div
       className={`dropdown-select ${className ?? ""} ${compact ? "compact" : ""} ${placement === "top" ? "open-up" : ""}`}
       onKeyDown={(event) => {
-        if (placement !== "right") return;
-        if (open && (event.key === "Escape" || event.key === "ArrowLeft")) {
+        if (open && (event.key === "Escape" || placement === "right" && event.key === "ArrowLeft")) {
           event.preventDefault(); event.stopPropagation(); closeMenu(); triggerRef.current?.focus();
-        } else if (!open && event.key === "ArrowRight") {
+        } else if (!open && (event.key === "ArrowDown" || placement === "right" && event.key === "ArrowRight")) {
+          if (disabled) return;
           event.preventDefault(); setOpen(true);
-        } else if (open && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        } else if (open && (event.key === "ArrowDown" || event.key === "ArrowUp" ||
+          !(event.target instanceof HTMLInputElement) && (event.key === "Home" || event.key === "End"))) {
           event.preventDefault();
           const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]:not(:disabled)') ?? []);
+          if (!items.length) return;
           const current = items.indexOf(document.activeElement as HTMLElement);
           const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
-            : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+            : current < 0 ? (event.key === "ArrowDown" ? 0 : items.length - 1)
+              : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
           items[next]?.focus();
         }
       }}
@@ -162,6 +167,7 @@ export function DropdownSelect({
         ref={triggerRef}
         className={`dropdown-trigger ${open ? "active" : ""}`}
         disabled={disabled}
+        data-autofocus={dialogAutoFocus || undefined}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -211,6 +217,7 @@ export function DropdownSelect({
                 onChange(option.value);
                 setQuery("");
                 closeMenu();
+                triggerRef.current?.focus();
               }}
             >
               <span>

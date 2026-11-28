@@ -1,6 +1,6 @@
 # Technical appendix
 
-Post-training from first principles · Lesson 10 of 10 · 3:12
+Post-training from first principles (lesson 10 of 10, 3:12)
 
 ## Learning objective
 

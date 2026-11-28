@@ -84,7 +84,7 @@ export async function neuronTrainingInspectionDraft(
     );
   const base = execution.sourceForm.baseModel,
     form = newNeuronTrainingExperimentForm(base);
-  const name = `Train selected neurons · ${execution.name}`.slice(0, 500);
+  const name = `Train selected neurons, ${execution.name}`.slice(0, 500);
   return ExperimentDraftSchema.parse({
     schemaVersion: "openpond.experimentDraft.v1",
     id: crypto.randomUUID(),

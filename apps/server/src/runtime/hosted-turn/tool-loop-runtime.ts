@@ -92,6 +92,7 @@ export function createHostedToolLoopRuntime(deps: {
   inboxStore: TaskInboxRepository;
   isolatedProfileEvaluationForTurn?:TurnRunnerDependencies["isolatedProfileEvaluationForTurn"];
   resolveModelTools?: TurnRunnerDependencies["resolveModelTools"];
+  executionHost?: TurnRunnerDependencies["executionHost"];
   candidateAuthoringForTurn?: TurnRunnerDependencies["candidateAuthoringForTurn"];
   authorizeCandidateTool?: TurnRunnerDependencies["authorizeCandidateTool"];
   hostedToolFlags: HostedToolRolloutFlags;
@@ -248,7 +249,8 @@ export function createHostedToolLoopRuntime(deps: {
     const candidateAuthoring=await deps.candidateAuthoringForTurn?.(params.session.id,params.turn.id)??false;
     if((params.turn.metadata.source==="experiment-improvement"||params.turn.metadata.refinementCandidate!==undefined)&&!candidateAuthoring)throw new Error("Candidate Work has no durable source/turn binding.");
     const isolatedProfile=await deps.isolatedProfileEvaluationForTurn?.(params.session,params.turn)??false;
-    let nativeToolDefinitions = !isolatedProfile && nativeToolsEnabledForProvider(params.provider)
+    const nativeTransport = nativeToolsEnabledForProvider(params.provider);
+    let nativeToolDefinitions = !isolatedProfile && nativeTransport
       ? filterModelToolsForExperience(
           session,
           enabledModelToolDefinitions(
@@ -281,8 +283,9 @@ export function createHostedToolLoopRuntime(deps: {
           )
         )
       : [];
-    if (deps.resolveModelTools) {
-      if (!isolatedProfile && !nativeToolsEnabledForProvider(params.provider)) throw new Error("Embedded Work requires native tool transport.");
+    if (deps.resolveModelTools && !isolatedProfile && !nativeTransport && deps.executionHost === "embedded")
+      throw new Error("Embedded Work requires native tool transport.");
+    if (deps.resolveModelTools && (isolatedProfile || nativeTransport)) {
       nativeToolDefinitions = await deps.resolveModelTools({
         session: params.session, turn: params.turn, signal: params.signal,
         harness: params.harness ?? null, declarations: params.harnessDeclarations ?? [],

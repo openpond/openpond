@@ -8,6 +8,7 @@ import { modelsLocation, navigateModelsRoute } from "./lab-primary-tab-state";
 import "./hosted-training-run.css";
 import { SavedModelServing } from "./SavedModelServing";
 import type { WorkspaceApi } from "./workspace/workspace-api";
+import { BenchmarkSavedVersionButton } from "./BenchmarkSavedVersionButton";
 
 export function useSavedTrainingModel(
   connection: ClientConnection | null | undefined,
@@ -86,7 +87,7 @@ export function SavedTrainingModel({
               <div>
                 <dt>Exact profile</dt>
                 <dd>
-                  {version.publication.id} · revision {version.publication.revision}
+                  {version.publication.id}, revision {version.publication.revision}
                 </dd>
               </div>
             </dl>
@@ -197,6 +198,12 @@ export function SavedTrainingModel({
                 Open producing experiment
               </button>
             </>
+          ) : version.schemaVersion === "openpond.registeredAdapterVersion.v1" ? (
+            <dl className="model-project-page-metrics">
+              <div><dt>Source</dt><dd>Uploaded LoRA adapter</dd></div>
+              <div><dt>Base model</dt><dd>{version.baseModel.repository}</dd><small>{version.baseModel.revision}</small></div>
+              <div><dt>Exact adapter</dt><dd>{version.artifact.id}</dd><small>{version.artifact.contentHash}</small></div>
+            </dl>
           ) : (
             <>
               <dl className="model-project-page-metrics">
@@ -234,6 +241,7 @@ export function SavedTrainingModel({
               >
                 Open producing experiment
               </button>
+              <BenchmarkSavedVersionButton version={version} name={query.data?.model.name ?? "Saved Model version"} />
             </>
           )}
           <details>

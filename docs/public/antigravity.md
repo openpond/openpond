@@ -26,4 +26,4 @@ OpenPond stores this Google login in a dedicated profile in its application home
 
 Disable the connection to stop its active sessions while keeping the saved Google login. Enable it again to verify access and reload models. **Sign out of Google** stops active sessions and removes the saved login. Sign in again to connect another account; saved conversations and workspace files remain, but conversations tied to the previous account cannot silently resume with a different account.
 
-Use **Refresh** to verify access and reload the model list. Available models come from Google rather than a fixed OpenPond catalog. If Neon is absent, check the account's plan and Google's current model availability.
+Use **Refresh** to verify access and reload the models Google's runtime offers to OpenPond. Account checks, model discovery and chat use Google's [Agent Client Protocol integration](https://antigravity.google/docs/cli/acp). If Neon is absent, check the account's plan and Google's current model availability.

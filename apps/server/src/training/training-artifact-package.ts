@@ -33,12 +33,13 @@ export type TrainingArtifactPackage = {
 
 export function selectPortableModelArtifacts(
   artifacts: TrainingArtifact[],
+  provider = "openpond",
 ): PortableModelArtifact[] {
   const selected = new Map<string, PortableModelArtifact>();
   for (const artifact of artifacts) {
     const providerFilename = artifact.metadata.providerFilename;
     if (
-      artifact.metadata.provider !== "openpond"
+      artifact.metadata.provider !== provider
       || typeof providerFilename !== "string"
     ) {
       continue;

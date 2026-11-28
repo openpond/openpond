@@ -92,8 +92,8 @@ export function TrainingStartSummary({
         ? approvalPresentation === "dialog"
           ? "Reviewed when you Run"
           : preparedQuote == null
-            ? `Prepare a provider-validated quote · hard cap $${maximumCostUsd != null && Number.isFinite(maximumCostUsd) ? maximumCostUsd.toFixed(2) : "—"}`
-            : `$${preparedQuote.toFixed(2)} · hard cap $${(maximumCostUsd ?? 0).toFixed(2)}`
+            ? `Prepare a provider-validated quote, hard cap $${maximumCostUsd != null && Number.isFinite(maximumCostUsd) ? maximumCostUsd.toFixed(2) : "—"}`
+            : `$${preparedQuote.toFixed(2)}, hard cap $${(maximumCostUsd ?? 0).toFixed(2)}`
         : "Provided before approval";
   return (
     <dl className="training-start-summary">
@@ -143,8 +143,8 @@ export function TrainingPreparedConfirmation({
         ? recipe.baseModel.id
         : "";
   const methodLabel = recipe.method === "grpo"
-    ? `RFT · ${rftLossLabel(recipe.loss.method)}`
-    : `${trainingMethodLabel(recipe.method)} · ${recipe.parameterization.toUpperCase()}`;
+    ? `RFT, ${rftLossLabel(recipe.loss.method)}`
+    : `${trainingMethodLabel(recipe.method)}, ${recipe.parameterization.toUpperCase()}`;
   return (
     <section
       className="training-prepared-confirmation"
@@ -194,7 +194,7 @@ export function TrainingPreparedConfirmation({
         </div>
         <div>
           <dt>Prepared data</dt>
-          <dd>{formatBytes(prepared.bundle.totalSizeBytes)} · verified</dd>
+          <dd>{formatBytes(prepared.bundle.totalSizeBytes)}, verified</dd>
         </div>
       </dl>
       <p>No provider dataset or job exists until you launch.</p>

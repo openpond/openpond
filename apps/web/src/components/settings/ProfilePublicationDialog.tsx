@@ -181,11 +181,11 @@ function PublicationPreview({ preview }: { preview: OpenPondProfilePublicationPr
   const totalBytes = preview.files.reduce((sum, file) => sum + file.sizeBytes, 0);
   return (
     <div className="profile-publication-preview">
-      <div className="profile-dialog-summary"><strong>{preview.files.length} files · {formatBytes(totalBytes)}</strong><span>{preview.sourceRevision?.slice(0, 10) ?? "No source revision"}</span></div>
+      <div className="profile-dialog-summary"><strong>{preview.files.length} files, {formatBytes(totalBytes)}</strong><span>{preview.sourceRevision?.slice(0, 10) ?? "No source revision"}</span></div>
       {preview.blockedReasons.map((reason) => <div className="profile-dialog-warning" key={reason}>{reason}</div>)}
       {preview.warnings.map((warning) => <div className="profile-publication-warning" key={warning}>{warning}</div>)}
       <div className="profile-publication-file-list" aria-label="Exact files to publish">
-        {preview.files.map((file) => <div key={file.path}><span title={file.path}>{file.path}</span><small>{file.category} · {formatBytes(file.sizeBytes)}</small></div>)}
+        {preview.files.map((file) => <div key={file.path}><span title={file.path}>{file.path}</span><small>{file.category}, {formatBytes(file.sizeBytes)}</small></div>)}
       </div>
       {preview.excludedFiles.length ? <details><summary>{preview.excludedFiles.length} excluded sensitive/runtime files</summary>{preview.excludedFiles.map((file) => <code key={file}>{file}</code>)}</details> : null}
     </div>

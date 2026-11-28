@@ -5,6 +5,7 @@ export { TrainingServingPoolSchema, MODEL_SERVING_IDLE_TIMEOUT_SECONDS } from ".
 import { z } from "zod";
 import { ModelProjectImmutableRefSchema } from "./model-projects.js";
 import { canonicalSha256, OpenPondProtocolError } from "./protocol.js";
+import { RegisteredAdapterVersionSchema, parseAndVerifyRegisteredAdapterVersion } from "./model-registered-adapters.js";
 import { TrainingModelVersionSchema, parseAndVerifyTrainingModelVersion } from "./training-result.js";
 import { TrainingModelServingControlSchema } from "./training-model-serving-control.js";
 
@@ -41,10 +42,20 @@ export const TrainingModelServingContentSchema = z.object({
 }).strict();
 export const TrainingModelServingSchema = TrainingModelServingContentSchema.extend({ contentHash: Hash }).strict();
 export type TrainingModelServing = z.infer<typeof TrainingModelServingSchema>;
+export const RegisteredAdapterServingRegistrySchema = TrainingServingRegistrySchema.omit({ source: true }).extend({
+  reason: z.enum(["qualified", "artifact_revoked", "artifact_deleted", "runtime_unavailable"]),
+});
+export const RegisteredAdapterServingSchema = TrainingModelServingSchema.extend({
+  schemaVersion: z.literal("openpond.registeredAdapterServing.v1"), version: RegisteredAdapterVersionSchema,
+  registry: RegisteredAdapterServingRegistrySchema,
+});
+export type RegisteredAdapterServing = z.infer<typeof RegisteredAdapterServingSchema>;
+type CheckpointServing = TrainingModelServing | RegisteredAdapterServing;
+type ServingScope = { modelProjectId: string; teamId: string; versionHash: string };
 
 /** Active means a routable, eligible deployment. Worker residency and provider
  * scale-to-zero are separate observations; a past inference is historical. */
-export function trainingModelServingState(value: Pick<TrainingModelServing, "registry" | "deployments" | "pools" | "bindings" | "control">): TrainingModelServing["state"] {
+export function trainingModelServingState(value: Pick<CheckpointServing, "registry" | "deployments" | "pools" | "bindings" | "control">): TrainingModelServing["state"] {
   if (value.control?.desiredState === "stopped") return value.control.phase === "stopping" ? "retiring" : value.bindings.length ? "unavailable" : "inactive";
   if (value.control?.phase === "failed") return "unavailable";
   if (!value.registry) return "unpublished";
@@ -60,8 +71,20 @@ export function trainingModelServingState(value: Pick<TrainingModelServing, "reg
   return value.bindings.length ? "unavailable" : "inactive";
 }
 
-export async function parseAndVerifyTrainingModelServing(raw: unknown, expected: { modelProjectId: string; teamId: string; versionHash: string }) {
-  const value = TrainingModelServingSchema.parse(raw), { contentHash, ...content } = value;
+export async function parseAndVerifyTrainingModelServing(raw: unknown, expected: ServingScope) {
+  const value = TrainingModelServingSchema.parse(raw);
+  await verifyCheckpointServing(value, expected);
+  return value;
+}
+
+export async function parseAndVerifyRegisteredAdapterServing(raw: unknown, expected: ServingScope) {
+  const value = RegisteredAdapterServingSchema.parse(raw);
+  await verifyCheckpointServing(value, expected);
+  return value;
+}
+
+async function verifyCheckpointServing(value: CheckpointServing, expected: ServingScope) {
+  const { contentHash, ...content } = value;
   await verifyManagedServingUsageBilling(value.usageBilling, { ...expected, method: "training" }, value.control);
   for (const pair of [
     {review: value.serverlessReview, versionHash: expected.versionHash, artifact: value.registry?.artifact},
@@ -72,8 +95,19 @@ export async function parseAndVerifyTrainingModelServing(raw: unknown, expected:
     await verifyServerlessServingReview(review, {teamId: expected.teamId, modelProjectId: expected.modelProjectId,
       versionHash: pair.versionHash!, artifact: pair.artifact});
   }
-  await parseAndVerifyTrainingModelVersion(value.version, expected);
   function fail(): never { throw new OpenPondProtocolError("training_model_serving_mismatch", "Serving evidence differs from the exact saved Model, registry or deployment."); }
+  if (value.schemaVersion === "openpond.registeredAdapterServing.v1") {
+    await parseAndVerifyRegisteredAdapterVersion(value.version, expected);
+    const { artifact } = value.version;
+    if (value.registry.artifact.id !== artifact.id || value.registry.artifact.contentHash !== artifact.contentHash ||
+      value.registry.baseProfileId !== artifact.baseProfileId ||
+      value.serverlessReview && (!value.registry.qualified || value.serverlessReview.baseProfileId !== artifact.baseProfileId)) fail();
+  } else {
+    await parseAndVerifyTrainingModelVersion(value.version, expected);
+    const source = value.registry?.source;
+    if (source && (source.jobId !== value.version.jobId || source.checkpointId !== value.version.candidate.checkpointId ||
+      source.artifact.id !== value.version.candidate.artifact.id || source.artifact.contentHash !== value.version.candidate.artifact.contentHash)) fail();
+  }
   if (value.teamId !== expected.teamId || value.modelProjectId !== expected.modelProjectId || value.version.contentHash !== expected.versionHash
     || contentHash !== await canonicalSha256(content) || value.state !== trainingModelServingState(value)) fail();
   for (const rows of [value.deployments, value.pools, value.bindings]) if (new Set(rows.map(row => row.id)).size !== rows.length) fail();
@@ -84,10 +118,8 @@ export async function parseAndVerifyTrainingModelServing(raw: unknown, expected:
   if (control && (control.teamId !== expected.teamId || control.modelProjectId !== expected.modelProjectId
     || control.versionHash !== value.version.contentHash && !(control.desiredState === "stopped" && control.phase === "stopped")
     || control.desiredState === "active" && registry && (control.artifact.id !== registry.artifact.id || control.artifact.contentHash !== registry.artifact.contentHash))) fail();
-  if (!registry) { if (value.deployments.length || value.pools.length || value.bindings.length || value.lastVerifiedInference) fail(); return value; }
-  if (registry.source.jobId !== value.version.jobId || registry.source.checkpointId !== value.version.candidate.checkpointId
-    || registry.source.artifact.id !== value.version.candidate.artifact.id || registry.source.artifact.contentHash !== value.version.candidate.artifact.contentHash
-    || registry.qualified !== (registry.reason === "qualified")
+  if (!registry) { if (value.deployments.length || value.pools.length || value.bindings.length || value.lastVerifiedInference) fail(); return; }
+  if (registry.qualified !== (registry.reason === "qualified")
     || registry.qualified && (!["imported_unvalidated", "evaluating", "promotable", "rejected"].includes(registry.state) || registry.revoked || registry.deleted)) fail();
   const deployments = new Map(value.deployments.map(row => [row.id, row]));
   const pools = new Map(value.pools.map(row => [row.id, row]));
@@ -98,7 +130,6 @@ export async function parseAndVerifyTrainingModelServing(raw: unknown, expected:
   if (evidence && (evidence.artifact.id !== registry.artifact.id || evidence.artifact.contentHash !== registry.artifact.contentHash
     || deployments.get(evidence.deploymentId)?.poolId !== evidence.poolId
     || pools.get(evidence.poolId)?.workerImageDigest !== evidence.workerImageDigest || evidence.receipt.id !== evidence.requestId)) fail();
-  return value;
 }
 
 export function createTrainingModelServingClient(request: (path: string, init?: RequestInit) => Promise<unknown>) {

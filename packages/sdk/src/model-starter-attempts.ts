@@ -15,8 +15,18 @@ import { contentHash } from "@openpond/harness";
 
 const IdSchema = z.string().trim().min(1).max(200);
 const HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
+const LocalSftBenchmarkRuntimeSchema = z.object({
+  providerId: z.literal("local-sft-adapter"),
+  configurationHash: HashSchema,
+  projectId: IdSchema,
+  versionId: IdSchema,
+  artifactId: IdSchema,
+  bundleHash: HashSchema,
+  device: z.enum(["cpu", "cuda"]),
+  requestTimeoutMs: z.number().int().min(1000).max(300000),
+}).strict();
 export const ModelStarterAttemptPolicySchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("hosted_chat"), modelId: IdSchema, localRuntime:z.union([z.object({providerId:z.literal("custom-openai-compatible"),configurationHash:HashSchema,maximumRequestCostUsd:z.number().finite().positive().max(10000),requestTimeoutMs:z.number().int().min(1000).max(300000)}).strict(),ClaudeCodeRuntimeSchema,CodexExperimentRuntimeSchema]).optional(), candidate: z.object({ artifactId: IdSchema, contentHash: HashSchema, preparationId: IdSchema, dispatchId: IdSchema, baseProfileId: IdSchema, workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/) }).strict().optional(), harness: StandaloneHarnessExperimentSourceSchema.optional(), messages: EvaluationMessagesSchema.optional(), maxOutputTokens: z.number().int().min(1).max(1_000_000).default(100_000), temperature: z.number().min(0).max(2).default(0), topP: z.number().gt(0).max(1).default(1) }).strict(),
+  z.object({ kind: z.literal("hosted_chat"), modelId: IdSchema, localRuntime:z.union([z.object({providerId:z.literal("custom-openai-compatible"),configurationHash:HashSchema,maximumRequestCostUsd:z.number().finite().positive().max(10000),requestTimeoutMs:z.number().int().min(1000).max(300000)}).strict(),ClaudeCodeRuntimeSchema,CodexExperimentRuntimeSchema,LocalSftBenchmarkRuntimeSchema]).optional(), candidate: z.object({ artifactId: IdSchema, contentHash: HashSchema, preparationId: IdSchema, dispatchId: IdSchema, baseProfileId: IdSchema, workerImageDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/) }).strict().optional(), harness: StandaloneHarnessExperimentSourceSchema.optional(), messages: EvaluationMessagesSchema.optional(), maxOutputTokens: z.number().int().min(1).max(1_000_000).default(100_000), temperature: z.number().min(0).max(2).default(0), topP: z.number().gt(0).max(1).default(1) }).strict(),
   z.object({ kind: z.literal("fixture"), fixtureId: IdSchema }).strict(),
 ]);
 /** The server resolves task input, private state, verifier and fixture script.
