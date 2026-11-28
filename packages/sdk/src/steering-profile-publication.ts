@@ -4,6 +4,7 @@ import { ModelProjectBaseModelSchema, HostedModelProjectSummarySchema } from "./
 import { NeuronSteeringProfileSchema, parseAndVerifyNeuronSteeringProfile } from "./neuron-steering.js";
 import { ActivationReferenceOutcomeSchema } from "./activation-reference.js";
 import { TrainingModelVersionSchema, parseAndVerifyTrainingModelVersion } from "./training-result.js";
+import { RegisteredAdapterVersionSchema, parseAndVerifyRegisteredAdapterVersion } from "./model-registered-adapters.js";
 import { EngramModelVersionSchema, parseAndVerifyEngramModelVersion } from "./engram-model-version.js";
 import { DecisionModelVersionSchema, parseAndVerifyDecisionModelVersion } from "./decision-model-version.js";
 import { WeightSpaceModelVersionSchema, parseAndVerifyWeightSpaceModelVersion, AlphaEditModelVersionSchema, NeuronTrainingModelVersionSchema,
@@ -33,10 +34,13 @@ export const SteeringModelVersionContentSchema = z.object({schemaVersion: z.lite
   teamId: Id, modelProjectId: Id, portableProjectId: Id, publication: SteeringProfilePublicationSchema, createdAt: z.iso.datetime()}).strict();
 export const SteeringModelVersionSchema = SteeringModelVersionContentSchema.extend({contentHash: Hash}).strict();
 export type SteeringModelVersion = z.infer<typeof SteeringModelVersionSchema>;
-export const SavedModelVersionSchema = z.discriminatedUnion("schemaVersion", [TrainingModelVersionSchema, SteeringModelVersionSchema, EngramModelVersionSchema, DecisionModelVersionSchema, AlphaEditModelVersionSchema, NeuronTrainingModelVersionSchema, WeightSpaceModelVersionSchema]);
+export const SavedModelVersionSchema = z.discriminatedUnion("schemaVersion", [TrainingModelVersionSchema, SteeringModelVersionSchema, EngramModelVersionSchema, DecisionModelVersionSchema, AlphaEditModelVersionSchema, NeuronTrainingModelVersionSchema, WeightSpaceModelVersionSchema, RegisteredAdapterVersionSchema]);
 export type SavedModelVersion = z.infer<typeof SavedModelVersionSchema>;
 export async function parseAndVerifySavedModelVersion(raw: unknown, expected: {teamId?: string; modelProjectId?: string} = {}): Promise<SavedModelVersion> {
   const value = SavedModelVersionSchema.parse(raw);
+  if (value.schemaVersion === "openpond.registeredAdapterVersion.v1") return parseAndVerifyRegisteredAdapterVersion(value, {
+    teamId: expected.teamId ?? value.teamId, modelProjectId: expected.modelProjectId ?? value.modelProjectId,
+  });
   if (value.schemaVersion === "openpond.trainingModelVersion.v1") return parseAndVerifyTrainingModelVersion(value, expected);
   if (value.schemaVersion === "openpond.engramModelVersion.v1") return parseAndVerifyEngramModelVersion(value, expected);
   if (value.schemaVersion === "openpond.decisionModelVersion.v1") return parseAndVerifyDecisionModelVersion(value, expected);

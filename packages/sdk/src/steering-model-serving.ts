@@ -8,8 +8,8 @@ import { NeuronTrainingModelServingSchema, parseAndVerifyNeuronTrainingModelServ
 import { z } from "zod";
 import { canonicalJson, canonicalSha256, OpenPondProtocolError } from "./protocol.js";
 import { SteeringModelVersionSchema, parseAndVerifySavedModelVersion } from "./steering-profile-publication.js";
-import { TrainingModelServingSchema, TrainingModelServingQuerySchema, TrainingServingPoolSchema,
-  parseAndVerifyTrainingModelServing } from "./training-model-serving.js";
+import { TrainingModelServingSchema, TrainingModelServingQuerySchema, TrainingServingPoolSchema, RegisteredAdapterServingSchema,
+  parseAndVerifyTrainingModelServing, parseAndVerifyRegisteredAdapterServing } from "./training-model-serving.js";
 import { SteeringPublicationReferenceSchema, type SteeringPublicationReference } from "./steering-model-selection.js";
 import { SteeringInferenceReceiptSchema, parseAndVerifyResolvedSteeringSelection } from "./steering-inference.js";
 export * from "./steering-model-selection.js";
@@ -69,7 +69,7 @@ export const SteeringModelServingContentSchema = z.object({
 }).strict();
 export const SteeringModelServingSchema = SteeringModelServingContentSchema.extend({ contentHash: Hash }).strict();
 export type SteeringModelServing = z.infer<typeof SteeringModelServingSchema>;
-export const SavedModelServingSchema = z.discriminatedUnion("schemaVersion", [TrainingModelServingSchema, SteeringModelServingSchema, EngramModelServingSchema, DecisionModelServingSchema, AlphaEditModelServingSchema, NeuronTrainingModelServingSchema, WeightSpaceModelServingSchema]);
+export const SavedModelServingSchema = z.discriminatedUnion("schemaVersion", [TrainingModelServingSchema, SteeringModelServingSchema, EngramModelServingSchema, DecisionModelServingSchema, AlphaEditModelServingSchema, NeuronTrainingModelServingSchema, WeightSpaceModelServingSchema, RegisteredAdapterServingSchema]);
 export type SavedModelServing = z.infer<typeof SavedModelServingSchema>;
 export const SavedModelServingQuerySchema = TrainingModelServingQuerySchema;
 
@@ -175,6 +175,7 @@ export async function parseAndVerifySteeringModelServing(raw: unknown, expected:
 
 export async function parseAndVerifySavedModelServing(raw: unknown, expected: { teamId: string; modelProjectId: string; versionHash: string }): Promise<SavedModelServing> {
   const value = SavedModelServingSchema.parse(raw);
+  if (value.schemaVersion === "openpond.registeredAdapterServing.v1") return parseAndVerifyRegisteredAdapterServing(value, expected);
   if (value.schemaVersion === "openpond.alphaEditModelServing.v1") return parseAndVerifyAlphaEditModelServing(value, expected);
   if (value.schemaVersion === "openpond.weightSpaceModelServing.v1") return parseAndVerifyWeightSpaceModelServing(value, expected);
   if (value.schemaVersion === "openpond.neuronTrainingModelServing.v1") return parseAndVerifyNeuronTrainingModelServing(value, expected);

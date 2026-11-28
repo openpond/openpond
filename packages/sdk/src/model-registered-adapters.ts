@@ -37,11 +37,16 @@ function identityMismatch() {
   return new OpenPondProtocolError("registered_adapter_identity_mismatch", "The registered adapter response differs from the requested Model, workspace, or adapter.");
 }
 
-async function verifyVersion(version: RegisteredAdapterVersion, projectId: string, teamId: string) {
+export async function parseAndVerifyRegisteredAdapterVersion(raw: unknown, expected: {
+  modelProjectId: string; teamId: string; versionHash?: string;
+}, allowPortableProjectId = false) {
+  const version = RegisteredAdapterVersionSchema.parse(raw);
   const { contentHash, ...content } = version;
   const id = `adapter-version-${await canonicalSha256([version.modelProjectId, version.localVersion.id])}`;
-  if (version.teamId !== teamId || (version.modelProjectId !== projectId && version.portableProjectId !== projectId) ||
-    version.id !== id || await canonicalSha256(content) !== contentHash) throw identityMismatch();
+  if (version.teamId !== expected.teamId || (version.modelProjectId !== expected.modelProjectId &&
+    !(allowPortableProjectId && version.portableProjectId === expected.modelProjectId)) || version.id !== id ||
+    expected.versionHash !== undefined && contentHash !== expected.versionHash || await canonicalSha256(content) !== contentHash)
+    throw identityMismatch();
   return version;
 }
 
@@ -58,7 +63,7 @@ export function createModelRegisteredAdaptersClient(request: (path: string, init
         ...options(parsed.teamId, signal), method: "POST", body: JSON.stringify(parsed),
       }));
       const { contentHash, ...content } = result;
-      const version = await verifyVersion(result.version, model, parsed.teamId);
+      const version = await parseAndVerifyRegisteredAdapterVersion(result.version, { modelProjectId: model, teamId: parsed.teamId }, true);
       if (result.operationId !== parsed.operationId || result.requestHash !== await canonicalSha256({ projectId: model, request: parsed }) ||
         canonicalJson(version.localVersion) !== canonicalJson(parsed.localVersion) || canonicalJson(version.artifact) !== canonicalJson(parsed.artifact) ||
         await canonicalSha256(content) !== contentHash) throw identityMismatch();
@@ -69,14 +74,14 @@ export function createModelRegisteredAdaptersClient(request: (path: string, init
       const args = new URLSearchParams({ limit: String(z.number().int().min(1).max(100).parse(query.limit ?? 25)) });
       if (query.afterId !== undefined) args.set("afterId", id.parse(query.afterId));
       const page = pageSchema.parse(await request(`${collection(model)}?${args}`, options(teamId, query.signal)));
-      return { ...page, versions: await Promise.all(page.versions.map(version => verifyVersion(version, model, teamId))) };
+      return { ...page, versions: await Promise.all(page.versions.map(version => parseAndVerifyRegisteredAdapterVersion(version, { modelProjectId: model, teamId }, true))) };
     },
     async getRegisteredAdapter(projectId: string, teamId: string, versionId: string, signal?: AbortSignal) {
       const model = id.parse(projectId);
       const selected = id.parse(versionId);
       const result = exactSchema.parse(await request(`${collection(model)}/${encodeURIComponent(selected)}`, options(teamId, signal)));
       if (result.version.id !== selected) throw identityMismatch();
-      return verifyVersion(result.version, model, teamId);
+      return parseAndVerifyRegisteredAdapterVersion(result.version, { modelProjectId: model, teamId }, true);
     },
   };
 }

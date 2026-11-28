@@ -5,6 +5,7 @@ import { apiFetch } from "../../api/api-client";
 import { useErrorToast } from "../../app/AppToastContext";
 import { connectionQueryScope } from "../../lib/query-scope";
 import { AppDialog } from "../dialogs/AppDialog";
+import { HostedModelServingSetup } from "./HostedModelServingSetup";
 import { formatBytes } from "./LabModelTrainingActivity";
 import type { WorkspaceApi } from "./workspace/workspace-api";
 
@@ -24,6 +25,7 @@ export function LocalAdapterPublicationAction({ api, profileId, version, hostedW
   name: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [servingVersion, setServingVersion] = useState<{ modelId: string; contentHash: string }>();
   const queries = useQueryClient();
   const key = ["local-adapter-publication", connectionQueryScope(api.connection), api.key, profileId, version] as const;
   async function request(action: "preview" | "upload", reviewHash?: string, signal?: AbortSignal) {
@@ -62,8 +64,14 @@ export function LocalAdapterPublicationAction({ api, profileId, version, hostedW
           onClick={() => { upload.reset(); void review.refetch(); }}>Refresh review</button> : null}
         {state?.state === "review" && !review.isError && !upload.isError ? <button type="button" className="training-button"
           disabled={upload.isPending || review.isFetching} onClick={() => upload.mutate(state.reviewHash)}>{upload.isPending ? "Uploading adapter…" : "Upload adapter"}</button> : null}
-        {link ? <a className="training-button" href={link} target="_blank" rel="noopener noreferrer">Open serving options</a> : null}
+        {link ? <a className="training-button secondary" href={link} target="_blank" rel="noopener noreferrer">Open registry artifact</a> : null}
+        {hosted ? <button type="button" className="training-button" onClick={() => {
+          close();
+          setServingVersion({ modelId: hosted.modelProjectId, contentHash: hosted.contentHash });
+        }}>Review serving</button> : null}
       </footer>
     </AppDialog> : null}
+    {servingVersion ? <HostedModelServingSetup key={`${api.key}:${servingVersion.contentHash}`} api={api} name={name}
+      modelId={servingVersion.modelId} versionHash={servingVersion.contentHash} onClose={() => setServingVersion(undefined)} /> : null}
   </>;
 }

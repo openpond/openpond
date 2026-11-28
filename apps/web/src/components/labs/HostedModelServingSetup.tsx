@@ -12,9 +12,9 @@ import { AppDialog } from "../dialogs/AppDialog";
 import { ModelServingControlDialog } from "./ModelServingControlDialog";
 import type { WorkspaceApi } from "./workspace/workspace-api";
 
-type Props = { api: WorkspaceApi; modelId: string; name: string; onClose(): void };
+type Props = { api: WorkspaceApi; modelId: string; name: string; versionHash?: string; onClose(): void };
 
-export function HostedModelServeAction({ api, modelId, name, active = false, compact = false }: Omit<Props, "onClose"> & {
+export function HostedModelServeAction({ api, modelId, name, active = false, compact = false }: Omit<Props, "onClose" | "versionHash"> & {
   active?: boolean;
   compact?: boolean;
 }) {
@@ -32,14 +32,15 @@ export function HostedModelServeAction({ api, modelId, name, active = false, com
 
 /** Open only on Serve. Closed table rows perform no per-model state reads. */
 export function HostedModelServingSetup(props: Props) {
-  const { api, modelId } = props;
+  const { api, modelId, versionHash } = props;
   const query = useQuery({
-    queryKey: ["inference-model-preparation", api.key, connectionQueryScope(api.connection), modelId],
+    queryKey: ["inference-model-preparation", api.key, connectionQueryScope(api.connection), modelId, versionHash],
     queryFn: async ({ signal }) => {
-      const saved = await parseAndVerifySavedModelVersionRead(await apiFetch(api.connection,
-        `/v1/training/saved-models/${encodeURIComponent(modelId)}/version?${new URLSearchParams({ teamId: api.teamId, preferActiveServing: "true" })}`,
-        { signal }), api.teamId, modelId);
-      return saved;
+      const query = new URLSearchParams({ teamId: api.teamId });
+      if (versionHash) query.set("versionHash", versionHash);
+      else query.set("preferActiveServing", "true");
+      return parseAndVerifySavedModelVersionRead(await apiFetch(api.connection,
+        `/v1/training/saved-models/${encodeURIComponent(modelId)}/version?${query}`, { signal }), api.teamId, modelId, versionHash);
     },
     staleTime: 0,
     gcTime: 0,
@@ -49,7 +50,7 @@ export function HostedModelServingSetup(props: Props) {
   if (query.data?.version) return <PreparedServing {...props} version={query.data.version} />;
   return <PreparationDialog {...props}>
     <ErrorToast error={query.error} />
-    {query.isPending ? <p role="status">Preparing your model…</p> : query.isSuccess ? <p>Waiting for a completed training checkpoint.</p> : null}
+    {query.isPending ? <p role="status">Preparing your model…</p> : query.isSuccess ? <p>Save a Model version to review serving.</p> : null}
     {!query.isPending ? <button type="button" className="training-button secondary" onClick={() => void query.refetch()}>Refresh checkpoint</button> : null}
   </PreparationDialog>;
 }

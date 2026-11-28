@@ -144,7 +144,7 @@ export function SavedModelServing({
       {value ? (
         <>
           <dl className="model-project-page-metrics">
-            {value.schemaVersion === "openpond.trainingModelServing.v1" &&
+            {(value.schemaVersion === "openpond.trainingModelServing.v1" || value.schemaVersion === "openpond.registeredAdapterServing.v1") &&
             value.control?.serverless ? (
               <>
                 <div>
@@ -223,7 +223,7 @@ export function SavedModelServing({
               </>
             ) : null}
           </dl>
-          {value.schemaVersion === "openpond.trainingModelServing.v1" && value.registry ? (
+          {(value.schemaVersion === "openpond.trainingModelServing.v1" || value.schemaVersion === "openpond.registeredAdapterServing.v1") && value.registry ? (
             <p>{reasons[value.registry.reason]}</p>
           ) : value.schemaVersion === "openpond.steeringModelServing.v1" ? (
             <p>
@@ -343,6 +343,8 @@ export function SavedModelServing({
                           jobId: value.version.jobId,
                           candidate: value.version.candidate,
                         }
+                      : value.schemaVersion === "openpond.registeredAdapterServing.v1"
+                        ? { contentHash: value.version.contentHash, artifact: value.registry.artifact, baseModel: value.version.baseModel }
                       : value.schemaVersion === "openpond.engramModelServing.v1" ||
                           value.schemaVersion === "openpond.decisionModelServing.v1" ||
                           value.schemaVersion === "openpond.alphaEditModelServing.v1" ||

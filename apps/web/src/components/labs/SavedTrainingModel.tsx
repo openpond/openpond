@@ -198,6 +198,12 @@ export function SavedTrainingModel({
                 Open producing experiment
               </button>
             </>
+          ) : version.schemaVersion === "openpond.registeredAdapterVersion.v1" ? (
+            <dl className="model-project-page-metrics">
+              <div><dt>Source</dt><dd>Uploaded LoRA adapter</dd></div>
+              <div><dt>Base model</dt><dd>{version.baseModel.repository}</dd><small>{version.baseModel.revision}</small></div>
+              <div><dt>Exact adapter</dt><dd>{version.artifact.id}</dd><small>{version.artifact.contentHash}</small></div>
+            </dl>
           ) : (
             <>
               <dl className="model-project-page-metrics">

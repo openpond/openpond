@@ -5,6 +5,7 @@ export * from "./model-native-runs.js";
 import { createModelRegisteredAdaptersClient } from "./model-registered-adapters.js";
 export {
   RegisteredAdapterAttachSchema, RegisteredAdapterVersionSchema, RegisteredAdapterAttachReceiptSchema, RegisteredAdapterBaseProofSchema,
+  parseAndVerifyRegisteredAdapterVersion,
   type RegisteredAdapterAttach, type RegisteredAdapterVersion, type RegisteredAdapterAttachReceipt, type RegisteredAdapterBaseProof,
 } from "./model-registered-adapters.js";
 import { TrainingGpuSelectionSchema } from "./training-compute-selection.js";
