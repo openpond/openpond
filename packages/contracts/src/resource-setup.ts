@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
 import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelProjectVersionedRefSchema } from "openpond-sdk/model-projects";
+import { SftRecipeSchema } from "openpond-sdk/training";
 
 const fieldText = z.string().max(2_000).optional();
 const positiveInteger = z.number().int().positive().optional();
@@ -35,6 +36,32 @@ export const LocalTrainingModelBaseSchema = z.object({
   }),
 }).strict();
 export type LocalTrainingModelBase = z.infer<typeof LocalTrainingModelBaseSchema>;
+
+export const LocalSftReviewRequestSchema = z.object({
+  sessionId: resourceId,
+  dataset: ModelProjectVersionedRefSchema,
+  modelAssetId: artifactHash,
+  recipe: SftRecipeSchema.strict(),
+}).strict();
+export type LocalSftReviewRequest = z.infer<typeof LocalSftReviewRequestSchema>;
+export const LocalSftReviewPlanSchema = z.object({
+  request: LocalSftReviewRequestSchema,
+  datasetName: z.string().min(1).max(500),
+  datasetPackageHash: artifactHash,
+  trainingDataHash: artifactHash,
+  taskIdsHash: artifactHash,
+  rowCount: z.number().int().positive(),
+  eligibleRows: z.number().int().positive(),
+  excludedRows: z.number().int().nonnegative(),
+  planHash: artifactHash,
+}).strict();
+export const LocalSftReviewSchema = z.object({
+  plan: LocalSftReviewPlanSchema,
+  rows: z.array(z.object({ id: resourceId, prompt: z.string(), target: z.string() }).strict()),
+}).strict();
+export const LocalSftApprovalSchema = LocalSftReviewPlanSchema.extend({
+  approvedAt: z.string().datetime({ offset: true }),
+});
 
 const valuesSchema = z.object({
   name: fieldText,
@@ -81,6 +108,7 @@ export const ResourceSetupDraftSchema = z.object({
   localCandidate: localModelRef.optional(),
   localBaseline: localModelRef.optional(),
   localTrainingBase: LocalTrainingModelBaseSchema.optional(),
+  localSftApproval: LocalSftApprovalSchema.optional(),
   datasetExamples: datasetExample.array().max(50).optional(),
   datasetInputsDirty: z.boolean().optional(),
   trainingRecipes: z.object({

@@ -14,6 +14,7 @@ import { handleHostedEngramRoutes } from "./hosted-engram-routes.js";
 import { handleSteeringPublicationRoutes } from "./steering-publication-routes.js";
 import { handleHostedModificationRoutes } from "./hosted-modification-routes.js";
 import { handleLocalTrainingModelRoutes } from "./local-training-model-routes.js";
+import { handleLocalSftReviewRoutes } from "./local-sft-review-routes.js";
 import { OpenPondExperimentError } from "openpond-sdk/experiments";
 import { OpenPondLearningError } from "openpond-sdk/learning";
 import { OpenPondTrainingApiError } from "openpond-sdk/training";
@@ -41,6 +42,7 @@ export async function handleTrainingRoutes({
 }: HttpRouteContext): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/v1/training")) return false;
   if (await handleLocalTrainingModelRoutes({ deps, request, requestUrl, response })) return true;
+  if (await handleLocalSftReviewRoutes({ deps, request, requestUrl, response })) return true;
   if (await handleWeightSpacePublicationRoutes({ deps, request, requestUrl, response })) return true;
   if (await handleWeightSpaceReadRoutes({ deps, request, requestUrl, response })) return true;
   if (await handleAlphaEditPublicationRoutes({ deps, request, requestUrl, response })) return true;

@@ -1,7 +1,6 @@
-import { createModelTrainingRecipeDefaults } from "openpond-sdk/model-starters";
 import type { ModelProject } from "@openpond/contracts";
 import { ModelTrainingSettings } from "../labs/ModelTrainingSettings";
-import { ResourceSetupDraftSchema, type ResourceSetupDraft } from "../../lib/resource-setup-prompt";
+import { modelSetupTrainingRecipe, ResourceSetupDraftSchema, type ResourceSetupDraft } from "../../lib/resource-setup-prompt";
 
 type Recipe = ModelProject["trainingSetup"]["recipe"];
 type BaseModel = ModelProject["trainingSetup"]["baseModel"];
@@ -9,18 +8,6 @@ type BaseModel = ModelProject["trainingSetup"]["baseModel"];
 function settingsSection(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown> : {};
-}
-
-export function modelSetupTrainingRecipe(draft: ResourceSetupDraft, method: "sft" | "grpo", baseModel?: BaseModel): NonNullable<Recipe> {
-  const saved = draft.trainingRecipes?.[method];
-  if (saved) return saved;
-  const defaults = createModelTrainingRecipeDefaults(null, method, baseModel);
-  const { epochs, learningRate } = draft.values;
-  return { ...defaults, optimizer: {
-    ...settingsSection(defaults.optimizer),
-    ...(epochs !== undefined && method === "sft" ? { epochs } : {}),
-    ...(learningRate !== undefined ? { learningRate } : {}),
-  } };
 }
 
 export function ModelSetupTrainingFields({ draft, method, baseModel, disabled, onChange }: {

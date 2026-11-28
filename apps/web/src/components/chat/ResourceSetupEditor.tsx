@@ -8,6 +8,8 @@ import { connectionQueryScope } from "../../lib/query-scope";
 import type { EvaluationModel } from "../../hooks/useChatResourceFocus";
 import { useErrorToast } from "../../app/AppToastContext";
 import {
+  localSftReviewRequest,
+  retainedLocalSftApproval,
   resourceSetupGroups,
   resourceSetupLabel,
   resourceSetupParts,
@@ -28,6 +30,7 @@ import { GraderSetupReview } from "./GraderSetupReview";
 import { ModelSetupTrainingFields } from "./ModelSetupTrainingFields";
 import { ModelSetupManagedReview } from "./ModelSetupManagedReview";
 import { ModelSetupLocalBase } from "./ModelSetupLocalBase";
+import { ModelSetupLocalSftReview } from "./ModelSetupLocalSftReview";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
 import "./resource-setup-editor.css";
 
@@ -188,6 +191,9 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   </div>;
   const activePart = parts.find(part => typeof part !== "string" && part.field === field);
   const trainingMethod = field === "trainingSettings" ? resourceSetupTrainingMethod(draft) : null;
+  const localSft = draft.values.destination !== "OpenPond Managed" && resourceSetupTrainingMethod(draft) === "sft";
+  const reviewInputs = localSft && (field === "dataset" || field === "trainingSettings");
+  const reviewRequest = reviewInputs ? localSftReviewRequest(draft, sessionId) : null;
   const activeFields: readonly ResourceSetupField[] = trainingMethod
     ? ["budget"] : resourceSetupGroups[field] ?? [field as ResourceSetupField];
   const benchmarkPresets = draft.kind === "benchmark" ? <div className="resource-setup-presets" role="group" aria-label="Benchmark presets">
@@ -220,6 +226,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           if (draft.kind === "grader" && draft.values.graderType === "Exact answer" && key === "cases") return null;
           if (managedReview && key === "baseModel") return null;
           if (localBase && key === "baseModel") return null;
+          if (localSft && key === "split") return null;
           if (draft.kind === "dataset" && (key === "fields" && draft.values.source === "Import a local file"
             || field === "preview" && draft.values.source === "Use an existing dataset")) return null;
           if (key === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") {
@@ -290,6 +297,12 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
             })} />
         </div>
       ) : null}
+      {reviewInputs && (reviewRequest && connection ? (
+        <ModelSetupLocalSftReview key={JSON.stringify(reviewRequest)} connection={connection} request={reviewRequest}
+          approval={retainedLocalSftApproval(draft, sessionId)} busy={busy} onBusy={setAuthoringBusy}
+          onApprove={approval => onChange(draft, { ...draft, revision: draft.revision + 1, localSftApproval: approval })} />
+      ) : <p>{localBase && draft.datasetRef ? "Check the local SFT settings before reviewing training examples."
+        : "Choose a local checkpoint and Dataset to review training examples."}</p>)}
       {version?.location === "local" && <p>This saved artifact needs an exact-version inference runtime. A generic local endpoint cannot verify which artifact is loaded.</p>}
       {version?.location === "cloud" && <button type="button" className="training-button secondary"
         disabled={busy || context.selecting || workspace?.teamId !== version.teamId || !openableVersion}

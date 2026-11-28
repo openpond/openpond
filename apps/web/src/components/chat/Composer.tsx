@@ -1396,6 +1396,7 @@ export function Composer({
     if (!beginSubmissionForScope(submissionScope)) return false;
     const setup = resourceSetup && !selectedAction && !selectedCommand ? snapshotResourceSetup(
       resourceSetup, contextSelection.selection, options.promptOverride ?? inputRef.current?.getPrompt() ?? prompt, contextSelection.workspace,
+      taskSessionId,
     ) : null;
     setAddMenuOpen(false);
     setAttachmentError(null);

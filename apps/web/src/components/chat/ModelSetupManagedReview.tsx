@@ -9,6 +9,7 @@ import type { ClientConnection } from "../../api/api-client";
 import { useErrorToast } from "../../app/AppToastContext";
 import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import {
+  modelSetupTrainingRecipe,
   resourceSetupTrainingMethod,
   type ResourceSetupDraft,
 } from "../../lib/resource-setup-prompt";
@@ -17,7 +18,6 @@ import { useTrainingExperimentInputs } from "../labs/workspace/useTrainingExperi
 import { ReleasedDatasetPicker } from "../labs/workspace/ReleasedDatasetPicker";
 import { createWorkspaceApi, type WorkspaceApi } from "../labs/workspace/workspace-api";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
-import { modelSetupTrainingRecipe } from "./ModelSetupTrainingFields";
 
 type ManagedInputs = NonNullable<ResourceSetupDraft["managedTrainingInputs"]>;
 type ReviewContext = Pick<ReturnType<typeof useChatContextSelection>, "select" | "selection">;

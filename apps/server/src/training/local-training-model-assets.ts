@@ -227,6 +227,10 @@ export function localTrainingModelAssets(storeDir: string) {
   }
   return {
     verify,
+    async inspect(id: string) {
+      const { record } = await read(id);
+      return summarize(id, record);
+    },
     async list() {
       const entries = await readdir(root, { withFileTypes: true }).catch(error => { if (missing(error)) return []; throw error; });
       const bases = [];

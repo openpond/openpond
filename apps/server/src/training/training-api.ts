@@ -1,4 +1,5 @@
 import type { TrainingApiDependencies } from "./training-api-dependencies.js";
+import { LocalSftReviewRequestSchema } from "@openpond/contracts/resource-setup";
 import { handleManagedCandidateReviewAction, isManagedCandidateReviewAction } from "./training-api-candidate-review.js";
 import { createTaskInventoryService, taskInventoryRequest } from "./task-inventory-service.js";
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
@@ -180,6 +181,12 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
       profileId: requiredString(input.profileId, "profileId"), request: input.request });
     if (action === "navigation") return deps.store.readTrainingNavigation(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "local_compute") return (await import("./local-training-compute.js")).inspectLocalTrainingCompute(deps.storeDir);
+    if (action === "review_local_sft") {
+      return (await import("./local-sft-review.js")).reviewLocalSft({
+        store: deps.store, storeDir: deps.storeDir, request: LocalSftReviewRequestSchema.parse(input.request),
+        expectedPlanHash: string(input.expectedPlanHash) ?? undefined, signal,
+      });
+    }
     if (action === "list_local_training_models" || action === "import_local_training_model" || action === "verify_local_training_model") {
       const assets = (await import("./local-training-model-assets.js")).localTrainingModelAssets(deps.storeDir);
       if (action === "list_local_training_models") return assets.list();

@@ -1,5 +1,8 @@
 import type { BenchmarkModelVersion, ResourceSetupDraft } from "@openpond/contracts/resource-setup";
-import type { ChatContextSelection } from "@openpond/contracts";
+import { LocalSftReviewRequestSchema } from "@openpond/contracts/resource-setup";
+import type { ChatContextSelection, ModelProject } from "@openpond/contracts";
+import { createModelTrainingRecipeDefaults } from "openpond-sdk/model-starters";
+import { canonicalJson } from "openpond-sdk/training";
 export { ResourceSetupDraftSchema, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 
 export type ResourceSetupField = keyof ResourceSetupDraft["values"];
@@ -28,6 +31,48 @@ export function resourceSetupTrainingMethod(draft: ResourceSetupDraft): "sft" | 
 
 function localTrainingBase(draft: ResourceSetupDraft) {
   return draft.kind === "model" && draft.values.destination !== "OpenPond Managed" ? draft.localTrainingBase : undefined;
+}
+
+export function modelSetupTrainingRecipe(draft: ResourceSetupDraft, method: "sft" | "grpo",
+  baseModel?: ModelProject["trainingSetup"]["baseModel"]): NonNullable<ModelProject["trainingSetup"]["recipe"]> {
+  const saved = draft.trainingRecipes?.[method];
+  if (saved) return saved;
+  const defaults = createModelTrainingRecipeDefaults(null, method, baseModel);
+  const { epochs, learningRate } = draft.values;
+  const optimizer = defaults.optimizer && typeof defaults.optimizer === "object" && !Array.isArray(defaults.optimizer) ? defaults.optimizer : {};
+  return { ...defaults, optimizer: {
+    ...optimizer,
+    ...(epochs !== undefined && method === "sft" ? { epochs } : {}),
+    ...(learningRate !== undefined ? { learningRate } : {}),
+  } };
+}
+
+export function localSftReviewRequest(draft: ResourceSetupDraft, sessionId: string | null | undefined) {
+  const base = localTrainingBase(draft)?.preference;
+  if (!base || resourceSetupTrainingMethod(draft) !== "sft" || !sessionId || !draft.datasetRef?.contentHash) return null;
+  const recipe = modelSetupTrainingRecipe(draft, "sft", base);
+  const dataset = recipe.dataset as Record<string, unknown> | undefined;
+  const parsed = LocalSftReviewRequestSchema.safeParse({
+    sessionId, dataset: draft.datasetRef, modelAssetId: base.modelAssetId,
+    recipe: {
+      ...recipe,
+      baseModel: {
+        id: base.modelId, revision: base.revision, tokenizerRevision: base.tokenizerRevision, chatTemplateHash: base.chatTemplateHash,
+      },
+      dataset: {
+        ...dataset, trainSplit: "train", validationSplit: dataset?.validationSplit ?? "validation",
+        maxExamples: dataset?.maxExamples === "" ? undefined : dataset?.maxExamples,
+      },
+    },
+  });
+  return parsed.success ? parsed.data : null;
+}
+
+export function retainedLocalSftApproval(draft: ResourceSetupDraft, sessionId: string | null | undefined) {
+  const approval = draft.localSftApproval;
+  if (!approval) return undefined;
+  const request = localSftReviewRequest(draft, sessionId);
+  return request && canonicalJson(request) === canonicalJson(approval.request) ? approval : undefined;
 }
 
 function selectedTrainingRecipe(draft: ResourceSetupDraft, method: ReturnType<typeof resourceSetupTrainingMethod>) {
@@ -142,6 +187,7 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
     managed?.base && `Starting model ${managed.base.preference.modelId}, revision ${managed.base.preference.revision}, tokenizer revision ${managed.base.preference.tokenizerRevision}, chat template hash ${managed.base.preference.chatTemplateHash}`,
     localBase && `Local starting model ${localBase.modelId}, revision ${localBase.revision}, tokenizer revision ${localBase.tokenizerRevision}, chat template hash ${localBase.chatTemplateHash}`,
+    draft.localSftApproval && `Approved local SFT review ${draft.localSftApproval.planHash}, Dataset package ${draft.localSftApproval.datasetPackageHash}, training population ${draft.localSftApproval.taskIdsHash}, ${draft.localSftApproval.rowCount} examples`,
     managed?.batch && method === managed.batch.method && `Reviewed training batch ${managed.batch.reference.id}, revision ${managed.batch.reference.revision}, content hash ${managed.batch.reference.contentHash}`,
     managed?.validation && `Validation Dataset ${managed.validation.id}, revision ${managed.validation.revision}, content hash ${managed.validation.contentHash}, split ${managed.validationSplit ?? "validation"}`,
     draft.candidateRef && `Model project ${draft.candidateRef.projectId}, version ${draft.candidateRef.versionId}, artifact ${draft.candidateRef.artifactId}, bundle hash ${draft.candidateRef.bundleHash}`,
@@ -149,7 +195,7 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     version?.location === "cloud" && `Saved Model ${version.modelProjectId}, exact version hash ${version.versionHash}`,
     draft.values.destination === "This device" && draft.localCandidate && `Candidate local provider custom-openai-compatible, model ID ${draft.localCandidate.modelId}, configuration hash ${draft.localCandidate.configurationHash}`,
     draft.values.destination === "This device" && draft.comparison && draft.localBaseline && `Baseline local provider custom-openai-compatible, model ID ${draft.localBaseline.modelId}, configuration hash ${draft.localBaseline.configurationHash}`,
-    split && `Dataset split ${split}`,
+    (draft.localSftApproval || split) && `Dataset split ${draft.localSftApproval ? "train" : split}`,
     epochs !== undefined && `${epochs} epochs`,
     learningRate !== undefined && `learning rate ${learningRate}`,
     draft.kind === "model" && budget !== undefined && `maximum spend $${budget}`,
@@ -172,8 +218,9 @@ export function snapshotResourceSetup(
   selection: ChatContextSelection | null,
   instructions: string,
   workspace: ModelSetupScope | null,
+  sessionId?: string | null,
 ) {
-  const draft = scopeManagedSetup(original, workspace);
+  const draft = { ...scopeManagedSetup(original, workspace), localSftApproval: retainedLocalSftApproval(original, sessionId) };
   const benchmarkDefinition = draft.kind === "benchmark" && selection?.localDraft && selection.draft && selection.draftRevision
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
   const { datasetExamples: _localExamples, graderExamples: _localFixtures, datasetInputsDirty, trainingRecipes: _recipes, ...setup } = draft;
