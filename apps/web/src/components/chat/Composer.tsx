@@ -1598,6 +1598,10 @@ export function Composer({
     connection={connection} session={nativeAvailability.session} reason={nativeReadOnlyReason} onRechecked={nativeAvailability.acceptSession} onOpenParent={onOpenNativeParent}
   />;
 
+  const projectContext = <ComposerProjectTargetControl busy={busy || projectTarget.busy} placement={dropdownPlacement}
+    state={projectTarget} onChange={onProjectTargetChange}
+    resourceContext={surface === "chat" && enableResourceContext ? contextSelection : undefined} />;
+
   return (
     <form
       ref={composerRef}
@@ -1667,15 +1671,7 @@ export function Composer({
       />
       {mode === "start" && (showProjectFooter || surface === "chat") && (
         <div className="composer-footer">
-          {showProjectFooter ? (
-            <ComposerProjectTargetControl
-              busy={busy || projectTarget.busy}
-              placement={dropdownPlacement}
-              state={projectTarget}
-              onChange={onProjectTargetChange}
-              resourceContext={surface === "chat" && enableResourceContext ? contextSelection : undefined}
-            />
-          ) : null}
+          {showProjectFooter ? projectContext : null}
           {profileTarget && onProfileTargetChange ? (
             <ComposerProfileTargetControl
               busy={busy}
@@ -1925,9 +1921,7 @@ export function Composer({
         <ComposerPrimaryControls
           issueAction={surface === "chat" ? <DesktopLogIssueAction key={conversationId ?? "new-chat"}
             conversationId={conversationId} inbox={taskInbox} running={running} onSubmit={onSubmit} showToast={showToast} /> : null}
-          trainingControl={surface === "chat" && enableResourceContext && (mode !== "start" || !showProjectFooter) ? <ComposerProjectTargetControl
-            busy={busy || projectTarget.busy} placement={dropdownPlacement} state={projectTarget} onChange={onProjectTargetChange}
-            resourceContext={contextSelection} /> : null}
+          trainingControl={surface === "chat" && enableResourceContext && (mode !== "start" || !showProjectFooter) ? projectContext : null}
           surface={surface}
           teamUseModel={teamUseModel}
           teamUseModelLocked={teamUseModelLocked}
