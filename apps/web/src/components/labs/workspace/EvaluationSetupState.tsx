@@ -209,6 +209,7 @@ export function EvaluationSetupProvider({
   const startingModelRef = useRef(startingModel);
   startingModelRef.current = startingModel;
   function setOperationType(value: ExperimentOperationType) {
+    if (authoring?.benchmarkBaseline && value !== "evaluate") return;
     if (startingModelRef.current?.source === "alphaedit" && value !== "alphaedit") return;
     if (startingModelRef.current?.source === "neuron_training") return;
     if (startingModelRef.current?.source === "decision" && value !== "decision_model") return;
@@ -507,7 +508,7 @@ export function EvaluationSetupProvider({
     acceptSaved,
     evaluationDirty: canonicalJson({ draft, selection }) !== baseline,
     initialExperiment: authoring,
-    allowedOperationTypes,
+    allowedOperationTypes: authoring?.benchmarkBaseline ? ["evaluate"] : allowedOperationTypes,
     operationDraftDirty: Object.values(trainingDirty).some(Boolean),
     reportOperationDraftDirty,
     operationType,
