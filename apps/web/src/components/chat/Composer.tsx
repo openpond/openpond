@@ -1445,7 +1445,7 @@ export function Composer({
       );
       if (sent && setup && originDraftScopeKey) {
         composerDraftStore?.setResourceSetup(originDraftScopeKey, current =>
-          current === resourceSetup && !current?.datasetInputsDirty && !current?.graderExamples && !current?.managedBenchmarkVersions &&
+          current === resourceSetup && !current?.datasetInputsDirty && !current?.graderExamples && !current?.managedBenchmarkVersions && !current?.managedBenchmarkDataset &&
             (!current?.managedTrainingInputs || setup?.draft.managedTrainingInputs) ? null : current);
       }
       if (sent && resourceDrafts.current.get(submissionScope) === submissionContexts) resourceDrafts.current.delete(submissionScope);

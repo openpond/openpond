@@ -7,7 +7,7 @@ import type { ClientConnection } from "../api";
 import { connectionQueryScope } from "../lib/query-scope";
 import { ChatExperimentWorkspaceContext } from "../components/chat/ChatExperimentWorkspaceContext";
 import { requestDesktopViewChange } from "../components/labs/lab-primary-tab-state";
-import type { ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
+import type { ManagedBenchmarkReview } from "@openpond/contracts/resource-setup";
 import type { ModelSetupScope } from "../lib/resource-setup-prompt";
 
 export const ChatContextAccountScope = createContext("default");
@@ -31,7 +31,7 @@ type PagedContextQuery<T> = {
   fetchNextPage: () => Promise<unknown>;
   refetch: () => Promise<unknown>;
 };
-type ContextSelectionOptions = { newExperiment?: boolean; configureDraft?: boolean; modelTrainingReview?: boolean; benchmark?: { versions: ManagedBenchmarkVersions; expectedRevision: number; name?: string; budget?: number; seed?: number } };
+type ContextSelectionOptions = { newExperiment?: boolean; configureDraft?: boolean; modelTrainingReview?: boolean; benchmark?: ManagedBenchmarkReview };
 type ChatContextSelectionState = {
   associateTraining: (jobId: string, apiOrigin: string, draftId: string) => Promise<void>;
   selection: ChatContextSelection | null;

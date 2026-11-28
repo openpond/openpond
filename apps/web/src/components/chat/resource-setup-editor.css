@@ -48,6 +48,13 @@
   margin-block: 16px;
 }
 
+.resource-setup-grader-fields {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .resource-setup-input {
   display: grid;
   gap: 5px;

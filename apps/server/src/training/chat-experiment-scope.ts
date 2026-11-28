@@ -15,6 +15,7 @@ import {
 } from "@openpond/contracts";
 import type { ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
+import type { ReviewedBenchmarkDataset } from "./hosted-benchmark-dataset.js";
 import type { SqliteStore } from "../store/store.js";
 import { canonicalJson, parseAndVerifyExperimentDraft, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
 
@@ -172,6 +173,8 @@ export function createChatExperimentScopes(store: SqliteStore) {
     name?: string;
     budget?: number;
     seed?: number;
+    outputTokens?: number;
+    dataset?: ReviewedBenchmarkDataset | null;
   }): Promise<ChatExperimentContext> {
     return change(sessionId, (state, metadata) => {
       const resource = SessionResourceDraftSchema.safeParse(metadata.resourceDraft).data;
@@ -188,11 +191,18 @@ export function createChatExperimentScopes(store: SqliteStore) {
       const compatible = previousForm?.executionLocation === "hosted" && previousForm.form.mode === "model" ? previousForm : null;
       const { localRuntime: _localRuntime, ...previousSettings } = compatible?.form ?? {};
       const evaluationForm: ExperimentDraft["evaluationForm"] = {
-        executionLocation: "hosted", selection: compatible?.selection ?? null, source: compatible?.source ?? null,
+        executionLocation: "hosted",
+        selection: input.dataset === undefined ? compatible?.selection ?? null : input.dataset?.selection ?? null,
+        source: input.dataset === undefined ? compatible?.source ?? null : null,
         form: {
           mode: "model", sourceId: "", profileChoiceId: "", release: null, modelId: "", outputTokens: 1024,
           prompt: "", targetId: "", graderChoices: {}, budget: null, seed: "0",
           ...previousSettings, name,
+          ...(input.dataset !== undefined && {
+            release: input.dataset?.selection.release ?? null,
+            graderChoices: input.dataset ? { [input.dataset.selection.release.contentHash]: input.dataset.graders } : {},
+          }),
+          ...(input.outputTokens !== undefined ? { outputTokens: input.outputTokens } : {}),
           ...(input.budget !== undefined ? { budget: input.budget } : {}),
           ...(input.seed !== undefined ? { seed: String(input.seed) } : {}),
         },

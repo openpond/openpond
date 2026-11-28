@@ -30,7 +30,8 @@ export function canSubmitBenchmarkSetup(
   draft: ResourceSetupDraft, workspace: ModelSetupScope | null,
   selection: ChatContextSelection | null, sessionId: string | null,
 ) {
-  if (draft.managedBenchmarkVersions && !ownsHostedBenchmarkVersion(draft.managedBenchmarkVersions.candidate, workspace))
+  if ((draft.managedBenchmarkVersions && !ownsHostedBenchmarkVersion(draft.managedBenchmarkVersions.candidate, workspace)) ||
+    (draft.managedBenchmarkDataset && !ownsHostedBenchmarkVersion(draft.managedBenchmarkDataset, workspace)))
     return false;
   const version = draft.benchmarkModelVersion;
   return version?.location !== "cloud" || Boolean(scopedBenchmarkVersion(version, workspace, selection, sessionId));
@@ -46,6 +47,9 @@ export function scopeManagedSetup(
   }
   if (draft.managedBenchmarkVersions && !ownsHostedBenchmarkVersion(draft.managedBenchmarkVersions.candidate, scope))
     draft = { ...draft, managedBenchmarkVersions: undefined, values: { ...draft.values, candidate: undefined, baseline: undefined } };
+  if (draft.managedBenchmarkDataset && !ownsHostedBenchmarkVersion(draft.managedBenchmarkDataset, scope))
+    draft = { ...draft, managedBenchmarkDataset: undefined, values: { ...draft.values, dataset: undefined,
+      datasetRevision: undefined, grader: undefined, split: undefined } };
   const version = scopedBenchmarkVersion(draft.benchmarkModelVersion, scope, selection, sessionId);
   if (draft.benchmarkModelVersion && !version)
     return { ...draft, benchmarkModelVersion: undefined, values: { ...draft.values, candidate: undefined } };
@@ -189,7 +193,7 @@ export function resourceSetupParts(draft: ResourceSetupDraft): ResourceSetupPart
 export const resourceSetupGroups: Partial<Record<PromptField, readonly ResourceSetupField[]>> = {
   dataset: ["dataset", "datasetRevision", "split"],
   trainingSettings: ["epochs", "learningRate", "budget"],
-  evaluationSettings: ["samples", "seed"],
+  evaluationSettings: ["samples", "seed", "outputTokens"],
   saveDestination: ["destination"],
   preview: ["split", "samples"],
 };
@@ -205,9 +209,15 @@ export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetup
     if (field === "destination") return draft.localBenchmarkInference?.device === "cuda" ? "This device (NVIDIA CUDA)" : "This device (CPU)";
     if (field === "grader") return "the Dataset’s local graders";
   }
+  if (field === "grader" && draft.managedBenchmarkDataset) {
+    const selected = draft.managedBenchmarkDataset.graders?.length;
+    return selected === undefined ? "the released graders" : selected ? `${selected} exact ${selected === 1 ? "grader" : "graders"}` : placeholder;
+  }
   if (field === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") return "the Dataset’s local graders";
   const value = draft.values[field];
   if (field === "budget" && typeof value === "number") return `$${value}`;
+  if (field === "dataset" && draft.managedBenchmarkDataset)
+    return `${draft.managedBenchmarkDataset.label} revision ${draft.managedBenchmarkDataset.release.revision}`;
   if (field === "dataset" && value && draft.values.datasetRevision) return `${value} revision ${draft.values.datasetRevision}`;
   if (value === undefined && draft.kind === "model" && draft.values.method === "SFT") {
     if (field === "dataset") return "GSM8K example";
@@ -234,7 +244,11 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const localBase = localTrainingBase(draft)?.preference;
   const version = draft.managedBenchmarkVersions?.candidate ?? draft.benchmarkModelVersion;
   const baseline = draft.comparison ? draft.managedBenchmarkVersions?.baseline : undefined;
+  const release = draft.managedBenchmarkDataset?.release;
   const settings = [
+    release && `Released Dataset ${release.id}, revision ${release.revision}, content hash ${release.contentHash}`,
+    draft.managedBenchmarkDataset?.graders?.length && `Released Graders ${JSON.stringify(draft.managedBenchmarkDataset.graders)}`,
+    draft.values.outputTokens !== undefined && `maximum output ${draft.values.outputTokens} tokens per task`,
     version?.location === "cloud" && `Managed Model ${version.modelProjectId}, training run ${version.jobId}, version hash ${version.versionHash}`,
     baseline && `Managed baseline ${baseline.modelProjectId}, training run ${baseline.jobId}, version hash ${baseline.versionHash}`,
     !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,

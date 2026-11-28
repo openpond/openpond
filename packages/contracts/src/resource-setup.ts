@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { ExperimentGraderSelectionSchema } from "openpond-sdk/experiments";
+import { TasksetCatalogReleaseRefSchema } from "openpond-sdk/taskset-catalog";
 import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
 import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelProjectVersionedRefSchema, RegisteredAdapterVersionSchema } from "openpond-sdk/model-projects";
 import { SftRecipeSchema } from "openpond-sdk/training";
@@ -28,10 +30,30 @@ export const ManagedBenchmarkVersionsSchema = z.object({
   candidate.versionHash !== baseline.versionHash
 ), "Choose two distinct saved versions from the same workspace.");
 export type ManagedBenchmarkVersions = z.infer<typeof ManagedBenchmarkVersionsSchema>;
+export const ManagedBenchmarkDatasetSchema = z.object({
+  teamId: resourceId,
+  owner: HostedBenchmarkOwnerSchema,
+  release: TasksetCatalogReleaseRefSchema,
+  label: z.string().trim().min(1).max(500),
+  graders: ExperimentGraderSelectionSchema.array().max(100).optional(),
+}).strict();
+export type ManagedBenchmarkDataset = z.infer<typeof ManagedBenchmarkDatasetSchema>;
+export const ManagedBenchmarkReviewSchema = z.object({
+  expectedRevision: z.number().int().positive(),
+  versions: ManagedBenchmarkVersionsSchema,
+  name: z.string().trim().min(1).max(191).optional(),
+  budget: z.number().min(0).max(10_000).optional(),
+  seed: z.number().int().min(0).max(2_147_483_647).optional(),
+  dataset: ManagedBenchmarkDatasetSchema.nullable().optional(),
+  split: DatasetSplitSchema.optional(),
+  samples: z.number().int().min(1).max(100).optional(),
+  outputTokens: z.number().int().min(1).max(4096).optional(),
+}).strict();
+export type ManagedBenchmarkReview = z.infer<typeof ManagedBenchmarkReviewSchema>;
 export type BenchmarkModelVersion = z.infer<typeof BenchmarkModelVersionSchema>;
 type HostedBenchmarkVersion = Extract<BenchmarkModelVersion, { location: "cloud" }>;
 export function ownsHostedBenchmarkVersion(
-  version: HostedBenchmarkVersion,
+  version: Pick<HostedBenchmarkVersion, "teamId" | "owner">,
   scope: { teamId: string | null; actorId: string | null; apiOrigin?: string | null } | null | undefined,
 ) {
   return Boolean(version.owner && scope && version.teamId === scope.teamId &&
@@ -188,6 +210,7 @@ const valuesSchema = z.object({
   graderType: z.enum(["Exact answer", "Code grader", "LLM judge", "Human assessment", "Python correctness"]).optional(),
   fields: fieldText,
   samples: z.number().int().min(1).max(100).optional(),
+  outputTokens: z.number().int().min(1).max(4096).optional(),
   epochs: positiveInteger,
   learningRate: nonnegativeNumber,
   seed: z.number().int().min(0).max(2_147_483_647).optional(),
@@ -207,6 +230,7 @@ export const ResourceSetupDraftSchema = z.object({
   }).optional(),
   benchmarkModelVersion: BenchmarkModelVersionSchema.optional(),
   managedBenchmarkVersions: ManagedBenchmarkVersionsSchema.optional(),
+  managedBenchmarkDataset: ManagedBenchmarkDatasetSchema.nullable().optional(),
   localBenchmarkInference: z.object({
     device: z.enum(["cpu", "cuda"]),
     maxOutputTokens: z.number().int().min(1).max(2048),

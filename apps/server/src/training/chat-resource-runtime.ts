@@ -1,6 +1,7 @@
 import { readChatWeightSpace } from "./chat-weight-space.js";
 import { createChatNextStepService } from "./chat-next-step.js";
 import { createChatContextBrowser, hasModelSetupAccess } from "./chat-context-browser.js";
+import { readManagedBenchmarkDataset } from "./hosted-benchmark-dataset.js";
 import { authorizeHostedBenchmarkVersion, readExactHostedBenchmarkVersion } from "./hosted-benchmark-access.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
 import { readChatTrainingAttachment } from "./chat-training-attachment.js";
@@ -10,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
-import { ManagedBenchmarkVersionsSchema, ResourceSetupDraftSchema, type BenchmarkRunPin } from "@openpond/contracts/resource-setup";
+import { ManagedBenchmarkReviewSchema, ManagedBenchmarkVersionsSchema, ResourceSetupDraftSchema, type BenchmarkRunPin } from "@openpond/contracts/resource-setup";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import type { SqliteStore } from "../store/store.js";
 import type { LocalInferenceState } from "../evaluations/local-experiment-local-inference.js";
@@ -237,10 +238,9 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     }
     if (kind === "dataset" && input.action === "context_prepare_benchmark") {
       if (context) throw new Error("Choose saved Model versions from the Benchmark prompt.");
-      const query = z.object({ sessionId: z.string().min(1), target: ChatContextTargetSchema,
-        expectedRevision: z.number().int().positive(), versions: ManagedBenchmarkVersionsSchema,
-        name: z.string().trim().min(1).max(191).optional(), budget: z.number().min(0).max(10_000).optional(),
-        seed: z.number().int().min(0).max(2_147_483_647).optional() }).strict().parse(input.payload);
+      const query = ManagedBenchmarkReviewSchema.extend({
+        sessionId: z.string().min(1), target: ChatContextTargetSchema,
+      }).parse(input.payload);
       if (query.target.sessionId !== query.sessionId || !query.target.scopeId)
         throw new Error("The Benchmark belongs to another conversation.");
       const selected = await browser.resolve(query.target);
@@ -248,8 +248,10 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
         throw new Error("Open the originating Benchmark to choose saved Model versions.");
       const candidate = await readExactHostedBenchmarkVersion(query.versions.candidate, deps.access);
       const baseline = query.versions.baseline && await readExactHostedBenchmarkVersion(query.versions.baseline, deps.access);
+      const dataset = await readManagedBenchmarkDataset(query, deps.access);
       await scopes.setManagedBenchmarkVersions(query.sessionId, query.target.scopeId, {
         expectedRevision: query.expectedRevision, name: query.name, budget: query.budget, seed: query.seed,
+        dataset, outputTokens: query.outputTokens,
         versions: ManagedBenchmarkVersionsSchema.parse({ candidate: candidate.pin, ...(baseline ? { baseline: baseline.pin } : {}) }),
         model: { source: "trained", label: candidate.model.name, baseModel: candidate.version.request.baseModel,
           inferenceModelId: null, trainedVersion: candidate.version },
