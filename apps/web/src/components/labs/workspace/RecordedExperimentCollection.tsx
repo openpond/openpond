@@ -7,8 +7,9 @@ import type {WorkspaceApi} from "./workspace-api";
 import {EvaluationTime} from "./EvaluationPresentation";
 export type RecordedExperimentPage=z.infer<typeof ConnectedRecordedListSchema>;
 
-export function useRecordedExperimentHistory(api:WorkspaceApi) {
+export function useRecordedExperimentHistory(api:WorkspaceApi, enabled=true) {
   return useInfiniteQuery({queryKey:["evaluation-workspace",api.key,"recordedExperiments"],
+    enabled,
     initialPageParam:undefined as string|undefined,getNextPageParam:(page:RecordedExperimentPage)=>page.nextCursor??undefined,
     queryFn:({signal,pageParam})=>api.request<RecordedExperimentPage>("connectedRecordedList",{...(api.projectId?{projectId:api.projectId}:{}),...(pageParam?{cursor:pageParam}:{}),limit:30},signal),
   });

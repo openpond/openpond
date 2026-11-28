@@ -18,7 +18,7 @@ export function trainingStoreMethods(context: SqliteDomainContext, lifecycle: St
   return {
     ...modelPreparation.methods(["prepareLocalModelProject", "applyLocalModelProjectPreparation"]),
     ...overview.methods(["readTrainingActivityState", "readTrainingNavigation"]),
-    ...chatResources.methods(["listChatHostedExperiments", "readChatHostedExperiment", "retainChatHostedExperiment", "localResourceOwnerId", "readLocalDataset", "readLocalDatasetByWorkspaceHash", "readLocalDatasetListing", "readLocalDatasetProjection", "listLocalDatasets", "listLocalDatasetListings", "recoverLocalDatasetOperation", "saveLocalDataset", "updateLocalDatasetMetadata", "linkChatResource", "chatResourceLinks", "readChatExperimentGroup", "prepareChatExperimentGroup"]),
+    ...chatResources.methods(["listChatHostedExperiments", "readChatHostedExperiment", "retainChatHostedExperiment", "listChatHostedBenchmarkPeers", "findChatBenchmarkPreparation", "localResourceOwnerId", "readLocalDataset", "readLocalDatasetByWorkspaceHash", "readLocalDatasetListing", "readLocalDatasetProjection", "listLocalDatasets", "listLocalDatasetListings", "recoverLocalDatasetOperation", "saveLocalDataset", "updateLocalDatasetMetadata", "linkChatResource", "chatResourceLinks", "readChatExperimentGroup", "prepareChatExperimentGroup"]),
     ...training.methods([
       "trainingChatSearchSignatures",
       "openPondTrainingChatSearchEvidence",

@@ -11,11 +11,15 @@ type Comparison = Awaited<ReturnType<OpenPondExperimentsClient["compare"]>>;
 import { ExperimentComparisonTables } from "./ExperimentComparisonTables";
 import { useRecordedExperimentHistory } from "./RecordedExperimentCollection";
 import type { ExperimentGraderPin } from "openpond-sdk/experiments";
+import { chatResourceRequest } from "../../../api/chat-resource-api";
+import { DropdownSelect } from "../../DropdownSelect";
 export function ExperimentCompare({
   api,
   baselineId,
   graders = [],
   onOpenGrader,
+  exactBenchmark = false,
+  baselineReady = true,
 }: {
   api: WorkspaceApi;
   inventory?: Inventory | null;
@@ -23,15 +27,18 @@ export function ExperimentCompare({
   baselineId: string | null;
   graders?: ExperimentGraderPin[];
   onOpenGrader?: (release: NonNullable<ExperimentGraderPin["release"]>) => void;
+  exactBenchmark?: boolean;
+  baselineReady?: boolean;
 }) {
   const [candidateExecution, setCandidateExecution] = useState("");
   const [candidatePass, setCandidatePass] = useState("");
   const [candidateKind,setCandidateKind]=useState<"model"|"recorded_evidence">("model");
-  const recordedHistory=useRecordedExperimentHistory(api);
+  const recordedHistory=useRecordedExperimentHistory(api,!exactBenchmark);
   const recordedItems=[...new Map((recordedHistory.data?.pages.flatMap(page=>page.items)??[]).map(item=>[item.id,item])).values()];
   const history = useInfiniteQuery({
     queryKey: ["evaluation-workspace", api.key, "compareCandidates"],
     initialPageParam: undefined as string | undefined,
+    enabled: !exactBenchmark,
     getNextPageParam: (page: { items: ExperimentRunDetails[]; nextCursor: string | null }) =>
       page.nextCursor ?? undefined,
     queryFn: ({ signal, pageParam }) =>
@@ -43,7 +50,7 @@ export function ExperimentCompare({
   });
   const passes = useInfiniteQuery({
     queryKey: ["evaluation-workspace", api.key, "comparePasses", candidateExecution,candidateKind],
-    enabled: Boolean(candidateExecution),
+    enabled: !exactBenchmark && Boolean(candidateExecution),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page: { items: ExperimentScoringPass[]; nextCursor: string | null }) =>
       page.nextCursor ?? undefined,
@@ -64,13 +71,28 @@ export function ExperimentCompare({
       (passes.data?.pages.flatMap((page) => page.items) ?? []).map((pass) => [pass.id, pass]),
     ).values(),
   ];
-  const selectedCandidate = executionItems.find((run) => run.summary.id === candidateExecution);
+  const peers = useQuery({
+    queryKey: ["benchmark-compare-peers", api.key, baselineId],
+    enabled: exactBenchmark && Boolean(baselineId),
+    queryFn: ({ signal }) => chatResourceRequest<{ peers: { id: string; versionHash: string }[] | null }>(api.connection, "experiment", {
+      action: "benchmark_peers", payload: { id: baselineId },
+    }, signal),
+  });
+  const peer = useQuery({
+    queryKey: ["benchmark-compare-run", api.key, candidateExecution],
+    enabled: exactBenchmark && Boolean(peers.data?.peers?.some(run => run.id === candidateExecution)),
+    queryFn: ({ signal }) => api.request<ExperimentRunDetails>("experiment", { id: candidateExecution }, signal),
+    refetchInterval: query => ["queued", "running", "cancelling"].includes(query.state.data?.summary.status ?? "") ? 3000 : false,
+  });
+  const selectedCandidate = exactBenchmark ? peer.data : executionItems.find((run) => run.summary.id === candidateExecution);
   const candidateId = candidatePass || (candidateKind==="model"?candidateExecution:"");
   const comparison = useQuery({
-    queryKey: ["evaluation-workspace", api.key, "comparison", baselineId, candidateId],
+    queryKey: ["evaluation-workspace", api.key, "comparison", baselineId, candidateId, exactBenchmark],
     enabled: false,
     queryFn: async ({ signal }) => {
-      const evidence = await api.request<Comparison>("compare", { baselineId, candidateId }, signal);
+      const evidence = exactBenchmark ? await chatResourceRequest<Comparison>(api.connection, "experiment", {
+        action: "benchmark_compare", payload: { baselineId, candidateId },
+      }, signal) : await api.request<Comparison>("compare", { baselineId, candidateId }, signal);
       const reviewSources = await Promise.all([evidence.baseline, evidence.candidate].map(async result => {
         const id = result.manifest.lineage?.execution.id;
         if (!id) throw new Error("This retained result does not name its original execution.");
@@ -93,11 +115,15 @@ export function ExperimentCompare({
   const data = comparison.data?.comparison;
   return (
     <EvaluationCard title="Compare retained results">
-      <p>
+      {exactBenchmark ? <p>Choose another Model version run on this Benchmark revision.</p> : <p>
         Baseline: {baselineId ?? "Choose a completed Experiment"}. Compatibility and eligible cases
         use the same comparison rules as the API and CLI.
-      </p>
+      </p>}
       <div className="evaluation-workspace-scope">
+        {exactBenchmark ? <DropdownSelect label="Comparison version run" searchable floating
+          value={candidateExecution} onChange={setCandidateExecution}
+          options={[{value:"",label:"Choose a run"},...(peers.data?.peers??[]).map(run=>({value:run.id,
+            label:`Version ${run.versionHash.slice(0, 12)}`,description:`Run ${run.id}`}))]} /> : <>
         <label>Candidate source<select value={candidateKind} onChange={event=>{setCandidateKind(event.target.value as typeof candidateKind);setCandidateExecution("");setCandidatePass("");}}><option value="model">Target execution</option><option value="recorded_evidence">Recorded evidence</option></select></label>
         <label>
           Candidate Experiment
@@ -123,6 +149,7 @@ export function ExperimentCompare({
             ))}
           </select>
         </label>
+        </>}
         {selectedCandidate ? (
           <span>
             Started{" "}
@@ -131,7 +158,7 @@ export function ExperimentCompare({
             />
           </span>
         ) : null}
-        {passItems.length ? (
+        {!exactBenchmark && passItems.length ? (
           <label>
             Candidate scoring
             <select
@@ -149,12 +176,15 @@ export function ExperimentCompare({
         ) : null}
         <button
           className="training-button secondary"
-          disabled={!candidateId || !baselineId || comparison.isFetching}
+          disabled={!candidateId || !baselineId || comparison.isFetching ||
+            exactBenchmark && (!baselineReady || !selectedCandidate?.summary.resultAvailable)}
           onClick={() => void comparison.refetch()}
         >
           {comparison.isFetching ? "Reading retained comparison…" : "Compare"}
         </button>
       </div>
+      {exactBenchmark && peers.isSuccess && !peers.data.peers?.length ? <p>Run another saved Model version from the Benchmark draft to compare results.</p> : null}
+      {exactBenchmark && selectedCandidate && !selectedCandidate.summary.resultAvailable ? <p role="status">Comparison run is {selectedCandidate.summary.status}.</p> : null}
       {history.hasNextPage ? (
         <button disabled={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>
           More experiments
@@ -167,8 +197,8 @@ export function ExperimentCompare({
           Older scoring passes
         </button>
       ) : null}
-      {history.error || passes.error || comparison.error ? (
-        <ErrorToast error={history.error?.message ?? passes.error?.message ?? comparison.error?.message} />
+      {history.error || passes.error || comparison.error || peers.error || peer.error ? (
+        <ErrorToast error={history.error?.message ?? passes.error?.message ?? comparison.error?.message ?? peers.error?.message ?? peer.error?.message} />
       ) : null}
       {data ? (
         <>

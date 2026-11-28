@@ -51,11 +51,12 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
   async function retain(pin:z.infer<typeof Pin>,datasetId:string,datasetRevision:number,details:ExperimentRunDetails, benchmark?:BenchmarkRunPin) {
     const record=Hosted.parse({pin,datasetId,datasetRevision,details,...(benchmark ? { benchmark } : {})});await deps.store.retainChatHostedExperiment(details.summary.id,contentHash(pin),details.configuration.configurationHash,record);return record;
   }
-  async function bindBenchmark(input:{sessionId:string;preparationId:string;revision:number;draft?:ExperimentDraft}) {
+  async function bindBenchmark(input:{sessionId:string;preparationId:string;revision:number;versionHash?:string;draft?:ExperimentDraft}) {
     const operation=`benchmark-candidate:${input.preparationId}`;
     const previous=await deps.store.readChatExperimentGroup(operation);
     let recorded=previous ? CandidateBenchmark.parse(previous) : null;
-    if(recorded && (recorded.sessionId!==input.sessionId || recorded.benchmark.revision!==input.revision))
+    if(recorded && (recorded.sessionId!==input.sessionId || recorded.benchmark.revision!==input.revision ||
+      input.versionHash && recorded.benchmark.modelVersion?.versionHash!==input.versionHash))
       throw new Error("This candidate is already bound to another Benchmark revision.");
     const current=await access(recorded?.pin);
     const headers=hostedApiAuthHeaders(current.token);
@@ -69,13 +70,18 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
     if(prepared.ownerUserId!==current.actorId)throw new Error("The candidate evaluation owner changed.");
     const configuration=prepared.request.configuration;
     if(!recorded) {
-      const draft=input.draft, version=draft?.startingModel?.source==="trained" ? draft.startingModel.trainedVersion : null;
+      const draft=input.draft, original=draft?.startingModel?.source==="trained" ? draft.startingModel.trainedVersion : null;
+      if(!original || original.teamId!==current.teamId)
+        throw new Error("Open the saved Benchmark in its original workspace.");
+      const versionHash=input.versionHash ?? original.contentHash;
+      const result=await createTrainingClient({baseUrl:current.apiBaseUrl,headers,fetch:transport}).result(prepared.trainingJobId,{teamId:current.teamId});
+      const version=versionHash===original.contentHash ? original : result.savedVersion;
       const {form,selection}=draft?.evaluationForm ?? {};
       const {policy,population}=configuration.request;
       const seeds=new Set(form?.seed.split(/[\s,]+/).filter(Boolean));
       const tasks=new Set(selection?.ids);
       if(!draft || !version || !form?.release || draft.evaluationForm?.executionLocation!=="hosted" ||
-        version.teamId!==current.teamId || prepared.trainingJobId!==version.jobId ||
+        version.contentHash!==versionHash || version.teamId!==current.teamId || prepared.trainingJobId!==version.jobId ||
         policy.kind!=="hosted_chat" || policy.localRuntime || policy.harness || policy.candidate ||
         policy.modelId!==version.request.baseModel.modelId || policy.maxOutputTokens!==form.outputTokens ||
         policy.temperature!==(form.temperature??0) || policy.topP!==(form.topP??1) ||
@@ -87,7 +93,6 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
         form.budget!==configuration.maximumCostUsd || form.name.trim()!==configuration.request.name ||
         canonicalJson(form.graderChoices[form.release.contentHash]??[])!==canonicalJson(configuration.graders??[]))
         throw new Error("The preparation differs from the saved Benchmark revision.");
-      const result=await createTrainingClient({baseUrl:current.apiBaseUrl,headers,fetch:transport}).result(version.jobId,{teamId:current.teamId});
       if(result.teamId!==current.teamId || result.job.modelProjectId!==version.modelProjectId ||
         result.candidate?.registryArtifactId!==prepared.request.artifact.id ||
         result.candidate.checkpointId!==version.candidate.checkpointId ||
@@ -148,12 +153,51 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
   async function list(){return (await deps.store.listChatHostedExperiments()).map(raw=>cloudExperimentSummary(Hosted.parse(raw)));}
   async function benchmarkPin(id:string) {
     const raw=await deps.store.readChatHostedExperiment(id);
-    if(!raw)return null;
+    if(!raw)return { benchmark:null, sessionId:null };
     const record=Hosted.parse(raw);
     await access(record.pin);
-    return record.benchmark ?? null;
+    const policy=record.details.request.policy;
+    const candidate=policy.kind==="hosted_chat" ? policy.candidate : undefined;
+    const source=record.benchmark && candidate ? CandidateBenchmark.safeParse(
+      await deps.store.readChatExperimentGroup(`benchmark-candidate:${candidate.preparationId}`),
+    ) : null;
+    const sessionId=source?.success && contentHash(source.data.pin)===contentHash(record.pin) &&
+      contentHash(source.data.benchmark)===contentHash(record.benchmark) ? source.data.sessionId : null;
+    return { benchmark:record.benchmark??null, sessionId };
   }
-  async function compare(payload:Record<string,unknown>){const input=z.object({baselineId:z.string().min(1),candidateId:z.string().min(1)}).parse(payload);const [a,b]=await Promise.all([read(input.baselineId),read(input.candidateId)]);if(contentHash(a.pin)!==contentHash(b.pin))throw new Error("Cloud comparison requires the same pinned account and workspace.");return client(await access(a.pin)).compare(input.baselineId,input.candidateId);}
+  function matchesBenchmark(a:BenchmarkRunPin|undefined,b:BenchmarkRunPin|undefined) {
+    return Boolean(a?.modelVersion && b?.modelVersion && a.id===b.id && a.revision===b.revision && a.draftHash===b.draftHash &&
+      a.modelVersion.versionHash!==b.modelVersion.versionHash);
+  }
+  async function benchmarkPeers(id:string) {
+    const raw=await deps.store.readChatHostedExperiment(id);
+    if(!raw)return null;
+    const baseline=Hosted.parse(raw);
+    if(!baseline.benchmark?.modelVersion)return null;
+    await access(baseline.pin);
+    return deps.store.listChatHostedBenchmarkPeers(id,contentHash(baseline.pin),baseline.benchmark);
+  }
+  async function recoverBenchmark(input:{sessionId:string;revision:number;versionHash:string}) {
+    const current=await access();
+    const stored=await deps.store.findChatBenchmarkPreparation({ ...input, pin:current.pin });
+    if(!stored)return { preparationId:null };
+    const record=CandidateBenchmark.parse(stored.payload);
+    await access(record.pin);
+    return { preparationId:stored.preparationId };
+  }
+  async function compare(payload:Record<string,unknown>,exactBenchmark=false) {
+    const input=z.object({baselineId:z.string().min(1),candidateId:z.string().min(1)}).parse(payload);
+    const [a,b]=await Promise.all([read(input.baselineId),read(input.candidateId)]);
+    if(contentHash(a.pin)!==contentHash(b.pin))throw new Error("Cloud comparison requires the same pinned account and workspace.");
+    if(exactBenchmark && !matchesBenchmark(a.benchmark,b.benchmark))
+      throw new Error("Choose two saved Model versions run on the same Benchmark revision.");
+    const comparison=await client(await access(a.pin)).compare(input.baselineId,input.candidateId);
+    if(exactBenchmark && (comparison.baseline.manifest.lineage?.execution.contentHash!==a.details.manifest.contentHash ||
+      comparison.candidate.manifest.lineage?.execution.contentHash!==b.details.manifest.contentHash))
+      throw new Error("The comparison results differ from their retained Benchmark runs.");
+    await access(a.pin);
+    return comparison;
+  }
   async function request(action:string,payload:Record<string,unknown>) {
     if(typeof payload.id!=="string")throw new Error("Select a retained cloud Experiment.");
     let record=await read(payload.id);const current=await access(record.pin),api=client(current);
@@ -174,5 +218,5 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
     }
     throw new Error("Cloud status observation stopped.");
   }
-  return {run,request,read,list,compare,wait,bindBenchmark,benchmarkPin,close:()=>shutdown.abort(new Error("Cloud Experiment observation stopped."))};
+  return {run,request,read,list,compare,wait,bindBenchmark,benchmarkPin,benchmarkPeers,recoverBenchmark,close:()=>shutdown.abort(new Error("Cloud Experiment observation stopped."))};
 }

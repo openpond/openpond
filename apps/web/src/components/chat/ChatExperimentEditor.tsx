@@ -56,12 +56,19 @@ function EditorBody({ api, context, localTrainingDraft, onClose }: { api: Worksp
     queryFn: ({ signal }) => api.request<Inventory>("inventory", {}, signal) });
   const navigate = (route: Parameters<typeof navigateModelsRoute>[0]) => { void navigateModelsRoute({ ...route, area: "console" }); };
   const sessionId = context.selection?.target.sessionId;
+  const hostedBenchmark = context.selection?.benchmarkVersion?.location === "cloud" && sessionId;
   return <WorkspacePanelHost.Provider value={host}>
     <div ref={setHost} className="evaluation-workspace-panel chat-experiment-editor" />
     {inventory.error ? <ErrorToast error={inventory.error}><button type="button" className="training-text-button" onClick={() => void inventory.refetch()}>Retry workspace</button></ErrorToast> : null}
     <ExperimentSetupPanel key={setup.initialExperiment?.id} api={api} inventory={inventory.data ?? null} localTrainingDraft={localTrainingDraft}
-      bindBenchmark={context.selection?.benchmarkVersion?.location === "cloud" && sessionId ? async (preparationId, revision) => {
-        await chatResourceRequest(api.connection, "dataset", { action: "context_bind_benchmark", payload: { sessionId, preparationId, revision } });
+      bindBenchmark={hostedBenchmark ? async (preparationId, revision, versionHash) => {
+        await chatResourceRequest(api.connection, "dataset", { action: "context_bind_benchmark", payload: { sessionId, preparationId, revision, versionHash } });
+      } : undefined}
+      recoverBenchmark={hostedBenchmark ? async (revision, versionHash) => {
+        const value = await chatResourceRequest<{ preparationId: string | null }>(api.connection, "dataset", {
+          action: "context_recover_benchmark", payload: { sessionId, revision, versionHash },
+        });
+        return value.preparationId;
       } : undefined}
       retainedBenchmark={context.selection?.localDraft && context.selection.draft && context.selection.draftRevision
         ? { draft: context.selection.draft, revision: context.selection.draftRevision } : undefined}

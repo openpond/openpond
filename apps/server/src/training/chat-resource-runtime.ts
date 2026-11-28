@@ -79,7 +79,9 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal,originTurnId?:string):Promise<unknown> {
     if(kind==="dataset")return datasets.request(input,signal);
     const envelope=z.object({action:z.string(),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(input);
-    if(envelope.action==="benchmark_pin")return { benchmark:await cloud.benchmarkPin(z.string().min(1).parse(envelope.payload.id)) };
+    if(envelope.action==="benchmark_pin")return cloud.benchmarkPin(z.string().min(1).parse(envelope.payload.id));
+    if(envelope.action==="benchmark_peers")return { peers:await cloud.benchmarkPeers(z.string().min(1).parse(envelope.payload.id)) };
+    if(envelope.action==="benchmark_compare")return cloud.compare(envelope.payload,true);
     let benchmark: BenchmarkRunPin | undefined;
     if (originTurnId && (envelope.action === "run" || envelope.action === "run_cloud")) {
       const turn = await deps.store.getTurn(originTurnId);
@@ -192,10 +194,16 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if (context && context.sessionId !== query.sessionId) throw new Error("The Benchmark belongs to another conversation.");
       return browser.syncLocalDraft(query.sessionId, query.scopeId, query.expectedRevision);
     }
+    if (kind === "dataset" && input.action === "context_recover_benchmark") {
+      if (context) throw new Error("Open the Benchmark editor to recover the prepared version.");
+      const query = z.object({ sessionId:z.string().min(1),revision:z.number().int().positive(),
+        versionHash:z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(input.payload);
+      return cloud.recoverBenchmark(query);
+    }
     if (kind === "dataset" && input.action === "context_bind_benchmark") {
       if (context) throw new Error("Bind the reviewed candidate from the Benchmark editor.");
       const query = z.object({ sessionId: z.string().min(1), preparationId: z.string().min(1).max(200),
-        revision: z.number().int().positive() }).strict().parse(input.payload);
+        revision: z.number().int().positive(), versionHash:z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict().parse(input.payload);
       const session = await deps.store.getSession(query.sessionId);
       const resource = SessionResourceDraftSchema.safeParse(session?.metadata?.resourceDraft);
       if (!resource.success || resource.data.kind !== "benchmark" || resource.data.benchmarkVersion?.location !== "cloud")

@@ -1,14 +1,16 @@
 import { ErrorToast } from "../common/ErrorToast";
 import { useEffect, useState, useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import "./hosted-training-run.css";
-import { apiFetch, type ClientConnection } from "../../api/api-client";
+import type { ClientConnection } from "../../api/api-client";
 import {
-  createCandidateEvaluationClient,
   type CandidateEvaluationPreparation,
   type CandidateEvaluationOption,
 } from "openpond-sdk/candidate-evaluations";
 import type { RunExperiment } from "openpond-sdk/experiments";
-import { canonicalJson, parseAndVerifyTrainingResult, type TrainingModelVersion } from "openpond-sdk/training";
+import { canonicalJson, type TrainingModelVersion } from "openpond-sdk/training";
+import { desktopCandidateEvaluationClient, readCandidateTrainingResult } from "./desktop-candidate-evaluation";
+import { connectionQueryScope } from "../../lib/query-scope";
 
 export function TrainedVersionExperimentControl({
   connection,
@@ -17,8 +19,10 @@ export function TrainedVersionExperimentControl({
   projectId,
   configuration,
   version,
+  benchmarkId,
   benchmarkRevision,
   bindBenchmark,
+  recoverBenchmark,
   retainOperation,
   onStarted,
   onBusyChange,
@@ -29,8 +33,10 @@ export function TrainedVersionExperimentControl({
   projectId: string | null;
   configuration: RunExperiment | null;
   version?: TrainingModelVersion;
+  benchmarkId?: string;
   benchmarkRevision?: number;
-  bindBenchmark?: (preparationId: string, revision: number) => Promise<void>;
+  bindBenchmark?: (preparationId: string, revision: number, versionHash: string) => Promise<void>;
+  recoverBenchmark?: (revision: number, versionHash: string) => Promise<string | null>;
   retainOperation: (
     action: string,
     intent: unknown,
@@ -39,22 +45,15 @@ export function TrainedVersionExperimentControl({
   onStarted: (experimentId: string) => void;
 }) {
   const scope = JSON.stringify([
-    connection.serverUrl,
-    connection.token,
+    connectionQueryScope(connection),
     teamId,
     actorId,
     projectId,
     version?.contentHash ?? null,
+    benchmarkId ?? null,
+    benchmarkRevision ?? null,
   ]);
-  const client = useMemo(
-    () =>
-      createCandidateEvaluationClient(async (path, init) => {
-        const parsed = new URL(path, "https://candidate.invalid");
-        parsed.searchParams.set("teamId", teamId);
-        return apiFetch(connection, `${parsed.pathname}?${parsed.searchParams}`, init);
-      }),
-    [connection.serverUrl, connection.token, teamId],
-  );
+  const client = useMemo(() => desktopCandidateEvaluationClient(connection), [connection]);
   const activeScope = useRef(scope);
   activeScope.current = scope;
   useEffect(() => {
@@ -86,13 +85,30 @@ export function TrainedVersionExperimentControl({
     onBusyChange?.(busy);
     return () => onBusyChange?.(false);
   }, [busy, onBusyChange]);
-  const value = retained?.scope === scope ? retained.value : null;
+  const recovery = useQuery({
+    queryKey: ["saved-benchmark-preparation", scope],
+    enabled: Boolean(recoverBenchmark && version && benchmarkRevision),
+    queryFn: async () => {
+      const id = await recoverBenchmark!(benchmarkRevision!, version!.contentHash);
+      if (!id) return null;
+      const value = await client.get(teamId, id);
+      if (value.ownerUserId !== actorId || value.trainingJobId !== version?.jobId)
+        throw new Error("The recovered preparation belongs to a different saved Model version.");
+      return value;
+    },
+    retry: false,
+    refetchOnMount: "always",
+  });
+  const value = retained?.scope === scope ? retained.value : recovery.data ?? null;
+  const recoveryPending = recovery.fetchStatus === "fetching" && !value;
+  const finished = Boolean(value && ["completed", "failed", "cancelled"].includes(value.state));
   async function bind(value: CandidateEvaluationPreparation) {
     if (!version) return;
-    const revision = retainedRevision.current;
-    if (!bindBenchmark || !revision || revision.scope !== scope)
+    const retained = retainedRevision.current;
+    const revision = retained?.scope === scope ? retained.revision : benchmarkRevision;
+    if (!bindBenchmark || !revision)
       throw new Error("Review and save the exact Benchmark before preparing this version.");
-    await bindBenchmark(value.id, revision.revision);
+    await bindBenchmark(value.id, revision, version.contentHash);
   }
   useEffect(() => {
     let stopped = false;
@@ -106,9 +122,7 @@ export function TrainedVersionExperimentControl({
         const items: CandidateEvaluationOption[] = [];
         let exactArtifactId: string | undefined;
         if (version) {
-          const result = await parseAndVerifyTrainingResult(await apiFetch(connection,
-            `/v1/training/hosted-jobs/${encodeURIComponent(version.jobId)}/result?teamId=${encodeURIComponent(teamId)}`),
-            { teamId, jobId: version.jobId });
+          const result = await readCandidateTrainingResult(connection, teamId, version.jobId);
           const candidate = result.candidate;
           if (version.teamId !== teamId || result.job.modelProjectId !== version.modelProjectId ||
             !candidate?.registryArtifactId || candidate.checkpointId !== version.candidate.checkpointId ||
@@ -169,8 +183,8 @@ export function TrainedVersionExperimentControl({
       clearTimeout(timer);
     };
   }, [client, teamId, scope, value?.id, value?.state]);
-  async function perform(action: "prepare" | "run" | "cancel") {
-    if (busy || !actorId) return;
+  async function perform(action: "prepare" | "run" | "cancel", another = false) {
+    if (busy || !actorId || recoveryPending || recovery.isError && !value || another && (!finished || pending.current)) return;
     const callScope = scope;
     const fence = () => {
       if (activeScope.current !== callScope)
@@ -181,7 +195,7 @@ export function TrainedVersionExperimentControl({
     setBusy(true);
     setError(null);
     try {
-      let current = value;
+      let current = another ? null : value;
       if (!current) {
         const target =
           catalog?.scope === scope ? catalog.items.find((c) => c.artifact.id === selected) : null;
@@ -198,6 +212,7 @@ export function TrainedVersionExperimentControl({
           artifact: target.artifact,
           configuration,
           ...(benchmarkRevision ? { benchmarkRevision } : {}),
+          ...(another && value ? { previousPreparationId: value.id } : {}),
         });
         fence();
         const request = {
@@ -213,11 +228,14 @@ export function TrainedVersionExperimentControl({
           throw new Error("The retained evaluation differs from the reviewed candidate or workspace.");
         setRetained({ scope, value: current });
         if (benchmarkRevision) retainedRevision.current = { scope, revision: benchmarkRevision };
+        await bind(current);
+        fence();
         await operation.acknowledge();
         fence();
+      } else {
+        await bind(current);
+        fence();
       }
-      await bind(current);
-      fence();
       let command = pending.current?.scope === scope ? pending.current : null;
       if (command && command.action !== action)
         throw new Error("Resolve the retained uncertain action before choosing another action.");
@@ -290,7 +308,9 @@ export function TrainedVersionExperimentControl({
             : null}
         </select>
       </label>}
-      {error ? <ErrorToast error={error} /> : null}
+      <ErrorToast error={error ?? recovery.error}>
+        {recovery.isError ? <button type="button" className="training-text-button" onClick={() => void recovery.refetch()}>Retry saved preparation</button> : null}
+      </ErrorToast>
       {value ? (
         <>
           <p role="status">
@@ -323,12 +343,17 @@ export function TrainedVersionExperimentControl({
         {!value || ["configured", "preparing"].includes(value.state) ? (
           <button
             type="button"
-            disabled={busy || !configuration || !selected || Boolean(version && !benchmarkRevision)}
+            disabled={busy || recoveryPending || !value && (recovery.isError || !configuration || !selected) || Boolean(version && !benchmarkRevision)}
             onClick={() => void perform("prepare")}
           >
             Prepare exact version for evaluation
           </button>
         ) : null}
+        {version && finished && configuration && !pending.current && (
+          <button type="button" disabled={busy || !selected || !benchmarkRevision} onClick={() => void perform("prepare", true)}>
+            Prepare another run
+          </button>
+        )}
         {value && ["ready", "dispatching"].includes(value.state) ? (
           <button type="button" disabled={busy} onClick={() => void perform("run")}>
             {version ? "Run Benchmark" : "Run Experiment"}

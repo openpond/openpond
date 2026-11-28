@@ -29,7 +29,8 @@ export type ExperimentSetupPanelProps = {
   onTrainingStarted?: (id: string) => void | Promise<void>;
   onSaveDraft?: (draft: ExperimentDraft) => Promise<unknown>;
   localTrainingDraft?: boolean;
-  bindBenchmark?: (preparationId: string, revision: number) => Promise<void>;
+  bindBenchmark?: (preparationId: string, revision: number, versionHash: string) => Promise<void>;
+  recoverBenchmark?: (revision: number, versionHash: string) => Promise<string | null>;
   retainedBenchmark?: { draft: ExperimentDraft; revision: number };
 };
 export function ExperimentSetupPanel(props: ExperimentSetupPanelProps) {

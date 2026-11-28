@@ -29,6 +29,7 @@ import { experimentPopulation } from "./experiment-population";
 import { useExperimentSetupTransition } from "./useExperimentSetupTransition";
 import { useEvaluationSetup } from "./EvaluationSetupState";
 import { WorkspacePanel } from "./WorkspacePanel";
+import { BenchmarkVersionChoice, type BenchmarkVersionChoiceValue } from "./BenchmarkVersionChoice";
 
 type Prepared = z.infer<typeof PreparedHarnessExperimentSchema>;
 export function OrdinaryExperimentSetupPanel({
@@ -41,12 +42,18 @@ export function OrdinaryExperimentSetupPanel({
   onClose,
   onSaveDraft,
   bindBenchmark,
+  recoverBenchmark,
   retainedBenchmark,
 }: ExperimentSetupPanelProps) {
   const setup = useEvaluationSetup();
   const draft = setup.draft!;
   const { name, release, prompt, seed } = draft;
-  const trainedVersion = setup.startingModel?.source === "trained" ? setup.startingModel.trainedVersion : undefined;
+  const originalVersion = setup.startingModel?.source === "trained" ? {
+    version: setup.startingModel.trainedVersion, label: setup.startingModel.label,
+  } : null;
+  const [selectedVersion, setSelectedVersion] = useState<BenchmarkVersionChoiceValue | null>(null);
+  const runTarget = originalVersion ? selectedVersion ?? originalVersion : null;
+  const trainedVersion = runTarget?.version;
   const modelId = trainedVersion?.request.baseModel.modelId ?? draft.modelId;
   const budget = draft.budget ?? Number.NaN,
     outputTokens = draft.outputTokens ?? Number.NaN;
@@ -440,6 +447,7 @@ export function OrdinaryExperimentSetupPanel({
   }
   const reviewKey = JSON.stringify({
     draft,
+    versionHash: trainedVersion?.contentHash ?? null,
     graders: canonicalGraders,
     project: api.projectId,
     location: api.location,
@@ -588,7 +596,8 @@ export function OrdinaryExperimentSetupPanel({
         }}
       >
         <EvaluationCard title="Model and budget">
-          {trainedVersion ? <span>{setup.startingModel?.label}</span> : <label>
+          {runTarget && originalVersion ? <BenchmarkVersionChoice api={api} original={originalVersion} selected={runTarget}
+            disabled={busy} onSelect={setSelectedVersion} /> : <label>
             Model
             <DropdownSelect
               label="Model"
@@ -633,7 +642,7 @@ export function OrdinaryExperimentSetupPanel({
           ) : null}
           <ExperimentTypeControl disabled={busy} />
           <label>
-            Whole execution budget ($)
+            {trainedVersion ? "Budget per version run ($)" : "Whole execution budget ($)"}
             <input
               type="number"
               min="0.000001"
@@ -835,7 +844,7 @@ export function OrdinaryExperimentSetupPanel({
           <EvaluationCard title="Reviewed configuration">
             <p>
               {reviewCount} selected tasks /{" "}
-              {(localDataset ? sampling.data?.models : models.data?.models)?.find(
+              {runTarget?.label ?? (localDataset ? sampling.data?.models : models.data?.models)?.find(
                 (model) => model.id === modelId,
               )?.name ??
                 (modelId || "Choose model")}{" "}
@@ -891,7 +900,10 @@ export function OrdinaryExperimentSetupPanel({
             connection={api.connection} teamId={api.teamId} actorId={api.actorId} projectId={api.projectId}
             configuration={reviewConfiguration?.key === reviewKey ? reviewConfiguration.configuration : null}
             version={trainedVersion} retainOperation={api.operation} onBusyChange={setBusy}
-            benchmarkRevision={reviewConfiguration?.benchmarkRevision} bindBenchmark={bindBenchmark}
+            benchmarkId={setup.initialExperiment?.id}
+            benchmarkRevision={reviewConfiguration?.key === reviewKey ? reviewConfiguration.benchmarkRevision
+              : retainedBenchmark?.draft.evaluationForm ? retainedBenchmark.revision : undefined}
+            bindBenchmark={bindBenchmark} recoverBenchmark={recoverBenchmark}
             onStarted={(id) => { guard.allowNextNavigation(); setup.close(); onSaved({ id }); }}
           />
         )}

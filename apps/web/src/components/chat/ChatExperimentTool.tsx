@@ -295,7 +295,7 @@ export function ChatExperimentTool({
             className="training-button secondary"
             onClick={() => setEditingDraft(true)}
           >
-            Configure experiment
+            {selected.draft.operationType === "evaluate" ? "Configure Benchmark" : "Configure experiment"}
           </button>
         </div>
       ) : selected?.resource ||
