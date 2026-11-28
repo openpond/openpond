@@ -1560,9 +1560,9 @@ export function createServerPayloads(deps: {
       `Uploaded ${input.fileCount} file${
         input.fileCount === 1 ? "" : "s"
       } to OpenPond Git.`,
-      `${formatByteCount(input.byteCount)} · ${
+      `${formatByteCount(input.byteCount)}, ${
         input.skippedCount
-      } skipped · ${commit} · ${input.branch}`,
+      } skipped, ${commit}, ${input.branch}`,
       `Cloud project ${input.cloudProjectId} is ready for Hybrid or Cloud workspace use.`,
     ].join("\n");
   }

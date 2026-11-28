@@ -128,12 +128,12 @@ export async function capturePonderDesktopStarters(input: {
             const component = session.profileComponentBinding?.target;
             bindings.push({
               label: session.profileWorkflowBinding
-                ? ` · workflow ${session.profileWorkflowBinding.workflowId}`
+                ? `, workflow ${session.profileWorkflowBinding.workflowId}`
                 : component?.kind === "skill"
-                  ? ` · skill ${component.skillPath}`
+                  ? `, skill ${component.skillPath}`
                   : component?.kind === "agent_action"
-                    ? ` · action ${component.actionId}`
-                    : " · Profile evaluation",
+                    ? `, action ${component.actionId}`
+                    : ", Profile evaluation",
               workflow: session.profileWorkflowBinding,
               component: session.profileComponentBinding,
             });
@@ -167,7 +167,7 @@ export async function capturePonderDesktopStarters(input: {
               id: `starter:${revision}`,
               kind: "starter",
               title:
-                `${provider.displayName}${modelId ? ` · ${modelId}` : ""} · ${profile.name}${binding.label} · ${session.experience} in ${session.workspaceName ?? session.cwd}`.slice(
+                `${provider.displayName}${modelId ? `, ${modelId}` : ""}, ${profile.name}${binding.label}, ${session.experience} in ${session.workspaceName ?? session.cwd}`.slice(
                   0,
                   300,
                 ),

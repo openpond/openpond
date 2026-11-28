@@ -19,5 +19,5 @@ export async function readChatWeightSpace(raw: ChatContextTarget, access: () => 
   const current = await access();
   if (current.actorId !== original.actorId || current.teamId !== original.teamId || current.apiBaseUrl !== original.apiBaseUrl)
     throw new Error("The account changed while reading the editing session.");
-  return { target, label: weightSpace.name, detail: `Weight-space programming · ${weightSpace.phase}`, weightSpace };
+  return { target, label: weightSpace.name, detail: `Weight-space programming, ${weightSpace.phase}`, weightSpace };
 }

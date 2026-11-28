@@ -21,7 +21,7 @@ export function localDatasetSummary(record: LocalDatasetRecord | LocalDatasetLis
   return {kind:"dataset",id:draft.id,revision:draft.revision,name:draft.name || "Untitled dataset",state:record.packageHash ? "Runnable" : "Saved draft",
     evaluationHash:record.workspace.contentHash,
     taskCount:draft.datasetArtifact?.rowCount ?? draft.tasks.length,graderCount:draft.graders.length,
-    checkState:checks.length ? checks.map(c => `${c.kind}: ${c.status} (${c.checked}/${c.total})`).join(" · ") : record.checks.length ? "Checks stale" : "Not checked",
+    checkState:checks.length ? checks.map(c => `${c.kind}: ${c.status} (${c.checked}/${c.total})`).join(", ") : record.checks.length ? "Checks stale" : "Not checked",
     syncState:record.sync ? record.sync.paused ? "Paused" : record.sync.acknowledgedHash === record.workspace.contentHash && record.sync.status === "synced" ? "Synced" : record.sync.status === "synced" ? "Sync pending" : record.sync.status : "Local",
     rows:draft.tasks.slice(0,3).map(t => ({id:t.id,label:typeof t.input.prompt === "string" ? t.input.prompt : JSON.stringify(t.input),detail:draft.graders.map(g => g.label).join(", ")}))};
 }

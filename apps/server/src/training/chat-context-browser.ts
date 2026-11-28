@@ -50,16 +50,16 @@ export function createChatContextBrowser(deps: {
     const resources = source === "all" || source === "local" ? await deps.resources() : [];
     const options: ChatContextOption[] = resources.filter(item => item.kind !== "grader").map(item => ({
       target: { kind: item.kind as "dataset" | "experiment", id: item.id, revision: item.revision, location: item.location ?? "local" },
-      label: item.name, detail: item.kind === "dataset" ? `Dataset · revision ${item.revision}` : `${item.state} · Dataset revision ${item.datasetRevision ?? "—"} · ${item.model ?? ""} · ${item.id.slice(-8)}`,
+      label: item.name, detail: item.kind === "dataset" ? `Dataset, revision ${item.revision}` : `${item.state}, Dataset revision ${item.datasetRevision ?? "—"}, ${item.model ?? ""}, ${item.id.slice(-8)}`,
     }));
     for (const model of source === "all" || source === "local" ? await deps.store.listModelProjects() : []) options.push({
       target: { kind: "model", id: model.id, location: "local" }, label: model.name,
-      detail: `Model · ${model.defaultBaseModel?.modelId ?? "Local"}`,
+      detail: `Model, ${model.defaultBaseModel?.modelId ?? "Local"}`,
     });
     if (sessionId && (source === "all" || source === "local")) {
       for (const scope of scopes.filter(scope => !scope.model && !scope.storedDraft && !scope.selectedRunId && (scope.dataset || scope.draft))) options.unshift({
         target: { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" },
-        label: scope.name, detail: scope.draft ? `Draft · ${experimentOperationLabel(scope.draft.operationType)}` : `Draft · ${scope.dataset!.name} · revision ${scope.dataset!.revision}`,
+        label: scope.name, detail: scope.draft ? `Draft, ${experimentOperationLabel(scope.draft.operationType)}` : `Draft, ${scope.dataset!.name}, revision ${scope.dataset!.revision}`,
       });
     }
     if ((source === "all" || source === "local") && scopes.some(scope=>scope.weightSpace)) {
@@ -75,11 +75,11 @@ export function createChatContextBrowser(deps: {
       if (active.actorId !== access.actorId || active.teamId !== access.teamId || active.apiBaseUrl !== access.apiBaseUrl) throw new Error("Account changed while reading models.");
       for (const { project } of hosted.projects) options.push({
         target: { kind: "model", id: project.id, location: "cloud", teamId: access.teamId, apiOrigin: new URL(access.apiBaseUrl).origin },
-        label: project.name, detail: `Model · ${project.defaultBaseModel?.modelId ?? "Hosted"}`,
+        label: project.name, detail: `Model, ${project.defaultBaseModel?.modelId ?? "Hosted"}`,
       });
       for (const scope of scopes) if (scope.model && scope.model.teamId === access.teamId && scope.model.actorId === access.actorId && scope.model.apiOrigin === new URL(access.apiBaseUrl).origin
         && !options.some(item => item.target.kind === "model" && item.target.id === scope.model!.id && item.target.location === "cloud"))
-        options.push({ target: { kind: "model", id: scope.model.id, location: "cloud", teamId: scope.model.teamId, apiOrigin: scope.model.apiOrigin }, label: scope.name, detail: "Model · Training setup" });
+        options.push({ target: { kind: "model", id: scope.model.id, location: "cloud", teamId: scope.model.teamId, apiOrigin: scope.model.apiOrigin }, label: scope.name, detail: "Model, Training setup" });
     } catch (cause) { warning = catalogFailure("Hosted models", cause); }
     let nextDraftCursor: string | null = null;
     if (source === "all" || source === "drafts") try {
@@ -167,7 +167,7 @@ export function createChatContextBrowser(deps: {
         (resource.location ?? "local") !== (scope.dataset.location ?? "local") ||
         JSON.stringify(resource.owner ?? null) !== JSON.stringify(scope.dataset.owner ?? null) ||
         JSON.stringify(resource.profileRef ?? null) !== JSON.stringify(scope.dataset.profileRef ?? null)) throw new Error("The draft’s exact dataset pin is unavailable.");
-      return { target, draft: scope.draft, ...(scope.draft ? { draftRevision: scope.draftRevision ?? 1 } : {}), label: scope.name, detail: `Draft · ${resource.name}`, resource, ...await deps.inspectResource?.(resource) };
+      return { target, draft: scope.draft, ...(scope.draft ? { draftRevision: scope.draftRevision ?? 1 } : {}), label: scope.name, detail: `Draft, ${resource.name}`, resource, ...await deps.inspectResource?.(resource) };
     }
     if (target.kind === "training") {
       const access = await deps.access();
@@ -181,7 +181,7 @@ export function createChatContextBrowser(deps: {
     }
     if (target.kind === "model") {
       const model = await modelDetails(target);
-      return { target, label: model.name, detail: `Model · ${model.baseModel ?? "Configured model"}`, model };
+      return { target, label: model.name, detail: `Model, ${model.baseModel ?? "Configured model"}`, model };
     }
     const resource = await deps.resource(target);
     if (resource.kind !== target.kind || resource.id !== target.id || (target.revision !== undefined && resource.revision !== target.revision)
@@ -205,7 +205,7 @@ export function createChatContextBrowser(deps: {
       if (active.actorId !== access.actorId || active.teamId !== access.teamId || active.apiBaseUrl !== access.apiBaseUrl) throw new Error("Account changed while reading training history.");
       if (page.jobs.some(job => job.teamId !== access.teamId || job.modelProjectId !== hostedId)) throw new Error("Training history returned another model or workspace.");
       return { nextCursor: page.nextCursor, runs: page.jobs.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(job => ({ target: { kind: "training" as const, id: job.id, location: "cloud" as const, teamId: access.teamId, apiOrigin: new URL(access.apiBaseUrl).origin },
-        label: `${job.createdAt.slice(0, 16).replace("T", " ")} UTC · ${job.state === "succeeded" ? "Completed" : job.state}`, detail: `${job.accruedSpendUsd === null ? "Cost unavailable" : `$${job.accruedSpendUsd.toFixed(4)}`} · ${job.id}` })) };
+        label: `${job.createdAt.slice(0, 16).replace("T", " ")} UTC, ${job.state === "succeeded" ? "Completed" : job.state}`, detail: `${job.accruedSpendUsd === null ? "Cost unavailable" : `$${job.accruedSpendUsd.toFixed(4)}`}, ${job.id}` })) };
     }
     const options: ChatContextOption[] = [];
     for (const job of (await deps.store.listTrainingJobs()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
@@ -215,7 +215,7 @@ export function createChatContextBrowser(deps: {
       try {
         const training = await readChatTrainingAttachment(deps.store, { jobId: job.id }, access);
         if (training.location !== "local" || training.modelId !== selected.target.id) continue;
-        options.push({ target: { kind: "training", id: job.id, location: "local" }, label: `${job.createdAt.slice(0, 16)} · ${job.status}`, detail: job.id });
+        options.push({ target: { kind: "training", id: job.id, location: "local" }, label: `${job.createdAt.slice(0, 16)}, ${job.status}`, detail: job.id });
       } catch { /* Only canonical executions owned by this account are selectable. */ }
     }
     return { runs: options, nextCursor: null };

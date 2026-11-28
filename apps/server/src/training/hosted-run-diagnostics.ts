@@ -38,7 +38,7 @@ function graderDifferences(components: Record<string, unknown>): Fact[] {
     if (Array.isArray(diagnostics.differences)) for (const difference of diagnostics.differences.slice(0, 80 - facts.length)) {
       const item = record(difference);
       if (typeof item.kind !== "string" || typeof item.path !== "string") continue;
-      facts.push(fact(`${item.kind.replaceAll("_", " ")} · ${item.path}`,
+      facts.push(fact(`${item.kind.replaceAll("_", " ")}, ${item.path}`,
         `Expected: ${JSON.stringify(item.expected) ?? "Not retained"}\nActual: ${JSON.stringify(item.actual) ?? "Not retained"}`, "warning"));
     }
     for (const [name, child] of Object.entries(object)) if (name !== "diagnostics") visit(child, depth + 1, name);
@@ -81,8 +81,8 @@ export function groupDiagnostics(detail: HostedStageDetail, groupId: string, sta
     ...(group?.eligibleTrajectoryCount !== undefined ? [fact("Eligible trajectories recorded by group", group.eligibleTrajectoryCount)] : []),
     fact("Scored trajectories", scored.length), fact("Failed attempts", failed.length, failed.length ? "warning" : "info"),
     fact("Reward range", scored.length ? `${Math.min(...scored.map(item => Number(item.reward)))} – ${Math.max(...scored.map(item => Number(item.reward)))}` : "No scored trajectories"),
-    fact("Retained trajectory eligibility", `${trajectories.filter(item => item.rewardEligible === true).length} eligible · ${trajectories.filter(item => item.rewardEligible === false).length} ineligible · ${trajectories.filter(item => typeof item.rewardEligible !== "boolean").length} not retained`),
-    ...(steps.length ? steps.slice(-10).flatMap(step => [fact("Optimizer step", `${step.id} · ${step.state}`, step.state.startsWith("failed") ? "warning" : "info"),
+    fact("Retained trajectory eligibility", `${trajectories.filter(item => item.rewardEligible === true).length} eligible, ${trajectories.filter(item => item.rewardEligible === false).length} ineligible, ${trajectories.filter(item => typeof item.rewardEligible !== "boolean").length} not retained`),
+    ...(steps.length ? steps.slice(-10).flatMap(step => [fact("Optimizer step", `${step.id}, ${step.state}`, step.state.startsWith("failed") ? "warning" : "info"),
       ...(step.inputPolicyVersion !== undefined && step.outputPolicyVersion !== undefined ? [fact("Policy transition", `v${step.inputPolicyVersion} → v${step.outputPolicyVersion}`)] : []),
       ...(Object.keys(record(step.metrics)).length ? [fact("Retained optimizer metrics", step.metrics)] : []),
     ]) : [fact("Optimizer evidence", "No optimizer-step record retained for this group.")]),
@@ -99,7 +99,7 @@ export function stageDiagnostics(detail: HostedStageDetail, label: string): Fact
       if (command[key] !== undefined && command[key] !== null) result.push(fact(key, command[key], key === "inferenceFailureOutput" ? "warning" : "info"));
     }
   }
-  if (["Rollouts", "Grade"].includes(label)) for (const group of detail.rolloutGroups.slice(-8)) result.push(...groupDiagnostics(detail, group.id, group.state).map(item => ({ ...item, label: `Group ${group.groupIndex + 1} · ${item.label}` })));
+  if (["Rollouts", "Grade"].includes(label)) for (const group of detail.rolloutGroups.slice(-8)) result.push(...groupDiagnostics(detail, group.id, group.state).map(item => ({ ...item, label: `Group ${group.groupIndex + 1}, ${item.label}` })));
   if (["Evaluate", "Baseline evaluation"].includes(label)) {
     const evaluations = detail.evaluations.filter(item => item.kind === (label === "Evaluate" ? "candidate" : "baseline"));
     if (!evaluations.length) result.push(fact("Evaluation evidence", "No evaluation receipt retained for this stage; quality is not established."));
@@ -109,7 +109,7 @@ export function stageDiagnostics(detail: HostedStageDetail, label: string): Fact
       const improvement = metricNumber(metrics.improvement), improvementThreshold = metricNumber(metrics.improvementThreshold);
       if (evaluation.kind === "baseline") result.push(fact("Baseline receipt", evaluation.state === "completed" ? "Baseline recorded" : evaluation.state));
       else if (improvement !== null && improvementThreshold !== null) {
-        result.push(fact("Improvement comparison", `${metrics.improvement} · required ${metrics.improvementThreshold}`));
+        result.push(fact("Improvement comparison", `${metrics.improvement}, required ${metrics.improvementThreshold}`));
         result.push(fact("Improvement threshold outcome", evaluation.passed === true ? "Improvement threshold met" : evaluation.passed === false ? "Improvement threshold not met" : "No comparison verdict retained", evaluation.passed === false ? "warning" : "info"));
       } else if (typeof evaluation.passed === "boolean") result.push(fact("Recorded evaluation acceptance flag", `${evaluation.passed}; improvement comparison not retained`));
       const passRate = typeof metrics.passRate === "number" ? metrics.passRate : typeof metrics.passRate === "string" && metrics.passRate.trim() ? Number(metrics.passRate) : null;
@@ -117,7 +117,7 @@ export function stageDiagnostics(detail: HostedStageDetail, label: string): Fact
       if (passRate !== null && Number.isFinite(passRate) && passRate >= 0 && passRate <= 1) {
         const passed = taskCount !== null && taskCount > 0 ? passRate * taskCount : null;
         const counts = passed !== null && Math.abs(passed - Math.round(passed)) < 0.000001 ? `${Math.round(passed)}/${taskCount} tasks` : taskCount !== null ? `${taskCount} tasks` : "Task count not retained";
-        result.push(fact("Retained task pass rate", `${counts} · ${(passRate * 100).toFixed(1)}%`, passRate < 1 ? "warning" : "info"));
+        result.push(fact("Retained task pass rate", `${counts}, ${(passRate * 100).toFixed(1)}%`, passRate < 1 ? "warning" : "info"));
       }
       if (evaluation.metrics) {
         const summary: Record<string, unknown> = {};
@@ -138,16 +138,16 @@ export function stageDiagnostics(detail: HostedStageDetail, label: string): Fact
     result.push(...optimizerReceiptFacts(record(group.optimizerEvidence)));
   }
   if (label === "Update adapter") for (const step of detail.trainingSteps.slice(-15)) {
-    result.push(fact("Optimizer step", `${step.id} · ${step.state}`, /failed/.test(step.state) ? "error" : "info"));
+    result.push(fact("Optimizer step", `${step.id}, ${step.state}`, /failed/.test(step.state) ? "error" : "info"));
     if (step.inputPolicyVersion !== undefined && step.outputPolicyVersion !== undefined) result.push(fact("Policy transition", `v${step.inputPolicyVersion} → v${step.outputPolicyVersion}`));
     result.push(fact("Optimizer commit", step.optimizerCommitSha256 ?? "No commit retained"));
     if (Object.keys(record(step.metrics)).length) result.push(fact("Retained optimizer metrics", step.metrics));
   }
   if (label === "Activate policy") for (const policy of detail.policyVersions.slice(-15)) {
-    result.push(fact("Serving policy", `v${policy.version} · ${policy.served ? "Served" : "No serving attestation"}`));
+    result.push(fact("Serving policy", `v${policy.version}, ${policy.served ? "Served" : "No serving attestation"}`));
     if (typeof policy.servedAttestationSha256 === "string") result.push(fact("Serving attestation", policy.servedAttestationSha256));
   }
-  if (label === "Save checkpoint") for (const item of detail.checkpoints.slice(-10)) result.push(fact("Checkpoint", `${item.id ?? "ID not retained"} · ${item.state ?? "State not retained"}`));
+  if (label === "Save checkpoint") for (const item of detail.checkpoints.slice(-10)) result.push(fact("Checkpoint", `${item.id ?? "ID not retained"}, ${item.state ?? "State not retained"}`));
   if (label === "Finish" && detail.job.terminalReason) result.push(fact("Run terminal reason", detail.job.terminalReason, detail.job.state === "completed" ? "info" : "warning"));
   return result.slice(0, 60);
 }

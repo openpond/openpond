@@ -23,7 +23,7 @@ export function cloudExperimentSummary(record:z.infer<typeof Hosted>,result?:Exp
     model:details.request.policy.kind==="fixture" ? "Fixture" : `openpond/${details.request.policy.modelId}`,taskCount:summary.totalCount,evaluatedCount:evaluated,
     score:summary.score,scoreLabel:summary.metricName,costUsd:costs?.length && costs.every(value=>value!==null) ? costs.reduce<number>((sum,value)=>sum+value!,0) : null,
     qualityFailureCount:quality,executionFailureCount:execution,failedCount:quality+execution,ungradedCount:summary.totalCount-evaluated,
-    rows:(result?.cases ?? []).slice(0,3).map(row=>({id:contentHash(row.identity).slice(0,40),label:row.identity.caseId,detail:row.error?.message ?? row.feedback.map(value=>`${value.feedbackKey}: ${value.status}${value.value!==null ? ` (${value.value})` : ""}`).join(" · ")}))};
+    rows:(result?.cases ?? []).slice(0,3).map(row=>({id:contentHash(row.identity).slice(0,40),label:row.identity.caseId,detail:row.error?.message ?? row.feedback.map(value=>`${value.feedbackKey}: ${value.status}${value.value!==null ? ` (${value.value})` : ""}`).join(", ")}))};
 }
 export function cloudExperimentView(record:z.infer<typeof Hosted>,result:ExperimentResult):ChatExperimentView {
   return {contentHash:result.contentHash,graders:record.details.configuration.graders,scope:record.details.request.taskset.contentHash,cases:result.cases.map(row=>({id:contentHash(row.identity).slice(0,40),taskId:row.identity.caseId,seed:row.identity.seed,status:row.status,error:row.error?.message ?? null,output:row.output===null ? null : typeof row.output==="string" ? row.output : JSON.stringify(row.output),score:null}))};

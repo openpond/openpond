@@ -72,21 +72,21 @@ export function groupStageEvidence(
           String(row.terminalClass),
         ),
       ),
-      detail: `${graded} graded${group.rewardMean === null ? "" : ` · avg ${Number(group.rewardMean).toFixed(3)}`}`,
+      detail: `${graded} graded${group.rewardMean === null ? "" : `, avg ${Number(group.rewardMean).toFixed(3)}`}`,
     },
     {
       label: "Update adapter",
       done: committed > 0,
       active: trainingSteps.some((row) => ["running", "leased"].includes(row.state)),
       failed: failure(trainingSteps.map((row) => row.state)),
-      detail: group.optimizerDisposition === "skipped_no_signal" ? `No optimizer update · policy v${group.policyVersion}` : `${committed} optimizer commit${committed === 1 ? "" : "s"} · ${trainingSteps.length} linked step${trainingSteps.length === 1 ? "" : "s"}`,
+      detail: group.optimizerDisposition === "skipped_no_signal" ? `No optimizer update, policy v${group.policyVersion}` : `${committed} optimizer commit${committed === 1 ? "" : "s"}, ${trainingSteps.length} linked step${trainingSteps.length === 1 ? "" : "s"}`,
     },
     {
       label: "Save checkpoint",
       done: checkpoints.some((row) => row.state === "ready" && Boolean(row.adapterSha256)),
       active: false,
       failed: failure(checkpoints.flatMap((row) => (row.state ? [row.state] : []))),
-      detail: `${checkpoints.filter(row => row.state === "ready" && row.adapterSha256).length} durable · ${checkpoints.length} checkpoint receipts`,
+      detail: `${checkpoints.filter(row => row.state === "ready" && row.adapterSha256).length} durable, ${checkpoints.length} checkpoint receipts`,
     },
     {
       label: "Activate policy",
@@ -116,7 +116,7 @@ export function groupStageEvidence(
             : live
               ? "pending"
               : "missing",
-      status: row.label === "Update adapter" && group.optimizerDisposition === "skipped_no_signal" ? "Skipped · no signal" : row.failed
+      status: row.label === "Update adapter" && group.optimizerDisposition === "skipped_no_signal" ? "Skipped, no signal" : row.failed
         ? "Issues recorded"
         : row.done
           ? "Recorded"

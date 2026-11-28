@@ -69,7 +69,7 @@ export async function readChatAlphaEditResult(
   return {
     target,
     label: execution.name,
-    detail: `Completed AlphaEdit · ${execution.id}`,
+    detail: `Completed AlphaEdit, ${execution.id}`,
     results: [reference],
     alphaEditResult: execution,
   };
