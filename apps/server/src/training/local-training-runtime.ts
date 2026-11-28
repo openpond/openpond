@@ -63,13 +63,9 @@ with redirect_stdout(sys.stderr):
 print(json.dumps(report))
 `;
 
-export async function runLocalTrainingPython(storeDir: string, source: string, options: {
-  timeout: number;
-  input?: unknown;
-  signal?: AbortSignal;
-}) {
+export function localTrainingPythonCommand(storeDir: string, source: string) {
   const directory = path.resolve(storeDir, "training", "local-runtime");
-  const child = execFileAsync(path.join(directory, "bin", "python"), ["-I", "-B", "-c", source], {
+  return { executable: path.join(directory, "bin", "python"), args: ["-I", "-B", "-c", source], options: {
     cwd: directory,
     env: {
       PATH: process.env.PATH,
@@ -82,6 +78,17 @@ export async function runLocalTrainingPython(storeDir: string, source: string, o
       TRANSFORMERS_OFFLINE: "1",
       WANDB_MODE: "disabled",
     },
+  } };
+}
+
+export async function runLocalTrainingPython(storeDir: string, source: string, options: {
+  timeout: number;
+  input?: unknown;
+  signal?: AbortSignal;
+}) {
+  const command = localTrainingPythonCommand(storeDir, source);
+  const child = execFileAsync(command.executable, command.args, {
+    ...command.options,
     timeout: options.timeout,
     signal: options.signal,
     killSignal: "SIGKILL",

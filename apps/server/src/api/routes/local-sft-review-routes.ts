@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LocalSftPreflightRequestSchema, LocalSftReviewRequestSchema } from "@openpond/contracts/resource-setup";
+import { LocalSftPreflightRequestSchema, LocalSftReviewRequestSchema, LocalSftRunRequestSchema } from "@openpond/contracts/resource-setup";
 import { LocalSftReviewError } from "../../training/local-sft-review.js";
 import { LocalTrainingModelError } from "../../training/local-training-model-assets.js";
 import { readJson, sendJson } from "../http.js";
@@ -12,10 +12,10 @@ const approveRequest = z.object({
 }).strict();
 
 export async function handleLocalSftReviewRoutes({ deps, request, response, requestUrl }: HttpRouteContext) {
-  const operation = /^\/v1\/training\/local-sft\/(preview|approve|check)$/.exec(requestUrl.pathname)?.[1];
+  const operation = /^\/v1\/training\/local-sft\/(preview|approve|check|start|status|cancel)$/.exec(requestUrl.pathname)?.[1];
   if (!operation || request.method !== "POST") return false;
   if (!isDesktopLocalRequest(request)) {
-    sendJson(response, 403, { code: "local_sft_requires_desktop", error: "Open the local desktop to review training inputs." });
+    sendJson(response, 403, { code: "local_sft_requires_desktop", error: "Open the local desktop to access local training." });
     return true;
   }
   const abort = new AbortController();
@@ -25,8 +25,12 @@ export async function handleLocalSftReviewRoutes({ deps, request, response, requ
   try {
     const body = await readJson(request, { maxBytes: 256 * 1024 });
     const payload = operation === "preview" ? { request: LocalSftReviewRequestSchema.parse(body) }
-      : operation === "approve" ? approveRequest.parse(body) : LocalSftPreflightRequestSchema.parse(body);
-    const result = await deps.trainingPayload(operation === "check" ? "check_local_sft" : "review_local_sft", payload, requestUrl, abort.signal);
+      : operation === "approve" ? approveRequest.parse(body)
+      : operation === "start" || operation === "cancel" ? LocalSftRunRequestSchema.parse(body)
+      : operation === "status" ? LocalSftRunRequestSchema.partial({ runId: true }).parse(body)
+      : LocalSftPreflightRequestSchema.parse(body);
+    const action = operation === "preview" || operation === "approve" ? "review_local_sft" : `${operation}_local_sft`;
+    const result = await deps.trainingPayload(action, payload, requestUrl, abort.signal);
     if (!abort.signal.aborted) sendJson(response, 200, result);
   } catch (error) {
     if (abort.signal.aborted) return true;

@@ -53,19 +53,14 @@ const runtimePreflightReasons: Record<Exclude<NonNullable<LocalTrainingCompute["
   probe_failed: "The local training runtime check could not finish.",
 };
 
-function describeLocalTrainingCompute(data: LocalTrainingCompute | undefined, checking: boolean): string {
+function describeLocalTrainingCompute(data: LocalTrainingCompute | undefined, checking: boolean): string | null {
   if (checking) return "Checking this device.";
   if (!data) return "Training on this device is unavailable.";
   if (data.status === "cuda_tools_unavailable") return "CUDA tools are unavailable on this device.";
   if (data.status === "devices_unavailable") return "CUDA devices did not report capacity.";
   const runtime = data.runtime;
-  if (runtime?.status === "ready") {
-    const best = runtime.devices.reduce((mostFree, current) =>
-      current.device.freeMiB > mostFree.device.freeMiB ? current : mostFree).device;
-    const available = (best.freeMiB / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 });
-    return `${best.name} checked with ${available} GiB free. Native SFT requires a local training runner.`;
-  }
-  return runtime ? runtimePreflightReasons[runtime.status] : "A local training runner is required.";
+  if (runtime?.status === "ready") return null;
+  return runtime ? runtimePreflightReasons[runtime.status] : "Set up the local CUDA training runtime.";
 }
 
 const choices: Partial<Record<ResourceSetupField, readonly string[]>> = {
@@ -100,6 +95,8 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     version.versionHash === selectedVersion.versionHash && context.selection?.target.sessionId === sessionId;
   const managedReview = Boolean(workspace?.teamId && workspace.actorId && connection && sessionId &&
     resourceSetupTrainingMethod(draft) && draft.values.destination === "OpenPond Managed");
+  const supportsLocalTraining = draft.values.method === "SFT" && draft.values.adapter === "LoRA" &&
+    draft.values.learning !== "Configure continual learning";
   const localBase = draft.kind === "model" && draft.values.destination !== "OpenPond Managed" ? draft.localTrainingBase : undefined;
   const [configureOpen, setConfigureOpen] = useState(false);
   const [field, setField] = useState<PromptField>("name");
@@ -129,6 +126,9 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   }
   function change(key: ResourceSetupField, raw: string) {
     const leavingLocal = key === "destination" && draft.values.destination === "This device" && raw !== "This device";
+    const invalidatesLocalTraining = draft.kind === "model" && draft.values.destination === "This device" &&
+      (key === "method" && raw !== "SFT" || key === "adapter" && raw !== "LoRA" ||
+        key === "learning" && raw === "Configure continual learning");
     const sourceChanged = draft.kind === "dataset" && key === "source" && raw !== draft.values.source;
     const datasetEdited = draft.kind === "dataset" && ["name", "objective", "split"].includes(key);
     const parsed = ResourceSetupDraftSchema.safeParse({
@@ -144,6 +144,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
         ...(leavingLocal && draft.localCandidate ? { candidate: undefined } : {}),
         ...(leavingLocal && draft.localBaseline ? { baseline: undefined } : {}),
         ...(sourceChanged ? { dataset: undefined, datasetRevision: undefined, fields: undefined } : {}),
+        ...(invalidatesLocalTraining ? { destination: undefined } : {}),
         ...(key === "method" && (raw === "SFT" || raw === "GRPO") ? { adapter: "LoRA" } : {}),
         [key]: raw === "" ? undefined : decimalFields.has(key) || integerFields.has(key) ? Number(raw) : raw,
       },
@@ -171,11 +172,14 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       { value: "Full fine-tuning", label: "Full fine-tuning", disabled: true, description: "The current SFT and GRPO runners use LoRA." },
     ];
     if (key === "destination") {
-      const localReason = draft.kind === "model" ? describeLocalTrainingCompute(compute.data, compute.isFetching)
+      const localReason = draft.kind === "model"
+        ? supportsLocalTraining ? describeLocalTrainingCompute(compute.data, compute.isFetching)
+          : "Choose SFT with LoRA and one-time training to use this device."
         : draft.kind === "benchmark" && !localModels.length ? "Configure a compatible loopback model in provider settings." : null;
       return [
         { value: "", label: "Choose a destination" },
-        { value: "This device", label: "This device", disabled: Boolean(localReason), description: localReason ?? undefined },
+        { value: "This device", label: "This device", disabled: Boolean(localReason),
+          description: localReason ?? (draft.kind === "model" ? "Check the exact checkpoint, Dataset, and recipe before starting." : undefined) },
         { value: "OpenPond Managed", label: "OpenPond Managed", disabled: !managedAvailable, description: managedAvailable ? undefined : "Sign in and select a workspace." },
       ];
     }
@@ -300,6 +304,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       {reviewInputs && (reviewRequest && connection ? (
         <ModelSetupLocalSftReview key={JSON.stringify(reviewRequest)} connection={connection} request={reviewRequest}
           approval={retainedLocalSftApproval(draft, sessionId)} busy={busy} onBusy={setAuthoringBusy}
+          localSelected={supportsLocalTraining && draft.values.destination === "This device"}
           onApprove={approval => onChange(draft, { ...draft, revision: draft.revision + 1, localSftApproval: approval })} />
       ) : <p>{localBase && draft.datasetRef ? "Check the local SFT settings before reviewing training examples."
         : "Choose a local checkpoint and Dataset to review training examples."}</p>)}

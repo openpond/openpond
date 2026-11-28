@@ -13,10 +13,11 @@ type Approval = NonNullable<ResourceSetupDraft["localSftApproval"]>;
 type Review = ReturnType<typeof LocalSftReviewSchema.parse>;
 const pageSize = 10;
 
-export function ModelSetupLocalSftReview({ connection, request, approval, busy, onBusy, onApprove }: {
+export function ModelSetupLocalSftReview({ connection, request, approval, localSelected, busy, onBusy, onApprove }: {
   connection: ClientConnection;
   request: LocalSftReviewRequest;
   approval?: Approval;
+  localSelected: boolean;
   busy: boolean;
   onBusy(busy: boolean): void;
   onApprove(approval: Approval): void;
@@ -57,7 +58,8 @@ export function ModelSetupLocalSftReview({ connection, request, approval, busy, 
       <strong>{approval.rowCount} {approval.rowCount === 1 ? "training example" : "training examples"} approved</strong>
       <span>{approval.datasetName} revision {approval.request.dataset.revision}</span>
       <small title={approval.planHash}>Review {approval.planHash.slice(0, 12)}</small>
-      <ModelSetupLocalSftPreflight key={approval.planHash} approval={approval} connection={connection} busy={busy} onBusy={onBusy} />
+      <ModelSetupLocalSftPreflight key={approval.planHash} approval={approval} connection={connection}
+        localSelected={localSelected} busy={busy} onBusy={onBusy} />
     </div> : null}
     <button type="button" className="training-button secondary" disabled={busy || Boolean(pending)} onClick={() => void previewOrApprove()}>
       {pending === "preview" ? "Preparing review" : "Preview training examples"}

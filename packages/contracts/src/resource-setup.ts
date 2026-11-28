@@ -69,12 +69,20 @@ const LocalSftTokenizerReportSchema = z.object({
   completionTokens: z.number().int().positive(),
   tokenizationHash: artifactHash,
 }).strict();
+const LocalSftDeviceReportSchema = z.object({
+  ordinal: z.number().int().nonnegative(),
+  name: z.string().min(1).max(500),
+  capacityBytes: z.number().int().positive().safe(),
+  freeBytes: z.number().int().positive().safe(),
+  usedBytes: z.number().int().positive().safe(),
+  budgetBytes: z.number().int().positive().safe(),
+}).strict();
 export const LocalSftPreflightReportSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.enum([
       "unsupported_platform", "python_missing", "dependencies_missing", "cuda_unavailable",
       "checkpoint_mismatch", "tokenizer_incompatible", "example_too_long", "lora_incompatible",
-      "insufficient_memory", "nonfinite_loss", "probe_failed",
+      "insufficient_memory", "nonfinite_loss", "probe_failed", "device_busy",
     ]),
     rowId: resourceId.optional(),
     tokens: LocalSftTokenizerReportSchema.optional(),
@@ -82,14 +90,7 @@ export const LocalSftPreflightReportSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("ready"),
     tokens: LocalSftTokenizerReportSchema,
-    device: z.object({
-      ordinal: z.number().int().nonnegative(),
-      name: z.string().min(1).max(500),
-      capacityBytes: z.number().int().positive().safe(),
-      freeBytes: z.number().int().positive().safe(),
-      usedBytes: z.number().int().positive().safe(),
-      budgetBytes: z.number().int().positive().safe(),
-    }).strict(),
+    device: LocalSftDeviceReportSchema,
   }).strict(),
 ]);
 export const LocalSftPreflightRequestSchema = z.object({
@@ -100,6 +101,40 @@ export const LocalSftPreflightSchema = z.object({
   planHash: artifactHash,
   report: LocalSftPreflightReportSchema,
 }).strict();
+
+const localSftRunId = z.uuid();
+export const LocalSftRunRequestSchema = LocalSftPreflightRequestSchema.extend({ runId: localSftRunId });
+const artifactFile = z.object({ bytes: z.number().int().positive().safe(), sha256: artifactHash }).strict();
+const localSftProgress = z.object({
+  step: z.number().int().nonnegative(),
+  steps: z.number().int().positive(),
+  tokens: LocalSftTokenizerReportSchema,
+  device: LocalSftDeviceReportSchema,
+}).strict();
+export const LocalSftRunStateSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.enum(["starting", "cancelling"]) }).strict(),
+  localSftProgress.extend({ status: z.literal("running") }),
+  localSftProgress.extend({
+    status: z.literal("completed"),
+    files: z.object({
+      "adapter_model.safetensors": artifactFile,
+      "adapter_config.json": artifactFile,
+    }).strict(),
+  }),
+  localSftProgress.partial().extend({
+    status: z.enum(["cancelled", "failed"]),
+    reason: z.enum([
+      "cancelled", "time_limit", "device_busy", "artifact_invalid", "worker_failed", "worker_stopped",
+      "python_missing", "dependencies_missing", "cuda_unavailable", "probe_failed", "tokenizer_incompatible",
+      "checkpoint_mismatch", "example_too_long", "lora_incompatible", "insufficient_memory", "nonfinite_loss",
+    ]),
+  }),
+]);
+export const LocalSftRunSchema = z.object({
+  planHash: artifactHash,
+  run: z.object({ id: localSftRunId, state: LocalSftRunStateSchema }).strict().nullable(),
+}).strict();
+export type LocalSftRun = z.infer<typeof LocalSftRunSchema>;
 
 const valuesSchema = z.object({
   name: fieldText,

@@ -1,5 +1,5 @@
 import type { TrainingApiDependencies } from "./training-api-dependencies.js";
-import { LocalSftPreflightRequestSchema, LocalSftReviewRequestSchema } from "@openpond/contracts/resource-setup";
+import { LocalSftPreflightRequestSchema, LocalSftReviewRequestSchema, LocalSftRunRequestSchema } from "@openpond/contracts/resource-setup";
 import { handleManagedCandidateReviewAction, isManagedCandidateReviewAction } from "./training-api-candidate-review.js";
 import { createTaskInventoryService, taskInventoryRequest } from "./task-inventory-service.js";
 import { humanPreferenceReviewer, preferenceComparisonReviewPayload } from "./preference-review-payload.js";
@@ -184,6 +184,13 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
     if (action === "check_local_sft") {
       return (await import("./local-sft-preflight.js")).preflightLocalSft({
         ...LocalSftPreflightRequestSchema.parse(input), store: deps.store, storeDir: deps.storeDir, signal,
+      });
+    }
+    if (action === "start_local_sft" || action === "status_local_sft" || action === "cancel_local_sft") {
+      const operation = action === "start_local_sft" ? "start" : action === "cancel_local_sft" ? "cancel" : "status";
+      const schema = operation === "status" ? LocalSftRunRequestSchema.partial({ runId: true }) : LocalSftRunRequestSchema;
+      return (await import("./local-sft-runs.js")).localSftRun({
+        ...schema.parse(input), operation, store: deps.store, storeDir: deps.storeDir, signal,
       });
     }
     if (action === "review_local_sft") {

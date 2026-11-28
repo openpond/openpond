@@ -3,6 +3,7 @@ import type { z } from "zod";
 import { LocalSftPreflightSchema, type LocalSftPreflightReportSchema, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { useErrorToast } from "../../app/AppToastContext";
+import { ModelSetupLocalSftRun } from "./ModelSetupLocalSftRun";
 
 type Report = z.infer<typeof LocalSftPreflightReportSchema>;
 const readiness: Record<Exclude<Report["status"], "ready">, string> = {
@@ -17,13 +18,15 @@ const readiness: Record<Exclude<Report["status"], "ready">, string> = {
   insufficient_memory: "The approved batch exceeded the available GPU memory or the recipe’s memory limit.",
   nonfinite_loss: "The temporary training step produced a non-finite loss or gradient.",
   probe_failed: "The local training check could not finish.",
+  device_busy: "Another local training run or check is using the device.",
 };
 
 const gib = (bytes: number) => (bytes / 1024 ** 3).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
-export function ModelSetupLocalSftPreflight({ approval, connection, busy, onBusy }: {
+export function ModelSetupLocalSftPreflight({ approval, connection, localSelected, busy, onBusy }: {
   approval: NonNullable<ResourceSetupDraft["localSftApproval"]>;
   connection: ClientConnection;
+  localSelected: boolean;
   busy: boolean;
   onBusy(busy: boolean): void;
 }) {
@@ -74,5 +77,7 @@ export function ModelSetupLocalSftPreflight({ approval, connection, busy, onBusy
         : report.rowId ? <small>Training example {report.rowId}</small> : null}
       {report.tokens ? <span>{report.tokens.rowCount} examples checked. Longest sequence {report.tokens.maximumTokens.toLocaleString()} tokens.</span> : null}
     </div> : null}
+    <ModelSetupLocalSftRun approval={approval} connection={connection} busy={busy}
+      canStart={localSelected && report?.status === "ready"} />
   </div>;
 }

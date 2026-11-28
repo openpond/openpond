@@ -1,14 +1,25 @@
-export const localSftWorkerSource = String.raw`
+export const localSftPythonCommon = String.raw`
 import hashlib
 import json
 import math
 import sys
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 
 
 class CheckFailed(Exception):
     def __init__(self, status, **details):
         self.report = {"status": status, **details}
+
+
+@contextmanager
+def reserve_device(lock):
+    import fcntl
+    with open(lock, "a") as lease:
+        try:
+            fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise CheckFailed("device_busy") from error
+        yield
 
 
 def tokenize_approved_rows(inputs, tokenizer, model_config):
@@ -127,19 +138,19 @@ def optimizer_for(model, recipe):
     return torch.optim.AdamW((param for param in model.parameters() if param.requires_grad), lr=recipe["optimizer"]["learningRate"])
 
 
-def backward_once(model, ids, labels, attention_mask):
+def backward_once(model, ids, labels, attention_mask, weight=1):
     import torch
     loss = model(input_ids=ids, labels=labels, attention_mask=attention_mask).loss
     value = loss.item()
     if not math.isfinite(value):
         raise CheckFailed("nonfinite_loss")
-    loss.backward()
+    (loss * weight).backward()
     if any(param.grad is not None and not torch.isfinite(param.grad).all().item() for param in model.parameters()):
         raise CheckFailed("nonfinite_loss")
     return value
 
 
-def preflight(inputs):
+def prepare_inputs(inputs):
     try:
         import torch
         import peft
@@ -152,20 +163,46 @@ def preflight(inputs):
     torch.set_num_threads(recipe["resourceLimits"]["cpuThreads"])
     tokenizer, config = load_tokenizer(inputs)
     rows, token_report = tokenize_approved_rows(inputs, tokenizer, config)
+    return tokenizer, rows, token_report
+
+
+def select_cuda(inputs, token_report):
+    import torch
+
     if not torch.version.cuda or not torch.cuda.is_available():
         raise CheckFailed("cuda_unavailable", tokens=token_report)
     ordinal, (free, capacity) = max(
         ((index, torch.cuda.mem_get_info(index)) for index in range(torch.cuda.device_count())),
         key=lambda item: item[1][0],
     )
-    budget = min(free, recipe["resourceLimits"]["memoryBytes"])
+    budget = min(free, inputs["recipe"]["resourceLimits"]["memoryBytes"])
     if budget <= 0:
         raise CheckFailed("insufficient_memory", tokens=token_report)
     device = torch.device("cuda", ordinal)
+    torch.cuda.set_device(device)
+    torch.cuda.set_per_process_memory_fraction(budget / capacity, device)
+    torch.cuda.reset_peak_memory_stats(device)
+    return device, {
+        "ordinal": ordinal, "name": torch.cuda.get_device_name(device),
+        "capacityBytes": capacity, "freeBytes": free, "budgetBytes": budget,
+    }
+
+
+def observe_cuda(device, capacity):
+    import torch
+
+    torch.cuda.synchronize(device)
+    used = max(torch.cuda.max_memory_reserved(device), capacity["freeBytes"] - torch.cuda.mem_get_info(device)[0])
+    if used > capacity["budgetBytes"]:
+        raise CheckFailed("insufficient_memory")
+    return {**capacity, "usedBytes": used}
+
+
+def exercise(inputs, rows, token_report, device, capacity):
+    import torch
+
+    recipe = inputs["recipe"]
     try:
-        torch.cuda.set_device(device)
-        torch.cuda.set_per_process_memory_fraction(budget / capacity, device)
-        torch.cuda.reset_peak_memory_stats(device)
         torch.manual_seed(recipe["optimizer"]["seed"])
         model = load_trainable_model(inputs, device, torch.float16)
         model.train()
@@ -184,26 +221,29 @@ def preflight(inputs):
             optimizer.zero_grad(set_to_none=False)
             backward_once(model, ids, labels, attention_mask)
             optimizer.step()
-        torch.cuda.synchronize(device)
+        report = observe_cuda(device, capacity)
     except torch.OutOfMemoryError as error:
         raise CheckFailed("insufficient_memory", tokens=token_report) from error
     except CheckFailed as error:
         error.report.setdefault("tokens", token_report)
         raise
-    used = max(torch.cuda.max_memory_reserved(device), free - torch.cuda.mem_get_info(device)[0])
-    if used > budget:
-        raise CheckFailed("insufficient_memory", tokens=token_report)
-    return {
-        "status": "ready", "tokens": token_report,
-        "device": {"ordinal": ordinal, "name": torch.cuda.get_device_name(device),
-                   "capacityBytes": capacity, "freeBytes": free, "usedBytes": used, "budgetBytes": budget},
-    }
+    return report
 
 
+def preflight(inputs):
+    _, rows, tokens = prepare_inputs(inputs)
+    device, capacity = select_cuda(inputs, tokens)
+    return {"status": "ready", "tokens": tokens, "device": exercise(inputs, rows, tokens, device, capacity)}
+`;
+
+
+export const localSftWorkerSource = localSftPythonCommon + String.raw`
 if __name__ == "__main__":
     with redirect_stdout(sys.stderr):
         try:
-            report = preflight(json.load(sys.stdin))
+            inputs = json.load(sys.stdin)
+            with reserve_device(inputs["deviceLock"]):
+                report = preflight(inputs)
         except CheckFailed as error:
             report = error.report
         except Exception:
