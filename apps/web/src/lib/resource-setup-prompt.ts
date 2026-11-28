@@ -333,11 +333,14 @@ export function editableResourceParts(draft: ResourceSetupDraft, instructions = 
 
 export function resourceSetupText(draft: ResourceSetupDraft): string {
   const parts = editableResourceParts(draft);
+  const unnamedResource = (draft.kind === "model" || draft.kind === "benchmark") && !draft.values.name?.trim();
   const prompt = parts.map(part => {
     if (typeof part === "string") return part;
+    if (unnamedResource && part.field === "name") return `a new ${draft.kind}`;
     const label = resourceSetupLabel(part, draft);
     return label === part.placeholder ? `[${label}]` : label;
   }).join("");
+  const naming = unnamedResource ? `Propose a short, descriptive name for the ${draft.kind} based on the objective and inputs, and include it in the setup review.` : "";
   if (isWeightSpaceSetup(draft)) {
     const setup = draft.weightSpace;
     const managed = draft.values.destination === "OpenPond Managed" ? setup?.managed : undefined;
@@ -354,7 +357,7 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     const review = managed?.checkpoint
       ? "Use the existing OpenPond Weight-space workflow in the selected workspace. Check the exact checkpoint capability, show me the proposed editing plan and cost, and keep the preparation receipt in this chat. Ask for approval before starting the editing session."
       : "Help me review the proposed editing plan. Resolve any missing inputs with me before preparing a managed session and ask for approval before starting it.";
-    return [prompt, `Editing setup ${JSON.stringify(details)}.`, review].filter(Boolean).join(" ");
+    return [prompt, naming, `Editing setup ${JSON.stringify(details)}.`, review].filter(Boolean).join(" ");
   }
   const { split, epochs, learningRate, budget, samples, seed } = draft.values;
   const method = resourceSetupTrainingMethod(draft);
@@ -410,7 +413,7 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const recipeText = recipe ? `Use these training settings ${JSON.stringify(recipe)}.` : "";
   const systemInstructions = protocol?.systemInstructions?.trim()
     ? `Use these system instructions for the evaluated models ${JSON.stringify(protocol.systemInstructions)}.` : "";
-  return [prompt, settings.length ? `Use ${settings.join(", ")}.` : "", systemInstructions, recipeText, review].filter(Boolean).join(" ");
+  return [prompt, naming, settings.length ? `Use ${settings.join(", ")}.` : "", systemInstructions, recipeText, review].filter(Boolean).join(" ");
 }
 
 export function snapshotResourceSetup(
