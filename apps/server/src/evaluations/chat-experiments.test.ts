@@ -8,7 +8,7 @@ import {ProviderSettingsSchema,type LocalDatasetRecord,type ChatResourceSummary}
 import type {loadOpenPondHostedModels,streamOpenPondHostedChatTurn} from "@openpond/runtime";
 import {SqliteStore} from "../store/store.js";
 import {createLocalDatasetService} from "../training/local-dataset-service.js";
-import {createChatExperiments} from "./chat-experiments.js";
+import {createChatExperiments,pinLocalBenchmarkRequest} from "./chat-experiments.js";
 import {REPORT_TABS_SCRIPT} from "./chat-experiment-report-presentation.js";
 import {chatExperimentReport} from "./chat-experiment-report.js";
 
@@ -92,13 +92,29 @@ test("account-independent configured loopback inference completes a saved local 
   const home=await mkdtemp(path.join(os.tmpdir(),"openpond-chat-loopback-")),store=new SqliteStore(home);
   const settings=ProviderSettingsSchema.parse({providers:{"custom-openai-compatible":{id:"custom-openai-compatible",enabled:true,baseUrl:`http://127.0.0.1:${address.port}/v1`,defaultModel:"local-model"}},modelCaches:{"custom-openai-compatible":{providerId:"custom-openai-compatible",source:"manual",models:[{id:"local-model",providerId:"custom-openai-compatible",displayName:"Loopback fixture",source:"manual",contextWindow:4096,outputLimit:256,capabilities:{streaming:true}}]}}});
   const datasets=createLocalDatasetService({store,home});await store.claimLocalExperimentOwner("loopback-owner");
-  const experiments=await createChatExperiments({store,home,ownerId:"loopback-owner",datasets,state:async()=>({settings,secrets:{version:1,providers:{"custom-openai-compatible":{source:"local_secret",value:"loopback-test",envVar:null,oauth:null,createdAt:"2026-10-10T00:00:00.000Z",updatedAt:"2026-10-10T00:00:00.000Z",lastValidatedAt:null,lastError:null}}}})});
+  let hostedAccess = 0;
+  const experiments=await createChatExperiments({store,home,ownerId:"loopback-owner",datasets,
+    hosted: { access: async () => { hostedAccess++; throw new Error("No OpenPond account"); } },
+    state:async()=>({settings,secrets:{version:1,providers:{"custom-openai-compatible":{source:"local_secret",value:"loopback-test",envVar:null,oauth:null,createdAt:"2026-10-10T00:00:00.000Z",updatedAt:"2026-10-10T00:00:00.000Z",lastValidatedAt:null,lastError:null}}}})});
   try{
     const created=await datasets.request({action:"create",operationId:"local",payload:{name:"No account",draft:{objective:"Check local output",tasks:[{schemaVersion:"openpond.taskData.v1",id:"one",clusterKey:"one",split:"validation",input:{prompt:"Reply with pond"},expectedOutput:{text:"pond"},policyVisibleContext:{},privilegedContextRef:null,sourceRefs:[],tags:[],metadata:{}}],graders:[{id:"accuracy",version:"1",label:"Exact answer",kind:"content",weight:1,hardGate:true,rewardEligible:false,privileged:true,config:{operator:"final_answer_equals_expected"},metadata:{}}]}}}) as {record:LocalDatasetRecord};
-    const run=await experiments.run({datasetId:created.record.workspace.draft.id,revision:1,operationId:"no-account-run",maximumCostUsd:0.01,taskLimit:1,maxOutputTokens:64,models:[{providerId:"custom-openai-compatible",modelId:"local-model"}]});
+    const { models } = await experiments.request({ action: "local_models" }) as { models: Array<{ id: string; configurationHash: string }> };
+    const model = models.find(candidate => candidate.id === "local-model")!;
+    const datasetId = created.record.workspace.draft.id;
+    const request = { datasetId, revision: 1, operationId: "no-account-run", maximumCostUsd: 0.01,
+      taskLimit: 1, maxOutputTokens: 64, models: [{ providerId: "custom-openai-compatible", modelId: model.id }] };
+    const setup = { kind: "benchmark", revision: 1, values: { destination: "This device", budget: 0.01, split: "validation" },
+      datasetRef: { id: datasetId, revision: 1 }, localCandidate: { modelId: model.id, configurationHash: model.configurationHash } } as const;
+    await expect(experiments.run(pinLocalBenchmarkRequest({ ...request, operationId: "stale-local-runtime" },
+      { ...setup, localCandidate: { ...setup.localCandidate, configurationHash: "f".repeat(64) } })))
+      .rejects.toThrow("selected model configuration changed");
+    const benchmark = { id: "local-benchmark", revision: 2, draftHash: contentHash("definition"), setupHash: contentHash(setup) };
+    const run=await experiments.run(pinLocalBenchmarkRequest(request, setup), benchmark);
     expect(run.errors).toEqual([]);await experiments.service.wait(run.runs[0]!.id);
     const result=await experiments.request({action:"result",payload:{id:run.runs[0]!.id}}) as {summary:ChatResourceSummary};
     expect(result.summary).toMatchObject({state:"completed",score:1,costUsd:null,evaluatedCount:1,taskCount:1});
+    expect(result.summary.benchmark).toEqual(benchmark);
+    expect(hostedAccess).toBe(0);
   }finally{await experiments.service.close();await store.releaseLocalExperimentOwner("loopback-owner");await store.close();await rm(home,{recursive:true,force:true});await new Promise<void>((resolve,reject)=>server.close(error=>error ? reject(error) : resolve()));}
 });
 

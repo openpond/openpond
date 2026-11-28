@@ -179,6 +179,7 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
     if (action === "begin_model_batch_review") return beginLocalModelBatchReview({ store: deps.store, storeDir: deps.storeDir,
       profileId: requiredString(input.profileId, "profileId"), request: input.request });
     if (action === "navigation") return deps.store.readTrainingNavigation(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
+    if (action === "local_compute") return (await import("./local-training-compute.js")).inspectLocalTrainingCompute();
     if (action === "state") {
       const profileId = string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default";
       const projection = requestUrl?.searchParams.get("projection") ?? "full";
@@ -1075,7 +1076,7 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
         model: { providerId: "custom-openai-compatible", modelId: "synthetic-collection-fixture-v1" },
       });
       const assignments = [];
-      for (const groupIndex of [...new Set(collectionReceipt.attempts.map((item) => item.groupIndex))]) {
+      for (const groupIndex of new Set(collectionReceipt.attempts.map((item) => item.groupIndex))) {
         const groupAttempts = collectionReceipt.attempts.filter((item) => item.groupIndex === groupIndex);
         const candidates: ComparisonAssignmentCandidateInput[] = [];
         for (const item of groupAttempts) {

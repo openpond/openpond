@@ -59,7 +59,7 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
       const budget=Math.floor(input.maximumCostUsd*1e6/input.models.length)/1e6;if(budget<1e-6)throw new Error("The requested total budget cannot allocate a positive ceiling to every model.");
       const configurations=input.models.map((model,index)=>{
         const operationId=input.operationId+":"+index;
-        return RunExperimentSchema.parse({operationId,maximumCostUsd:budget,request:{schemaVersion:"openpond.modelTasksetRunRequest.v1",operationId,teamId:current.teamId,modelProjectId:null,name:published.record.workspace.draft.name+" · "+model.modelId,
+        return RunExperimentSchema.parse({operationId,maximumCostUsd:budget,request:{schemaVersion:"openpond.modelTasksetRunRequest.v1",operationId,teamId:current.teamId,modelProjectId:null,name:`${published.record.workspace.draft.name}, ${model.modelId}`,
           taskset:remote.publication!.release,policy:{kind:"hosted_chat",modelId:model.modelId,maxOutputTokens:input.maxOutputTokens,temperature:0,topP:1},population:remote.workspace.draft.tasks.slice(0,input.taskLimit).map(task=>({receiptId:"case-"+contentHash([operationId,task.id,input.seed]).slice(0,40),taskId:task.id,seed:String(input.seed),fixtureId:null}))}});
       });
       saved=await deps.store.prepareChatExperimentGroup(input.operationId,requestHash,{location:"cloud",pin:current.pin,datasetId:input.datasetId,datasetRevision:input.revision,configurations});

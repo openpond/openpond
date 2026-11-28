@@ -1,5 +1,10 @@
 import { useContext, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { ChatResourceSummary } from "@openpond/contracts";
+import { LocalTrainingComputeSchema } from "@openpond/contracts/resource-setup";
+import { apiFetch, type ClientConnection } from "../../api/api-client";
+import { connectionQueryScope } from "../../lib/query-scope";
+import type { EvaluationModel } from "../../hooks/useChatResourceFocus";
 import {
   resourceSetupGroups,
   resourceSetupLabel,
@@ -32,35 +37,57 @@ const choices: Partial<Record<ResourceSetupField, readonly string[]>> = {
   adapter: ["LoRA", "Full fine-tuning"],
   learning: ["One-time training", "Configure continual learning"],
   source: ["Write examples", "Import a local file", "Use an existing dataset"],
+  split: ["train", "validation", "test", "frozen_eval"],
   graderType: ["Code grader", "LLM judge", "Human assessment", "Python correctness"],
 };
 const decimalFields = new Set<ResourceSetupField>(["budget", "learningRate"]);
 const integerFields = new Set<ResourceSetupField>(["datasetRevision", "epochs", "samples", "seed"]);
 
-export function ResourceSetupEditor({ draft, busy, datasets, localBenchmarkAvailable, onChange, onRemove }: {
+export function ResourceSetupEditor({ draft, busy, connection, datasets, evaluationModels, onChange, onRemove }: {
   draft: ResourceSetupDraft;
   busy: boolean;
+  connection: ClientConnection | null;
   datasets: readonly ChatResourceSummary[];
-  localBenchmarkAvailable: boolean;
+  evaluationModels: readonly EvaluationModel[];
   onChange(current: ResourceSetupDraft, next: ResourceSetupDraft): void;
   onRemove(): void;
 }) {
   const managedAvailable = useContext(DesktopNewContext)?.managedAvailable ?? false;
   const [configureOpen, setConfigureOpen] = useState(false);
   const [field, setField] = useState<PromptField>("name");
+  const compute = useQuery({
+    queryKey: ["local-training-compute", connectionQueryScope(connection)],
+    enabled: Boolean(connection && draft.kind === "model" && configureOpen && field === "destination"),
+    queryFn: async ({ signal }) => LocalTrainingComputeSchema.parse(await apiFetch(
+      connection!, "/v1/training/local-compute", { signal },
+    )),
+    retry: false,
+    staleTime: 30_000,
+  });
   const parts = resourceSetupParts(draft);
   const localDatasets = datasets.filter(dataset => dataset.location !== "cloud");
+  const localModels = evaluationModels.flatMap(model => model.providerId === "custom-openai-compatible" &&
+    model.configurationHash && /^[a-f0-9]{64}$/.test(model.configurationHash)
+    ? [{ modelId: model.id, name: model.name ?? model.id, configurationHash: model.configurationHash }] : []);
+  const localModelValue = (model: { modelId: string; configurationHash: string }) => JSON.stringify([model.modelId, model.configurationHash]);
   const datasetValue = (dataset: Pick<ChatResourceSummary, "id" | "revision">) => JSON.stringify([dataset.id, dataset.revision]);
   function showField(next: PromptField) {
     setField(next);
     setConfigureOpen(true);
   }
   function change(key: ResourceSetupField, raw: string) {
+    const leavingLocal = key === "destination" && draft.values.destination === "This device" && raw !== "This device";
     const parsed = ResourceSetupDraftSchema.safeParse({
       ...draft,
       revision: draft.revision + 1,
       ...(key === "candidate" ? { candidateRef: undefined } : {}),
-      values: { ...draft.values, [key]: raw === "" ? undefined : decimalFields.has(key) || integerFields.has(key) ? Number(raw) : raw },
+      ...(leavingLocal ? { localCandidate: undefined, localBaseline: undefined } : {}),
+      values: {
+        ...draft.values,
+        ...(leavingLocal && draft.localCandidate ? { candidate: undefined } : {}),
+        ...(leavingLocal && draft.localBaseline ? { baseline: undefined } : {}),
+        [key]: raw === "" ? undefined : decimalFields.has(key) || integerFields.has(key) ? Number(raw) : raw,
+      },
     });
     if (parsed.success) onChange(draft, parsed.data);
   }
@@ -75,8 +102,13 @@ export function ResourceSetupEditor({ draft, busy, datasets, localBenchmarkAvail
   }
   function fieldOptions(key: ResourceSetupField): DropdownOption[] | null {
     if (key === "destination") {
-      const localReason = draft.kind === "model" ? "Training on this device is unavailable."
-        : draft.kind === "benchmark" && !localBenchmarkAvailable ? "Configure a compatible loopback model in provider settings." : null;
+      const device = compute.data?.devices[0];
+      const modelReason = device ? `${device.name} detected. A local training runner is required.`
+        : compute.data?.status === "cuda_tools_unavailable" ? "CUDA tools are unavailable on this device."
+          : compute.data?.status === "devices_unavailable" ? "CUDA devices did not report capacity."
+            : compute.isFetching ? "Checking this device." : "Training on this device is unavailable.";
+      const localReason = draft.kind === "model" ? modelReason
+        : draft.kind === "benchmark" && !localModels.length ? "Configure a compatible loopback model in provider settings." : null;
       return [
         { value: "", label: "Choose a destination" },
         { value: "This device", label: "This device", disabled: Boolean(localReason), description: localReason ?? undefined },
@@ -119,6 +151,26 @@ export function ResourceSetupEditor({ draft, busy, datasets, localBenchmarkAvail
         {activeFields.map((key, index) => {
           const options = fieldOptions(key);
           const label = field === "saveDestination" ? "Save to" : labels[key];
+          if ((key === "candidate" || key === "baseline") && draft.values.destination === "This device") {
+            const pin = key === "candidate" ? "localCandidate" : "localBaseline";
+            const selected = draft[pin];
+            const value = selected ? localModelValue(selected) : "";
+            const options = localModels.map(model => ({ value: localModelValue(model), label: model.name }));
+            return <div className="resource-setup-input" key={key}>
+              <span>{key === "candidate" ? "Local candidate" : "Local baseline"}</span>
+              <DropdownSelect label={label} value={value} searchable
+                options={[{ value: "", label: "Choose a qualified local model" }, ...options]}
+                disabled={busy} onChange={raw => {
+                  const model = localModels.find(candidate => localModelValue(candidate) === raw);
+                  onChange(draft, {
+                    ...draft, revision: draft.revision + 1,
+                    ...(key === "candidate" ? { candidateRef: undefined } : {}),
+                    [pin]: model && { modelId: model.modelId, configurationHash: model.configurationHash },
+                    values: { ...draft.values, [key]: model?.name },
+                  });
+                }} />
+            </div>;
+          }
           if (key === "dataset" && localDatasets.length) {
             const value = draft.datasetRef ? datasetValue(draft.datasetRef) : "";
             const options = localDatasets.map(dataset => ({ value: datasetValue(dataset), label: `${dataset.name} revision ${dataset.revision}` }));

@@ -3,6 +3,7 @@ import {
   StoredExperimentDraftReferenceSchema,
   StoredExperimentResultReferenceSchema,
 } from "openpond-sdk/training";
+import { BenchmarkRunPinSchema } from "./resource-setup.js";
 export {
   StoredExperimentDraftReferenceSchema,
   type StoredExperimentDraftReference,
@@ -122,6 +123,7 @@ export const ChatResourceSummarySchema = z
     syncState: z.string().optional(),
     model: z.string().optional(),
     evaluationHash: Hash.optional(),
+    benchmark: BenchmarkRunPinSchema.optional(),
     graderId: Id.optional(),
     graderType: z.string().optional(),
     description: z.string().optional(),

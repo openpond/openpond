@@ -9,6 +9,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatResourceSummarySchema, type RuntimeEvent, type ChatResourceSummary } from "@openpond/contracts";
+import { ResourceSetupDraftSchema, type BenchmarkRunPin } from "@openpond/contracts/resource-setup";
+import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import type { SqliteStore } from "../store/store.js";
 import type { LocalInferenceState } from "../evaluations/local-experiment-local-inference.js";
 import type { ChatResourceAction } from "../openpond/chat-resource-action.js";
@@ -16,7 +18,7 @@ import {createChatDatasetSourceAction} from "./chat-dataset-sources.js";
 import { createLocalDatasetService, localDatasetSummary } from "./local-dataset-service.js";
 import { createLocalDatasetSync } from "./local-dataset-sync.js";
 import {createChatCloudExperiments,type ChatExperimentView} from "../evaluations/chat-cloud-experiments.js";
-import { createChatExperiments } from "../evaluations/chat-experiments.js";
+import { createChatExperiments, pinLocalBenchmarkRequest } from "../evaluations/chat-experiments.js";
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
 import type { HtmlVisualService } from "../visuals/visual-service.js";
 import { chatExperimentReport } from "../evaluations/chat-experiment-report.js";
@@ -74,9 +76,41 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     },
   });
   const nextSteps = createChatNextStepService({ store: deps.store, current: browser.current });
-  async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal):Promise<unknown> {
+  async function dispatch(kind:"dataset"|"experiment",input:unknown,signal?:AbortSignal,originTurnId?:string):Promise<unknown> {
     if(kind==="dataset")return datasets.request(input,signal);
     const envelope=z.object({action:z.string(),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(input);
+    let benchmark: BenchmarkRunPin | undefined;
+    if (originTurnId && (envelope.action === "run" || envelope.action === "run_cloud")) {
+      const turn = await deps.store.getTurn(originTurnId);
+      let setup = ResourceSetupDraftSchema.safeParse(turn?.metadata.resourceSetup);
+      if (setup.success && setup.data.kind === "benchmark")
+        throw new Error("Review the Benchmark setup and ask the user before starting a run.");
+      const owner = turn ? await deps.store.getSession(turn.sessionId) : null;
+      const resource = SessionResourceDraftSchema.safeParse(owner?.metadata?.resourceDraft);
+      const draft = resource.success && resource.data.kind === "benchmark"
+        ? chatExperimentContext(owner?.metadata).scopes.find(scope => scope.draft?.id === resource.data.id) : undefined;
+      if (turn && !setup.success) {
+        if (draft) {
+          const recent = await deps.store.turnsForSession(turn.sessionId);
+          const currentIndex = recent.findIndex(candidate => candidate.id === originTurnId);
+          for (const previous of currentIndex < 0 ? [] : recent.slice(currentIndex + 1)) {
+            const found = ResourceSetupDraftSchema.safeParse(previous.metadata.resourceSetup);
+            if (found.success) { setup = found; break; }
+          }
+        }
+      }
+      if (setup.success && setup.data.kind === "benchmark" && setup.data.values.destination === "This device") {
+        if (envelope.action !== "run") throw new Error("This Benchmark setup selects a local device.");
+        const configured = setup.data.benchmarkDefinition;
+        if (configured && (configured.id !== draft?.draft?.id || configured.revision !== draft?.draftRevision))
+          throw new Error("The Benchmark definition changed. Review the current settings before running it.");
+        envelope.payload = pinLocalBenchmarkRequest(envelope.payload, setup.data);
+        if (draft?.draft) benchmark = {
+          id: draft.draft.id, revision: draft.draftRevision ?? 1,
+          draftHash: contentHash(draft.draft), setupHash: contentHash(setup.data),
+        };
+      }
+    }
     if (typeof envelope.payload.id === "string" && profile) {
       const linked=(await deps.store.chatResourceLinks({kind:"experiment",id:envelope.payload.id})).find(link=>link.summary.profileRef)?.summary;
       if(linked?.profileRef && ["read","status","result"].includes(envelope.action))return profile.inspect(linked.id,linked.profileRef);
@@ -98,7 +132,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if(a && b)return cloud.compare(envelope.payload);
     }
     if(typeof envelope.payload.id==="string" && await deps.store.readChatHostedExperiment(envelope.payload.id))return cloud.request(envelope.action,envelope.payload);
-    return experiments.request(envelope);
+    return experiments.request(envelope, benchmark);
   }
   async function wait(id:string){if(await deps.store.readChatHostedExperiment(id))return cloud.wait(id);await experiments.service.wait(id);return dispatch("experiment",{action:"result",payload:{id}});}
   async function emit(sessionId:string,turnId:string,summary:ChatResourceSummary, showCard = true) {
@@ -365,7 +399,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if(!context)throw new Error("HTML charts require a conversation response; retained results remain available through result.");
       return charts(context,input.payload);
     }
-    const result = await dispatch(kind,input);
+    const result = await dispatch(kind,input,undefined,context?.turnId);
     // Discovery opens dataset browsing without allocating an experiment or selecting a record.
     if (context && input.action === "list") {
       const before = chatExperimentContext((await deps.store.getSession(context.sessionId))?.metadata);
@@ -409,7 +443,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       await emit(context.session.id,context.turnId,scaffold);
     }
     let result:unknown;
-    try { result = await dispatch(kind,payload,context.signal); }
+    try { result = await dispatch(kind,payload,context.signal,context.turnId); }
     catch (error) {
       if (kind === "dataset" && authorOperationId) {
         const ownerId = await deps.store.localResourceOwnerId();

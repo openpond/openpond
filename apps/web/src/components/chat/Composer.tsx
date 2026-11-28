@@ -105,7 +105,7 @@ import {
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
 import { DesktopLogIssueAction } from "./DesktopLogIssueAction";
 import { ResourceSetupEditor } from "./ResourceSetupEditor";
-import { resourceSetupText } from "../../lib/resource-setup-prompt";
+import { snapshotResourceSetup } from "../../lib/resource-setup-prompt";
 import {
   ComposerSkillMenu,
   type ComposerSkillMenuItem,
@@ -1394,9 +1394,9 @@ export function Composer({
     if (contextSelection.selecting) return false;
     const submissionScope = submissionScopeKey;
     if (!beginSubmissionForScope(submissionScope)) return false;
-    const setup = resourceSetup && !selectedAction && !selectedCommand && !options.promptOverride
-      ? resourceSetup : null;
-    const setupText = setup ? [resourceSetupText(setup), inputRef.current?.getPrompt() ?? prompt].filter(Boolean).join("\n\n") : undefined;
+    const setup = resourceSetup && !selectedAction && !selectedCommand ? snapshotResourceSetup(
+      resourceSetup, contextSelection.selection, options.promptOverride ?? inputRef.current?.getPrompt() ?? prompt,
+    ) : null;
     setAddMenuOpen(false);
     setAttachmentError(null);
     const { contexts: submissionContexts, focus: submissionFocus } = composerSubmissionResourceContext(
@@ -1419,7 +1419,7 @@ export function Composer({
         selectedAction && selectedDisplayPrompt && !prompt.trim()
           ? selectedDisplayPrompt
           : undefined;
-      const promptOverride = options.promptOverride ?? selectedActionPromptOverride ?? setupText;
+      const promptOverride = setup?.prompt ?? options.promptOverride ?? selectedActionPromptOverride;
       if (contextSelection.selection) window.dispatchEvent(new CustomEvent(CHAT_CONTEXT_SELECTED, {
         detail: { sessionId: taskSessionId ?? null, scope: contextSelection.scope, targetKey: JSON.stringify(contextSelection.selection.target) },
       }));
@@ -1437,7 +1437,7 @@ export function Composer({
               turnMetadata: {
                 ...composerResourceMetadata(submissionContexts),
                 ...(submissionFocus ? { chatResourceFocus: submissionFocus } : {}),
-                ...(setup ? { resourceSetup: setup } : {}),
+                ...(setup ? { resourceSetup: setup.draft } : {}),
               },
               ...(contextSelection.selection ? { sessionMetadata: { chatContextSelection: contextSelection.selection.target } } : {}),
               onSessionCreated: session => contextSelection.moveToSession(session.id),
@@ -1445,7 +1445,7 @@ export function Composer({
           : undefined,
       );
       if (sent && setup && originDraftScopeKey) {
-        composerDraftStore?.setResourceSetup(originDraftScopeKey, current => current === setup ? null : current);
+        composerDraftStore?.setResourceSetup(originDraftScopeKey, current => current === resourceSetup ? null : current);
       }
       if (sent && resourceDrafts.current.get(submissionScope) === submissionContexts) resourceDrafts.current.delete(submissionScope);
       settleStagedAttachments(
@@ -1784,8 +1784,9 @@ export function Composer({
             key={originDraftScopeKey}
             draft={resourceSetup}
             busy={busy || running}
+            connection={connection}
             datasets={chatResources.datasets}
-            localBenchmarkAvailable={chatResources.models.some(model => model.providerId === "custom-openai-compatible")}
+            evaluationModels={chatResources.models}
             onChange={(previous, next) => composerDraftStore.setResourceSetup(originDraftScopeKey, current => current === previous ? next : current)}
             onRemove={() => composerDraftStore.setResourceSetup(originDraftScopeKey, () => null)}
           /> : null}

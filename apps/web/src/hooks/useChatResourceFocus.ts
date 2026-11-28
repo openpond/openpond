@@ -4,7 +4,7 @@ import type { ClientConnection } from "../api/api-client";
 import { chatResourceRequest, type DatasetResponse } from "../api/chat-resource-api";
 
 export type ChatResourceFocus = { dataset: ChatResourceSummary | null; experiment: ChatResourceSummary | null; scopeContext?: ChatExperimentContext };
-export type EvaluationModel = {id:string;providerId:string;name?:string};
+export type EvaluationModel = {id:string;providerId:string;name?:string;configurationHash?:string};
 type ContextResponse = { focus: ChatResourceFocus; datasets: ChatResourceSummary[]; experiments: ChatResourceSummary[]; graders: ChatResourceSummary[] };
 const emptyFocus = (): ChatResourceFocus => ({ dataset: null, experiment: null });
 
@@ -57,7 +57,7 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
     setModels([]); setModelsError(null);
     if (!connection || !sessionId || (!includeModelChoices && !focus.scopeContext?.activeScopeId)) return;
     const abort = new AbortController(); setModelsLoading(true);
-    void chatResourceRequest<{models:EvaluationModel[]}>(connection,"experiment",{action:"models"},abort.signal)
+    void chatResourceRequest<{models:EvaluationModel[]}>(connection,"experiment",{action:includeModelChoices?"local_models":"models"},abort.signal)
       .then(result => { if (!abort.signal.aborted) setModels(result.models); })
       .catch(cause => { if (!abort.signal.aborted) setModelsError(cause instanceof Error ? cause.message : "Model choices unavailable."); })
       .finally(() => { if (!abort.signal.aborted) setModelsLoading(false); });

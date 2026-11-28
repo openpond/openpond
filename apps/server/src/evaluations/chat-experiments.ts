@@ -4,6 +4,7 @@ import { compareExperiments } from "@openpond/evals/experiments";
 import { z } from "zod";
 import { contentHash } from "@openpond/harness";
 import { LocalExperimentRunSchema, type ChatResourceSummary, type LocalExperimentRecord, type LocalExperimentResult } from "@openpond/contracts";
+import { BenchmarkRunPinSchema, type BenchmarkRunPin, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 import { createLocalExperimentService } from "./local-experiment-service.js";
 import { createLocalInferenceOwner, type LocalInferenceState } from "./local-experiment-local-inference.js";
 import { createClaudeCodeOwner } from "./claude-code-owner.js";
@@ -15,6 +16,7 @@ import { loadOpenPondHostedModels,streamOpenPondHostedChatTurn } from "@openpond
 import { prepareLocalExperimentModel } from "./local-experiment-model.js";
 import {readCachedTasksetPackage} from "../training/taskset-package-files.js";
 import {ClaudeCodeRuntimeSchema,CodexExperimentRuntimeSchema} from "openpond-sdk/experiments";
+import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
 
 export function chatExperimentSummary(record:LocalExperimentRecord,result?:LocalExperimentResult):ChatResourceSummary {
   const scored = result?.cases.filter(c => c.status==="completed" && c.grade?.gradingStatus==="scored" && c.grade.score !== null) ?? [];
@@ -36,12 +38,41 @@ export const ChatExperimentRun = z.object({datasetId:z.string().min(1),revision:
   requestTimeoutMs:z.number().int().min(1000).max(300000).default(120000),
   models:z.array(z.object({providerId:z.enum(["openpond","custom-openai-compatible","claude-code","codex"]),modelId:z.string().min(1),reasoningEffort:z.enum(["low","medium","high","xhigh","max"]).optional()}).strict()).min(1).max(8),
 }).strict();
-const ChatLocalExperimentRun=ChatExperimentRun.extend({maximumCostUsd:ChatExperimentRun.shape.maximumCostUsd.optional()});
+const ChatLocalExperimentRun=ChatExperimentRun.extend({
+  maximumCostUsd:ChatExperimentRun.shape.maximumCostUsd.optional(),
+  split:DatasetSplitSchema.optional(),
+  models:ChatExperimentRun.shape.models.element.extend({configurationHash:z.string().regex(/^[a-f0-9]{64}$/).optional()}).array().min(1).max(8),
+});
+
+export function pinLocalBenchmarkRequest(raw: unknown, setup: ResourceSetupDraft) {
+  const input = ChatLocalExperimentRun.parse(raw);
+  const dataset = setup.datasetRef;
+  const candidate = setup.localCandidate;
+  const baseline = setup.comparison ? setup.localBaseline : null;
+  if (!dataset || !candidate || setup.comparison && !baseline)
+    throw new Error("Select the exact local dataset and model choices before running this Benchmark.");
+  if (input.datasetId !== dataset.id || input.revision !== dataset.revision)
+    throw new Error("The requested dataset differs from the Benchmark setup.");
+  const models = baseline ? [candidate, baseline] : [candidate];
+  if (models.length !== input.models.length || input.models.some((model, index) =>
+    model.providerId !== "custom-openai-compatible" || models[index]?.modelId !== model.modelId))
+    throw new Error("The requested models differ from the qualified local models selected in the Benchmark setup.");
+  if (setup.values.budget !== undefined && (input.maximumCostUsd ?? 0) > setup.values.budget)
+    throw new Error("The requested run exceeds the Benchmark budget.");
+  return {
+    ...input,
+    ...(setup.values.samples === undefined ? {} : { taskLimit: setup.values.samples }),
+    ...(setup.values.seed === undefined ? {} : { seed: setup.values.seed }),
+    ...(setup.values.split === undefined ? {} : { split: setup.values.split }),
+    models: input.models.map((model, index) => ({ ...model, configurationHash: models[index]!.configurationHash })),
+  };
+}
 export function localExperimentView(evidence:LocalExperimentResult):ChatExperimentView {
   return {contentHash:evidence.contentHash,graders:"graders" in evidence.execution ? evidence.execution.graders : null,scope:"packageHash" in evidence.execution ? evidence.execution.packageHash : "",cases:evidence.cases.map(row=>({id:row.receiptId,taskId:row.taskId,seed:row.seed,status:row.status,error:row.error,output:row.output,score:row.grade?.score ?? null}))};
 }
 const HostedPin=z.object({actorId:z.string().min(1),teamId:z.string().min(1),apiOrigin:z.url()}).strict();
-const Group = z.object({packageHash:z.string().regex(/^[a-f0-9]{64}$/),hosted:HostedPin.nullable(),configurations:z.array(LocalExperimentRunSchema.shape.configuration).min(1).max(8)}).strict();
+const Group = z.object({packageHash:z.string().regex(/^[a-f0-9]{64}$/),hosted:HostedPin.nullable(),
+  configurations:z.array(LocalExperimentRunSchema.shape.configuration).min(1).max(8),benchmark:BenchmarkRunPinSchema.optional()}).strict();
 
 /** Same durable evaluation service and accounting as the workspace path, with
  * an explicit installation scope and locally retained package source. */
@@ -75,7 +106,11 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     const dataset=await deps.store.readLocalDatasetByWorkspaceHash(source.sourceTasksetId,source.sourcePackageHash);
     if(!dataset || dataset.ownerId!==scope)throw new Error("The Experiment's exact authored Dataset source is unavailable.");
     const retained=evidence ?? await service.result({teamId:scope,id:record.id});
-    return {...chatExperimentSummary(record,retained),evaluationHash:localDatasetSummary(dataset).evaluationHash,datasetId:dataset.workspace.draft.id,datasetRevision:dataset.workspace.draft.revision};
+    const operation = record.configuration.operationId;
+    const group = Group.safeParse(await deps.store.readChatExperimentGroup(operation.slice(0, operation.lastIndexOf(":"))));
+    const benchmark = group.success ? group.data.benchmark : undefined;
+    return {...chatExperimentSummary(record,retained),evaluationHash:localDatasetSummary(dataset).evaluationHash,datasetId:dataset.workspace.draft.id,datasetRevision:dataset.workspace.draft.revision,
+      ...(benchmark ? { benchmark } : {})};
   }
   async function hostedChoices() {
     try {
@@ -122,7 +157,7 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     authorizeProject:async configuration => {
       if (configuration.request.project || configuration.request.modelProjectId || configuration.request.policy.kind !== "hosted_chat") throw new Error("Independent local experiments require a configured model provider and locally pinned inputs.");
     }});
-  async function run(raw:unknown) {
+  async function run(raw:unknown, benchmark?: BenchmarkRunPin) {
     const parsed = ChatLocalExperimentRun.parse(raw);
     if(parsed.models.some(model=>!["codex","claude-code"].includes(model.providerId) && model.reasoningEffort!==undefined))throw new Error("Explicit reasoning effort is supported only for native Codex and Claude experiment models.");
     const {record,package:value} = await deps.datasets.packageDataset(parsed.datasetId,parsed.revision);
@@ -134,16 +169,25 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     if (new Set(input.models.map(m => `${m.providerId}/${m.modelId}/${m.reasoningEffort??"low"}`)).size !== input.models.length) throw new Error("Select each evaluated model and reasoning setting once.");
     const perRunBudget = Math.floor(input.maximumCostUsd*1_000_000/input.models.length)/1_000_000;
     if (perRunBudget < 0.000001) throw new Error("The total budget is too small for the selected models.");
-    const requestHash = contentHash({scope,input});
+    const requestHash = contentHash({scope,input,...(benchmark ? { benchmark } : {})});
     let retained = await deps.store.readChatExperimentGroup(input.operationId,requestHash);
     if (!retained) {
-      const catalog = await choices();
-      const hosted=input.models.some(model=>model.providerId==="openpond") || record.workspace.draft.graders.some(grader=>grader.kind==="model_judge") ? await hostedPin() : null;
+      const hasHostedModel = input.models.some(model => model.providerId === "openpond");
+      const hasLocalModel = input.models.some(model => model.providerId === "custom-openai-compatible");
+      const [local, hostedChoicesResult] = await Promise.all([
+        hasLocalModel ? loopback.choices() : [],
+        hasHostedModel ? hostedChoices() : { models: [] },
+      ]);
+      const catalog = [...local, ...hostedChoicesResult.models];
+      const hosted=hasHostedModel || record.workspace.draft.graders.some(grader=>grader.kind==="model_judge") ? await hostedPin() : null;
       const configurations = await Promise.all(input.models.map(async(selected,index) => {
-        const model = selected.providerId==="codex" ? await codex.choice(selected.modelId,selected.reasoningEffort===undefined?undefined:CodexExperimentRuntimeSchema.shape.reasoningEffort.parse(selected.reasoningEffort)) : selected.providerId==="claude-code" ? await claude.choice(selected.modelId,selected.reasoningEffort===undefined?undefined:ClaudeCodeRuntimeSchema.shape.reasoningEffort.parse(selected.reasoningEffort)) : catalog.models.find(m => m.providerId === selected.providerId && m.id === selected.modelId);
+        const model = selected.providerId==="codex" ? await codex.choice(selected.modelId,selected.reasoningEffort===undefined?undefined:CodexExperimentRuntimeSchema.shape.reasoningEffort.parse(selected.reasoningEffort)) : selected.providerId==="claude-code" ? await claude.choice(selected.modelId,selected.reasoningEffort===undefined?undefined:ClaudeCodeRuntimeSchema.shape.reasoningEffort.parse(selected.reasoningEffort)) : catalog.find(m => m.providerId === selected.providerId && m.id === selected.modelId);
         if (!model) throw new Error("The selected evaluated model is unavailable: "+selected.providerId+"/"+selected.modelId+".");
+        if (selected.configurationHash && selected.configurationHash !== model.configurationHash)
+          throw new Error("The selected model configuration changed. Review the current runtime before running this Benchmark.");
         const operationId = input.operationId+":"+index;
-        const population = value.taskset.tasks.slice(0,input.taskLimit).map(task => ({receiptId:"case-"+contentHash([operationId,task.id,input.seed]).slice(0,40),taskId:task.id,seed:String(input.seed),fixtureId:null}));
+        const tasks = input.split ? value.taskset.tasks.filter(task => task.split === input.split) : value.taskset.tasks;
+        const population = tasks.slice(0,input.taskLimit).map(task => ({receiptId:"case-"+contentHash([operationId,task.id,input.seed]).slice(0,40),taskId:task.id,seed:String(input.seed),fixtureId:null}));
         if (!population.length) throw new Error("This saved Dataset has no runnable tasks.");
         const requestBudget = Math.floor(perRunBudget*1_000_000/population.length)/1_000_000;
         if (requestBudget < 0.000001) throw new Error("The total budget cannot cover a positive allocation for every selected task.");
@@ -151,10 +195,11 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
         const common = {...(outputSchema && ["codex","claude-code"].includes(selected.providerId)?{outputSchema}:{}),configurationHash:model.configurationHash,maximumRequestCostUsd:requestBudget,requestTimeoutMs:input.requestTimeoutMs};
         const localRuntime = selected.providerId === "codex" && "accountHash" in model ? {providerId:"codex",...common,accountHash:model.accountHash,reasoningEffort:model.reasoningEffort} : selected.providerId === "claude-code" && "executableHash" in model ? {providerId:"claude-code",...common,executableHash:model.executableHash,capabilityHash:model.capabilityHash,version:model.version,authentication:model.authentication,...("reasoningEffort" in model && model.reasoningEffort?{reasoningEffort:model.reasoningEffort}:{}),maximumTurns:outputSchema?3:1,holdOpen:false} : {providerId:"custom-openai-compatible",...common};
         return LocalExperimentRunSchema.shape.configuration.parse({operationId,maximumCostUsd:perRunBudget,request:{schemaVersion:"openpond.modelTasksetRunRequest.v1",operationId,teamId:scope,modelProjectId:null,
-          name:record.workspace.draft.name+" · "+selected.modelId,taskset:{id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash},population,
+          name:`${record.workspace.draft.name}, ${selected.modelId}`,taskset:{id:value.taskset.id,revision:value.taskset.revision,contentHash:value.taskset.contentHash},population,
           policy:{kind:"hosted_chat",modelId:selected.modelId,maxOutputTokens:Math.min(input.maxOutputTokens,model.outputLimit!),temperature:0,topP:1,...selected.providerId==="openpond" ? {} : {localRuntime}}}});
       }));
-      retained = await deps.store.prepareChatExperimentGroup(input.operationId,requestHash,{packageHash:value.contentHash,hosted,configurations});
+      retained = await deps.store.prepareChatExperimentGroup(input.operationId,requestHash,{packageHash:value.contentHash,hosted,configurations,
+        ...(benchmark ? { benchmark } : {})});
     }
     const group = Group.parse(retained);
     if (group.packageHash !== value.contentHash) throw new Error("The retained group requires its exact saved Dataset package.");
@@ -170,10 +215,11 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     return {runs,errors,summaries:await Promise.all(runs.map(async record=>summary(record,
       record.status === "completed" ? await service.result({teamId:scope,id:record.id}) : undefined))),maximumCostUsd:input.maximumCostUsd};
   }
-  async function request(raw:unknown) {
-    const input = z.object({action:z.enum(["models","run","list","read","status","cancel","result","compare","case"]),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(raw);
+  async function request(raw:unknown, benchmark?: BenchmarkRunPin) {
+    const input = z.object({action:z.enum(["models","local_models","run","list","read","status","cancel","result","compare","case"]),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(raw);
     if (input.action === "models") return choices();
-    if (input.action === "run") return run(input.payload);
+    if (input.action === "local_models") return { models: await loopback.choices() };
+    if (input.action === "run") return run(input.payload,benchmark);
     const result = await service.request({teamId:scope,action:input.action,payload:input.payload});
     if(input.action === "list") {
       const page=result as Awaited<ReturnType<typeof service.list>>;

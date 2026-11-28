@@ -1,53 +1,7 @@
-import { z } from "zod";
+import type { ResourceSetupDraft } from "@openpond/contracts/resource-setup";
+import type { ChatContextSelection } from "@openpond/contracts";
+export { ResourceSetupDraftSchema, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 
-const fieldText = z.string().max(2_000).optional();
-const positiveInteger = z.number().int().positive().optional();
-const nonnegativeNumber = z.number().nonnegative().optional();
-const valuesSchema = z.object({
-  name: fieldText,
-  objective: fieldText,
-  baseModel: fieldText,
-  candidate: fieldText,
-  baseline: fieldText,
-  dataset: fieldText,
-  datasetRevision: positiveInteger,
-  split: fieldText,
-  grader: fieldText,
-  method: z.enum(["SFT", "GRPO", "Decision", "Weight-space programming"]).optional(),
-  adapter: z.enum(["LoRA", "Full fine-tuning"]).optional(),
-  learning: z.enum(["One-time training", "Configure continual learning"]).optional(),
-  destination: z.enum(["This device", "OpenPond Managed"]).optional(),
-  source: z.enum(["Write examples", "Import a local file", "Use an existing dataset"]).optional(),
-  graderType: z.enum(["Code grader", "LLM judge", "Human assessment", "Python correctness"]).optional(),
-  fields: fieldText,
-  samples: positiveInteger,
-  epochs: positiveInteger,
-  learningRate: nonnegativeNumber,
-  seed: z.number().int().nonnegative().optional(),
-  budget: nonnegativeNumber,
-  criterion: fieldText,
-  cases: fieldText,
-  project: fieldText,
-});
-
-export const ResourceSetupDraftSchema = z.object({
-  kind: z.enum(["chat", "model", "benchmark", "dataset", "grader"]),
-  revision: z.number().int().positive(),
-  comparison: z.boolean().optional(),
-  candidateRef: z.object({
-    projectId: z.string().min(1).max(240),
-    versionId: z.string().min(1).max(240),
-    artifactId: z.string().min(1).max(240),
-    bundleHash: z.string().regex(/^[a-f0-9]{64}$/),
-  }).optional(),
-  datasetRef: z.object({
-    id: z.string().min(1).max(240),
-    revision: z.number().int().positive(),
-    contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-  }).optional(),
-  values: valuesSchema,
-});
-export type ResourceSetupDraft = z.infer<typeof ResourceSetupDraftSchema>;
 export type ResourceSetupField = keyof ResourceSetupDraft["values"];
 export type ResourceSetupMethod = ResourceSetupDraft["values"]["method"];
 export type ResourceSetupCandidate = NonNullable<ResourceSetupDraft["candidateRef"]> & { label: string };
@@ -143,6 +97,8 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const settings = [
     draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
     draft.candidateRef && `Model project ${draft.candidateRef.projectId}, version ${draft.candidateRef.versionId}, artifact ${draft.candidateRef.artifactId}, bundle hash ${draft.candidateRef.bundleHash}`,
+    draft.values.destination === "This device" && draft.localCandidate && `Candidate local provider custom-openai-compatible, model ID ${draft.localCandidate.modelId}, configuration hash ${draft.localCandidate.configurationHash}`,
+    draft.values.destination === "This device" && draft.comparison && draft.localBaseline && `Baseline local provider custom-openai-compatible, model ID ${draft.localBaseline.modelId}, configuration hash ${draft.localBaseline.configurationHash}`,
     split && `Dataset split ${split}`,
     epochs !== undefined && `${epochs} epochs`,
     learningRate !== undefined && `learning rate ${learningRate}`,
@@ -158,4 +114,17 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     chat: "",
   }[draft.kind];
   return [prompt, settings.length ? `Use ${settings.join(", ")}.` : "", review, execution].filter(Boolean).join(" ");
+}
+
+export function snapshotResourceSetup(
+  draft: ResourceSetupDraft,
+  selection: ChatContextSelection | null,
+  instructions: string,
+) {
+  const benchmarkDefinition = draft.kind === "benchmark" && selection?.localDraft && selection.draft && selection.draftRevision
+    ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
+  return {
+    prompt: [resourceSetupText(draft), instructions].filter(Boolean).join("\n\n"),
+    draft: { ...draft, ...(benchmarkDefinition ? { benchmarkDefinition } : {}) },
+  };
 }

@@ -580,6 +580,10 @@ export async function handleTrainingRoutes({
     sendJson(response, 200, await deps.trainingPayload("navigation", {}, requestUrl));
     return true;
   }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/local-compute") {
+    sendJson(response, 200, await deps.trainingPayload("local_compute", {}, requestUrl));
+    return true;
+  }
   if (request.method === "GET" && requestUrl.pathname === "/v1/training/activity") {
     sendJson(response, 200, await deps.trainingPayload("activity", {}, requestUrl));
     return true;
