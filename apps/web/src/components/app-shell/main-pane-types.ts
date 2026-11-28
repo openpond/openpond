@@ -74,6 +74,7 @@ export type MainPaneProps = {
   onPonderModeChange?: (mode: "clean" | "activity" | null) => void;
   experience: Experience;
   view: AppView;
+  resourceWorkspaceId: string | null;
   teamChat: TeamChatViewProps;
   community: CommunityViewProps;
   bootstrap: BootstrapPayload | null;

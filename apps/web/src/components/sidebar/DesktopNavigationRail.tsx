@@ -1,6 +1,5 @@
 import { useId, useRef, useState } from "react";
-import { OPENPOND_ICON_URL } from "../../lib/public-assets";
-import { CircleAlert, Home, MessageCircle, type LucideIcon } from "lucide-react";
+import { CircleAlert, Home, LayoutDashboard, MessageCircle, type LucideIcon } from "lucide-react";
 import { useConnectionStatus } from "../../hooks/useConnectionStatus";
 import { CalendarClock, FileOutput, FolderGit2, Globe2, MessageSquare, MoreHorizontal, Shapes } from "../icons";
 import type { SidebarProps } from "./Sidebar.types";
@@ -84,9 +83,9 @@ export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: Si
   }
 
   return <nav className="desktop-navigation-rail" aria-label="Desktop destinations">
-    <button type="button" className="desktop-rail-destination desktop-rail-brand" aria-label="Home" data-rail-tooltip="New chat"
+    <button type="button" className="desktop-rail-destination" aria-label="Home" data-rail-tooltip="New chat"
       aria-current={activeView === "chat" && !sidebar.selectedSessionId ? "page" : undefined}
-      onClick={() => void openHome()}><span className="desktop-rail-destination-icon"><img src={OPENPOND_ICON_URL} alt="" /></span><span>Home</span></button>
+      onClick={() => void openHome()}><span className="desktop-rail-destination-icon"><Home size={21} aria-hidden /></span><span>Home</span></button>
     <div className="desktop-rail-destinations">
       {resourceDestinations.map(({ page, label, icon }) => {
         const active = sidebar.view === "labs" && (modelsRoute?.page === page ||
@@ -96,7 +95,7 @@ export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: Si
         return <button key={page} type="button" className="desktop-rail-destination" aria-label={label}
           aria-current={active ? "page" : undefined} onClick={() => void selectResource(page)}>
           <span className="desktop-rail-destination-icon">
-            {icon ? <span aria-hidden className="desktop-rail-resource-icon" style={{ maskImage: `url("/console-icons/${icon}.svg")` }} /> : <Home size={21} aria-hidden />}
+            {icon ? <span aria-hidden className="desktop-rail-resource-icon" style={{ maskImage: `url("/console-icons/${icon}.svg")` }} /> : <LayoutDashboard size={21} aria-hidden />}
           </span>
           <span>{label}</span>
         </button>;

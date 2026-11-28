@@ -33,6 +33,14 @@
   gap: 8px;
 }
 
+.labs-base-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.labs-base-model img { flex: none; object-fit: contain; }
+
 .labs-model-table-summary {
   display: grid;
   justify-items: start;

@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { lazy, memo, Suspense, useCallback, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { ComposerDraftStore } from "../../lib/composer-draft-store";
 import { useComposerDraft, useResourceSetupDraft } from "../../lib/composer-draft-store";
 import { RenderCommitBoundary } from "../../lib/render-commit-metrics";
@@ -48,7 +48,7 @@ const DraftComposerContent = memo(function DraftComposerContent({
   ...props
 }: DraftBoundComposerProps) {
   const prompt = useComposerDraft(draftStore);
-  const draftScopeKey = draftStore.getScopeKey();
+  const draftScopeKey = useSyncExternalStore(draftStore.subscribe, draftStore.getScopeKey, draftStore.getScopeKey);
   const resourceSetup = useResourceSetupDraft(draftStore, draftScopeKey);
   const setScopedPrompt = useCallback(
     (value: Parameters<ComposerDraftStore["set"]>[0]) => {

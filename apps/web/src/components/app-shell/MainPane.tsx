@@ -156,6 +156,7 @@ export function MainPane({
   onPonderModeChange,
   experience,
   view,
+  resourceWorkspaceId,
   teamChat,
   community,
   bootstrap,
@@ -371,7 +372,7 @@ export function MainPane({
     bootstrap?.profileLibrary?.lastUsed ??
     null;
   const accountTeamScopeKey = mainPaneAccountScopeKey(bootstrap);
-  const experimentTeamId = bootstrap?.preferences.defaultTeamId ?? null;
+  const experimentTeamId = resourceWorkspaceId;
   const experimentAccount = bootstrap?.account;
   const experimentActorId = experimentAccount?.state === "signed_in" ? experimentAccount.profile?.id ?? null : null;
   const experimentApiUrl = experimentAccount?.apiBaseUrl;
@@ -1702,7 +1703,7 @@ export function MainPane({
                     );
                   },
                   preferences: trainingPreferences,
-                  settingsPreferences: appPreferences,
+                  workspaceTeamId: resourceWorkspaceId,
                   providerSettings: bootstrap?.providers ?? null,
                   reasoningEffort: codexReasoningEffort,
                   selectedTasksetId: activeTrainingTasksetId,

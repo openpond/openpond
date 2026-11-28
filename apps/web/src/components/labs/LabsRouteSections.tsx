@@ -24,6 +24,7 @@ import {
 } from "../icons";
 import { workproductKey, type LabWorkproductSummary } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { BaseModelIcon } from "./BaseModelIcon";
 import { HostedModelServeAction } from "./HostedModelServingSetup";
 import { DropdownSelect } from "../DropdownSelect";
 import type { WorkspaceApi } from "./workspace/workspace-api";
@@ -280,6 +281,7 @@ export function ModelsTable({
             const hosted = row.hosted;
             const project = (item ? localProjects.get(item.id) : null) ?? hosted?.project;
             const setup = project?.trainingSetup;
+            const baseModelId = setup?.baseModel?.modelId ?? project?.defaultBaseModel?.modelId;
             const versions = item ? labModelVersions(item, runs, state) : [];
             const current = versions.find((version) => version.current) ?? null;
             const configured = Boolean((setup?.baseModel ?? project?.defaultBaseModel) && setup?.method);
@@ -329,7 +331,7 @@ export function ModelsTable({
                     )}
                   </div>
                 </td>
-                <td>{setup?.baseModel?.modelId ?? project?.defaultBaseModel?.modelId ?? "Unspecified"}</td>
+                <td><span className="labs-base-model"><BaseModelIcon modelId={baseModelId} />{baseModelId ?? "Unspecified"}</span></td>
                 <td>{setup?.method?.toUpperCase() ?? "Unspecified"}</td>
                 <td>{setup?.recipe?.parameterization === "lora" ? "LoRA" : setup?.recipe?.parameterization === "full" ? "Full weights" : "Unspecified"}</td>
                 <td>

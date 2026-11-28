@@ -41,6 +41,7 @@ export type SidebarProps = {
   experience: Experience;
   view: AppView;
   modelProjects: TrainingNavigationResponse["projects"];
+  resourceWorkspaceId: string | null;
   modelTrainingActivityByProjectId: TrainingNavigationResponse["activityByProjectId"];
   selectedAppId: string | null;
   selectedProjectId: string | null;

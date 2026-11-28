@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useHostedExecutionClient } from "./use-hosted-execution-client";
 import { ActivationExperimentAccountSchema } from "@openpond/contracts";
 import {
   parseAndVerifyManagedModificationCompilation,
@@ -12,7 +12,7 @@ import {
   type ManagedModificationExecutionListQuery,
 } from "openpond-sdk/training";
 import { apiFetch } from "../../../api/api-client";
-import type { WorkspaceApi, Inventory } from "./workspace-api";
+import type { WorkspaceApi } from "./workspace-api";
 
 export function managedModificationApi(api: WorkspaceApi, apiOrigin: string) {
   const account = ActivationExperimentAccountSchema.parse({
@@ -85,14 +85,5 @@ export function managedModificationApi(api: WorkspaceApi, apiOrigin: string) {
 }
 
 export function useManagedModificationClient(api: WorkspaceApi, enabled = true) {
-  return useQuery({
-    queryKey: ["activation-experiment-account", api.key, api.actorId],
-    enabled: enabled && api.location === "hosted" && Boolean(api.actorId),
-    retry: false,
-    queryFn: async ({ signal }) => {
-      const value = await api.request<Inventory>("inventory", {}, signal);
-      if (value.teamId !== api.teamId) throw new Error("The workspace account changed.");
-      return managedModificationApi(api, value.apiOrigin);
-    },
-  });
+  return useHostedExecutionClient(api, enabled, managedModificationApi);
 }

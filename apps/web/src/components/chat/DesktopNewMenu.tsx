@@ -22,8 +22,8 @@ const entries = [
 
 export function DesktopNewResourceButton({ kind }: { kind: SessionResourceDraftKind }) {
   const action = useContext(DesktopNewContext);
-  return action ? <button type="button" className="training-button" disabled={action.busy}
-    onClick={() => action.create(kind)}>New {kind}</button> : null;
+  return action ? <button type="button" className="training-button desktop-new-button" disabled={action.busy}
+    onClick={() => action.create(kind)}>{action.busy ? "Opening…" : `New ${kind}`}</button> : null;
 }
 
 export function DesktopNewMenu({ sidebar = false }: { sidebar?: boolean }) {
@@ -32,9 +32,10 @@ export function DesktopNewMenu({ sidebar = false }: { sidebar?: boolean }) {
   const popover = useRef<HTMLDivElement>(null);
   if (!action) return null;
   return <div className={sidebar ? "desktop-new sidebar-desktop-new" : "desktop-new"}>
-    <button type="button" className={sidebar ? "sidebar-row desktop-new-trigger" : "training-button desktop-new-trigger"}
+    <button type="button" className="training-button desktop-new-button desktop-new-trigger"
       popoverTarget={id} disabled={action.busy}>
-      <Plus aria-hidden="true" size={15} /> <span>New</span> <ChevronDown aria-hidden="true" size={13} />
+      <span className="desktop-new-caption"><Plus aria-hidden="true" size={15} />{action.busy ? "Opening…" : "New"}</span>
+      <ChevronDown className="desktop-new-caret" aria-hidden="true" size={13} />
     </button>
     <div id={id} ref={popover} popover="auto" className="desktop-new-popover" role="group" aria-label="Create new">
       {/* Keep the trigger focused through pointer selection so the sidebar menu stays anchored. */}

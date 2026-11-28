@@ -382,13 +382,14 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         }
       }
     },
-    openHostedModelProject: async (hostedProjectId: string, teamId: string, apiOrigin: string, options: { silent?: boolean } = {}) => {
+    openHostedModelProject: async (hostedProjectId: string, teamId: string, apiOrigin: string, options: { silent?: boolean; includeHistory?: boolean } = {}) => {
       if (!connection) return null;
       const key = `open-hosted-model-project:${hostedProjectId}`;
       if (!options.silent) setBusyAction(key);
       try {
-        const result = await api.trainingRequest<{ project: ModelProject; importedJobCount: number; importedMetricCount: number }>(connection,
-          `/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/open`, { profileId, teamId, apiOrigin }, "POST");
+        const result = await api.trainingRequest<{ project: ModelProject; importedJobCount: number; importedMetricCount: number; unavailableHistoryCount?: number }>(connection,
+          `/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/open`,
+          { profileId, teamId, apiOrigin, includeHistory: options.includeHistory === true }, "POST");
         const opened = ModelProjectSchema.parse(result.project);
         if (opened.hosted?.projectId !== hostedProjectId || opened.hosted.teamId !== teamId
           || opened.hosted.apiOrigin !== new URL(apiOrigin).origin) throw new Error("The opened Model belongs to another workspace.");
@@ -406,7 +407,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         return null;
       } finally { if (!options.silent) setBusyAction(current => current === key ? null : current); }
     },
-    pullHostedModelProject: (hostedProjectId: string) =>
+    pullHostedModelProject: (hostedProjectId: string, options: { includeHistory?: boolean } = {}) =>
       mutate<{
         project: ModelProject;
         hosted: PublicHostedModelProjectDetail;
@@ -415,7 +416,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       }>(
         `pull-hosted-model-project:${hostedProjectId}`,
         `/hosted-model-projects/${encodeURIComponent(hostedProjectId)}/pull`,
-        { profileId },
+        { profileId, includeHistory: options.includeHistory !== false },
       ),
     syncModelProject: (modelId: string) =>
       mutate<ModelProject>(

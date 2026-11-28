@@ -109,6 +109,7 @@ export function SidebarSectionList({
   account,
   connection,
   modelProjects,
+  resourceWorkspaceId,
   modelTrainingActivityByProjectId,
   teamChatEnabled,
   teamChatOrganization,
@@ -344,8 +345,8 @@ export function SidebarSectionList({
     [chatRowsVisibleCount, ordinaryFilteredTaskRows],
   );
   const { modelsById: modelChatsById, benchmarks, grouped: libraryChatIds } = useMemo(() => {
-    return sidebarResourceThreads(activeSessions, visibleTaskRows, modelProjects, hostedModelScope(account, selectedTeamId));
-  }, [account, activeSessions, visibleTaskRows, modelProjects, selectedTeamId]);
+    return sidebarResourceThreads(activeSessions, ordinaryFilteredTaskRows, modelProjects, hostedModelScope(account, resourceWorkspaceId));
+  }, [account, activeSessions, ordinaryFilteredTaskRows, modelProjects, resourceWorkspaceId]);
   const sidebarModels = modelProjects.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount));
   const visibleModelIds = new Set(sidebarModels.map(model => model.id));
   function openResourcePage(route: ModelsRoute) {
@@ -855,9 +856,9 @@ export function SidebarSectionList({
       </div>
       <DesktopNewMenu sidebar />
       {onOpenPonder ? (
-        <button type="button" className="sidebar-row sidebar-task-row sidebar-ponder-entry" onClick={onOpenPonder}>
+        <button type="button" className="sidebar-row sidebar-ponder-entry" onClick={onOpenPonder}>
           <span className="conversation-source-icon" aria-hidden="true"><img src={OPENPOND_ICON_URL} alt="" /></span>
-          <span>Pal</span>
+          <span>Your pal</span>
         </button>
       ) : null}
       {visiblePinnedRows.length > 0 || pinnedWorkflowRows.length > 0 ? (
@@ -866,14 +867,6 @@ export function SidebarSectionList({
           {renderWorkflowGroups(pinnedWorkflowRows)}
         </div>
       ) : null}
-      {inboxView ? <SidebarInbox rows={inboxRows} count={chatRowsVisibleCount} setCount={setChatRowsVisibleCount}
-        selectedSessionId={selectedSessionId}
-        emptyLabel={visiblePinnedRows.length === 0 && pinnedWorkflowRows.length === 0 ? sidebarTaskEmptyLabel(taskFilter, taskNoun) : null}
-        renderWorkflow={workflow => renderWorkflowGroups([workflow])}
-        renderSession={session => renderTaskSession(session, { projectLabel: sidebarProjectIdBySessionId[session.id] || trainingSessionIds.has(session.id) ? projectLabelForSession(session) : null })}
-      /> : <>
-      {renderWorkflowGroups(workflowRows.filter(row => !row.pinned))}
-      {groupedTaskRows.filter(group => group.key === "training").map(renderTaskGroup)}
       {(["model", "benchmark"] as const).map(kind => {
         const isModels = kind === "model";
         const page = isModels ? modelsLocation("models") : modelsLocation("experiments", null, { area: "console" });
@@ -887,19 +880,27 @@ export function SidebarSectionList({
               return <SidebarModelResource key={model.id} model={model}
                 activity={modelTrainingActivityByProjectId[model.id]} connection={connection}
                 actorId={account?.state === "signed_in" ? account.profile?.id ?? null : null}
-                apiBaseUrl={account?.apiBaseUrl ?? null} activeTeamId={selectedTeamId}
+                apiBaseUrl={account?.apiBaseUrl ?? null} activeTeamId={resourceWorkspaceId}
                 onOpen={() => openResourcePage(modelsLocation("models", model.id))}
                 onOpenLearning={() => openResourcePage(modelsLocation("models", model.id, { detailTab: "learning" }))}
                 onOpenRuns={resourceId => openResourcePage(modelsLocation("runs", model.id, { area: "console", resourceId }))}>
-                {chats?.map(session => renderTaskSession(session))}
+                {chats?.slice(0, chatRowsVisibleCount).map(session => renderTaskSession(session))}
               </SidebarModelResource>;
             })}
             {[...modelChatsById].filter(([id]) => !visibleModelIds.has(id))
               .flatMap(([, chats]) => chats.map(session => renderTaskSession(session)))}
-          </> : [...benchmarks.values()].map(({ owner, name, chats }) => <SidebarResourceRow key={owner.id} name={name}
-            onOpen={() => selectSession(owner)}>{chats.map(session => renderTaskSession(session))}</SidebarResourceRow>)}
+          </> : [...benchmarks.values()].slice(0, chatRowsVisibleCount).map(({ owner, name, chats }) => <SidebarResourceRow key={owner.id} name={name}
+            onOpen={() => selectSession(owner)}>{chats.slice(0, chatRowsVisibleCount).map(session => renderTaskSession(session))}</SidebarResourceRow>)}
         </SidebarSection>;
       })}
+      {inboxView ? <SidebarInbox rows={inboxRows} count={chatRowsVisibleCount} setCount={setChatRowsVisibleCount}
+        selectedSessionId={selectedSessionId}
+        emptyLabel={visiblePinnedRows.length === 0 && pinnedWorkflowRows.length === 0 ? sidebarTaskEmptyLabel(taskFilter, taskNoun) : null}
+        renderWorkflow={workflow => renderWorkflowGroups([workflow])}
+        renderSession={session => renderTaskSession(session, { projectLabel: sidebarProjectIdBySessionId[session.id] || trainingSessionIds.has(session.id) ? projectLabelForSession(session) : null })}
+      /> : <>
+      {renderWorkflowGroups(workflowRows.filter(row => !row.pinned))}
+      {groupedTaskRows.filter(group => group.key === "training").map(renderTaskGroup)}
       <SidebarSection
         label="Projects"
         className="sidebar-projects-section development"

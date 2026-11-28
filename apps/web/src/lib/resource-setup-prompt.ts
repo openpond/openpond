@@ -2,7 +2,7 @@ import type { BenchmarkModelVersion, ResourceSetupDraft } from "@openpond/contra
 import { LocalSftReviewRequestSchema, ownsHostedBenchmarkVersion } from "@openpond/contracts/resource-setup";
 import type { ChatContextSelection, ModelProject } from "@openpond/contracts";
 import { createModelTrainingRecipeDefaults } from "openpond-sdk/model-starters";
-import { canonicalJson, decisionSourcePreference, WEIGHT_SPACE_CHECKPOINT } from "openpond-sdk/training";
+import { canonicalJson, DECISION_BACKBONE_REPOSITORY, decisionSourcePreference, WEIGHT_SPACE_CHECKPOINT } from "openpond-sdk/training";
 export { ResourceSetupDraftSchema, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 
 export type ResourceSetupField = keyof ResourceSetupDraft["values"];
@@ -159,7 +159,8 @@ export function newResourceSetup(kind: ResourceSetupDraft["kind"]): ResourceSetu
   return {
     kind,
     revision: 1,
-    values: kind === "dataset" ? { destination: "This device" } : {},
+    values: kind === "model" ? { baseModel: DECISION_BACKBONE_REPOSITORY }
+      : kind === "dataset" ? { destination: "This device" } : {},
   };
 }
 
@@ -167,7 +168,7 @@ export function selectModelSetupMethod(draft: ResourceSetupDraft, method: Resour
   const adapter = method === "SFT" || method === "GRPO" ? "LoRA" as const : undefined;
   const destination = method !== "SFT" && draft.values.destination === "This device" ? undefined : draft.values.destination;
   if (draft.values.method === method && draft.values.adapter === adapter && draft.values.destination === destination) return draft;
-  return { ...draft, revision: draft.revision + 1, values: { ...draft.values, method, adapter, destination } };
+  return carryResourcePromptEdits(draft, { ...draft, revision: draft.revision + 1, values: { ...draft.values, method, adapter, destination } });
 }
 
 type PromptField = ResourceSetupField | "trainingSettings" | "evaluationSettings" | "saveDestination" | "preview"
@@ -177,10 +178,10 @@ export type ResourceSetupPart = string | { field: PromptField; placeholder: stri
 const field = (key: PromptField, placeholder: string): ResourceSetupPart => ({ field: key, placeholder });
 
 export function resourceSetupParts(draft: ResourceSetupDraft): ResourceSetupPart[] {
-  const name = field("name", `Name the ${draft.kind}`);
-  const objective = field("objective", "Choose an objective");
-  const dataset = field("dataset", "Choose a dataset revision");
-  const grader = field("grader", "Choose graders");
+  const name = field("name", `${draft.kind} name`);
+  const objective = field("objective", "an objective");
+  const dataset = field("dataset", "this dataset");
+  const grader = field("grader", "this grader");
   const destination = field("destination", "Choose where to run");
   switch (draft.kind) {
     case "chat":
@@ -188,19 +189,19 @@ export function resourceSetupParts(draft: ResourceSetupDraft): ResourceSetupPart
     case "model": {
       const method = draft.values.method;
       if (isWeightSpaceSetup(draft)) return [
-        "Set up ", name, " for ", objective, " using ", field("baseModel", "Choose an exact editing checkpoint"),
+        "Set up ", name, " for ", objective, " using ", field("baseModel", "Model"),
         " with ", field("method", "Choose a training method"), ". Review ", field("weightSpacePanels", "Development and preservation prompts"),
         " and ", field("weightSpaceFrozen", "Optional frozen Dataset"), ". Use ", field("weightSpaceSettings", "Generation, limits, and budget"),
         ".", " Run on ", destination, ".",
       ];
       const adapter = method !== "Decision";
       return [
-        "Set up ", name, " for ", objective, " using ", field("baseModel", "Choose a starting model or checkpoint"),
+        "Set up ", name, " for ", objective, " using ", field("baseModel", "Model"),
         " with ", field("method", "Choose a training method"),
         ...(adapter ? [" and a ", field("adapter", "Choose an adapter"), " adapter"] : []), ".",
         ...(method === "Decision"
           ? [" Use ", field("dataset", "Choose a reviewed Decision batch"), ". Show me the plan with ", field("trainingSettings", "Decision training settings"), "."]
-          : [" Use ", dataset, " with ", field("grader", method === "GRPO" ? "Choose a reward grader" : "Choose a grader"), ".",
+          : [" Use ", dataset, " with ", grader, ".",
             " Show me the plan with ", field("trainingSettings", "Training settings"), " and ", field("learning", "Learning settings"), "."]),
         " Run on ", destination, ".",
       ];
@@ -270,24 +271,73 @@ export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetup
   if (field === "dataset" && draft.managedBenchmarkDataset)
     return `${draft.managedBenchmarkDataset.label} revision ${draft.managedBenchmarkDataset.release.revision}`;
   if (field === "dataset" && value && draft.values.datasetRevision) return `${value} revision ${draft.values.datasetRevision}`;
-  if (value === undefined && draft.kind === "model" && draft.values.method === "SFT") {
-    if (field === "dataset") return "GSM8K example";
-    if (field === "grader") return "Exact numeric answer example";
-  }
+  if (field === "baseModel" && value === undefined) return DECISION_BACKBONE_REPOSITORY;
   return value === undefined ? placeholder : String(value);
 }
 
+export type ResourcePromptBody = NonNullable<ResourceSetupDraft["promptBody"]>;
+
+function templateBody(draft: ResourceSetupDraft): ResourcePromptBody {
+  const body: ResourcePromptBody = [];
+  for (const part of resourceSetupParts(draft)) {
+    const last = body.length - 1;
+    if (typeof part !== "string") body.push({ field: part.field });
+    else if (typeof body[last] === "string") body[last] += part;
+    else body.push(part);
+  }
+  return body;
+}
+
+// Template controls can insert a comparison baseline or switch the training
+// recipe. Replace unchanged passages between surviving fields, preserving the
+// user's prose and deletions in the passages they edited.
+export function carryResourcePromptEdits(previous: ResourceSetupDraft, next: ResourceSetupDraft): ResourceSetupDraft {
+  const edited = previous.promptBody;
+  if (!edited || edited !== next.promptBody || previous.kind !== next.kind || (
+    previous.comparison === next.comparison && previous.values.method === next.values.method &&
+    previous.values.source === next.values.source && previous.benchmarkModelVersion?.location === next.benchmarkModelVersion?.location
+  )) return next;
+  const before = templateBody(previous);
+  const after = templateBody(next);
+  const result: ResourcePromptBody = [];
+  let beforeStart = 0, afterStart = 0, editedStart = 0;
+  function replacePassage(beforeEnd: number, afterEnd: number, editedEnd: number) {
+    const authored = edited!.slice(editedStart, editedEnd);
+    const unchanged = JSON.stringify(authored) === JSON.stringify(before.slice(beforeStart, beforeEnd));
+    result.push(...(unchanged ? after.slice(afterStart, afterEnd) : authored));
+  }
+  for (let index = 0; index < edited.length; index++) {
+    const part = edited[index];
+    if (typeof part === "string") continue;
+    const matches = (token: ResourcePromptBody[number]) => typeof token !== "string" && token.field === part.field;
+    const oldAnchor = before.findIndex((token, i) => i >= beforeStart && matches(token));
+    const newAnchor = after.findIndex((token, i) => i >= afterStart && matches(token));
+    if (oldAnchor < 0 || newAnchor < 0) continue;
+    replacePassage(oldAnchor, newAnchor, index);
+    result.push(part);
+    beforeStart = oldAnchor + 1;
+    afterStart = newAnchor + 1;
+    editedStart = index + 1;
+  }
+  replacePassage(before.length, after.length, edited.length);
+  return { ...next, promptBody: result };
+}
+
+export function editableResourceParts(draft: ResourceSetupDraft, instructions = ""): ResourceSetupPart[] {
+  const template = resourceSetupParts(draft);
+  const fields = new Map(template.flatMap(part => typeof part === "string" ? [] : [[part.field, part] as const]));
+  const body = draft.promptBody?.flatMap<ResourceSetupPart>(part =>
+    typeof part === "string" ? [part] : fields.has(part.field) ? [fields.get(part.field)!] : []) ?? template;
+  return instructions ? [...body, body.length ? "\n\n" : "", instructions] : body;
+}
+
 export function resourceSetupText(draft: ResourceSetupDraft): string {
-  const parts = resourceSetupParts(draft);
-  const destination = parts.findIndex(part => typeof part !== "string" && part.field === "destination");
-  const destinationStart = destination < 0 ? parts.length : destination - 1;
-  const stringify = (part: ResourceSetupPart) => {
+  const parts = editableResourceParts(draft);
+  const prompt = parts.map(part => {
     if (typeof part === "string") return part;
     const label = resourceSetupLabel(part, draft);
     return label === part.placeholder ? `[${label}]` : label;
-  };
-  const prompt = parts.slice(0, destinationStart).map(stringify).join("");
-  const execution = parts.slice(destinationStart).map(stringify).join("").trim();
+  }).join("");
   if (isWeightSpaceSetup(draft)) {
     const setup = draft.weightSpace;
     const managed = draft.values.destination === "OpenPond Managed" ? setup?.managed : undefined;
@@ -304,7 +354,7 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     const review = managed?.checkpoint
       ? "Use the existing OpenPond Weight-space workflow in the selected workspace. Check the exact checkpoint capability, show me the proposed editing plan and cost, and keep the preparation receipt in this chat. Ask for approval before starting the editing session."
       : "Help me review the proposed editing plan. Resolve any missing inputs with me before preparing a managed session and ask for approval before starting it.";
-    return [prompt, `Editing setup ${JSON.stringify(details)}.`, review, execution].filter(Boolean).join(" ");
+    return [prompt, `Editing setup ${JSON.stringify(details)}.`, review].filter(Boolean).join(" ");
   }
   const { split, epochs, learningRate, budget, samples, seed } = draft.values;
   const method = resourceSetupTrainingMethod(draft);
@@ -360,7 +410,7 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const recipeText = recipe ? `Use these training settings ${JSON.stringify(recipe)}.` : "";
   const systemInstructions = protocol?.systemInstructions?.trim()
     ? `Use these system instructions for the evaluated models ${JSON.stringify(protocol.systemInstructions)}.` : "";
-  return [prompt, settings.length ? `Use ${settings.join(", ")}.` : "", systemInstructions, recipeText, review, execution].filter(Boolean).join(" ");
+  return [prompt, settings.length ? `Use ${settings.join(", ")}.` : "", systemInstructions, recipeText, review].filter(Boolean).join(" ");
 }
 
 export function snapshotResourceSetup(
@@ -383,7 +433,7 @@ export function snapshotResourceSetup(
     selection.draft && selection.draftRevision &&
     (selection.benchmarkVersion?.location !== "cloud" || ownsHostedBenchmarkVersion(selection.benchmarkVersion, workspace))
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
-  const { datasetExamples: _localExamples, graderExamples: _localFixtures, managedGrader, datasetInputsDirty, trainingRecipes: _recipes,
+  const { promptBody: _promptBody, datasetExamples: _localExamples, graderExamples: _localFixtures, managedGrader, datasetInputsDirty, trainingRecipes: _recipes,
     weightSpace, managedTrainingInputs, ...setup } = draft;
   const method = resourceSetupTrainingMethod(draft);
   const selectedRecipe = selectedTrainingRecipe(draft, method);

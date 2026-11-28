@@ -51,12 +51,7 @@ export function LabModelsPage({
   state: TrainingStateResponse | null;
   training: ReturnType<typeof useTraining>;
   onCompare: () => void;
-  onPulled: (
-    projectId: string,
-    projectName: string,
-    importedJobCount: number,
-    importedMetricCount: number,
-  ) => void;
+  onPulled: (projectName: string) => void;
   onSelect: (key: string) => void;
   onOpenRun: (modelId: string, runKey: string) => void;
   onOpened: (id: string) => void;
@@ -190,14 +185,10 @@ export function LabModelsPage({
   ) {
     const result = await training.actions.pullHostedModelProject(
       item.project.id,
+      { includeHistory: false },
     );
     if (!result) return;
-    onPulled(
-      result.project.id,
-      result.project.name,
-      result.importedJobCount,
-      result.importedMetricCount,
-    );
+    onPulled(result.project.name);
     const catalog = await listHostedModelProjects({ silent: true });
     if (catalog && hostedScope && liveScope.current === hostedScope) setHostedResult({ scope: hostedScope, catalog });
   }

@@ -3,7 +3,7 @@ import { useToastPresentation } from "../hooks/useToastPresentation";
 import { useThreadNotifications } from "../hooks/useThreadNotifications";
 import { useThreadNotificationReveal } from "../hooks/useThreadNotificationReveal";
 import { connectionQueryScope } from "../lib/query-scope";
-import { hostedModelScope } from "../lib/hosted-model-scope";
+import { hostedModelScope, personalModelWorkspaceId } from "../lib/hosted-model-scope";
 import { sidebarActivityTimes, sidebarEventsBySession } from "../lib/sidebar-inbox";
 import { usePonderActivity } from "../components/ponder/usePonderActivity";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
@@ -417,6 +417,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const newResourceInFlight = useRef(false);
   const newResourceRequests = useRef(new Map<string, CreateSessionResourceDraftRequest>());
   const refreshTrainingNavigation = trainingNavigation.refetch;
+  const resourceWorkspaceId = appDefaults.defaultTeamId ?? personalModelWorkspaceId(organizations);
+  const hostedModels = hostedModelScope(bootstrap?.account, resourceWorkspaceId);
   const openHomeChat = useCallback(() => {
     setPonderMode(null);
     composerDraftStore.setResourceSetup("new-chat", () => null);
@@ -434,13 +436,14 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       showToast("Wait for OpenPond to connect before creating a draft.", "info");
       return;
     }
-    const startLocation = window.location.href;
+    const routePath = () => window.location.pathname + window.location.search;
+    const startLocation = routePath();
     const profileId = bootstrap.profile.activeProfile ?? "default";
     let source: CreateSessionResourceDraftRequest["benchmarkVersion"];
     if (candidate) {
       const { label: _label, ...version } = candidate;
       if (version.location === "cloud") {
-        const workspace = hostedModelScope(bootstrap.account, appDefaults.defaultTeamId);
+        const workspace = hostedModelScope(bootstrap.account, resourceWorkspaceId);
         if (!workspace?.actorId || workspace.teamId !== version.teamId) {
           showToast("Choose the OpenPond account and workspace that owns this saved Model.", "info");
           return;
@@ -482,10 +485,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         return { ...setup, benchmarkModelVersion: retainedSource, values: { ...setup.values, candidate: candidate?.label,
           ...(retainedSource.location === "cloud" ? { destination: "OpenPond Managed" as const } : {}) } };
       });
-      if (await openSessionInChat(session.id, undefined, () => window.location.href === startLocation || window.location.pathname === `/chat/${session.id}`, session)) {
+      if (await openSessionInChat(session.id, undefined, () => routePath() === startLocation || window.location.pathname === `/chat/${session.id}`, session)) {
         newResourceRequests.current.delete(operationKey);
         try { window.localStorage.removeItem(storageKey); } catch { /* The retained operation remains idempotent. */ }
         requestMainComposerFocus();
+      } else if (routePath() === startLocation) {
+        showToast("Draft saved. Choose New again to reopen it.", "info");
       }
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), "error");
@@ -493,9 +498,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       newResourceInFlight.current = false;
       setNewResourceBusy(false);
     }
-  }, [activeModel, activeProvider, appDefaults.defaultTeamId, bootstrap, composerDraftStore, connection, openHomeChat, openSessionInChat, refreshTrainingNavigation, requestMainComposerFocus, showToast]);
+  }, [activeModel, activeProvider, bootstrap, composerDraftStore, connection, openHomeChat, openSessionInChat, refreshTrainingNavigation, requestMainComposerFocus, resourceWorkspaceId, showToast]);
   const managedResourcesAvailable = bootstrap?.account.state === "signed_in";
-  const hostedModels = hostedModelScope(bootstrap?.account, appDefaults.defaultTeamId);
   const desktopNewAction = useMemo(() => ({
     busy: newResourceBusy, create: createDesktopResource, managedAvailable: managedResourcesAvailable,
   }), [newResourceBusy, createDesktopResource, managedResourcesAvailable]);
@@ -1081,9 +1085,11 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           },
           productArea,
           modelProjects: (trainingNavigation.data?.projects ?? []).filter((project) =>
-            project.teamId === null || (hostedModels && project.teamId === hostedModels.teamId && project.apiOrigin === hostedModels.apiOrigin),
+            (!project.profileId || project.profileId === (bootstrap?.profile.activeProfile ?? "default")) &&
+            (project.teamId === null || (hostedModels && project.teamId === hostedModels.teamId && project.apiOrigin === hostedModels.apiOrigin)),
           ),
           modelTrainingActivityByProjectId: trainingNavigation.data?.activityByProjectId ?? {},
+          resourceWorkspaceId: hostedModels?.teamId ?? null,
           onProductAreaChange: changeProductArea,
           experience: activeExperience,
           view,
@@ -1273,6 +1279,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             ),
         }}
         mainPane={{
+          resourceWorkspaceId: hostedModels?.teamId ?? null,
           ponderNavigationVersion,
           ponderMode,
           onPonderModeChange: setPonderMode,

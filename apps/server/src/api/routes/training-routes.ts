@@ -17,7 +17,9 @@ import { handleLocalTrainingModelRoutes } from "./local-training-model-routes.js
 import { handleLocalSftReviewRoutes } from "./local-sft-review-routes.js";
 import { handleLocalAdapterPublicationRoutes } from "./local-adapter-publication-routes.js";
 import { OpenPondExperimentError } from "openpond-sdk/experiments";
+import { DatasetWorkspaceRequestError } from "openpond-sdk/dataset-workspaces";
 import { OpenPondLearningError } from "openpond-sdk/learning";
+import { OpenPondTasksetCatalogError } from "openpond-sdk/taskset-catalog";
 import { OpenPondTrainingApiError } from "openpond-sdk/training";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -488,7 +490,8 @@ export async function handleTrainingRoutes({
           code: "evaluation_workspace_request_invalid",
           error: "The evaluation request does not match its contract.",
         });
-      else if (error instanceof OpenPondExperimentError || error instanceof OpenPondLearningError)
+      else if (error instanceof OpenPondExperimentError || error instanceof OpenPondLearningError ||
+        error instanceof DatasetWorkspaceRequestError || error instanceof OpenPondTasksetCatalogError)
         sendJson(response, error.status, { code: error.code, error: error.message });
       else throw error;
     }

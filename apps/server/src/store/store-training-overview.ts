@@ -48,6 +48,8 @@ export class SqliteTrainingOverviewStore extends SqliteStoreDomain {
     const [projects, runs, jobs, sources] = await Promise.all([
       this.all<TrainingNavigationResponse["projects"][number]>(
         `SELECT id, json_extract(payload, '$.name') AS name, profile_id AS profileId,
+          COALESCE(json_extract(payload, '$.trainingSetup.baseModel.modelId'),
+            json_extract(payload, '$.defaultBaseModel.modelId')) AS baseModelId,
           json_extract(payload, '$.hosted.teamId') AS teamId, json_extract(payload, '$.hosted.projectId') AS hostedProjectId,
           json_extract(payload, '$.hosted.apiOrigin') AS apiOrigin FROM model_projects ORDER BY updated_at DESC, id`,
       ),

@@ -105,7 +105,7 @@ import {
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
 import { useDesktopLogIssueAction } from "./DesktopLogIssueAction";
 import { ResourceSetupEditor } from "./ResourceSetupEditor";
-import { benchmarkAccountMessage, canSubmitBenchmarkSetup, snapshotResourceSetup } from "../../lib/resource-setup-prompt";
+import { benchmarkAccountMessage, canSubmitBenchmarkSetup, carryResourcePromptEdits, snapshotResourceSetup } from "../../lib/resource-setup-prompt";
 import {
   ComposerSkillMenu,
   type ComposerSkillMenuItem,
@@ -238,6 +238,7 @@ export function Composer({
   const composerRef = useRef<HTMLFormElement | null>(null);
   const inputShellRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<ComposerInlineInputHandle | null>(null);
+  const resourceEditorRef = useRef<HTMLDivElement | null>(null);
   const originDraftScopeKey = composerDraftStore?.getScopeKey();
   const voiceSubmitMode = useRef<{ channel: string; queue: boolean } | null>(null);
   const onVoiceInputActiveChange = useCallback((active: boolean) => {
@@ -402,7 +403,10 @@ export function Composer({
     selectedActionMentionText,
     selectedInvocationPosition,
   });
-  const hasComposerInput = Boolean(resourceSetup) || hasComposerSubmittableInput({
+  const editingResourceSetup = !running && !selectedAction && !selectedCommand && resourceSetup && originDraftScopeKey && composerDraftStore;
+  const hasSetupBody = resourceSetup && (!resourceSetup.promptBody || resourceSetup.promptBody.some(part =>
+    typeof part !== "string" || part.trim()));
+  const hasComposerInput = Boolean(editingResourceSetup && hasSetupBody) || hasComposerSubmittableInput({
     attachmentCount: attachments.length,
     prompt,
     selectedAction,
@@ -775,7 +779,8 @@ export function Composer({
       autoFocusAppliedRef.current = true;
       const focused = document.activeElement;
       if (focused && focused !== document.body && focused !== document.documentElement) return;
-      inputRef.current?.focusAtPromptIndex(prompt.length);
+      if (resourceEditorRef.current) resourceEditorRef.current.focus();
+      else inputRef.current?.focusAtPromptIndex(prompt.length);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [autoFocus, inputDisabled, prompt.length]);
@@ -788,8 +793,9 @@ export function Composer({
     )
       return;
     const frame = window.requestAnimationFrame(() => {
-      if (!inputRef.current?.element?.isConnected) return;
-      inputRef.current.focusAtPromptIndex(prompt.length);
+      if (resourceEditorRef.current) resourceEditorRef.current.focus();
+      else if (inputRef.current?.element?.isConnected) inputRef.current.focusAtPromptIndex(prompt.length);
+      else return;
       focusRequestAppliedRef.current = focusRequestId;
     });
     return () => window.cancelAnimationFrame(frame);
@@ -1747,23 +1753,31 @@ export function Composer({
           onCompositionStartCapture={nextStep.onCompositionStart}
           onCompositionEndCapture={nextStep.onCompositionEnd}
           onClick={(event) => {
-            if (event.target === event.currentTarget)
-              inputRef.current?.focusAtPromptIndex(cursorIndex);
+            if (event.target !== event.currentTarget) return;
+            if (resourceEditorRef.current) resourceEditorRef.current.focus();
+            else inputRef.current?.focusAtPromptIndex(cursorIndex);
           }}
         >
-          {resourceSetup && originDraftScopeKey && composerDraftStore ? <ResourceSetupEditor
+          {editingResourceSetup ? <ResourceSetupEditor
             key={originDraftScopeKey}
             draft={resourceSetup}
             configureTarget={configureSlot}
-            busy={busy || running}
+            editorRef={resourceEditorRef}
+            instructions={prompt}
+            onEditBody={promptBody => composerDraftStore.setResourceSetup(originDraftScopeKey, current =>
+              current === resourceSetup ? { ...current, promptBody, revision: current.revision + 1 } : current, prompt)}
+            onSubmit={queue => { if (!serializingAttachments) void submitComposer(queue); }}
+            onPasteFiles={addFiles}
+            busy={busy || serializingAttachments}
             connection={connection}
             datasets={chatResources.datasets}
             evaluationModels={chatResources.models}
             sessionId={taskSessionId ?? null} context={contextSelection}
             onAttachDataset={reference => chatResources.select("dataset", reference.id, reference.revision)}
-            onChange={(previous, next) => composerDraftStore.setResourceSetup(originDraftScopeKey, current => current === previous ? next : current)}
+            onChange={(previous, next) => composerDraftStore.setResourceSetup(originDraftScopeKey, current =>
+              current === previous ? carryResourcePromptEdits(previous, next) : current)}
             onRemove={() => composerDraftStore.setResourceSetup(originDraftScopeKey, () => null)}
-          /> : null}
+          /> : <>
           <ComposerNextStep next={nextStep} />
           <ComposerInlineInput
             ref={inputRef}
@@ -1888,13 +1902,14 @@ export function Composer({
               }
               setSelectedInvocationPosition(position);
             }}
-            placeholder={nextStep.suggestion ? "" : resourceSetup ? "Add instructions" : placeholder}
+            placeholder={nextStep.suggestion ? "" : placeholder}
             prompt={prompt}
             token={selectedInvocationToken}
           />
+          </>}
         </div>
         <ComposerPrimaryControls
-          configureSlotRef={resourceSetup ? setConfigureSlot : undefined}
+          configureSlotRef={editingResourceSetup ? setConfigureSlot : undefined}
           trainingControl={surface === "chat" && enableResourceContext && (mode !== "start" || !showProjectFooter) ? projectContext : null}
           surface={surface}
           teamUseModel={teamUseModel}

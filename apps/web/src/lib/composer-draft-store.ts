@@ -24,7 +24,7 @@ export type ComposerDraftStore = {
   getDecisionDraft: (scopeKey: string, modelId: string) => DecisionChatDraft | null;
   setDecisionDraftForScope: (scopeKey: string, modelId: string, value: DecisionChatDraft | null) => void;
   getResourceSetup(scopeKey: string): ResourceSetupDraft | null;
-  setResourceSetup(scopeKey: string, update: (current: ResourceSetupDraft | null) => ResourceSetupDraft | null): void;
+  setResourceSetup(scopeKey: string, update: (current: ResourceSetupDraft | null) => ResourceSetupDraft | null, consumePrompt?: string): void;
   subscribe: (listener: () => void) => () => void;
 };
 
@@ -76,8 +76,8 @@ export function createComposerDraftStore(
   let value = drafts.get(draftKey(selection)) ?? "";
   const listeners = new Set<() => void>();
 
-  const publish = (nextValue: string) => {
-    if (Object.is(value, nextValue)) return;
+  const publish = (nextValue: string, scopeChanged = false) => {
+    if (!scopeChanged && Object.is(value, nextValue)) return;
     value = nextValue;
     for (const listener of listeners) listener();
   };
@@ -91,6 +91,7 @@ export function createComposerDraftStore(
     options: { clear?: boolean; preserveCurrentDraft?: boolean } = {},
   ) => {
     const currentValue = value;
+    const currentKey = draftKey(selection);
     saveCurrent();
     selection = { ...selection, ...patch };
     const key = draftKey(selection);
@@ -98,10 +99,10 @@ export function createComposerDraftStore(
     if (options.preserveCurrentDraft) {
       if (currentValue) drafts.set(key, currentValue);
       else drafts.delete(key);
-      publish(currentValue);
+      publish(currentValue, currentKey !== key);
       return;
     }
-    publish(options.clear ? "" : (drafts.get(key) ?? ""));
+    publish(options.clear ? "" : (drafts.get(key) ?? ""), currentKey !== key);
   };
 
   const store: ComposerDraftStore = {
@@ -138,12 +139,18 @@ export function createComposerDraftStore(
       for (const listener of listeners) listener();
     },
     getResourceSetup: scopeKey => resourceSetups.get(scopeKey) ?? null,
-    setResourceSetup(scopeKey, update) {
+    setResourceSetup(scopeKey, update, consumePrompt) {
       const current = store.getResourceSetup(scopeKey);
       const next = update(current);
       if (current === next) return;
       if (next) resourceSetups.set(scopeKey, ResourceSetupDraftSchema.parse(next));
       else resourceSetups.delete(scopeKey);
+      // The resource body now contains the ordinary prompt. Consume both in one
+      // notification, keeping the attachments and resource contexts for this scope.
+      if (consumePrompt && (scopeKey === draftKey(selection) ? value : drafts.get(scopeKey)) === consumePrompt) {
+        drafts.delete(scopeKey);
+        if (scopeKey === draftKey(selection)) value = "";
+      }
       for (const listener of listeners) listener();
     },
     setForScope(scopeKey, next) {

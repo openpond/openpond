@@ -5,6 +5,23 @@ import { loadAuthenticatedOpenPondAccountContext, loadOpenPondAccountContext } f
 export function createCurrentWorkspaceIdentity(input: {
   defaultTeam(): Promise<string | null | undefined>;
 }) {
+  const personalReads = new Map<string, Promise<string | null>>();
+
+  async function personalTeam(apiBaseUrl: string, token: string): Promise<string | null> {
+    const key = JSON.stringify([apiBaseUrl, token]);
+    const pending = personalReads.get(key);
+    if (pending) return pending;
+    const request = createOpenPondSandboxClient({ apiKey: token, baseUrl: apiBaseUrl }).listOrganizations().then(organizations => {
+      const personal = organizations.filter(organization =>
+        organization.status === "active" && organization.role === "owner" &&
+        (organization.workspaceKind === "personal" || organization.kind === "personal_default" || organization.isPersonalDefault === true));
+      return personal.length === 1 ? personal[0].teamId?.trim() || null : null;
+    });
+    personalReads.set(key, request);
+    try { return await request; }
+    finally { personalReads.delete(key); }
+  }
+
   async function authenticatedAccount() {
     const context = await loadAuthenticatedOpenPondAccountContext();
     const actorId = context.accountState.profile?.id;
@@ -19,18 +36,7 @@ export function createCurrentWorkspaceIdentity(input: {
     const selectedTeam = (await input.defaultTeam())?.trim() || null;
     const { context, actorId, token } = await authenticatedAccount();
     const apiBaseUrl = context.apiBaseUrl;
-    let teamId = selectedTeam;
-    if (!teamId) {
-      const client = createOpenPondSandboxClient({ apiKey: token, baseUrl: apiBaseUrl });
-      const organizations = await client.listOrganizations();
-      const personal = organizations.filter((organization) =>
-        organization.status === "active" && organization.role === "owner" &&
-        (organization.workspaceKind === "personal" ||
-          organization.kind === "personal_default" ||
-          organization.isPersonalDefault === true)
-      );
-      teamId = personal.length === 1 ? personal[0].teamId?.trim() : null;
-    }
+    const teamId = selectedTeam ?? await personalTeam(apiBaseUrl, token);
     const [current, currentTeam] = await Promise.all([
       loadOpenPondAccountContext(),
       input.defaultTeam(),

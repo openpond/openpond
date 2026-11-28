@@ -738,6 +738,8 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     trainingService, conversationServingOwner, managedAdapterSyncService, managedAdapterChatRuntime,
     streamSelectedOpenPondChatTurn } = createManagedTrainingComposition({
       store, storeDir, resolveAccess: resolveHostedApiAccess,
+      resolveWorkspaceAccess: reviewIdentity.access,
+      resolveWorkspaceActor: reviewIdentity.actorId,
       account: async () => (await bootstrapPayload()).account,
       defaultTeam: async () => (await loadAppPreferences()).defaultTeamId,
       resolveReleasedHarness,
@@ -805,11 +807,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
     preferenceComparisons: preferenceComparisonService,
     modelProjectHosting,
     localAdapterPublication,
-    modelStarters: createModelStarterRuntime({ store, home: storeDir, resolveAccess: async () => {
-      const teamId = (await loadAppPreferences()).defaultTeamId?.trim();
-      if (!teamId) throw new Error("Select an OpenPond workspace to browse model starters.");
-      return { ...await resolveHostedApiAccess(), teamId };
-    } }),
+    modelStarters: createModelStarterRuntime({ store, home: storeDir, resolveAccess: reviewIdentity.access }),
     modelStream: trainingModelStream,
     judgeProvider: createLearningHostedJudgeProvider({ stream: streamOpenPondHostedChatTurn }),
   });

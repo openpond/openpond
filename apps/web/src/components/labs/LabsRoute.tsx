@@ -89,7 +89,7 @@ export function LabsRoute(props: LabsRouteProps) {
   const [startingRun, setStartingRun] = useState(false);
   const [runSetupError, setRunSetupError] = useState<unknown>(null);
   useErrorToast(runSetupError);
-  const workspaceKey = JSON.stringify([profileView.connection?.serverUrl ?? null, profileId, training.settingsPreferences.defaultTeamId ?? null, props.account?.apiBaseUrl ?? null, props.account?.activeProfile?.handle ?? null]);
+  const workspaceKey = JSON.stringify([profileView.connection?.serverUrl ?? null, profileId, training.workspaceTeamId ?? null, props.account?.apiBaseUrl ?? null, props.account?.activeProfile?.handle ?? null]);
   const launchScope = JSON.stringify([workspaceKey, route ? modelsPath(route) : null, Boolean(runTarget), runTarget ? selectedRunTarget : null]);
   const liveLaunchScope = useRef(launchScope);
   liveLaunchScope.current = launchScope;
@@ -99,7 +99,7 @@ export function LabsRoute(props: LabsRouteProps) {
   }, [launchScope]);
   // Packaged Desktop chooses a new local API port at launch. Catalog authority
   // is the hosted account/workspace, so its persisted key must survive that port.
-  const starterCacheScope = props.account?.state === "signed_in" ? JSON.stringify([props.account.apiBaseUrl, props.account.activeProfile?.handle ?? null, profileId, training.settingsPreferences.defaultTeamId ?? null]) : null;
+  const starterCacheScope = props.account?.state === "signed_in" ? JSON.stringify([props.account.apiBaseUrl, props.account.activeProfile?.handle ?? null, profileId, training.workspaceTeamId ?? null]) : null;
   const hostedResourceKey = JSON.stringify([workspaceKey, route?.area, route?.page, route?.resourceId]);
   const [hostedResourceTitle, setHostedResourceTitle] = useState<{ key: string; name: string | null } | null>(null);
   const reportHostedResourceName = useCallback((name: string | null) => setHostedResourceTitle(current => current?.key === hostedResourceKey && current.name === name ? current : { key: hostedResourceKey, name }), [hostedResourceKey]);
@@ -111,25 +111,28 @@ export function LabsRoute(props: LabsRouteProps) {
   useErrorToast(training.training.error);
   const workproducts = useMemo(() => labWorkproductProjection({ profile, training: state, runs: createImprove.runs }), [profile, state, createImprove.runs]);
   const models = useMemo(() => {
-    const workspace = hostedModelScope(props.account, training.settingsPreferences.defaultTeamId);
+    const workspace = hostedModelScope(props.account, training.workspaceTeamId);
     const ids = new Set((state?.modelProjects ?? []).filter((project) => project.profileId === profileId &&
       (project.hosted === null || (workspace && project.hosted.teamId === workspace.teamId && project.hosted.apiOrigin === workspace.apiOrigin))).map(project => project.id));
     return workproducts.filter((item) => item.kind === "model" && ids.has(item.id));
-  }, [state, profileId, training.settingsPreferences.defaultTeamId, props.account, workproducts]);
+  }, [state, profileId, training.workspaceTeamId, props.account, workproducts]);
   const selected = models.find((model) => model.id === route?.modelId) ?? null;
   const refreshModel = route?.resourceId
     ? models.find(model => model.id === modelResourceOwner(route, state)) ?? null
     : selected;
   const hostedRefreshError = useHostedModelRefresh(state?.modelProjects.find(model => model.id === refreshModel?.id) ?? null,
-    training.settingsPreferences.defaultTeamId ?? null, props.account?.apiBaseUrl ?? null, training.training);
+    training.workspaceTeamId ?? null, props.account?.apiBaseUrl ?? null, training.training);
   const modelRunSyncKey = useMemo(() => trainingModelRunSyncKey(state), [state]);
   const agentRunSyncKey = useMemo(() => computeProfileAgentRunSyncKey(createImprove.runs), [createImprove.runs]);
+  const agentRunSync = useRef({ workspaceKey, agentRunSyncKey });
   useEffect(() => {
-    if (!profileView.connection) return;
+    const previous = agentRunSync.current;
+    agentRunSync.current = { workspaceKey, agentRunSyncKey };
+    if (!profileView.connection || previous.workspaceKey !== workspaceKey || previous.agentRunSyncKey === agentRunSyncKey) return;
     let active = true;
     void api.bootstrap(profileView.connection).then((payload) => { if (active) profileView.onPayload(payload); }).catch((error: unknown) => { if (active) profileView.onError(error instanceof Error ? error.message : String(error)); });
     return () => { active = false; };
-  }, [profileView.connection, profileView.onPayload, profileView.onError, agentRunSyncKey]);
+  }, [profileView.connection, profileView.onPayload, profileView.onError, agentRunSyncKey, workspaceKey]);
   useEffect(() => { if (modelRunSyncKey) void createImprove.refresh(); }, [modelRunSyncKey, createImprove.refresh]);
   useEffect(() => {
     if (!workspaceReady) return;
@@ -143,7 +146,6 @@ export function LabsRoute(props: LabsRouteProps) {
     intakeDraft.current = null;
     intakeBusy.current = false;
     setRunTarget(null);
-    void navigateModelsRoute(modelsLocation(), "replace");
   }, [workspaceChanged, workspaceKey, workspaceReady]);
   useEffect(() => {
     props.onSkillSelectionChange(null);
@@ -253,7 +255,7 @@ export function LabsRoute(props: LabsRouteProps) {
   else if (route && ["runs", "versions"].includes(route.page) && route.resourceId && (!props.account || !profileView.payload || (!route.resourceId.startsWith("hosted-run:") && training.training.loading))) page = <p role="status">Loading training run…</p>;
   else if (!route) page = unavailable("This Models location is unavailable.");
   else if (route.page === "home") {
-    const teamId = training.settingsPreferences.defaultTeamId, actorId = props.account?.profile?.id;
+    const teamId = training.workspaceTeamId, actorId = props.account?.profile?.id;
     page = profileView.connection && teamId && actorId && props.account?.apiBaseUrl ? <ConnectedOverview key={workspaceKey} connection={profileView.connection} teamId={teamId} actorId={actorId} accountKey={workspaceKey} apiOrigin={props.account.apiBaseUrl} profileId={profileId} projectId={route.projectId ?? null}
       training={training.training} onNavigate={open} /> : (
       <main className="evaluation-workspace connected-overview">
@@ -268,10 +270,10 @@ export function LabsRoute(props: LabsRouteProps) {
       </main>
     );
   }
-  else if (route.page === "inbox") page = <InboxRoute connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} route={route} onNavigate={open} onSidebarControl={props.onEvaluationSidebarControl} />;
+  else if (route.page === "inbox") page = <InboxRoute connection={profileView.connection} teamId={training.workspaceTeamId ?? null} actorId={props.account?.profile?.id ?? null} route={route} onNavigate={open} onSidebarControl={props.onEvaluationSidebarControl} />;
   else if (["datasets", "graders", "experiments"].includes(route.page)) {
     const showLocalDrafts = route.page === "experiments" && !route.resourceId && !route.projectId && route.collection === "default";
-    const workspace = training.settingsPreferences.defaultTeamId;
+    const workspace = training.workspaceTeamId;
     const actorId = props.account?.profile?.id ?? null;
     const syncConnection = props.account?.state === "signed_in" ? profileView.connection : null;
     const localDrafts = showLocalDrafts ? <LocalBenchmarkDrafts sessions={props.resourceSessions}
@@ -292,24 +294,25 @@ export function LabsRoute(props: LabsRouteProps) {
       {localDrafts}
     </main> : <>
       <HostedEvaluationWorkspace key={workspaceKey} connection={profileView.connection} teamId={workspace ?? null} actorId={actorId}
-        accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`} route={route} onNavigate={open}
+        accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`} apiBaseUrl={props.account?.apiBaseUrl} route={route} onNavigate={open}
         onResourceName={reportHostedResourceName} onSidebarControl={props.onEvaluationSidebarControl}
         onLocalDatasets={() => open(modelsLocation("tasksets"))} onOpenWork={props.onOpenRunConversation} />
       {localDrafts}
     </>;
   }
-  else if (route.page === "runs" && isNativeTrainingResource(route.resourceId)) page = <HostedEvaluationWorkspace key={`${workspaceKey}:${route.modelId}`} connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`}
+  else if (route.page === "runs" && isNativeTrainingResource(route.resourceId)) page = <HostedEvaluationWorkspace key={`${workspaceKey}:${route.modelId}`} connection={profileView.connection} teamId={training.workspaceTeamId ?? null} actorId={props.account?.profile?.id ?? null} accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`}
+    apiBaseUrl={props.account?.apiBaseUrl}
     modelProjectId={state?.modelProjects.find(model => model.id === route.modelId)?.hosted?.projectId ?? null}
     route={{ ...route, page: "experiments", modelId: null, area: "console" }}
     onNavigate={next => open(next.page === "experiments" && (!next.resourceId || isNativeTrainingResource(next.resourceId)) ? { ...next, page: "runs", modelId: route.modelId, executionLocation: undefined } : next)}
     onResourceName={reportHostedResourceName} onSidebarControl={props.onEvaluationSidebarControl} onLocalDatasets={() => open(modelsLocation("tasksets"))} onOpenWork={props.onOpenRunConversation} />;
   else if (route.page === "runs" && route.resourceId?.startsWith("hosted-policy:")) {
-    const teamId=training.settingsPreferences.defaultTeamId,actorId=props.account?.profile?.id;
+    const teamId=training.workspaceTeamId,actorId=props.account?.profile?.id;
     page=profileView.connection&&teamId&&actorId?<HostedTrainingPolicyRoute key={`${workspaceKey}:${route.resourceId}`} connection={profileView.connection} teamId={teamId} actorId={actorId} projectId={route.projectId??null} policyId={route.resourceId.slice(14)}
       onOpenJob={id=>open(modelsLocation("runs",null,{resourceId:`hosted-run:${id}`,projectId:route.projectId}))} onOpenExperiment={id=>open(modelsLocation("experiments",null,{resourceId:id,projectId:route.projectId}))}/>:unavailable("Sign in and select a workspace to open this policy.");
   }
   else if (route.page === "runs" && route.resourceId?.startsWith("hosted-run:")) {
-    const teamId = training.settingsPreferences.defaultTeamId, actorId=props.account?.profile?.id;
+    const teamId = training.workspaceTeamId, actorId=props.account?.profile?.id;
     page = profileView.connection && teamId && actorId ? <HostedTrainingRunRoute key={`${workspaceKey}:${route.resourceId}`} connection={profileView.connection} teamId={teamId} actorId={actorId} projectId={route.projectId??null} jobId={route.resourceId.slice(11)} accountKey={workspaceKey} loadModel={async id => (await training.training.actions.pullHostedModelProject(id))?.project.id ?? null} diagnostics={route.detailTab==="diagnostics"} onDiagnostics={value=>open({...route,detailTab:value?"diagnostics":"details"})} onOpenExperiment={id => open(modelsLocation("experiments",null,{resourceId:id,projectId:route.projectId}))} /> : unavailable("Sign in and select a workspace to open this training run.");
   }
   else if (route.modelId && !state) page = <p role="status">Loading model…</p>;
@@ -358,7 +361,7 @@ export function LabsRoute(props: LabsRouteProps) {
       />}
     </>;
   } else if (route.page === "serving") {
-    page = <LabServingPage connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} accountKey={workspaceKey} training={training.training} modelProjectId={route.modelId} />;
+    page = <LabServingPage connection={profileView.connection} teamId={training.workspaceTeamId ?? null} actorId={props.account?.profile?.id ?? null} accountKey={workspaceKey} training={training.training} modelProjectId={route.modelId} />;
   } else if (route.page === "runs" && route.collection === "series") {
     page = <>
       <LabModelComparisonsPage connection={profileView.connection} state={scopedState} training={training.training} selectedSeriesId={route.resourceId} selectedEntryId={route.detailTab}
@@ -371,7 +374,7 @@ export function LabsRoute(props: LabsRouteProps) {
   } else if (route.page === "models" && !route.modelId) {
     page = <LabModelsPage activeProfileId={profileId} hostedScope={props.account?.state === "signed_in" ? `${props.account.apiBaseUrl}:${props.account.activeProfile?.handle}:${workspaceKey}` : null} hostedApiOrigin={props.account?.apiBaseUrl ?? null} items={models} loading={training.training.loading && !models.length} runs={createImprove.runs} state={state} training={training.training}
       connection={profileView.connection} actorId={props.account?.profile?.id ?? null}
-      onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={(_id, name, runCount) => toast(`${name} pulled with ${runCount} runs.`, "success")}
+      onCompare={() => open(modelsLocation("runs", null, { collection: "series" }))} onPulled={name => toast(`${name} pulled.`, "success")}
       onOpened={(id) => open(modelsLocation("models", id))}
       onOpenRun={(id, runKey) => open(modelsLocation("runs", id, { area: "console", resourceId: runKey }))}
       onSelect={(key) => { const model = models.find((model) => model.key === key); if (model) open(modelsLocation("models", model.id)); }} onUseModel={useModel} onConfigure={(id) => { setStarterPreview(null); setEditingModelId(id); setModelCreateOpen(true); }}

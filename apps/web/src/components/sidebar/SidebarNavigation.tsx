@@ -1,5 +1,8 @@
 import type { OpenPondApp } from "@openpond/contracts";
 import { SquarePen } from "../icons";
+import { BaseModelIcon } from "../labs/BaseModelIcon";
+import { SidebarModelControls } from "./SidebarModelResource";
+import type { SidebarProps } from "./Sidebar.types";
 import {
   modelsLocation,
   modelsPath,
@@ -87,14 +90,21 @@ function resourceDestinations(route: ModelsRoute) {
   return { kind: "Models", destinations };
 }
 
-export function SidebarNavigation({ modelProjects }: { modelProjects: { id: string; name: string }[] }) {
+export function SidebarNavigation({ modelProjects, connection, account, resourceWorkspaceId }: Pick<SidebarProps, "modelProjects" | "connection" | "account" | "resourceWorkspaceId">) {
   const route = useModelsRoute();
   if (!route || !hasResourceSidebar(route.page)) return null;
   const menu = resourceDestinations(route);
   if (!menu) return null;
-  const title = modelProjects.find(model => model.id === route.modelId)?.name ?? menu.kind;
+  const model = modelProjects?.find(project => project.id === route.modelId);
+  const title = model?.name ?? menu.kind;
   return <nav className="sidebar-nav sidebar-resource-nav" aria-label={`${menu.kind} navigation`}>
-    <div className="sidebar-nav-group-label" title={title}>{title}</div>
+    <div className="sidebar-nav-group-label sidebar-resource-title">
+      <BaseModelIcon modelId={model?.baseModelId} /><span title={title}>{title}</span>
+      {model ? <SidebarModelControls model={model} connection={connection}
+        actorId={account?.state === "signed_in" ? account.profile?.id ?? null : null}
+        apiBaseUrl={account?.apiBaseUrl ?? null} activeTeamId={resourceWorkspaceId}
+        onOpenLearning={() => void navigateModelsRoute(modelsLocation("models", model.id, { detailTab: "learning" }))} /> : null}
+    </div>
     {menu.destinations.map(({ label, target, active }) => <button key={modelsPath(target)}
       className={`nav-command${active ? " active" : ""}`} aria-current={active ? "page" : undefined}
       type="button" onClick={() => void navigateModelsRoute(target)}>{label}</button>)}

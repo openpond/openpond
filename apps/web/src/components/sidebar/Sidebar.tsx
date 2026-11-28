@@ -79,7 +79,8 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
       </div>
 
       <div className="sidebar-scroll">
-        {view === "labs" ? <SidebarNavigation modelProjects={modelProjects ?? []} /> : null}
+        {view === "labs" ? <SidebarNavigation modelProjects={modelProjects} connection={props.connection}
+          account={props.account} resourceWorkspaceId={props.resourceWorkspaceId} /> : null}
 
         {productArea !== "chat" || view !== "chat" ? null : (
           <SidebarSectionList

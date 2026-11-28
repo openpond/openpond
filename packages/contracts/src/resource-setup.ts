@@ -270,6 +270,11 @@ export const ResourceSetupDraftSchema = z.object({
   kind: z.enum(["chat", "model", "benchmark", "dataset", "grader"]),
   revision: z.number().int().positive(),
   comparison: z.boolean().optional(),
+  promptBody: z.array(z.union([
+    z.string(),
+    z.object({ field: z.enum([...valuesSchema.keyof().options, "trainingSettings", "evaluationSettings", "saveDestination",
+      "preview", "weightSpacePanels", "weightSpaceFrozen", "weightSpaceSettings"] as const) }),
+  ])).optional(),
   benchmarkDefinition: z.object({
     id: z.string().min(1).max(240),
     revision: z.number().int().positive(),

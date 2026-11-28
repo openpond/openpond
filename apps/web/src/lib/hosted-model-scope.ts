@@ -1,4 +1,12 @@
 import type { AccountState } from "@openpond/contracts";
+import type { OpenPondOrganization } from "./organization-types";
+
+export function personalModelWorkspaceId(organizations: readonly OpenPondOrganization[]) {
+  const personal = organizations.filter(organization =>
+    organization.status === "active" && organization.role === "owner" &&
+    (organization.workspaceKind === "personal" || organization.isPersonalDefault || organization.kind === "personal_default"));
+  return personal.length === 1 ? personal[0]?.teamId ?? null : null;
+}
 
 export function hostedModelScope(
   account: Pick<AccountState, "state" | "apiBaseUrl" | "profile"> | null | undefined,

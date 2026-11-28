@@ -1065,6 +1065,7 @@ export type TrainingNavigationResponse = {
   projects: Array<{
     id: string;
     name: string;
+    baseModelId?: string | null;
     profileId: string;
     teamId: string | null;
     hostedProjectId: string | null;
