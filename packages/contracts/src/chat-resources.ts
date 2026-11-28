@@ -243,6 +243,7 @@ export const LocalDatasetRequestSchema = z
       "related_chats",
       "list_graders",
       "read_grader",
+      "preview_grader",
       "save_grader",
       "test_grader",
       "publish",

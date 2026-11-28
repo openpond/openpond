@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ClientConnection } from "../../api/api-client";
-import { chatResourceRequest, type DatasetResponse } from "../../api/chat-resource-api";
+import {
+  chatResourceRequest,
+  type DatasetResponse,
+  publishLocalDatasetRevision,
+} from "../../api/chat-resource-api";
 import { useAppToast, useErrorToast } from "../../app/AppToastContext";
 import { connectionQueryScope } from "../../lib/query-scope";
 import type { ResourceSetupDraft } from "../../lib/resource-setup-prompt";
@@ -188,19 +192,7 @@ export function DatasetSetupReview({
 
   async function publish() {
     if (!connection || !reference || !managedAvailable) return;
-    const result = await chatResourceRequest<DatasetResponse>(connection, "dataset", {
-      action: "publish",
-      id: reference.id,
-      expectedRevision: reference.revision,
-    });
-    const link = result.record.sync;
-    if (
-      !link ||
-      link.status !== "synced" ||
-      link.publicationIntent ||
-      link.acknowledgedHash !== result.record.workspace.contentHash
-    )
-      throw new Error(link?.error ?? "The exact Dataset revision could not be published.");
+    await publishLocalDatasetRevision(connection, reference);
     showToast?.("Dataset published to the linked workspace.", "success");
   }
 

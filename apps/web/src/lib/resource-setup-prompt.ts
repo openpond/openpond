@@ -126,7 +126,7 @@ export function snapshotResourceSetup(
 ) {
   const benchmarkDefinition = draft.kind === "benchmark" && selection?.localDraft && selection.draft && selection.draftRevision
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
-  const { datasetExamples: _localExamples, datasetInputsDirty, ...setup } = draft;
+  const { datasetExamples: _localExamples, graderExamples: _localFixtures, datasetInputsDirty, ...setup } = draft;
   return {
     prompt: [resourceSetupText(draft), instructions].filter(Boolean).join("\n\n"),
     draft: { ...setup, ...(datasetInputsDirty ? { datasetRef: undefined } : {}), ...(benchmarkDefinition ? { benchmarkDefinition } : {}) },

@@ -1446,7 +1446,7 @@ export function Composer({
       );
       if (sent && setup && originDraftScopeKey) {
         composerDraftStore?.setResourceSetup(originDraftScopeKey, current =>
-          current === resourceSetup && !current?.datasetInputsDirty ? null : current);
+          current === resourceSetup && !current?.datasetInputsDirty && !current?.graderExamples ? null : current);
       }
       if (sent && resourceDrafts.current.get(submissionScope) === submissionContexts) resourceDrafts.current.delete(submissionScope);
       settleStagedAttachments(

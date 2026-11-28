@@ -4,6 +4,11 @@ import { newResourceSetup, type ResourceSetupDraft } from "../../lib/resource-se
 
 const GRADER_TYPES = [
   {
+    value: "exact_answer",
+    label: "Exact answer",
+    request: "Check the final answer against the selected Dataset task's expected text. Review a passing and a failing fixture before saving the Grader revision.",
+  },
+  {
     value: "model_judge",
     label: "LLM judge",
     request: "Create an LLM judge (model_judge) with an explicit rubric and passing and failing calibration examples. Ask for the judge model and a fixture-check spending limit if they are not already agreed.",
@@ -41,7 +46,8 @@ export function ChatGraderRequestPanel({ dataset, busy, onDraft }: {
   }
   return <div className="chat-grader-request">
     <div className="evaluation-dataset-choices chat-grader-type-choices" role="group" aria-label="Grader type">
-      {GRADER_TYPES.map(type => <button key={type.value} type="button" className="training-button secondary" disabled={busy || !dataset}
+      {GRADER_TYPES.map(type => <button key={type.value} type="button" className="training-button secondary"
+        disabled={busy || !dataset || type.value === "exact_answer" && Boolean(dataset.owner || dataset.profileRef || dataset.location === "cloud")}
         onClick={() => submit(type)}>{type.label}</button>)}
     </div>
     <div className="training-dialog-actions">

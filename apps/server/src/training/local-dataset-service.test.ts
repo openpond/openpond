@@ -177,6 +177,23 @@ test("individual grader checks retain exact sibling scopes and invalidate them a
     const edited=await check("second",2);
     expect(edited).toMatchObject({status:"unavailable",checked:2,total:4});
     expect(edited.scopes).toEqual(expect.arrayContaining([{graderId:"first",status:"unavailable",checked:0,total:2},{graderId:"second",status:"passed",checked:2,total:2}]));
+
+    const third = { ...graders[0], id: "third", label: "Exact answer", kind: "content",
+      config: { operator: "final_answer_equals_expected" } };
+    const ownFixtures = fixtures.slice(0, 2).map(fixture => ({ ...fixture, id: fixture.id.replace("first", "third") }));
+    const payload = { grader: third, fixtures: ownFixtures, fixtureScope: "grader" };
+    const preview = { action: "preview_grader", id, expectedRevision: 2, payload };
+    const before = await service.read(id);
+    expect(await service.request(preview)).toMatchObject({ grader: { graderId: "third", status: "passed", checked: 2, total: 2 } });
+    expect(await service.read(id)).toEqual(before);
+    await service.request({ ...preview, action: "save_grader", operationId: "save-previewed-grader" });
+    const saved = await service.read(id);
+    expect(saved.workspace.draft.revision).toBe(3);
+    expect(saved.workspace.draft.graders.map(grader => grader.id)).toEqual(["first", "second", "third"]);
+    expect(saved.workspace.draft.graderFixtures.slice(0, fixtures.length)).toEqual(before.workspace.draft.graderFixtures);
+    expect(saved.workspace.draft.graderFixtures.slice(fixtures.length).map(fixture => fixture.metadata.graderIds)).toEqual([["third"], ["third"]]);
+    expect(await service.read(id, 2)).toEqual(before);
+    await expect(service.request(preview)).rejects.toThrow("The Dataset changed");
   } finally {await store.close();await rm(home,{recursive:true,force:true});}
 });
 

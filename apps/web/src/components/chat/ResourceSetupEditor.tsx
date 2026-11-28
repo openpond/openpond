@@ -20,6 +20,7 @@ import { AppDialog } from "../dialogs/AppDialog";
 import { ChevronDown, SlidersHorizontal } from "../icons";
 import { DesktopNewContext } from "./DesktopNewMenu";
 import { DatasetSetupReview } from "./DatasetSetupReview";
+import { GraderSetupReview } from "./GraderSetupReview";
 import "./resource-setup-editor.css";
 
 type PromptField = Exclude<ResourceSetupPart, string>["field"];
@@ -39,7 +40,7 @@ const choices: Partial<Record<ResourceSetupField, readonly string[]>> = {
   learning: ["One-time training", "Configure continual learning"],
   source: ["Write examples", "Import a local file", "Use an existing dataset"],
   split: ["train", "validation", "test", "frozen_eval"],
-  graderType: ["Code grader", "LLM judge", "Human assessment", "Python correctness"],
+  graderType: ["Exact answer", "Code grader", "LLM judge", "Human assessment", "Python correctness"],
 };
 const decimalFields = new Set<ResourceSetupField>(["budget", "learningRate"]);
 const integerFields = new Set<ResourceSetupField>(["datasetRevision", "epochs", "samples", "seed"]);
@@ -107,6 +108,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       ...draft,
       revision: draft.revision + 1,
       datasetRef: reference && { id: reference.id, revision: reference.revision, contentHash: reference.evaluationHash ?? reference.contentHash },
+      ...(draft.kind === "grader" && reference?.id !== draft.datasetRef?.id ? { graderExamples: undefined } : {}),
       ...(draft.kind === "dataset" ? { datasetInputsDirty: false } : {}),
       values: { ...draft.values, dataset: reference?.name, datasetRevision: reference?.revision, grader: undefined },
     });
@@ -162,6 +164,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
         {activeFields.map((key, index) => {
           const options = fieldOptions(key);
           const label = field === "saveDestination" ? "Save to" : labels[key];
+          if (draft.kind === "grader" && draft.values.graderType === "Exact answer" && key === "cases") return null;
           if (draft.kind === "dataset" && (key === "fields" && draft.values.source === "Import a local file"
             || field === "preview" && draft.values.source === "Use an existing dataset")) return null;
           if (key === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") {
@@ -225,6 +228,9 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       </div> : null}
       {draft.kind === "dataset" && <DatasetSetupReview draft={draft} connection={connection}
         sessionId={datasetSessionId} busy={busy} managedAvailable={managedAvailable} activeField={field}
+        onChange={onChange} onAttach={onAttachDataset} onBusy={setAuthoringBusy} />}
+      {draft.kind === "grader" && draft.values.graderType === "Exact answer" && <GraderSetupReview
+        draft={draft} connection={connection} busy={busy} active={field === "cases"} managedAvailable={managedAvailable}
         onChange={onChange} onAttach={onAttachDataset} onBusy={setAuthoringBusy} />}
       <footer className="training-dialog-actions">
         <button type="button" className="training-button secondary" disabled={busy} onClick={onRemove}>Remove setup</button>

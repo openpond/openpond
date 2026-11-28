@@ -28,7 +28,7 @@ const valuesSchema = z.object({
   learning: z.enum(["One-time training", "Configure continual learning"]).optional(),
   destination: z.enum(["This device", "OpenPond Managed"]).optional(),
   source: z.enum(["Write examples", "Import a local file", "Use an existing dataset"]).optional(),
-  graderType: z.enum(["Code grader", "LLM judge", "Human assessment", "Python correctness"]).optional(),
+  graderType: z.enum(["Exact answer", "Code grader", "LLM judge", "Human assessment", "Python correctness"]).optional(),
   fields: fieldText,
   samples: z.number().int().min(1).max(100).optional(),
   epochs: positiveInteger,
@@ -58,6 +58,13 @@ export const ResourceSetupDraftSchema = z.object({
   localBaseline: localModelRef.optional(),
   datasetExamples: datasetExample.array().max(50).optional(),
   datasetInputsDirty: z.boolean().optional(),
+  graderExamples: z.object({
+    id: z.uuid(),
+    taskId: fieldText,
+    positive: fieldText,
+    negative: fieldText,
+    savedSetupRevision: positiveInteger,
+  }).strict().optional(),
   datasetRef: z.object({
     id: z.string().min(1).max(240),
     revision: z.number().int().positive(),

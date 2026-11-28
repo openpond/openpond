@@ -104,6 +104,7 @@ export function DatasetWorkspace({
         </div>
         <div className="dataset-workspace-actions dataset-workspace-header-actions">
           <button type="button" className="training-button secondary" disabled={!dataset} onClick={() => request("Run benchmark")}>Run benchmark</button>
+          <button type="button" className="training-button secondary" disabled={!dataset} onClick={() => request("Add grader")}>Add grader</button>
 
           <button
             type="button"
@@ -121,7 +122,7 @@ export function DatasetWorkspace({
         <ErrorToast error={resources.error} />
       ) : null}
       {!dataset ? (
-        <p>Choose an experiment, or create one from a dataset.</p>
+        <p>Choose a Benchmark or create one from a Dataset.</p>
       ) : (
         <>
           <p className="dataset-workspace-context"><span>Dataset:</span> {dataset.name}, revision {dataset.revision}</p>
@@ -135,7 +136,7 @@ export function DatasetWorkspace({
               onRefresh={() => void detail.refetch()}
             />
           ) : (
-            <p>Evaluate this experiment, or configure a training run below.</p>
+            <p>Evaluate this Benchmark or configure a training run below.</p>
           )}
           {collection.history.error ? (
             <ErrorToast error={collection.history.error.message}><button
