@@ -134,7 +134,7 @@ export function ConnectedOverview({
     setOpening(id);
     try {
       const result = await training.actions.openHostedModelProject(id, teamId, apiOrigin);
-      if (result && live.current) onNavigate(modelsLocation("runs", result.project.id, { area: "console" }));
+      if (result && live.current) onNavigate(modelsLocation("models", result.project.id));
     } finally {
       setOpening(null);
     }

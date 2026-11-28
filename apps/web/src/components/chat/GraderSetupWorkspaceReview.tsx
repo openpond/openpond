@@ -47,6 +47,7 @@ export default function GraderSetupWorkspaceReview({ connection, scope, method, 
     (authoring.resource && !verifiedDraft || published.resource && !verifiedRelease ? "The Grader differs from its saved revision." : null));
   return <AppDialog ariaLabel="Workspace Grader review" className="training-dialog" onClose={requestClose}>
     <h2>{method}</h2>
+    <div className="training-dialog-scroll-body">
     {valid ? <RewardEditor embedded closeRef={close} client={client} reward={verifiedRelease}
       authoringDraft={verifiedDraft} models={graderModels.data?.models ?? []} allowedKinds={[kindByMethod[method]]}
       initialFields={{
@@ -65,6 +66,7 @@ export default function GraderSetupWorkspaceReview({ connection, scope, method, 
       }}
       onClose={onClose} /> : loading ? <p role="status">Loading the Grader revision…</p>
       : <button type="button" className="training-button secondary" onClick={() => { authoring.refresh(); published.refresh(); }}>Retry Grader revision</button>}
+    </div>
     <footer className="training-dialog-actions">
       <button className="training-button secondary" type="button" onClick={requestClose}>Return to prompt</button>
     </footer>

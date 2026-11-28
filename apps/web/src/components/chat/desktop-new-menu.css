@@ -8,6 +8,7 @@
 }
 
 .desktop-new-trigger {
+  anchor-name: --desktop-new-trigger;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -16,7 +17,13 @@
   padding-inline: 12px;
 }
 
+.sidebar-desktop-new .desktop-new-trigger {
+  anchor-name: --desktop-sidebar-new-trigger;
+}
+
 .desktop-new-popover {
+  position: fixed;
+  position-anchor: --desktop-new-trigger;
   position-area: bottom span-right;
   position-try-fallbacks: flip-block, flip-inline;
   inset: auto;
@@ -27,6 +34,10 @@
   border-radius: 8px;
   background: var(--surface-raised);
   color: var(--text-primary);
+}
+
+.sidebar-desktop-new .desktop-new-popover {
+  position-anchor: --desktop-sidebar-new-trigger;
 }
 
 .desktop-new-popover button {

@@ -37,7 +37,9 @@ export function DesktopNewMenu({ sidebar = false }: { sidebar?: boolean }) {
       <Plus aria-hidden="true" size={15} /> <span>New</span> <ChevronDown aria-hidden="true" size={13} />
     </button>
     <div id={id} ref={popover} popover="auto" className="desktop-new-popover" role="group" aria-label="Create new">
-      {entries.map(({ kind, label, Icon }) => <button key={kind} type="button" onClick={() => {
+      {/* Keep the trigger focused through pointer selection so the sidebar menu stays anchored. */}
+      {entries.map(({ kind, label, Icon }) => <button key={kind} type="button"
+        onMouseDown={event => event.preventDefault()} onClick={() => {
         popover.current?.hidePopover();
         action.create(kind);
       }}>
