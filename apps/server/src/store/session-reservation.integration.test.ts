@@ -5,6 +5,7 @@ import path from "node:path";
 import { expect, it } from "vitest";
 import { createSessionStore } from "./session-store.js";
 import { SqliteStore } from "./store.js";
+import { createChatContextBrowser } from "../training/chat-context-browser.js";
 import { createSessionResourceDraft } from "../training/session-resource-draft.js";
 import { chatExperimentContext, createChatExperimentScopes } from "../training/chat-experiment-scope.js";
 import { canonicalSha256 } from "openpond-sdk/training";
@@ -52,13 +53,19 @@ it("recovers one reserved session across SQLite owners and process restart", asy
 it("recovers the same local Model, folder, and chat if creating the draft is retried", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "desktop-resource-draft-"));
   let store = new SqliteStore(directory);
+  const originalAccess = { actorId: "original-user", teamId: "team", token: "fixture", apiBaseUrl: "https://fixture.invalid/" };
+  let access = { ...originalAccess };
+  const loadAccess = async () => {
+    if (!access.token) throw new Error("Signed out");
+    return access;
+  };
   function createDraft(readHostedVersion?: NonNullable<Parameters<typeof createSessionResourceDraft>[0]["readHostedVersion"]>) {
     const { createReservedSession } = createSessionStore({
       store,
       defaultSessionCwd: () => directory,
       appendRuntimeEvent: async event => { await store.appendRuntimeEvent(event); },
     });
-    return createSessionResourceDraft({ storeDir: directory, store, createReservedSession, readHostedVersion });
+    return createSessionResourceDraft({ storeDir: directory, store, createReservedSession, readHostedVersion, access: loadAccess });
   }
   const request = { operationId: randomUUID(), kind: "model", provider: "codex", modelRef: null, profileId: "default" };
   try {
@@ -119,6 +126,32 @@ it("recovers the same local Model, folder, and chat if creating the draft is ret
     const pinned = chatExperimentContext(replay.metadata).scopes[0]!;
     expect(replay.cwd).toBe(exact.cwd);
     expect(pinned.draft?.startingModel).toMatchObject({ source: "trained", trainedVersion: version });
+    const browser = createChatContextBrowser({
+      store, access: loadAccess, resources: async () => [],
+      resource: async () => { throw new Error("Unexpected resource"); },
+      selectResource: async () => { throw new Error("Unexpected selection"); },
+      createExperiment: async () => { throw new Error("Unexpected experiment"); },
+    });
+    const catalogIncludes = async (sessionId: string) =>
+      (await browser.catalog(true, undefined, undefined, "local")).options.some(option => option.target.sessionId === sessionId);
+    const title = (await browser.current(exact.id))?.label;
+    expect(await catalogIncludes(exact.id)).toBe(true);
+    for (const switched of [
+      { actorId: "other-user" },
+      { apiBaseUrl: "https://other-fixture.invalid" },
+      { teamId: "other-team" },
+      { token: "" },
+    ]) {
+      access = { ...originalAccess, ...switched };
+      await expect(browser.current(exact.id)).rejects.toThrow("owns this Benchmark");
+      await expect(createDraft()(exactRequest)).rejects.toThrow("owns this Benchmark");
+      expect(await catalogIncludes(exact.id)).toBe(false);
+      expect(await catalogIncludes(benchmark.id)).toBe(true);
+    }
+    access = { ...originalAccess };
+    expect(await browser.current(exact.id)).toMatchObject({ label: title, benchmarkVersion: {
+      versionHash: version.contentHash, owner: { actorId: originalAccess.actorId, apiOrigin: "https://fixture.invalid" },
+    } });
     const { startingModel: _source, ...substitution } = pinned.draft!;
     await expect(scopes.saveLocalDraft(exact.id, pinned.id, { draft: substitution, operationId: randomUUID(), expectedRevision: 1 }))
       .rejects.toThrow("Keep the exact saved Model version");

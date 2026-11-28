@@ -1,5 +1,5 @@
 import type { BenchmarkModelVersion, ResourceSetupDraft } from "@openpond/contracts/resource-setup";
-import { LocalSftReviewRequestSchema } from "@openpond/contracts/resource-setup";
+import { LocalSftReviewRequestSchema, ownsHostedBenchmarkVersion } from "@openpond/contracts/resource-setup";
 import type { ChatContextSelection, ModelProject } from "@openpond/contracts";
 import { createModelTrainingRecipeDefaults } from "openpond-sdk/model-starters";
 import { canonicalJson } from "openpond-sdk/training";
@@ -8,17 +8,44 @@ export { ResourceSetupDraftSchema, type ResourceSetupDraft } from "@openpond/con
 export type ResourceSetupField = keyof ResourceSetupDraft["values"];
 export type ResourceSetupMethod = ResourceSetupDraft["values"]["method"];
 export type ResourceSetupCandidate = BenchmarkModelVersion & { label: string };
-export type ModelSetupScope = { accountKey: string; teamId: string | null; actorId: string | null };
+export type ModelSetupScope = { accountKey: string; teamId: string | null; actorId: string | null; apiOrigin?: string | null };
+export const benchmarkAccountMessage = "Choose the OpenPond account and workspace that owns this Benchmark.";
 
-export function scopeManagedSetup(draft: ResourceSetupDraft, scope: ModelSetupScope | null) {
+function scopedBenchmarkVersion(
+  version: BenchmarkModelVersion | undefined,
+  scope: ModelSetupScope | null,
+  selection?: ChatContextSelection | null,
+  sessionId?: string | null,
+) {
+  if (version?.location !== "cloud" || ownsHostedBenchmarkVersion(version, scope)) return version;
+  const verified = selection?.benchmarkVersion;
+  if (!version.owner && sessionId && selection?.target.sessionId === sessionId &&
+    verified?.location === "cloud" && ownsHostedBenchmarkVersion(verified, scope) &&
+    verified.teamId === version.teamId && verified.modelProjectId === version.modelProjectId &&
+    verified.jobId === version.jobId && verified.versionHash === version.versionHash) return verified;
+  return undefined;
+}
+
+export function canSubmitBenchmarkSetup(
+  draft: ResourceSetupDraft, workspace: ModelSetupScope | null,
+  selection: ChatContextSelection | null, sessionId: string | null,
+) {
+  return draft.benchmarkModelVersion?.location !== "cloud" ||
+    Boolean(scopedBenchmarkVersion(draft.benchmarkModelVersion, workspace, selection, sessionId));
+}
+
+export function scopeManagedSetup(
+  draft: ResourceSetupDraft, scope: ModelSetupScope | null, selection?: ChatContextSelection | null, sessionId?: string | null,
+) {
   const grader = draft.managedGrader;
   if (grader && (grader.accountKey !== scope?.accountKey || grader.teamId !== scope?.teamId ||
     grader.actorId !== scope?.actorId || grader.method !== draft.values.graderType)) {
     draft = { ...draft, managedGrader: undefined };
   }
-  if (draft.benchmarkModelVersion?.location === "cloud" &&
-    (draft.benchmarkModelVersion.teamId !== scope?.teamId || !scope?.actorId))
+  const version = scopedBenchmarkVersion(draft.benchmarkModelVersion, scope, selection, sessionId);
+  if (draft.benchmarkModelVersion && !version)
     return { ...draft, benchmarkModelVersion: undefined, values: { ...draft.values, candidate: undefined } };
+  if (version && version !== draft.benchmarkModelVersion) draft = { ...draft, benchmarkModelVersion: version };
   const managed = draft.managedTrainingInputs;
   if (!managed || draft.values.destination === "OpenPond Managed" && managed.accountKey === scope?.accountKey &&
     managed.teamId === scope?.teamId && managed.actorId === scope?.actorId) {
@@ -242,7 +269,7 @@ export function snapshotResourceSetup(
   workspace: ModelSetupScope | null,
   sessionId?: string | null,
 ) {
-  const scoped = scopeManagedSetup(original, workspace);
+  const scoped = scopeManagedSetup(original, workspace, selection, sessionId);
   const draft = { ...scoped, localSftApproval: retainedLocalSftApproval(original, sessionId),
     ...(scoped.kind === "benchmark" && !scoped.comparison ? {
       localBaseline: undefined,
@@ -250,7 +277,9 @@ export function snapshotResourceSetup(
       values: { ...scoped.values, baseline: undefined },
     } : {}),
   };
-  const benchmarkDefinition = draft.kind === "benchmark" && selection?.localDraft && selection.draft && selection.draftRevision
+  const benchmarkDefinition = draft.kind === "benchmark" && selection?.target.sessionId === sessionId && selection?.localDraft &&
+    selection.draft && selection.draftRevision &&
+    (selection.benchmarkVersion?.location !== "cloud" || ownsHostedBenchmarkVersion(selection.benchmarkVersion, workspace))
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
   const { datasetExamples: _localExamples, graderExamples: _localFixtures, managedGrader, datasetInputsDirty, trainingRecipes: _recipes, ...setup } = draft;
   const method = resourceSetupTrainingMethod(draft);

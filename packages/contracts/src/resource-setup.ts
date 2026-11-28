@@ -14,9 +14,18 @@ const LocalBenchmarkModelVersionSchema = z.object({
 export const BenchmarkModelVersionSchema = z.discriminatedUnion("location", [
   LocalBenchmarkModelVersionSchema,
   z.object({ location: z.literal("cloud"), modelProjectId: resourceId, jobId: resourceId,
-    teamId: resourceId, versionHash: artifactHash }).strict(),
+    teamId: resourceId, versionHash: artifactHash,
+    owner: z.object({ actorId: resourceId, apiOrigin: z.url() }).strict().optional() }).strict(),
 ]);
 export type BenchmarkModelVersion = z.infer<typeof BenchmarkModelVersionSchema>;
+type HostedBenchmarkVersion = Extract<BenchmarkModelVersion, { location: "cloud" }>;
+export function ownsHostedBenchmarkVersion(
+  version: HostedBenchmarkVersion,
+  scope: { teamId: string | null; actorId: string | null; apiOrigin?: string | null } | null | undefined,
+) {
+  return Boolean(version.owner && scope && version.teamId === scope.teamId &&
+    version.owner.actorId === scope.actorId && version.owner.apiOrigin === scope.apiOrigin);
+}
 export const LocalAdapterPublicationRequestSchema = z.object({
   profileId: resourceId, teamId: resourceId, actorId: resourceId, version: LocalBenchmarkModelVersionSchema,
 }).strict();

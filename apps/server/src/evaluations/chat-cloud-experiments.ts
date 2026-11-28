@@ -51,14 +51,16 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
   async function retain(pin:z.infer<typeof Pin>,datasetId:string,datasetRevision:number,details:ExperimentRunDetails, benchmark?:BenchmarkRunPin) {
     const record=Hosted.parse({pin,datasetId,datasetRevision,details,...(benchmark ? { benchmark } : {})});await deps.store.retainChatHostedExperiment(details.summary.id,contentHash(pin),details.configuration.configurationHash,record);return record;
   }
-  async function bindBenchmark(input:{sessionId:string;preparationId:string;revision:number;versionHash?:string;draft?:ExperimentDraft}) {
+  async function bindBenchmark(input:{sessionId:string;preparationId:string;revision:number;versionHash?:string;draft?:ExperimentDraft;owner?:z.infer<typeof Pin>}) {
     const operation=`benchmark-candidate:${input.preparationId}`;
     const previous=await deps.store.readChatExperimentGroup(operation);
     let recorded=previous ? CandidateBenchmark.parse(previous) : null;
     if(recorded && (recorded.sessionId!==input.sessionId || recorded.benchmark.revision!==input.revision ||
       input.versionHash && recorded.benchmark.modelVersion?.versionHash!==input.versionHash))
       throw new Error("This candidate is already bound to another Benchmark revision.");
-    const current=await access(recorded?.pin);
+    const current=await access(input.owner ?? recorded?.pin);
+    if (recorded && contentHash(recorded.pin) !== contentHash(current.pin))
+      throw new Error("This candidate preparation belongs to another workspace.");
     const headers=hostedApiAuthHeaders(current.token);
     headers.set("x-openpond-team-id",current.teamId);
     const candidate=createCandidateEvaluationClient(async (path,init)=>{
@@ -150,7 +152,15 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
     if(!runs.length)throw new Error(errors.map(error=>`${error.modelId}: ${error.message}`).join("\n"));
     return {runs,summaries,errors,maximumCostUsd:input.maximumCostUsd};
   }
-  async function list(){return (await deps.store.listChatHostedExperiments()).map(raw=>cloudExperimentSummary(Hosted.parse(raw)));}
+  async function list() {
+    const records = await deps.store.listChatHostedExperiments();
+    if (!records.length) return [];
+    const current = await access().catch(() => null);
+    if (!current) return [];
+    const scopeHash = contentHash(current.pin);
+    return records.map(raw => Hosted.parse(raw)).filter(record => contentHash(record.pin) === scopeHash)
+      .map(record => cloudExperimentSummary(record));
+  }
   async function benchmarkPin(id:string) {
     const raw=await deps.store.readChatHostedExperiment(id);
     if(!raw)return { benchmark:null, sessionId:null };
@@ -177,8 +187,8 @@ export function createChatCloudExperiments(deps:{store:SqliteStore;datasets:Retu
     await access(baseline.pin);
     return deps.store.listChatHostedBenchmarkPeers(id,contentHash(baseline.pin),baseline.benchmark);
   }
-  async function recoverBenchmark(input:{sessionId:string;revision:number;versionHash:string}) {
-    const current=await access();
+  async function recoverBenchmark(input:{sessionId:string;revision:number;versionHash:string;owner?:z.infer<typeof Pin>}) {
+    const current=await access(input.owner);
     const stored=await deps.store.findChatBenchmarkPreparation({ ...input, pin:current.pin });
     if(!stored)return { preparationId:null };
     const record=CandidateBenchmark.parse(stored.payload);

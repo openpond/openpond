@@ -9,11 +9,12 @@ import {
 } from "@openpond/contracts/requests";
 import { ModelProjectTrainingSetupSchema } from "openpond-sdk/model-projects";
 import { parseAndVerifySavedModelVersionRead, type ExperimentDraft } from "openpond-sdk/training";
-import type { BenchmarkModelVersion } from "@openpond/contracts/resource-setup";
+import { ownsHostedBenchmarkVersion, type BenchmarkModelVersion } from "@openpond/contracts/resource-setup";
 import type { Session } from "@openpond/contracts/sessions";
 import type { SqliteStore } from "../store/store.js";
 import type { ReservedSessionCreation } from "../store/session-store.js";
 import { chatExperimentContext, createChatExperimentScopes } from "./chat-experiment-scope.js";
+import { requireHostedBenchmarkAccess, type HostedBenchmarkAccess } from "./hosted-benchmark-access.js";
 
 const titles = {
   model: "New model",
@@ -26,6 +27,7 @@ export function createSessionResourceDraft(input: {
   storeDir: string;
   store: SqliteStore;
   createReservedSession: (payload: unknown, reservation: ReservedSessionCreation) => Promise<Session>;
+  access?: HostedBenchmarkAccess;
   readHostedVersion?: (source: Extract<BenchmarkModelVersion, { location: "cloud" }>) => Promise<unknown>;
 }) {
   const benchmarkScopes = createChatExperimentScopes(input.store);
@@ -45,6 +47,28 @@ export function createSessionResourceDraft(input: {
     const initialized = current && chatExperimentContext(current.metadata).scopes.some(scope => scope.draft?.id === resource.id);
     let startingModel: ExperimentDraft["startingModel"];
     const source = resource.benchmarkVersion;
+    if (source?.location === "cloud") {
+      if (!input.access) throw new Error("Saved Model versions are unavailable.");
+      const pin = SessionResourceDraftSchema.safeParse(current?.metadata?.resourceDraft).data?.benchmarkVersion;
+      const saved = pin?.location === "cloud" ? pin : undefined;
+      const access = await requireHostedBenchmarkAccess(saved ?? source, input.access);
+      if (source.teamId !== access.teamId || source.owner && !ownsHostedBenchmarkVersion(source, {
+        teamId: access.teamId, ...access.owner,
+      })) throw new Error("The active account changed. Reopen the saved Model version.");
+      resource.benchmarkVersion = !current ? { ...source, owner: access.owner } : saved;
+      if (!initialized || !saved?.owner) {
+        if (!input.readHostedVersion) throw new Error("Saved Model versions are unavailable.");
+        const { model, version } = await parseAndVerifySavedModelVersionRead(
+          await input.readHostedVersion(source), source.teamId, source.modelProjectId, source.versionHash,
+        );
+        const active = await requireHostedBenchmarkAccess({ ...source, owner: access.owner }, input.access);
+        if (active.token !== access.token) throw new Error("The active account changed. Reopen the saved Model version.");
+        if (version?.schemaVersion !== "openpond.trainingModelVersion.v1" || version.jobId !== source.jobId)
+          throw new Error("Choose an exact saved training version for this Benchmark.");
+        startingModel = { source: "trained", label: model.name, baseModel: version.request.baseModel,
+          inferenceModelId: null, trainedVersion: version };
+      }
+    }
     if (!initialized && source?.location === "local") {
       const [lineage, project] = await Promise.all([
         input.store.getModelArtifactLineage(source.versionId), input.store.getModelProject(source.projectId),
@@ -52,16 +76,6 @@ export function createSessionResourceDraft(input: {
       if (!project || project.profileId !== request.profileId || !lineage || lineage.modelId !== project.id ||
         lineage.status !== "imported" || lineage.artifactId !== source.artifactId || lineage.bundleHash !== source.bundleHash)
         throw new Error("This exact local Model version is unavailable.");
-    }
-    if (!initialized && source?.location === "cloud") {
-      if (!input.readHostedVersion) throw new Error("Saved Model versions are unavailable.");
-      const { model, version } = await parseAndVerifySavedModelVersionRead(
-        await input.readHostedVersion(source), source.teamId, source.modelProjectId, source.versionHash,
-      );
-      if (version?.schemaVersion !== "openpond.trainingModelVersion.v1" || version.jobId !== source.jobId)
-        throw new Error("Choose an exact saved training version for this Benchmark.");
-      startingModel = { source: "trained", label: model.name, baseModel: version.request.baseModel,
-        inferenceModelId: null, trainedVersion: version };
     }
     const title = titles[resource.kind];
     const ownsFolder = resource.kind === "model" || resource.kind === "benchmark";

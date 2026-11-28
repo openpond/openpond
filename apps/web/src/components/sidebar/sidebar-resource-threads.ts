@@ -1,17 +1,18 @@
 import { ChatContextTargetSchema, type Session, type TrainingNavigationResponse } from "@openpond/contracts";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
+import type { hostedModelScope } from "../../lib/hosted-model-scope";
 import { sessionBenchmarkDraft } from "../../lib/session-benchmark";
 
 export function sidebarResourceThreads(
   sessions: readonly Session[], visible: readonly Session[], models: TrainingNavigationResponse["projects"],
-  workspace: { apiOrigin: string; teamId: string } | null,
+  workspace: ReturnType<typeof hostedModelScope>,
 ) {
   const modelIds = new Set(models.map(model => model.id));
   const hostedIds = new Map(models.filter(model => workspace && model.hostedProjectId &&
     model.apiOrigin === workspace.apiOrigin && model.teamId === workspace.teamId)
     .map(model => [model.hostedProjectId!, model.id]));
   const drafts = new Map(sessions.flatMap(owner => {
-    const scope = sessionBenchmarkDraft(owner);
+    const scope = sessionBenchmarkDraft(owner, workspace);
     return scope ? [[owner.id, { owner, scope }] as const] : [];
   }));
   const modelsById = new Map<string, Session[]>();
@@ -39,7 +40,7 @@ export function sidebarResourceThreads(
     const attached = target?.kind === "experiment" && target.location === "local" && target.sessionId && target.id === target.scopeId
       ? drafts.get(target.sessionId) : undefined;
     const benchmarkOwners = new Map<string, { owner: Session; name: string }>();
-    if (draft?.kind === "benchmark") benchmarkOwners.set(session.id, { owner: session, name: drafts.get(session.id)?.scope.name ?? session.title });
+    if (draft?.kind === "benchmark" && (draft.benchmarkVersion?.location !== "cloud" || drafts.has(session.id))) benchmarkOwners.set(session.id, { owner: session, name: drafts.get(session.id)?.scope.name ?? session.title });
     if (attached && attached.scope.id === target?.scopeId)
       benchmarkOwners.set(attached.owner.id, { owner: attached.owner, name: attached.scope.name });
     for (const [ownerId, owner] of benchmarkOwners) {

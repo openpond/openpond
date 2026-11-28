@@ -69,6 +69,7 @@ export function publicSessionMetadata(
     ponderDesktopReservation: _reservation,
     ponderWorkspaceRevision: _workspace,
     remoteStarterSourceSessionId: _remoteStarter,
+    resourceDraft: _resourceDraft,
     ...ordinary
   } = metadata ?? {};
   return ordinary;
@@ -80,6 +81,7 @@ export function preserveDeviceSessionIdentity(
 ) {
   return {
     ...publicSessionMetadata(metadata),
+    ...(existing?.resourceDraft !== undefined ? { resourceDraft: existing.resourceDraft } : {}),
     ...(existing?.ponderLocalOwner !== undefined
       ? { ponderLocalOwner: existing.ponderLocalOwner }
       : {}),

@@ -1,5 +1,6 @@
 import { useContext, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ownsHostedBenchmarkVersion } from "@openpond/contracts/resource-setup";
 import type { ClientConnection } from "../../api";
 import { chatResourceRequest } from "../../api/chat-resource-api";
 import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
@@ -26,6 +27,12 @@ export function ChatExperimentEditor({ connection, context, onClose }: {
     ...scope, teamId: scope.teamId, actorId: scope.actorId, projectId: record?.projectId ?? null, executionLocation: location,
   }) : null, [connection, scope?.accountKey, scope?.teamId, scope?.actorId, record?.projectId, location]);
   if (!draft) return null;
+  const version = context.selection?.benchmarkVersion;
+  if (version?.location === "cloud" && !ownsHostedBenchmarkVersion(version, scope))
+    return <div className="chat-experiment-tool-content">
+      <p>Choose the OpenPond account and workspace that owns this Benchmark.</p>
+      <button type="button" className="training-button secondary" onClick={onClose}>Close editor</button>
+    </div>;
   if (context.selection?.benchmarkVersion?.location === "local" && context.selection.target.sessionId)
     return <div className="chat-experiment-tool-content">
       <LocalAdapterBenchmarkReview connection={connection} sessionId={context.selection.target.sessionId} />

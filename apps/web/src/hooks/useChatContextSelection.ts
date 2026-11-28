@@ -52,6 +52,7 @@ const subscribe = (listener: () => void) => { listeners.add(listener); return ()
 export function useChatContextSelection(connection: ClientConnection | null, sessionId: string | null, scopeOverride?: string): ChatContextSelectionState {
   const inheritedScope = useContext(ChatContextAccountScope);
   const workspace = useContext(ChatExperimentWorkspaceContext);
+  const hostedAvailable = Boolean(workspace?.actorId);
   const scope = `${connection ? connectionQueryScope(connection) : "disconnected"}:${scopeOverride ?? inheritedScope}`;
   const key = `${scope}:${sessionId ?? "new"}`;
   const activeKey = useRef(key); activeKey.current = key;
@@ -60,7 +61,7 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
   const staged = useSyncExternalStore(subscribe, () => selections.get(key), () => undefined);
   const selecting = useSyncExternalStore(subscribe, () => pending.has(key), () => false);
   const configureDraftId = useSyncExternalStore(subscribe, () => configureDrafts.get(key) ?? null, () => null);
-  const catalogPages = useInfiniteQuery({ queryKey: ["chat-context-catalog", "pages", scope, sessionId], enabled: Boolean(connection), staleTime: 30_000,
+  const catalogPages = useInfiniteQuery({ queryKey: ["chat-context-catalog", "pages", scope, sessionId], enabled: Boolean(connection && hostedAvailable), staleTime: 30_000,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page: { nextDraftCursor: string | null }) => page.nextDraftCursor ?? undefined,
     queryFn: async ({ signal, pageParam }) => {
@@ -70,7 +71,7 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
       return { ...result, options: ChatContextOptionSchema.array().parse(result.options) };
     } });
   function sourceQuery(source: "local" | "models") {
-    return { queryKey: ["chat-context-catalog", source, scope, source === "local" ? sessionId : null], enabled: Boolean(connection), staleTime: 30_000,
+    return { queryKey: ["chat-context-catalog", source, scope, source === "local" ? sessionId : null], enabled: Boolean(connection && (source === "local" || hostedAvailable)), staleTime: 30_000,
       queryFn: async ({ signal }: { signal: AbortSignal }) => {
         const result = await chatResourceRequest<ChatContextCatalogPage>(connection!, "dataset", {
           action: "context_catalog", payload: { source, ...(sessionId ? { sessionId } : {}) },
@@ -84,7 +85,7 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
     isPending: localCatalog.isPending,
     isFetching: localCatalog.isFetching || modelCatalog.isFetching || catalogPages.isFetching,
     error: localCatalog.error ?? modelCatalog.error ?? catalogPages.error,
-    refetch: () => Promise.all([localCatalog.refetch(), modelCatalog.refetch(), catalogPages.refetch()]),
+    refetch: () => Promise.all([localCatalog.refetch(), ...(hostedAvailable ? [modelCatalog.refetch(), catalogPages.refetch()] : [])]),
     data: useMemo(() => {
       const pages = [localCatalog.data, modelCatalog.data, ...(catalogPages.data?.pages ?? [])].filter(page => page !== undefined);
       return pages.length ? {

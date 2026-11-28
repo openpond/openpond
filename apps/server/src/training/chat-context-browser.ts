@@ -18,6 +18,8 @@ import { chatExperimentContext, chatResourceFocusKey as focusKey } from "./chat-
 import { readChatDecisionResult } from "./chat-decision-result.js";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import { createHash } from "node:crypto";
+import { ownsHostedBenchmarkVersion } from "@openpond/contracts/resource-setup";
+import { authorizeHostedBenchmarkVersion } from "./hosted-benchmark-access.js";
 
 type Access = { apiBaseUrl: string; token: string; teamId: string; actorId: string };
 type ModelSetupOwner = NonNullable<ChatExperimentScope["modelSetupOwner"]>;
@@ -66,19 +68,28 @@ export function createChatContextBrowser(deps: {
       target: { kind: "model", id: model.id, location: "local" }, label: model.name,
       detail: `Model, ${model.defaultBaseModel?.modelId ?? "Local"}`,
     });
+    const draftSessions = source === "all" || source === "local" ? await deps.store.sessionShells() : [];
+    const cloudDraftScope = draftSessions.some(owner =>
+      SessionResourceDraftSchema.safeParse(owner.metadata?.resourceDraft).data?.benchmarkVersion?.location === "cloud")
+      ? await deps.access().then(access => ({ ...access, apiOrigin: new URL(access.apiBaseUrl).origin })).catch(() => null)
+      : null;
     if (sessionId && (source === "all" || source === "local")) {
       const resource = SessionResourceDraftSchema.safeParse(session?.metadata?.resourceDraft).data;
-      for (const scope of scopes.filter(scope => !scope.model && !scope.modelSetupOwner && !scope.storedDraft &&
+      const version = resource?.benchmarkVersion;
+      const visible = version?.location !== "cloud" || ownsHostedBenchmarkVersion(version, cloudDraftScope);
+      for (const scope of scopes.filter(scope => (visible || scope.draft?.id !== resource?.id) && !scope.model && !scope.modelSetupOwner && !scope.storedDraft &&
         (scope.dataset || scope.draft) && (!scope.selectedRunId || resource?.kind === "benchmark" && resource.id === scope.draft?.id))) options.unshift({
         target: { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" },
         label: scope.name, detail: scope.draft ? `Draft, ${experimentOperationLabel(scope.draft.operationType)}` : `Draft, ${scope.dataset!.name}, revision ${scope.dataset!.revision}`,
       });
     }
     if (source === "all" || source === "local") {
-      for (const owner of await deps.store.sessionShells()) {
+      for (const owner of draftSessions) {
         if (owner.id === sessionId || owner.archived || owner.systemKind) continue;
         const resource = SessionResourceDraftSchema.safeParse(owner.metadata?.resourceDraft);
         if (!resource.success || resource.data.kind !== "benchmark") continue;
+        const version = resource.data.benchmarkVersion;
+        if (version?.location === "cloud" && !ownsHostedBenchmarkVersion(version, cloudDraftScope)) continue;
         const scope = chatExperimentContext(owner.metadata).scopes.find(item => item.draft?.id === resource.data.id);
         if (scope) options.push({
           target: { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId: owner.id, location: "local" },
@@ -110,7 +121,7 @@ export function createChatContextBrowser(deps: {
       const stored = await drafts.list(draftCursor);
       nextDraftCursor = stored.page.nextCursor;
       options.unshift(...storedOptions(stored.options));
-    } catch (cause) { warning = [warning, catalogFailure("Saved experiments", cause)].filter(Boolean).join(" "); }
+    } catch (cause) { warning = [warning, catalogFailure("Saved benchmarks", cause)].filter(Boolean).join(" "); }
     return { options, warning, nextDraftCursor };
   }
   async function modelProject(target: ChatContextTarget) {
@@ -194,8 +205,10 @@ export function createChatContextBrowser(deps: {
       }
       const library = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft);
       const localDraft = library.success && library.data.kind === "benchmark" && library.data.id === scope.draft?.id;
+      const pinnedVersion = localDraft ? library.data.benchmarkVersion : undefined;
+      const benchmarkVersion = pinnedVersion?.location === "cloud" ? await authorizeHostedBenchmarkVersion(pinnedVersion, deps.access) : pinnedVersion;
       const draftState = scope.draft ? { draft: scope.draft, draftRevision: scope.draftRevision ?? 1,
-        ...(localDraft ? { localDraft: true as const, ...(library.data.benchmarkVersion ? { benchmarkVersion: library.data.benchmarkVersion } : {}) } : {}) } : {};
+        ...(localDraft ? { localDraft: true as const, ...(benchmarkVersion ? { benchmarkVersion } : {}) } : {}) } : {};
       if (!scope.dataset) return { target, ...draftState, label: scope.name, detail: "Benchmark draft" };
       const resource = await deps.resource({ kind: "dataset", id: scope.dataset.id, revision: scope.dataset.revision, location: scope.dataset.location ?? "local" });
       if (resource.kind !== "dataset" || resource.id !== scope.dataset.id || resource.revision !== scope.dataset.revision ||

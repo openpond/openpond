@@ -4,6 +4,7 @@ import type { MainPaneProps } from "./main-pane-types";
 export function mainPaneAccountScopeKey(bootstrap: MainPaneProps["bootstrap"]) {
   return JSON.stringify({
     account: bootstrap?.account.activeProfile ?? null,
+    apiBaseUrl: bootstrap?.account.apiBaseUrl ?? null,
     baseUrl: bootstrap?.account.baseUrl ?? null,
     owner: bootstrap?.account.profile?.id ?? null,
     state: bootstrap?.account.state ?? null,

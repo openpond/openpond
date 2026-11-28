@@ -16,6 +16,7 @@ import {
   resourceSetupParts,
   resourceSetupTrainingMethod,
   scopeManagedSetup,
+  benchmarkAccountMessage,
   selectModelSetupMethod,
   ResourceSetupDraftSchema,
   type ResourceSetupDraft,
@@ -93,8 +94,9 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
 }) {
   const managedAvailable = useContext(DesktopNewContext)?.managedAvailable ?? false;
   const workspace = useContext(ChatExperimentWorkspaceContext);
-  const visibleDraft = scopeManagedSetup(draft, workspace);
-  const version = draft.benchmarkModelVersion;
+  const visibleDraft = scopeManagedSetup(draft, workspace, context.selection, sessionId);
+  const version = visibleDraft.benchmarkModelVersion;
+  const benchmarkUnavailable = draft.benchmarkModelVersion?.location === "cloud" && !version;
   const selectedVersion = context.selection?.benchmarkVersion;
   const openableVersion = version?.location === "cloud" && selectedVersion?.location === "cloud" &&
     version.versionHash === selectedVersion.versionHash && context.selection?.target.sessionId === sessionId;
@@ -134,7 +136,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     retry: false,
   });
   useErrorToast(starterDatasets.error);
-  const parts = resourceSetupParts(draft);
+  const parts = resourceSetupParts(visibleDraft);
   const localDatasets = (sessionId ? datasets : starterDatasets.data ?? []).filter(dataset => dataset.location !== "cloud");
   const localModels = evaluationModels.flatMap(model => model.providerId === "custom-openai-compatible" &&
     model.configurationHash && /^[a-f0-9]{64}$/.test(model.configurationHash)
@@ -212,7 +214,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     const options = choices[key];
     return options ? [{ value: "", label: "Choose later" }, ...options.map(value => ({ value, label: value }))] : null;
   }
-  const sentence = () => <div className="resource-setup-sentence">
+  const sentence = () => benchmarkUnavailable ? <p>{benchmarkAccountMessage}</p> : <div className="resource-setup-sentence">
     {parts.map((part, index) => typeof part === "string" ? part : <button key={index}
       className="resource-setup-pill" type="button" disabled={busy} aria-label={`Edit ${part.placeholder}`}
       data-active={configureOpen && part.field === field || undefined} onClick={() => showField(part.field)}>
@@ -226,7 +228,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   const reviewRequest = reviewInputs ? localSftReviewRequest(draft, sessionId) : null;
   const activeFields: readonly ResourceSetupField[] = trainingMethod
     ? ["budget"] : resourceSetupGroups[field] ?? [field as ResourceSetupField];
-  const benchmarkPresets = draft.kind === "benchmark" && version?.location !== "local" ? <div className="resource-setup-presets" role="group" aria-label="Benchmark presets">
+  const benchmarkPresets = draft.kind === "benchmark" && !benchmarkUnavailable && version?.location !== "local" ? <div className="resource-setup-presets" role="group" aria-label="Benchmark presets">
     {[{ compare: false, label: "Evaluate one model" }, { compare: true, label: "Compare models" }].map(({ compare, label }) =>
       <button type="button" className="training-button secondary" key={label} disabled={busy}
         aria-pressed={Boolean(draft.comparison) === compare}
@@ -235,13 +237,13 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   return <div className="resource-setup-editor">
     {benchmarkPresets}
     {sentence()}
-    <button type="button" className="training-text-button resource-setup-configure" disabled={busy} onClick={() => {
+    <button type="button" className="training-text-button resource-setup-configure" disabled={busy || benchmarkUnavailable} onClick={() => {
       setField(parts.find((part): part is Exclude<ResourceSetupPart, string> => typeof part !== "string")?.field ?? "name");
       setConfigureOpen(true);
     }}>
       <SlidersHorizontal size={13} aria-hidden="true" /> Configure
     </button>
-    {configureOpen ? <AppDialog ariaLabel="Configure prompt" className="training-dialog resource-setup-dialog" initialFocusKey={field}
+    {configureOpen && !benchmarkUnavailable ? <AppDialog ariaLabel="Configure prompt" className="training-dialog resource-setup-dialog" initialFocusKey={field}
       dismissDisabled={authoringBusy} onClose={() => setConfigureOpen(false)}>
       <h2>Configure prompt</h2>
       {sentence()}

@@ -372,10 +372,14 @@ export function MainPane({
     null;
   const accountTeamScopeKey = mainPaneAccountScopeKey(bootstrap);
   const experimentTeamId = bootstrap?.preferences.defaultTeamId ?? null;
-  const experimentActorId = bootstrap?.account.profile?.id ?? null;
+  const experimentAccount = bootstrap?.account;
+  const experimentActorId = experimentAccount?.state === "signed_in" ? experimentAccount.profile?.id ?? null : null;
+  const experimentApiUrl = experimentAccount?.apiBaseUrl;
+  const experimentApiOrigin = experimentActorId && experimentApiUrl && URL.canParse(experimentApiUrl) ? new URL(experimentApiUrl).origin : null;
   const experimentWebBaseUrl = bootstrap?.account.activeProfile?.baseUrl ?? bootstrap?.account.baseUrl ?? null;
   const experimentWorkspaceScope = useMemo(() => ({ accountKey: accountTeamScopeKey, teamId: experimentTeamId,
-    actorId: experimentActorId, webBaseUrl: experimentWebBaseUrl }), [accountTeamScopeKey, experimentTeamId, experimentActorId, experimentWebBaseUrl]);
+    actorId: experimentActorId, apiOrigin: experimentApiOrigin, webBaseUrl: experimentWebBaseUrl }),
+  [accountTeamScopeKey, experimentTeamId, experimentActorId, experimentApiOrigin, experimentWebBaseUrl]);
   const trainingLabel = useTrainingSidebarContext({ connection, sessionId: selectedSessionId, accountScope: accountTeamScopeKey,
     active: view === "chat", onOpen: onShowExperimentsPanel });
   const selectedProfileState =

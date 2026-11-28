@@ -273,7 +273,7 @@ export function LabsRoute(props: LabsRouteProps) {
     const actorId = props.account?.profile?.id ?? null;
     const syncConnection = props.account?.state === "signed_in" ? profileView.connection : null;
     const localDrafts = showLocalDrafts ? <LocalBenchmarkDrafts sessions={props.resourceSessions}
-      search={route.query} actorId={actorId} onOpen={props.onOpenResourceChat}
+      search={route.query} workspace={hostedModelScope(props.account, workspace)} onOpen={props.onOpenResourceChat}
       onSync={syncConnection ? async (sessionId, scopeId, revision) => {
         try {
           await chatResourceRequest(syncConnection, "dataset", { action: "context_sync_draft",

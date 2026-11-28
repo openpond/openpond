@@ -388,7 +388,7 @@ export function createTrainingApi(deps: TrainingApiDependencies) {
       if (policyTasks.length === 1) policyTasks.push({ ...policyTasks[0]! });
       const requestContent = {
         schemaVersion: "openpond.managedRlCalibrationBatchRequest.v1" as const,
-        name: `Calibration · ${taskset.name}`.slice(0, 191),
+        name: `Calibration for ${taskset.name}`.slice(0, 191),
         idempotencyKey: `openpond-calibration:${release.contentHash}:${contentHash([task.id, batchId])}`.slice(0, 191),
         taskId: task.id,
         tasks: policyTasks,

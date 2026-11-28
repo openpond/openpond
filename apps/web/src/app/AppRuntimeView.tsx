@@ -18,7 +18,7 @@ import {
   TerminalScope,
 } from "@openpond/contracts";
 import { api } from "../api";
-import { CreateSessionResourceDraftRequestSchema, type CreateSessionResourceDraftRequest } from "@openpond/contracts/requests";
+import { CreateSessionResourceDraftRequestSchema, SessionResourceDraftSchema, type CreateSessionResourceDraftRequest } from "@openpond/contracts/requests";
 import { DesktopNewContext, type DesktopNewKind } from "../components/chat/DesktopNewMenu";
 import { HostedModelServingStatusProvider } from "../components/labs/HostedModelServingStatus";
 import { newResourceSetup, type ResourceSetupCandidate } from "../lib/resource-setup-prompt";
@@ -432,7 +432,16 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     let source: CreateSessionResourceDraftRequest["benchmarkVersion"];
     if (candidate) {
       const { label: _label, ...version } = candidate;
-      source = version;
+      if (version.location === "cloud") {
+        const workspace = hostedModelScope(bootstrap.account, appDefaults.defaultTeamId);
+        if (!workspace?.actorId || workspace.teamId !== version.teamId) {
+          showToast("Choose the OpenPond account and workspace that owns this saved Model.", "info");
+          return;
+        }
+        source = { ...version, owner: { actorId: workspace.actorId, apiOrigin: workspace.apiOrigin } };
+      } else {
+        source = version;
+      }
     }
     const operationKey = JSON.stringify(source ? [profileId, kind, source] : [profileId, kind, null, null]);
     const storageKey = `openpond.resource-draft-creation.v1:${operationKey}`;
@@ -457,12 +466,13 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       newResourceRequests.current.set(operationKey, request);
       try { window.localStorage.setItem(storageKey, JSON.stringify(request)); } catch { /* In-flight requests remain available in this renderer. */ }
       const session = await api.createSessionResourceDraft(connection, request);
+      const retainedSource = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft).data?.benchmarkVersion;
       composerDraftStore.setResourceSetup(`session:${session.id}`, current => {
         if (current) return current;
         const setup = newResourceSetup(kind);
-        if (kind !== "benchmark" || !source) return setup;
-        return { ...setup, benchmarkModelVersion: source, values: { ...setup.values, candidate: candidate?.label,
-          ...(source.location === "cloud" ? { destination: "OpenPond Managed" as const } : {}) } };
+        if (kind !== "benchmark" || !retainedSource) return setup;
+        return { ...setup, benchmarkModelVersion: retainedSource, values: { ...setup.values, candidate: candidate?.label,
+          ...(retainedSource.location === "cloud" ? { destination: "OpenPond Managed" as const } : {}) } };
       });
       if (await openSessionInChat(session.id, undefined, () => window.location.href === startLocation || window.location.pathname === `/chat/${session.id}`)) {
         newResourceRequests.current.delete(operationKey);
@@ -475,7 +485,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       newResourceInFlight.current = false;
       setNewResourceBusy(false);
     }
-  }, [activeModel, activeProvider, beginContextualNewChat, bootstrap, composerDraftStore, connection, openSessionInChat, requestMainComposerFocus, showToast]);
+  }, [activeModel, activeProvider, appDefaults.defaultTeamId, beginContextualNewChat, bootstrap, composerDraftStore, connection, openSessionInChat, requestMainComposerFocus, showToast]);
   const managedResourcesAvailable = bootstrap?.account.state === "signed_in";
   const hostedModels = hostedModelScope(bootstrap?.account, appDefaults.defaultTeamId);
   const desktopNewAction = useMemo(() => ({

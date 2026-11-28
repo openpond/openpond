@@ -63,6 +63,8 @@ test("cloud chat runs seal publication and budget before recoverable admission",
     expect(retry.runs.map(run=>run.request.population.map(row=>[row.taskId,row.seed]))).toEqual([[[taskset.tasks[0]!.id,"0"]],[[taskset.tasks[0]!.id,"0"]]]);
     await expect(cloud.run({...input,maximumCostUsd:1})).rejects.toThrow(/different inputs/);
     actorId="other";const before=submissions.length;await expect(cloud.run(input)).rejects.toThrow(/linked account/);expect(submissions).toHaveLength(before);
+    expect(await cloud.list()).toHaveLength(0);
+    actorId="actor";
     expect(await cloud.list()).toHaveLength(2);
   }finally{cloud.close();await store.close();await rm(home,{recursive:true,force:true});}
 });
@@ -216,7 +218,9 @@ test("binds a hosted candidate Benchmark to its original saved revision and immu
     expect(compared.comparison.comparable).toBe(true);
     expect(compared.baseline.result.cases[0]?.feedback[0]?.value).toBe(0.5);
     expect(compared.candidate.result.cases[0]?.feedback[0]?.value).toBe(0.75);
+    expect(await cloud.list()).toHaveLength(2);
     actorId="other";
+    expect(await cloud.list()).toHaveLength(0);
     await expect(cloud.bindBenchmark(binding)).rejects.toThrow(/linked account/);
     await expect(cloud.benchmarkPeers(secondId)).rejects.toThrow(/linked account/);
     expect(await cloud.recoverBenchmark({sessionId,revision,versionHash:version.contentHash})).toEqual({preparationId:null});

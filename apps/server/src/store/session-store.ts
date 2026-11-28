@@ -74,6 +74,7 @@ export function createSessionStore(deps: {
   async function createSessionInternal(payload: unknown, reservation?: ReservedSessionCreation, owner: DeviceLocalOwner | null = null): Promise<Session> {
     const input = CreateSessionRequestSchema.parse(payload);
     const metadata = publicSessionMetadata(input.metadata);
+    if (reservation && input.metadata?.resourceDraft !== undefined) metadata.resourceDraft = input.metadata.resourceDraft;
     const workspaceRevision = input.metadata?.ponderWorkspaceRevision;
     if (reservation && workspaceRevision !== undefined) {
       if (typeof workspaceRevision !== "string" || !/^[a-f0-9]{64}$/.test(workspaceRevision))

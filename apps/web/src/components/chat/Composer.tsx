@@ -105,7 +105,7 @@ import {
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
 import { DesktopLogIssueAction } from "./DesktopLogIssueAction";
 import { ResourceSetupEditor } from "./ResourceSetupEditor";
-import { snapshotResourceSetup } from "../../lib/resource-setup-prompt";
+import { benchmarkAccountMessage, canSubmitBenchmarkSetup, snapshotResourceSetup } from "../../lib/resource-setup-prompt";
 import {
   ComposerSkillMenu,
   type ComposerSkillMenuItem,
@@ -1383,12 +1383,14 @@ export function Composer({
     });
   }
 
-  async function submitComposerPayload(options: {
-    preservePrompt?: boolean;
-    promptOverride?: string;
-  } = {}): Promise<boolean> {
+  async function submitComposerPayload(options: { preservePrompt?: boolean; promptOverride?: string } = {}): Promise<boolean> {
     if (contextSelection.selecting) return false;
     const submissionScope = submissionScopeKey;
+    if (resourceSetup && !selectedAction && !selectedCommand &&
+      !canSubmitBenchmarkSetup(resourceSetup, contextSelection.workspace, contextSelection.selection, taskSessionId)) {
+      showToast(benchmarkAccountMessage, "info");
+      return false;
+    }
     if (!beginSubmissionForScope(submissionScope)) return false;
     const setup = resourceSetup && !selectedAction && !selectedCommand ? snapshotResourceSetup(
       resourceSetup, contextSelection.selection, options.promptOverride ?? inputRef.current?.getPrompt() ?? prompt, contextSelection.workspace,

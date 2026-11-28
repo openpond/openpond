@@ -1,19 +1,20 @@
 import type { Session } from "@openpond/contracts";
 import { useState } from "react";
+import type { hostedModelScope } from "../../../lib/hosted-model-scope";
 import { sessionBenchmarkDraft } from "../../../lib/session-benchmark";
 import { EvaluationTime } from "./EvaluationPresentation";
 
-export function LocalBenchmarkDrafts({ sessions, search, actorId, onOpen, onSync }: {
+export function LocalBenchmarkDrafts({ sessions, search, workspace, onOpen, onSync }: {
   sessions: readonly Session[];
   search: string;
-  actorId: string | null;
+  workspace: ReturnType<typeof hostedModelScope>;
   onOpen(id: string): void;
   onSync?: (sessionId: string, scopeId: string, revision: number) => Promise<void>;
 }) {
   const [syncing, setSyncing] = useState<string | null>(null);
   const query = search.trim().toLowerCase();
   const drafts = sessions.flatMap(session => {
-    const scope = sessionBenchmarkDraft(session);
+    const scope = sessionBenchmarkDraft(session, workspace);
     if (!scope || !scope.name.toLowerCase().includes(query)) return [];
     return [{ sessionId: session.id, scope }];
   }).sort((left, right) => right.scope.updatedAt.localeCompare(left.scope.updatedAt));
@@ -25,7 +26,9 @@ export function LocalBenchmarkDrafts({ sessions, search, actorId, onOpen, onSync
       <tbody>
         {drafts.map(({ sessionId, scope }) => {
           const revision = scope.draftRevision ?? 1;
-          const synced = scope.syncedDraft?.actorId === actorId && scope.syncedDraft.sourceRevision === revision;
+          const sync = scope.syncedDraft;
+          const synced = Boolean(sync && workspace && sync.actorId === workspace.actorId &&
+            sync.teamId === workspace.teamId && sync.apiOrigin === workspace.apiOrigin && sync.sourceRevision === revision);
           return <tr key={sessionId}>
             <td>{scope.name}</td><td>{revision}</td><td><EvaluationTime value={scope.updatedAt} /></td>
             <td><div className="model-build-actions">
