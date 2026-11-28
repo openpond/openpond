@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { lazy, Suspense, useContext, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import type { ChatResourceSummary } from "@openpond/contracts";
@@ -27,6 +27,8 @@ import { ChevronDown, SlidersHorizontal } from "../icons";
 import { DesktopNewContext } from "./DesktopNewMenu";
 import { DatasetSetupReview } from "./DatasetSetupReview";
 import { GraderSetupReview } from "./GraderSetupReview";
+
+const GraderSetupWorkspaceReview = lazy(() => import("./GraderSetupWorkspaceReview"));
 import { ModelSetupTrainingFields } from "./ModelSetupTrainingFields";
 import { ModelSetupManagedReview } from "./ModelSetupManagedReview";
 import { ModelSetupLocalBase } from "./ModelSetupLocalBase";
@@ -100,11 +102,20 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     draft.values.learning !== "Configure continual learning";
   const localBase = draft.kind === "model" && draft.values.destination !== "OpenPond Managed" ? draft.localTrainingBase : undefined;
   const [configureOpen, setConfigureOpen] = useState(false);
+  const [openGraderScope, setOpenGraderScope] = useState<string | null>(null);
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
   const [field, setField] = useState<PromptField>("name");
   const [authoringBusy, setAuthoringBusy] = useState(false);
   const [benchmarkError, setBenchmarkError] = useState<unknown>(null);
   useErrorToast(benchmarkError);
   const busy = composerBusy || authoringBusy;
+  const graderType = draft.kind === "grader" ? draft.values.graderType : undefined;
+  const workspaceGraderMethod = graderType === "LLM judge" || graderType === "Human assessment" || graderType === "Python correctness"
+    ? graderType : null;
+  const graderScope = managedAvailable && workspace?.teamId && workspace.actorId
+    ? { accountKey: workspace.accountKey, teamId: workspace.teamId, actorId: workspace.actorId } : null;
+  const graderScopeKey = graderScope && workspaceGraderMethod ? JSON.stringify([graderScope, workspaceGraderMethod]) : null;
   const compute = useQuery({
     queryKey: ["local-training-compute", connectionQueryScope(connection)],
     enabled: Boolean(connection && draft.kind === "model" && configureOpen && field === "destination"),
@@ -340,13 +351,36 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       {managedReview && <ModelSetupManagedReview draft={draft} connection={connection} sessionId={sessionId}
         context={context} field={field} busy={busy || context.selecting}
         onChange={onChange} onBusy={setAuthoringBusy} onOpened={() => setConfigureOpen(false)} />}
-      {draft.kind === "grader" && draft.values.graderType === "Exact answer" && <GraderSetupReview
-        draft={draft} connection={connection} busy={busy} active={field === "cases"} managedAvailable={managedAvailable}
+      {draft.kind === "grader" && (draft.values.graderType === "Exact answer" || draft.values.graderType === "Code grader") && <GraderSetupReview
+        draft={draft} connection={connection} busy={busy}
+        active={field === "cases" || field === "criterion" && draft.values.graderType === "Code grader"} managedAvailable={managedAvailable}
         onChange={onChange} onAttach={onAttachDataset} onBusy={setAuthoringBusy} />}
+      {workspaceGraderMethod ? <div className="resource-setup-fields">
+        {visibleDraft.managedGrader?.release ? <span>Published Grader revision {visibleDraft.managedGrader.release.revision}</span>
+          : visibleDraft.managedGrader?.draft ? <span>Workspace Grader draft revision {visibleDraft.managedGrader.draft.revision}</span> : null}
+        <button type="button" className="training-button secondary" disabled={busy || !connection || !graderScope}
+          onClick={() => { setConfigureOpen(false); setOpenGraderScope(graderScopeKey); }}>Open workspace Grader review</button>
+        {!graderScope ? <p>Sign in and select a workspace to review and publish this Grader.</p> : null}
+      </div> : null}
       <footer className="training-dialog-actions">
         <button type="button" className="training-button secondary" disabled={busy} onClick={onRemove}>Remove setup</button>
         <button type="button" className="training-button" disabled={authoringBusy} onClick={() => setConfigureOpen(false)}>Done</button>
       </footer>
     </AppDialog> : null}
+    {workspaceGraderMethod && graderScope && graderScopeKey === openGraderScope && connection ? <Suspense fallback={null}>
+      <GraderSetupWorkspaceReview key={graderScopeKey} connection={connection}
+        scope={graderScope} method={workspaceGraderMethod} selection={visibleDraft.managedGrader}
+        name={draft.values.name} criterion={draft.values.criterion}
+        onChange={(pin, values) => {
+          const current = latestDraft.current;
+          const next = {
+            ...current, revision: current.revision + 1, managedGrader: pin,
+            values: { ...current.values, ...values, criterion: values?.criterion ?? current.values.criterion },
+          };
+          latestDraft.current = next;
+          onChange(current, next);
+        }}
+        onClose={() => { setOpenGraderScope(null); setConfigureOpen(true); }} />
+    </Suspense> : null}
   </div>;
 }

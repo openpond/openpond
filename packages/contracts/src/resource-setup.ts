@@ -216,7 +216,16 @@ export const ResourceSetupDraftSchema = z.object({
     taskId: fieldText,
     positive: fieldText,
     negative: fieldText,
+    verifierSource: z.string().max(24_000).optional(),
     savedSetupRevision: positiveInteger,
+  }).strict().optional(),
+  managedGrader: z.object({
+    accountKey: z.string().min(1).max(4_000),
+    teamId: z.string().min(1).max(500),
+    actorId: z.string().min(1).max(500),
+    method: z.enum(["LLM judge", "Human assessment", "Python correctness"]),
+    draft: z.object({ id: resourceId, revision: z.number().int().positive(), contentHash: artifactHash }).strict().optional(),
+    release: z.object({ id: resourceId, revision: z.number().int().positive(), contentHash: artifactHash }).strict().optional(),
   }).strict().optional(),
   datasetRef: z.object({
     id: z.string().min(1).max(240),

@@ -29,7 +29,7 @@ const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "human", label: "Human review rubric" },
 ];
 
-export function RewardEditor(props: { models?: GraderModelChoice[]; embedded?: boolean; initialFields?: Partial<Fields>; allowedKinds?: readonly Kind[]; closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onClose: () => void }) {
+export function RewardEditor(props: { models?: GraderModelChoice[]; embedded?: boolean; initialFields?: Partial<Fields>; allowedKinds?: readonly Kind[]; closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onDraftSaved?: (draft: AuthoringDraftFor<"reward">) => void; onClose: () => void }) {
   const implementation = props.reward?.implementation;
   const assetId = implementation && "verifierRef" in implementation ? implementation.verifierRef.id
     : implementation && "rubricRef" in implementation ? implementation.rubricRef.id
@@ -40,7 +40,7 @@ export function RewardEditor(props: { models?: GraderModelChoice[]; embedded?: b
   return <RewardEditorForm {...props} sourceAsset={asset.resource} fixtureAsset={fixtures.resource} />;
 }
 
-function RewardEditorForm({ models, embedded, initialFields, allowedKinds, client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onClose, closeRef }: {
+function RewardEditorForm({ models, embedded, initialFields, allowedKinds, client, reward, sourceAsset, fixtureAsset, authoringDraft, fromLabel, onSaved, onDraftSaved, onClose, closeRef }: {
   models?: GraderModelChoice[];
   embedded?: boolean;
   initialFields?: Partial<Fields>;
@@ -50,6 +50,7 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
   authoringDraft?: AuthoringDraftFor<"reward">;
   client: OpenPondLearningClient | null; reward: RewardRelease | null; sourceAsset: LearningTextAsset | null; fixtureAsset: LearningTextAsset | null;
   onSaved: (reward: RewardRelease) => void; onClose: () => void;
+  onDraftSaved?: (draft: AuthoringDraftFor<"reward">) => void;
 }) {
   const [id] = useState(() => authoringDraft?.targetId ?? reward?.id ?? `reward-${crypto.randomUUID()}`);
   const [initial] = useState(() => {
@@ -79,7 +80,10 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
   const draftInput = () => ({ targetKind: "reward" as const, targetId: id, baseRelease: reward ? learningRef(reward) : null, fields: draft });
   async function saveDraft() {
     const result = await runAction("save", api => persistence.save(api, draftInput()));
-    if (result) setSaved(JSON.stringify(draft));
+    if (result) {
+      setSaved(JSON.stringify(draft));
+      if (result.targetKind === "reward") onDraftSaved?.(result);
+    }
     return Boolean(result);
   }
   const patch = (update: Partial<typeof draft>) => setDraft(value => ({ ...value, ...update, ...(update.name !== undefined && automaticKey ? { feedbackKey: graderFeedbackKeyFromName(update.name, id) } : {}) }));
@@ -90,6 +94,7 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
       const { reward: release, assets } = compileRewardAuthoring({ id, fields: draft, base: reward });
       const { contentHash: _hash, ...content } = release;
       const storedDraft = await persistence.save(api, draftInput());
+      if (storedDraft.targetKind === "reward") onDraftSaved?.(storedDraft);
       if (draft.kind !== "human" && draft.kind !== "learned_model" && (draft.fixtures?.length ?? 0) > 0) {
         const checks = await api.list("reward_check", { parentId: id, status: "completed", limit: 100 });
         const check = checks.items.find(check => check.matchesExpectations && check.draft.id === storedDraft.id
@@ -116,6 +121,7 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
       compileRewardFixtures(draft.fixtures ?? []);
       compileRewardAuthoring({ id, fields: draft, base: reward });
       const record = await persistence.save(api, draftInput());
+      if (record.targetKind === "reward") onDraftSaved?.(record);
       setSaved(JSON.stringify(draft));
       const maximumSpendUsd = draft.kind === "model_judge" ? Number(checkBudget) : 0;
       if (!Number.isFinite(maximumSpendUsd) || maximumSpendUsd < 0 || maximumSpendUsd > 1000) throw new Error("Enter a fixture cost limit between $0 and $1,000.");

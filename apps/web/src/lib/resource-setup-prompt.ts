@@ -11,6 +11,11 @@ export type ResourceSetupCandidate = BenchmarkModelVersion & { label: string };
 export type ModelSetupScope = { accountKey: string; teamId: string | null; actorId: string | null };
 
 export function scopeManagedSetup(draft: ResourceSetupDraft, scope: ModelSetupScope | null) {
+  const grader = draft.managedGrader;
+  if (grader && (grader.accountKey !== scope?.accountKey || grader.teamId !== scope?.teamId ||
+    grader.actorId !== scope?.actorId || grader.method !== draft.values.graderType)) {
+    draft = { ...draft, managedGrader: undefined };
+  }
   if (draft.benchmarkModelVersion?.location === "cloud" &&
     (draft.benchmarkModelVersion.teamId !== scope?.teamId || !scope?.actorId))
     return { ...draft, benchmarkModelVersion: undefined, values: { ...draft.values, candidate: undefined } };
@@ -199,6 +204,7 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     version?.location === "local" && `Model project ${version.projectId}, version ${version.versionId}, artifact ${version.artifactId}, bundle hash ${version.bundleHash}`,
     draft.localBenchmarkInference?.baseline && `Baseline Model project ${draft.localBenchmarkInference.baseline.projectId}, version ${draft.localBenchmarkInference.baseline.versionId}, artifact ${draft.localBenchmarkInference.baseline.artifactId}, bundle hash ${draft.localBenchmarkInference.baseline.bundleHash}`,
     draft.localBenchmarkInference && `Maximum output ${draft.localBenchmarkInference.maxOutputTokens} tokens per case`,
+    draft.managedGrader?.release && `Saved Grader ${draft.managedGrader.release.id}, revision ${draft.managedGrader.release.revision}, content hash ${draft.managedGrader.release.contentHash}`,
     version?.location === "cloud" && `Saved Model ${version.modelProjectId}, exact version hash ${version.versionHash}`,
     draft.values.destination === "This device" && draft.localCandidate && `Candidate local provider custom-openai-compatible, model ID ${draft.localCandidate.modelId}, configuration hash ${draft.localCandidate.configurationHash}`,
     draft.values.destination === "This device" && draft.comparison && draft.localBaseline && `Baseline local provider custom-openai-compatible, model ID ${draft.localBaseline.modelId}, configuration hash ${draft.localBaseline.configurationHash}`,
@@ -230,12 +236,13 @@ export function snapshotResourceSetup(
   const draft = { ...scopeManagedSetup(original, workspace), localSftApproval: retainedLocalSftApproval(original, sessionId) };
   const benchmarkDefinition = draft.kind === "benchmark" && selection?.localDraft && selection.draft && selection.draftRevision
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
-  const { datasetExamples: _localExamples, graderExamples: _localFixtures, datasetInputsDirty, trainingRecipes: _recipes, ...setup } = draft;
+  const { datasetExamples: _localExamples, graderExamples: _localFixtures, managedGrader, datasetInputsDirty, trainingRecipes: _recipes, ...setup } = draft;
   const method = resourceSetupTrainingMethod(draft);
   const selectedRecipe = selectedTrainingRecipe(draft, method);
   return {
     prompt: [resourceSetupText(draft), instructions].filter(Boolean).join("\n\n"),
     draft: { ...setup, localTrainingBase: localTrainingBase(draft),
+      ...(managedGrader?.release ? { managedGrader: { ...managedGrader, draft: undefined } } : {}),
       ...(method && selectedRecipe ? { trainingRecipes: { [method]: selectedRecipe } } : {}),
       ...(datasetInputsDirty ? { datasetRef: undefined } : {}), ...(benchmarkDefinition ? { benchmarkDefinition } : {}) },
   };

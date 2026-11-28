@@ -1,6 +1,7 @@
-import { contentHash } from "@openpond/harness";
+import { contentHash, sha256 } from "@openpond/harness";
+import { z } from "zod";
 import type { ChatResourceSummary,LocalDatasetRecord } from "@openpond/contracts";
-import { TasksetDraftSchema } from "openpond-sdk/taskset-drafts";
+import { createTasksetDraftWorkspace, saveTasksetDraftWorkspaceDocument, TasksetDraftSchema } from "openpond-sdk/taskset-drafts";
 
 export function applyLocalGraderDraft(
   draft: LocalDatasetRecord["workspace"]["draft"],
@@ -30,6 +31,43 @@ export function applyLocalGraderDraft(
     fixtures.push({ ...fixture, metadata: { ...fixture.metadata, graderIds: [grader.id] } });
   }
   return { grader, graders, fixtures };
+}
+
+/** Build one revision containing the Grader, its fixture scope, and exact
+ * verifier bytes. Both review and save use this same workspace. */
+export function prepareLocalGraderRevision(
+  record: LocalDatasetRecord,
+  payload: Record<string, unknown>,
+  expectedRevision: number,
+  now: string,
+) {
+  const { verifierSource, previewHash: _review, ...submission } = payload;
+  let { workspace } = record;
+  const sourceHash = workspace.contentHash;
+  const { grader, graders, fixtures } = applyLocalGraderDraft(workspace.draft, submission);
+  if (verifierSource !== undefined) {
+    const source = z.string().min(1).max(24_000).refine(value => value.trim().length > 0).parse(verifierSource);
+    if (submission.fixtureScope !== "grader" || grader.kind !== "custom_verifier" ||
+      grader.runtime !== "isolated_javascript" || grader.networkPolicy !== "none" ||
+      !z.uuid().safeParse(grader.id).success || grader.module !== `graders/${grader.id}.mjs`) {
+      throw new Error("Supply source for this Grader's own isolated JavaScript module.");
+    }
+    const existing = workspace.draft.graders.find(item => item.id === grader.id);
+    const files = workspace.files.filter(file => file.path !== grader.module);
+    if (graders.some(item => item.id !== grader.id && item.kind === "custom_verifier" && item.module === grader.module) ||
+      files.length !== workspace.files.length && (existing?.kind !== "custom_verifier" || existing.module !== grader.module)) {
+      throw new Error("This verifier path belongs to an existing Dataset resource.");
+    }
+    const bytes = Buffer.from(source, "utf8");
+    files.push({ path: grader.module, sizeBytes: bytes.byteLength, contentHash: sha256(bytes), base64: bytes.toString("base64") });
+    workspace = createTasksetDraftWorkspace({ schemaVersion: workspace.schemaVersion, draft: workspace.draft, files }, Number.POSITIVE_INFINITY);
+  }
+  const next = saveTasksetDraftWorkspaceDocument({
+    workspace, expectedDraftRevision: expectedRevision, now, maximumBytes: Number.POSITIVE_INFINITY,
+    draft: { ...workspace.draft, graders, graderFixtures: fixtures },
+  });
+  return { workspace: next, grader, fixtures,
+    previewHash: contentHash({ sourceHash, grader, fixtures, verifierSource }) };
 }
 
 export function localGraderSummaries(record:Pick<LocalDatasetRecord,"checks"> & {workspace:Pick<LocalDatasetRecord["workspace"],"draft"|"contentHash">}):ChatResourceSummary[] {

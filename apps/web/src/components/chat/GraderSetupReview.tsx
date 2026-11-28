@@ -17,7 +17,13 @@ type Examples = NonNullable<ResourceSetupDraft["graderExamples"]>;
 type CheckResult = {
   check: LocalDatasetCheck;
   grader: NonNullable<LocalDatasetCheck["scopes"]>[number] | null;
+  previewHash: string;
 };
+const starter = `export function verify({ output, expectedOutput }) {
+  if (typeof expectedOutput?.text !== "string") throw new Error("This task needs an expected text answer.");
+  const passed = output.text?.trim() === expectedOutput.text.trim();
+  return { score: passed ? 1 : 0, passed, feedback: passed ? "Answer matched" : "Answer differed" };
+}`;
 
 export function GraderSetupReview({
   draft,
@@ -43,6 +49,8 @@ export function GraderSetupReview({
   const showToast = useAppToast();
   const reference = draft.datasetRef;
   const examples = draft.graderExamples;
+  const code = draft.values.graderType === "Code grader";
+  const verifierSource = examples?.verifierSource ?? starter;
   const saved = Boolean(reference && examples?.savedSetupRevision === draft.revision);
   const dataset = useQuery({
     queryKey: [
@@ -78,34 +86,36 @@ export function GraderSetupReview({
     () =>
       (dataset.data?.record.workspace.draft.tasks ?? []).flatMap((task) => {
         const answer = task.expectedOutput?.text;
-        return typeof answer === "string" && answer.trim()
+        return code || typeof answer === "string" && answer.trim()
           ? [
               {
                 id: task.id,
-                answer,
+                answer: typeof answer === "string" ? answer : "",
                 label: typeof task.input.prompt === "string" ? task.input.prompt : task.id,
               },
             ]
           : [];
       }),
-    [dataset.data],
+    [code, dataset.data],
   );
   const task = tasks.find((candidate) => candidate.id === examples?.taskId);
   const name = draft.values.name?.trim();
   const payload =
-    task && examples?.positive?.trim() && examples.negative?.trim() && name
+    task && examples?.positive?.trim() && examples.negative?.trim() && name && (!code || verifierSource.trim())
       ? {
           fixtureScope: "grader",
           grader: {
             id: examples.id,
             version: "1",
             label: name,
-            kind: "content",
             weight: 1,
             hardGate: true,
             rewardEligible: false,
             privileged: true,
-            config: { operator: "final_answer_equals_expected" },
+            ...(code ? {
+              kind: "custom_verifier", runtime: "isolated_javascript", module: `graders/${examples.id}.mjs`,
+              exportName: "verify", timeoutMs: 1_000, networkPolicy: "none",
+            } : { kind: "content", config: { operator: "final_answer_equals_expected" } }),
             metadata: draft.values.criterion ? { criterion: draft.values.criterion } : {},
           },
           fixtures: [
@@ -121,6 +131,7 @@ export function GraderSetupReview({
             expectedRewardEligible: false,
             metadata: {},
           })),
+          ...(code ? { verifierSource } : {}),
         }
       : null;
   const input = JSON.stringify([reference, payload]);
@@ -171,7 +182,7 @@ export function GraderSetupReview({
       id: reference.id,
       expectedRevision: reference.revision,
       operationId,
-      payload,
+      payload: { ...payload, previewHash: review.previewHash },
     });
     const pinned = {
       id: summary.id,
@@ -198,10 +209,16 @@ export function GraderSetupReview({
 
   return (
     <section className="resource-setup-fields" aria-label="Grader fixtures">
+      {code && <label className="resource-setup-input">
+        JavaScript verifier
+        <span>Export <code>verify</code> to return a score, pass verdict, and feedback.</span>
+        <textarea value={verifierSource} maxLength={24_000} rows={8} disabled={busy}
+          spellCheck={false} onChange={event => change({ verifierSource: event.target.value })} />
+      </label>}
       {!reference && <p>Choose a Dataset revision for the Grader.</p>}
       {dataset.isFetching && <p role="status">Reading the selected Dataset revision…</p>}
       {dataset.data && !tasks.length && (
-        <p>Add a task with an expected text answer to check this Grader.</p>
+        <p>{code ? "Add a task to check this Grader." : "Add a task with an expected text answer to check this Grader."}</p>
       )}
       {tasks.length > 0 && (
         <>

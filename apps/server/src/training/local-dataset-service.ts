@@ -8,7 +8,7 @@ import { captureTasksetDraftWorkspace } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import { cacheTasksetPackage } from "./taskset-package-files.js";
 import { localLearningCatalog } from "./local-learning-catalog.js";
-import { applyLocalGraderDraft, localGraderSummaries } from "./local-grader-resources.js";
+import { prepareLocalGraderRevision, localGraderSummaries } from "./local-grader-resources.js";
 import { localGraderInspection } from "./local-grader-inspection.js";
 import { checkLocalDatasetGraders } from "./local-dataset-checks.js";
 import { checkCapturedDatasetSources } from "./chat-dataset-source-checks.js";
@@ -44,6 +44,15 @@ export function createLocalDatasetService(deps: {store:SqliteStore;home:string;o
     return compileTasksetDraftWorkspace({workspace:taskIds ? projectLocalDatasetWorkspace(record.workspace,taskIds) : record.workspace,
       sourceWorkspaceHash, maximumBytes:Number.POSITIVE_INFINITY,
       preparation:null,adapterId:"openpond-desktop-taskset-authoring-v1",now:record.workspace.draft.updatedAt});
+  }
+  async function checkProposedGrader(current: LocalDatasetRecord, prepared: ReturnType<typeof prepareLocalGraderRevision>, signal?: AbortSignal) {
+    const candidate = { ...current, workspace: prepared.workspace, checks: [], packageHash: null };
+    const tasks = [...new Set(prepared.fixtures.map(fixture => fixture.taskId))];
+    const value = compile(candidate, tasks.length ? tasks : undefined);
+    signal?.throwIfAborted();
+    const check = await checkLocalDatasetGraders(candidate, value, signal, prepared.grader.id);
+    signal?.throwIfAborted();
+    return { check, grader: check.scopes?.find(scope => scope.graderId === prepared.grader.id) ?? null };
   }
   async function packageDataset(id:string,revision?:number,taskIds?:string[]) {
     if(taskIds) {
@@ -90,18 +99,10 @@ export function createLocalDatasetService(deps: {store:SqliteStore;home:string;o
       const current = await read(input.id);
       if (current.workspace.draft.revision !== input.expectedRevision)
         throw new Error("The Dataset changed. Reopen its latest revision before checking the Grader.");
-      const { grader, graders, fixtures } = applyLocalGraderDraft(current.workspace.draft, { ...input.payload, fixtureScope: "grader" });
-      const workspace = saveTasksetDraftWorkspaceDocument({
-        workspace: current.workspace, expectedDraftRevision: input.expectedRevision,
-        draft: { ...current.workspace.draft, graders, graderFixtures: fixtures },
-        now: new Date().toISOString(), maximumBytes: Number.POSITIVE_INFINITY,
-      });
-      const preview = { ...current, workspace, checks: [], packageHash: null };
-      const fixtureTaskIds = [...new Set(fixtures.map(fixture => fixture.taskId))];
-      const value = compile(preview, fixtureTaskIds.length ? fixtureTaskIds : undefined);
-      signal?.throwIfAborted();
-      const check = await checkLocalDatasetGraders(preview, value, signal, grader.id);
-      return { check, grader: check.scopes?.find(scope => scope.graderId === grader.id) ?? null };
+      const prepared = prepareLocalGraderRevision(current, { ...input.payload, fixtureScope: "grader" },
+        input.expectedRevision, new Date().toISOString());
+      const { check, grader } = await checkProposedGrader(current, prepared, signal);
+      return { check, grader, previewHash: prepared.previewHash };
     }
     const intentHash = contentHash(input);
     if (["create","save","file","import","save_grader","check_sources"].includes(input.action)) {
@@ -122,15 +123,23 @@ export function createLocalDatasetService(deps: {store:SqliteStore;home:string;o
           workspace = createTasksetDraftWorkspace({schemaVersion:"openpond.tasksetDraftWorkspace.v1",draft:{...draft,...input.payload.draft as object,id,profileId:ownerId,modelScope:null,revision:1,status:"draft",publishedTasksetRef:null,createdAt:timestamp,updatedAt:timestamp},files:Array.isArray(input.payload.files) ? input.payload.files : []},Number.POSITIVE_INFINITY);
         }
         record = LocalDatasetRecordSchema.parse({schemaVersion:"openpond.localDataset.v1",ownerId,projectId:typeof input.payload.projectId === "string" ? input.payload.projectId : null,workspace,checks:[],packageHash:null,sync:null});
+      } else if (input.action === "save_grader") {
+        if (!input.id || input.expectedRevision === undefined) throw new Error("Editing requires a Dataset ID and expectedRevision.");
+        const current = await read(input.id);
+        const prepared = prepareLocalGraderRevision(current, input.payload, input.expectedRevision, timestamp);
+        const needsReview = input.payload.verifierSource !== undefined || input.payload.previewHash !== undefined;
+        if (needsReview && input.payload.previewHash !== prepared.previewHash)
+          throw new Error("Check the current Grader source and fixtures before saving.");
+        const checked = needsReview ? await checkProposedGrader(current, prepared, signal) : null;
+        if (checked && checked.grader?.status !== "passed")
+          throw new Error("Both passing and failing fixtures must qualify before saving this Grader.");
+        record = { ...current, workspace: prepared.workspace, packageHash: null,
+          checks: checked ? [checked.check, ...current.checks.filter(check => check.kind !== "graders")] : current.checks };
       } else {
         if (!input.id || input.expectedRevision === undefined) throw new Error("Editing requires a Dataset ID and expectedRevision.");
         const current = await read(input.id);
         let patch=input.payload.draft as object;
         if(input.action==="check_sources")patch={sourceRefs:checkCapturedDatasetSources(current.workspace)};
-        if(input.action==="save_grader") {
-          const { graders, fixtures } = applyLocalGraderDraft(current.workspace.draft, input.payload);
-          patch = { graders, graderFixtures: fixtures };
-        }
         let workspace:TasksetDraftWorkspace;
         if(input.action==="save" && typeof input.payload.path==="string") {
           if(current.workspace.draft.modelScope)throw new Error("Folder replacement requires an ordinary local Dataset.");
