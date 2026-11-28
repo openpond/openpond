@@ -447,7 +447,11 @@ export function ResourceSetupEditor({ draft, configureTarget, editorRef, instruc
           const label = field === "saveDestination" ? "Save to" : labels[key];
           if (options && (key === "method" || key === "adapter" || key === "source" || key === "graderType")) {
             return <SetupChoiceCards key={key} label={key === "method" ? "Workflow" : label} busy={busy}
-              value={draft.values[key]} options={options} onChange={value => change(key, value)} />;
+              value={draft.values[key]} options={options} onChange={value => {
+                change(key, value);
+                if (key === "source" && value === "Import a local file") setField("fields");
+                if (key === "source" && value === "Write examples") setField("preview");
+              }} />;
           }
           if (key === "grader" && draft.kind === "model") {
             const part = parts.find(part => typeof part !== "string" && part.field === key);
@@ -604,7 +608,7 @@ export function ResourceSetupEditor({ draft, configureTarget, editorRef, instruc
         aria-pressed={Boolean(draft.comparison) === compare}
         onClick={() => onChange(draft, { ...draft, revision: draft.revision + 1, comparison: compare })}>{label}</button>)}
   </div> : null;
-  const title = `New ${draft.kind[0]!.toUpperCase()}${draft.kind.slice(1)}`;
+  const title = `Configure ${draft.kind[0]!.toUpperCase()}${draft.kind.slice(1)}`;
   return <div className="resource-setup-editor">
     {benchmarkPresets}
     {benchmarkUnavailable ? <p>{benchmarkAccountMessage}</p> : <ResourcePromptInput
@@ -616,7 +620,8 @@ export function ResourceSetupEditor({ draft, configureTarget, editorRef, instruc
     }}>
       <SlidersHorizontal size={13} aria-hidden="true" /> Configure
     </button>, configureTarget) : null}
-    {configureOpen && !benchmarkUnavailable ? createPortal(<AppDialog ariaLabel={title} className="training-dialog resource-setup-dialog" initialFocusKey={shownField}
+    {configureOpen && !benchmarkUnavailable ? createPortal(<AppDialog ariaLabel={title} className="training-dialog resource-setup-dialog"
+      backdropClassName="resource-setup-dialog-backdrop" initialFocusKey={shownField}
       dismissDisabled={authoringBusy} onClose={() => setConfigureOpen(false)}>
       <header className="training-dialog-header">
         <h2>{title}</h2>

@@ -8,8 +8,8 @@ import {
 import { apiFetch } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
 import { ErrorToast } from "../common/ErrorToast";
-import { AppDialog } from "../dialogs/AppDialog";
 import { ModelServingControlDialog } from "./ModelServingControlDialog";
+import { ModelServingDialog } from "./ModelServingDialog";
 import { useHostedModelManaging } from "./HostedModelServingStatus";
 import type { WorkspaceApi } from "./workspace/workspace-api";
 
@@ -75,9 +75,9 @@ function PreparedServing(props: Props & { version: SavedModelVersion }) {
 }
 
 function PreparationDialog({ name, onClose, busy = false, children }: Props & { busy?: boolean; children: React.ReactNode }) {
-  return <AppDialog ariaLabel={`Serve ${name}`} className="labs-rename-dialog labs-serving-dialog" dismissDisabled={busy} onClose={onClose}>
+  return <ModelServingDialog ariaLabel={`Serve ${name}`} dismissDisabled={busy} onClose={onClose}>
     <h2>Serve {name}</h2>
     {children}
     <button type="button" className="training-button secondary" disabled={busy} onClick={onClose}>Close</button>
-  </AppDialog>;
+  </ModelServingDialog>;
 }

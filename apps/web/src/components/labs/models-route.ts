@@ -50,7 +50,7 @@ export function modelsLocation(page: ModelsPage = "models", modelId: string | nu
 }
 
 export function hasResourceSidebar(page: ModelsPage) {
-  return ["models", "runs", "versions", "evaluations", "tasks", "tasksets", "experiments", "datasets", "graders"].includes(page);
+  return ["home", "models", "runs", "versions", "evaluations", "tasks", "tasksets", "experiments", "datasets", "graders", "serving"].includes(page);
 }
 
 export function modelsRouteFromLocation(input: { pathname: string; search?: string }): ModelsRoute | null {

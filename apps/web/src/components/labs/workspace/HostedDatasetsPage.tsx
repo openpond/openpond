@@ -118,7 +118,7 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
     ...(importOpen ? [{ id: "import-folder", label: "Import folder", onSelect: () => setImportOpen(true) }] : []),
     ...(task ? [{ id: "task", label: "Task", onSelect: () => {} }] : []),
     ...(visibilityOpen && dataset?.publication ? [{ id: "visibility", label: "Visibility", onSelect: () => {} }] : []),
-    ...(!versionRevision && route.datasetKind !== "release" ? [{ id: "dataset", label: dataset ? "Edit" : "Create", onSelect: () => { if (!editing && !busy && !selected.isFetching) { if (dataset?.workspace.draft.status === "published") void beginVersion(); else setEditing(true); } } }] : []),
+    ...(dataset && !versionRevision && route.datasetKind !== "release" ? [{ id: "dataset", label: "Edit", onSelect: () => { if (!editing && !busy && !selected.isFetching) { if (dataset.workspace.draft.status === "published") void beginVersion(); else setEditing(true); } } }] : []),
   ]);
   useWorkspaceResourceName(dataset?.workspace.draft.name ?? (selected.error ? "Unavailable dataset" : null));
   const discoverPanel = discovering ? <DiscoverDatasets api={api} onClose={() => setDiscovering(false)} onImported={id => { setDiscovering(false); onRefresh(); navigate({ ...route, resourceId: id, datasetKind: "release", detailTab: "tasks" }); }} /> : null;
@@ -143,7 +143,7 @@ export function HostedDatasetsPage({ api, inventory, route, navigate, onLocalDat
       </> : null}
       {executableRelease ? <DatasetExperimentButton release={executableRelease} route={route} /> : null}
       {dataset && dataset.workspace.draft.status === "draft" ? <button className="training-button secondary" disabled={busy || selected.isFetching} onClick={() => void publish()}>{busy ? "Checking…" : "Check and publish"}</button> : null}
-      <button className="training-button" disabled={busy || selected.isFetching || Boolean(versionRevision)} onClick={() => selectSidebarAction("dataset")}>{published ? "Create editable version" : dataset ? "Edit Dataset" : "New Dataset"}</button>
+      {dataset ? <button className="training-button" disabled={busy || selected.isFetching || Boolean(versionRevision)} onClick={() => selectSidebarAction("dataset")}>{published ? "Create editable version" : "Edit Dataset"}</button> : null}
       <WorkspaceActionMenu label="More dataset actions" actions={moreActions} />
     </header>
     {visibilityMenu.error ? <ErrorToast error={visibilityMenu.error} /> : null}

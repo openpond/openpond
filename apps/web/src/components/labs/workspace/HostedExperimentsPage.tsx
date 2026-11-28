@@ -140,9 +140,9 @@ export function HostedExperimentsPage({
             onChange={(event) => navigate({ ...route, query: event.target.value, after: null })}
           />
         ) : null}
-        {!route.resourceId || run ? (
+        {run ? (
           <button className="training-button" disabled={busy} onClick={() => select("experiment")}>
-            {run ? "Duplicate and edit" : "New benchmark"}
+            Duplicate and edit
           </button>
         ) : null}
       </header>

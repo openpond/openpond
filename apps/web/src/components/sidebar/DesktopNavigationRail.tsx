@@ -45,6 +45,7 @@ export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: Si
     if (!await navigateModelsRoute(route)) return;
     sidebar.setSectionMenuOpen(null);
     sidebar.setView("labs");
+    sidebar.setSidebarOpen(true);
   }
 
   async function selectMore(view: MoreDestination["view"]) {

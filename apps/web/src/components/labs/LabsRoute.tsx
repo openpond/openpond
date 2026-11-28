@@ -1,6 +1,5 @@
 import { ErrorToast } from "../common/ErrorToast";
 import { ConnectedOverview } from "./workspace/ConnectedOverview";
-import { DesktopNewMenu, DesktopNewResourceButton } from "../chat/DesktopNewMenu";
 import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { HostedTrainingRunRoute } from "./HostedTrainingRunRoute";
 import { InboxRoute } from "../human-review/InboxRoute";
@@ -39,7 +38,7 @@ import { LabModelsPage } from "./LabModelsPage";
 import { useHostedModelRefresh } from "./use-hosted-model-refresh";
 import { LabModelComparisonsPage } from "./LabModelComparisonsPage";
 import { LabServingPage } from "./LabServingPage";
-import { LabsView, type LabPrimaryTab } from "./LabsView";
+import { LabsView } from "./LabsView";
 import { ModelRunEditorPage } from "./ModelRunEditorPage";
 import { ModelsResourceDetail } from "./ModelsResourceDetail";
 import { ModelsAggregatePage } from "./ModelsAggregatePage";
@@ -260,8 +259,7 @@ export function LabsRoute(props: LabsRouteProps) {
       training={training.training} onNavigate={open} /> : (
       <main className="evaluation-workspace connected-overview">
         <div className="connected-overview-content">
-          <ModelProjectPageHeader title="Overview" description="Create drafts and work with resources on this device."
-            actions={<DesktopNewMenu />} />
+          <ModelProjectPageHeader title="Overview" description="Create drafts and work with resources on this device." />
           <div className="model-build-actions">
             <button type="button" className="training-button secondary" onClick={() => open(modelsLocation("models"))}>Models</button>
             <button type="button" className="training-button secondary" onClick={() => open(modelsLocation("tasksets"))}>Local datasets</button>
@@ -290,7 +288,7 @@ export function LabsRoute(props: LabsRouteProps) {
         } catch (error) { toast(error instanceof Error ? error.message : String(error), "error"); }
       } : undefined} /> : null;
     page = showLocalDrafts && (!workspace || !actorId) ? <main className="evaluation-workspace">
-      <ModelProjectPageHeader title="Benchmarks" actions={<DesktopNewResourceButton kind="benchmark" />} />
+      <ModelProjectPageHeader title="Benchmarks" />
       {localDrafts}
     </main> : <>
       <HostedEvaluationWorkspace key={workspaceKey} connection={profileView.connection} teamId={workspace ?? null} actorId={actorId}
@@ -398,8 +396,7 @@ export function LabsRoute(props: LabsRouteProps) {
       <ModelsResourceDetail key={`${workspaceKey}:${owner.id}:${route.page}`} accountKey={workspaceKey} props={props} model={owner} profile={profile} runs={createImprove.runs} route={route} />
     </> : unavailable("This resource is unavailable in the active workspace.", () => open(modelsLocation(route.page, route.modelId)));
   }
-  const tab: LabPrimaryTab = (route?.page === "home" || route?.page === "models" || route?.page === "get-started") ? "overview" : route?.page === "runs" ? "training" : route?.page === "evaluations" || route?.page === "labeling" ? "evals" : route?.page === "tasks" ? "tasksets" : route?.page === "datasets" ? "tasksets" : route?.page === "graders" ? "rewards" : route?.page === "experiments" || route?.page === "inbox" ? "evals" : route?.page ?? "overview";
-  return <LabsView activeTab={tab} showHeader={route?.page === "models" && !route.modelId} onCreateDataset={() => setImportSource("source")} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }}>
+  return <LabsView>
     {hostedRefreshError ? <ErrorToast error={hostedRefreshError} /> : null}
     {route && !route.modelId && (route.page === "runs" || route.page === "evaluations") ? <ModelsRunViews route={route} /> : null}
     {page}

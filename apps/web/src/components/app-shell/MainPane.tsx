@@ -157,6 +157,8 @@ export function MainPane({
   experience,
   view,
   resourceWorkspaceId,
+  resourceDraftPreviewStatus,
+  modelContextRequest,
   teamChat,
   community,
   bootstrap,
@@ -382,7 +384,7 @@ export function MainPane({
     actorId: experimentActorId, apiOrigin: experimentApiOrigin, webBaseUrl: experimentWebBaseUrl }),
   [accountTeamScopeKey, experimentTeamId, experimentActorId, experimentApiOrigin, experimentWebBaseUrl]);
   const trainingLabel = useTrainingSidebarContext({ connection, sessionId: selectedSessionId, accountScope: accountTeamScopeKey,
-    active: view === "chat", onOpen: onShowExperimentsPanel });
+    active: view === "chat", onOpen: onShowExperimentsPanel, selectionRequest: modelContextRequest, showToast });
   const selectedProfileState =
     profileStateForRef(
       bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
@@ -914,6 +916,12 @@ export function MainPane({
       selectedCommand: ComposerSlashCommand | null = null,
       options: ComposerSubmitOptions = {}
     ) => {
+      if (!selectedSessionId && resourceDraftPreviewStatus) {
+        showToast(resourceDraftPreviewStatus === "saving"
+          ? "The draft is still saving. Try sending again in a moment."
+          : "Choose the same resource from New to retry saving this draft.", "info");
+        return false;
+      }
       const promptForSubmit =
         options.promptOverride ?? composerDraftStore.getSnapshot();
       const clearSubmittedDraft = captureSubmittedDraftClear(composerDraftStore);
@@ -1046,6 +1054,7 @@ export function MainPane({
       connectedAppMentions,
       composerDraftStore,
       experience,
+      resourceDraftPreviewStatus,
       sendPrompt,
       selectedSessionId,
       setMentionedAppId,

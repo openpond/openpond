@@ -10,7 +10,7 @@ import { usePonderWork } from "../ponder/usePonderWork";
 import { SidebarSectionList } from "./SidebarSectionList";
 import { useNativeConversationHistory } from "./NativeConversationSources";
 import { ErrorToast } from "../common/ErrorToast";
-import { OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
+import { OPENPOND_ICON_URL, OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
 import type { SidebarProps } from "./Sidebar.types";
 import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
 import type { SidebarSectionMenuId } from "../../app/app-state";
@@ -79,12 +79,18 @@ export function Sidebar(props: SidebarProps & { open?: boolean }) {
         <DesktopUpdateButton hasRunningWork={props.runningSessionIds.size > 0 || Object.values(props.terminalSummaries).some((summary) => summary.tabCount > 0)} />
       </div>
 
+      {view === "chat" || view === "labs" ? <div className="sidebar-resource-new">
+        <DesktopNewMenu sidebar />
+        {view === "chat" && productArea === "chat" && props.onOpenPonder ? (
+          <button type="button" className="sidebar-row sidebar-ponder-entry" onClick={props.onOpenPonder}>
+            <span className="conversation-source-icon" aria-hidden="true"><img src={OPENPOND_ICON_URL} alt="" /></span>
+            <span>Your pal</span>
+          </button>
+        ) : null}
+      </div> : null}
       <div className="sidebar-scroll">
-        {view === "labs" ? <>
-          <div className="sidebar-resource-new"><DesktopNewMenu sidebar /></div>
-          <SidebarNavigation modelProjects={modelProjects} connection={props.connection}
-            account={props.account} resourceWorkspaceId={props.resourceWorkspaceId} />
-        </> : null}
+        {view === "labs" ? <SidebarNavigation modelProjects={modelProjects} connection={props.connection}
+          account={props.account} resourceWorkspaceId={props.resourceWorkspaceId} /> : null}
 
         {productArea !== "chat" || view !== "chat" ? null : (
           <SidebarSectionList

@@ -108,9 +108,9 @@ export function LocalExperimentsPage({
     <>
       <header className="evaluation-workspace-header">
         <h1 className="sr-only">{execution?.configuration.request.name ?? "Local benchmarks"}</h1>
-        {!installationRead ? (
+        {!installationRead && execution ? (
           <button className="training-button" disabled={busy} onClick={() => select("experiment")}>
-            {execution ? "Duplicate and edit" : "New benchmark"}
+            Duplicate and edit
           </button>
         ) : null}
       </header>

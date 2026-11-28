@@ -405,7 +405,7 @@ export function LabModelVersionDetailPage({
           </button>
         ) : selectedVersion ? <>
           {newResource ? <button className="training-button secondary" type="button"
-          disabled={newResource.busy} onClick={() => newResource.create("benchmark", {
+          onClick={() => newResource.create("benchmark", {
             label: `${workproduct.name} Version ${selectedVersion.number}`,
             location: "local",
             projectId: workproduct.id,

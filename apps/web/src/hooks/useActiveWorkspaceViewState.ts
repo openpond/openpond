@@ -340,7 +340,7 @@ export function useWorkspaceTargetState({
         ...COMPOSER_PROJECT_ACTION_OPTIONS,
         {
           value: "none",
-          label: "Don't work in a project",
+          label: "No project",
           detail: "General chat without project files",
           kind: "none" as const,
         },

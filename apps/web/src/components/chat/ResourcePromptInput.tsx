@@ -12,45 +12,119 @@ function appendText(body: ResourcePromptBody, text: string) {
   else body.push(text);
 }
 
-function readBody(root: HTMLElement, fields: Map<string, Field>) {
-  const body: ResourcePromptBody = [];
-  const slots: Slot[] = [];
+function visitPrompt(root: HTMLElement, fields: Map<string, Field>, emit: (part: ResourcePromptBody[number], node: Node) => void) {
   function visit(node: Node) {
     if (node.nodeType === Node.TEXT_NODE) {
-      appendText(body, node.textContent ?? "");
+      if (node.textContent) emit(node.textContent, node);
       return;
     }
     if (!(node instanceof HTMLElement)) return;
     const field = fields.get(node.dataset.resourceField ?? "");
     if (field) {
-      body.push({ field: field.field });
-      slots.push({ field: field.field, host: node });
+      emit({ field: field.field }, node);
       return;
     }
     if (node.tagName === "BR") {
-      if (node.parentNode?.childNodes.length !== 1) appendText(body, "\n");
+      // Chromium leaves a trailing BR as a caret stop after deleting prose next
+      // to a non-editable span. A real final line break has its own preceding BR.
+      if (node.nextSibling) emit("\n", node);
       return;
     }
-    if (node !== root && (node.tagName === "DIV" || node.tagName === "P") && node.previousSibling) appendText(body, "\n");
+    if (node !== root && (node.tagName === "DIV" || node.tagName === "P") && node.previousSibling) emit("\n", node);
     node.childNodes.forEach(visit);
   }
   visit(root);
-  return { body, slots };
 }
 
-function adjacentField(root: HTMLElement, backward: boolean) {
+type PromptDeletion = { node: Node; start: number; end: number };
+
+function readBody(root: HTMLElement, fields: Map<string, Field>, deletion?: PromptDeletion) {
+  const body: ResourcePromptBody = [];
+  const slots: Slot[] = [];
+  let length = 0;
+  let omittedOffset: number | null = null;
+  visitPrompt(root, fields, (part, node) => {
+    if (deletion && node === deletion.node) {
+      omittedOffset = length + deletion.start;
+      if (typeof part !== "string") return;
+      part = part.slice(0, deletion.start) + part.slice(deletion.end);
+    }
+    if (typeof part === "string") {
+      appendText(body, part);
+      length += part.length;
+    } else {
+      body.push(part);
+      slots.push({ field: part.field, host: node as HTMLElement });
+      length++;
+    }
+  });
+  return { body, slots, omittedOffset };
+}
+
+function placeCaret(root: HTMLElement, fields: Map<string, Field>, index: number) {
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  range.collapse(false);
+  let offset = 0;
+  let placed = false;
+  visitPrompt(root, fields, (part, node) => {
+    if (placed) return;
+    const length = typeof part === "string" ? part.length : 1;
+    if (index <= offset + length) {
+      if (node.nodeType === Node.TEXT_NODE) range.setStart(node, Math.max(0, index - offset));
+      else if (index <= offset) range.setStartBefore(node);
+      else if (typeof part !== "string" || node.nodeName === "BR") range.setStartAfter(node);
+      else range.setStart(node, 0);
+      range.collapse(true);
+      placed = true;
+    }
+    offset += length;
+  });
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function deletionAtCaret(root: HTMLElement, backward: boolean): PromptDeletion | null {
   const selection = window.getSelection();
   if (!selection?.isCollapsed || !selection.rangeCount) return null;
   const range = selection.getRangeAt(0);
-  let node: Node | null = range.startContainer;
+  const container = range.startContainer;
   const offset = range.startOffset;
-  if (!root.contains(node)) return null;
-  if (node.nodeType === Node.TEXT_NODE) {
-    if (backward ? offset !== 0 : offset !== node.textContent?.length) return null;
-    node = backward ? node.previousSibling : node.nextSibling;
-  } else node = node.childNodes[backward ? offset - 1 : offset] ?? null;
-  while (node?.nodeType === Node.TEXT_NODE && !node.textContent) node = backward ? node.previousSibling : node.nextSibling;
-  return node instanceof HTMLElement && node.hasAttribute("data-resource-field") ? node : null;
+  if (!root.contains(container)) return null;
+  const element = container instanceof Element ? container : container.parentElement;
+  const inside = element?.closest<HTMLElement>("[data-resource-field]");
+  if (inside) return { node: inside, start: 0, end: 1 };
+
+  // Chromium can skip whitespace adjoining an inline widget. Give that
+  // whitespace an exact range; the browser handles ordinary prose itself.
+  function whitespace(node: Node, start: number): PromptDeletion | null {
+    const char = node.textContent?.charAt(start);
+    return char && /\s/u.test(char) ? { node, start, end: start + 1 } : null;
+  }
+  function neighbor(node: Node): Node | null {
+    for (let current: Node | null = node; current && current !== root; current = current.parentNode) {
+      const next = backward ? current.previousSibling : current.nextSibling;
+      if (next) return next;
+      if (current.nodeName === "DIV" || current.nodeName === "P") break;
+    }
+    return null;
+  }
+  let node: Node | null;
+  if (container.nodeType === Node.TEXT_NODE) {
+    if (backward ? offset > 0 : offset < (container.textContent?.length ?? 0))
+      return whitespace(container, backward ? offset - 1 : offset);
+    node = neighbor(container);
+  } else node = container.childNodes[backward ? offset - 1 : offset] ?? neighbor(container);
+  while (node) {
+    if (node instanceof HTMLElement && (node.hasAttribute("data-resource-field") || (node.nodeName === "BR" && node.nextSibling)))
+      return { node, start: 0, end: 1 };
+    if (node.nodeType === Node.TEXT_NODE && node.textContent)
+      return whitespace(node, backward ? node.textContent.length - 1 : 0);
+    if (node.nodeName === "DIV" || node.nodeName === "P") return null;
+    node = (backward ? node.lastChild : node.firstChild) ?? neighbor(node);
+  }
+  return null;
 }
 
 export function ResourcePromptInput({ parts, template, disabled, editorRef, renderField, fieldLabel, onEdit, onSubmit, onPasteFiles }: {
@@ -77,6 +151,8 @@ export function ResourcePromptInput({ parts, template, disabled, editorRef, rend
   // The browser owns prose and selection. React only mounts controls inside
   // non-editable spans, so typing never replaces a focused DOM text node.
   const lastBody = useRef("");
+  const nativeDeleteInProgress = useRef(false);
+  const caretAfterEdit = useRef<number | null>(null);
   const bodyKey = JSON.stringify(desired);
   useLayoutEffect(() => {
     const root = editorRef.current;
@@ -110,6 +186,10 @@ export function ResourcePromptInput({ parts, template, disabled, editorRef, rend
       if (focused?.isConnected && document.activeElement === document.body) focused.focus({ preventScroll: true });
       lastBody.current = bodyKey;
     }
+    if (caretAfterEdit.current !== null) {
+      if (document.activeElement === root) placeCaret(root, fields, caretAfterEdit.current);
+      caretAfterEdit.current = null;
+    }
     const current = readBody(root, fields).slots;
     if (current.length !== slots.length || current.some((slot, index) => slot.host !== slots[index]?.host)) setSlots(current);
   });
@@ -138,29 +218,37 @@ export function ResourcePromptInput({ parts, template, disabled, editorRef, rend
     const backward = event.key === "Backspace" || event.key === "ArrowLeft";
     const target = event.target;
     if (target.closest('[role="menu"]') && (!remove || target instanceof HTMLInputElement)) return;
-    const focused = target.closest<HTMLElement>("[data-resource-field]");
-    const host = focused ?? (remove && target === root ? adjacentField(root, backward) : null);
-    if (!host || !host.parentNode || (arrow && event.shiftKey)) return;
+    const host = target.closest<HTMLElement>("[data-resource-field]");
+    const deletion = host ? { node: host, start: 0, end: 1 }
+      : remove && target === root ? deletionAtCaret(root, backward) : null;
+    if (!deletion || (arrow && event.shiftKey)) return;
     if (target instanceof HTMLInputElement && (target.selectionStart !== target.selectionEnd ||
       target.selectionStart !== (backward ? 0 : target.value.length))) return;
     event.preventDefault();
     event.stopPropagation();
     root.focus();
     const range = document.createRange();
-    range.selectNode(host);
+    if (deletion.node.nodeType === Node.TEXT_NODE) {
+      range.setStart(deletion.node, deletion.start);
+      range.setEnd(deletion.node, deletion.end);
+    } else range.selectNode(deletion.node);
     if (arrow) range.collapse(backward);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
     if (remove) {
-      // Native deletion records an undo entry and leaves the caret at the badge.
-      document.execCommand("delete");
-      if (root.contains(host)) {
-        range.deleteContents();
-        const { body } = readBody(root, fields);
-        lastBody.current = JSON.stringify(body);
-        onEdit(body);
-      }
+      const intended = readBody(root, fields, deletion);
+      // Let the editor record a native undo entry. At adjacent widgets Chromium
+      // can also remove a line break while normalizing the DOM. Commit only the
+      // intended deletion and restore the insertion point in the resulting text.
+      nativeDeleteInProgress.current = true;
+      try { document.execCommand("delete"); }
+      finally { nativeDeleteInProgress.current = false; }
+      if (deletion.node instanceof HTMLElement && deletion.node.hasAttribute("data-resource-field") && root.contains(deletion.node))
+        deletion.node.remove();
+      lastBody.current = JSON.stringify(readBody(root, fields).body);
+      caretAfterEdit.current = intended.omittedOffset;
+      onEdit(intended.body);
     }
   }
 
@@ -169,7 +257,7 @@ export function ResourcePromptInput({ parts, template, disabled, editorRef, rend
       aria-label="Resource prompt" aria-multiline="true" aria-disabled={disabled} tabIndex={0}
       contentEditable={!disabled} suppressContentEditableWarning
       onInput={event => {
-        if (event.target !== event.currentTarget) return;
+        if (nativeDeleteInProgress.current || event.target !== event.currentTarget) return;
         const { body } = readBody(event.currentTarget, fields);
         lastBody.current = JSON.stringify(body);
         onEdit(body);

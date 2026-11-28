@@ -7,7 +7,7 @@ import { AcpClient } from "@openpond/agent-runtime/acp/client";
 import { ClaudeCliClient } from "@openpond/agent-runtime/acp/claude-cli-client";
 import { type AcpSessionResult } from "@openpond/agent-runtime/acp/types";
 import { ProviderModelSchema, isRegisteredAcpProvider, type ProviderSettings, type ProviderConfig } from "@openpond/contracts/providers";
-import { isNativeAgentId, NATIVE_AGENTS, nativeAgentLaunch, type NativeAgentId } from "./config.js";
+import { isNativeAgentId, NATIVE_AGENTS, nativeAgentAuthMethod, nativeAgentLaunch, type NativeAgentId } from "./config.js";
 import { createNativeCapabilityProbe } from "./capability-probes.js";
 import { refreshLocalExecutablePath } from "@openpond/runtime/executable-search-path";
 import { readClaudeInstallationStatus } from "./claude-installation-status.js";
@@ -84,7 +84,7 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
       result.version ??= info.agentInfo?.version ?? null;
       result.authMethods = info.authMethods ?? [];
       result.capabilities = info.agentCapabilities ?? null;
-      const authMethodId = options.authMethodId ?? config?.acp?.authMethodId;
+      const authMethodId = nativeAgentAuthMethod(config, options.authMethodId);
       if (authMethodId) await client.authenticate(authMethodId);
       else if (provider === "grok-build" && info.authMethods?.some((method) => method.id === "cached_token")) await client.authenticate("cached_token");
       signal.throwIfAborted();
@@ -95,7 +95,7 @@ export async function probeNativeAgent(provider: NativeAgentId, config?: Partial
       const code = error && typeof error === "object" && "code" in error ? error.code : null;
       result.status = code === "ENOENT" ? "missing" : result.status === "needs_login" || (code === -32000 && error instanceof Error && error.message === "Authentication required") ? "needs_login" : "unavailable";
       result.error = error instanceof Error ? error.message : "Native agent connection failed.";
-      if (antigravity && (code === -32000 || (code === -32603 && result.error.startsWith("No browser is available here")))) {
+      if (antigravity && (result.status === "needs_login" || (code === -32603 && result.error.startsWith("No browser is available here")))) {
         result.status = "needs_login";
         result.error = "Sign in with Google in Antigravity provider settings.";
       }

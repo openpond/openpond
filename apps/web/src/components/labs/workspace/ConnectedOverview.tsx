@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { DesktopNewMenu } from "../../chat/DesktopNewMenu";
 import type { ClientConnection } from "../../../api";
 import { apiFetch } from "../../../api/api-client";
 import type { HostedModelProjectCatalog } from "../../../hooks/hosted-model-project-types";
@@ -150,7 +149,6 @@ export function ConnectedOverview({
         <ModelProjectPageHeader
           title="Overview"
           description="Models, benchmarks, datasets, and activity in your workspace."
-          actions={<DesktopNewMenu />}
         />
         <div className="connected-overview-grid">
           <OverviewSection title="Models" onViewAll={() => onNavigate(modelsLocation("models"))}>

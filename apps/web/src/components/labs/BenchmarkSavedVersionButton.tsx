@@ -5,7 +5,7 @@ import { DesktopNewContext } from "../chat/DesktopNewMenu";
 export function BenchmarkSavedVersionButton({ version, name }: { version: TrainingModelVersion; name: string }) {
   const action = useContext(DesktopNewContext);
   if (!action) return null;
-  return <button type="button" className="training-button secondary" disabled={action.busy}
+  return <button type="button" className="training-button secondary"
     onClick={() => action.create("benchmark", {
       location: "cloud",
       label: name,

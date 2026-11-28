@@ -5,7 +5,6 @@ import type {
 } from "@openpond/contracts";
 
 import { Search } from "../icons";
-import { DesktopNewResourceButton } from "../chat/DesktopNewMenu";
 import type { ClientConnection } from "../../api";
 import { createWorkspaceApi } from "./workspace/workspace-api";
 import { DropdownSelect } from "../DropdownSelect";
@@ -218,7 +217,6 @@ export function LabModelsPage({
     <div className="labs-flat-body labs-models-page">
       <ModelProjectPageHeader
         title="Models"
-        actions={<DesktopNewResourceButton kind="model" />}
       />
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">

@@ -3,12 +3,14 @@ import { ChevronDown, ChevronRight } from "../icons";
 import { SidebarInteractiveRow } from "./SidebarRows";
 import "./sidebar-model-resource.css";
 
-export function SidebarResourceRow({ name, icon, onOpen, onToggle, selected = false, actions, status, children }: {
+export function SidebarResourceRow({ name, icon, onOpen, onActivate, onToggle, selected = false, leadingActions, actions, status, children }: {
   name: string;
   icon?: ReactNode;
   onOpen?(): void;
+  onActivate?(): void;
   onToggle?(expanded: boolean): void;
   selected?: boolean;
+  leadingActions?: ReactNode;
   actions?: ReactNode;
   status?: ReactNode;
   children?: ReactNode;
@@ -18,14 +20,18 @@ export function SidebarResourceRow({ name, icon, onOpen, onToggle, selected = fa
   const Chevron = expanded ? ChevronDown : ChevronRight;
   if (!onOpen) return <div className="sidebar-model-resource">
     <SidebarInteractiveRow className="sidebar-project-row sidebar-model-project-row"
-      selected={selected} ariaExpanded={expanded} onSelect={toggle}>
+      selected={selected} ariaExpanded={expanded} onSelect={() => { toggle(); onActivate?.(); }}>
       <span className="sidebar-model-icon" aria-hidden="true">{icon}</span>
       <span className="sidebar-project-title-line">
         <span className="row-label" title={name}>{name}</span>
-        <Chevron size={13} className="sidebar-project-caret" aria-hidden="true" />
       </span>
       <div className="row-meta"><div className="sidebar-row-actions sidebar-model-hover-actions"
-        onClick={event => event.stopPropagation()}>{actions}</div></div>
+        onClick={event => event.stopPropagation()}>
+        {leadingActions}
+        <button type="button" className="sidebar-row-action" aria-label={`${expanded ? "Collapse" : "Expand"} ${name} chats`}
+          aria-expanded={expanded} onClick={toggle}><Chevron size={13} aria-hidden="true" /></button>
+        {actions}
+      </div></div>
     </SidebarInteractiveRow>
     {status}
     {expanded ? <div className="sidebar-model-threads">{children ?? <span className="training-muted">No chats yet</span>}</div> : null}

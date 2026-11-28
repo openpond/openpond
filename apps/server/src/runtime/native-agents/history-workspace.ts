@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { AcpClient } from "@openpond/agent-runtime/acp/client";
 import { ClaudeCliClient } from "@openpond/agent-runtime/acp/claude-cli-client";
 import { readProvidersFile } from "../../openpond/provider-settings.js";
-import { nativeAgentLaunch, type NativeAgentId } from "./config.js";
+import { nativeAgentAuthMethod, nativeAgentLaunch, type NativeAgentId } from "./config.js";
 import { probeNativeAgent } from "./setup.js";
 import { isAntigravityConfig } from "./antigravity-profile.js";
 
@@ -41,7 +41,8 @@ export function createNativeHistoryWorkspace(providersFilePath: string) {
       try {
         const info = await client.initialize();
         if (isAntigravityConfig(config) ? !info.agentCapabilities?.sessionCapabilities?.resume : !info.agentCapabilities?.loadSession) throw new Error("This agent cannot resume saved conversations.");
-        if (config.acp?.authMethodId) await client.authenticate(config.acp.authMethodId);
+        const authMethodId = nativeAgentAuthMethod(config);
+        if (authMethodId) await client.authenticate(authMethodId);
         else if (input.provider === "grok-build" && info.authMethods?.some(method => method.id === "cached_token")) await client.authenticate("cached_token");
         const native = await client.loadSession(input.sessionId, input.cwd);
         if (native.sessionId !== input.sessionId) throw new Error("The agent returned a different conversation; the saved conversation was not changed.");

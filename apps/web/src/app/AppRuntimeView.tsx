@@ -18,6 +18,7 @@ import {
   TerminalScope,
 } from "@openpond/contracts";
 import { api } from "../api";
+import { ApiRequestError } from "../api/api-client";
 import { CreateSessionResourceDraftRequestSchema, SessionResourceDraftSchema, type CreateSessionResourceDraftRequest } from "@openpond/contracts/requests";
 import { DesktopNewContext, type DesktopNewKind } from "../components/chat/DesktopNewMenu";
 import { HostedModelServingStatusProvider } from "../components/labs/HostedModelServingStatus";
@@ -52,6 +53,7 @@ import {
 } from "../lib/sidebar-files";
 import type { SkillSourceDocument } from "../components/app-shell/skill-source-document";
 import type { SkillPackageSourceSelection } from "../components/app-shell/skill-package-source";
+import type { MainPaneProps } from "../components/app-shell/main-pane-types";
 import { extensionSourceSelection } from "../components/settings/extension-source-selection";
 import { AppToastProvider } from "./AppToastContext";
 import { composerSkillsForProfile } from "../lib/profile-selection";
@@ -413,19 +415,35 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       beginNewThread,
     ],
   );
-  const [newResourceBusy, setNewResourceBusy] = useState(false);
-  const newResourceInFlight = useRef(false);
+  const [resourceDraftPreviewStatus, setResourceDraftPreviewStatus] = useState<"saving" | "failed" | null>(() => {
+    try { return window.localStorage.getItem("openpond.resource-draft-preview.v1") ? "failed" : null; }
+    catch { return null; }
+  });
+  const newResourceSequence = useRef(0);
+  const [modelContextRequest, setModelContextRequest] = useState<MainPaneProps["modelContextRequest"]>(null);
   const newResourceRequests = useRef(new Map<string, CreateSessionResourceDraftRequest>());
   const refreshTrainingNavigation = trainingNavigation.refetch;
   const resourceWorkspaceId = appDefaults.defaultTeamId ?? personalModelWorkspaceId(organizations);
   const hostedModels = hostedModelScope(bootstrap?.account, resourceWorkspaceId);
   const openHomeChat = useCallback(() => {
+    newResourceSequence.current++;
+    setModelContextRequest(null);
+    setResourceDraftPreviewStatus(null);
+    try { window.localStorage.removeItem("openpond.resource-draft-preview.v1"); } catch { /* The renderer also retains preview state. */ }
     setPonderMode(null);
     composerDraftStore.setResourceSetup("new-chat", () => null);
     beginNewChat(null);
   }, [beginNewChat, composerDraftStore]);
+  const selectSidebarModelContext = useCallback(async (modelId: string) => {
+    if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
+    if (selectedSessionId || resourceDraftPreviewStatus) openHomeChat();
+    else {
+      setPonderMode(null);
+      beginNewChat(null);
+    }
+    setModelContextRequest({ id: crypto.randomUUID(), target: { kind: "model", id: modelId, location: "local" } });
+  }, [beginNewChat, openHomeChat, resourceDraftPreviewStatus, selectedSessionId, setPonderMode]);
   const createDesktopResource = useCallback(async (kind: DesktopNewKind, candidate?: ResourceSetupCandidate) => {
-    if (newResourceInFlight.current) return;
     if (kind === "chat") {
       if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
       openHomeChat();
@@ -437,7 +455,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       return;
     }
     const routePath = () => window.location.pathname + window.location.search;
-    const startLocation = routePath();
     const profileId = bootstrap.profile.activeProfile ?? "default";
     let source: CreateSessionResourceDraftRequest["benchmarkVersion"];
     if (candidate) {
@@ -455,8 +472,9 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     }
     const operationKey = JSON.stringify(source ? [profileId, kind, source] : [profileId, kind, null, null]);
     const storageKey = `openpond.resource-draft-creation.v1:${operationKey}`;
-    newResourceInFlight.current = true;
-    setNewResourceBusy(true);
+    const sequence = ++newResourceSequence.current;
+    const isCurrent = () => newResourceSequence.current === sequence;
+    const isPreviewCurrent = () => isCurrent() && routePath() === "/chat/new";
     try {
       const modelId = normalizeChatModel(activeProvider, activeModel, bootstrap.providers);
       let storedRequest: CreateSessionResourceDraftRequest | undefined;
@@ -465,7 +483,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         if (saved.success && saved.data.kind === kind && saved.data.profileId === profileId &&
           JSON.stringify(saved.data.benchmarkVersion ?? null) === JSON.stringify(source ?? null)) storedRequest = saved.data;
       } catch { /* In-flight requests are also retained in this renderer. */ }
-      const request = newResourceRequests.current.get(operationKey) ?? storedRequest ?? {
+      const retainedRequest = newResourceRequests.current.get(operationKey) ?? storedRequest;
+      const request = retainedRequest ?? {
         kind,
         operationId: crypto.randomUUID(),
         provider: activeProvider,
@@ -473,36 +492,59 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         profileId,
         ...(source ? { benchmarkVersion: source } : {}),
       };
+      if (!await navigateDesktopRoute({ kind: "chat", sessionId: null }, "push", isCurrent)) return;
+      setPonderMode(null);
+      setModelContextRequest(null);
+      beginNewChat(null);
+      setResourceDraftPreviewStatus("saving");
+      try { window.localStorage.setItem("openpond.resource-draft-preview.v1", kind); } catch { /* The renderer also retains preview state. */ }
+      const seed = newResourceSetup(kind);
+      composerDraftStore.setResourceSetup("new-chat", current => {
+        if (retainedRequest && current?.kind === kind && JSON.stringify(current.benchmarkModelVersion ?? null) === JSON.stringify(source ?? null)) return current;
+        return kind === "benchmark" && source
+          ? { ...seed, benchmarkModelVersion: source, values: { ...seed.values, candidate: candidate?.label,
+              ...(source.location === "cloud" ? { destination: "OpenPond Managed" as const } : {}) } }
+          : seed;
+      });
+      if (!retainedRequest) composerDraftStore.setForScope("new-chat", () => "");
+      requestMainComposerFocus();
       newResourceRequests.current.set(operationKey, request);
       try { window.localStorage.setItem(storageKey, JSON.stringify(request)); } catch { /* In-flight requests remain available in this renderer. */ }
       const session = await api.createSessionResourceDraft(connection, request);
       if (kind === "model") void refreshTrainingNavigation();
+      if (!isPreviewCurrent()) return;
       const retainedSource = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft).data?.benchmarkVersion;
-      composerDraftStore.setResourceSetup(`session:${session.id}`, current => {
-        if (current) return current;
-        const setup = newResourceSetup(kind);
-        if (kind !== "benchmark" || !retainedSource) return setup;
-        return { ...setup, benchmarkModelVersion: retainedSource, values: { ...setup.values, candidate: candidate?.label,
-          ...(retainedSource.location === "cloud" ? { destination: "OpenPond Managed" as const } : {}) } };
-      });
-      if (await openSessionInChat(session.id, undefined, () => routePath() === startLocation || window.location.pathname === `/chat/${session.id}`, session)) {
+      const edited = composerDraftStore.getResourceSetup("new-chat") ?? seed;
+      const previewText = composerDraftStore.getDrafts()["new-chat"];
+      const sessionScope = `session:${session.id}`;
+      composerDraftStore.setResourceSetup(sessionScope, () => kind === "benchmark" && retainedSource
+        ? { ...edited, benchmarkModelVersion: retainedSource } : edited);
+      composerDraftStore.setForScope(sessionScope, () => typeof previewText === "string" ? previewText : previewText?.prompt ?? "");
+      if (await openSessionInChat(session.id, undefined, () => isCurrent() &&
+        (routePath() === "/chat/new" || window.location.pathname === `/chat/${session.id}`), session)) {
         newResourceRequests.current.delete(operationKey);
         try { window.localStorage.removeItem(storageKey); } catch { /* The retained operation remains idempotent. */ }
+        try { window.localStorage.removeItem("openpond.resource-draft-preview.v1"); } catch { /* The renderer also retains preview state. */ }
+        setResourceDraftPreviewStatus(null);
+        composerDraftStore.setResourceSetup("new-chat", () => null);
+        composerDraftStore.setForScope("new-chat", () => "");
         requestMainComposerFocus();
-      } else if (routePath() === startLocation) {
+      } else if (isPreviewCurrent()) {
+        setResourceDraftPreviewStatus("failed");
         showToast("Draft saved. Choose New again to reopen it.", "info");
       }
     } catch (error) {
-      showToast(error instanceof Error ? error.message : String(error), "error");
-    } finally {
-      newResourceInFlight.current = false;
-      setNewResourceBusy(false);
+      if (!isPreviewCurrent()) return;
+      setResourceDraftPreviewStatus("failed");
+      showToast(error instanceof ApiRequestError && error.status === 404
+        ? "This local server is older than the app. Restart pnpm dev, then choose New again to save the draft."
+        : error instanceof Error ? error.message : String(error), "error");
     }
-  }, [activeModel, activeProvider, bootstrap, composerDraftStore, connection, openHomeChat, openSessionInChat, refreshTrainingNavigation, requestMainComposerFocus, resourceWorkspaceId, showToast]);
+  }, [activeModel, activeProvider, beginNewChat, bootstrap, composerDraftStore, connection, openHomeChat, openSessionInChat, refreshTrainingNavigation, requestMainComposerFocus, resourceWorkspaceId, setPonderMode, showToast]);
   const managedResourcesAvailable = bootstrap?.account.state === "signed_in";
   const desktopNewAction = useMemo(() => ({
-    busy: newResourceBusy, create: createDesktopResource, managedAvailable: managedResourcesAvailable,
-  }), [newResourceBusy, createDesktopResource, managedResourcesAvailable]);
+    create: createDesktopResource, managedAvailable: managedResourcesAvailable,
+  }), [createDesktopResource, managedResourcesAvailable]);
   const selectSidebarTeam = useCallback(
     async (teamId: string | null) => {
       if (!connection || !bootstrap) return;
@@ -1090,6 +1132,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           ),
           modelTrainingActivityByProjectId: trainingNavigation.data?.activityByProjectId ?? {},
           resourceWorkspaceId: hostedModels?.teamId ?? null,
+          onSelectModelContext: selectSidebarModelContext,
           onProductAreaChange: changeProductArea,
           experience: activeExperience,
           view,
@@ -1280,6 +1323,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         }}
         mainPane={{
           resourceWorkspaceId: hostedModels?.teamId ?? null,
+          resourceDraftPreviewStatus,
+          modelContextRequest,
           ponderNavigationVersion,
           ponderMode,
           onPonderModeChange: setPonderMode,

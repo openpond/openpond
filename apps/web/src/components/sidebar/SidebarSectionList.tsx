@@ -2,14 +2,11 @@ import { SidebarInbox } from "./SidebarInbox";
 import { sidebarThreadGroups } from "./SidebarThreadGroupIndicator";
 import { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
 export { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
-import { SidebarNewThreadButton } from "./SidebarNavigation";
-import { DesktopNewMenu } from "../chat/DesktopNewMenu";
 import { SidebarModelResource } from "./SidebarModelResource";
 import { SidebarResourceRow } from "./SidebarResourceRow";
 import { sidebarResourceThreads } from "./sidebar-resource-threads";
 import { hostedModelScope } from "../../lib/hosted-model-scope";
 import { SidebarTeamAvatars } from "./SidebarTeamAvatars";
-import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
 import { Inbox, List } from "../icons";
 import { clientChoiceStorage } from "../../lib/client-choice-storage";
@@ -105,11 +102,11 @@ export function groupSidebarTaskRows(
 
 export function SidebarSectionList({
   activeSessions,
-  beginNewChat,
   account,
   connection,
   modelProjects,
   resourceWorkspaceId,
+  onSelectModelContext,
   modelTrainingActivityByProjectId,
   teamChatEnabled,
   teamChatOrganization,
@@ -117,7 +114,6 @@ export function SidebarSectionList({
   teamMembers,
   currentUserId,
   openTeamDm,
-  onOpenPonder,
   workflowGroups: _workflowGroups = [],
   workflowSessions = [],
   trainingSessionIds = EMPTY_TRAINING_SESSION_IDS,
@@ -855,16 +851,8 @@ export function SidebarSectionList({
             onClick={() => { const next = inboxView ? "grouped" : "inbox"; setPresentation(next); clientChoiceStorage.setItem("openpond.sidebar.presentation.v1", next); }}>
             {inboxView ? <List size={16} /> : <Inbox size={16} />}
           </button>
-          <SidebarNewThreadButton beginNewChat={beginNewChat} />
         </div>
       </div>
-      <DesktopNewMenu sidebar />
-      {onOpenPonder ? (
-        <button type="button" className="sidebar-row sidebar-ponder-entry" onClick={onOpenPonder}>
-          <span className="conversation-source-icon" aria-hidden="true"><img src={OPENPOND_ICON_URL} alt="" /></span>
-          <span>Your pal</span>
-        </button>
-      ) : null}
       {visiblePinnedRows.length > 0 || pinnedWorkflowRows.length > 0 ? (
         <div className="sidebar-pinned-rows">
           {visiblePinnedRows.map(renderPinnedRow)}
@@ -883,6 +871,10 @@ export function SidebarSectionList({
               const chats = modelChatsById.get(model.id);
               return <SidebarModelResource key={model.id} model={model}
                 selected={selectedModelId === model.id}
+                onActivate={() => {
+                  setSelectedModelGroup({ id: model.id, sessionId: null });
+                  onSelectModelContext(model.id);
+                }}
                 onToggle={expanded => setSelectedModelGroup(current => expanded ? { id: model.id, sessionId: selectedSessionId }
                   : current?.id === model.id ? null : current)}
                 activity={modelTrainingActivityByProjectId[model.id]} connection={connection}

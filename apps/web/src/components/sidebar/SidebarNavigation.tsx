@@ -1,5 +1,4 @@
-import type { OpenPondApp } from "@openpond/contracts";
-import { Boxes, SquarePen } from "../icons";
+import { Boxes } from "../icons";
 import { BaseModelIcon } from "../labs/BaseModelIcon";
 import { SidebarModelControls } from "./SidebarModelResource";
 import type { SidebarProps } from "./Sidebar.types";
@@ -7,25 +6,10 @@ import {
   modelsLocation,
   modelsPath,
   hasResourceSidebar,
-  navigateDesktopRoute,
   navigateModelsRoute,
   useModelsRoute,
   type ModelsRoute,
 } from "../labs/lab-primary-tab-state";
-
-export function SidebarNewThreadButton({ beginNewChat }: {
-  beginNewChat: (app?: OpenPondApp | null) => void;
-}) {
-  return (
-    <button className="sidebar-icon" type="button" aria-label="New thread" data-tooltip="New thread" data-tooltip-placement="bottom"
-      onClick={async () => {
-        if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
-        beginNewChat(null);
-      }}>
-      <SquarePen size={16} />
-    </button>
-  );
-}
 
 type Destination = { label: string; target: ModelsRoute; active: boolean };
 const benchmarkViews = [
@@ -43,6 +27,7 @@ const graderViews = [
 ] as const;
 
 function resourceDestinations(route: ModelsRoute) {
+  if (route.page === "home" || route.page === "serving") return null;
   if (route.page === "experiments" || route.page === "datasets" || route.page === "graders") {
     const kind = { experiments: "Benchmarks", datasets: "Datasets", graders: "Graders" }[route.page];
     const destinations: Destination[] = [{

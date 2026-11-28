@@ -69,6 +69,12 @@
   cursor: text;
 }
 
+.resource-prompt-input:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 .resource-setup-text-field {
   display: inline-block;
   field-sizing: content;
@@ -90,14 +96,46 @@
   white-space: nowrap;
 }
 
+.resource-setup-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: var(--backdrop);
+}
+
 .training-dialog.resource-setup-dialog {
   width: min(730px, calc(100vw - 36px));
   max-height: min(820px, calc(100dvh - 36px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-panel);
+  box-shadow: 0 20px 60px var(--shadow-color);
+}
+
+.resource-setup-dialog > header,
+.resource-setup-dialog > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .resource-setup-dialog-body {
   margin-top: 8px;
+  min-block-size: 0;
+  overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.resource-setup-dialog > footer {
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .resource-setup-fields {

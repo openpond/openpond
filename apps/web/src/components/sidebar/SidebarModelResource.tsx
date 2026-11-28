@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import type { TrainingNavigationResponse } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { createHostedModelLearningApi } from "../../api/model-learning-api";
-import { Boxes, MoreHorizontal, RefreshCw } from "../icons";
-import { AppDialog } from "../dialogs/AppDialog";
+import { Boxes, MoreHorizontal, RadioTower, RefreshCw } from "../icons";
 import { BaseModelIcon } from "../labs/BaseModelIcon";
 import { HostedModelServingSetup } from "../labs/HostedModelServingSetup";
+import { ModelServingDialog } from "../labs/ModelServingDialog";
 import { useHostedModelManaging } from "../labs/HostedModelServingStatus";
 import { LabStatusBadge } from "../labs/LabStatusBadge";
 import { createWorkspaceApi } from "../labs/workspace/workspace-api";
@@ -22,11 +22,12 @@ type SidebarModelControlsProps = {
   onOpenVersions(): void;
 };
 
-export function SidebarModelResource({ model, activity, onOpen, onOpenRuns, onToggle, selected, children, ...controls }: SidebarModelControlsProps & {
+export function SidebarModelResource({ model, activity, onOpen, onOpenRuns, onActivate, onToggle, selected, children, ...controls }: SidebarModelControlsProps & {
   activity?: TrainingNavigationResponse["activityByProjectId"][string];
   onOpen(): void;
   onOpenRuns(key: string | null): void;
   onToggle(expanded: boolean): void;
+  onActivate(): void;
   selected: boolean;
   children: ReactNode;
 }) {
@@ -36,11 +37,11 @@ export function SidebarModelResource({ model, activity, onOpen, onOpenRuns, onTo
   const { workspace, serveLabel, openServe, dialog } = useSidebarModelServing({ model, ...controls });
   const gpu = activity?.activeRuns === 1 && activity.gpuType && activity.gpuCount
     ? `${activity.gpuCount} × ${activity.gpuType.replaceAll("_", " ")}` : null;
-  return <><SidebarResourceRow name={name} selected={selected} onToggle={onToggle}
-    icon={<BaseModelIcon modelId={baseModelId} fallback={<Boxes size={15} />} />} actions={<>
-      <button type="button" className="training-button secondary labs-compact-button" aria-label={`${serveLabel} ${name}`} onClick={openServe}>{serveLabel}</button>
-      <SidebarModelLearning model={model} workspace={workspace} onOpenLearning={controls.onOpenLearning} />
-      <button type="button" className="sidebar-icon" aria-label={`Actions for ${name}`} popoverTarget={menuId}>
+  return <><SidebarResourceRow name={name} selected={selected} onActivate={onActivate} onToggle={onToggle}
+    icon={<BaseModelIcon modelId={baseModelId} fallback={<Boxes size={15} />} />}
+    leadingActions={<SidebarModelLearning model={model} workspace={workspace} onOpenLearning={controls.onOpenLearning} />} actions={<>
+      <SidebarModelServeButton label={serveLabel} name={name} onClick={openServe} />
+      <button type="button" className="sidebar-row-action" aria-label={`Actions for ${name}`} title="More actions" popoverTarget={menuId}>
         <MoreHorizontal size={15} aria-hidden="true" />
       </button>
       <div id={menuId} ref={menu} popover="auto" className="sidebar-model-menu" role="group" aria-label={`${name} actions`}>
@@ -69,11 +70,11 @@ function useSidebarModelServing({ model, connection, actorId, apiBaseUrl, active
   const close = () => setServing(false);
   const dialog = !serving ? null : workspace && hostedProjectId
     ? <HostedModelServingSetup api={workspace} modelId={hostedProjectId} name={name} onClose={close} />
-    : <AppDialog ariaLabel={`Serve ${name}`} className="labs-rename-dialog labs-serving-dialog" onClose={close}>
+    : <ModelServingDialog ariaLabel={`Serve ${name}`} onClose={close}>
         <h2>Serve {name}</h2>
         <p>Choose a saved version to review serving options.</p>
         <button type="button" className="training-button" onClick={() => { close(); onOpenVersions(); }}>View versions</button>
-      </AppDialog>;
+      </ModelServingDialog>;
   return { workspace, serveLabel, openServe: () => setServing(true), dialog };
 }
 
@@ -91,7 +92,7 @@ function SidebarModelLearning({ model, workspace, onOpenLearning }: Pick<Sidebar
   });
   const policy = learning.data?.policy;
   const learningLabel = policy ? (policy.enabled ? "Continual learning on" : "Continual learning paused") : "Continual learning";
-  return workspace ? <button type="button" className={`sidebar-icon${policy?.enabled ? " active" : ""}`}
+  return workspace ? <button type="button" className={`sidebar-row-action${policy?.enabled ? " active" : ""}`}
     aria-label={learningLabel} title={learningLabel} onClick={onOpenLearning}>
     <RefreshCw size={14} aria-hidden="true" />
   </button> : null;
@@ -101,7 +102,13 @@ export function SidebarModelControls(props: SidebarModelControlsProps) {
   const { workspace, serveLabel, openServe, dialog } = useSidebarModelServing(props);
   return <>
     <SidebarModelLearning model={props.model} workspace={workspace} onOpenLearning={props.onOpenLearning} />
-    <button type="button" className="training-button secondary labs-compact-button" aria-label={`${serveLabel} ${props.model.name}`} onClick={openServe}>{serveLabel}</button>
+    <SidebarModelServeButton label={serveLabel} name={props.model.name} onClick={openServe} />
     {dialog}
   </>;
+}
+
+function SidebarModelServeButton({ label, name, onClick }: { label: string; name: string; onClick(): void }) {
+  return <button type="button" className="sidebar-row-action" aria-label={`${label} ${name}`} title={label} onClick={onClick}>
+    <RadioTower size={15} aria-hidden="true" />
+  </button>;
 }

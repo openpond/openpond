@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   MODEL_SERVING_IDLE_TIMEOUT_SECONDS,
   SERVERLESS_SERVING_IDLE_SECONDS,
@@ -7,7 +8,7 @@ import {
 } from "openpond-sdk/training";
 import { DropdownSelect } from "../DropdownSelect";
 import { ErrorToast } from "../common/ErrorToast";
-import { AppDialog } from "../dialogs/AppDialog";
+import { ModelServingDialog } from "./ModelServingDialog";
 import { useDraftNavigation } from "./useDraftNavigation";
 import { useModelServingControl } from "./useModelServingControl";
 import type { WorkspaceApi } from "./workspace/workspace-api";
@@ -67,6 +68,8 @@ export function ModelServingControlDialog({
         value.control.versionHash === version.contentHash);
   const guard = useDraftNavigation({
     name: "Serving setup",
+    dialogClassName: "model-serving-dialog",
+    backdropClassName: "model-serving-backdrop",
     busy: saved.busy,
     dirty:
       Boolean(retained) ||
@@ -87,10 +90,8 @@ export function ModelServingControlDialog({
   });
   return (
     <>
-      <AppDialog
+      <ModelServingDialog
         ariaLabel={actual === "activate" ? "Serve model" : "Stop serving"}
-        className="labs-rename-dialog"
-        backdropClassName="labs-rename-backdrop"
         dismissDisabled={saved.busy}
         onClose={() => void guard.requestLeave(onClose)}
       >
@@ -269,8 +270,8 @@ export function ModelServingControlDialog({
                   : "Stop serving"}
           </button>
         </div>
-      </AppDialog>
-      {guard.dialog}
+      </ModelServingDialog>
+      {guard.dialog ? createPortal(guard.dialog, document.body) : null}
     </>
   );
 }

@@ -7,7 +7,6 @@ import "./desktop-new-menu.css";
 export type DesktopNewKind = "chat" | SessionResourceDraftKind;
 
 export const DesktopNewContext = createContext<{
-  busy: boolean;
   managedAvailable: boolean;
   create(kind: DesktopNewKind, candidate?: ResourceSetupCandidate): void;
 } | null>(null);
@@ -20,12 +19,6 @@ const entries = [
   { kind: "grader", label: "Grader", Icon: Shield },
 ] as const;
 
-export function DesktopNewResourceButton({ kind }: { kind: SessionResourceDraftKind }) {
-  const action = useContext(DesktopNewContext);
-  return action ? <button type="button" className="training-button desktop-new-button" disabled={action.busy}
-    onClick={() => action.create(kind)}>{action.busy ? "Opening…" : `New ${kind}`}</button> : null;
-}
-
 export function DesktopNewMenu({ sidebar = false }: { sidebar?: boolean }) {
   const action = useContext(DesktopNewContext);
   const id = useId();
@@ -33,8 +26,8 @@ export function DesktopNewMenu({ sidebar = false }: { sidebar?: boolean }) {
   if (!action) return null;
   return <div className={sidebar ? "desktop-new sidebar-desktop-new" : "desktop-new"}>
     <button type="button" className="training-button desktop-new-button desktop-new-trigger"
-      popoverTarget={id} disabled={action.busy}>
-      <span className="desktop-new-caption"><Plus aria-hidden="true" size={15} />{action.busy ? "Opening…" : "New"}</span>
+      popoverTarget={id}>
+      <span className="desktop-new-caption"><Plus aria-hidden="true" size={15} />New</span>
       <ChevronDown className="desktop-new-caret" aria-hidden="true" size={13} />
     </button>
     <div id={id} ref={popover} popover="auto" className="desktop-new-popover" role="group" aria-label="Create new">
