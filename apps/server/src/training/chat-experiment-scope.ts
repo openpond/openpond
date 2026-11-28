@@ -35,7 +35,7 @@ export function chatResourceFocusKey(state: ChatExperimentContext) {
 }
 
 export function createChatExperimentScopes(store: SqliteStore) {
-  async function change(sessionId: string, apply: (state: ChatExperimentContext, metadata: Record<string, unknown>) => void) {
+  async function change(sessionId: string, apply: (state: ChatExperimentContext, metadata: Record<string, unknown>) => void): Promise<ChatExperimentContext> {
     // updateSession serializes this callback with all other session writes.
     // Read state inside the callback so concurrent selections cannot lose scopes.
     const session = await store.updateSession(sessionId, current => {
@@ -76,7 +76,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
     return scope;
   }
 
-  async function ensure(sessionId: string) {
+  async function ensure(sessionId: string): Promise<ChatExperimentContext> {
     return change(sessionId, state => {
       if (state.activeScopeId) return;
       const now = new Date().toISOString();
@@ -87,7 +87,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
     });
   }
 
-  async function create(sessionId: string, operationId: string, expectedSelectionVersion?:number, graderId?: string | null, graders?: ChatResourceSummary[]) {
+  async function create(sessionId: string, operationId: string, expectedSelectionVersion?:number, graderId?: string | null, graders?: ChatResourceSummary[]): Promise<ChatExperimentContext> {
     return change(sessionId, state => {
       if(expectedSelectionVersion!==undefined && expectedSelectionVersion!==state.selectionVersion)throw new Error("Resource selection changed. Refresh before creating another experiment.");
       if (state.scopes.some(scope => scope.operationId === operationId)) return;
@@ -106,7 +106,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
   async function createForDataset(sessionId: string, input: {
     dataset: ChatResourceSummary; graders: ChatResourceSummary[]; operationId: string;
     expected?: { version: number; target: ChatContextTarget };
-  }) {
+  }): Promise<ChatExperimentContext> {
     return change(sessionId, (state, metadata) => {
       if (input.expected) {
         const target = ChatContextTargetSchema.safeParse(metadata.chatContextSelection);
@@ -130,7 +130,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
 
   async function createDraft(sessionId: string, raw: ExperimentDraft, expected?: {
     version: number; target: ChatContextTarget | null; modelSetupOwner?: ChatExperimentScope["modelSetupOwner"];
-  }) {
+  }): Promise<ChatExperimentContext> {
     const draft = await parseAndVerifyExperimentDraft(raw);
     const hash = createHash("sha256").update(canonicalJson(draft)).digest("hex");
     return change(sessionId, (state, metadata) => {
@@ -167,7 +167,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
     draft: ExperimentDraft;
     operationId: string;
     expectedRevision: number;
-  }) {
+  }): Promise<ChatExperimentContext> {
     const draft = await parseAndVerifyExperimentDraft(input.draft);
     const requestHash = createHash("sha256").update(canonicalJson({ draft, expectedRevision: input.expectedRevision })).digest("hex");
     return change(sessionId, state => {
@@ -194,7 +194,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
   }
 
   async function linkStoredDraft(sessionId: string, record: ExperimentDraftRecord, reference: StoredExperimentDraftReference,
-    expected?: { version: number; target: ChatContextTarget | null }, scopeId?: string) {
+    expected?: { version: number; target: ChatContextTarget | null }, scopeId?: string): Promise<ChatExperimentContext> {
     if (record.id !== reference.id || record.teamId !== reference.teamId)
       throw new Error("The stored experiment reference does not match its document.");
     const identity = createHash("sha256").update(canonicalJson(reference)).digest("hex");
@@ -230,7 +230,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
   }
 
   async function select(sessionId: string, input: { scopeId?: string; name?: string; evaluationModel?: string; executionLocation?: "local" | "cloud"; dataset?: ChatResourceSummary | null;
-    graders?: ChatResourceSummary[]; graderId?: string | null; run?: ChatResourceSummary; expectedSelectionVersion?: number;operationId?:string;visualPublicationId?:string }) {
+    graders?: ChatResourceSummary[]; graderId?: string | null; run?: ChatResourceSummary; expectedSelectionVersion?: number;operationId?:string;visualPublicationId?:string }): Promise<ChatExperimentContext> {
     return change(sessionId, state => {
       const hash=createHash("sha256").update(JSON.stringify({scopeId:input.scopeId,name:input.name,evaluationModel:input.evaluationModel,executionLocation:input.executionLocation,visualPublicationId:input.visualPublicationId,dataset:input.dataset ? [input.dataset.id,input.dataset.revision] : input.dataset,graderId:input.graderId,run:input.run?.id})).digest("hex");
       const prior=input.operationId && Object.hasOwn(state.selectionOperations,input.operationId) ? state.selectionOperations[input.operationId] : undefined;
@@ -295,7 +295,19 @@ export function createChatExperimentScopes(store: SqliteStore) {
     });
   }
 
-  async function attach(sessionId: string, turnId: string, summary: ChatResourceSummary) {
+  async function recordLocalAdapterBenchmarkRuns(sessionId: string, scopeId: string, runs: ChatResourceSummary[]): Promise<void> {
+    await change(sessionId, state => {
+      const scope = state.scopes.find(candidate => candidate.id === scopeId);
+      if (!scope?.draft || runs.some(run => run.location !== "local" || run.benchmark?.id !== scope.draft!.id))
+        throw new Error("These runs do not belong to the originating local Benchmark.");
+      const retained = new Map(scope.runs.map(run => [run.id, run]));
+      for (const run of runs) retained.set(run.id, run);
+      scope.runs = [...retained.values()].slice(-100);
+      scope.updatedAt = new Date().toISOString();
+    });
+  }
+
+  async function attach(sessionId: string, turnId: string, summary: ChatResourceSummary): Promise<ChatExperimentContext> {
     // Grader fixtures can contain privileged answers. Configuration context
     // retains identifiers and metadata, never grader example outputs.
     if (summary.kind === "grader") summary = { ...summary, rows: [] };
@@ -361,7 +373,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
-  async function attachModel(sessionId: string, turnId: string, model: NonNullable<ChatExperimentScope["model"]>, name: string) {
+  async function attachModel(sessionId: string, turnId: string, model: NonNullable<ChatExperimentScope["model"]>, name: string): Promise<ChatExperimentContext> {
     const turn = await store.getTurn(turnId);
     if (!turn || turn.sessionId !== sessionId) throw new Error("Model attachment requires its originating conversation.");
     return change(sessionId, (state, metadata) => {
@@ -390,7 +402,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
       }
     });
   }
-  async function attachTraining(sessionId: string, turnId: string, input: ChatTrainingAttachment) {
+  async function attachTraining(sessionId: string, turnId: string, input: ChatTrainingAttachment): Promise<ChatExperimentContext> {
     const training = ChatTrainingAttachmentSchema.parse(input);
     const turn = await store.getTurn(turnId);
     if (!turn || turn.sessionId !== sessionId) throw new Error("Resource turn does not belong to this conversation.");
@@ -430,7 +442,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
       if (!state.activeScopeId && !late) state.activeScopeId = scope.id;
     });
   }
-  async function attachWeightSpace(sessionId: string, turnId: string, pin: NonNullable<ChatExperimentScope["weightSpace"]>) {
+  async function attachWeightSpace(sessionId: string, turnId: string, pin: NonNullable<ChatExperimentScope["weightSpace"]>): Promise<ChatExperimentContext> {
     const turn = await store.getTurn(turnId);
     if (!turn || turn.sessionId !== sessionId) throw new Error("The editing session requires its originating conversation.");
     return change(sessionId, state => {
@@ -449,7 +461,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
   }
   // GUI Start has no agent turn. Associate its canonical returned Job with the
   // originating draft, preserving newer focus rather than inventing a turn.
-  async function associateDraftTraining(sessionId: string, draftId: string, input: ChatTrainingAttachment) {
+  async function associateDraftTraining(sessionId: string, draftId: string, input: ChatTrainingAttachment): Promise<ChatExperimentContext> {
     const training = ChatTrainingAttachmentSchema.parse(input);
     return change(sessionId, state => {
       const scope = state.scopes.find(item => item.draft?.id === draftId || item.storedDraft?.id === draftId);
@@ -465,5 +477,5 @@ export function createChatExperimentScopes(store: SqliteStore) {
       scope.updatedAt = new Date().toISOString();
     });
   }
-  return { ensure, create, createForDataset, createDraft, saveLocalDraft, linkStoredDraft, select, attach, attachModel, attachTraining, attachWeightSpace, associateDraftTraining };
+  return { ensure, create, createForDataset, createDraft, saveLocalDraft, recordLocalAdapterBenchmarkRuns, linkStoredDraft, select, attach, attachModel, attachTraining, attachWeightSpace, associateDraftTraining };
 }

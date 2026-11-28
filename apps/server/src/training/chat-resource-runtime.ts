@@ -187,6 +187,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
     const {context:requestedContext,invocationToken,...input} = envelope;
     const context = invocationToken ? await deps.resolveInvocation!(invocationToken) : requestedContext;
+    if (kind === "experiment" && input.action === "local_adapter_benchmark") {
+      if (context) throw new Error("Open the desktop Benchmark review to use this local adapter.");
+      return (await import("../evaluations/chat-local-adapter-benchmark.js")).handleLocalAdapterBenchmark({
+        store: deps.store, home: deps.home, scopes, experiments,
+      }, input.payload);
+    }
     if (kind === "dataset" && input.action === "next_step") return nextSteps.request(input.payload, context);
     if (kind === "dataset" && input.action === "context_sync_draft") {
       const query = z.object({ sessionId: z.string().min(1), scopeId: z.string().min(1),

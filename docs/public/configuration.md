@@ -85,7 +85,7 @@ An explicitly approved request can warm a self-hosted model before evaluating an
 
 ## Local inference and training
 
-To send setup prompts or run model-only Benchmarks while signed out, configure a loopback OpenAI-compatible server in **Settings → Providers → Local / Custom OpenAI-compatible**. Use the server's provider key and choose one of its models. That server controls GPU acceleration for inference. You can create and edit local setup drafts without connecting a provider.
+To send setup prompts or benchmark a model from your own provider while signed out, configure a loopback OpenAI-compatible server in **Settings → Providers → Local / Custom OpenAI-compatible**. Use the server's provider key and choose one of its models. That server controls GPU acceleration for inference. You can create and edit local setup drafts without connecting a provider.
 
 **This device** supports one-time supervised fine-tuning with LoRA on a single NVIDIA GPU on Linux. Prepare the runtime in the active OpenPond home.
 
@@ -95,6 +95,8 @@ To send setup prompts or run model-only Benchmarks while signed out, configure a
 4. **Preview training examples**, approve the exact rows, and select **Check this device**. After the check passes, use **Start local training**. The setup review shows the GPU and optimizer progress. Reopen the same review to find the run or cancel it.
 
 OpenPond retains the adapter and its hashes in the active home's `training/local-sft/runs/` directory. After installing dependencies and downloading the base model, training can run offline. The local runner loads the on-disk checkpoint and Dataset without OpenPond authentication.
+
+In **Models → Versions**, open a locally trained adapter and choose **Benchmark this version**. Select a local Dataset revision, an optional saved local baseline, and CPU or NVIDIA CUDA. Save the review before selecting **Run saved Benchmark**. OpenPond uses the saved base checkpoint and adapter bytes in the local Python environment. Both versions use the same cases and the Dataset's local graders. The results retain their Benchmark revision and request no hosted inference or grading.
 
 ## Local voice dictation
 

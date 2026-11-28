@@ -270,6 +270,30 @@ export const ModelSetupDraftSchema = z
   .strict();
 export type ModelSetupDraft = z.infer<typeof ModelSetupDraftSchema>;
 
+const LocalAdapterVersionSchema = z.object({
+  location: z.literal("local"),
+  projectId: z.string().min(1).max(240),
+  versionId: z.string().min(1).max(240),
+  artifactId: z.string().min(1).max(240),
+  bundleHash: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+export const LocalAdapterBenchmarkSetupSchema = z.object({
+  candidate: LocalAdapterVersionSchema,
+  baseline: LocalAdapterVersionSchema.optional(),
+  dataset: z.object({
+    id: z.string().min(1).max(240), revision: z.number().int().positive(),
+    contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  }).strict(),
+  split: z.enum(["train", "validation", "test", "frozen_eval"]),
+  samples: z.number().int().min(1).max(100),
+  seed: z.number().int().min(0).max(2_147_483_647),
+  maxOutputTokens: z.number().int().min(1).max(2048),
+  device: z.enum(["cpu", "cuda"]),
+}).strict().refine(setup => !setup.baseline || setup.baseline.versionId !== setup.candidate.versionId, {
+  path: ["baseline"], message: "Choose a different saved version for the baseline.",
+});
+export type LocalAdapterBenchmarkSetup = z.infer<typeof LocalAdapterBenchmarkSetupSchema>;
+
 /** An authoring snapshot may be incomplete. It is never a preparation, an
  * execution, or evidence that a model/method is available to this account. */
 export const ExperimentDraftSchema = z
@@ -281,6 +305,7 @@ export const ExperimentDraftSchema = z
     modelSetup: ModelSetupDraftSchema.optional(),
     startingModel: ExperimentStartingModelSchema.optional(),
     evaluationForm: EvaluationExperimentDraftSchema.optional(),
+    localAdapterBenchmark: LocalAdapterBenchmarkSetupSchema.optional(),
     hostedEvaluationForm: HostedEvaluationExperimentFormDraftSchema.optional(),
     trainingForm: TrainingExperimentFormDraftSchema.optional(),
     activationForm: ActivationExperimentFormDraftSchema.optional(),
@@ -302,6 +327,8 @@ export const ExperimentDraftSchema = z
   .strict()
   .superRefine((draft, context) => {
     const source = draft.startingModel;
+    if (draft.localAdapterBenchmark && (draft.operationType !== "evaluate" || source || draft.evaluationForm || draft.hostedEvaluationForm))
+      context.addIssue({ code: "custom", path: ["localAdapterBenchmark"], message: "The local adapter Benchmark owns its reviewed execution settings." });
     if (draft.alphaEditForm && draft.operationType !== "alphaedit")
       context.addIssue({
         code: "custom",

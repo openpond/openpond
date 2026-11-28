@@ -320,8 +320,14 @@ export class SqliteLocalExperimentStore extends SqliteStoreDomain {
     return this.localWrite(db=> {
       this.requireLocalOwner(db,input.teamId,input.id,input.ownerId);
       this.requireLocalChargeBounds(db,input.teamId,input.id);
-      if(!Number.isFinite(input.maximumUsd)||input.maximumUsd<=0)throw new LocalExperimentError("local_charge_bound_unknown","An enforceable positive model charge ceiling is required.",422);
       const value=refreshLocalExecution(db,input.teamId,input.id);
+      const source = db.get<{ provider: string }>(
+        "SELECT json_extract(payload, '$.model.providerId') AS provider FROM local_experiment_definitions WHERE team_id=? AND id=? AND revision=?",
+        [input.teamId, value.definition.id, value.definition.revision],
+      );
+      const localAdapter = source?.provider === "local-sft-adapter";
+      if (!Number.isFinite(input.maximumUsd) || (localAdapter ? input.maximumUsd !== 0 : input.maximumUsd <= 0))
+        throw new LocalExperimentError("local_charge_bound_unknown","An enforceable model charge ceiling is required.",422);
       if(value.status!=="running")throw new LocalExperimentError("local_execution_not_running","The execution no longer accepts model dispatch.");
       const admitted=db.get<{status:string}>("SELECT status FROM local_experiment_cases WHERE team_id=? AND execution_id=? AND receipt_id=?",[input.teamId,input.id,input.caseId]);
       if(admitted?.status!=="running")throw new LocalExperimentError("local_case_not_admitted","Model reservation requires an owned running case.");

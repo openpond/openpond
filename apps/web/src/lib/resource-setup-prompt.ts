@@ -130,8 +130,9 @@ export function resourceSetupParts(draft: ResourceSetupDraft): ResourceSetupPart
       return [
         "Set up ", name, " for ", objective, ". Evaluate ", field("candidate", "Choose a candidate version"),
         ...(draft.comparison ? [" against ", field("baseline", "Choose a baseline version")] : []),
-        " on ", dataset, " with ", grader, ". Use ", field("evaluationSettings", "Evaluation protocol"), " and ",
-        field("budget", "Choose a budget"), ".", " Run on ", destination, ".",
+        " on ", dataset, " with ", grader, ". Use ", field("evaluationSettings", "Evaluation protocol"),
+        ...(draft.benchmarkModelVersion?.location === "local" ? ["."] : [" and ", field("budget", "Choose a budget"), "."]),
+        " Run on ", destination, ".",
       ];
     case "dataset":
       return ["Set up ", name, " for ", objective, " from ", field("source", "Choose a source"), " with ",
@@ -159,6 +160,10 @@ export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetup
   if (field === "trainingSettings" || field === "evaluationSettings" || field === "preview") return placeholder;
   const localBase = localTrainingBase(draft);
   if (field === "baseModel" && localBase) return localBase.label;
+  if (draft.benchmarkModelVersion?.location === "local") {
+    if (field === "destination") return draft.localBenchmarkInference?.device === "cuda" ? "This device (NVIDIA CUDA)" : "This device (CPU)";
+    if (field === "grader") return "the Dataset’s local graders";
+  }
   if (field === "grader" && draft.kind === "benchmark" && draft.values.destination === "This device") return "the Dataset’s local graders";
   const value = draft.values[field];
   if (field === "budget" && typeof value === "number") return `$${value}`;
@@ -192,6 +197,8 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     managed?.validation && `Validation Dataset ${managed.validation.id}, revision ${managed.validation.revision}, content hash ${managed.validation.contentHash}, split ${managed.validationSplit ?? "validation"}`,
     draft.candidateRef && `Model project ${draft.candidateRef.projectId}, version ${draft.candidateRef.versionId}, artifact ${draft.candidateRef.artifactId}, bundle hash ${draft.candidateRef.bundleHash}`,
     version?.location === "local" && `Model project ${version.projectId}, version ${version.versionId}, artifact ${version.artifactId}, bundle hash ${version.bundleHash}`,
+    draft.localBenchmarkInference?.baseline && `Baseline Model project ${draft.localBenchmarkInference.baseline.projectId}, version ${draft.localBenchmarkInference.baseline.versionId}, artifact ${draft.localBenchmarkInference.baseline.artifactId}, bundle hash ${draft.localBenchmarkInference.baseline.bundleHash}`,
+    draft.localBenchmarkInference && `Maximum output ${draft.localBenchmarkInference.maxOutputTokens} tokens per case`,
     version?.location === "cloud" && `Saved Model ${version.modelProjectId}, exact version hash ${version.versionHash}`,
     draft.values.destination === "This device" && draft.localCandidate && `Candidate local provider custom-openai-compatible, model ID ${draft.localCandidate.modelId}, configuration hash ${draft.localCandidate.configurationHash}`,
     draft.values.destination === "This device" && draft.comparison && draft.localBaseline && `Baseline local provider custom-openai-compatible, model ID ${draft.localBaseline.modelId}, configuration hash ${draft.localBaseline.configurationHash}`,

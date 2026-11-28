@@ -25,6 +25,7 @@ export async function projectLocalSftRun(input: {
   directory: string;
   startedAt: string;
   observedAt: string;
+  completedAt?: string;
 }): Promise<ModelRun | null> {
   const { store, approval, state, attemptId, directory, startedAt, observedAt } = input;
   const { sessionId, dataset, recipe, modelAssetId } = approval.request;
@@ -45,12 +46,13 @@ export async function projectLocalSftRun(input: {
   if (existing && JSON.stringify(existing.localSft) === JSON.stringify(localSft) && existing.failure === failure) return existing;
   const status = statusByPhase[state.status];
   const terminal = status === "cancelled" || status === "failed" || status === "succeeded";
+  const completedAt = input.completedAt ?? observedAt;
   const core = {
     schemaVersion: "openpond.modelRun.v1", id, modelVersionId: null, modelId: project.id,
     profileId: project.profileId, kind: "training", status, method: "sft", destinationId: "local_cuda",
     taskset: dataset, quote: { maximumSpendUsd: 0, hourlyCostUsd: null },
     reward: null, localSft, failure, startedAt,
-    completedAt: terminal ? observedAt : null, updatedAt: observedAt,
+    completedAt: terminal ? completedAt : null, updatedAt: observedAt,
   } as const;
   if (state.status !== "completed") {
     return store.projectLocalSftModelRun(ModelRunSchema.parse({ ...core, receipt: null, adapterArtifactLineageId: null }));
@@ -63,7 +65,7 @@ export async function projectLocalSftRun(input: {
     jobId: id, kind: name.endsWith(".safetensors") ? "adapter" : "manifest",
     path: path.join(directory, "adapter", name), sha256: file.sha256, sizeBytes: file.bytes,
     baseModelId: base.id, baseModelRevision: base.revision, tokenizerRevision: base.tokenizerRevision,
-    chatTemplateHash: base.chatTemplateHash, nonProduction: true, createdAt: observedAt,
+    chatTemplateHash: base.chatTemplateHash, nonProduction: true, createdAt: completedAt,
     metadata: { provider: "local_cuda", providerFilename: name, verified: true, modelAssetId },
   }));
   const weights = artifacts.find(artifact => artifact.kind === "adapter")!;
@@ -80,7 +82,7 @@ export async function projectLocalSftRun(input: {
     modelId: project.id, artifactId: weights.id, jobId: id, tasksetId: dataset.id, tasksetHash: dataset.contentHash,
     graderHash: contentHash([]), planHash: approval.planHash, bundleHash: receipt.contentHash,
     recipeHash: contentHash(recipe), workerVersion: "openpond-local-sft-v1", trainerVersion: "pytorch-peft",
-    importedAt: observedAt, frozenEvaluationArtifactId: null, promotable: false,
+    importedAt: completedAt, frozenEvaluationArtifactId: null, promotable: false,
   });
   return store.projectLocalSftModelRun(ModelRunSchema.parse({ ...core, receipt, adapterArtifactLineageId: lineage.id }), {
     lineage, artifacts,
@@ -92,7 +94,7 @@ export async function projectLocalSftRun(input: {
         schemaVersion: "openpond.baseModelPreference.v1", source: "local", modelAssetId,
         modelId: base.id, revision: base.revision, tokenizerRevision: base.tokenizerRevision, chatTemplateHash: base.chatTemplateHash,
       },
-      artifactLineageId: lineage.id, adapterStatus: "trained", createdAt: observedAt,
+      artifactLineageId: lineage.id, adapterStatus: "trained", createdAt: completedAt,
     },
   });
 }

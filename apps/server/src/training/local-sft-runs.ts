@@ -123,8 +123,9 @@ async function latestRun(directory: string, approval: Receipt) {
 
 async function projectRun(store: Request["store"], directory: string, attemptId: string, approval: Receipt, state: Run["state"], observedAt: string) {
   const { birthtime } = await stat(directory);
+  const completion = state.status === "completed" ? await stat(path.join(directory, "status.json")) : null;
   await projectLocalSftRun({ store, approval, attemptId, directory, state,
-    startedAt: birthtime.toISOString(), observedAt });
+    startedAt: birthtime.toISOString(), observedAt, completedAt: completion?.mtime.toISOString() });
 }
 
 const modelProjections = new WeakMap<Request["store"], { recovered: boolean; checkedAt: number; pending?: Promise<void> }>();

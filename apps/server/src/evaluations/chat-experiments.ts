@@ -17,6 +17,8 @@ import { prepareLocalExperimentModel } from "./local-experiment-model.js";
 import {readCachedTasksetPackage} from "../training/taskset-package-files.js";
 import {ClaudeCodeRuntimeSchema,CodexExperimentRuntimeSchema} from "openpond-sdk/experiments";
 import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
+import type { LocalAdapterBenchmarkSetup } from "openpond-sdk/training";
+import { createLocalSftBenchmarkInference } from "./local-sft-benchmark-inference.js";
 
 export function chatExperimentSummary(record:LocalExperimentRecord,result?:LocalExperimentResult):ChatResourceSummary {
   const scored = result?.cases.filter(c => c.status==="completed" && c.grade?.gradingStatus==="scored" && c.grade.score !== null) ?? [];
@@ -85,9 +87,17 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
   const scope = await deps.store.localResourceOwnerId();
   const identity = {actorId:async()=>scope,teamId:async()=>scope};
   const loopback = createLocalInferenceOwner(deps.state);
+  const localAdapter = createLocalSftBenchmarkInference(deps.store, deps.home);
   const claude = createClaudeCodeOwner({state:deps.state,store:deps.store,ownerId:deps.ownerId,...identity});
   const codex = createCodexExperimentOwner({state:deps.state,status:deps.codexStatus});
-  const prepareNative=(configuration:Parameters<typeof loopback.prepare>[0])=>configuration.request.policy.kind === "hosted_chat" && configuration.request.policy.localRuntime?.providerId === "codex" ? codex.prepare(configuration) : configuration.request.policy.kind === "hosted_chat" && configuration.request.policy.localRuntime?.providerId === "claude-code" ? claude.prepare(configuration) : loopback.prepare(configuration);
+  const prepareNative = (configuration: Parameters<typeof loopback.prepare>[0]) => {
+    const policy = configuration.request.policy;
+    const provider = policy.kind === "hosted_chat" ? policy.localRuntime?.providerId : undefined;
+    if (provider === "local-sft-adapter") return localAdapter.prepare(configuration);
+    if (provider === "codex") return codex.prepare(configuration);
+    if (provider === "claude-code") return claude.prepare(configuration);
+    return loopback.prepare(configuration);
+  };
   async function hostedPin() {
     if(!deps.hosted)throw new Error("This installation has no hosted inference provider.");
     const access=await deps.hosted.access();
@@ -210,6 +220,51 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     }
     const group = Group.parse(retained);
     if (group.packageHash !== value.contentHash) throw new Error("The retained group requires its exact saved Dataset package.");
+    return submit(group, value, input.maximumCostUsd);
+  }
+
+  async function runSavedAdapterBenchmark({ operationId, setup, benchmark, profileId, name }: {
+    operationId: string; setup: LocalAdapterBenchmarkSetup; benchmark: BenchmarkRunPin; profileId: string; name: string;
+  }) {
+    const { record, package: value } = await deps.datasets.packageDataset(setup.dataset.id, setup.dataset.revision);
+    if (record.workspace.contentHash !== setup.dataset.contentHash) throw new Error("The Benchmark requires its exact reviewed Dataset revision.");
+    if (value.taskset.graders.some(grader => grader.kind === "model_judge"))
+      throw new Error("A saved local adapter Benchmark requires Dataset graders that run on this device.");
+    const tasks = value.taskset.tasks.filter(task => task.split === setup.split).slice(0, setup.samples);
+    if (!tasks.length) throw new Error("The reviewed Dataset split has no runnable tasks.");
+    const requestHash = contentHash({ scope, operationId, setup, benchmark, profileId });
+    let retained = await deps.store.readChatExperimentGroup(operationId, requestHash);
+    if (!retained) {
+      const sources = setup.baseline ? [setup.candidate, setup.baseline] : [setup.candidate];
+      const configurations = await Promise.all(sources.map(async ({ location: _location, ...pin }, index) => {
+        const selected = await localAdapter.resolve({ location: "local", ...pin }, setup.device, profileId);
+        const id = `${operationId}:${index}`;
+        return LocalExperimentRunSchema.shape.configuration.parse({ operationId: id,
+          // The portable envelope has a positive minimum. The verified local
+          // transport reserves and settles exactly zero and admits no paid graders.
+          maximumCostUsd: 0.000001, request: {
+            schemaVersion: "openpond.modelTasksetRunRequest.v1", operationId: id,
+            teamId: scope, modelProjectId: null, name: `${name}, Version ${selected.version.version}`.slice(0, 191),
+            taskset: { id: value.taskset.id, revision: value.taskset.revision, contentHash: value.taskset.contentHash },
+            population: tasks.map(task => ({
+              receiptId: "case-" + contentHash([id, task.id, setup.seed]).slice(0, 40),
+              taskId: task.id, seed: String(setup.seed), fixtureId: null,
+            })),
+            policy: { kind: "hosted_chat", modelId: pin.versionId, maxOutputTokens: setup.maxOutputTokens, temperature: 0, topP: 1,
+              localRuntime: { ...pin, providerId: "local-sft-adapter", configurationHash: selected.configurationHash,
+                device: setup.device, requestTimeoutMs: 120_000 } },
+          } });
+      }));
+      for (const configuration of configurations) await localAdapter.prepare({ ...configuration, expectedRevision: 0 });
+      retained = await deps.store.prepareChatExperimentGroup(operationId, requestHash, { packageHash: value.contentHash,
+        hosted: null, configurations, benchmark });
+    }
+    const group = Group.parse(retained);
+    if (group.packageHash !== value.contentHash) throw new Error("The retained group requires its exact saved Dataset package.");
+    return submit(group, value, 0);
+  }
+
+  async function submit(group: z.infer<typeof Group>, value: Awaited<ReturnType<typeof deps.datasets.packageDataset>>["package"], maximumCostUsd: number) {
     const runs:LocalExperimentRecord[] = [];
     const errors:{modelId:string;message:string}[]=[];
     // Disjoint allocations bound the whole group, including every run's judges,
@@ -220,7 +275,7 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     }
     if(!runs.length && errors.length)throw new Error(errors.map(error=>error.modelId+": "+error.message).join("\n"));
     return {runs,errors,summaries:await Promise.all(runs.map(async record=>summary(record,
-      record.status === "completed" ? await service.result({teamId:scope,id:record.id}) : undefined))),maximumCostUsd:input.maximumCostUsd};
+      record.status === "completed" ? await service.result({teamId:scope,id:record.id}) : undefined))),maximumCostUsd};
   }
   async function request(raw:unknown, benchmark?: BenchmarkRunPin) {
     const input = z.object({action:z.enum(["models","local_models","run","list","read","status","cancel","result","compare","case"]),payload:z.record(z.string(),z.unknown()).default({})}).strict().parse(raw);
@@ -240,5 +295,5 @@ export async function createChatExperiments(deps:{store:SqliteStore;home:string;
     }
     return result;
   }
-  return {service,request,run,scope,summary};
+  return {service,request,run,runSavedAdapterBenchmark,scope,summary};
 }

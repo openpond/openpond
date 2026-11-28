@@ -8,9 +8,11 @@ const positiveInteger = z.number().int().positive().optional();
 const nonnegativeNumber = z.number().nonnegative().optional();
 const artifactHash = z.string().regex(/^[a-f0-9]{64}$/);
 const resourceId = z.string().min(1).max(240);
+const LocalBenchmarkModelVersionSchema = z.object({
+  location: z.literal("local"), projectId: resourceId, versionId: resourceId, artifactId: resourceId, bundleHash: artifactHash,
+}).strict();
 export const BenchmarkModelVersionSchema = z.discriminatedUnion("location", [
-  z.object({ location: z.literal("local"), projectId: resourceId, versionId: resourceId,
-    artifactId: resourceId, bundleHash: artifactHash }).strict(),
+  LocalBenchmarkModelVersionSchema,
   z.object({ location: z.literal("cloud"), modelProjectId: resourceId, jobId: resourceId,
     teamId: resourceId, versionHash: artifactHash }).strict(),
 ]);
@@ -172,6 +174,11 @@ export const ResourceSetupDraftSchema = z.object({
     revision: z.number().int().positive(),
   }).optional(),
   benchmarkModelVersion: BenchmarkModelVersionSchema.optional(),
+  localBenchmarkInference: z.object({
+    device: z.enum(["cpu", "cuda"]),
+    maxOutputTokens: z.number().int().min(1).max(2048),
+    baseline: LocalBenchmarkModelVersionSchema.optional(),
+  }).strict().optional(),
   candidateRef: z.object({
     projectId: z.string().min(1).max(240),
     versionId: z.string().min(1).max(240),

@@ -11,6 +11,7 @@ import { navigateModelsRoute } from "../labs/lab-primary-tab-state";
 import { modelsLocation } from "../labs/models-route";
 import { ErrorToast } from "../common/ErrorToast";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
+import { LocalAdapterBenchmarkReview } from "./LocalAdapterBenchmarkReview";
 import "../../styles/labs/evaluation-workspace.css";
 
 type Context = ReturnType<typeof useChatContextSelection>;
@@ -25,9 +26,9 @@ export function ChatExperimentEditor({ connection, context, onClose }: {
     ...scope, teamId: scope.teamId, actorId: scope.actorId, projectId: record?.projectId ?? null, executionLocation: location,
   }) : null, [connection, scope?.accountKey, scope?.teamId, scope?.actorId, record?.projectId, location]);
   if (!draft) return null;
-  if (context.selection?.benchmarkVersion?.location === "local")
+  if (context.selection?.benchmarkVersion?.location === "local" && context.selection.target.sessionId)
     return <div className="chat-experiment-tool-content">
-      <p>This saved artifact needs an exact-version inference runtime.</p>
+      <LocalAdapterBenchmarkReview connection={connection} sessionId={context.selection.target.sessionId} />
       <button type="button" className="training-button secondary" onClick={onClose}>Close editor</button>
     </div>;
   if (draft.hostedEvaluationForm) return <div className="chat-experiment-tool-content">

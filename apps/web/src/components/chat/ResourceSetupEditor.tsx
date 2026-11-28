@@ -31,6 +31,7 @@ import { ModelSetupTrainingFields } from "./ModelSetupTrainingFields";
 import { ModelSetupManagedReview } from "./ModelSetupManagedReview";
 import { ModelSetupLocalBase } from "./ModelSetupLocalBase";
 import { ModelSetupLocalSftReview } from "./ModelSetupLocalSftReview";
+import { LocalAdapterBenchmarkReview } from "./LocalAdapterBenchmarkReview";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
 import "./resource-setup-editor.css";
 
@@ -175,7 +176,8 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       const localReason = draft.kind === "model"
         ? supportsLocalTraining ? describeLocalTrainingCompute(compute.data, compute.isFetching)
           : "Choose SFT with LoRA and one-time training to use this device."
-        : draft.kind === "benchmark" && !localModels.length ? "Configure a compatible loopback model in provider settings." : null;
+        : draft.kind === "benchmark" && version?.location !== "local" && !localModels.length
+          ? "Configure a compatible loopback model in provider settings." : null;
       return [
         { value: "", label: "Choose a destination" },
         { value: "This device", label: "This device", disabled: Boolean(localReason),
@@ -200,7 +202,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   const reviewRequest = reviewInputs ? localSftReviewRequest(draft, sessionId) : null;
   const activeFields: readonly ResourceSetupField[] = trainingMethod
     ? ["budget"] : resourceSetupGroups[field] ?? [field as ResourceSetupField];
-  const benchmarkPresets = draft.kind === "benchmark" ? <div className="resource-setup-presets" role="group" aria-label="Benchmark presets">
+  const benchmarkPresets = draft.kind === "benchmark" && version?.location !== "local" ? <div className="resource-setup-presets" role="group" aria-label="Benchmark presets">
     {[{ compare: false, label: "Evaluate one model" }, { compare: true, label: "Compare models" }].map(({ compare, label }) =>
       <button type="button" className="training-button secondary" key={label} disabled={busy}
         aria-pressed={Boolean(draft.comparison) === compare}
@@ -224,6 +226,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
         baseModel={visibleDraft.managedTrainingInputs?.base?.preference ?? localBase?.preference} disabled={busy} onChange={onChange} />}
       {activePart ? <div className="resource-setup-fields" key={field}>
         {activeFields.map((key, index) => {
+          if (version?.location === "local") return null;
           const options = fieldOptions(key);
           const label = field === "saveDestination" ? "Save to" : labels[key];
           if (version && ["candidate", "baseline", "dataset", "datasetRevision", "grader", "destination"].includes(key)) return null;
@@ -308,7 +311,20 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           onApprove={approval => onChange(draft, { ...draft, revision: draft.revision + 1, localSftApproval: approval })} />
       ) : <p>{localBase && draft.datasetRef ? "Check the local SFT settings before reviewing training examples."
         : "Choose a local checkpoint and Dataset to review training examples."}</p>)}
-      {version?.location === "local" && <p>This saved artifact needs an exact-version inference runtime. A generic local endpoint cannot verify which artifact is loaded.</p>}
+      {version?.location === "local" && connection && sessionId && <LocalAdapterBenchmarkReview
+        connection={connection} sessionId={sessionId}
+        initial={{
+          name: draft.values.name, split: draft.values.split, samples: draft.values.samples, seed: draft.values.seed,
+          ...draft.localBenchmarkInference,
+          dataset: draft.datasetRef?.contentHash ? { ...draft.datasetRef, contentHash: draft.datasetRef.contentHash } : undefined,
+        }}
+        onReviewed={(setup, name, baseline) => onChange(draft, {
+          ...draft, revision: draft.revision + 1, comparison: Boolean(baseline), datasetRef: setup.dataset,
+          localBenchmarkInference: { device: setup.device, maxOutputTokens: setup.maxOutputTokens, baseline: setup.baseline },
+          values: { ...draft.values, name, baseline, destination: "This device", split: setup.split,
+            samples: setup.samples, seed: setup.seed, dataset: localDatasets.find(item => item.id === setup.dataset.id)?.name,
+            datasetRevision: setup.dataset.revision },
+        })} />}
       {version?.location === "cloud" && <button type="button" className="training-button secondary"
         disabled={busy || context.selecting || workspace?.teamId !== version.teamId || !openableVersion}
         onClick={async () => {
