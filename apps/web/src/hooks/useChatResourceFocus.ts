@@ -8,7 +8,7 @@ export type EvaluationModel = {id:string;providerId:string;name?:string};
 type ContextResponse = { focus: ChatResourceFocus; datasets: ChatResourceSummary[]; experiments: ChatResourceSummary[]; graders: ChatResourceSummary[] };
 const emptyFocus = (): ChatResourceFocus => ({ dataset: null, experiment: null });
 
-export function useChatResourceFocus(connection: ClientConnection | null, sessionId: string | null) {
+export function useChatResourceFocus(connection: ClientConnection | null, sessionId: string | null, includeModelChoices = false) {
   const [focus, setFocus] = useState<ChatResourceFocus>(emptyFocus);
   const [datasets, setDatasets] = useState<ChatResourceSummary[]>([]);
   const [experiments, setExperiments] = useState<ChatResourceSummary[]>([]);
@@ -55,14 +55,14 @@ export function useChatResourceFocus(connection: ClientConnection | null, sessio
 
   useEffect(() => {
     setModels([]); setModelsError(null);
-    if (!connection || !sessionId || !focus.scopeContext?.activeScopeId) return;
+    if (!connection || !sessionId || (!includeModelChoices && !focus.scopeContext?.activeScopeId)) return;
     const abort = new AbortController(); setModelsLoading(true);
     void chatResourceRequest<{models:EvaluationModel[]}>(connection,"experiment",{action:"models"},abort.signal)
       .then(result => { if (!abort.signal.aborted) setModels(result.models); })
       .catch(cause => { if (!abort.signal.aborted) setModelsError(cause instanceof Error ? cause.message : "Model choices unavailable."); })
       .finally(() => { if (!abort.signal.aborted) setModelsLoading(false); });
     return () => abort.abort();
-  }, [connection, sessionId, Boolean(focus.scopeContext?.activeScopeId), modelRefresh]);
+  }, [connection, sessionId, Boolean(focus.scopeContext?.activeScopeId), includeModelChoices, modelRefresh]);
 
   async function change(action: string, payload: Record<string, unknown>) {
     if (!connection || !sessionId || selection.current) return false;

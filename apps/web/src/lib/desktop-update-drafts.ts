@@ -1,6 +1,7 @@
 import { TaskResourceContextsSchema } from "@openpond/contracts";
 import type { StoredComposerDraft } from "./composer-draft-store";
 import { DecisionChatDraftsSchema } from "./decision-chat-draft";
+import { ResourceSetupDraftSchema } from "./resource-setup-prompt";
 const KEY = "openpond.desktop-update-drafts.v1";
 const MAX_SNAPSHOT_CHARACTERS = 512 * 1024;
 
@@ -29,8 +30,10 @@ export function restoreDesktopUpdateDrafts(storage?: Storage): Record<string, St
         const entry = value as Record<string, unknown>;
         const contexts = TaskResourceContextsSchema.safeParse(entry.resourceContexts);
         const decisions = DecisionChatDraftsSchema.safeParse(entry.decisionInputs);
+        const resourceSetup = ResourceSetupDraftSchema.safeParse(entry.resourceSetup);
         if (typeof entry.prompt === "string" && contexts.success) drafts[key] = {prompt:entry.prompt,resourceContexts:contexts.data,
-          ...(decisions.success ? { decisionInputs: decisions.data } : {})};
+          ...(decisions.success ? { decisionInputs: decisions.data } : {}),
+          ...(resourceSetup.success ? { resourceSetup: resourceSetup.data } : {})};
       }
     }
     return drafts;

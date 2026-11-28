@@ -112,6 +112,7 @@ export const ChatContextOptionSchema = z
 export const ChatContextSelectionSchema = ChatContextOptionSchema.extend({
   draft: ExperimentDraftSchema.optional(),
   draftRevision: z.number().int().positive().optional(),
+  localDraft: z.literal(true).optional(),
   storedDraft: ExperimentDraftRecordSchema.optional(),
   resource: ChatResourceSummarySchema.optional(),
   dataset: ChatResourceSummarySchema.optional(),

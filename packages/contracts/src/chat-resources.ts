@@ -161,6 +161,7 @@ export const ChatExperimentScopeSchema = z
     draft: ExperimentDraftSchema.optional(),
     storedDraft: StoredExperimentDraftReferenceSchema.optional(),
     draftRevision: z.number().int().positive().optional(),
+    draftSave: z.object({ operationId: Id, requestHash: Hash }).strict().optional(),
     creationHash: Hash.optional(),
     dataset: ChatResourceSummarySchema.nullable(),
     evaluationModel: z.string().min(1).max(500).optional(),

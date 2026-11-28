@@ -6,6 +6,7 @@ import { X } from "../icons";
 import { ComposerResourcePanel } from "./ComposerResourcePanel";
 import { DatasetTrainingPlanFields } from "./DatasetTrainingPlanFields";
 import type { DatasetWorkspaceDialogState } from "./DatasetWorkspace";
+import type { ResourceSetupDraft } from "../../lib/resource-setup-prompt";
 
 type Resources = ReturnType<typeof useChatResourceFocus>;
 export function DatasetWorkspaceDialog({
@@ -19,7 +20,7 @@ export function DatasetWorkspaceDialog({
   connection: ClientConnection;
   resources: Resources;
   onClose: () => void;
-  onAddToChat: (text: string) => void;
+  onAddToChat: (text: string, setup?: ResourceSetupDraft) => void;
 }) {
   const [text, setText] = useState(dialog.text ?? "");
   return (

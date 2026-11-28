@@ -1,5 +1,6 @@
 import type { ChatResourceSummary } from "@openpond/contracts";
 import { modelsLocation, modelsPath } from "../labs/models-route";
+import { newResourceSetup, type ResourceSetupDraft } from "../../lib/resource-setup-prompt";
 
 const GRADER_TYPES = [
   {
@@ -27,11 +28,16 @@ const GRADER_TYPES = [
 export function ChatGraderRequestPanel({ dataset, busy, onDraft }: {
   dataset: ChatResourceSummary | null;
   busy: boolean;
-  onDraft: (text: string) => void;
+  onDraft: (text: string, setup: ResourceSetupDraft) => void;
 }) {
   function submit(type: typeof GRADER_TYPES[number]) {
     if (!dataset || busy) return;
-    onDraft(`${type.request}\n\nDataset: ${dataset.name}, ID ${dataset.id}, revision ${dataset.revision}. Inspect its tasks and existing graders to determine the appropriate checks.\n\nPreserve the existing graders and retained experiment inputs. Save changes as a new dataset revision. Do not start an experiment or training run.`);
+    const setup = newResourceSetup("grader");
+    onDraft(type.request, {
+      ...setup,
+      datasetRef: { id: dataset.id, revision: dataset.revision, contentHash: dataset.contentHash },
+      values: { ...setup.values, dataset: dataset.name, datasetRevision: dataset.revision, graderType: type.label },
+    });
   }
   return <div className="chat-grader-request">
     <div className="evaluation-dataset-choices chat-grader-type-choices" role="group" aria-label="Grader type">

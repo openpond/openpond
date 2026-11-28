@@ -59,6 +59,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     },
     associateDraftTraining: async (sessionId, draftId, training) => { await scopes.associateDraftTraining(sessionId, draftId, training); },
     createDraft: async (sessionId, draft, expected) => { await scopes.createDraft(sessionId, draft, expected); },
+    saveLocalDraft: async (sessionId, scopeId, input) => { await scopes.saveLocalDraft(sessionId, scopeId, input); },
     linkStoredDraft: async (sessionId, record, reference, expected, scopeId) => { await scopes.linkStoredDraft(sessionId, record, reference, expected, scopeId); },
     inspectResource: async resource => {
       if (resource.owner || resource.profileRef) {

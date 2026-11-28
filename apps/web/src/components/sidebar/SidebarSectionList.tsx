@@ -3,6 +3,7 @@ import { sidebarThreadGroups } from "./SidebarThreadGroupIndicator";
 import { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
 export { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "../../lib/sidebar-pagination";
 import { SidebarNewThreadButton } from "./SidebarNavigation";
+import { DesktopNewMenu } from "../chat/DesktopNewMenu";
 import { SidebarTeamAvatars } from "./SidebarTeamAvatars";
 import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
@@ -12,6 +13,7 @@ import { sidebarInboxTime } from "../../lib/sidebar-inbox";
 import { sidebarWorkflowInbox, sidebarWorkflowRows, type SidebarWorkflowRow } from "../../lib/sidebar-workflow-list";
 import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import type { Session } from "@openpond/contracts";
+import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import { useEffect, useMemo, useState } from "react";
 import {
   SIDEBAR_TASK_INITIAL_LIMIT,
@@ -58,7 +60,7 @@ import {
   SidebarTaskProjectGroup,
   type SidebarTaskGroupKind,
 } from "./SidebarTaskProjectGroup";
-import { navigateDesktopRoute } from "../labs/lab-primary-tab-state";
+import { modelsLocation, navigateDesktopRoute, navigateModelsRoute } from "../labs/lab-primary-tab-state";
 import { isDesktopShell } from "../app-shell/WindowControls";
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
@@ -170,6 +172,7 @@ export function SidebarSectionList({
   const [groupByProject, setGroupByProject] = useState(true);
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [ordinaryCollapsed, setOrdinaryCollapsed] = useState(false);
+  const [libraryCollapsed, setLibraryCollapsed] = useState({ model: false, benchmark: false });
   const [taskVisibility, setTaskVisibility] = useState(
     readSidebarTaskVisibilityPreferences,
   );
@@ -334,6 +337,15 @@ export function SidebarSectionList({
       ordinaryFilteredTaskRows.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)),
     [chatRowsVisibleCount, ordinaryFilteredTaskRows],
   );
+  const libraryChats = useMemo(() => {
+    const groups: { model: Session[]; benchmark: Session[] } = { model: [], benchmark: [] };
+    for (const session of visibleTaskRows) {
+      const resource = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft);
+      if (resource.success && (resource.data.kind === "model" || resource.data.kind === "benchmark")) groups[resource.data.kind].push(session);
+    }
+    return groups;
+  }, [visibleTaskRows]);
+  const libraryChatIds = new Set([...libraryChats.model, ...libraryChats.benchmark].map(session => session.id));
   const groupedTaskRows = useMemo(
     () => {
       const groups = groupSidebarTaskRows(visibleTaskRows, (session) => {
@@ -836,6 +848,7 @@ export function SidebarSectionList({
           <SidebarNewThreadButton beginNewChat={beginNewChat} />
         </div>
       </div>
+      <DesktopNewMenu sidebar />
       {onOpenPonder ? (
         <button type="button" className="sidebar-row sidebar-task-row sidebar-ponder-entry" onClick={onOpenPonder}>
           <span className="conversation-source-icon" aria-hidden="true"><img src={OPENPOND_ICON_URL} alt="" /></span>
@@ -856,6 +869,16 @@ export function SidebarSectionList({
       /> : <>
       {renderWorkflowGroups(workflowRows.filter(row => !row.pinned))}
       {groupedTaskRows.filter(group => group.key === "training").map(renderTaskGroup)}
+      {(["model", "benchmark"] as const).map(kind => {
+        const model = kind === "model";
+        const page = model ? modelsLocation("models") : modelsLocation("experiments", null, { area: "console" });
+        return <SidebarSection key={kind} label={model ? "Models" : "Benchmarks"}
+          collapsed={libraryCollapsed[kind]}
+          onTitleClick={() => { void navigateModelsRoute(page).then(opened => { if (opened) setView("labs"); }); }}
+          onToggleCollapsed={() => setLibraryCollapsed(current => ({ ...current, [kind]: !current[kind] }))}>
+          {libraryChats[kind].map(session => renderTaskSession(session))}
+        </SidebarSection>;
+      })}
       <SidebarSection
         label="Projects"
         className="sidebar-projects-section development"
@@ -893,7 +916,7 @@ export function SidebarSectionList({
         {(!groupByProject
           ? visibleTaskRows
           : visibleTaskRows.filter((session) => !sidebarProjectIdBySessionId[session.id])
-        ).filter(session => !trainingSessionIds.has(session.id)).map((session) => renderTaskSession(session))}
+        ).filter(session => !trainingSessionIds.has(session.id) && !libraryChatIds.has(session.id)).map((session) => renderTaskSession(session))}
         {ordinaryFilteredTaskRows.length === 0 && visiblePinnedRows.length === 0 ? (
           <div className="empty-row">
             {sidebarTaskEmptyLabel(taskFilter, taskNoun)}

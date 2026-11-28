@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { ChatGraderRequestPanel } from "./ChatGraderRequestPanel";
 import type { DatasetResponse } from "../../api/chat-resource-api";
 import type { useChatResourceFocus } from "../../hooks/useChatResourceFocus";
+import { newResourceSetup, type ResourceSetupDraft } from "../../lib/resource-setup-prompt";
 
 export type ResourcePanelKind = "experiment" | "action" | "dataset" | "grader" | "rows";
 type Resources = ReturnType<typeof useChatResourceFocus>;
 
 export function ComposerResourcePanel({ kind, resources, busy, onDraft }: {
-  kind: Exclude<ResourcePanelKind, "experiment" | "action">; resources: Resources; busy: boolean; onDraft: (text: string) => void;
+  kind: Exclude<ResourcePanelKind, "experiment" | "action">; resources: Resources; busy: boolean; onDraft: (text: string, setup?: ResourceSetupDraft) => void;
 }) {
   const [description, setDescription] = useState("");
   if (kind === "rows") return <DatasetRows resources={resources} />;
@@ -18,7 +19,7 @@ export function ComposerResourcePanel({ kind, resources, busy, onDraft }: {
   const labels = {title:"New dataset", placeholder:"What examples should it contain?", button:"Chat"};
   function submit() {
     const detail = description.trim();
-    onDraft(`Create a new dataset: ${detail}`);
+    onDraft(detail, newResourceSetup("dataset"));
   }
   const disabled = busy || resources.selecting || !description.trim();
   return <div className="composer-resource-request" onKeyDown={event => { if (!event.nativeEvent.isComposing && event.key === "Enter" && event.target instanceof HTMLInputElement) { event.preventDefault(); event.stopPropagation(); if (!disabled) submit(); } }}>

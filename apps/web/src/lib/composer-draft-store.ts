@@ -2,8 +2,14 @@ import { TaskResourceContextsSchema, type TaskResourceContext } from "@openpond/
 import { useSyncExternalStore, type SetStateAction } from "react";
 import type { AppAction, AppState } from "../app/app-state";
 import { DecisionChatDraftSchema, DecisionChatDraftsSchema, type DecisionChatDraft } from "./decision-chat-draft";
+import { ResourceSetupDraftSchema, type ResourceSetupDraft } from "./resource-setup-prompt";
 
-export type StoredComposerDraft = string | { prompt: string; resourceContexts: TaskResourceContext[]; decisionInputs?: Record<string, DecisionChatDraft> };
+export type StoredComposerDraft = string | {
+  prompt: string;
+  resourceContexts: TaskResourceContext[];
+  decisionInputs?: Record<string, DecisionChatDraft>;
+  resourceSetup?: ResourceSetupDraft;
+};
 
 type PromptSelection = Pick<AppState, "selectedAppId" | "selectedProjectId" | "selectedSessionId">;
 
@@ -17,6 +23,8 @@ export type ComposerDraftStore = {
   setForScope: (scopeKey: string, value: SetStateAction<string>) => void;
   getDecisionDraft: (scopeKey: string, modelId: string) => DecisionChatDraft | null;
   setDecisionDraftForScope: (scopeKey: string, modelId: string, value: DecisionChatDraft | null) => void;
+  getResourceSetup(scopeKey: string): ResourceSetupDraft | null;
+  setResourceSetup(scopeKey: string, update: (current: ResourceSetupDraft | null) => ResourceSetupDraft | null): void;
   subscribe: (listener: () => void) => () => void;
 };
 
@@ -54,12 +62,15 @@ export function createComposerDraftStore(
   let selection = initialSelection;
   const resourceContexts = new Map<string, TaskResourceContext[]>();
   const decisionInputs = new Map<string, Record<string, DecisionChatDraft>>();
+  const resourceSetups = new Map<string, ResourceSetupDraft>();
   const drafts = new Map(Object.entries(initialDrafts).map(([key, entry]) => {
     if (typeof entry === "string") return [key, entry] as const;
     const parsed = TaskResourceContextsSchema.safeParse(entry.resourceContexts);
     if (parsed.success) resourceContexts.set(key, parsed.data);
     const decisions = DecisionChatDraftsSchema.safeParse(entry.decisionInputs);
     if (decisions.success && Object.keys(decisions.data).length) decisionInputs.set(key, decisions.data);
+    const setup = ResourceSetupDraftSchema.safeParse(entry.resourceSetup);
+    if (setup.success) resourceSetups.set(key, setup.data);
     return [key, entry.prompt] as const;
   }));
   let value = drafts.get(draftKey(selection)) ?? "";
@@ -99,11 +110,12 @@ export function createComposerDraftStore(
     resourceContexts,
     getDrafts: () => {
       saveCurrent();
-      return Object.fromEntries([...new Set([...drafts.keys(), ...decisionInputs.keys()])].map(key => {
-        const prompt = drafts.get(key) ?? "", decisions = decisionInputs.get(key);
-        return [key, resourceContexts.has(key) || decisions ? {
+      return Object.fromEntries([...new Set([...drafts.keys(), ...decisionInputs.keys(), ...resourceSetups.keys()])].map(key => {
+        const prompt = drafts.get(key) ?? "", decisions = decisionInputs.get(key), resourceSetup = resourceSetups.get(key);
+        return [key, resourceContexts.has(key) || decisions || resourceSetup ? {
           prompt, resourceContexts: structuredClone(resourceContexts.get(key) ?? []),
           ...(decisions ? { decisionInputs: structuredClone(decisions) } : {}),
+          ...(resourceSetup ? { resourceSetup: structuredClone(resourceSetup) } : {}),
         } : prompt];
       }));
     },
@@ -123,6 +135,15 @@ export function createComposerDraftStore(
       else delete current[modelId];
       if (Object.keys(current).length) decisionInputs.set(scopeKey, current);
       else decisionInputs.delete(scopeKey);
+      for (const listener of listeners) listener();
+    },
+    getResourceSetup: scopeKey => resourceSetups.get(scopeKey) ?? null,
+    setResourceSetup(scopeKey, update) {
+      const current = store.getResourceSetup(scopeKey);
+      const next = update(current);
+      if (current === next) return;
+      if (next) resourceSetups.set(scopeKey, ResourceSetupDraftSchema.parse(next));
+      else resourceSetups.delete(scopeKey);
       for (const listener of listeners) listener();
     },
     setForScope(scopeKey, next) {
@@ -197,4 +218,8 @@ export function createComposerDraftStore(
 
 export function useComposerDraft(store: ComposerDraftStore): string {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+}
+
+export function useResourceSetupDraft(store: ComposerDraftStore, scopeKey: string): ResourceSetupDraft | null {
+  return useSyncExternalStore(store.subscribe, () => store.getResourceSetup(scopeKey), () => null);
 }

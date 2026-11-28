@@ -1,5 +1,6 @@
 import { comparisonParentLabel, continuationConfiguration, runConfiguration } from "./model-run-configuration";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useContext, useMemo, useState } from "react";
+import { DesktopNewContext } from "../chat/DesktopNewMenu";
 import { ErrorToast } from "../common/ErrorToast";
 import {
   RftRecipeSchema,
@@ -104,6 +105,7 @@ export function LabModelVersionDetailPage({
   selectedEntryKey: string;
   onOpenConversation: (conversationId: string) => void;
 }) {
+  const newResource = useContext(DesktopNewContext);
   const state = training.payload;
   const [runAction, setRunAction] = useState<{ runId: string; message: string } | null>(null);
   const jobs = useMemo(
@@ -390,7 +392,14 @@ export function LabModelVersionDetailPage({
           >
             {training.busyAction === "retry-model-run-collection" ? "Collecting…" : "Retry collection"}
           </button>
-        ) : undefined}
+        ) : selectedVersion && newResource ? <button className="training-button secondary" type="button"
+          disabled={newResource.busy} onClick={() => newResource.create("benchmark", {
+            label: `${workproduct.name} Version ${selectedVersion.number}`,
+            projectId: workproduct.id,
+            versionId: selectedVersion.lineage.id,
+            artifactId: selectedVersion.lineage.artifactId,
+            bundleHash: selectedVersion.lineage.bundleHash,
+          })}>Benchmark this version</button> : undefined}
         metrics={[
           {
             label: isGrpo && rolloutProgress ? "Training groups" : "Training steps",

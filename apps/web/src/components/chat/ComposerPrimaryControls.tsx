@@ -358,6 +358,7 @@ export function ComposerPrimaryControls({
           }}
         />
       </div>
+      {issueAction}
       {!hideModelControls && nativeProvider ? (
         <NativeAgentControls
           connection={connection}
@@ -416,7 +417,6 @@ export function ComposerPrimaryControls({
         />
       ) : null}
       <div className="composer-spacer" />
-      {issueAction}
       {!hideModelControls && (
         <span
           className={`context-status-shell ${contextWindowStatus.tone}`}

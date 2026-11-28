@@ -157,6 +157,31 @@ export function createChatExperimentScopes(store: SqliteStore) {
     });
   }
 
+  async function saveLocalDraft(sessionId: string, scopeId: string, input: {
+    draft: ExperimentDraft;
+    operationId: string;
+    expectedRevision: number;
+  }) {
+    const draft = await parseAndVerifyExperimentDraft(input.draft);
+    const requestHash = createHash("sha256").update(canonicalJson({ draft, expectedRevision: input.expectedRevision })).digest("hex");
+    return change(sessionId, state => {
+      const scope = state.scopes.find(candidate => candidate.id === scopeId);
+      if (!scope?.draft || scope.storedDraft || scope.draft.id !== draft.id || draft.operationType !== "evaluate")
+        throw new Error("Reopen this local Benchmark before saving its definition.");
+      if (scope.draftSave?.operationId === input.operationId) {
+        if (scope.draftSave.requestHash !== requestHash) throw new Error("This save operation was used for different Benchmark settings.");
+        return;
+      }
+      if ((scope.draftRevision ?? 1) !== input.expectedRevision)
+        throw new Error("The Benchmark changed. Reopen it before saving these settings.");
+      scope.draft = draft;
+      scope.draftRevision = input.expectedRevision + 1;
+      scope.draftSave = { operationId: input.operationId, requestHash };
+      scope.name = draft.name;
+      scope.updatedAt = new Date().toISOString();
+    });
+  }
+
   async function linkStoredDraft(sessionId: string, record: ExperimentDraftRecord, reference: StoredExperimentDraftReference,
     expected?: { version: number; target: ChatContextTarget | null }, scopeId?: string) {
     if (record.id !== reference.id || record.teamId !== reference.teamId)
@@ -429,5 +454,5 @@ export function createChatExperimentScopes(store: SqliteStore) {
       scope.updatedAt = new Date().toISOString();
     });
   }
-  return { ensure, create, createForDataset, createDraft, linkStoredDraft, select, attach, attachModel, attachTraining, attachWeightSpace, associateDraftTraining };
+  return { ensure, create, createForDataset, createDraft, saveLocalDraft, linkStoredDraft, select, attach, attachModel, attachTraining, attachWeightSpace, associateDraftTraining };
 }

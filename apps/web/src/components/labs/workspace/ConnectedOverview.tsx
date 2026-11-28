@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { DesktopNewMenu } from "../../chat/DesktopNewMenu";
 import type { ClientConnection } from "../../../api";
 import { apiFetch } from "../../../api/api-client";
 import type { HostedModelProjectCatalog } from "../../../hooks/hosted-model-project-types";
@@ -47,8 +48,6 @@ export function ConnectedOverview({
   projectId,
   training,
   onNavigate,
-  onCreateModel,
-  onCreateDataset,
 }: {
   connection: ClientConnection;
   teamId: string;
@@ -59,8 +58,6 @@ export function ConnectedOverview({
   projectId: string | null;
   training: ReturnType<typeof useTraining>;
   onNavigate(route: ModelsRoute): void;
-  onCreateModel(): void;
-  onCreateDataset(): void;
 }) {
   const api = useMemo(
     () => createWorkspaceApi(connection, { teamId, actorId, accountKey, projectId }),
@@ -148,16 +145,7 @@ export function ConnectedOverview({
         <ModelProjectPageHeader
           title="Overview"
           description="Models, benchmarks, datasets, and activity in your workspace."
-          actions={
-            <div className="model-build-actions">
-              <button className="training-button secondary" type="button" onClick={onCreateDataset}>
-                New dataset
-              </button>
-              <button className="training-button" type="button" onClick={onCreateModel}>
-                New model
-              </button>
-            </div>
-          }
+          actions={<DesktopNewMenu />}
         />
         <div className="connected-overview-grid">
           <OverviewSection title="Models" onViewAll={() => onNavigate(modelsLocation("models"))}>

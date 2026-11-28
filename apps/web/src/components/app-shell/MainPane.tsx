@@ -1615,6 +1615,8 @@ export function MainPane({
           <>
             <Suspense fallback={null}>
               <LabsRoute
+                resourceSessions={trainingSessions}
+                onOpenResourceChat={sessionId => { void onOpenSession(sessionId); }}
                 account={bootstrap?.account ?? null}
                 closeDetailRequestId={labCloseDetailRequestId}
                 closeDetailKind={labCloseDetailKind}

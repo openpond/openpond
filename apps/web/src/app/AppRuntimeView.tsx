@@ -17,6 +17,9 @@ import {
   TerminalScope,
 } from "@openpond/contracts";
 import { api } from "../api";
+import { CreateSessionResourceDraftRequestSchema, type CreateSessionResourceDraftRequest } from "@openpond/contracts/requests";
+import { DesktopNewContext, type DesktopNewKind } from "../components/chat/DesktopNewMenu";
+import { newResourceSetup, type ResourceSetupCandidate } from "../lib/resource-setup-prompt";
 import {
   AppSettingsController,
   AppShellController,
@@ -36,6 +39,7 @@ import type { AppSecondaryRuntime } from "./useAppSecondaryRuntime";
 import {
   DEFAULT_APP_PREFERENCES,
   defaultModelForProvider,
+  normalizeChatModel,
   projectSelectionKey,
   providerOptionsFromSettings,
 } from "../lib/app-models";
@@ -406,6 +410,67 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       beginNewThread,
     ],
   );
+  const [newResourceBusy, setNewResourceBusy] = useState(false);
+  const newResourceInFlight = useRef(false);
+  const newResourceRequests = useRef(new Map<string, CreateSessionResourceDraftRequest>());
+  const createDesktopResource = useCallback(async (kind: DesktopNewKind, candidate?: ResourceSetupCandidate) => {
+    if (newResourceInFlight.current) return;
+    if (kind === "chat") {
+      if (!await navigateDesktopRoute({ kind: "chat", sessionId: null })) return;
+      beginContextualNewChat();
+      composerDraftStore.setResourceSetup("new-chat", current => current ?? newResourceSetup("chat"));
+      return;
+    }
+    if (!connection || !bootstrap) {
+      showToast("Wait for OpenPond to connect before creating a draft.", "info");
+      return;
+    }
+    const startLocation = window.location.href;
+    const profileId = bootstrap.profile.activeProfile ?? "default";
+    const operationKey = JSON.stringify([profileId, kind, candidate?.projectId, candidate?.versionId]);
+    const storageKey = `openpond.resource-draft-creation.v1:${operationKey}`;
+    newResourceInFlight.current = true;
+    setNewResourceBusy(true);
+    try {
+      const modelId = normalizeChatModel(activeProvider, activeModel, bootstrap.providers);
+      let storedRequest: CreateSessionResourceDraftRequest | undefined;
+      try {
+        const saved = CreateSessionResourceDraftRequestSchema.safeParse(JSON.parse(window.localStorage.getItem(storageKey) ?? "null"));
+        if (saved.success && saved.data.kind === kind && saved.data.profileId === profileId) storedRequest = saved.data;
+      } catch { /* In-flight requests are also retained in this renderer. */ }
+      const request = newResourceRequests.current.get(operationKey) ?? storedRequest ?? {
+        kind,
+        operationId: crypto.randomUUID(),
+        provider: activeProvider,
+        modelRef: modelId ? { providerId: activeProvider, modelId } : null,
+        profileId,
+      };
+      newResourceRequests.current.set(operationKey, request);
+      try { window.localStorage.setItem(storageKey, JSON.stringify(request)); } catch { /* In-flight requests remain available in this renderer. */ }
+      const session = await api.createSessionResourceDraft(connection, request);
+      composerDraftStore.setResourceSetup(`session:${session.id}`, current => {
+        if (current) return current;
+        const setup = newResourceSetup(kind);
+        if (kind !== "benchmark" || !candidate) return setup;
+        const { label, ...candidateRef } = candidate;
+        return { ...setup, candidateRef, values: { ...setup.values, candidate: label } };
+      });
+      if (await openSessionInChat(session.id, undefined, () => window.location.href === startLocation || window.location.pathname === `/chat/${session.id}`)) {
+        newResourceRequests.current.delete(operationKey);
+        try { window.localStorage.removeItem(storageKey); } catch { /* The retained operation remains idempotent. */ }
+        requestMainComposerFocus();
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      newResourceInFlight.current = false;
+      setNewResourceBusy(false);
+    }
+  }, [activeModel, activeProvider, beginContextualNewChat, bootstrap, composerDraftStore, connection, openSessionInChat, requestMainComposerFocus, showToast]);
+  const managedResourcesAvailable = bootstrap?.account.state === "signed_in";
+  const desktopNewAction = useMemo(() => ({
+    busy: newResourceBusy, create: createDesktopResource, managedAvailable: managedResourcesAvailable,
+  }), [newResourceBusy, createDesktopResource, managedResourcesAvailable]);
   const selectSidebarTeam = useCallback(
     async (teamId: string | null) => {
       if (!connection || !bootstrap) return;
@@ -970,6 +1035,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
 
   return (
     <AppToastProvider showToast={showToast}>
+      <DesktopNewContext.Provider value={desktopNewAction}>
       <AppShellController
         className={appShellClassName}
         style={appShellStyle}
@@ -1470,6 +1536,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           ...toastPresentation,
         }}
       />
+      </DesktopNewContext.Provider>
     </AppToastProvider>
   );
 }

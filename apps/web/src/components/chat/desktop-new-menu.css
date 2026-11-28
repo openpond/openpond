@@ -1,0 +1,47 @@
+.desktop-new {
+  display: inline-flex;
+}
+
+.sidebar-desktop-new {
+  display: flex;
+  margin-bottom: 3px;
+}
+
+.desktop-new-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desktop-new-popover {
+  position-area: bottom span-right;
+  position-try-fallbacks: flip-block, flip-inline;
+  inset: auto;
+  margin: 4px 0;
+  min-width: 150px;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.desktop-new-popover button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.desktop-new-popover button:hover,
+.desktop-new-popover button:focus-visible {
+  background: var(--state-hover);
+}

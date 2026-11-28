@@ -139,6 +139,7 @@ import { createCodexStatusService } from "./codex-status-service.js";
 import { createSessionFileIndex } from "./workspace/session-file-index.js";
 import { createNativeHistoryWorkspace } from "./runtime/native-agents/history-workspace.js";
 import { createSessionStore } from "./store/session-store.js";
+import { createSessionResourceDraft } from "./training/session-resource-draft.js";
 import { createSessionTitleService } from "./session-title-service.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
@@ -1709,6 +1710,7 @@ async function createOwnedOpenPondServer(options: OpenPondServerOptions): Promis
       openEventSubscriber,
       refreshCodexStatus,
       bootstrapPayload,
+      createSessionResourceDraft: createSessionResourceDraft({ storeDir, store, createReservedSession }),
       localProjectActionCatalogPayload,
       skillSourceFilePayload,
       extensionCatalogPayload,

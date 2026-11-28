@@ -171,6 +171,25 @@ export const CreateSessionRequestSchema = z.object({
 
 export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;
 
+export const SessionResourceDraftKindSchema = z.enum(["model", "benchmark", "dataset", "grader"]);
+export type SessionResourceDraftKind = z.infer<typeof SessionResourceDraftKindSchema>;
+
+export const CreateSessionResourceDraftRequestSchema = z.object({
+  operationId: z.string().uuid(),
+  kind: SessionResourceDraftKindSchema,
+  provider: ChatProviderSchema,
+  modelRef: ChatModelRefSchema.nullable(),
+  profileId: z.string().trim().min(1).max(200),
+}).strict().refine(value => !value.modelRef || value.modelRef.providerId === value.provider, "The chat model must belong to the selected provider.");
+export type CreateSessionResourceDraftRequest = z.infer<typeof CreateSessionResourceDraftRequestSchema>;
+
+export const SessionResourceDraftSchema = z.object({
+  kind: SessionResourceDraftKindSchema,
+  id: z.string().uuid(),
+  profileId: z.string().min(1).max(200),
+}).strict();
+export type SessionResourceDraft = z.infer<typeof SessionResourceDraftSchema>;
+
 export const UploadLocalProjectCloudSourceRequestSchema = z.object({
   teamId: z.string().trim().min(1),
   projectName: z.string().trim().min(1).max(120).optional(),

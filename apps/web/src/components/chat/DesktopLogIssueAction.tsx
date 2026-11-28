@@ -3,6 +3,7 @@ import type { ComposerProps } from "./composer-types";
 import type { TaskInboxController } from "../../hooks/useTaskInbox";
 import { useErrorToast } from "../../app/AppToastContext";
 import { useDesktopCorrections } from "./DesktopCorrectionsContext";
+import { Bug, LoaderCircle, RefreshCw } from "../icons";
 import { modelsLocation, modelsPath } from "../labs/lab-primary-tab-state";
 import "./desktop-log-issue.css";
 
@@ -50,11 +51,14 @@ export function DesktopLogIssueAction({ conversationId, inbox, running, onSubmit
     } finally { pending.current = false; setSending(false); }
   }
   return <div className="desktop-log-issue">
-    <button type="button" aria-busy={sending} onClick={() => void logIssue()}
-      title={!conversationId ? "Start a conversation before logging an issue" : corrections.unavailableReason
+    <button type="button" className="composer-icon" aria-label="Log an issue" aria-busy={sending} onClick={() => void logIssue()}
+      title={sending ? "Sending issue request" : !conversationId ? "Start a conversation before logging an issue" : corrections.unavailableReason
         ?? (!corrections.data?.dataset ? "Choose an available issue dataset in Settings" : active && !canSteer ? "Waiting for the conversation to accept steering" : `Add the latest issue to ${corrections.data.dataset.name}`)}>
-      {sending ? "Sending…" : "Log an issue"}
+      {sending ? <LoaderCircle size={16} aria-hidden="true" /> : <Bug size={16} aria-hidden="true" />}
     </button>
-    {corrections.error ? <button type="button" onClick={() => void corrections.refresh()}>Retry</button> : null}
+    {corrections.error ? <button type="button" className="composer-icon" aria-label="Retry loading issue settings"
+      title="Retry loading issue settings" onClick={() => void corrections.refresh()}>
+      <RefreshCw size={16} aria-hidden="true" />
+    </button> : null}
   </div>;
 }

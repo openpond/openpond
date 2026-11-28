@@ -16,6 +16,7 @@ import { createChatExperimentDraftStorage, storedDraftSelection } from "./chat-e
 import { chatSteeringExperiment } from "./chat-steering-experiment.js";
 import { chatExperimentContext, chatResourceFocusKey as focusKey } from "./chat-experiment-scope.js";
 import { readChatDecisionResult } from "./chat-decision-result.js";
+import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 
 type Access = { apiBaseUrl: string; token: string; teamId: string; actorId: string };
 
@@ -27,6 +28,7 @@ export function createChatContextBrowser(deps: {
   createExperiment: (sessionId: string, dataset: ChatContextTarget, expected?: { version: number; target: ChatContextTarget }) => Promise<void>;
   associateDraftTraining?: (sessionId: string, draftId: string, training: import("@openpond/contracts").ChatTrainingAttachment) => Promise<void>;
   createDraft?: (sessionId: string, draft: ExperimentDraft, expected: { version: number; target: ChatContextTarget | null }) => Promise<void>;
+  saveLocalDraft?: (sessionId: string, scopeId: string, input: { draft: ExperimentDraft; expectedRevision: number; operationId: string }) => Promise<void>;
   linkStoredDraft?: (sessionId: string, record: ExperimentDraftRecord, reference: StoredExperimentDraftReference, expected?: { version: number; target: ChatContextTarget | null }, scopeId?: string) => Promise<void>;
   inspectResource?: (resource: ChatResourceSummary) => Promise<{ dataset?: ChatResourceSummary; graders?: ChatResourceSummary[] }>;
 
@@ -161,13 +163,16 @@ export function createChatContextBrowser(deps: {
         const selection = storedDraftSelection(await drafts.read(scope.storedDraft), scope.storedDraft);
         return { ...selection, target };
       }
-      if (!scope.dataset) return { target, draft: scope.draft, draftRevision: scope.draftRevision ?? 1, label: scope.name, detail: "Experiment draft" };
+      const library = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft);
+      const localDraft = library.success && library.data.kind === "benchmark" && library.data.id === scope.draft?.id;
+      const draftState = scope.draft ? { draft: scope.draft, draftRevision: scope.draftRevision ?? 1, ...(localDraft ? { localDraft: true as const } : {}) } : {};
+      if (!scope.dataset) return { target, ...draftState, label: scope.name, detail: "Benchmark draft" };
       const resource = await deps.resource({ kind: "dataset", id: scope.dataset.id, revision: scope.dataset.revision, location: scope.dataset.location ?? "local" });
       if (resource.kind !== "dataset" || resource.id !== scope.dataset.id || resource.revision !== scope.dataset.revision ||
         (resource.location ?? "local") !== (scope.dataset.location ?? "local") ||
         JSON.stringify(resource.owner ?? null) !== JSON.stringify(scope.dataset.owner ?? null) ||
         JSON.stringify(resource.profileRef ?? null) !== JSON.stringify(scope.dataset.profileRef ?? null)) throw new Error("The draft’s exact dataset pin is unavailable.");
-      return { target, draft: scope.draft, ...(scope.draft ? { draftRevision: scope.draftRevision ?? 1 } : {}), label: scope.name, detail: `Draft, ${resource.name}`, resource, ...await deps.inspectResource?.(resource) };
+      return { target, ...draftState, label: scope.name, detail: `Draft, ${resource.name}`, resource, ...await deps.inspectResource?.(resource) };
     }
     if (target.kind === "training") {
       const access = await deps.access();
@@ -341,6 +346,11 @@ export function createChatContextBrowser(deps: {
     const selected = await resolve(target);
     if (!selected.draft || selected.draft.id !== input.draft.id)
       throw new Error("Reopen the intended experiment before saving settings.");
+    if (selected.localDraft && sessionId && target.scopeId && deps.saveLocalDraft) {
+      await deps.saveLocalDraft(sessionId, target.scopeId, input);
+      const saved = await resolve(target);
+      return { saved, currentSaved: saved, selection: await current(sessionId) };
+    }
     if (!selected.storedDraft && input.expectedRevision !== 0)
       throw new Error("An unsaved experiment requires revision zero.");
     const { receipt, reference } = await drafts.save(input);

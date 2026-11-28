@@ -183,8 +183,9 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
     if (selection?.draft?.hostedEvaluationForm)
       throw new Error("Open this saved evaluation in its hosted editor to preserve its native settings.");
     const draft = ExperimentDraftSchema.parse(raw);
-    if (!connection || !selection?.draft || selection.draft.id !== draft.id || !workspace?.teamId)
+    if (!connection || !selection?.draft || selection.draft.id !== draft.id || (!selection.localDraft && !workspace?.teamId))
       throw new Error("Reopen the intended experiment in an OpenPond workspace before saving settings.");
+    const local = selection.localDraft === true;
     if (pending.has(key)) throw new Error("Wait for the current experiment action to finish.");
     pending.add(key); for (const listener of listeners) listener();
     try {
@@ -204,17 +205,21 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
         pendingDraftSave.current = null;
       }
       if (activeKey.current !== key) throw new Error("The active chat or account changed. The draft remains in Experiments.");
-      if (!result || !record || canonicalJson(record.draft) !== canonicalJson(draft)) {
+      if (!result || canonicalJson(result.saved.draft) !== canonicalJson(draft)) {
         pendingDraftSave.current = { key, target: selection.target, update: {
-          schemaVersion: "openpond.experimentDraftSave.v1", teamId: workspace.teamId, projectId: record?.projectId ?? null,
-          operationId: `draft-save-${crypto.randomUUID()}`, expectedRevision: record?.revision ?? 0, draft,
+          schemaVersion: "openpond.experimentDraftSave.v1", teamId: local ? "local" : workspace!.teamId!, projectId: record?.projectId ?? null,
+          operationId: `draft-save-${crypto.randomUUID()}`,
+          expectedRevision: local ? result?.saved.draftRevision ?? selection.draftRevision ?? 1 : record?.revision ?? 0,
+          draft,
         } };
         result = await write(pendingDraftSave.current);
         pendingDraftSave.current = null;
       }
-      if (!result.saved.storedDraft || canonicalJson(result.saved.draft) !== canonicalJson(draft) ||
-          result.currentSaved.storedDraft?.contentHash !== result.saved.storedDraft.contentHash)
-        throw new Error("This experiment changed elsewhere. Your edits are still here; reopen the saved draft to load its current settings.");
+      const matchesSave = local
+        ? result.saved.localDraft && result.currentSaved.draftRevision === result.saved.draftRevision
+        : result.saved.storedDraft && result.currentSaved.storedDraft?.contentHash === result.saved.storedDraft.contentHash;
+      if (!matchesSave || canonicalJson(result.saved.draft) !== canonicalJson(draft))
+        throw new Error("This Benchmark changed elsewhere. Your edits are still here. Reopen the saved draft to load its current settings.");
       if (activeKey.current !== key) return result.saved;
       await queries.cancelQueries({ queryKey: ["chat-context-selection", key] });
       publish(key, result.focused);

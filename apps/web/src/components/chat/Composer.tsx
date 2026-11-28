@@ -105,6 +105,8 @@ import {
 } from "./ComposerMentionMenu";
 import { ComposerPrimaryControls } from "./ComposerPrimaryControls";
 import { DesktopLogIssueAction } from "./DesktopLogIssueAction";
+import { ResourceSetupEditor } from "./ResourceSetupEditor";
+import { resourceSetupText } from "../../lib/resource-setup-prompt";
 import {
   ComposerSkillMenu,
   type ComposerSkillMenuItem,
@@ -192,6 +194,7 @@ export function Composer({
   goalSessionId = taskSessionId,
   taskEvents = EMPTY_TASK_EVENTS,
   submissionScopeKey = "default", composerDraftStore,
+  resourceSetup = null,
   getCurrentSubmissionScopeKey,
   voiceInputChannelKey = submissionScopeKey,
   initialSteerDrafts = EMPTY_STEER_DRAFTS,
@@ -247,7 +250,9 @@ export function Composer({
   }, []);
   const taskInbox = useTaskInbox(connection, taskSessionId, taskEvents);
   const contextSelection = useChatContextSelection(surface === "chat" && enableResourceContext ? connection : null, taskSessionId ?? null);
-  const chatResources = useChatResourceFocus(surface === "chat" && enableResourceContext && !contextSelection.selection?.model && !contextSelection.selection?.training ? connection : null, taskSessionId ?? null);
+  const chatResources = useChatResourceFocus(surface === "chat" && enableResourceContext &&
+    (Boolean(resourceSetup) || !contextSelection.selection?.model && !contextSelection.selection?.training) ? connection : null,
+    taskSessionId ?? null, resourceSetup?.kind === "benchmark");
   const { resourceDrafts, onPromptChange, currentResourceContexts } = useComposerResourceDrafts(submissionScopeKey, changePrompt, chatResources, composerDraftStore);
   useComposerResourceRequests({ surface, voiceInputChannelKey, taskSessionId, submissionScopeKey, prompt, onPromptChange, showToast, resourceDrafts, inputRef, composerDraftStore });
 
@@ -398,7 +403,7 @@ export function Composer({
     selectedActionMentionText,
     selectedInvocationPosition,
   });
-  const hasComposerInput = hasComposerSubmittableInput({
+  const hasComposerInput = Boolean(resourceSetup) || hasComposerSubmittableInput({
     attachmentCount: attachments.length,
     prompt,
     selectedAction,
@@ -464,7 +469,7 @@ export function Composer({
   const nextStep = useComposerNextStep({
     connection: surface === "chat" && enableResourceContext ? connection : null, sessionId: taskSessionId ?? null,
     events: taskEvents, prompt, selectionKey: JSON.stringify(contextSelection.selection?.target ?? null), inputRef,
-    blocked: busy || running || serializingAttachments || contextSelection.selecting || attachments.length > 0
+    blocked: Boolean(resourceSetup) || busy || running || serializingAttachments || contextSelection.selecting || attachments.length > 0
       || Boolean(selectedAction || selectedCommand) || composerSteerDraftsForScope(steerDraftsByScope, submissionScopeKey, initialSteerDrafts).length > 0
       || Boolean(taskInbox.enabled && !taskInbox.snapshot) || Boolean(taskInbox.snapshot?.activeTurnId || taskInbox.snapshot?.inputs.some(item => item.state === "pending")),
   });
@@ -1390,6 +1395,9 @@ export function Composer({
     if (contextSelection.selecting) return false;
     const submissionScope = submissionScopeKey;
     if (!beginSubmissionForScope(submissionScope)) return false;
+    const setup = resourceSetup && !selectedAction && !selectedCommand && !options.promptOverride
+      ? resourceSetup : null;
+    const setupText = setup ? [resourceSetupText(setup), inputRef.current?.getPrompt() ?? prompt].filter(Boolean).join("\n\n") : undefined;
     setAddMenuOpen(false);
     setAttachmentError(null);
     const { contexts: submissionContexts, focus: submissionFocus } = composerSubmissionResourceContext(
@@ -1412,8 +1420,7 @@ export function Composer({
         selectedAction && selectedDisplayPrompt && !prompt.trim()
           ? selectedDisplayPrompt
           : undefined;
-      const promptOverride =
-        options.promptOverride ?? selectedActionPromptOverride;
+      const promptOverride = options.promptOverride ?? selectedActionPromptOverride ?? setupText;
       if (contextSelection.selection) window.dispatchEvent(new CustomEvent(CHAT_CONTEXT_SELECTED, {
         detail: { sessionId: taskSessionId ?? null, scope: contextSelection.scope, targetKey: JSON.stringify(contextSelection.selection.target) },
       }));
@@ -1428,12 +1435,19 @@ export function Composer({
                 : {}),
               ...(promptOverride !== undefined ? { promptOverride } : {}),
               ...(options.preservePrompt ? { preservePrompt: true } : {}),
-              turnMetadata: { ...composerResourceMetadata(submissionContexts), ...(submissionFocus ? { chatResourceFocus: submissionFocus } : {}) },
+              turnMetadata: {
+                ...composerResourceMetadata(submissionContexts),
+                ...(submissionFocus ? { chatResourceFocus: submissionFocus } : {}),
+                ...(setup ? { resourceSetup: setup } : {}),
+              },
               ...(contextSelection.selection ? { sessionMetadata: { chatContextSelection: contextSelection.selection.target } } : {}),
               onSessionCreated: session => contextSelection.moveToSession(session.id),
             }
           : undefined,
       );
+      if (sent && setup && originDraftScopeKey) {
+        composerDraftStore?.setResourceSetup(originDraftScopeKey, current => current === setup ? null : current);
+      }
       if (sent && resourceDrafts.current.get(submissionScope) === submissionContexts) resourceDrafts.current.delete(submissionScope);
       settleStagedAttachments(
         stagedAttachments,
@@ -1770,6 +1784,15 @@ export function Composer({
               inputRef.current?.focusAtPromptIndex(cursorIndex);
           }}
         >
+          {resourceSetup && originDraftScopeKey && composerDraftStore ? <ResourceSetupEditor
+            key={originDraftScopeKey}
+            draft={resourceSetup}
+            busy={busy || running}
+            datasets={chatResources.datasets}
+            localBenchmarkAvailable={chatResources.models.some(model => model.providerId === "custom-openai-compatible")}
+            onChange={(previous, next) => composerDraftStore.setResourceSetup(originDraftScopeKey, current => current === previous ? next : current)}
+            onRemove={() => composerDraftStore.setResourceSetup(originDraftScopeKey, () => null)}
+          /> : null}
           <ComposerNextStep next={nextStep} />
           <ComposerInlineInput
             ref={inputRef}
@@ -1894,7 +1917,7 @@ export function Composer({
               }
               setSelectedInvocationPosition(position);
             }}
-            placeholder={nextStep.suggestion ? "" : placeholder}
+            placeholder={nextStep.suggestion ? "" : resourceSetup ? "Add instructions" : placeholder}
             prompt={prompt}
             token={selectedInvocationToken}
           />

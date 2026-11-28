@@ -318,6 +318,7 @@ export type HttpRouteDeps = {
   ) => unknown;
   browserControlStatus: () => unknown;
   agentRuntime: AgentRuntimeHost;
+  createSessionResourceDraft?: (payload: unknown) => Promise<unknown>;
   createSession: (payload: unknown) => Promise<unknown>;
   patchSession: (sessionId: string, payload: unknown) => Promise<unknown>;
   sendTurn: (sessionId: string, payload: unknown) => Promise<unknown>;

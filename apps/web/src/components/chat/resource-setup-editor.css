@@ -1,0 +1,77 @@
+.resource-setup-editor {
+  padding: 10px 12px 2px;
+}
+
+.resource-setup-sentence {
+  color: var(--text-primary);
+  line-height: 2.15;
+  overflow-wrap: anywhere;
+}
+
+.resource-setup-pill {
+  display: inline;
+  padding: 2px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.91em;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.resource-setup-pill svg {
+  vertical-align: middle;
+}
+
+.resource-setup-pill:hover,
+.resource-setup-pill[data-active] {
+  background: var(--state-selected);
+  border-color: var(--accent-primary);
+}
+
+.resource-setup-configure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.resource-setup-dialog {
+  width: min(730px, calc(100vw - 36px));
+}
+
+.resource-setup-fields {
+  display: grid;
+  gap: 12px;
+  margin-block: 16px;
+}
+
+.resource-setup-input {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+}
+
+.resource-setup-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-block: 4px 8px;
+}
+
+.resource-setup-presets button[aria-pressed="true"] {
+  border-color: var(--accent-primary);
+}
+
+.resource-setup-input > input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font: inherit;
+}

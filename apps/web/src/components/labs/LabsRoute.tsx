@@ -1,8 +1,11 @@
 import { ErrorToast } from "../common/ErrorToast";
 import { ConnectedOverview } from "./workspace/ConnectedOverview";
+import { DesktopNewMenu, DesktopNewResourceButton } from "../chat/DesktopNewMenu";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import { HostedTrainingRunRoute } from "./HostedTrainingRunRoute";
 import { InboxRoute } from "../human-review/InboxRoute";
 import { HostedEvaluationWorkspace } from "./workspace/HostedEvaluationWorkspace";
+import { LocalBenchmarkDrafts } from "./workspace/LocalBenchmarkDrafts";
 import { LabComparisonSeriesCreateDialog } from "./LabComparisonSeriesCreateDialog";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { LearnedPreferenceRewardBinding, TasksetDraft } from "@openpond/contracts";
@@ -247,10 +250,37 @@ export function LabsRoute(props: LabsRouteProps) {
   else if (route.page === "home") {
     const teamId = training.settingsPreferences.defaultTeamId, actorId = props.account?.profile?.id;
     page = profileView.connection && teamId && actorId && props.account?.apiBaseUrl ? <ConnectedOverview key={workspaceKey} connection={profileView.connection} teamId={teamId} actorId={actorId} accountKey={workspaceKey} apiOrigin={props.account.apiBaseUrl} profileId={profileId} projectId={route.projectId ?? null}
-      training={training.training} onNavigate={open} onCreateModel={() => { setStarterPreview(null); setEditingModelId(null); setModelCreateOpen(true); }} onCreateDataset={() => setImportSource("source")} /> : unavailable("Sign in and select a workspace to view Overview.");
+      training={training.training} onNavigate={open} /> : (
+      <main className="evaluation-workspace connected-overview">
+        <div className="connected-overview-content">
+          <ModelProjectPageHeader title="Overview" description="Create drafts and work with resources on this device."
+            actions={<DesktopNewMenu />} />
+          <div className="model-build-actions">
+            <button type="button" className="training-button secondary" onClick={() => open(modelsLocation("models"))}>Models</button>
+            <button type="button" className="training-button secondary" onClick={() => open(modelsLocation("tasksets"))}>Local datasets</button>
+          </div>
+        </div>
+      </main>
+    );
   }
   else if (route.page === "inbox") page = <InboxRoute connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} route={route} onNavigate={open} onSidebarControl={props.onEvaluationSidebarControl} />;
-  else if (["datasets", "graders", "experiments"].includes(route.page)) page = <HostedEvaluationWorkspace key={workspaceKey} connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`} route={route} onNavigate={open} onResourceName={reportHostedResourceName} onSidebarControl={props.onEvaluationSidebarControl} onLocalDatasets={() => open(modelsLocation("tasksets"))} onOpenWork={props.onOpenRunConversation} />;
+  else if (["datasets", "graders", "experiments"].includes(route.page)) {
+    const showLocalDrafts = route.page === "experiments" && !route.resourceId && !route.projectId && route.collection === "default";
+    const workspace = training.settingsPreferences.defaultTeamId;
+    const actorId = props.account?.profile?.id ?? null;
+    const localDrafts = showLocalDrafts ? <LocalBenchmarkDrafts sessions={props.resourceSessions}
+      search={route.query} onOpen={props.onOpenResourceChat} /> : null;
+    page = showLocalDrafts && (!workspace || !actorId) ? <main className="evaluation-workspace">
+      <ModelProjectPageHeader title="Benchmarks" actions={<DesktopNewResourceButton kind="benchmark" />} />
+      {localDrafts}
+    </main> : <>
+      <HostedEvaluationWorkspace key={workspaceKey} connection={profileView.connection} teamId={workspace ?? null} actorId={actorId}
+        accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`} route={route} onNavigate={open}
+        onResourceName={reportHostedResourceName} onSidebarControl={props.onEvaluationSidebarControl}
+        onLocalDatasets={() => open(modelsLocation("tasksets"))} onOpenWork={props.onOpenRunConversation} />
+      {localDrafts}
+    </>;
+  }
   else if (route.page === "runs" && isNativeTrainingResource(route.resourceId)) page = <HostedEvaluationWorkspace key={`${workspaceKey}:${route.modelId}`} connection={profileView.connection} teamId={training.settingsPreferences.defaultTeamId ?? null} actorId={props.account?.profile?.id ?? null} accountKey={`${props.account?.apiBaseUrl ?? ""}:${props.account?.activeProfile?.handle ?? ""}`}
     modelProjectId={state?.modelProjects.find(model => model.id === route.modelId)?.hosted?.projectId ?? null}
     route={{ ...route, page: "experiments", modelId: null, area: "console" }}
