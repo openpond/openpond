@@ -3,7 +3,7 @@ import Network from "lucide-react/dist/esm/icons/network.js";
 import Route from "lucide-react/dist/esm/icons/route.js";
 import Braces from "lucide-react/dist/esm/icons/braces.js";
 import type { ComposerDraftStore } from "../../lib/composer-draft-store";
-import { newResourceSetup } from "../../lib/resource-setup-prompt";
+import { newResourceSetup, selectModelSetupMethod } from "../../lib/resource-setup-prompt";
 import "./model-training-starter-cards.css";
 
 const starters = [
@@ -71,13 +71,8 @@ export function ModelTrainingStarterCards({
               getCurrentSubmissionScopeKey() !== submissionScopeKey
             )
               return;
-            draftStore.setResourceSetup(scopeKey, current => {
-              const next = newResourceSetup("model", { method });
-              if (!current || current.kind !== "model") return next;
-              return { ...current, revision: current.revision + 1, values: {
-                ...next.values, ...current.values, method, adapter: next.values.adapter,
-              } };
-            });
+            draftStore.setResourceSetup(scopeKey, current =>
+              selectModelSetupMethod(current?.kind === "model" ? current : newResourceSetup("model"), method));
             onFocus();
           }}
         >

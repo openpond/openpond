@@ -21,7 +21,12 @@ export function scopeManagedSetup(draft: ResourceSetupDraft, scope: ModelSetupSc
     return { ...draft, benchmarkModelVersion: undefined, values: { ...draft.values, candidate: undefined } };
   const managed = draft.managedTrainingInputs;
   if (!managed || draft.values.destination === "OpenPond Managed" && managed.accountKey === scope?.accountKey &&
-    managed.teamId === scope?.teamId && managed.actorId === scope?.actorId) return draft;
+    managed.teamId === scope?.teamId && managed.actorId === scope?.actorId) {
+    if (managed?.batch && managed.batch.method !== resourceSetupTrainingMethod(draft) &&
+      !draft.datasetRef && draft.values.dataset === managed.batch.label)
+      return { ...draft, values: { ...draft.values, dataset: undefined } };
+    return draft;
+  }
   return { ...draft, managedTrainingInputs: undefined, values: { ...draft.values,
     ...(managed.base ? { baseModel: undefined } : {}),
     ...(managed.batch && !draft.datasetRef ? { dataset: undefined, datasetRevision: undefined } : {}),
@@ -90,19 +95,19 @@ function selectedTrainingRecipe(draft: ResourceSetupDraft, method: ReturnType<ty
   } };
 }
 
-export function newResourceSetup(
-  kind: ResourceSetupDraft["kind"],
-  options: { method?: ResourceSetupMethod; comparison?: boolean } = {},
-): ResourceSetupDraft {
-  const method = options.method;
+export function newResourceSetup(kind: ResourceSetupDraft["kind"]): ResourceSetupDraft {
   return {
     kind,
     revision: 1,
-    ...(options.comparison ? { comparison: true } : {}),
-    values: method === "SFT" ? { method, adapter: "LoRA", dataset: "GSM8K", grader: "Exact numeric answer" }
-      : method === "GRPO" ? { method, adapter: "LoRA" }
-      : method ? { method } : kind === "dataset" ? { destination: "This device" } : {},
+    values: kind === "dataset" ? { destination: "This device" } : {},
   };
+}
+
+export function selectModelSetupMethod(draft: ResourceSetupDraft, method: ResourceSetupMethod): ResourceSetupDraft {
+  const adapter = method === "SFT" || method === "GRPO" ? "LoRA" as const : undefined;
+  const destination = method !== "SFT" && draft.values.destination === "This device" ? undefined : draft.values.destination;
+  if (draft.values.method === method && draft.values.adapter === adapter && draft.values.destination === destination) return draft;
+  return { ...draft, revision: draft.revision + 1, values: { ...draft.values, method, adapter, destination } };
 }
 
 type PromptField = ResourceSetupField | "trainingSettings" | "evaluationSettings" | "saveDestination" | "preview";
@@ -173,6 +178,10 @@ export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetup
   const value = draft.values[field];
   if (field === "budget" && typeof value === "number") return `$${value}`;
   if (field === "dataset" && value && draft.values.datasetRevision) return `${value} revision ${draft.values.datasetRevision}`;
+  if (value === undefined && draft.kind === "model" && draft.values.method === "SFT") {
+    if (field === "dataset") return "GSM8K example";
+    if (field === "grader") return "Exact numeric answer example";
+  }
   return value === undefined ? placeholder : String(value);
 }
 
@@ -233,7 +242,14 @@ export function snapshotResourceSetup(
   workspace: ModelSetupScope | null,
   sessionId?: string | null,
 ) {
-  const draft = { ...scopeManagedSetup(original, workspace), localSftApproval: retainedLocalSftApproval(original, sessionId) };
+  const scoped = scopeManagedSetup(original, workspace);
+  const draft = { ...scoped, localSftApproval: retainedLocalSftApproval(original, sessionId),
+    ...(scoped.kind === "benchmark" && !scoped.comparison ? {
+      localBaseline: undefined,
+      localBenchmarkInference: scoped.localBenchmarkInference && { ...scoped.localBenchmarkInference, baseline: undefined },
+      values: { ...scoped.values, baseline: undefined },
+    } : {}),
+  };
   const benchmarkDefinition = draft.kind === "benchmark" && selection?.localDraft && selection.draft && selection.draftRevision
     ? { id: selection.draft.id, revision: selection.draftRevision } : undefined;
   const { datasetExamples: _localExamples, graderExamples: _localFixtures, managedGrader, datasetInputsDirty, trainingRecipes: _recipes, ...setup } = draft;

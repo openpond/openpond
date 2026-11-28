@@ -4,6 +4,7 @@ import type { useChatContextSelection } from "../../hooks/useChatContextSelectio
 import type { ChatResourceSummary } from "@openpond/contracts";
 import { LocalTrainingComputeSchema, type LocalTrainingCompute } from "@openpond/contracts/resource-setup";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
+import { chatResourceRequest } from "../../api/chat-resource-api";
 import { connectionQueryScope } from "../../lib/query-scope";
 import type { EvaluationModel } from "../../hooks/useChatResourceFocus";
 import { useErrorToast } from "../../app/AppToastContext";
@@ -15,6 +16,7 @@ import {
   resourceSetupParts,
   resourceSetupTrainingMethod,
   scopeManagedSetup,
+  selectModelSetupMethod,
   ResourceSetupDraftSchema,
   type ResourceSetupDraft,
   type ResourceSetupField,
@@ -125,8 +127,15 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     retry: false,
     staleTime: 30_000,
   });
+  const starterDatasets = useQuery({
+    queryKey: ["setup-local-datasets", connectionQueryScope(connection)],
+    enabled: Boolean(connection && !sessionId && draft.kind === "model" && configureOpen && field === "dataset"),
+    queryFn: ({ signal }) => chatResourceRequest<ChatResourceSummary[]>(connection!, "dataset", { action: "list" }, signal),
+    retry: false,
+  });
+  useErrorToast(starterDatasets.error);
   const parts = resourceSetupParts(draft);
-  const localDatasets = datasets.filter(dataset => dataset.location !== "cloud");
+  const localDatasets = (sessionId ? datasets : starterDatasets.data ?? []).filter(dataset => dataset.location !== "cloud");
   const localModels = evaluationModels.flatMap(model => model.providerId === "custom-openai-compatible" &&
     model.configurationHash && /^[a-f0-9]{64}$/.test(model.configurationHash)
     ? [{ modelId: model.id, name: model.name ?? model.id, configurationHash: model.configurationHash }] : []);
@@ -137,9 +146,14 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     setConfigureOpen(true);
   }
   function change(key: ResourceSetupField, raw: string) {
+    if (key === "method") {
+      const method = ResourceSetupDraftSchema.shape.values.shape.method.safeParse(raw || undefined);
+      if (method.success) onChange(draft, selectModelSetupMethod(draft, method.data));
+      return;
+    }
     const leavingLocal = key === "destination" && draft.values.destination === "This device" && raw !== "This device";
     const invalidatesLocalTraining = draft.kind === "model" && draft.values.destination === "This device" &&
-      (key === "method" && raw !== "SFT" || key === "adapter" && raw !== "LoRA" ||
+      (key === "adapter" && raw !== "LoRA" ||
         key === "learning" && raw === "Configure continual learning");
     const sourceChanged = draft.kind === "dataset" && key === "source" && raw !== draft.values.source;
     const datasetEdited = draft.kind === "dataset" && ["name", "objective", "split"].includes(key);
@@ -157,7 +171,6 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
         ...(leavingLocal && draft.localBaseline ? { baseline: undefined } : {}),
         ...(sourceChanged ? { dataset: undefined, datasetRevision: undefined, fields: undefined } : {}),
         ...(invalidatesLocalTraining ? { destination: undefined } : {}),
-        ...(key === "method" && (raw === "SFT" || raw === "GRPO") ? { adapter: "LoRA" } : {}),
         [key]: raw === "" ? undefined : decimalFields.has(key) || integerFields.has(key) ? Number(raw) : raw,
       },
     });
@@ -262,6 +275,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
               <span>{key === "candidate" ? "Local candidate" : "Local baseline"}</span>
               <DropdownSelect label={label} value={value} searchable
                 options={[{ value: "", label: "Choose a qualified local model" }, ...options]}
+                dialogAutoFocus={index === 0}
                 disabled={busy} onChange={raw => {
                   const model = localModels.find(candidate => localModelValue(candidate) === raw);
                   onChange(draft, {
@@ -273,7 +287,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
                 }} />
             </div>;
           }
-          if (key === "dataset" && localDatasets.length) {
+          if (key === "dataset" && (localDatasets.length || draft.datasetRef)) {
             const value = draft.datasetRef ? datasetValue(draft.datasetRef) : "";
             const options = localDatasets.map(dataset => ({ value: datasetValue(dataset), label: `${dataset.name} revision ${dataset.revision}` }));
             const retained = value && !options.some(option => option.value === value)
@@ -282,6 +296,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
               <span>{label}</span>
               <DropdownSelect label={label} value={value} searchable
                 options={[{ value: "", label: visibleDraft.values.dataset && !value ? visibleDraft.values.dataset : "Choose a local dataset" }, ...retained, ...options]}
+                dialogAutoFocus={index === 0}
                 disabled={busy} onChange={chooseDataset} />
             </div>;
           }
@@ -289,6 +304,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           return options ? <div className="resource-setup-input" key={key}>
             <span>{label}</span>
             <DropdownSelect label={label} options={options} value={String(draft.values[key] ?? "")}
+              dialogAutoFocus={index === 0}
               disabled={busy} onChange={value => change(key, value)} />
           </div> : <label className="resource-setup-input" key={key}>
             {label}
