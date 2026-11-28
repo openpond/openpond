@@ -215,7 +215,7 @@ export class OpenPondWorkClient {
 
       for (let step = 1; step <= maxSteps; step += 1) {
         input.signal?.throwIfAborted();
-        await emit({ type: "status", message: `Thinking · step ${step}` });
+        await emit({ type: "status", message: `Thinking, step ${step}` });
         const completion = await workModelTurn({
           apiBaseUrl: this.#chatApiBaseUrl,
           token: this.#apiKey,

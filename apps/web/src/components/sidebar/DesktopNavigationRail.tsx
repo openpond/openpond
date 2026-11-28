@@ -81,7 +81,7 @@ export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: Si
       {resourceDestinations.map(({ page, label, icon }) => {
         const active = sidebar.view === "labs" && (modelsRoute?.page === page ||
           page === "models" && Boolean(modelsRoute?.modelId) && modelsRoute?.page !== "serving");
-        return <button key={page} type="button" className="desktop-rail-destination"
+        return <button key={page} type="button" className="desktop-rail-destination" aria-label={label}
           aria-current={active ? "page" : undefined} onClick={() => void selectResource(page)}>
           <span className="desktop-rail-destination-icon">
             {icon ? <span aria-hidden className="desktop-rail-resource-icon" style={{ maskImage: `url("/console-icons/${icon}.svg")` }} /> : <Home size={21} aria-hidden />}
@@ -89,7 +89,7 @@ export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: Si
           <span>{label}</span>
         </button>;
       })}
-      <button type="button" className="desktop-rail-destination desktop-rail-more-trigger"
+      <button type="button" className="desktop-rail-destination desktop-rail-more-trigger" aria-label="More"
         data-active={destinations.some(({ view }) => view === activeView) || undefined}
         popoverTarget={moreId} onClick={() => setAccountOpen(false)}>
         <span className="desktop-rail-destination-icon"><MoreHorizontal size={21} aria-hidden /></span>
@@ -97,7 +97,7 @@ export function DesktopNavigationRail({ sidebar, open, provider }: { sidebar: Si
       </button>
     </div>
     <div id={moreId} ref={morePopover} className="desktop-rail-more" popover="auto" role="group" aria-label="More destinations">
-      {destinations.map(({ view, label, Icon }) => <button type="button" key={view}
+      {destinations.map(({ view, label, Icon }) => <button type="button" key={view} aria-label={label}
         aria-current={activeView === view ? "page" : undefined} onClick={() => void selectMore(view)}>
         <Icon size={16} aria-hidden /><span>{label}</span>
       </button>)}
