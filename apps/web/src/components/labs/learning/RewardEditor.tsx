@@ -29,7 +29,7 @@ const KINDS: Array<{ value: Kind; label: string }> = [
   { value: "human", label: "Human review rubric" },
 ];
 
-export function RewardEditor(props: { models?: GraderModelChoice[]; embedded?: boolean; initialFields?: Partial<Fields>; allowedKinds?: readonly Kind[]; closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease) => void; onDraftSaved?: (draft: AuthoringDraftFor<"reward">) => void; onClose: () => void }) {
+export function RewardEditor(props: { models?: GraderModelChoice[]; embedded?: boolean; initialFields?: Partial<Fields>; allowedKinds?: readonly Kind[]; closeRef?: Ref<DraftEditorHandle>; fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback }; authoringDraft?: AuthoringDraftFor<"reward">; client: OpenPondLearningClient | null; reward: RewardRelease | null; onSaved: (reward: RewardRelease, fields: Fields) => void; onDraftSaved?: (draft: AuthoringDraftFor<"reward">) => void; onClose: () => void }) {
   const implementation = props.reward?.implementation;
   const assetId = implementation && "verifierRef" in implementation ? implementation.verifierRef.id
     : implementation && "rubricRef" in implementation ? implementation.rubricRef.id
@@ -49,7 +49,7 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
   fromLabel?: { evidence: TaskEvidence; feedback: TaskFeedback };
   authoringDraft?: AuthoringDraftFor<"reward">;
   client: OpenPondLearningClient | null; reward: RewardRelease | null; sourceAsset: LearningTextAsset | null; fixtureAsset: LearningTextAsset | null;
-  onSaved: (reward: RewardRelease) => void; onClose: () => void;
+  onSaved: (reward: RewardRelease, fields: Fields) => void; onClose: () => void;
   onDraftSaved?: (draft: AuthoringDraftFor<"reward">) => void;
 }) {
   const [id] = useState(() => authoringDraft?.targetId ?? reward?.id ?? `reward-${crypto.randomUUID()}`);
@@ -151,7 +151,10 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
     <label>Description (optional)<textarea maxLength={10_000} value={draft.description} onChange={(event) => patch({ description: event.target.value })} /></label>
     <label>Reward type<select value={draft.kind} onChange={(event) => patch({ kind: event.target.value as Kind })}>{KINDS.filter(kind => !allowedKinds || allowedKinds.includes(kind.value) || kind.value === draft.kind).map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}</select></label>
     {draft.kind === "custom_verifier" ? <>
-      <LearningJsonField label="JavaScript source" value={draft.code} onChange={(code) => patch({ code })} hint="Export a function returning score (0–1), passed, and feedback. It receives input, output, expectedOutput and evaluatorContext. Files, network and imports are unavailable." />
+      <LearningJsonField label="JavaScript source" value={draft.code} onChange={(code) => patch({ code })}
+        hint={draft.verifierRuntime === "sandbox_process"
+          ? "This verifier needs an isolated process runtime. Python correctness fixtures also need an admitted Python program, private stdin/stdout tests, and a pinned Python runtime."
+          : "Export a function returning score (0–1), passed, and feedback. It receives input, output, expectedOutput and evaluatorContext. Files, network and imports are unavailable."} />
       <label>Function export<input value={draft.exportName} onChange={(event) => patch({ exportName: event.target.value })} /></label>
       <label>Time limit (milliseconds)<input type="number" min={1} max={300_000} value={draft.timeout} onChange={(event) => patch({ timeout: event.target.value })} /></label>
     </> : null}
@@ -168,7 +171,7 @@ function RewardEditorForm({ models, embedded, initialFields, allowedKinds, clien
     {draft.kind === "model_judge" ? <p>Check a passing and a failing example before publishing a calibrated judge. Publishing without a matching check keeps the judge pending.</p> : null}
     <details><summary>Advanced settings</summary>{embedded && draft.kind === "model_judge" ? modelIdentity : null}<label>Feedback key<input value={draft.feedbackKey} disabled={Boolean(reward)} maxLength={80} pattern="[a-z][a-z0-9_]{0,79}" onChange={event => { setAutomaticKey(false); patch({ feedbackKey: event.target.value }); }} /><small>{reward ? "This released score key stays fixed across grader updates." : "Derived from the name and this grader’s identity. Override before publication if you need a technical score key."}</small></label>{draft.kind === "model_judge" && (!embedded || draft.providerId === "openpond" && models?.some(model => model.id === draft.modelId && model.supportsSampling)) ? <label>Temperature<input type="number" min={0} max={2} step={0.1} value={draft.temperature} onChange={(event) => patch({ temperature: event.target.value })} /><small>0 uses deterministic sampling.</small></label> : embedded && draft.kind === "model_judge" ? <p>Sampling is managed by the selected model provider.</p> : null}{draft.kind === "model_judge" ? <label>Maximum fixture cost (USD)<input type="number" min={0} max={1000} step="0.01" value={checkBudget} onChange={event => setCheckBudget(event.target.value)} /><small>Total limit for this fixture check. A provider request starts only when its maximum charge fits the remaining limit.</small></label> : null}</details>
     <RewardCheckHistory client={client} targetId={id} draft={persistence.record?.targetKind === "reward" ? persistence.record : null} unchanged={JSON.stringify(draft) === JSON.stringify(persistence.record?.fields)} busy={mutation.busy || !draft.fixtures?.length} onCheck={checkFixtures} checking={pendingAction === "check"} />
-    <LearningActions>{!embedded ? <button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button> : null}<button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void saveDraft(); }}>{pendingAction === "save" ? "Saving draft…" : "Save draft"}</button><button type="button" className="training-button" disabled={mutation.busy || !draft.name.trim()} onClick={async () => { const result = await save(); if (result) { guard.allowNextNavigation(); onSaved(result); } }}>{pendingAction === "publish" ? "Publishing…" : `Publish release ${revision + 1}`}</button></LearningActions>
+    <LearningActions>{!embedded ? <button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void guard.requestLeave(onClose); }}>Cancel</button> : null}<button type="button" className="training-button secondary" disabled={mutation.busy} onClick={() => { void saveDraft(); }}>{pendingAction === "save" ? "Saving draft…" : "Save draft"}</button><button type="button" className="training-button" disabled={mutation.busy || !draft.name.trim()} onClick={async () => { const result = await save(); if (result) { guard.allowNextNavigation(); onSaved(result, draft); } }}>{pendingAction === "publish" ? "Publishing…" : `Publish release ${revision + 1}`}</button></LearningActions>
     {guard.dialog}
   </div>;
 }

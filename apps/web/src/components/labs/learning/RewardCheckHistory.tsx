@@ -51,10 +51,13 @@ function RewardCheckDetails({ client, check }: { client: OpenPondLearningClient 
     <LearningError error={snapshot.error} />
     <ul>{check.results.map(result => {
       const fixture = fixtures.find(fixture => fixture.id === result.fixture.id);
+      const message = result.result.message === "verifier_sandbox_process_required"
+        ? "The workspace fixture runner needs an isolated process runtime to check this verifier."
+        : result.result.message;
       return <li key={result.fixture.id}>
         <strong>{fixture?.name ?? result.fixture.id}</strong>
         <p>{result.result.status}{result.result.rawScore === null ? "" : `, score ${result.result.rawScore}`}, {result.matchesExpectation ? "Matched expectation" : "Did not match expectation"}</p>
-        {result.result.message ? <p>{result.result.message}</p> : null}
+        {message ? <p>{message}</p> : null}
         {fixture ? <details><summary>Checked example</summary><p>Expected {fixture.expectedStatus}{fixture.expectedStatus === "scored" ? `, score ${fixture.minimumScore}–${fixture.maximumScore}, passed ${fixture.expectedPassed}` : ""}</p>
           <h4>Input</h4><pre>{fixture.input}</pre><h4>Output</h4><pre>{fixture.output}</pre><h4>Expected answer</h4><pre>{fixture.expectedOutput || "None"}</pre>
         </details> : null}

@@ -56,7 +56,13 @@ export default function GraderSetupWorkspaceReview({ connection, scope, method, 
       }}
       onDraftSaved={draft => onChange({ ...scope, method, release: starting?.release, draft: learningRef(draft) },
         { name: draft.fields.name, criterion: method === "Python correctness" ? undefined : draft.fields.rubric })}
-      onSaved={release => { onChange({ ...scope, method, release: learningRef(release) }, { name: release.name }); onClose(); }}
+      onSaved={(release, fields) => {
+        onChange({ ...scope, method, release: learningRef(release) }, {
+          name: release.name,
+          criterion: method === "Python correctness" ? undefined : fields.rubric,
+        });
+        onClose();
+      }}
       onClose={onClose} /> : loading ? <p role="status">Loading the Grader revision…</p>
       : <button type="button" className="training-button secondary" onClick={() => { authoring.refresh(); published.refresh(); }}>Retry Grader revision</button>}
     <footer className="training-dialog-actions">
