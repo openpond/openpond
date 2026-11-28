@@ -129,7 +129,7 @@ export type HttpRouteDeps = {
     requestUrl?: URL,
     signal?: AbortSignal,
   ) => Promise<unknown>;
-  localExperimentPayload?: (payload:unknown) => Promise<unknown>;
+  localExperimentPayload?: (payload:unknown, desktop?:boolean) => Promise<unknown>;
   modificationRecordings?: ReturnType<typeof import("../evaluations/modification-recordings.js").createLocalModificationRecordings>;
   chatResourcePayload?: (kind:"dataset"|"experiment",payload:unknown) => Promise<unknown>;
   experimentImprovementPayload?: (payload:unknown) => Promise<unknown>;

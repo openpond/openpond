@@ -1598,7 +1598,7 @@ export function Composer({
   />;
 
   const projectContext = <ComposerProjectTargetControl busy={busy || projectTarget.busy} placement={dropdownPlacement}
-    state={projectTarget} onChange={onProjectTargetChange}
+    state={projectTarget} onChange={onProjectTargetChange} sessionId={taskSessionId}
     resourceContext={surface === "chat" && enableResourceContext ? contextSelection : undefined} />;
 
   return (

@@ -19,11 +19,13 @@ import { createLocalDatasetService, localDatasetSummary } from "./local-dataset-
 import { createLocalDatasetSync } from "./local-dataset-sync.js";
 import {createChatCloudExperiments,type ChatExperimentView} from "../evaluations/chat-cloud-experiments.js";
 import { createChatExperiments, pinLocalBenchmarkRequest } from "../evaluations/chat-experiments.js";
+import { deviceExperimentReads } from "../evaluations/device-experiment-reads.js";
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
 import type { HtmlVisualService } from "../visuals/visual-service.js";
 import { chatExperimentReport } from "../evaluations/chat-experiment-report.js";
 import { chatExperimentContext, createChatExperimentScopes } from "./chat-experiment-scope.js";
 import { localGraderSummaries } from "./local-grader-resources.js";
+import { event } from "../utils.js";
 
 export async function createChatResourceRuntime(deps:{store:SqliteStore;home:string;ownerId:string;state:LocalInferenceState;
   codexStatus?:()=>Promise<import("@openpond/contracts").CodexStatus>;
@@ -183,6 +185,11 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     const preview=await deps.visuals.preview(execution,{html:chatExperimentReport(runs)});
     return {visual:await deps.visuals.render(execution,{previewId:preview.previewId,title:"Experiment results"})};
   }
+  async function publishResourceSession(sessionId?: string) {
+    if (!sessionId) return;
+    const session = await deps.store.getSession(sessionId);
+    if (session) await deps.append(event({ sessionId, name: "session.updated", source: "server", data: { session } }));
+  }
   async function request(kind:"dataset"|"experiment",raw:unknown) {
     const envelope = z.object({context:z.object({sessionId:z.string().min(1),turnId:z.string().min(1)}).optional(),invocationToken:z.string().optional()}).passthrough().parse(raw);
     const {context:requestedContext,invocationToken,...input} = envelope;
@@ -190,7 +197,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     if (kind === "experiment" && input.action === "local_adapter_benchmark") {
       if (context) throw new Error("Open the desktop Benchmark review to use this local adapter.");
       return (await import("../evaluations/chat-local-adapter-benchmark.js")).handleLocalAdapterBenchmark({
-        store: deps.store, home: deps.home, scopes, experiments,
+        store: deps.store, home: deps.home, scopes, experiments, onReviewed: publishResourceSession,
       }, input.payload);
     }
     if (kind === "dataset" && input.action === "next_step") return nextSteps.request(input.payload, context);
@@ -219,12 +226,20 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
     }
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_inputs", "context_runs", "context_select", "context_selection", "context_save_draft"].includes(String(input.action))) {
       const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), modelTrainingReview: z.boolean().optional(), update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
-      if (input.action === "context_save_draft") return browser.updateDraft(query.sessionId, query.target, query.update);
+      if (input.action === "context_save_draft") {
+        const saved = await browser.updateDraft(query.sessionId, query.target, query.update);
+        await publishResourceSession(query.sessionId);
+        return saved;
+      }
       if (input.action === "context_catalog") return browser.catalog(true, query.sessionId, query.draftCursor, query.source);
       if (input.action === "context_runs") return browser.runs(query.target, query.cursor);
       if (input.action === "context_inputs") return browser.inputs(query.target);
       if (input.action === "context_resolve") return { selection: await browser.resolve(query.target) };
-      if (input.action === "context_select") return { selection: await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId, query.modelTrainingReview) };
+      if (input.action === "context_select") {
+        const selection = await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId, query.modelTrainingReview);
+        await publishResourceSession(query.sessionId);
+        return { selection };
+      }
       return { selection: query.sessionId ? await browser.current(query.sessionId) : null };
     }
     if (kind === "experiment" && input.action === "attach_weight_space") {
@@ -382,6 +397,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if (input.action === "select_scope" || input.action === "rename_scope") {
         if (!query.scopeId) throw new Error("Select an experiment scope.");
         scopeContext = await scopes.select(session.id,{scopeId:query.scopeId,...input.action === "rename_scope" ? {name:z.string().trim().min(1).max(500).parse(query.name)} : {},expectedSelectionVersion:query.expectedSelectionVersion});
+        if (input.action === "rename_scope") await publishResourceSession(session.id);
         return selectedFocus(scopeContext);
       }
       if (input.action === "context") {
@@ -504,5 +520,5 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
   return {datasets,experiments,request,execute,
     setProfileOwner:(owner:ReturnType<typeof createChatProfileExperiments>)=>{if(profile)throw new Error("Profile owner is already registered.");profile=owner;},
     associate:async(context:{sessionId:string;turnId:string},resources:ChatResourceSummary[])=>{for(const summary of resources)await emit(context.sessionId,context.turnId,summary);},
-    teamRequest:team.request,close:async()=>{cloud.close();await sync.close();await experiments.service.close();}};
+    teamRequest:deviceExperimentReads(experiments,team.request),close:async()=>{cloud.close();await sync.close();await experiments.service.close();}};
 }

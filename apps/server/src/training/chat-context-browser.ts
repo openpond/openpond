@@ -67,7 +67,9 @@ export function createChatContextBrowser(deps: {
       detail: `Model, ${model.defaultBaseModel?.modelId ?? "Local"}`,
     });
     if (sessionId && (source === "all" || source === "local")) {
-      for (const scope of scopes.filter(scope => !scope.model && !scope.modelSetupOwner && !scope.storedDraft && !scope.selectedRunId && (scope.dataset || scope.draft))) options.unshift({
+      const resource = SessionResourceDraftSchema.safeParse(session?.metadata?.resourceDraft).data;
+      for (const scope of scopes.filter(scope => !scope.model && !scope.modelSetupOwner && !scope.storedDraft &&
+        (scope.dataset || scope.draft) && (!scope.selectedRunId || resource?.kind === "benchmark" && resource.id === scope.draft?.id))) options.unshift({
         target: { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" },
         label: scope.name, detail: scope.draft ? `Draft, ${experimentOperationLabel(scope.draft.operationType)}` : `Draft, ${scope.dataset!.name}, revision ${scope.dataset!.revision}`,
       });

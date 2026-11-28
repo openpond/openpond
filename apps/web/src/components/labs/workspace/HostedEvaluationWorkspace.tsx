@@ -15,7 +15,9 @@ import {
 } from "./WorkspacePanel";
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ClientConnection } from "../../../api/api-client";
+import { z } from "zod";
+import { apiFetch, type ClientConnection } from "../../../api/api-client";
+import { connectionQueryScope } from "../../../lib/query-scope";
 import { modelsLocation, type ModelsRoute } from "../models-route";
 import { createWorkspaceApi, workspaceApiForLocation, type Inventory } from "./workspace-api";
 import { HostedExperimentsPage } from "./HostedExperimentsPage";
@@ -31,6 +33,9 @@ import { EvaluationSetupProvider, useEvaluationSetup } from "./EvaluationSetupSt
 import { ExperimentSetupPanel } from "./ExperimentSetupPanel";
 import { StoredExperimentDraftEntry } from "./StoredExperimentDraftEntry";
 import "../../../styles/labs/evaluation-workspace.css";
+
+const deviceOwnerSchema = z.object({ teamId: z.string().nullable() });
+
 function HostedEvaluationWorkspaceContent({
   connection,
   teamId,
@@ -61,6 +66,25 @@ function HostedEvaluationWorkspaceContent({
       ? [{ id: "experiment", label: "Experiment", onSelect: () => {} }]
       : [],
   );
+  const localResultId = route.page === "experiments" && route.collection === "default" &&
+    !route.projectId && route.resourceId &&
+    (route.executionLocation ?? (route.resourceId.startsWith("local-") ? "local" : "hosted")) === "local"
+    ? route.resourceId : null;
+  const deviceOwner = useQuery({
+    queryKey: ["device-benchmark-owner", connectionQueryScope(connection), localResultId],
+    enabled: Boolean(connection && localResultId),
+    queryFn: async ({ signal }) => deviceOwnerSchema.parse(await apiFetch(connection!, "/v1/local-experiments", {
+      method: "POST",
+      body: JSON.stringify({ action: "deviceOwner", payload: { id: localResultId } }),
+      signal,
+    })),
+  });
+  const deviceTeamId = deviceOwner.data?.teamId;
+  const deviceApi = useMemo(() => connection && deviceTeamId
+    ? createWorkspaceApi(connection, { teamId: deviceTeamId, accountKey: connectionQueryScope(connection),
+        projectId: null, executionLocation: "local" })
+    : null, [connection, deviceTeamId]);
+  const resolvingDevice = Boolean(connection && localResultId && !deviceOwner.isSuccess);
   const api = useMemo(
     () =>
       connection && teamId
@@ -106,7 +130,7 @@ function HostedEvaluationWorkspaceContent({
     [api, setup.reviewRoute?.executionLocation, setup.reviewRoute?.projectId],
   );
   useEffect(() => {
-    if (route.projectId !== undefined) return;
+    if (route.resourceId || route.projectId !== undefined) return;
     const scope = `${accountKey}:${teamId}`;
     const remembered = localStorage.getItem(`openpond:evaluation-project:${scope}`);
     if (remembered)
@@ -114,7 +138,7 @@ function HostedEvaluationWorkspaceContent({
   }, [accountKey, teamId, route, onNavigate]);
   const inventory = useQuery({
     queryKey: ["evaluation-workspace", api?.key, route.query, route.after, route.sort],
-    enabled: Boolean(api),
+    enabled: Boolean(api && !deviceApi && !resolvingDevice),
     queryFn: ({ signal }) =>
       api!.request<Inventory>(
         "inventory",
@@ -151,11 +175,28 @@ function HostedEvaluationWorkspaceContent({
       after: null,
     });
   }
+  if (resolvingDevice) {
+    return deviceOwner.error ? (
+      <ErrorToast error={deviceOwner.error}>
+        <button className="training-button secondary" onClick={() => void deviceOwner.refetch()}>Retry Benchmark</button>
+      </ErrorToast>
+    ) : <p role="status">Loading Benchmark…</p>;
+  }
+  if (deviceApi) {
+    return (
+      <WorkspaceResourceName.Provider value={onResourceName}>
+        <ExperimentWorkspaceFrame>
+          <LocalExperimentsPage key={`${deviceApi.key}:${route.resourceId}`} api={deviceApi}
+            route={route} navigate={onNavigate} installationRead />
+        </ExperimentWorkspaceFrame>
+      </WorkspaceResourceName.Provider>
+    );
+  }
   if (!api)
     return (
       <div className="labs-table-empty" role="status">
         Connect an OpenPond account and choose a workspace to open datasets, graders and
-        experiments.
+        benchmarks.
       </div>
     );
   return (

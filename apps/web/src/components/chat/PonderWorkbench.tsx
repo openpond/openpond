@@ -34,9 +34,9 @@ export function PonderWorkbench({ context, connection, sessionId, resources, chi
     rememberedTabs.set(tabKey, tab);
   }, [tabKey, tab]);
   const id = useId();
-  const tabs = [{ value: "model", label: "Model / Experiments" }, { value: "dataset", label: "Dataset" }, { value: "graders", label: "Graders" }] as const;
+  const tabs = [{ value: "model", label: "Models and Benchmarks" }, { value: "dataset", label: "Dataset" }, { value: "graders", label: "Graders" }] as const;
   return <>
-    <div className="workspace-diff-tabs ponder-workbench-tabs" role="tablist" aria-label="Ponder Training views">
+    <div className="workspace-diff-tabs ponder-workbench-tabs" role="tablist" aria-label="Resource views">
       {tabs.map((item, index) => <button key={item.value} type="button" role="tab" id={`${id}-${item.value}`} aria-controls={`${id}-panel`}
         aria-selected={tab === item.value} tabIndex={tab === item.value ? 0 : -1} className={`workspace-diff-tab${tab === item.value ? " active" : ""}`}
         onClick={() => void requestDesktopViewChange(() => setTab(item.value))} onKeyDown={event => {
@@ -95,7 +95,7 @@ function PonderInputs({ context, connection, sessionId, resources, tab }: {
     </ErrorToast>
     {modelTarget && modelInputs.data?.sources.length ? <DropdownSelect label="Model dataset" floating value={input!.role}
       options={modelInputs.data.sources.map(item => ({ value: item.role, label: `${item.role === "training" ? "Training" : "Evaluation"}, ${item.name}` }))} onChange={value => void requestDesktopViewChange(() => setRole(value))} /> : null}
-    {!modelTarget ? <DropdownSelect label="Experiment dataset" floating searchable disabled={context.selecting} value={value}
+    {!modelTarget ? <DropdownSelect label="Benchmark dataset" floating searchable disabled={context.selecting} value={value}
       options={[{ value: "", label: context.catalog.isPending ? "Loading datasets…" : "Choose dataset", disabled: true }, ...options]} onChange={raw => void choose(raw)} /> : null}
     {tab === "graders" && hostedEditor && !dataset && !input?.release ? <a className="training-text-button" href={hostedEditor} target="_blank" rel="noreferrer">Hosted grader editor</a> : null}
     {modelInputs.isPending && modelTarget ? <p role="status">Loading model inputs…</p> : null}
@@ -103,6 +103,6 @@ function PonderInputs({ context, connection, sessionId, resources, tab }: {
       : dataset && !dataset.owner && !dataset.profileRef ? tab === "dataset" ? <PonderDatasetTasks key={`${dataset.id}:${dataset.revision}`} connection={connection} dataset={dataset} sessionId={sessionId} contexts={contexts}
         onSaved={async saved => { await context.select({ kind: "dataset", id: saved.id, revision: saved.revision, location: "local" }, { newExperiment: true });  }} />
         : <PonderGraderInspector key={`${dataset.id}:${dataset.revision}`} connection={connection} dataset={dataset} graders={details.data?.graders ?? selected?.graders ?? []} sessionId={sessionId} contexts={contexts} hostedEditor={hostedEditor} />
-        : !modelInputs.isPending || !modelTarget ? <p>{modelTarget ? "No dataset configured for this model. Ask chat to attach a dataset or open an experiment to choose its inputs." : "Choose a dataset to work on its tasks and graders."}</p> : null}
+        : !modelInputs.isPending || !modelTarget ? <p>{modelTarget ? "No dataset configured for this model. Ask chat to attach a dataset or open a Benchmark to choose its inputs." : "Choose a dataset to work on its tasks and graders."}</p> : null}
   </div>;
 }

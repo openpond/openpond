@@ -44,6 +44,7 @@ export type ComposerProjectTargetState = {
   detail: string;
   options: ComposerProjectTargetOption[];
   busy: boolean;
+  resourceFolder?: { sessionId: string; path: string } | null;
 };
 
 export type ComposerProfileTargetState = {
@@ -157,12 +158,14 @@ export function ComposerProjectTargetControl({
   state,
   onChange,
   resourceContext,
+  sessionId,
 }: {
   busy: boolean;
   placement: "bottom" | "top";
   state: ComposerProjectTargetState;
   onChange: (value: string) => void;
   resourceContext?: ReturnType<typeof useChatContextSelection>;
+  sessionId?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
@@ -173,6 +176,7 @@ export function ComposerProjectTargetControl({
   const noProjectSelected = state.value === "none";
   const controlLabel = resourceContext ? "Context" : "Project";
   const resource = resourceContext?.selection;
+  const workingFolder = sessionId && state.resourceFolder?.sessionId === sessionId ? state.resourceFolder.path : null;
   const selectedContextType = selectedResourceContextType(resource);
   const triggerLabel = resource?.label ?? (noProjectSelected ? controlLabel : state.label);
   const selectedIconKind =
@@ -300,8 +304,12 @@ export function ComposerProjectTargetControl({
               visibleProjectOptions.map(renderOption)
             )}
           </div>
-          {visibleCreationOptions.length > 0 || visibleNoProjectOptions.length > 0 ? (
+          {visibleCreationOptions.length > 0 || visibleNoProjectOptions.length > 0 || workingFolder ? (
             <div className="composer-project-actions">
+              {workingFolder && window.openpond?.files ? <button type="button" role="menuitem" className="composer-project-option action"
+                onClick={() => { onChange("action:open-resource-folder"); setOpen(false); triggerRef.current?.focus(); }}>
+                <Folder size={14} /><span><strong>Open working folder</strong><small>{workingFolder}</small></span>
+              </button> : null}
               {visibleCreationOptions.length > 0 ? (
                 <button
                   type="button"

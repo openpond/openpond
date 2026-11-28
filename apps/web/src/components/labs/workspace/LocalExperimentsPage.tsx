@@ -31,11 +31,13 @@ export function LocalExperimentsPage({
   route,
   navigate,
   onOpenWork,
+  installationRead = false,
 }: {
   api: WorkspaceApi;
   route: ModelsRoute;
   navigate: (route: ModelsRoute) => void;
   onOpenWork?: (id:string)=>void;
+  installationRead?: boolean;
 }) {
   const setup = useEvaluationSetup(),
     detail = useLocalExperimentDetail(api, route),
@@ -45,7 +47,7 @@ export function LocalExperimentsPage({
     [busy, setBusy] = useState(false),
     active = useRef(false);
   useWorkspaceResourceName(execution?.configuration.request.name ?? null);
-  const select = useWorkspaceActions([
+  const select = useWorkspaceActions(installationRead ? [] : [
     {
       id: "experiment",
       label: "Benchmark",
@@ -106,11 +108,15 @@ export function LocalExperimentsPage({
     <>
       <header className="evaluation-workspace-header">
         <h1 className="sr-only">{execution?.configuration.request.name ?? "Local benchmarks"}</h1>
-        <button className="training-button" disabled={busy} onClick={() => select("experiment")}>
-          {execution ? "Duplicate and edit" : "New benchmark"}
-        </button>
+        {!installationRead ? (
+          <button className="training-button" disabled={busy} onClick={() => select("experiment")}>
+            {execution ? "Duplicate and edit" : "New benchmark"}
+          </button>
+        ) : null}
       </header>
-      <p className="evaluation-meta-line">Executed and retained on this Desktop server using its signed-in account.</p>
+      <p className="evaluation-meta-line">{installationRead
+        ? "Executed and retained on this device."
+        : "Executed and retained on this Desktop server using its signed-in account."}</p>
       {failure ? <ErrorToast error={failure} /> : null}
       {!route.resourceId ? (
         <LocalExperimentCollection key={api.key} api={api} route={route} navigate={navigate} />
@@ -139,7 +145,7 @@ export function LocalExperimentsPage({
               <b>{total}</b> attempts
             </span>
             <EvaluationTime value={execution.createdAt} />
-            {!execution.completedAt ? (
+            {!installationRead && !execution.completedAt ? (
               <button
                 className="training-button secondary"
                 disabled={busy || execution.status === "cancelling"}
@@ -279,7 +285,7 @@ export function LocalExperimentsPage({
             </>
           ) : null}
           {tab !== "configuration" ? <LocalExperimentUsage execution={pass ?? execution} evidence={detail.evidence.data?.result.cases} /> : null}
-          <LocalExperimentGrading
+          {!installationRead ? <LocalExperimentGrading
             key={execution.id}
             api={api}
             definition={execution}
@@ -291,7 +297,7 @@ export function LocalExperimentsPage({
                 navigate({ ...route, passId: next.id, detailTab: "cases" });
               })
             }
-          />
+          /> : null}
           {tab === "compare" ? (
             <LocalExperimentCompare
               key={`${detail.resultId}:compare`}
@@ -326,12 +332,14 @@ export function LocalExperimentsPage({
         </>
       ) : (
         <p role="status">
-          {detail.execution.isPending ? "Loading Experiment…" : "This Experiment is unavailable."}
+          {detail.execution.isPending ? "Loading Benchmark…" : "This Benchmark is unavailable."}
         </p>
       )}
-      <AdvancedRefinerEvaluationControl api={api} evidence={detail.evidence.data?.result.status==="completed"?{id:detail.evidence.data.manifest.id,contentHash:detail.evidence.data.result.contentHash}:null}/>
-      <ReviewedExperimentScheduleControl api={api} configuration={execution?.configuration??null} onOpenExperiment={id=>navigate({...route,page:"experiments",resourceId:id,passId:null,detailTab:"overview"})}/>
-      <ExperimentImproveSidebar api={api} evidence={detail.evidence.data??null} onOpenWork={onOpenWork}/>
+      {!installationRead ? <>
+        <AdvancedRefinerEvaluationControl api={api} evidence={detail.evidence.data?.result.status==="completed"?{id:detail.evidence.data.manifest.id,contentHash:detail.evidence.data.result.contentHash}:null}/>
+        <ReviewedExperimentScheduleControl api={api} configuration={execution?.configuration??null} onOpenExperiment={id=>navigate({...route,page:"experiments",resourceId:id,passId:null,detailTab:"overview"})}/>
+        <ExperimentImproveSidebar api={api} evidence={detail.evidence.data??null} onOpenWork={onOpenWork}/>
+      </> : null}
     </>
   );
 }

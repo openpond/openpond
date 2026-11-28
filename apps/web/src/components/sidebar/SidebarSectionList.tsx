@@ -5,6 +5,8 @@ export { nextSidebarChatVisibleCount, previousSidebarChatVisibleCount } from "..
 import { SidebarNewThreadButton } from "./SidebarNavigation";
 import { DesktopNewMenu } from "../chat/DesktopNewMenu";
 import { SidebarModelResource } from "./SidebarModelResource";
+import { SidebarResourceRow } from "./SidebarResourceRow";
+import { sidebarResourceThreads } from "./sidebar-resource-threads";
 import { SidebarTeamAvatars } from "./SidebarTeamAvatars";
 import { OPENPOND_ICON_URL } from "../../lib/public-assets";
 import { SidebarWorkflowGroups } from "./SidebarWorkflowGroups";
@@ -14,7 +16,6 @@ import { sidebarInboxTime } from "../../lib/sidebar-inbox";
 import { sidebarWorkflowInbox, sidebarWorkflowRows, type SidebarWorkflowRow } from "../../lib/sidebar-workflow-list";
 import { useHydratedClientChoice } from "../../lib/client-choice-storage";
 import type { Session } from "@openpond/contracts";
-import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import { useEffect, useMemo, useState } from "react";
 import {
   SIDEBAR_TASK_INITIAL_LIMIT,
@@ -341,22 +342,12 @@ export function SidebarSectionList({
       ordinaryFilteredTaskRows.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)),
     [chatRowsVisibleCount, ordinaryFilteredTaskRows],
   );
-  const libraryChats = useMemo(() => {
-    const groups: { model: Session[]; benchmark: Session[] } = { model: [], benchmark: [] };
-    for (const session of visibleTaskRows) {
-      const resource = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft);
-      if (resource.success && (resource.data.kind === "model" || resource.data.kind === "benchmark")) groups[resource.data.kind].push(session);
-    }
-    return groups;
-  }, [visibleTaskRows]);
-  const libraryChatIds = new Set([...libraryChats.model, ...libraryChats.benchmark].map(session => session.id));
-  const modelChatsById = new Map<string, Session[]>();
-  for (const session of libraryChats.model) {
-    const resource = SessionResourceDraftSchema.parse(session.metadata?.resourceDraft);
-    const chats = modelChatsById.get(resource.id) ?? [];
-    chats.push(session);
-    modelChatsById.set(resource.id, chats);
-  }
+  const { modelsById: modelChatsById, benchmarks, grouped: libraryChatIds } = useMemo(() => {
+    const origin = account?.state === "signed_in" && account.apiBaseUrl && URL.canParse(account.apiBaseUrl)
+      ? new URL(account.apiBaseUrl).origin : null;
+    return sidebarResourceThreads(activeSessions, visibleTaskRows, modelProjects,
+      origin && selectedTeamId ? { apiOrigin: origin, teamId: selectedTeamId } : null);
+  }, [account?.apiBaseUrl, account?.state, activeSessions, visibleTaskRows, modelProjects, selectedTeamId]);
   const sidebarModels = modelProjects.slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount));
   const visibleModelIds = new Set(sidebarModels.map(model => model.id));
   function openResourcePage(route: ModelsRoute) {
@@ -907,7 +898,8 @@ export function SidebarSectionList({
             })}
             {[...modelChatsById].filter(([id]) => !visibleModelIds.has(id))
               .flatMap(([, chats]) => chats.map(session => renderTaskSession(session)))}
-          </> : libraryChats.benchmark.map(session => renderTaskSession(session))}
+          </> : [...benchmarks.values()].map(({ owner, name, chats }) => <SidebarResourceRow key={owner.id} name={name}
+            onOpen={() => selectSession(owner)}>{chats.map(session => renderTaskSession(session))}</SidebarResourceRow>)}
         </SidebarSection>;
       })}
       <SidebarSection

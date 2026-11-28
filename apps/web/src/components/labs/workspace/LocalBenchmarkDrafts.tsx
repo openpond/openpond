@@ -1,6 +1,6 @@
-import { ChatExperimentContextSchema, type Session } from "@openpond/contracts";
-import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
+import type { Session } from "@openpond/contracts";
 import { useState } from "react";
+import { sessionBenchmarkDraft } from "../../../lib/session-benchmark";
 import { EvaluationTime } from "./EvaluationPresentation";
 
 export function LocalBenchmarkDrafts({ sessions, search, actorId, onOpen, onSync }: {
@@ -13,12 +13,7 @@ export function LocalBenchmarkDrafts({ sessions, search, actorId, onOpen, onSync
   const [syncing, setSyncing] = useState<string | null>(null);
   const query = search.trim().toLowerCase();
   const drafts = sessions.flatMap(session => {
-    if (session.archived) return [];
-    const resource = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft);
-    if (!resource.success || resource.data.kind !== "benchmark") return [];
-    const context = ChatExperimentContextSchema.safeParse(session.metadata?.chatExperimentContext);
-    if (!context.success) return [];
-    const scope = context.data.scopes.find(candidate => candidate.draft?.id === resource.data.id);
+    const scope = sessionBenchmarkDraft(session);
     if (!scope || !scope.name.toLowerCase().includes(query)) return [];
     return [{ sessionId: session.id, scope }];
   }).sort((left, right) => right.scope.updatedAt.localeCompare(left.scope.updatedAt));

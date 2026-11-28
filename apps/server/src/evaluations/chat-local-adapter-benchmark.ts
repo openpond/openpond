@@ -21,6 +21,7 @@ export async function handleLocalAdapterBenchmark(deps: {
   home: string;
   scopes: ReturnType<typeof createChatExperimentScopes>;
   experiments: Awaited<ReturnType<typeof createChatExperiments>>;
+  onReviewed?: (sessionId: string) => Promise<void>;
 }, raw: unknown) {
   const request = requestSchema.parse(raw);
   const { store, home, scopes, experiments } = deps;
@@ -70,6 +71,7 @@ export async function handleLocalAdapterBenchmark(deps: {
       draft: { ...draft, name: request.name, localAdapterBenchmark: setup },
     });
     const updated = saved.scopes.find(scope => scope.id === currentScope.id)!;
+    await deps.onReviewed?.(current.id);
     return { draftId: draft.id, revision: updated.draftRevision ?? 1 };
   }
   const setup = draft.localAdapterBenchmark;
