@@ -2,6 +2,7 @@ import { useContext, useMemo, useState } from "react";
 import {
   canonicalJson,
   canonicalSha256,
+  decisionSourcePreference,
   ExperimentDraftSchema,
   type TrainingExperimentInputsPage,
 } from "openpond-sdk/training";
@@ -10,7 +11,7 @@ import { useErrorToast } from "../../app/AppToastContext";
 import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import {
   modelSetupTrainingRecipe,
-  resourceSetupTrainingMethod,
+  resourceSetupManagedTrainingMethod,
   type ResourceSetupDraft,
 } from "../../lib/resource-setup-prompt";
 import { DropdownSelect } from "../DropdownSelect";
@@ -18,6 +19,7 @@ import { useTrainingExperimentInputs } from "../labs/workspace/useTrainingExperi
 import { ReleasedDatasetPicker } from "../labs/workspace/ReleasedDatasetPicker";
 import { createWorkspaceApi, type WorkspaceApi } from "../labs/workspace/workspace-api";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
+import { initialDecisionTraining } from "../labs/workspace/decision-form-defaults";
 
 type ManagedInputs = NonNullable<ResourceSetupDraft["managedTrainingInputs"]>;
 type ReviewContext = Pick<ReturnType<typeof useChatContextSelection>, "select" | "selection">;
@@ -44,7 +46,7 @@ export function ModelSetupManagedReview(props: {
   onOpened(): void;
 }) {
   const scope = useContext(ChatExperimentWorkspaceContext);
-  const method = resourceSetupTrainingMethod(props.draft);
+  const method = resourceSetupManagedTrainingMethod(props.draft);
   const api = useMemo(
     () =>
       props.connection && scope?.actorId && scope.teamId
@@ -59,11 +61,12 @@ export function ModelSetupManagedReview(props: {
   );
   if (!api || !method || !props.sessionId || props.draft.values.destination !== "OpenPond Managed")
     return null;
-  return <ManagedFields {...props} api={api} method={method} sessionId={props.sessionId} />;
+  return <ManagedFields {...props} api={api} apiOrigin={scope?.apiOrigin} method={method} sessionId={props.sessionId} />;
 }
 
 function ManagedFields({
   api,
+  apiOrigin,
   draft,
   method,
   sessionId,
@@ -76,7 +79,8 @@ function ManagedFields({
 }: {
   api: WorkspaceApi;
   draft: ResourceSetupDraft;
-  method: "sft" | "grpo";
+  apiOrigin?: string | null;
+  method: NonNullable<ReturnType<typeof resourceSetupManagedTrainingMethod>>;
   sessionId: string;
   context: ReviewContext;
   field: string;
@@ -91,18 +95,22 @@ function ManagedFields({
     retained?.accountKey === api.accountKey &&
     retained?.teamId === api.teamId &&
     retained?.actorId === api.actorId;
-  const base = matchingScope ? retained.base : undefined;
+  const decision = method === "decision_model";
+  const decisionSource = decision ? decisionSourcePreference() : null;
+  const retainedBase = matchingScope ? retained.base : undefined;
+  const base = decisionSource ? { label: decisionSource.modelId, preference: decisionSource } : retainedBase;
   const batch = matchingScope && retained.batch?.method === method ? retained.batch : undefined;
   const validation = matchingScope ? retained.validation : undefined;
   const validationSplit = matchingScope ? (retained.validationSplit ?? "validation") : "validation";
-  const picking = field === "baseModel" || field === "dataset";
+  const picking = !decision && field === "baseModel" || field === "dataset";
   const catalog = useTrainingExperimentInputs(api, picking, batch?.reference);
   const selected = catalog.models.find(
     (candidate) => base && canonicalJson(candidate.preference) === canonicalJson(base.preference),
   );
   const batches = catalog.batches.filter(
     (candidate) =>
-      candidate.purpose === (method === "sft" ? "supervised_training" : "reward_training"),
+      candidate.purpose === (method === "grpo" ? "reward_training" : "supervised_training") &&
+      (!decision || Boolean(candidate.sealedAt && candidate.exampleCount)),
   );
   useErrorToast(error ?? (picking ? catalog.error : null));
 
@@ -120,7 +128,7 @@ function ManagedFields({
         accountKey: api.accountKey,
         teamId: api.teamId,
         actorId: api.actorId!,
-        base,
+        base: retainedBase,
         batch,
         validation,
         validationSplit,
@@ -134,32 +142,39 @@ function ManagedFields({
     onBusy(true);
     setError(null);
     try {
-      const name =
-        draft.values.name?.trim() || (method === "sft" ? "Supervised training" : "RL training");
-      const recipe = modelSetupTrainingRecipe(draft, method, base.preference);
+      const name = draft.values.name?.trim() || (decision ? "Decision Model" : method === "sft" ? "Supervised training" : "RL training");
+      const budget = draft.values.budget === undefined ? "" : String(draft.values.budget);
       const body = {
         schemaVersion: "openpond.experimentDraft.v1",
         operationType: method,
         name,
-        trainingForm: {
+        ...(decision ? { decisionForm: {
+          mode: "train", baseModel: base.preference, name, maximumSpendUsd: budget,
+          parentArtifact: null, batch: batch?.reference ?? null,
+          training: draft.decisionTraining ?? initialDecisionTraining(),
+        }} : { trainingForm: {
           baseModel: base.preference,
-          recipe,
+          recipe: modelSetupTrainingRecipe(draft, method, base.preference),
           batch: batch?.reference ?? null,
           evaluation: validation ?? null,
           validationSplit,
           name,
-          budget: draft.values.budget === undefined ? "" : String(draft.values.budget),
+          budget,
           startingModelLabel: base.label,
-        },
+        }}),
       };
-      const id = `model-setup-${await canonicalSha256([sessionId, api.accountKey, body])}`;
+      const reviewOwner = decision && apiOrigin && api.actorId
+        ? { apiOrigin, actorId: api.actorId, teamId: api.teamId } : undefined;
+      if (decision && !reviewOwner) throw new Error("Choose the workspace that will own this Decision draft.");
+      const id = `model-setup-${await canonicalSha256([sessionId, api.accountKey, ...(reviewOwner ? [reviewOwner] : []), body])}`;
       const review = ExperimentDraftSchema.parse({ ...body, id });
       const current = context.selection;
-      const reopening = current?.draft?.id === id && current.localDraft;
+      const reopening = current?.draft?.id === id && (decision ? current.storedDraft : current.localDraft);
       const target = reopening
         ? current.target
         : { kind: "experiment" as const, location: "local" as const, id, draft: review };
-      if (await context.select(target, { configureDraft: true, modelTrainingReview: !reopening }))
+      if (await context.select(target, { configureDraft: true, modelTrainingReview: !reopening,
+        modelReviewOwner: reopening ? undefined : reviewOwner }))
         onOpened();
     } catch (cause) {
       setError(cause);
@@ -171,7 +186,7 @@ function ManagedFields({
   return (
     <div className="resource-setup-fields">
       {field === "baseModel" && (
-        <>
+        decisionSource ? <p>{decisionSource.modelId}, revision {decisionSource.revision}</p> : <>
           <DropdownSelect
             label="Managed starting model"
             value={selected?.id ?? (base ? "retained" : "")}
@@ -248,7 +263,7 @@ function ManagedFields({
               More reviewed batches
             </button>
           )}
-          <div className="resource-setup-input">
+          {!decision && <><div className="resource-setup-input">
             <span>Validation Dataset</span>
             <ReleasedDatasetPicker
               api={api}
@@ -270,7 +285,7 @@ function ManagedFields({
                 validationSplit: value === "frozen_eval" ? "frozen_eval" : "validation",
               })
             }
-          />
+          /></>}
         </>
       )}
       {draft.datasetRef && !batch && (
@@ -283,10 +298,10 @@ function ManagedFields({
         <button
           type="button"
           className="training-button secondary"
-          disabled={busy || !base || selected?.available === false}
+          disabled={busy || !base || (!decision && selected?.available === false) || (decision && !apiOrigin)}
           onClick={() => void openReview()}
         >
-          Open training review
+          {decision ? "Save managed draft and open Decision review" : "Open training review"}
         </button>
       </div>
     </div>

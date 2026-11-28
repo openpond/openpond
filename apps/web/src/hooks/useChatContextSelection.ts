@@ -31,7 +31,8 @@ type PagedContextQuery<T> = {
   fetchNextPage: () => Promise<unknown>;
   refetch: () => Promise<unknown>;
 };
-type ContextSelectionOptions = { newExperiment?: boolean; configureDraft?: boolean; modelTrainingReview?: boolean; benchmark?: ManagedBenchmarkReview };
+type ContextSelectionOptions = { newExperiment?: boolean; configureDraft?: boolean; modelTrainingReview?: boolean;
+  modelReviewOwner?: { actorId: string; teamId: string; apiOrigin: string }; benchmark?: ManagedBenchmarkReview };
 type ChatContextSelectionState = {
   associateTraining: (jobId: string, apiOrigin: string, draftId: string) => Promise<void>;
   selection: ChatContextSelection | null;
@@ -147,7 +148,8 @@ export function useChatContextSelection(connection: ClientConnection | null, ses
         action: "context_prepare_benchmark", payload: { target, sessionId, ...options.benchmark },
       } : { action: "context_select", payload: {
         target, ...(options?.newExperiment ? { newExperiment: true } : {}),
-        ...(options?.modelTrainingReview ? { modelTrainingReview: true } : {}), ...(sessionId ? { sessionId } : {}),
+        ...(options?.modelTrainingReview ? { modelTrainingReview: true } : {}),
+        ...(options?.modelReviewOwner ? { modelReviewOwner: options.modelReviewOwner } : {}), ...(sessionId ? { sessionId } : {}),
       } });
       const value = result.selection ? ChatContextSelectionSchema.parse(result.selection) : null;
       if (activeKey.current !== key) return false;

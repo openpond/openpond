@@ -544,7 +544,7 @@ export function DecisionExperimentSetupPanel({
                   />
                 </label>
                 {form.mode === "train" ? (
-                  <DecisionTrainingFields form={form} onChange={setForm} />
+                  <DecisionTrainingFields training={form.training} onChange={training => setForm({ ...form, training })} />
                 ) : (
                   <DecisionScoringFields form={form} onChange={setForm} />
                 )}

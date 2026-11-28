@@ -15,6 +15,7 @@ import {
   resourceSetupLabel,
   resourceSetupParts,
   resourceSetupTrainingMethod,
+  resourceSetupManagedTrainingMethod,
   scopeManagedSetup,
   benchmarkAccountMessage,
   selectModelSetupMethod,
@@ -40,6 +41,8 @@ import { ManagedBenchmarkProtocolFields } from "./ManagedBenchmarkProtocolFields
 import { ManagedBenchmarkDatasetFields } from "./ManagedBenchmarkDatasetFields";
 import { LocalAdapterBenchmarkReview } from "./LocalAdapterBenchmarkReview";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
+import { DecisionTrainingFields } from "../labs/workspace/DecisionFields";
+import { initialDecisionTraining } from "../labs/workspace/decision-form-defaults";
 import "./resource-setup-editor.css";
 
 const GraderSetupWorkspaceReview = lazy(() => import("./GraderSetupWorkspaceReview"));
@@ -124,7 +127,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   const openableVersion = version?.location === "cloud" && selectedVersion?.location === "cloud" &&
     version.versionHash === selectedVersion.versionHash && context.selection?.target.sessionId === sessionId;
   const managedReview = Boolean(workspace?.teamId && workspace.actorId && connection && sessionId &&
-    resourceSetupTrainingMethod(draft) && draft.values.destination === "OpenPond Managed");
+    resourceSetupManagedTrainingMethod(draft) && draft.values.destination === "OpenPond Managed");
   const supportsLocalTraining = draft.values.method === "SFT" && draft.values.adapter === "LoRA" &&
     draft.values.learning !== "Configure continual learning";
   const localBase = draft.kind === "model" && draft.values.destination !== "OpenPond Managed" ? draft.localTrainingBase : undefined;
@@ -276,11 +279,12 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
   </div>;
   const activePart = parts.find(part => typeof part !== "string" && part.field === field);
   const trainingMethod = field === "trainingSettings" ? resourceSetupTrainingMethod(draft) : null;
+  const decisionSettings = field === "trainingSettings" && resourceSetupManagedTrainingMethod(draft) === "decision_model";
   const localSft = draft.values.destination !== "OpenPond Managed" && resourceSetupTrainingMethod(draft) === "sft";
   const reviewInputs = localSft && (field === "dataset" || field === "trainingSettings");
   const reviewRequest = reviewInputs ? localSftReviewRequest(draft, sessionId) : null;
-  const activeFields: readonly ResourceSetupField[] = trainingMethod
-    ? ["budget"] : resourceSetupGroups[field] ?? [field as ResourceSetupField];
+  const activeFields: readonly ResourceSetupField[] = trainingMethod || decisionSettings ? ["budget"]
+    : resourceSetupGroups[field] ?? [field as ResourceSetupField];
   const benchmarkPresets = draft.kind === "benchmark" && !benchmarkUnavailable && version?.location !== "local" ? <div className="resource-setup-presets" role="group" aria-label="Benchmark presets">
     {[{ compare: false, label: "Evaluate one model" }, { compare: true, label: "Compare models" }].map(({ compare, label }) =>
       <button type="button" className="training-button secondary" key={label} disabled={busy}
@@ -303,6 +307,11 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       {benchmarkPresets}
       {trainingMethod && <ModelSetupTrainingFields key={trainingMethod} draft={draft} method={trainingMethod}
         baseModel={visibleDraft.managedTrainingInputs?.base?.preference ?? localBase?.preference} disabled={busy} onChange={onChange} />}
+      {decisionSettings && <fieldset className="resource-setup-fields resource-setup-training-fields resource-setup-protocol-fields" disabled={busy}>
+        <legend>Optimizer and limits</legend>
+        <DecisionTrainingFields training={draft.decisionTraining ?? initialDecisionTraining()} onChange={decisionTraining =>
+          onChange(draft, { ...draft, revision: draft.revision + 1, decisionTraining })} />
+      </fieldset>}
       {activePart ? <div className="resource-setup-fields" key={field}>
         {activeFields.map((key, index) => {
           if (version?.location === "local") return null;
@@ -424,7 +433,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
                 ...(dataset === null ? { samples: undefined } : {}) } });
           }} />
       ) : null}
-      {field === "baseModel" && draft.kind === "model" && draft.values.destination !== "OpenPond Managed" && connection ? (
+      {field === "baseModel" && draft.kind === "model" && (localSft || !draft.values.method && draft.values.destination !== "OpenPond Managed") && connection ? (
         <div className="resource-setup-fields">
           <ModelSetupLocalBase connection={connection} selected={localBase} busy={busy} onBusy={setAuthoringBusy}
             onSelect={base => onChange(draft, {

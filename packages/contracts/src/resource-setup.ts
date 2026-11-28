@@ -3,7 +3,7 @@ import { ExperimentGraderSelectionSchema } from "openpond-sdk/experiments";
 import { TasksetCatalogReleaseRefSchema } from "openpond-sdk/taskset-catalog";
 import { DatasetSplitSchema } from "openpond-sdk/taskset-drafts";
 import { ModelProjectBaseModelSchema, ModelProjectRecipeDocumentSchema, ModelProjectVersionedRefSchema, RegisteredAdapterVersionSchema } from "openpond-sdk/model-projects";
-import { SftRecipeSchema } from "openpond-sdk/training";
+import { DecisionTrainingFormDraftSchema, SftRecipeSchema } from "openpond-sdk/training";
 
 const fieldText = z.string().max(2_000).optional();
 const positiveInteger = z.number().int().positive().optional();
@@ -271,6 +271,7 @@ export const ResourceSetupDraftSchema = z.object({
     sft: ModelProjectRecipeDocumentSchema.extend({ method: z.literal("sft") }).optional(),
     grpo: ModelProjectRecipeDocumentSchema.extend({ method: z.literal("grpo") }).optional(),
   }).strict().optional(),
+  decisionTraining: DecisionTrainingFormDraftSchema.optional(),
   managedTrainingInputs: z.object({
     accountKey: z.string().min(1).max(4_000),
     teamId: z.string().min(1).max(500),
@@ -281,7 +282,7 @@ export const ResourceSetupDraftSchema = z.object({
     }).strict().optional(),
     batch: z.object({
       label: z.string().min(1).max(500),
-      method: z.enum(["sft", "grpo"]),
+      method: z.enum(["sft", "grpo", "decision_model"]),
       reference: ModelProjectVersionedRefSchema,
     }).strict().optional(),
     validation: ModelProjectVersionedRefSchema.optional(),

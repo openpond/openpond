@@ -2,7 +2,7 @@ import type { BenchmarkModelVersion, ResourceSetupDraft } from "@openpond/contra
 import { LocalSftReviewRequestSchema, ownsHostedBenchmarkVersion } from "@openpond/contracts/resource-setup";
 import type { ChatContextSelection, ModelProject } from "@openpond/contracts";
 import { createModelTrainingRecipeDefaults } from "openpond-sdk/model-starters";
-import { canonicalJson } from "openpond-sdk/training";
+import { canonicalJson, decisionSourcePreference } from "openpond-sdk/training";
 export { ResourceSetupDraftSchema, type ResourceSetupDraft } from "@openpond/contracts/resource-setup";
 
 export type ResourceSetupField = keyof ResourceSetupDraft["values"];
@@ -59,7 +59,7 @@ export function scopeManagedSetup(
   const managed = draft.managedTrainingInputs;
   if (!managed || draft.values.destination === "OpenPond Managed" && managed.accountKey === scope?.accountKey &&
     managed.teamId === scope?.teamId && managed.actorId === scope?.actorId) {
-    if (managed?.batch && managed.batch.method !== resourceSetupTrainingMethod(draft) &&
+    if (managed?.batch && managed.batch.method !== resourceSetupManagedTrainingMethod(draft) &&
       !draft.datasetRef && draft.values.dataset === managed.batch.label)
       return { ...draft, values: { ...draft.values, dataset: undefined } };
     return draft;
@@ -76,8 +76,14 @@ export function resourceSetupTrainingMethod(draft: ResourceSetupDraft): "sft" | 
       : draft.values.method === "GRPO" ? "grpo" : null;
 }
 
+export function resourceSetupManagedTrainingMethod(draft: ResourceSetupDraft) {
+  return draft.kind === "model" && draft.values.method === "Decision"
+    ? "decision_model" : resourceSetupTrainingMethod(draft);
+}
+
 function localTrainingBase(draft: ResourceSetupDraft) {
-  return draft.kind === "model" && draft.values.destination !== "OpenPond Managed" ? draft.localTrainingBase : undefined;
+  return draft.kind === "model" && draft.values.destination !== "OpenPond Managed" &&
+    (!draft.values.method || resourceSetupTrainingMethod(draft) === "sft") ? draft.localTrainingBase : undefined;
 }
 
 export function modelSetupTrainingRecipe(draft: ResourceSetupDraft, method: "sft" | "grpo",
@@ -168,9 +174,11 @@ export function resourceSetupParts(draft: ResourceSetupDraft): ResourceSetupPart
         "Set up ", name, " for ", objective, " using ", field("baseModel", "Choose a starting model or checkpoint"),
         " with ", field("method", "Choose a training method"),
         ...(adapter ? [" and a ", field("adapter", "Choose an adapter"), " adapter"] : []), ".",
-        " Use ", dataset, " with ", field("grader", method === "GRPO" ? "Choose a reward grader" : "Choose a grader"), ".",
-        " Show me the plan with ", field("trainingSettings", "Training settings"), " and ",
-        field("learning", "Learning settings"), ".", " Run on ", destination, ".",
+        ...(method === "Decision"
+          ? [" Use ", field("dataset", "Choose a reviewed Decision batch"), ". Show me the plan with ", field("trainingSettings", "Decision training settings"), "."]
+          : [" Use ", dataset, " with ", field("grader", method === "GRPO" ? "Choose a reward grader" : "Choose a grader"), ".",
+            " Show me the plan with ", field("trainingSettings", "Training settings"), " and ", field("learning", "Learning settings"), "."]),
+        " Run on ", destination, ".",
       ];
     }
     case "benchmark":
@@ -205,6 +213,8 @@ export function resourceSetupLabel({ field, placeholder }: Exclude<ResourceSetup
   if (field === "preview" && draft.datasetExamples?.length)
     return `Preview ${draft.datasetExamples.length} ${draft.datasetExamples.length === 1 ? "row" : "rows"}`;
   if (field === "trainingSettings" || field === "evaluationSettings" || field === "preview") return placeholder;
+  if (field === "baseModel" && resourceSetupManagedTrainingMethod(draft) === "decision_model" && draft.values.destination === "OpenPond Managed")
+    return decisionSourcePreference().modelId;
   const localBase = localTrainingBase(draft);
   if (field === "baseModel" && localBase) return localBase.label;
   if (draft.benchmarkModelVersion?.location === "local") {
@@ -241,8 +251,11 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const execution = parts.slice(destinationStart).map(stringify).join("").trim();
   const { split, epochs, learningRate, budget, samples, seed } = draft.values;
   const method = resourceSetupTrainingMethod(draft);
+  const managedMethod = resourceSetupManagedTrainingMethod(draft);
   const recipe = selectedTrainingRecipe(draft, method);
   const managed = draft.values.destination === "OpenPond Managed" ? draft.managedTrainingInputs : undefined;
+  const managedBase = draft.values.destination === "OpenPond Managed" && managedMethod === "decision_model"
+    ? decisionSourcePreference() : managed?.base?.preference;
   const localBase = localTrainingBase(draft)?.preference;
   const version = draft.managedBenchmarkVersions?.candidate ?? draft.benchmarkModelVersion;
   const baseline = draft.comparison ? draft.managedBenchmarkVersions?.baseline : undefined;
@@ -257,11 +270,12 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     version?.location === "cloud" && `Managed Model ${version.modelProjectId}, training run ${version.jobId}, version hash ${version.versionHash}`,
     baseline && `Managed baseline ${baseline.modelProjectId}, training run ${baseline.jobId}, version hash ${baseline.versionHash}`,
     !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
-    managed?.base && `Starting model ${managed.base.preference.modelId}, revision ${managed.base.preference.revision}, tokenizer revision ${managed.base.preference.tokenizerRevision}, chat template hash ${managed.base.preference.chatTemplateHash}`,
+    managedBase && `Starting model ${managedBase.modelId}, revision ${managedBase.revision}, tokenizer revision ${managedBase.tokenizerRevision}, chat template hash ${managedBase.chatTemplateHash}`,
     localBase && `Local starting model ${localBase.modelId}, revision ${localBase.revision}, tokenizer revision ${localBase.tokenizerRevision}, chat template hash ${localBase.chatTemplateHash}`,
     draft.localSftApproval && `Approved local SFT review ${draft.localSftApproval.planHash}, Dataset package ${draft.localSftApproval.datasetPackageHash}, training population ${draft.localSftApproval.taskIdsHash}, ${draft.localSftApproval.rowCount} examples`,
-    managed?.batch && method === managed.batch.method && `Reviewed training batch ${managed.batch.reference.id}, revision ${managed.batch.reference.revision}, content hash ${managed.batch.reference.contentHash}`,
-    managed?.validation && `Validation Dataset ${managed.validation.id}, revision ${managed.validation.revision}, content hash ${managed.validation.contentHash}, split ${managed.validationSplit ?? "validation"}`,
+    managed?.batch && managedMethod === managed.batch.method && `Reviewed training batch ${managed.batch.reference.id}, revision ${managed.batch.reference.revision}, content hash ${managed.batch.reference.contentHash}`,
+    managedMethod === "decision_model" && draft.decisionTraining && `Decision training settings ${canonicalJson(draft.decisionTraining)}`,
+    method && managed?.validation && `Validation Dataset ${managed.validation.id}, revision ${managed.validation.revision}, content hash ${managed.validation.contentHash}, split ${managed.validationSplit ?? "validation"}`,
     draft.candidateRef && `Model project ${draft.candidateRef.projectId}, version ${draft.candidateRef.versionId}, artifact ${draft.candidateRef.artifactId}, bundle hash ${draft.candidateRef.bundleHash}`,
     version?.location === "local" && `Model project ${version.projectId}, version ${version.versionId}, artifact ${version.artifactId}, bundle hash ${version.bundleHash}`,
     draft.localBenchmarkInference?.baseline && `Baseline Model project ${draft.localBenchmarkInference.baseline.projectId}, version ${draft.localBenchmarkInference.baseline.versionId}, artifact ${draft.localBenchmarkInference.baseline.artifactId}, bundle hash ${draft.localBenchmarkInference.baseline.bundleHash}`,
@@ -271,8 +285,8 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     draft.values.destination === "This device" && draft.localCandidate && `Candidate local provider custom-openai-compatible, model ID ${draft.localCandidate.modelId}, configuration hash ${draft.localCandidate.configurationHash}`,
     draft.values.destination === "This device" && draft.comparison && draft.localBaseline && `Baseline local provider custom-openai-compatible, model ID ${draft.localBaseline.modelId}, configuration hash ${draft.localBaseline.configurationHash}`,
     (draft.localSftApproval || split) && `Dataset split ${draft.localSftApproval ? "train" : split}`,
-    epochs !== undefined && `${epochs} epochs`,
-    learningRate !== undefined && `learning rate ${learningRate}`,
+    method && epochs !== undefined && `${epochs} epochs`,
+    method && learningRate !== undefined && `learning rate ${learningRate}`,
     draft.kind === "model" && budget !== undefined && `maximum spend $${budget}`,
     samples !== undefined && `${samples} samples`,
     seed !== undefined && `seed ${seed}`,

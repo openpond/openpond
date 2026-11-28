@@ -4,7 +4,7 @@ import { readChatRetainedResult } from "./chat-retained-result.js";
 import { readChatAlphaEditResult } from "./chat-alphaedit-result.js";
 import { readChatNeuronTrainingResult } from "./chat-neuron-training-result.js";
 import { chatResourceWorkspaces, chatTrainingAttachmentKey, ChatContextTargetSchema, ChatExperimentContextSchema, type ChatContextOption, type ChatContextSelection, type ChatContextTarget, type ChatExperimentScope, type ChatResourceSummary, type StoredExperimentDraftReference } from "@openpond/contracts";
-import { createTrainingClient, canonicalJson, experimentOperationLabel, ExperimentDraftSaveSchema, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
+import { createTrainingClient, canonicalJson, decisionSourcePreference, experimentOperationLabel, ExperimentDraftSaveSchema, type ExperimentDraft, type ExperimentDraftRecord } from "openpond-sdk/training";
 import { createModelProjectsClient } from "openpond-sdk/model-projects";
 import type { SqliteStore } from "../store/store.js";
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
@@ -38,7 +38,7 @@ export function createChatContextBrowser(deps: {
   associateDraftTraining?: (sessionId: string, draftId: string, training: import("@openpond/contracts").ChatTrainingAttachment) => Promise<void>;
   createDraft?: (sessionId: string, draft: ExperimentDraft, expected: { version: number; target: ChatContextTarget | null; modelSetupOwner?: ModelSetupOwner }) => Promise<void>;
   saveLocalDraft?: (sessionId: string, scopeId: string, input: { draft: ExperimentDraft; expectedRevision: number; operationId: string }) => Promise<void>;
-  linkStoredDraft?: (sessionId: string, record: ExperimentDraftRecord, reference: StoredExperimentDraftReference, expected?: { version: number; target: ChatContextTarget | null }, scopeId?: string) => Promise<void>;
+  linkStoredDraft?: (sessionId: string, record: ExperimentDraftRecord, reference: StoredExperimentDraftReference, expected?: { version: number; target: ChatContextTarget | null; modelSetupOwner?: ModelSetupOwner }, scopeId?: string) => Promise<void>;
   inspectResource?: (resource: ChatResourceSummary) => Promise<{ dataset?: ChatResourceSummary; graders?: ChatResourceSummary[] }>;
 
 }) {
@@ -198,8 +198,7 @@ export function createChatContextBrowser(deps: {
       if (scope.modelSetupOwner) {
         if (!hasModelSetupAccess(scope.modelSetupOwner, await deps.access().catch(() => null)))
           throw new Error("Choose the workspace that owns this Model training review.");
-        if (!scope.draft) throw new Error("Model training review is unavailable.");
-        return { target, draft: scope.draft, draftRevision: scope.draftRevision ?? 1, localDraft: true,
+        if (scope.draft) return { target, draft: scope.draft, draftRevision: scope.draftRevision ?? 1, localDraft: true,
           label: scope.name, detail: "Model training review" };
       }
       if (scope.storedDraft) {
@@ -271,10 +270,13 @@ export function createChatContextBrowser(deps: {
     }
     return { runs: options, nextCursor: null };
   }
-  async function select(raw: unknown, sessionId?: string, newExperiment = false, sourceDraftId?: string, modelTrainingReview = false) {
+  async function select(raw: unknown, sessionId?: string, newExperiment = false, sourceDraftId?: string, modelTrainingReview = false,
+    modelReviewOwner?: Omit<ModelSetupOwner, "modelId">) {
     let selection = raw === null ? null : await resolve(raw);
     if (modelTrainingReview && (!sessionId || !selection?.target.draft || newExperiment || sourceDraftId))
       throw new Error("Open Model training review from its originating chat.");
+    if (modelReviewOwner && (!modelTrainingReview || selection?.target.draft?.operationType !== "decision_model"))
+      throw new Error("Choose an exact hosted Decision review.");
     if (sourceDraftId) {
       if (!sessionId || !selection?.training || !deps.associateDraftTraining || newExperiment)
         throw new Error("A returned training Job requires its originating chat draft.");
@@ -313,14 +315,37 @@ export function createChatContextBrowser(deps: {
         return current(sessionId);
       }
       if (selection?.target.draft) {
-        if (!deps.createDraft) throw new Error("Experiment draft authoring is unavailable.");
+        const draft = selection.target.draft;
+        const state = chatExperimentContext(session.metadata);
+        const expected = { version: state.selectionVersion,
+          target: ChatContextTargetSchema.nullable().optional().parse(session.metadata?.chatContextSelection) ?? null };
         let modelSetupOwner: ModelSetupOwner | undefined;
         if (modelTrainingReview) {
           const owner = SessionResourceDraftSchema.safeParse(session.metadata?.resourceDraft);
-          const draft = selection.target.draft;
-          if (!owner.success || owner.data.kind !== "model" || !draft.trainingForm ||
-            !["sft", "grpo"].includes(draft.operationType) || !await deps.store.getModelProject(owner.data.id))
+          if (!owner.success || owner.data.kind !== "model" || !await deps.store.getModelProject(owner.data.id))
             throw new Error("Open this review from an installation-owned Model chat.");
+          if (draft.operationType === "decision_model") {
+            if (!deps.linkStoredDraft || !modelReviewOwner || draft.decisionForm?.mode !== "train" ||
+              draft.startingModel || draft.decisionForm.parentArtifact ||
+              canonicalJson(draft.decisionForm.baseModel) !== canonicalJson(decisionSourcePreference()))
+              throw new Error("Choose the supported Decision base and workspace before saving review.");
+            const operationId = `model-decision-${createHash("sha256").update(canonicalJson([
+              sessionId, modelReviewOwner, draft,
+            ])).digest("hex")}`;
+            const { receipt, reference } = await drafts.save({ schemaVersion: "openpond.experimentDraftSave.v1",
+              teamId: modelReviewOwner.teamId, projectId: null, operationId, expectedRevision: 0, draft }, modelReviewOwner);
+            await deps.linkStoredDraft(sessionId, receipt.record, reference, {
+              ...expected, modelSetupOwner: { ...modelReviewOwner, modelId: owner.data.id },
+            });
+            const linked = chatExperimentContext((await deps.store.getSession(sessionId))?.metadata);
+            const scope = linked.scopes.find(item => item.storedDraft?.id === draft.id &&
+              canonicalJson(item.storedDraft) === canonicalJson(reference));
+            if (!scope || linked.activeScopeId !== scope.id)
+              throw new Error("The Decision draft was saved. Select it in Context to reopen the review.");
+            return current(sessionId);
+          }
+          if (!draft.trainingForm || !["sft", "grpo"].includes(draft.operationType))
+            throw new Error("Choose a supported managed training method.");
           const { baseModel, recipe } = draft.trainingForm;
           if (baseModel?.source !== "managed" || !baseModel.revision || !baseModel.tokenizerRevision ||
             !baseModel.chatTemplateHash || recipe.method !== draft.operationType || recipe.parameterization !== "lora")
@@ -329,9 +354,8 @@ export function createChatContextBrowser(deps: {
           modelSetupOwner = { modelId: owner.data.id, actorId: access.actorId, teamId: access.teamId,
             apiOrigin: new URL(access.apiBaseUrl).origin };
         }
-        const state = chatExperimentContext(session.metadata);
-        await deps.createDraft(sessionId, selection.target.draft, { version: state.selectionVersion,
-          target: ChatContextTargetSchema.nullable().optional().parse(session.metadata?.chatContextSelection) ?? null, modelSetupOwner });
+        if (!deps.createDraft) throw new Error("Experiment draft authoring is unavailable.");
+        await deps.createDraft(sessionId, draft, { ...expected, modelSetupOwner });
         return current(sessionId);
       }
       if (newExperiment && selection) await deps.createExperiment(sessionId, selection.target);

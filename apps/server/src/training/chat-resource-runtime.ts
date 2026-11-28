@@ -274,7 +274,9 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return { selection: await browser.resolve(query.target) };
     }
     if (kind === "dataset" && ["context_catalog", "context_resolve", "context_inputs", "context_runs", "context_select", "context_selection", "context_save_draft"].includes(String(input.action))) {
-      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), modelTrainingReview: z.boolean().optional(), update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
+      const query = z.object({ sessionId: z.string().min(1).optional(), target: z.unknown().optional(), newExperiment: z.boolean().optional(), sourceDraftId: z.string().min(1).max(240).optional(), modelTrainingReview: z.boolean().optional(),
+        modelReviewOwner: z.object({ actorId: z.string().min(1).max(240), teamId: z.string().min(1).max(240), apiOrigin: z.url().max(2000) }).strict().optional(),
+        update: z.unknown().optional(), draftCursor: z.string().min(1).max(2000).optional(), source: z.enum(["all", "local", "models", "drafts"]).optional(), cursor: z.string().min(1).max(2000).optional() }).strict().parse(input.payload ?? {});
       if (input.action === "context_save_draft") {
         const saved = await browser.updateDraft(query.sessionId, query.target, query.update);
         await publishResourceSession(query.sessionId);
@@ -285,7 +287,7 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       if (input.action === "context_inputs") return browser.inputs(query.target);
       if (input.action === "context_resolve") return { selection: await browser.resolve(query.target) };
       if (input.action === "context_select") {
-        const selection = await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId, query.modelTrainingReview);
+        const selection = await browser.select(query.target ?? null, query.sessionId, query.newExperiment, query.sourceDraftId, query.modelTrainingReview, query.modelReviewOwner);
         await publishResourceSession(query.sessionId);
         return { selection };
       }

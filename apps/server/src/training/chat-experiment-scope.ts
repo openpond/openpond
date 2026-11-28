@@ -270,16 +270,37 @@ export function createChatExperimentScopes(store: SqliteStore) {
   }
 
   async function linkStoredDraft(sessionId: string, record: ExperimentDraftRecord, reference: StoredExperimentDraftReference,
-    expected?: { version: number; target: ChatContextTarget | null }, scopeId?: string): Promise<ChatExperimentContext> {
+    expected?: { version: number; target: ChatContextTarget | null; modelSetupOwner?: ChatExperimentScope["modelSetupOwner"] }, scopeId?: string): Promise<ChatExperimentContext> {
     if (record.id !== reference.id || record.teamId !== reference.teamId)
       throw new Error("The stored experiment reference does not match its document.");
     const identity = createHash("sha256").update(canonicalJson(reference)).digest("hex");
     return change(sessionId, (state, metadata) => {
+      const target = ChatContextTargetSchema.nullable().optional().parse(metadata.chatContextSelection);
+      const checkSelection = () => {
+        if (expected && (state.selectionVersion !== expected.version || canonicalJson(target ?? null) !== canonicalJson(expected.target)))
+          throw new Error("The chat context changed before the experiment was attached.");
+      };
+      function focus(scope: ChatExperimentScope, now = new Date().toISOString()) {
+        state.activeScopeId = scope.id;
+        state.selectionVersion++;
+        state.selectedAt = now;
+        metadata.chatContextSelection = { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" };
+        metadata.chatContextSelectionVersion = state.selectionVersion;
+        delete metadata.chatContextFocusKey;
+      }
       const prior = scopeId ? state.scopes.find(scope => scope.id === scopeId)
         : state.scopes.find(scope => scope.operationId === `stored-draft:${identity}`);
       if (prior) {
         if (prior.storedDraft ? canonicalJson(prior.storedDraft) !== canonicalJson(reference) : prior.draft?.id !== record.id)
           throw new Error("This stored draft does not belong to the intended experiment scope.");
+        if (expected?.modelSetupOwner) {
+          if (canonicalJson(prior.modelSetupOwner ?? null) !== canonicalJson(expected.modelSetupOwner))
+            throw new Error("This Decision draft belongs to another Model or account.");
+          if (state.activeScopeId !== prior.id) {
+            checkSelection();
+            focus(prior);
+          }
+        }
         prior.storedDraft = reference;
         delete prior.draft;
         // Keep only display metadata and the canonical pointer. An old retry
@@ -291,17 +312,13 @@ export function createChatExperimentScopes(store: SqliteStore) {
         return;
       }
       if (scopeId) throw new Error("The experiment scope is unavailable.");
-      const target = ChatContextTargetSchema.nullable().optional().parse(metadata.chatContextSelection);
-      if (expected && (state.selectionVersion !== expected.version || canonicalJson(target ?? null) !== canonicalJson(expected.target)))
-        throw new Error("The chat context changed before the experiment was attached.");
+      checkSelection();
       const scope = make(state, `stored-draft:${identity}`, new Date().toISOString());
       scope.storedDraft = reference; scope.draftRevision = record.revision;
+      if (expected?.modelSetupOwner) scope.modelSetupOwner = expected.modelSetupOwner;
       scope.creationHash = identity;
       scope.name = record.draft.name;
-      state.activeScopeId = scope.id; state.selectionVersion++; state.selectedAt = scope.createdAt;
-      metadata.chatContextSelection = { kind: "experiment", id: scope.id, scopeId: scope.id, sessionId, location: "local" };
-      metadata.chatContextSelectionVersion = state.selectionVersion;
-      delete metadata.chatContextFocusKey;
+      focus(scope, scope.createdAt);
     });
   }
 
