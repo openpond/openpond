@@ -2,13 +2,13 @@ import { createTrainingClient, TrainingExecutionListQuerySchema } from "openpond
 import { readHostedWeightSpace } from "./hosted-weight-space-read.js";
 import { DesktopCorrectionsRequestSchema, DesktopCorrectionsStateSchema } from "@openpond/contracts";
 import {EvaluationOperationRecoveryPageSchema,RecoverableEvaluationActionSchema} from "@openpond/contracts";
-import { ModelProjectBaseModelSchema, createModelProjectsClient } from "openpond-sdk/model-projects";
+import { createModelProjectsClient } from "openpond-sdk/model-projects";
 import { OpenPondToolLearningClient } from "openpond-sdk/tool-learning";
 import {validateReviewedEvaluationIntent,validateReviewedEvaluationCommand} from "./reviewed-evaluation-operation.js";
 import {OpenPondProfileEvaluationDiscoveryClient} from "openpond-sdk/experiments";
 import { connectedWorkspaceOperations, connectedWorkspaceRequest } from "./connected-workspace.js";
 import { ConnectedEvidenceClient } from "openpond-sdk/connected-evidence";
-import { listOpChatModels } from "@openpond/cloud/hosted-chat";
+import { readHostedEvaluationModels } from "./hosted-evaluation-models.js";
 import { contentHash } from "@openpond/harness";
 import type { SqliteStore } from "../store/store.js";
 import { experimentFeedbackSummary,createFeedbackSummaryReader } from "../evaluations/experiment-feedback-summary.js";
@@ -188,10 +188,7 @@ export function createHostedEvaluationWorkspace(input: { store:Pick<SqliteStore,
     }).listExecutions(access.teamId, { ...TrainingExecutionListQuerySchema.parse(request.value ?? {}), ...(request.projectId ? { projectId: request.projectId } : {}) });
     if (request.operation === "experiments") return experiments.list({ ...ExperimentListQuerySchema.parse(request.value ?? {}), ...(request.projectId ? { projectId: request.projectId } : {}) });
     if (request.operation === "projects") return projects.list(z.object({ cursor: Id.optional() }).strict().parse(request.value ?? {}));
-    if (request.operation === "graderModels") {
-      const models = z.object({ data: z.array(z.object({ id: z.string().min(1).max(500), display_name: z.string().max(500).optional(), endpoints: z.array(z.string()).optional(), capabilities: z.object({ samplingParameters: z.boolean().optional() }).passthrough().optional(), metadata: z.object({ baseModel: ModelProjectBaseModelSchema.optional() }).passthrough().optional() }).passthrough()).max(200) }).passthrough().parse(await listOpChatModels({ apiBaseUrl: `${access.apiBaseUrl}/v1`, token: access.token }));
-      return { models: models.data.filter(model => model.endpoints?.includes("chat.completions")).map(model => ({ id: model.id, name: model.display_name ?? model.id, supportsSampling: model.capabilities?.samplingParameters === true, baseModel: model.metadata?.baseModel ?? null })) };
-    }
+    if (request.operation === "graderModels") return readHostedEvaluationModels(access);
     if (request.operation === "graderCatalog") { const { allProjects, ...query } = z.object({ allProjects: z.boolean().optional() }).passthrough().parse(request.value ?? {}); return inspection.catalog(GraderCatalogQuerySchema.parse({ ...query, ...(request.projectId && !allProjects ? { projectId: request.projectId } : {}) })); }
     if (request.operation === "graderVersions") { const data = z.object({ id: Id, beforeRevision: z.number().int().positive().optional() }).parse(request.value); return inspection.versions(data.id, { beforeRevision: data.beforeRevision }); }
     if (request.operation === "graderUsage") { const data = Identity.parse(request.value); return inspection.usage(data.id, GraderUsageQuerySchema.parse(data.query)); }

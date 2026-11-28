@@ -13,7 +13,7 @@ import {
   type ChatResourceSummary,
   type StoredExperimentDraftReference,
 } from "@openpond/contracts";
-import type { ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
+import { parseEvaluationEnvironmentSeeds, type ManagedBenchmarkProtocol, type ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
 import { SessionResourceDraftSchema } from "@openpond/contracts/requests";
 import type { ReviewedBenchmarkDataset } from "./hosted-benchmark-dataset.js";
 import type { SqliteStore } from "../store/store.js";
@@ -174,6 +174,7 @@ export function createChatExperimentScopes(store: SqliteStore) {
     budget?: number;
     seed?: number;
     outputTokens?: number;
+    protocol?: ManagedBenchmarkProtocol;
     dataset?: ReviewedBenchmarkDataset | null;
   }): Promise<ChatExperimentContext> {
     return change(sessionId, (state, metadata) => {
@@ -189,14 +190,25 @@ export function createChatExperimentScopes(store: SqliteStore) {
       const name = input.name ?? scope.draft.name;
       const previousForm = scope.draft.evaluationForm;
       const compatible = previousForm?.executionLocation === "hosted" && previousForm.form.mode === "model" ? previousForm : null;
-      const { localRuntime: _localRuntime, ...previousSettings } = compatible?.form ?? {};
+      const { localRuntime: _localRuntime, temperature, topP, ...previousSettings } = compatible?.form ?? {};
+      const protocol = input.protocol;
+      const selection = input.dataset === undefined ? compatible?.selection ?? null : input.dataset?.selection ?? null;
+      const authoredSeeds = input.seed !== undefined || protocol?.environmentSeeds !== undefined
+        ? parseEvaluationEnvironmentSeeds(protocol?.environmentSeeds?.trim() || String(input.seed ?? 0)) : undefined;
+      const seedText = authoredSeeds?.join(", ") ?? compatible?.form.seed ?? "0";
+      if ((authoredSeeds || input.dataset) && selection?.mode === "subset" &&
+        new Set(selection.ids).size * (authoredSeeds ?? parseEvaluationEnvironmentSeeds(seedText)).length > 10_000)
+        throw new Error("One Benchmark can contain at most 10,000 task and seed pairs.");
+      const sampling = protocol?.sampling === undefined ? {
+        ...(temperature !== undefined ? { temperature } : {}), ...(topP !== undefined ? { topP } : {}),
+      } : protocol.sampling ?? {};
       const evaluationForm: ExperimentDraft["evaluationForm"] = {
         executionLocation: "hosted",
-        selection: input.dataset === undefined ? compatible?.selection ?? null : input.dataset?.selection ?? null,
+        selection,
         source: input.dataset === undefined ? compatible?.source ?? null : null,
         form: {
           mode: "model", sourceId: "", profileChoiceId: "", release: null, modelId: "", outputTokens: 1024,
-          prompt: "", targetId: "", graderChoices: {}, budget: null, seed: "0",
+          prompt: "", targetId: "", graderChoices: {}, budget: null,
           ...previousSettings, name,
           ...(input.dataset !== undefined && {
             release: input.dataset?.selection.release ?? null,
@@ -204,7 +216,9 @@ export function createChatExperimentScopes(store: SqliteStore) {
           }),
           ...(input.outputTokens !== undefined ? { outputTokens: input.outputTokens } : {}),
           ...(input.budget !== undefined ? { budget: input.budget } : {}),
-          ...(input.seed !== undefined ? { seed: String(input.seed) } : {}),
+          seed: seedText,
+          ...sampling,
+          ...(protocol?.systemInstructions !== undefined ? { prompt: protocol.systemInstructions } : {}),
         },
       };
       const sameVersion = scope.draft.startingModel?.source === "trained" &&

@@ -38,6 +38,23 @@ export const ManagedBenchmarkDatasetSchema = z.object({
   graders: ExperimentGraderSelectionSchema.array().max(100).optional(),
 }).strict();
 export type ManagedBenchmarkDataset = z.infer<typeof ManagedBenchmarkDatasetSchema>;
+const BenchmarkSamplingSchema = z.object({
+  temperature: z.number().min(0).max(2).nullable(),
+  topP: z.number().gt(0).max(1).nullable(),
+}).strict();
+const ManagedBenchmarkProtocolSchema = z.object({
+  environmentSeeds: z.string().max(10_000).optional(),
+  systemInstructions: z.string().max(100_000).optional(),
+  sampling: BenchmarkSamplingSchema.nullable().optional(),
+}).strict();
+export type ManagedBenchmarkProtocol = z.infer<typeof ManagedBenchmarkProtocolSchema>;
+export function parseEvaluationEnvironmentSeeds(text: string) {
+  const seeds = [...new Set(text.split(/[\s,]+/).filter(Boolean))];
+  if (!seeds.length || seeds.some(value => !/^(0|[1-9][0-9]*)$/.test(value) || Number(value) > 2_147_483_647))
+    throw new Error("Enter integer environment seeds from 0 to 2147483647, separated by commas.");
+  return seeds;
+}
+
 export const ManagedBenchmarkReviewSchema = z.object({
   expectedRevision: z.number().int().positive(),
   versions: ManagedBenchmarkVersionsSchema,
@@ -48,6 +65,7 @@ export const ManagedBenchmarkReviewSchema = z.object({
   split: DatasetSplitSchema.optional(),
   samples: z.number().int().min(1).max(100).optional(),
   outputTokens: z.number().int().min(1).max(4096).optional(),
+  protocol: ManagedBenchmarkProtocolSchema.optional(),
 }).strict();
 export type ManagedBenchmarkReview = z.infer<typeof ManagedBenchmarkReviewSchema>;
 export type BenchmarkModelVersion = z.infer<typeof BenchmarkModelVersionSchema>;
@@ -231,6 +249,7 @@ export const ResourceSetupDraftSchema = z.object({
   benchmarkModelVersion: BenchmarkModelVersionSchema.optional(),
   managedBenchmarkVersions: ManagedBenchmarkVersionsSchema.optional(),
   managedBenchmarkDataset: ManagedBenchmarkDatasetSchema.nullable().optional(),
+  managedBenchmarkProtocol: ManagedBenchmarkProtocolSchema.optional(),
   localBenchmarkInference: z.object({
     device: z.enum(["cpu", "cuda"]),
     maxOutputTokens: z.number().int().min(1).max(2048),

@@ -2,7 +2,7 @@ import { readChatWeightSpace } from "./chat-weight-space.js";
 import { createChatNextStepService } from "./chat-next-step.js";
 import { createChatContextBrowser, hasModelSetupAccess } from "./chat-context-browser.js";
 import { readManagedBenchmarkDataset } from "./hosted-benchmark-dataset.js";
-import { authorizeHostedBenchmarkVersion, readExactHostedBenchmarkVersion } from "./hosted-benchmark-access.js";
+import { authorizeHostedBenchmarkVersion, readManagedBenchmarkSampling, readManagedBenchmarkVersions } from "./hosted-benchmark-access.js";
 import { readChatHostedTrainingAttachment } from "./chat-hosted-training-attachment.js";
 import { readChatTrainingAttachment } from "./chat-training-attachment.js";
 import type { createChatProfileExperiments } from "../evaluations/chat-profile-experiments.js";
@@ -236,6 +236,12 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       return cloud.bindBenchmark({ ...query, owner, draft: exactRevision ? scope.draft : undefined,
         versions: exactRevision ? scope.managedBenchmarkVersions : undefined });
     }
+    if (kind === "dataset" && input.action === "context_benchmark_sampling") {
+      if (context) throw new Error("Check sampling support from the Benchmark prompt.");
+      const versions = ManagedBenchmarkVersionsSchema.parse(input.payload);
+      const verified = await readManagedBenchmarkVersions(versions, deps.access);
+      return { supported: await readManagedBenchmarkSampling(verified, deps.access) };
+    }
     if (kind === "dataset" && input.action === "context_prepare_benchmark") {
       if (context) throw new Error("Choose saved Model versions from the Benchmark prompt.");
       const query = ManagedBenchmarkReviewSchema.extend({
@@ -246,12 +252,20 @@ export async function createChatResourceRuntime(deps:{store:SqliteStore;home:str
       const selected = await browser.resolve(query.target);
       if (!selected.localDraft || selected.draft?.operationType !== "evaluate" || selected.benchmarkVersion?.location === "local")
         throw new Error("Open the originating Benchmark to choose saved Model versions.");
-      const candidate = await readExactHostedBenchmarkVersion(query.versions.candidate, deps.access);
-      const baseline = query.versions.baseline && await readExactHostedBenchmarkVersion(query.versions.baseline, deps.access);
+      const versions = await readManagedBenchmarkVersions(query.versions, deps.access);
+      const { candidate, baseline } = versions;
+      const sampling = query.protocol?.sampling;
+      if (sampling && (sampling.temperature === null || sampling.topP === null))
+        throw new Error("Set both Temperature and Top P before opening review.");
+      const retained = selected.draft.evaluationForm;
+      const retainedOverride = sampling === undefined && retained?.executionLocation === "hosted" && retained.form.mode === "model" &&
+        ((retained.form.temperature ?? 0) !== 0 || (retained.form.topP ?? 1) !== 1);
+      if ((sampling || retainedOverride) && !await readManagedBenchmarkSampling(versions, deps.access))
+        throw new Error("Clear sampling overrides or choose saved Model versions that support them.");
       const dataset = await readManagedBenchmarkDataset(query, deps.access);
       await scopes.setManagedBenchmarkVersions(query.sessionId, query.target.scopeId, {
         expectedRevision: query.expectedRevision, name: query.name, budget: query.budget, seed: query.seed,
-        dataset, outputTokens: query.outputTokens,
+        dataset, outputTokens: query.outputTokens, protocol: query.protocol,
         versions: ManagedBenchmarkVersionsSchema.parse({ candidate: candidate.pin, ...(baseline ? { baseline: baseline.pin } : {}) }),
         model: { source: "trained", label: candidate.model.name, baseModel: candidate.version.request.baseModel,
           inferenceModelId: null, trainedVersion: candidate.version },

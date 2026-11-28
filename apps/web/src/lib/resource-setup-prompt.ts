@@ -46,9 +46,11 @@ export function scopeManagedSetup(
     draft = { ...draft, managedGrader: undefined };
   }
   if (draft.managedBenchmarkVersions && !ownsHostedBenchmarkVersion(draft.managedBenchmarkVersions.candidate, scope))
-    draft = { ...draft, managedBenchmarkVersions: undefined, values: { ...draft.values, candidate: undefined, baseline: undefined } };
+    draft = { ...draft, managedBenchmarkVersions: undefined, managedBenchmarkProtocol: undefined,
+      values: { ...draft.values, candidate: undefined, baseline: undefined } };
   if (draft.managedBenchmarkDataset && !ownsHostedBenchmarkVersion(draft.managedBenchmarkDataset, scope))
-    draft = { ...draft, managedBenchmarkDataset: undefined, values: { ...draft.values, dataset: undefined,
+    draft = { ...draft, managedBenchmarkDataset: undefined, managedBenchmarkProtocol: undefined,
+      values: { ...draft.values, dataset: undefined,
       datasetRevision: undefined, grader: undefined, split: undefined } };
   const version = scopedBenchmarkVersion(draft.benchmarkModelVersion, scope, selection, sessionId);
   if (draft.benchmarkModelVersion && !version)
@@ -193,7 +195,7 @@ export function resourceSetupParts(draft: ResourceSetupDraft): ResourceSetupPart
 export const resourceSetupGroups: Partial<Record<PromptField, readonly ResourceSetupField[]>> = {
   dataset: ["dataset", "datasetRevision", "split"],
   trainingSettings: ["epochs", "learningRate", "budget"],
-  evaluationSettings: ["samples", "seed", "outputTokens"],
+  evaluationSettings: ["samples", "seed"],
   saveDestination: ["destination"],
   preview: ["split", "samples"],
 };
@@ -245,10 +247,13 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
   const version = draft.managedBenchmarkVersions?.candidate ?? draft.benchmarkModelVersion;
   const baseline = draft.comparison ? draft.managedBenchmarkVersions?.baseline : undefined;
   const release = draft.managedBenchmarkDataset?.release;
+  const protocol = draft.values.destination === "OpenPond Managed" ? draft.managedBenchmarkProtocol : undefined;
   const settings = [
     release && `Released Dataset ${release.id}, revision ${release.revision}, content hash ${release.contentHash}`,
     draft.managedBenchmarkDataset?.graders?.length && `Released Graders ${JSON.stringify(draft.managedBenchmarkDataset.graders)}`,
     draft.values.outputTokens !== undefined && `maximum output ${draft.values.outputTokens} tokens per task`,
+    protocol?.environmentSeeds?.trim() && `environment seeds ${protocol.environmentSeeds.trim()}`,
+    protocol?.sampling && `temperature ${protocol.sampling.temperature ?? "unset"}, top P ${protocol.sampling.topP ?? "unset"}`,
     version?.location === "cloud" && `Managed Model ${version.modelProjectId}, training run ${version.jobId}, version hash ${version.versionHash}`,
     baseline && `Managed baseline ${baseline.modelProjectId}, training run ${baseline.jobId}, version hash ${baseline.versionHash}`,
     !draft.datasetInputsDirty && draft.datasetRef && `Dataset ID ${draft.datasetRef.id}, revision ${draft.datasetRef.revision}${draft.datasetRef.contentHash ? `, content hash ${draft.datasetRef.contentHash}` : ""}`,
@@ -280,7 +285,9 @@ export function resourceSetupText(draft: ResourceSetupDraft): string {
     chat: "",
   }[draft.kind];
   const recipeText = recipe ? `Use these training settings ${JSON.stringify(recipe)}.` : "";
-  return [prompt, settings.length ? `Use ${settings.join(", ")}.` : "", recipeText, review, execution].filter(Boolean).join(" ");
+  const systemInstructions = protocol?.systemInstructions?.trim()
+    ? `Use these system instructions for the evaluated models ${JSON.stringify(protocol.systemInstructions)}.` : "";
+  return [prompt, settings.length ? `Use ${settings.join(", ")}.` : "", systemInstructions, recipeText, review, execution].filter(Boolean).join(" ");
 }
 
 export function snapshotResourceSetup(

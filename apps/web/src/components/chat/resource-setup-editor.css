@@ -73,8 +73,14 @@
   border-color: var(--accent-primary);
 }
 
+.resource-setup-protocol-fields label:has(input:not([type="checkbox"]), textarea) {
+  display: grid;
+  gap: 5px;
+}
+
 .resource-setup-input > input,
-.resource-setup-training-fields input {
+.resource-setup-training-fields input,
+.resource-setup-protocol-fields input:not([type="checkbox"]) {
   width: 100%;
   padding: 7px 9px;
   border: 1px solid var(--border-strong);

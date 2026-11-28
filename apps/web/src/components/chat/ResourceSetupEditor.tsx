@@ -2,7 +2,7 @@ import { lazy, Suspense, useContext, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import type { ChatResourceSummary } from "@openpond/contracts";
-import { LocalTrainingComputeSchema, type LocalTrainingCompute } from "@openpond/contracts/resource-setup";
+import { LocalTrainingComputeSchema, ownsHostedBenchmarkVersion, type LocalTrainingCompute } from "@openpond/contracts/resource-setup";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { chatResourceRequest } from "../../api/chat-resource-api";
 import { connectionQueryScope } from "../../lib/query-scope";
@@ -36,8 +36,8 @@ import { ModelSetupLocalBase } from "./ModelSetupLocalBase";
 import { ModelSetupLocalSftReview } from "./ModelSetupLocalSftReview";
 import { SavedBenchmarkVersionPicker, type BenchmarkVersionChoiceValue } from "../labs/workspace/BenchmarkVersionChoice";
 import { createWorkspaceApi } from "../labs/workspace/workspace-api";
+import { ManagedBenchmarkProtocolFields } from "./ManagedBenchmarkProtocolFields";
 import { ManagedBenchmarkDatasetFields } from "./ManagedBenchmarkDatasetFields";
-import type { ManagedBenchmarkVersions } from "@openpond/contracts/resource-setup";
 import { LocalAdapterBenchmarkReview } from "./LocalAdapterBenchmarkReview";
 import { ChatExperimentWorkspaceContext } from "./ChatExperimentWorkspaceContext";
 import "./resource-setup-editor.css";
@@ -82,7 +82,7 @@ const choices: Partial<Record<ResourceSetupField, readonly string[]>> = {
   graderType: ["Exact answer", "Code grader", "LLM judge", "Human assessment", "Python correctness"],
 };
 const decimalFields = new Set<ResourceSetupField>(["budget", "learningRate"]);
-const integerFields = new Set<ResourceSetupField>(["datasetRevision", "epochs", "samples", "seed", "outputTokens"]);
+const integerFields = new Set<ResourceSetupField>(["datasetRevision", "epochs", "samples", "seed"]);
 
 export function ResourceSetupEditor({ draft, busy: composerBusy, connection, datasets, evaluationModels, sessionId, context, onAttachDataset, onChange, onRemove }: {
   draft: ResourceSetupDraft;
@@ -109,7 +109,18 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
     }) : null;
   const pinnedCandidate = version?.location === "cloud" && version.owner ? { ...version, owner: version.owner } : undefined;
   const managedVersions = visibleDraft.managedBenchmarkVersions ?? (pinnedCandidate ? { candidate: pinnedCandidate } : undefined);
+  const reviewVersions = managedVersions &&
+    (draft.comparison ? managedVersions : { candidate: managedVersions.candidate });
   const selectedVersion = context.selection?.benchmarkVersion;
+  const evaluationForm = context.selection?.target.sessionId === sessionId && selectedVersion?.location === "cloud" &&
+    ownsHostedBenchmarkVersion(selectedVersion, workspace) ? context.selection?.draft?.evaluationForm : undefined;
+  const retainedProtocol = evaluationForm?.executionLocation === "hosted" && evaluationForm.form.mode === "model"
+    ? evaluationForm.form : undefined;
+  const protocol = visibleDraft.managedBenchmarkProtocol;
+  const retainedSampling = retainedProtocol && (retainedProtocol.temperature !== undefined || retainedProtocol.topP !== undefined)
+    ? { temperature: retainedProtocol.temperature === undefined ? 0 : retainedProtocol.temperature,
+      topP: retainedProtocol.topP === undefined ? 1 : retainedProtocol.topP } : undefined;
+  const sampling = protocol?.sampling === undefined ? retainedSampling : protocol.sampling;
   const openableVersion = version?.location === "cloud" && selectedVersion?.location === "cloud" &&
     version.versionHash === selectedVersion.versionHash && context.selection?.target.sessionId === sessionId;
   const managedReview = Boolean(workspace?.teamId && workspace.actorId && connection && sessionId &&
@@ -181,7 +192,8 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       ...(key === "candidate" ? { candidateRef: undefined } : {}),
       ...(key === "baseModel" && draft.values.destination !== "OpenPond Managed" ? { localTrainingBase: undefined } : {}),
       ...(leavingLocal ? { localCandidate: undefined, localBaseline: undefined } : {}),
-      ...(leavingManagedBenchmark ? { managedBenchmarkVersions: undefined, managedBenchmarkDataset: undefined } : {}),
+      ...(leavingManagedBenchmark ? { managedBenchmarkVersions: undefined, managedBenchmarkDataset: undefined,
+        managedBenchmarkProtocol: undefined } : {}),
       ...(enteringManagedBenchmark ? { datasetRef: undefined } : {}),
       ...(sourceChanged ? { datasetRef: undefined, datasetExamples: undefined } : {}),
       ...(datasetEdited ? { datasetInputsDirty: true } : {}),
@@ -297,7 +309,6 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           const options = fieldOptions(key);
           const label = field === "saveDestination" ? "Save to" : labels[key];
           if (benchmarkApi && ["dataset", "datasetRevision", "split", "grader"].includes(key)) return null;
-          if (key === "outputTokens" && !benchmarkApi) return null;
           if (version && ["candidate", "dataset", "datasetRevision", "grader", "destination"].includes(key)) return null;
           if (draft.kind === "benchmark" && (key === "candidate" || key === "baseline") &&
             draft.values.destination !== "This device") {
@@ -367,8 +378,8 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
               data-autofocus={index === 0 || undefined}
               type={decimalFields.has(key) || integerFields.has(key) ? "number" : "text"}
               step={decimalFields.has(key) ? "any" : undefined}
-              min={["datasetRevision", "epochs", "samples", "outputTokens"].includes(key) ? 1 : 0}
-              max={key === "outputTokens" ? 4096 : key === "samples" ? 100 : undefined}
+              min={["datasetRevision", "epochs", "samples"].includes(key) ? 1 : 0}
+              max={key === "samples" ? 100 : undefined}
               maxLength={(draft.kind === "model" || draft.kind === "benchmark") && key === "name" ? 191 : 2_000}
               disabled={busy}
               value={visibleDraft.values[key] ?? ""}
@@ -378,6 +389,30 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           </label>;
         })}
       </div> : null}
+      {benchmarkApi && field === "evaluationSettings" && <ManagedBenchmarkProtocolFields
+        connection={benchmarkApi.connection} scope={benchmarkApi.key} versions={reviewVersions} comparison={Boolean(draft.comparison)}
+        disabled={busy || context.selecting}
+        draft={{ seed: protocol?.environmentSeeds ?? retainedProtocol?.seed ?? "",
+          prompt: protocol?.systemInstructions ?? retainedProtocol?.prompt ?? "",
+          outputTokens: draft.values.outputTokens ?? retainedProtocol?.outputTokens ?? null,
+          temperature: sampling?.temperature, topP: sampling?.topP }}
+        onChange={patch => {
+          const nextSampling = "temperature" in patch || "topP" in patch
+            ? patch.temperature === undefined && patch.topP === undefined ? null : {
+              temperature: "temperature" in patch ? patch.temperature ?? null : sampling ? sampling.temperature : 0,
+              topP: "topP" in patch ? patch.topP ?? null : sampling ? sampling.topP : 1,
+            } : protocol?.sampling;
+          const updated = ResourceSetupDraftSchema.safeParse({
+            ...draft, revision: draft.revision + 1,
+            values: { ...draft.values, ...("outputTokens" in patch ? { outputTokens: patch.outputTokens ?? undefined } : {}) },
+            managedBenchmarkProtocol: {
+              environmentSeeds: patch.seed ?? protocol?.environmentSeeds,
+              systemInstructions: patch.prompt ?? protocol?.systemInstructions,
+              sampling: nextSampling,
+            },
+          });
+          if (updated.success) onChange(draft, updated.data);
+        }} />}
       {benchmarkApi && workspace?.actorId && workspace.apiOrigin && (field === "dataset" || field === "grader") ? (
         <ManagedBenchmarkDatasetFields key={benchmarkApi.key} api={benchmarkApi} field={field}
           owner={{ actorId: workspace.actorId, apiOrigin: workspace.apiOrigin }}
@@ -427,13 +462,13 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
           try {
             const selected = context.selection;
             if (!selected || selected.target.sessionId !== sessionId || !selected.draftRevision) return;
-            const versions: ManagedBenchmarkVersions | undefined = managedVersions &&
-              (draft.comparison ? managedVersions : { candidate: managedVersions.candidate });
-            if (await context.select(selected.target, { configureDraft: true, ...(versions ? {
-              benchmark: { versions, expectedRevision: selected.draftRevision, name: draft.values.name?.trim() || undefined,
+            if (await context.select(selected.target, { configureDraft: true, ...(reviewVersions ? {
+              benchmark: { versions: reviewVersions, expectedRevision: selected.draftRevision, name: draft.values.name?.trim() || undefined,
                 budget: draft.values.budget, seed: draft.values.seed, outputTokens: draft.values.outputTokens,
                 dataset: visibleDraft.managedBenchmarkDataset,
-                split: draft.values.split, samples: draft.values.samples },
+                split: draft.values.split, samples: draft.values.samples,
+                protocol: protocol?.environmentSeeds === undefined && draft.values.seed !== undefined && retainedProtocol?.seed
+                  ? { ...protocol, environmentSeeds: retainedProtocol.seed } : protocol },
             } : {}) })) setConfigureOpen(false);
           } catch (cause) { setBenchmarkError(cause); }
         }}>Open Benchmark review</button>}
