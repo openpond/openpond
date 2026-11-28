@@ -2,7 +2,7 @@ import { useContext, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { useChatContextSelection } from "../../hooks/useChatContextSelection";
 import type { ChatResourceSummary } from "@openpond/contracts";
-import { LocalTrainingComputeSchema } from "@openpond/contracts/resource-setup";
+import { LocalTrainingComputeSchema, type LocalTrainingCompute } from "@openpond/contracts/resource-setup";
 import { apiFetch, type ClientConnection } from "../../api/api-client";
 import { connectionQueryScope } from "../../lib/query-scope";
 import type { EvaluationModel } from "../../hooks/useChatResourceFocus";
@@ -41,6 +41,29 @@ const labels: Record<ResourceSetupField, string> = {
   samples: "Sample count", epochs: "Epochs", learningRate: "Learning rate", seed: "Seed",
   budget: "Maximum spend in USD", criterion: "Scoring criterion", cases: "Passing and failing examples", project: "Project",
 };
+const runtimePreflightReasons: Record<Exclude<NonNullable<LocalTrainingCompute["runtime"]>["status"], "ready">, string> = {
+  unsupported_platform: "The local CUDA runtime requires Linux.",
+  python_missing: "Set up the local training Python environment.",
+  dependencies_missing: "Check the packages in the local training Python environment.",
+  cuda_unusable: "The local PyTorch runtime could not run a CUDA operation.",
+  probe_failed: "The local training runtime check could not finish.",
+};
+
+function describeLocalTrainingCompute(data: LocalTrainingCompute | undefined, checking: boolean): string {
+  if (checking) return "Checking this device.";
+  if (!data) return "Training on this device is unavailable.";
+  if (data.status === "cuda_tools_unavailable") return "CUDA tools are unavailable on this device.";
+  if (data.status === "devices_unavailable") return "CUDA devices did not report capacity.";
+  const runtime = data.runtime;
+  if (runtime?.status === "ready") {
+    const best = runtime.devices.reduce((mostFree, current) =>
+      current.device.freeMiB > mostFree.device.freeMiB ? current : mostFree).device;
+    const available = (best.freeMiB / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 });
+    return `${best.name} checked with ${available} GiB free. Native SFT requires a local training runner.`;
+  }
+  return runtime ? runtimePreflightReasons[runtime.status] : "A local training runner is required.";
+}
+
 const choices: Partial<Record<ResourceSetupField, readonly string[]>> = {
   method: ["SFT", "GRPO", "Decision", "Weight-space programming"],
   adapter: ["LoRA", "Full fine-tuning"],
@@ -142,12 +165,7 @@ export function ResourceSetupEditor({ draft, busy: composerBusy, connection, dat
       { value: "Full fine-tuning", label: "Full fine-tuning", disabled: true, description: "The current SFT and GRPO runners use LoRA." },
     ];
     if (key === "destination") {
-      const device = compute.data?.devices[0];
-      const modelReason = device ? `${device.name} detected. A local training runner is required.`
-        : compute.data?.status === "cuda_tools_unavailable" ? "CUDA tools are unavailable on this device."
-          : compute.data?.status === "devices_unavailable" ? "CUDA devices did not report capacity."
-            : compute.isFetching ? "Checking this device." : "Training on this device is unavailable.";
-      const localReason = draft.kind === "model" ? modelReason
+      const localReason = draft.kind === "model" ? describeLocalTrainingCompute(compute.data, compute.isFetching)
         : draft.kind === "benchmark" && !localModels.length ? "Configure a compatible loopback model in provider settings." : null;
       return [
         { value: "", label: "Choose a destination" },

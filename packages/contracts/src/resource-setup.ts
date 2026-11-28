@@ -117,12 +117,38 @@ export const BenchmarkRunPinSchema = z.object({
 }).strict();
 export type BenchmarkRunPin = z.infer<typeof BenchmarkRunPinSchema>;
 
+const LocalTrainingDeviceSchema = z.object({
+  name: z.string().min(1).max(500),
+  memoryMiB: z.number().int().positive(),
+  freeMiB: z.number().int().nonnegative(),
+}).strict().refine(device => device.freeMiB <= device.memoryMiB, "Free memory exceeds total device memory.");
+
+export const LocalTrainingRuntimeSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.enum(["unsupported_platform", "python_missing", "dependencies_missing", "cuda_unusable", "probe_failed"]),
+  }).strict(),
+  z.object({
+    status: z.literal("ready"),
+    python: z.string().min(1).max(80),
+    cuda: z.string().min(1).max(80),
+    packages: z.object({
+      torch: z.string().min(1).max(100),
+      transformers: z.string().min(1).max(100),
+      peft: z.string().min(1).max(100),
+      accelerate: z.string().min(1).max(100),
+      safetensors: z.string().min(1).max(100),
+    }).strict(),
+    devices: z.array(z.object({
+      ordinal: z.number().int().min(0).max(255),
+      device: LocalTrainingDeviceSchema,
+      computeCapability: z.tuple([z.number().int().min(1).max(99), z.number().int().min(0).max(99)]),
+    }).strict()).min(1).max(256),
+  }).strict(),
+]);
+
 export const LocalTrainingComputeSchema = z.object({
   status: z.enum(["cuda_detected", "cuda_tools_unavailable", "devices_unavailable"]),
-  devices: z.array(z.object({
-    name: z.string().min(1).max(500),
-    memoryMiB: z.number().int().positive(),
-    freeMiB: z.number().int().nonnegative(),
-  }).strict()).max(256),
+  devices: z.array(LocalTrainingDeviceSchema).max(256),
+  runtime: LocalTrainingRuntimeSchema.optional(),
 }).strict();
 export type LocalTrainingCompute = z.infer<typeof LocalTrainingComputeSchema>;

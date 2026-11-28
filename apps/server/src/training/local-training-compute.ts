@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { LocalTrainingCompute } from "@openpond/contracts/resource-setup";
+import { inspectLocalTrainingRuntime } from "./local-training-runtime.js";
 
 const execFileAsync = promisify(execFile);
 
-export async function inspectLocalTrainingCompute(): Promise<LocalTrainingCompute> {
+export async function inspectLocalTrainingCompute(storeDir: string): Promise<LocalTrainingCompute> {
   try {
     const { stdout } = await execFileAsync("nvidia-smi", [
       "--query-gpu=name,memory.total,memory.free",
@@ -15,11 +16,12 @@ export async function inspectLocalTrainingCompute(): Promise<LocalTrainingComput
       const freeMiB = Number(columns.pop());
       const memoryMiB = Number(columns.pop());
       const name = columns.join(", ");
-      if (!name || !Number.isSafeInteger(freeMiB) || !Number.isSafeInteger(memoryMiB) ||
+      if (!name || name.length > 500 || !Number.isSafeInteger(freeMiB) || !Number.isSafeInteger(memoryMiB) ||
         memoryMiB <= 0 || freeMiB < 0 || freeMiB > memoryMiB) return [];
       return [{ name, memoryMiB, freeMiB }];
-    });
-    return { status: devices.length ? "cuda_detected" : "devices_unavailable", devices };
+    }).slice(0, 256);
+    if (!devices.length) return { status: "devices_unavailable", devices: [] };
+    return { status: "cuda_detected", devices, runtime: await inspectLocalTrainingRuntime(storeDir) };
   } catch (error) {
     return { status: (error as NodeJS.ErrnoException).code === "ENOENT" ? "cuda_tools_unavailable" : "devices_unavailable", devices: [] };
   }
